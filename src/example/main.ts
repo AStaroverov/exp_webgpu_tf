@@ -1,4 +1,3 @@
-import { createDrawRopeSystem } from '../ECS/System/RopeSystem/createDrawRopeSystem.ts';
 import { createResizeSystem } from '../ECS/System/resizeSystem.ts';
 import { world } from '../ECS/world.ts';
 import { canvas, context, device } from '../gpu.ts';
@@ -6,8 +5,8 @@ import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
 import { createShapes } from './helpers.ts';
 import { createDrawShapeSystem } from '../ECS/System/SDFSystem/createDrawShapeSystem.ts';
 
-const resizeSystem = createResizeSystem(world, canvas);
-const drawRopeSystem = createDrawRopeSystem(world, device);
+const resizeSystem = createResizeSystem(canvas);
+// const drawRopeSystem = createDrawRopeSystem(world, device);
 const drawShapeSystem = createDrawShapeSystem(world, device);
 
 function frame() {
@@ -25,7 +24,7 @@ function frame() {
     });
 
     resizeSystem();
-    drawRopeSystem(passEncoder);
+    // drawRopeSystem(passEncoder);
     drawShapeSystem(passEncoder);
 
     device.queue.submit([

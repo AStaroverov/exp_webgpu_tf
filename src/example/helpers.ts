@@ -1,17 +1,19 @@
-import { Color, Resolution, Roundness, setColor, Thinness, Translate } from '../ECS/Component/Common.ts';
+import { Color, Resolution, Roundness, setColor, Size, Translate } from '../ECS/Component/Common.ts';
 import { Rope, ROPE_BUFFER_LENGTH } from '../ECS/Component/Rope.ts';
 import { canvas } from '../gpu.ts';
 import { macroTasks } from '../../lib/TasksScheduler/macroTasks.ts';
 import { addComponent, addEntity, IWorld } from 'bitecs';
 import { Shape } from '../ECS/Component/Shape.ts';
+import { Transform } from '../ECS/Component/Transform.ts';
+import { mat4 } from 'gl-matrix';
 
 export function createRopes(world: IWorld) {
     for (let i = 0; i < 100; i++) {
         const id = addEntity(world);
         addComponent(world, Resolution, id);
         addComponent(world, Translate, id);
-        addComponent(world, Thinness, id);
         addComponent(world, Color, id);
+        addComponent(world, Size, id);
         addComponent(world, Rope, id);
 
         const points = Array.from(
@@ -22,7 +24,6 @@ export function createRopes(world: IWorld) {
         );
 
         Rope.points[id].set(points);
-        Thinness.value[id] = 30;
         setColor(id, Math.random(), Math.random(), Math.random(), 0.5 + Math.random() / 2);
 
         function update() {
@@ -45,9 +46,10 @@ export function createShapes(world: IWorld) {
         const id = addEntity(world);
         addComponent(world, Resolution, id);
         addComponent(world, Translate, id);
+        addComponent(world, Transform, id);
         addComponent(world, Roundness, id);
-        addComponent(world, Thinness, id);
         addComponent(world, Color, id);
+        addComponent(world, Size, id);
         addComponent(world, Shape, id);
 
         // Shape.kind[id] = Math.round(3 * Math.random());
@@ -58,10 +60,21 @@ export function createShapes(world: IWorld) {
         // setColor(id, Math.random(), Math.random(), Math.random(), 0.5 + Math.random() / 2);
 
         // circle
-        Translate.x[id] = 50 + Math.random() * 400;
-        Translate.y[id] = 50 + Math.random() * 400;
-        Shape.kind[id] = 0;
-        Thinness.value[id] = 10;
+        // Translate.x[id] = 50 + Math.random() * 400;
+        // Translate.y[id] = 50 + Math.random() * 400;
+        // Shape.kind[id] = 0;
+        // Size.width[id] = 30;
+        // setColor(id, Math.random(), Math.random(), Math.random(), 0.5 + Math.random() / 2);
+
+        // Translate.x[id] = 300;//50 + Math.random() * 400;
+        // Translate.y[id] = 300;//50 + Math.random() * 400;
+        mat4.identity(Transform.matrix[id]);
+        mat4.translate(Transform.matrix[id], Transform.matrix[id], [50 + Math.random() * 400, 50 + Math.random() * 400, 0]);
+
+        Shape.kind[id] = 1;
+        Size.width[id] = 300;
+        Size.height[id] = 60;
+        Roundness.value[id] = 30;
         setColor(id, Math.random(), Math.random(), Math.random(), 0.5 + Math.random() / 2);
 
         // function update() {

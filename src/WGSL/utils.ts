@@ -1,6 +1,6 @@
-import {isNil, uniqBy} from "../utils.ts";
-import {VariableMeta} from "../Struct/VariableMeta.ts";
-import {TWGSLFunc, TWGSLModule, TWGSLPart} from "./def.ts";
+import { isNil, uniqBy } from '../utils.ts';
+import { VariableKind, VariableMeta } from '../Struct/VariableMeta.ts';
+import { TWGSLFunc, TWGSLModule, TWGSLPart } from './def.ts';
 
 
 function isWGSLFunc(module: TWGSLModule): module is TWGSLFunc {
@@ -12,8 +12,8 @@ function isWGSLPart(module: TWGSLModule): module is TWGSLPart {
 }
 
 function getSortedDependencies(dependencies: TWGSLModule[]): TWGSLModule[] {
-    const partDeps = uniqBy(dependencies.filter(isWGSLPart), ({body}) => body);
-    const unsortedDeps = uniqBy(dependencies.filter(isWGSLFunc), ({name}) => name);
+    const partDeps = uniqBy(dependencies.filter(isWGSLPart), ({ body }) => body);
+    const unsortedDeps = uniqBy(dependencies.filter(isWGSLFunc), ({ name }) => name);
     const sortedDeps: TWGSLFunc[] = [];
 
     if (unsortedDeps.length > 0) {
@@ -27,7 +27,7 @@ function getSortedDependencies(dependencies: TWGSLModule[]): TWGSLModule[] {
                     continue;
                 }
 
-                const namedDeps = dependency.deps.filter(isWGSLFunc).map(({name}) => name);
+                const namedDeps = dependency.deps.filter(isWGSLFunc).map(({ name }) => name);
 
                 if (namedDeps.length === 0 || namedDeps.every((name) => processedDeps.has(name))) {
                     processedDeps.add(dependency.name);
@@ -44,13 +44,33 @@ function getSortedDependencies(dependencies: TWGSLModule[]): TWGSLModule[] {
     return [...partDeps, ...sortedDeps];
 }
 
-export function setupVariable<M extends Record<string, VariableMeta>>(map: M, group = 0, binding = 0): Record<keyof M, VariableMeta> {
-    for (const k in map) {
-        map[k].group = group;
-        map[k].binding = binding++;
+export const mapKindToGroup = {
+    [VariableKind.Uniform]: 0,
+    [VariableKind.StorageRead]: 1,
+    [VariableKind.StorageWrite]: 2,
+};
+
+export function setupVariable<M extends Record<string, VariableMeta>>(map: M): Record<keyof M, VariableMeta> {
+    const values = Object.values(map);
+
+    if (values.length === 0) {
+        return map;
     }
 
-    return map as Record<keyof M, VariableMeta>;
+    const sortedByKind = values.sort((a, b) => mapKindToGroup[a.kind] - mapKindToGroup[b.kind]);
+    let prevKind = sortedByKind[0].kind;
+    let binding = 0;
+
+    for (const meta of sortedByKind) {
+        if (prevKind !== meta.kind) {
+            prevKind = meta.kind;
+            binding = 0;
+        }
+        meta.group = mapKindToGroup[meta.kind];
+        meta.binding = binding++;
+    }
+
+    return map;
 }
 
 export function buildShader<U extends Record<string, VariableMeta>, A extends Record<string, VariableMeta>>(
@@ -62,19 +82,19 @@ export function buildShader<U extends Record<string, VariableMeta>, A extends Re
     const uniformsPart = uniformKeys.reduce((acc, key) => {
         const u = uniforms![key];
         return `
-            ${acc}
+            ${ acc }
 
-            @group(${u.group})
-            @binding(${u.binding})
-            var<${u.kind}> ${u.name}: ${u.type};
+            @group(${ u.group })
+            @binding(${ u.binding })
+            var<${ u.kind }> ${ u.name }: ${ u.type };
         `;
     }, '');
     const attributesKeys = attributes ? Object.keys(attributes) : [];
     const attributesPart = attributesKeys.reduce((acc, key) => {
         return `
-            ${acc}
+            ${ acc }
 
-            ${attributes![key].name}: ${attributes![key].type};
+            ${ attributes![key].name }: ${ attributes![key].type };
         `;
     }, '');
     const body =
@@ -83,9 +103,9 @@ export function buildShader<U extends Record<string, VariableMeta>, A extends Re
             .join('') + module.body;
 
     return `
-        ${uniformsPart}
-        ${attributesPart}
-        ${body}
+        ${ uniformsPart }
+        ${ attributesPart }
+        ${ body }
     `;
 }
 

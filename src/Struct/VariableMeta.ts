@@ -1,4 +1,4 @@
-import {getTypeBufferSize, getTypeSize} from "../Shader";
+import { getTypeBufferSize, getTypeSize } from '../Shader';
 
 export enum VariableKind {
     Uniform = 'uniform',
@@ -13,6 +13,7 @@ export class VariableMeta {
         public type: string,
         public group: number = 0,
         public binding: number = 0,
+        public visibility = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
         public size = getTypeSize(type),
         public bufferSize = getTypeBufferSize(type),
     ) {

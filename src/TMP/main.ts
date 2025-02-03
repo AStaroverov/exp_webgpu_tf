@@ -1,5 +1,5 @@
 import { shaderMeta } from './ECS/System/RopeSystem/sdf.shader.ts';
-import { Variable } from '../WebGPU/Variable.ts';
+import { Variable } from './Variable.ts';
 
 const canvas = document.createElement('canvas');
 

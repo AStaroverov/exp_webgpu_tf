@@ -1,4 +1,4 @@
-import { Variable } from '../WebGPU/Variable.ts';
+import { Variable } from '../TMP/Variable.ts';
 
 export function getBindGroupEntry(device: GPUDevice, variableData: Variable): GPUBindGroupEntry {
     return {

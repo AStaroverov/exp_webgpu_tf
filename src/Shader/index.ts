@@ -8,7 +8,7 @@ enum GPU_Primitive {
     i32 = 'i32',
 }
 
-const GPU_PRIMITIVE_SET = new Set([GPU_Primitive.f32, GPU_Primitive.i32, GPU_Primitive.u32, GPU_Primitive.ui8]);
+const GPU_PRIMITIVE_SET = new Set([GPU_Primitive.f32, GPU_Primitive.i32, GPU_Primitive.u32]);
 const GPU_PRIMITIVE_SIZE = 4;
 
 export const mapPrimitiveToConstructor = <const>{
@@ -27,13 +27,23 @@ export function getTypeConstructor(type: GPU_Type): ValueOf<typeof mapPrimitiveT
         return getTypeConstructor(primitive);
     }
 
+    if (type.startsWith('mat')) {
+        const [, primitive] = type.match(/mat\dx\d<(\w+)>/)!;
+        return getTypeConstructor(primitive);
+    }
+
     if (type.startsWith('array<vec')) {
         const [, primitive] = type.match(/array<vec\d<(\w+)>,\s*\d+>/)!;
         return getTypeConstructor(primitive);
     }
 
+    if (type.startsWith('array<mat')) {
+        const [, primitive] = type.match(/array<mat\dx\d<(\w+)>,\s*\d+>/)!;
+        return getTypeConstructor(primitive);
+    }
+
     if (type.startsWith('array')) {
-        const [, primitive] = type.match(/array<(\w+),\s*\d+>/)!;
+        const [, primitive] = type.match(/array<([<>\w]+),\s*\d+>/)!;
         return getTypeConstructor(primitive);
     }
 
@@ -48,6 +58,16 @@ export function getTypeSize(type: GPU_Type): number {
     if (type.startsWith('vec')) {
         const [, size] = type.match(/vec(\d+)/)!;
         return Number(size);
+    }
+
+    if (type.startsWith('mat')) {
+        const [, x, y] = type.match(/mat(\d)x(\d)<\w+>/)!;
+        return Number(x) * Number(y);
+    }
+
+    if (type.startsWith('array<mat')) {
+        const [, x, y, size] = type.match(/array<mat(\d)x(\d)<\w+>,\s*(\d+)>/)!;
+        return Number(x) * Number(y) * Number(size);
     }
 
     if (type.startsWith('array<vec')) {
@@ -69,13 +89,23 @@ export function getTypeBufferSize(type: GPU_Type): number {
     }
 
     if (type.startsWith('vec')) {
-        const [, size] = type.match(/vec(\d+)/)!;
-        return Number(size) * GPU_PRIMITIVE_SIZE;
+        const [, size, innerType] = type.match(/vec(\d+)<(\w+)>/)!;
+        return Number(size) * getTypeBufferSize(innerType);
+    }
+
+    if (type.startsWith('mat')) {
+        const [, x, y, innerType] = type.match(/mat(\d)x(\d)<(\w+)>/)!;
+        return Number(x) * Number(y) * getTypeBufferSize(innerType);
     }
 
     if (type.startsWith('array<vec')) {
         const [, vec, innerType, size] = type.match(/array<vec(\d)<(\w+)>,\s*(\d+)>/)!;
         return Number(vec) * Number(size) * getTypeBufferSize(innerType);
+    }
+
+    if (type.startsWith('array<mat')) {
+        const [, x, y, innerType, size] = type.match(/array<mat(\d)x(\d)<(\w+)>,\s*(\d+)>/)!;
+        return Number(x) * Number(y) * Number(size) * getTypeBufferSize(innerType);
     }
 
     if (type.startsWith('array')) {
