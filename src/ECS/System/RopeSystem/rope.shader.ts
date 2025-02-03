@@ -8,12 +8,13 @@ export const MAX_INSTANCE_COUNT = MAX_ROPES_COUNT * ROPE_POINTS_COUNT;
 
 export const shaderMeta = new ShaderMeta(
     {
+        // USE projection
         resolution: new VariableMeta('uResolution', VariableKind.StorageRead, `array<vec2<f32>, ${ MAX_ROPES_COUNT }>`),
         translate: new VariableMeta('uTranslate', VariableKind.StorageRead, `array<vec2<f32>, ${ MAX_ROPES_COUNT }>`),
 
-        thinness: new VariableMeta('uThinness', VariableKind.StorageRead, `array<f32, ${ MAX_ROPES_COUNT }>`),
         color: new VariableMeta('uColor', VariableKind.StorageRead, `array<vec4<f32>, ${ MAX_ROPES_COUNT }>`),
         points: new VariableMeta('uPoints', VariableKind.StorageRead, `array<vec2<f32>, ${ MAX_INSTANCE_COUNT }>`),
+        thinness: new VariableMeta('uThinness', VariableKind.StorageRead, `array<f32, ${ MAX_ROPES_COUNT }>`),
     },
     {},
     // language=WGSL

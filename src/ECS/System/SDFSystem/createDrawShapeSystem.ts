@@ -16,8 +16,7 @@ export function createDrawShapeSystem(world: IWorld, device: GPUDevice) {
     const transformCollect = getTypeTypedArray(shaderMeta.uniforms.transform.type);
     const kindCollect = getTypeTypedArray(shaderMeta.uniforms.kind.type);
     const colorCollect = getTypeTypedArray(shaderMeta.uniforms.color.type);
-    const widthCollect = getTypeTypedArray(shaderMeta.uniforms.width.type);
-    const heightCollect = getTypeTypedArray(shaderMeta.uniforms.height.type);
+    const valuesCollect = getTypeTypedArray(shaderMeta.uniforms.values.type);
     const roundnessCollect = getTypeTypedArray(shaderMeta.uniforms.roundness.type);
 
     const query = defineQuery([Shape, Size, Color, Translate, Resolution]);
@@ -39,10 +38,8 @@ export function createDrawShapeSystem(world: IWorld, device: GPUDevice) {
             transformCollect.set(Transform.matrix[id], i * 16);
             // ui8
             kindCollect[i] = Shape.kind[id];
-            // vec2<f32>
-            widthCollect[i] = Size.width[id];
-            // vec2<f32>
-            heightCollect[i] = Size.height[id];
+            // vec4<f32> width, height, ..., ...
+            valuesCollect.set(Shape.values[id], i * 6);
             // f32
             roundnessCollect[i] = Roundness.value[id];
             // [f32, 4]
@@ -57,12 +54,9 @@ export function createDrawShapeSystem(world: IWorld, device: GPUDevice) {
         if (enterEntities.length > 0 || changedEntities.length > 0) {
             device.queue.writeBuffer(gpuShader.uniforms.kind.getGPUBuffer(device), 0, kindCollect);
             device.queue.writeBuffer(gpuShader.uniforms.color.getGPUBuffer(device), 0, colorCollect);
-            device.queue.writeBuffer(gpuShader.uniforms.width.getGPUBuffer(device), 0, widthCollect);
-            device.queue.writeBuffer(gpuShader.uniforms.height.getGPUBuffer(device), 0, heightCollect);
+            device.queue.writeBuffer(gpuShader.uniforms.values.getGPUBuffer(device), 0, valuesCollect);
             device.queue.writeBuffer(gpuShader.uniforms.roundness.getGPUBuffer(device), 0, roundnessCollect);
             device.queue.writeBuffer(gpuShader.uniforms.transform.getGPUBuffer(device), 0, transformCollect);
-            // device.queue.writeBuffer(gpuShader.uniforms.translate.getGPUBuffer(device), 0, translateCollect);
-            // device.queue.writeBuffer(gpuShader.uniforms.resolution.getGPUBuffer(device), 0, resolutionCollect);
         }
 
         renderPass.setPipeline(pipeline);

@@ -3,9 +3,10 @@ import { Rope, ROPE_BUFFER_LENGTH } from '../ECS/Component/Rope.ts';
 import { canvas } from '../gpu.ts';
 import { macroTasks } from '../../lib/TasksScheduler/macroTasks.ts';
 import { addComponent, addEntity, IWorld } from 'bitecs';
-import { Shape } from '../ECS/Component/Shape.ts';
+import { setCircle, setParallelogram, setRectangle, setTrapezoid, setTriangle, Shape } from '../ECS/Component/Shape.ts';
 import { Transform } from '../ECS/Component/Transform.ts';
 import { mat4 } from 'gl-matrix';
+import { MAX_INSTANCE_COUNT } from '../ECS/System/SDFSystem/sdf.shader.ts';
 
 export function createRopes(world: IWorld) {
     for (let i = 0; i < 100; i++) {
@@ -42,7 +43,8 @@ export function createRopes(world: IWorld) {
 }
 
 export function createShapes(world: IWorld) {
-    for (let i = 0; i < 10; i++) {
+    // for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < MAX_INSTANCE_COUNT; i++) {
         const id = addEntity(world);
         addComponent(world, Resolution, id);
         addComponent(world, Translate, id);
@@ -52,39 +54,87 @@ export function createShapes(world: IWorld) {
         addComponent(world, Size, id);
         addComponent(world, Shape, id);
 
-        // Shape.kind[id] = Math.round(3 * Math.random());
-        // Shape.point1[id].set([50 + Math.random() * 400, 50 + Math.random() * 400]);
-        // Shape.point2[id].set([50 + Math.random() * 400, 50 + Math.random() * 400]);
-        // Thinness.value[id] = 10 + 20 * Math.random();
-        // Roundness.value[id] = Thinness.value[id] * Math.random();
-        // setColor(id, Math.random(), Math.random(), Math.random(), 0.5 + Math.random() / 2);
-
-        // circle
-        // Translate.x[id] = 50 + Math.random() * 400;
-        // Translate.y[id] = 50 + Math.random() * 400;
-        // Shape.kind[id] = 0;
-        // Size.width[id] = 30;
-        // setColor(id, Math.random(), Math.random(), Math.random(), 0.5 + Math.random() / 2);
-
-        // Translate.x[id] = 300;//50 + Math.random() * 400;
-        // Translate.y[id] = 300;//50 + Math.random() * 400;
         mat4.identity(Transform.matrix[id]);
         mat4.translate(Transform.matrix[id], Transform.matrix[id], [50 + Math.random() * 400, 50 + Math.random() * 400, 0]);
+        // mat4.translate(Transform.matrix[id], Transform.matrix[id], [300, 300, 0]);
 
-        Shape.kind[id] = 1;
-        Size.width[id] = 300;
-        Size.height[id] = 60;
-        Roundness.value[id] = 30;
+        switch (Math.round(4 * Math.random())) {
+            case 0:
+                setCircle(id, 10 + Math.random() * 50);
+                break;
+            case 1:
+                setRectangle(id, 50 + Math.random() * 100, 50 + Math.random() * 100);
+                break;
+            case 2:
+                setParallelogram(
+                    id,
+                    50 + Math.random() * 100,
+                    50 + Math.random() * 100,
+                    -50 + Math.random() * 100,
+                );
+                break;
+            case 3:
+                setTrapezoid(
+                    id,
+                    50 + Math.random() * 100,
+                    50 + Math.random() * 100,
+                    50 + Math.random() * 100,
+                );
+                break;
+            case 4:
+                setTriangle(
+                    id,
+                    50 + Math.random() * 100,
+                    50 + Math.random() * 100,
+                    -50 + Math.random() * 100,
+                    -50 + Math.random() * 100,
+                    50 + Math.random() * 100,
+                    -50 + Math.random() * 100,
+                );
+                break;
+        }
+
         setColor(id, Math.random(), Math.random(), Math.random(), 0.5 + Math.random() / 2);
+        Roundness.value[id] = 2;
 
-        // function update() {
-        //     Shape.kind[id] = Math.round(3 * Math.random());
-        //     Shape.point1[id].set([50 + Math.random() * 400, 50 + Math.random() * 400]);
-        //     Shape.point2[id].set([50 + Math.random() * 400, 50 + Math.random() * 400]);
-        //     Thinness.value[id] = 10 + 20 * Math.random();
-        //     Roundness.value[id] = Thinness.value[id] * Math.random();
-        // }
+        function update() {
+            switch (Math.round(4 * Math.random())) {
+                case 0:
+                    setCircle(id, 10 + Math.random() * 50);
+                    break;
+                case 1:
+                    setRectangle(id, 50 + Math.random() * 100, 50 + Math.random() * 100);
+                    break;
+                case 2:
+                    setParallelogram(
+                        id,
+                        50 + Math.random() * 100,
+                        50 + Math.random() * 100,
+                        -50 + Math.random() * 100,
+                    );
+                    break;
+                case 3:
+                    setTrapezoid(
+                        id,
+                        50 + Math.random() * 100,
+                        50 + Math.random() * 100,
+                        50 + Math.random() * 100,
+                    );
+                    break;
+                case 4:
+                    setTriangle(
+                        id,
+                        50 + Math.random() * 100,
+                        50 + Math.random() * 100,
+                        -50 + Math.random() * 100,
+                        -50 + Math.random() * 100,
+                        50 + Math.random() * 100,
+                        -50 + Math.random() * 100,
+                    );
+                    break;
+            }
+        }
 
-        // macroTasks.addInterval(update, 1000);
+        macroTasks.addInterval(update, 100);
     }
 }

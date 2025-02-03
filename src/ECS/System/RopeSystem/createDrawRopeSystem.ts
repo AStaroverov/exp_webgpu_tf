@@ -8,7 +8,7 @@ import { Color, Resolution, Thinness, Translate } from '../../Component/Common.t
 export function createDrawRopeSystem(world: IWorld, device: GPUDevice) {
     const gpuShader = new GPUShader(shaderMeta);
     const pipeline = gpuShader.getRenderPipeline(device);
-    const bindGroup = gpuShader.getBindGroup(device);
+    const bindGroup = gpuShader.getBindGroup(device, 0);
 
     const colorCollect = getTypeTypedArray(shaderMeta.uniforms.color.type);
     const pointsCollect = getTypeTypedArray(shaderMeta.uniforms.points.type);
