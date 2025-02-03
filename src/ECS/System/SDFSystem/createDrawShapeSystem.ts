@@ -2,7 +2,7 @@ import { Changed, defineQuery, enterQuery, IWorld } from 'bitecs';
 import { shaderMeta } from './sdf.shader.ts';
 import { GPUShader } from '../../../WGSL/GPUShader.ts';
 import { getTypeTypedArray } from '../../../Shader';
-import { Color, Resolution, Roundness, Size, Translate } from '../../Component/Common.ts';
+import { Color, Roundness } from '../../Component/Common.ts';
 import { Shape } from '../../Component/Shape.ts';
 import { Transform } from '../../Component/Transform.ts';
 import { projectionMatrix } from '../resizeSystem.ts';
@@ -19,9 +19,9 @@ export function createDrawShapeSystem(world: IWorld, device: GPUDevice) {
     const valuesCollect = getTypeTypedArray(shaderMeta.uniforms.values.type);
     const roundnessCollect = getTypeTypedArray(shaderMeta.uniforms.roundness.type);
 
-    const query = defineQuery([Shape, Size, Color, Translate, Resolution]);
+    const query = defineQuery([Shape, Color, Transform]);
     const enter = enterQuery(query);
-    const queryChanged = defineQuery([Changed(Shape), Changed(Size), Changed(Color), Changed(Translate), Changed(Resolution)]);
+    const queryChanged = defineQuery([Changed(Shape), Changed(Color), Changed(Transform)]);
 
     return function drawShapeSystem(renderPass: GPURenderPassEncoder) {
         const entities = query(world);
@@ -63,6 +63,5 @@ export function createDrawShapeSystem(world: IWorld, device: GPUDevice) {
         renderPass.setBindGroup(0, bindGroup0);
         renderPass.setBindGroup(1, bindGroup1);
         renderPass.draw(6, entities.length, 0, 0);
-        renderPass.end();
     };
 }

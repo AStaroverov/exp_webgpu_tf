@@ -2,11 +2,12 @@ import { createResizeSystem } from '../ECS/System/resizeSystem.ts';
 import { world } from '../ECS/world.ts';
 import { canvas, context, device } from '../gpu.ts';
 import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
-import { createShapes } from './helpers.ts';
+import { createRopes, createShapes } from './helpers.ts';
+import { createDrawRopeSystem } from '../ECS/System/RopeSystem/createDrawRopeSystem.ts';
 import { createDrawShapeSystem } from '../ECS/System/SDFSystem/createDrawShapeSystem.ts';
 
 const resizeSystem = createResizeSystem(canvas);
-// const drawRopeSystem = createDrawRopeSystem(world, device);
+const drawRopeSystem = createDrawRopeSystem(world, device);
 const drawShapeSystem = createDrawShapeSystem(world, device);
 
 function frame() {
@@ -24,15 +25,17 @@ function frame() {
     });
 
     resizeSystem();
-    // drawRopeSystem(passEncoder);
+    drawRopeSystem(passEncoder);
     drawShapeSystem(passEncoder);
+
+    passEncoder.end();
 
     device.queue.submit([
         commandEncoder.finish(),
     ]);
 }
 
-// createRopes(world);
+createRopes(world);
 createShapes(world);
 
 frameTasks.addInterval(frame, 1);

@@ -69,7 +69,6 @@ export const shaderMeta = new ShaderMeta(
             @location(0) @interpolate(flat) instance_index: u32
         ) -> @location(0) vec4<f32> {
             var matr = uTransform[instance_index];
-
             var pos = frag_coord.xy - vec2<f32>(matr[3][0], matr[3][1]);
 //            var pos = (uTransform[instance_index] * vec4(frag_coord.xy, 0.0, 1.0)).xy;
             var kind = uKind[instance_index];

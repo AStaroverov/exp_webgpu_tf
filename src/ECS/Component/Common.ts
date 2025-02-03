@@ -26,12 +26,3 @@ export function setColor(id: number, r: number, g: number, b: number, a: number)
     Color.b[id] = b;
     Color.a[id] = a;
 }
-
-export const Resolution = defineComponent({
-    x: Types.f32,
-    y: Types.f32,
-});
-export const Translate = defineComponent({
-    x: Types.f32,
-    y: Types.f32,
-});
