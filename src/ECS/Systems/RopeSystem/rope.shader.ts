@@ -1,7 +1,7 @@
 import { VariableKind, VariableMeta } from '../../../Struct/VariableMeta.ts';
 import { ShaderMeta } from '../../../WGSL/ShaderMeta.ts';
 import { wgsl } from '../../../WGSL/wgsl.ts';
-import { ROPE_POINTS_COUNT } from '../../Component/Rope.ts';
+import { ROPE_POINTS_COUNT } from '../../Components/Rope.ts';
 
 export const MAX_ROPES_COUNT = 1000;
 export const MAX_INSTANCE_COUNT = MAX_ROPES_COUNT * ROPE_POINTS_COUNT;

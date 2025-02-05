@@ -1,7 +1,5 @@
 import { ShaderMeta } from './ShaderMeta.ts';
 import { GPUVariable } from '../WebGPU/GPUVariable.ts';
-import { presentationFormat } from '../gpu.ts';
-
 
 export class GPUShader<M extends ShaderMeta<any, any>> {
     uniforms = {} as Record<keyof M['uniforms'], GPUVariable>;
@@ -44,7 +42,8 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
                 entryPoint: this.shaderMeta.fragmentName,
                 targets: [
                     {
-                        format: presentationFormat,
+                        // TODO: get from context format
+                        format: navigator.gpu.getPreferredCanvasFormat(),
                     },
                 ],
             },

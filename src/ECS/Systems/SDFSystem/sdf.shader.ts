@@ -20,7 +20,8 @@ export const shaderMeta = new ShaderMeta(
     wgsl`
         struct VertexOutput {
             @builtin(position) position: vec4<f32>,
-            @location(0) @interpolate(flat) instance_index: u32
+            @location(0) @interpolate(flat) instance_index: u32,
+            @location(1) local_position: vec2<f32>,
         };
         
         @vertex
@@ -60,17 +61,15 @@ export const shaderMeta = new ShaderMeta(
                 1.0
             );
             
-            return VertexOutput(position, instance_index);
+            return VertexOutput(position, instance_index, rect_vertex);
         }
         
         @fragment
         fn fs_main(
-            @builtin(position) frag_coord: vec4<f32>,
-            @location(0) @interpolate(flat) instance_index: u32
+            @location(0) @interpolate(flat) instance_index: u32,
+            @location(1) local_position: vec2<f32>,
         ) -> @location(0) vec4<f32> {
-            var matr = uTransform[instance_index];
-            var pos = frag_coord.xy - vec2<f32>(matr[3][0], matr[3][1]);
-//            var pos = (uTransform[instance_index] * vec4(frag_coord.xy, 0.0, 1.0)).xy;
+            var pos = local_position; 
             var kind = uKind[instance_index];
             var width = uValues[instance_index*6+0];
             var height = uValues[instance_index*6+1];

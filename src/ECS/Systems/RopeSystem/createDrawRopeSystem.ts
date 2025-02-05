@@ -1,11 +1,12 @@
 import { Changed, defineQuery, enterQuery, IWorld } from 'bitecs';
-import { Rope, ROPE_BUFFER_LENGTH, ROPE_POINTS_COUNT } from '../../Component/Rope.ts';
+
 import { shaderMeta } from './rope.shader.ts';
 import { GPUShader } from '../../../WGSL/GPUShader.ts';
 import { getTypeTypedArray } from '../../../Shader';
-import { Color, Thinness } from '../../Component/Common.ts';
-import { Transform } from '../../Component/Transform.ts';
 import { projectionMatrix } from '../resizeSystem.ts';
+import { Rope, ROPE_BUFFER_LENGTH, ROPE_POINTS_COUNT } from '../../Components/Rope.ts';
+import { Color, Thinness } from '../../Components/Common.ts';
+import { Transform } from '../../Components/Transform.ts';
 
 export function createDrawRopeSystem(world: IWorld, device: GPUDevice) {
     const gpuShader = new GPUShader(shaderMeta);
@@ -18,6 +19,7 @@ export function createDrawRopeSystem(world: IWorld, device: GPUDevice) {
     const pointsCollect = getTypeTypedArray(shaderMeta.uniforms.points.type);
     const thinnessCollect = getTypeTypedArray(shaderMeta.uniforms.thinness.type);
 
+    // optimize query by each component
     const query = defineQuery([Rope, Thinness, Color, Transform]);
     const enter = enterQuery(query);
     const queryChanged = defineQuery([Changed(Rope), Changed(Thinness), Changed(Color), Changed(Transform)]);
@@ -59,6 +61,5 @@ export function createDrawRopeSystem(world: IWorld, device: GPUDevice) {
         renderPass.setBindGroup(0, bindGroup0);
         renderPass.setBindGroup(1, bindGroup1);
         renderPass.draw(6, entities.length * ROPE_POINTS_COUNT, 0, 0);
-        // renderPass.end();
     };
 }

@@ -1,16 +1,39 @@
-export const canvas = document.querySelector('canvas')!;
-export const adapter = await navigator.gpu.requestAdapter();
-if (adapter === null) throw new Error('No adapter found');
+// export const canvas = document.querySelector('canvas')!;
+// export const adapter = await navigator.gpu.requestAdapter();
+// if (adapter === null) throw new Error('No adapter found');
+//
+// export const device = await adapter.requestDevice();
+// export const context = canvas.getContext('webgpu') as GPUCanvasContext;
+//
+// canvas.width = canvas.clientWidth; //* window.devicePixelRatio;
+// canvas.height = canvas.clientHeight; //* window.devicePixelRatio;
+// export const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+//
+// context.configure({
+//     device,
+//     format: presentationFormat,
+//     alphaMode: 'premultiplied',
+// });
 
-export const device = await adapter.requestDevice();
-export const context = canvas.getContext('webgpu') as GPUCanvasContext;
+export async function initWebGPU(canvas: HTMLCanvasElement): Promise<{ device: GPUDevice, context: GPUCanvasContext }> {
+    const adapter = await navigator.gpu.requestAdapter();
+    if (adapter === null) throw new Error('No adapter found');
 
-canvas.width = canvas.clientWidth //* window.devicePixelRatio;
-canvas.height = canvas.clientHeight //* window.devicePixelRatio;
-export const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+    const device = await adapter.requestDevice();
+    const context = canvas.getContext('webgpu') as GPUCanvasContext;
 
-context.configure({
-    device,
-    format: presentationFormat,
-    alphaMode: 'premultiplied',
-});
+    canvas.width = canvas.clientWidth; //* window.devicePixelRatio;
+    canvas.height = canvas.clientHeight; //* window.devicePixelRatio;
+    const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+
+    context.configure({
+        device,
+        format: presentationFormat,
+        alphaMode: 'premultiplied',
+    });
+
+    return {
+        device,
+        context,
+    };
+}

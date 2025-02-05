@@ -2,10 +2,10 @@ import { Changed, defineQuery, enterQuery, IWorld } from 'bitecs';
 import { shaderMeta } from './sdf.shader.ts';
 import { GPUShader } from '../../../WGSL/GPUShader.ts';
 import { getTypeTypedArray } from '../../../Shader';
-import { Color, Roundness } from '../../Component/Common.ts';
-import { Shape } from '../../Component/Shape.ts';
-import { Transform } from '../../Component/Transform.ts';
 import { projectionMatrix } from '../resizeSystem.ts';
+import { Color, Roundness } from '../../Components/Common.ts';
+import { Shape } from '../../Components/Shape.ts';
+import { Transform } from '../../Components/Transform.ts';
 
 export function createDrawShapeSystem(world: IWorld, device: GPUDevice) {
     const gpuShader = new GPUShader(shaderMeta);

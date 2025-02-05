@@ -4,7 +4,7 @@ export default defineConfig({
     build: {
         rollupOptions: {
             input: {
-                app: './src/example/index.html', // default
+                app: './example/index.html', // default
             },
         },
     },

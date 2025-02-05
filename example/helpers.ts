@@ -1,13 +1,19 @@
-import { Color, Roundness, setColor, Thinness } from '../ECS/Component/Common.ts';
-import { Rope, ROPE_BUFFER_LENGTH, ROPE_POINTS_COUNT } from '../ECS/Component/Rope.ts';
-import { canvas } from '../gpu.ts';
-import { macroTasks } from '../../lib/TasksScheduler/macroTasks.ts';
+import { Color, Roundness, setColor, Thinness } from '../src/ECS/Components/Common.ts';
+import { Rope, ROPE_BUFFER_LENGTH, ROPE_POINTS_COUNT } from '../src/ECS/Components/Rope.ts';
+import { macroTasks } from '../lib/TasksScheduler/macroTasks.ts';
 import { addComponent, addEntity, IWorld } from 'bitecs';
-import { setCircle, setParallelogram, setRectangle, setTrapezoid, setTriangle, Shape } from '../ECS/Component/Shape.ts';
-import { Transform } from '../ECS/Component/Transform.ts';
+import {
+    setCircle,
+    setParallelogram,
+    setRectangle,
+    setTrapezoid,
+    setTriangle,
+    Shape,
+} from '../src/ECS/Components/Shape.ts';
+import { Transform } from '../src/ECS/Components/Transform.ts';
 import { mat4 } from 'gl-matrix';
 
-export function createRopes(world: IWorld) {
+export function createRopes(world: IWorld, canvas: HTMLCanvasElement) {
     for (let i = 0; i < 200; i++) {
         const id = addEntity(world);
         addComponent(world, Transform, id);
