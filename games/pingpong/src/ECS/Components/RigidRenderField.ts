@@ -2,6 +2,7 @@ import { createRectangleRR } from './RigidRender.ts';
 import { RenderWorld } from '../../../../../src/ECS/renderWorld.ts';
 import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
 import { PhysicalWorld } from '../../index.ts';
+import { ActiveEvents } from '@dimforge/rapier2d';
 
 export function createFiled(physicalWorld: PhysicalWorld, renderWorld: RenderWorld, canvas: HTMLCanvasElement) {
     const common = {
@@ -11,6 +12,7 @@ export function createFiled(physicalWorld: PhysicalWorld, renderWorld: RenderWor
         bodyType: RigidBodyType.Fixed,
         gravityScale: 0,
         mass: 1,
+        collisionEvent: ActiveEvents.NONE,
     };
     // top
     createRectangleRR({

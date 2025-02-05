@@ -8,6 +8,7 @@ type CommonPhysicalOptions = {
     bodyType: RigidBodyType,
     gravityScale: number,
     mass: number,
+    collisionEvent: ActiveEvents
 }
 
 export type RectangleColliderOptions = CommonPhysicalOptions & {
@@ -28,7 +29,7 @@ export function createRectangleCollider(
     let body = physicalWorld.createRigidBody(bodyDesc);
     let colliderDesc = ColliderDesc.cuboid(o.width / 2, o.height / 2)
         .setMass(o.mass)
-        .setActiveEvents(ActiveEvents.COLLISION_EVENTS);
+        .setActiveEvents(o.collisionEvent);
     physicalWorld.createCollider(colliderDesc, body);
 
     return body.handle;
@@ -54,7 +55,7 @@ export function createCircleCollider(
     let body = physicalWorld.createRigidBody(bodyDesc);
     let colliderDesc = ColliderDesc.ball(o.radius / 2)
         .setMass(o.mass)
-        .setActiveEvents(ActiveEvents.COLLISION_EVENTS);
+        .setActiveEvents(o.collisionEvent);
     physicalWorld.createCollider(colliderDesc, body);
 
     return body.handle;

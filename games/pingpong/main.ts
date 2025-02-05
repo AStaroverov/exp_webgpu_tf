@@ -11,7 +11,7 @@ import {
 import { createCirceRR, createRectangleRR } from './src/ECS/Components/RigidRender.ts';
 import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
 import { createPlatformControllerSystem } from './src/ECS/Systems/createPlatformControllerSystem.ts';
-import { EventQueue } from '@dimforge/rapier2d';
+import { ActiveEvents, EventQueue } from '@dimforge/rapier2d';
 import { createFiled } from './src/ECS/Components/RigidRenderField.ts';
 
 
@@ -31,7 +31,7 @@ for (let i = 0; i < 1000; i++) {
         physicalWorld,
         renderWorld,
         x,
-        y,
+        y: y + 50,
         width: 5,
         height: 5,
         rotation: 0,
@@ -39,6 +39,7 @@ for (let i = 0; i < 1000; i++) {
         bodyType: RigidBodyType.Dynamic,
         gravityScale: 0,
         mass: 1,
+        collisionEvent: ActiveEvents.NONE,
     });
 }
 
@@ -52,6 +53,7 @@ createCirceRR({
     bodyType: RigidBodyType.Dynamic,
     gravityScale: 4,
     mass: 100,
+    collisionEvent: ActiveEvents.NONE,
 });
 
 const platformId = createRectangleRR({
@@ -66,6 +68,7 @@ const platformId = createRectangleRR({
     bodyType: RigidBodyType.KinematicPositionBased,
     gravityScale: 1,
     mass: 1000,
+    collisionEvent: ActiveEvents.NONE,
 });
 
 const syncRigidBodyMatrixSystem = createSyncRigidBodyToRenderTransformSystem(physicalWorld);
