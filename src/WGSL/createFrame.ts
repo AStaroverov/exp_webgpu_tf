@@ -1,5 +1,5 @@
 import { IWorld } from 'bitecs';
-import { renderWorld } from '../ECS/renderWorld.ts';
+import { world } from '../ECS/world.ts';
 import { createResizeSystem } from '../ECS/Systems/resizeSystem.ts';
 
 export function createFrameTick(
@@ -16,7 +16,7 @@ export function createFrameTick(
     const resizeSystem = createResizeSystem(canvas);
 
     const arg = {
-        world: renderWorld,
+        world: world,
         context,
         device,
         passEncoder: null as unknown as GPURenderPassEncoder,

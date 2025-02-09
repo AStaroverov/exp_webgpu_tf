@@ -10,21 +10,21 @@ import {
     setTriangle,
     Shape,
 } from '../src/ECS/Components/Shape.ts';
-import { Transform } from '../src/ECS/Components/Transform.ts';
+import { LocalTransform } from '../src/ECS/Components/Transform.ts';
 import { mat4 } from 'gl-matrix';
 
 export function createRopes(world: IWorld, canvas: HTMLCanvasElement) {
     for (let i = 0; i < 200; i++) {
         const id = addEntity(world);
-        addComponent(world, Transform, id);
+        addComponent(world, LocalTransform, id);
         addComponent(world, Thinness, id);
         addComponent(world, Color, id);
         addComponent(world, Rope, id);
 
-        mat4.identity(Transform.matrix[id]);
+        mat4.identity(LocalTransform.local[id]);
         mat4.translate(
-            Transform.matrix[id],
-            Transform.matrix[id],
+            LocalTransform.local[id],
+            LocalTransform.local[id],
             // [0, 0, 0],
             [-50 + Math.random() * 200, -50 + Math.random() * 200, 0],
         );
@@ -61,14 +61,13 @@ export function createRopes(world: IWorld, canvas: HTMLCanvasElement) {
 export function createShapes(world: IWorld) {
     for (let i = 0; i < 200; i++) {
         const id = addEntity(world);
-        addComponent(world, Transform, id);
+        addComponent(world, LocalTransform, id);
         addComponent(world, Roundness, id);
         addComponent(world, Color, id);
         addComponent(world, Shape, id);
 
-        mat4.identity(Transform.matrix[id]);
-        mat4.translate(Transform.matrix[id], Transform.matrix[id], [50 + Math.random() * 400, 50 + Math.random() * 400, 0]);
-        // mat4.translate(Transform.matrix[id], Transform.matrix[id], [300, 300, 0]);
+        mat4.identity(LocalTransform.local[id]);
+        mat4.translate(LocalTransform.local[id], LocalTransform.local[id], [50 + Math.random() * 400, 50 + Math.random() * 400, 0]);
 
         switch (Math.round(4 * Math.random())) {
             case 0:

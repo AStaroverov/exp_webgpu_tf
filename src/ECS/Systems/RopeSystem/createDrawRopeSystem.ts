@@ -6,7 +6,7 @@ import { getTypeTypedArray } from '../../../Shader';
 import { projectionMatrix } from '../resizeSystem.ts';
 import { Rope, ROPE_BUFFER_LENGTH, ROPE_POINTS_COUNT } from '../../Components/Rope.ts';
 import { Color, Thinness } from '../../Components/Common.ts';
-import { Transform } from '../../Components/Transform.ts';
+import { GlobalTransform } from '../../Components/Transform.ts';
 
 export function createDrawRopeSystem(world: IWorld, device: GPUDevice) {
     const gpuShader = new GPUShader(shaderMeta);
@@ -20,9 +20,9 @@ export function createDrawRopeSystem(world: IWorld, device: GPUDevice) {
     const thinnessCollect = getTypeTypedArray(shaderMeta.uniforms.thinness.type);
 
     // optimize query by each component
-    const query = defineQuery([Rope, Thinness, Color, Transform]);
+    const query = defineQuery([Rope, Thinness, Color, GlobalTransform]);
     const enter = enterQuery(query);
-    const queryChanged = defineQuery([Changed(Rope), Changed(Thinness), Changed(Color), Changed(Transform)]);
+    const queryChanged = defineQuery([Changed(Rope), Changed(Thinness), Changed(Color), Changed(GlobalTransform)]);
 
     return function drawRopeSystem(renderPass: GPURenderPassEncoder) {
         const entities = query(world);
@@ -37,7 +37,7 @@ export function createDrawRopeSystem(world: IWorld, device: GPUDevice) {
             if (enterEntities.indexOf(id) === -1 && changedEntities.indexOf(id) === -1) continue;
 
             pointsCollect.set(Rope.points[id], i * ROPE_BUFFER_LENGTH);
-            transformCollect.set(Transform.matrix[id], i * 16);
+            transformCollect.set(GlobalTransform.matrix[id], i * 16);
 
             // f32
             thinnessCollect[i] = Thinness.value[id];

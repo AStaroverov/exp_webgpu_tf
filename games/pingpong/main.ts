@@ -1,4 +1,4 @@
-import { renderWorld } from '../../src/ECS/renderWorld.ts';
+import { world } from '../../src/ECS/world.ts';
 import { initWebGPU } from '../../src/gpu.ts';
 import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
 import { createFrameTick } from '../../src/WGSL/createFrame.ts';
@@ -19,17 +19,17 @@ const canvas = document.querySelector('canvas')!;
 const { device, context } = await initWebGPU(canvas);
 const physicalWorld = initPhysicalWorld();
 
-const drawRopeSystem = createDrawRopeSystem(renderWorld, device);
-const drawShapeSystem = createDrawShapeSystem(renderWorld, device);
+const drawRopeSystem = createDrawRopeSystem(world, device);
+const drawShapeSystem = createDrawShapeSystem(world, device);
 
-createFiled(physicalWorld, renderWorld, canvas);
+createFiled(physicalWorld, world, canvas);
 
 for (let i = 0; i < 1000; i++) {
     const y = Math.floor(i / 50) * 6;
     const x = 150 + i * 6 - y * 50;
     createRectangleRR({
         physicalWorld,
-        renderWorld,
+        renderWorld: world,
         x,
         y: y + 50,
         width: 5,
@@ -45,7 +45,7 @@ for (let i = 0; i < 1000; i++) {
 
 createCirceRR({
     physicalWorld,
-    renderWorld,
+    renderWorld: world,
     x: 300,
     y: 300,
     radius: 40,
@@ -58,7 +58,7 @@ createCirceRR({
 
 const platformId = createRectangleRR({
     physicalWorld,
-    renderWorld,
+    renderWorld: world,
     x: canvas.width / 2,
     y: canvas.height - 50,
     width: 100,
@@ -85,7 +85,6 @@ const eventQueue = new EventQueue(true);
 const physicalFrame = () => {
     platformControllerSystem();
     physicalWorld.step(eventQueue);
-
     // eventQueue.drainCollisionEvents((handle1, handle2, started) => {
     //     console.log('Collision event:', handle1, handle2, started);
     // });

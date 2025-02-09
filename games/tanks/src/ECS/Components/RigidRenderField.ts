@@ -4,10 +4,10 @@ import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
 import { PhysicalWorld } from '../../index.ts';
 import { ActiveEvents } from '@dimforge/rapier2d';
 
-export function createFiled(physicalWorld: PhysicalWorld, renderWorld: World, canvas: HTMLCanvasElement) {
+export function createFiled(physicalWorld: PhysicalWorld, world: World, canvas: HTMLCanvasElement) {
     const common = {
         physicalWorld,
-        renderWorld,
+        world,
         color: [0, 1, 0, 1] as [number, number, number, number],
         bodyType: RigidBodyType.Fixed,
         gravityScale: 0,

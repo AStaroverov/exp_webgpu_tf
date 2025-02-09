@@ -1,4 +1,4 @@
-import { renderWorld } from '../src/ECS/renderWorld.ts';
+import { world } from '../src/ECS/world.ts';
 import { initWebGPU } from '../src/gpu.ts';
 import { frameTasks } from '../lib/TasksScheduler/frameTasks.ts';
 import { createRopes, createShapes } from './helpers.ts';
@@ -8,11 +8,11 @@ import { createFrameTick } from '../src/WGSL/createFrame.ts';
 
 const canvas = document.querySelector('canvas')!;
 const { device, context } = await initWebGPU(canvas);
-const drawRopeSystem = createDrawRopeSystem(renderWorld, device);
-const drawShapeSystem = createDrawShapeSystem(renderWorld, device);
+const drawRopeSystem = createDrawRopeSystem(world, device);
+const drawShapeSystem = createDrawShapeSystem(world, device);
 
-createRopes(renderWorld, canvas);
-createShapes(renderWorld);
+createRopes(world, canvas);
+createShapes(world);
 
 const frame = createFrameTick(canvas, device, context, ({ passEncoder }) => {
     drawRopeSystem(passEncoder);

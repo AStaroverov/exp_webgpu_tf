@@ -5,7 +5,7 @@ import { getTypeTypedArray } from '../../../Shader';
 import { projectionMatrix } from '../resizeSystem.ts';
 import { Color, Roundness } from '../../Components/Common.ts';
 import { Shape } from '../../Components/Shape.ts';
-import { Transform } from '../../Components/Transform.ts';
+import { GlobalTransform } from '../../Components/Transform.ts';
 
 export function createDrawShapeSystem(world: IWorld, device: GPUDevice) {
     const gpuShader = new GPUShader(shaderMeta);
@@ -19,9 +19,9 @@ export function createDrawShapeSystem(world: IWorld, device: GPUDevice) {
     const valuesCollect = getTypeTypedArray(shaderMeta.uniforms.values.type);
     const roundnessCollect = getTypeTypedArray(shaderMeta.uniforms.roundness.type);
 
-    const query = defineQuery([Shape, Color, Transform]);
+    const query = defineQuery([Shape, Color, GlobalTransform]);
     const enter = enterQuery(query);
-    const queryChanged = defineQuery([Changed(Shape), Changed(Color), Changed(Transform)]);
+    const queryChanged = defineQuery([Changed(Shape), Changed(Color), Changed(GlobalTransform)]);
 
     return function drawShapeSystem(renderPass: GPURenderPassEncoder) {
         const entities = query(world);
@@ -35,7 +35,7 @@ export function createDrawShapeSystem(world: IWorld, device: GPUDevice) {
 
             if (enterEntities.indexOf(id) === -1 && changedEntities.indexOf(id) === -1) continue;
 
-            transformCollect.set(Transform.matrix[id], i * 16);
+            transformCollect.set(GlobalTransform.matrix[id], i * 16);
             // ui8
             kindCollect[i] = Shape.kind[id];
             // vec4<f32> width, height, ..., ...
