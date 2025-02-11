@@ -26,10 +26,10 @@ export function createTransformSystem(world: World) {
             for (let i = 0; i < entities.length; i++) {
                 const id = entities[i];
                 const globalParent = GlobalTransform.matrix[id];
-                const children = Children.entitiesIds[id];
-                for (const id of children) {
-                    const localChild = LocalTransform.matrix[id];
-                    const globalChild = GlobalTransform.matrix[id];
+                for (let j = 0; j < Children.entitiesCount[id]; j++) {
+                    const childId = Children.entitiesIds[id][j];
+                    const localChild = LocalTransform.matrix[childId];
+                    const globalChild = GlobalTransform.matrix[childId];
                     mat4.multiply(globalChild, globalParent, localChild);
                 }
             }

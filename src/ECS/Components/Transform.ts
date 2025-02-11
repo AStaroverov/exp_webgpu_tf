@@ -13,8 +13,8 @@ export const GlobalTransform = defineComponent({
 export function addTransformComponents(world: World, id: number) {
     addComponent(world, LocalTransform, id);
     addComponent(world, GlobalTransform, id);
-    resetMatrix(LocalTransform.matrix[id]);
-    resetMatrix(GlobalTransform.matrix[id]);
+    resetMatrix(LocalTransform.matrix[id] as unknown as mat4);
+    resetMatrix(GlobalTransform.matrix[id] as unknown as mat4);
 }
 
 const tmpTranslate: [number, number, number] = [0, 0, 0];
@@ -26,6 +26,7 @@ export function resetMatrix(m: mat4) {
 export function applyMatrixTranslate(m: mat4, x: number, y: number) {
     tmpTranslate[0] = x;
     tmpTranslate[1] = y;
+    tmpTranslate[2] = 0;
     mat4.translate(m, m, tmpTranslate);
 }
 

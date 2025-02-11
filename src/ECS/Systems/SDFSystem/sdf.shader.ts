@@ -110,11 +110,11 @@ export const shaderMeta = new ShaderMeta(
                 dist = op_round(dist, roundness);
             }
         
-            if (dist > 0.0) { 
+            if (dist > 0.0 || uColor[instance_index].a == 0.0) { 
                 discard;
 //                return vec4<f32>(1.0, 1.0, 1.0, 0.1);
-             }
-        
+            }
+
             return uColor[instance_index];
         }
 
@@ -217,5 +217,5 @@ export const shaderMeta = new ShaderMeta(
         }
     `,
 );
-
-console.log('>>', shaderMeta.shader.trim());
+//
+// console.log('>>', shaderMeta.shader.trim());

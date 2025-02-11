@@ -17,9 +17,11 @@
   },
   "dependencies": {
     "@dimforge/rapier2d": "^0.14.0",
+    "@types/lodash-es": "^4.17.12",
     "@webgpu/types": "^0.1.31",
     "bitecs": "^0.3.38",
     "gl-matrix": "^3.4.3",
+    "lodash-es": "^4.17.21",
     "vite-plugin-top-level-await": "^1.4.4",
     "vite-plugin-wasm": "^3.4.1"
   }

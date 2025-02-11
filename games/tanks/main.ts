@@ -11,10 +11,10 @@ import { EventQueue } from '@dimforge/rapier2d';
 import { createTankRR } from './src/ECS/Components/Tank.ts';
 import { DI } from './src/DI';
 import { createTransformSystem } from '../../src/ECS/Systems/createTransformSystem.ts';
-import {
-    createSyncGlobalTransformToRigidBodySystem,
-} from './src/ECS/Systems/createSyncGlobalTransformToRigidBodySystem.ts';
 import { createUpdatePlayerTankPositionSystem } from './src/ECS/Systems/createUpdatePlayerTankPositionSystem.ts';
+import { createSpawnerBulletsSystem } from './src/ECS/Systems/createControllBulletSystem.ts';
+import { createRectangleRR } from './src/ECS/Components/RigidRender.ts';
+import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
 
 const canvas = document.querySelector('canvas')!;
 const { device, context } = await initWebGPU(canvas);
@@ -24,33 +24,43 @@ DI.canvas = canvas;
 DI.world = world;
 DI.physicalWorld = physicalWorld;
 
-
 const tankId = createTankRR({
-    x: 300,
-    y: 300,
-    scale: 1,
-    rotation: Math.PI / 13,
+    x: 100,
+    y: 100,
+    rotation: Math.PI / 1.5,
     color: [1, 0, 0, 1],
 });
 
+for (let i = 0; i < 100; i++) {
+    createRectangleRR({
+        x: 200 + (i * 11) % 100,
+        y: 200 + Math.floor(i / 10) * 10,
+        width: 10,
+        height: 10,
+        rotation: 0,
+        color: [1, 0, 1, 1],
+        bodyType: RigidBodyType.Dynamic,
+        gravityScale: 0,
+        mass: 100,
+    });
+}
 
+const spawnBullets = createSpawnerBulletsSystem(tankId);
 const execTransformSystem = createTransformSystem(DI.world);
 const updatePlayerTankPositionSystem = createUpdatePlayerTankPositionSystem(tankId);
-const syncGlobalTransformToRigidBodySystem = createSyncGlobalTransformToRigidBodySystem();
 const applyRigidBodyDeltaToLocalTransformSystem = createApplyRigidBodyDeltaToLocalTransformSystem();
 
 const inputFrame = () => {
     updatePlayerTankPositionSystem();
+    spawnBullets();
 };
 
 const eventQueue = new EventQueue(true);
 const physicalFrame = () => {
-
-    syncGlobalTransformToRigidBodySystem();
-
     physicalWorld.step(eventQueue);
 
     applyRigidBodyDeltaToLocalTransformSystem();
+
     // eventQueue.drainCollisionEvents((handle1, handle2, started) => {
     //     console.log('Collision event:', handle1, handle2, started);
     // });
@@ -75,10 +85,11 @@ frameTasks.addInterval(() => {
     // const time = performance.now();
     // const delta = time - timeStart;
     // timeStart = time;
-
     execTransformSystem();
 
     physicalFrame();
+
     renderFrame();
+
     inputFrame();
 }, 1);
