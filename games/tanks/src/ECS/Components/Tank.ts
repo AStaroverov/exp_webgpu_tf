@@ -1,11 +1,10 @@
 import { createCirceRR, createRectangleRR } from './RigidRender.ts';
 import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
-import { JointData, RigidBody } from '@dimforge/rapier2d';
+import { JointData, RigidBody, Vector2 } from '@dimforge/rapier2d';
 import { addComponent, defineComponent, Types } from 'bitecs';
 import { addTransformComponents } from '../../../../../src/ECS/Components/Transform.ts';
 import { DI } from '../../DI';
 import { Children } from './Children.ts';
-import { addRigidBodyRef } from './Physical.ts';
 
 export const Tank = defineComponent({
     bulletSpeed: Types.f64,
@@ -55,15 +54,18 @@ export const mutatedOptions: Options = {
     height: 0,
     radius: 0,
     rotation: 0,
-    color: [0.01, 0.01, 0.01, 0.01],
+    color: [1, 0, 0, 1],
     mass: 10,
     linearDamping: 5,
     angularDamping: 5,
+    belongsCollisionGroup: undefined,
+    interactsCollisionGroup: undefined,
 };
 
 export const defaultOptions = { ...mutatedOptions };
 
-
+const parentVector = new Vector2(0, 0);
+const childVector = new Vector2(0, 0);
 const createRectanglesRR = (
     parent: RigidBody,
     params: [number, number, number, number][],
@@ -73,14 +75,17 @@ const createRectanglesRR = (
     physicalWorld = DI.physicalWorld,
 ) => {
     return params.map((param) => {
-        mutated.x = x + param[0];
-        mutated.y = y + param[1];
+        const parentTranslation = parent.translation();
+        mutated.x = parentTranslation.x + x + param[0];
+        mutated.y = parentTranslation.y + y + param[1];
         mutated.width = param[2];
         mutated.height = param[3];
         const [wid, pid] = createRectangleRR(mutated);
 
+        parentVector.x = x + param[0];
+        parentVector.y = y + param[1];
         physicalWorld.createImpulseJoint(
-            JointData.fixed(mutated, 100, { x: 0, y: 0 }, 100),
+            JointData.fixed(parentVector, 1, childVector, 1),
             parent,
             physicalWorld.getRigidBody(pid),
             true,
@@ -95,17 +100,17 @@ export function createTankRR(options: {
     y: number,
     rotation: number,
     color: [number, number, number, number],
-}, { world } = DI) {
+}, { world, physicalWorld } = DI) {
     Object.assign(mutatedOptions, defaultOptions, options);
 
     mutatedOptions.radius = PADDING * 22;
     mutatedOptions.bodyType = RigidBodyType.Dynamic;
     mutatedOptions.belongsCollisionGroup = 0;
     mutatedOptions.interactsCollisionGroup = 0;
-    mutatedOptions.color = [0.2, 0.1, 0.1, 1];
+    mutatedOptions.color = [0.2, 0.1, 0.1, 0];
 
     const [tankId, rbId] = createCirceRR(mutatedOptions);
-    const tankBody = DI.physicalWorld.getRigidBody(rbId);
+    const tankBody = physicalWorld.getRigidBody(rbId);
 
     const entitiesIds = new Float64Array(COMMON_LENGTH);
 
@@ -113,8 +118,6 @@ export function createTankRR(options: {
     mutatedOptions.bodyType = RigidBodyType.Dynamic;
     mutatedOptions.belongsCollisionGroup = undefined;
     mutatedOptions.interactsCollisionGroup = undefined;
-    mutatedOptions.belongsSolverGroup = undefined;
-    mutatedOptions.interactsSolverGroup = undefined;
 
     // === TEST ===
     // entitiesIds.set(
@@ -123,7 +126,7 @@ export function createTankRR(options: {
     // );
 
     // === Hull ===
-    mutatedOptions.color = [1, 0, 0, 1];
+    mutatedOptions.color = options.color;
     entitiesIds.set(
         createRectanglesRR(tankBody, mainHullBase, mutatedOptions, 0 - 3 * PADDING, 0 - 3 * PADDING),
         0,
@@ -149,7 +152,7 @@ export function createTankRR(options: {
         mainHullBase.length + turretAndGun.length + caterpillar.length,
     );
 
-    addRigidBodyRef(world, tankId, tankBody.handle);
+    addTransformComponents(world, tankId);
 
     addComponent(world, Tank, tankId);
     Tank.bulletSpeed[tankId] = 300;
@@ -159,7 +162,6 @@ export function createTankRR(options: {
     addComponent(world, Children, tankId);
     Children.entitiesCount[tankId] = entitiesIds.length;
     Children.entitiesIds[tankId] = entitiesIds;
-    addTransformComponents(world, tankId);
 
     return tankId;
 }

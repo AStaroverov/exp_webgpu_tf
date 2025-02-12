@@ -31,10 +31,31 @@ const tankId = createTankRR({
     color: [1, 0, 0, 1],
 });
 
+const tankId2 = createTankRR({
+    x: 100,
+    y: 500,
+    rotation: Math.PI / 2,
+    color: [1, 1, 0, 1],
+});
+
+const tankId3 = createTankRR({
+    x: 500,
+    y: 100,
+    rotation: Math.PI / 3,
+    color: [1, 0, 1, 1],
+});
+
+const tankId4 = createTankRR({
+    x: 500,
+    y: 500,
+    rotation: Math.PI / 4,
+    color: [1, 0, 1, 1],
+});
+
 for (let i = 0; i < 100; i++) {
     createRectangleRR({
-        x: 200 + (i * 11) % 100,
-        y: 200 + Math.floor(i / 10) * 10,
+        x: 200 + (i * 11) % 122,
+        y: 200 + Math.floor(i / 11) * 11,
         width: 10,
         height: 10,
         rotation: 0,
