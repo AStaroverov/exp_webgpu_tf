@@ -21,19 +21,14 @@ export const mutatedOptions: Options = {
     width: 10,
     height: 10,
     bodyType: RigidBodyType.Dynamic,
-    gravityScale: 0,
     mass: 10,
+    angularDamping: 0.1,
+    linearDamping: 0.1,
 };
 
 const tmpSpeed = vec2.create();
 
-export function createBulletRR(options: {
-    x?: number,
-    y?: number,
-    speed?: number,
-    rotation?: number,
-    color: [number, number, number, number],
-}, { world } = DI) {
+export function createBulletRR(options: Options & { speed: number }, { world } = DI) {
     Object.assign(mutatedOptions, options);
 
     if (isNumber(options.speed) && options.speed > 0) {

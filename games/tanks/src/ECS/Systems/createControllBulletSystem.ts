@@ -48,8 +48,11 @@ export function createSpawnerBulletsSystem(tankId: number, { world, document, ca
 const mutatedOptions = {
     x: 0,
     y: 0,
+    width: 5,
+    height: 5,
     rotation: 0,
     speed: 0,
+    mass: 100,
     color: [1, 0, 0, 1] as [number, number, number, number],
 };
 
