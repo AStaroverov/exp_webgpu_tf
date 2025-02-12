@@ -41,7 +41,7 @@ for (let i = 0; i < 100; i++) {
         color: [1, 0, 1, 1],
         bodyType: RigidBodyType.Dynamic,
         gravityScale: 0,
-        mass: 100,
+        mass: 1,
     });
 }
 

@@ -22,7 +22,7 @@ export const mutatedOptions: Options = {
     height: 10,
     bodyType: RigidBodyType.Dynamic,
     gravityScale: 0,
-    mass: 1,
+    mass: 10,
 };
 
 const tmpSpeed = vec2.create();
