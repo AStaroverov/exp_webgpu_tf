@@ -26,7 +26,7 @@ export enum CollisionGroup {
     BULLET = 0b0100, // 4
 }
 
-function prepareColliderDesc(shape: ColliderDesc, o: RigidRectangleOptions): ColliderDesc {
+function prepareColliderDesc(shape: ColliderDesc, o: CommonRigidOptions): ColliderDesc {
     return shape.setDensity(o.mass ?? 0)
         .setCollisionGroups(((o.belongsCollisionGroup ?? CollisionGroup.ALL) << 16) | (o.interactsCollisionGroup ?? CollisionGroup.ALL))
         .setSolverGroups(((o.belongsSolverGroup ?? CollisionGroup.ALL) << 16) | (o.interactsSolverGroup ?? CollisionGroup.ALL))
