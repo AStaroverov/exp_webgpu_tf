@@ -3,16 +3,18 @@ import { world } from '../ECS/world.ts';
 import { createResizeSystem } from '../ECS/Systems/resizeSystem.ts';
 
 export function createFrameTick(
-    canvas: HTMLCanvasElement,
-    device: GPUDevice,
-    context: GPUCanvasContext,
-    callback: (options: {
+    { canvas, device, context, background }: {
+        canvas: HTMLCanvasElement,
+        device: GPUDevice,
+        context: GPUCanvasContext,
+        background: GPUColor,
+
+    }, callback: (options: {
         world: IWorld,
         context: GPUCanvasContext,
         device: GPUDevice,
         passEncoder: GPURenderPassEncoder
-    }) => void,
-) {
+    }) => void) {
     const resizeSystem = createResizeSystem(canvas);
 
     const arg = {
@@ -29,7 +31,7 @@ export function createFrameTick(
             colorAttachments: [
                 {
                     view: textureView,
-                    clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+                    clearValue: background,
                     loadOp: 'clear',
                     storeOp: 'store',
                 },

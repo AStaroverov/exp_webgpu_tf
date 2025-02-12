@@ -96,7 +96,12 @@ const physicalFrame = () => {
 
 const drawShapeSystem = createDrawShapeSystem(world, device);
 
-const renderFrame = createFrameTick(canvas, device, context, ({ passEncoder }) => {
+const renderFrame = createFrameTick({
+    canvas,
+    device,
+    context,
+    background: [173 / 255, 193 / 255, 120 / 255, 1],
+}, ({ passEncoder }) => {
     drawShapeSystem(passEncoder);
 });
 
