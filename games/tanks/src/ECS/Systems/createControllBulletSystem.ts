@@ -10,6 +10,7 @@ import {
 import { Tank } from '../Components/Tank.ts';
 import { mat4, vec3 } from 'gl-matrix';
 import { defineQuery, removeEntity } from 'bitecs';
+import { Player } from '../Components/Player.ts';
 
 export function createSpawnerBulletsSystem(tankId: number, { world, document, canvas } = DI) {
     const initSpawnBullet = once(() => {
@@ -55,6 +56,7 @@ const mutatedOptions = {
     speed: 0,
     mass: 100,
     color: [1, 0, 0, 1] as [number, number, number, number],
+    playerId: 0,
 };
 
 const tmpMatrix = mat4.create();
@@ -73,6 +75,7 @@ function spawnBullet(parentId: number) {
     mutatedOptions.y = getMatrixTranslationY(tmpMatrix);
     mutatedOptions.rotation = getMatrixRotationZ(tmpMatrix);
     mutatedOptions.speed = Tank.bulletSpeed[parentId];
+    mutatedOptions.playerId = Player.id[parentId];
 
     createBulletRR(mutatedOptions);
 }

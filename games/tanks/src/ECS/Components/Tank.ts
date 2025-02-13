@@ -1,16 +1,24 @@
 import { createCirceRR, createRectangleRR } from './RigidRender.ts';
 import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
-import { JointData, RigidBody, Vector2 } from '@dimforge/rapier2d';
+import { JointData, Vector2 } from '@dimforge/rapier2d';
 import { addComponent, defineComponent, Types } from 'bitecs';
 import { addTransformComponents } from '../../../../../src/ECS/Components/Transform.ts';
 import { DI } from '../../DI';
 import { Children } from './Children.ts';
+import { CollisionGroup } from '../../Physical/createRigid.ts';
+import { addPlayerComponent, getNewPlayerId } from './Player.ts';
+import { addHitableComponent } from './Hitable.ts';
+import { Parent } from './Parent.ts';
+import { RigidBodyRef } from './Physical.ts';
 
 export const Tank = defineComponent({
     bulletSpeed: Types.f64,
     bulletStartPosition: [Types.f64, 2],
 });
 
+export const TankPart = defineComponent({
+    jointId: Types.f64,
+});
 
 const SIZE = 5;
 const PADDING = SIZE + 1;
@@ -45,7 +53,9 @@ const caterpillar: [number, number, number, number][] = Array.from({ length: 26 
 
 const COMMON_LENGTH = mainHullBase.length + turretAndGun.length + caterpillar.length * 2;
 
-type Options = Parameters<typeof createRectangleRR>[0] & Parameters<typeof createCirceRR>[0];
+type Options = Parameters<typeof createRectangleRR>[0] & Parameters<typeof createCirceRR>[0] & {
+    playerId: number,
+};
 
 export const mutatedOptions: Options = {
     x: 0,
@@ -58,8 +68,10 @@ export const mutatedOptions: Options = {
     mass: 10,
     linearDamping: 5,
     angularDamping: 5,
-    belongsCollisionGroup: undefined,
-    interactsCollisionGroup: undefined,
+    belongsCollisionGroup: CollisionGroup.TANK,
+    interactsCollisionGroup: CollisionGroup.ALL,
+
+    playerId: 0,
 };
 
 export const defaultOptions = { ...mutatedOptions };
@@ -67,31 +79,42 @@ export const defaultOptions = { ...mutatedOptions };
 const parentVector = new Vector2(0, 0);
 const childVector = new Vector2(0, 0);
 const createRectanglesRR = (
-    parent: RigidBody,
-    params: [number, number, number, number][],
-    mutated: Options,
+    parentEId: number,
+    coords: [number, number, number, number][],
+    options: Options,
     x: number,
     y: number,
-    physicalWorld = DI.physicalWorld,
+    { world, physicalWorld } = DI,
 ) => {
-    return params.map((param) => {
-        const parentTranslation = parent.translation();
-        mutated.x = parentTranslation.x + x + param[0];
-        mutated.y = parentTranslation.y + y + param[1];
-        mutated.width = param[2];
-        mutated.height = param[3];
-        const [wid, pid] = createRectangleRR(mutated);
+    const rbId = RigidBodyRef.id[parentEId];
+    const parentRb = physicalWorld.getRigidBody(rbId);
+
+    return coords.map((param) => {
+        const parentTranslation = parentRb.translation();
+        options.x = parentTranslation.x + x + param[0];
+        options.y = parentTranslation.y + y + param[1];
+        options.width = param[2];
+        options.height = param[3];
+
+        const [eid, pid] = createRectangleRR(options);
 
         parentVector.x = x + param[0];
         parentVector.y = y + param[1];
-        physicalWorld.createImpulseJoint(
-            JointData.fixed(parentVector, 1, childVector, 1),
-            parent,
+        const joint = physicalWorld.createImpulseJoint(
+            JointData.fixed(parentVector, 10, childVector, 10),
+            parentRb,
             physicalWorld.getRigidBody(pid),
             true,
         );
 
-        return wid;
+        addPlayerComponent(world, eid, options.playerId);
+        addHitableComponent(world, eid);
+        addComponent(world, TankPart, eid);
+        TankPart.jointId[eid] = joint.handle;
+        addComponent(world, Parent, eid);
+        Parent.id[eid] = parentEId;
+
+        return eid;
     });
 };
 
@@ -100,7 +123,7 @@ export function createTankRR(options: {
     y: number,
     rotation: number,
     color: [number, number, number, number],
-}, { world, physicalWorld } = DI) {
+}, { world } = DI) {
     Object.assign(mutatedOptions, defaultOptions, options);
 
     mutatedOptions.radius = PADDING * 22;
@@ -108,49 +131,47 @@ export function createTankRR(options: {
     mutatedOptions.belongsCollisionGroup = 0;
     mutatedOptions.interactsCollisionGroup = 0;
     mutatedOptions.color = [0.2, 0.1, 0.1, 0];
+    mutatedOptions.playerId = getNewPlayerId();
 
-    const [tankId, rbId] = createCirceRR(mutatedOptions);
-    const tankBody = physicalWorld.getRigidBody(rbId);
+    const [tankId] = createCirceRR(mutatedOptions);
 
-    const entitiesIds = new Float64Array(COMMON_LENGTH);
+
+    const partsEntityIds = new Float64Array(COMMON_LENGTH);
 
     mutatedOptions.rotation = 0;
     mutatedOptions.bodyType = RigidBodyType.Dynamic;
     mutatedOptions.belongsCollisionGroup = undefined;
     mutatedOptions.interactsCollisionGroup = undefined;
 
-    // === TEST ===
-    // entitiesIds.set(
-    //     createRectanglesRR(tankBody, mainHullBase.slice(0, 1), mutatedOptions, 0, 0),
-    //     0,
-    // );
-
     // === Hull ===
     mutatedOptions.color = options.color;
-    entitiesIds.set(
-        createRectanglesRR(tankBody, mainHullBase, mutatedOptions, 0 - 3 * PADDING, 0 - 3 * PADDING),
+    partsEntityIds.set(
+        createRectanglesRR(tankId, mainHullBase, mutatedOptions, 0 - 3 * PADDING, 0 - 3 * PADDING),
         0,
     );
 
     // === Turret and Gun (8 прямоугольников) ===
     mutatedOptions.color = [0.5, 1, 0.5, 1];
-    entitiesIds.set(
-        createRectanglesRR(tankBody, turretAndGun, mutatedOptions, 0, 0 - 10 * PADDING),
+    mutatedOptions.interactsCollisionGroup = CollisionGroup.WALL | CollisionGroup.TANK;
+    partsEntityIds.set(
+        createRectanglesRR(tankId, turretAndGun, mutatedOptions, 0, 0 - 10 * PADDING),
         mainHullBase.length,
     );
+    mutatedOptions.interactsCollisionGroup = CollisionGroup.ALL;
 
     // === Left Track (13 прямоугольников) ===
     mutatedOptions.color = [0.5, 0.5, 0.5, 1];
-    entitiesIds.set(
-        createRectanglesRR(tankBody, caterpillar, mutatedOptions, 0 - 5 * PADDING, 0 - 4 * PADDING),
+    partsEntityIds.set(
+        createRectanglesRR(tankId, caterpillar, mutatedOptions, 0 - 5 * PADDING, 0 - 4 * PADDING),
         mainHullBase.length + turretAndGun.length,
     );
 
     // === Right Track (13 прямоугольников) ===
-    entitiesIds.set(
-        createRectanglesRR(tankBody, caterpillar, mutatedOptions, 0 + 5 * PADDING, 0 - 4 * PADDING),
+    partsEntityIds.set(
+        createRectanglesRR(tankId, caterpillar, mutatedOptions, 0 + 5 * PADDING, 0 - 4 * PADDING),
         mainHullBase.length + turretAndGun.length + caterpillar.length,
     );
+
 
     addTransformComponents(world, tankId);
 
@@ -160,8 +181,10 @@ export function createTankRR(options: {
     Tank.bulletStartPosition[tankId][1] = -PADDING * 12;
 
     addComponent(world, Children, tankId);
-    Children.entitiesCount[tankId] = entitiesIds.length;
-    Children.entitiesIds[tankId] = entitiesIds;
+    Children.entitiesCount[tankId] = partsEntityIds.length;
+    Children.entitiesIds[tankId] = partsEntityIds;
+
+    addPlayerComponent(world, tankId, mutatedOptions.playerId);
 
     return tankId;
 }

@@ -6,6 +6,10 @@ import { addComponent, defineComponent } from 'bitecs';
 import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';
 import { vec2 } from 'gl-matrix';
 import { isNumber } from 'lodash-es';
+import { ActiveEvents } from '@dimforge/rapier2d';
+import { CollisionGroup } from '../../Physical/createRigid.ts';
+import { addHitableComponent } from './Hitable.ts';
+import { addPlayerComponent } from './Player.ts';
 
 export const Bullet = defineComponent();
 
@@ -24,11 +28,13 @@ export const mutatedOptions: Options = {
     mass: 10,
     angularDamping: 0.1,
     linearDamping: 0.1,
+    collisionEvent: ActiveEvents.CONTACT_FORCE_EVENTS,
+    belongsCollisionGroup: CollisionGroup.BULLET,
 };
 
 const tmpSpeed = vec2.create();
 
-export function createBulletRR(options: Options & { speed: number }, { world } = DI) {
+export function createBulletRR(options: Options & { speed: number, playerId: number }, { world } = DI) {
     Object.assign(mutatedOptions, options);
 
     if (isNumber(options.speed) && options.speed > 0) {
@@ -41,7 +47,10 @@ export function createBulletRR(options: Options & { speed: number }, { world } =
 
     const [bulletId] = createRectangleRR(mutatedOptions);
     addComponent(world, Bullet, bulletId);
+    addPlayerComponent(world, bulletId, options.playerId);
+    addHitableComponent(world, bulletId);
     addTransformComponents(world, bulletId);
+
 
     return bulletId;
 }

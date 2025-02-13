@@ -2,14 +2,23 @@ import { ActiveEvents, ColliderDesc } from '@dimforge/rapier2d';
 import { DI } from '../DI';
 import { BodyOptions, createBody } from './createBody.ts';
 import { ActiveCollisionTypes } from '@dimforge/rapier2d/src/geometry/collider.ts';
+import { RigidBodyRef } from '../ECS/Components/Physical.ts';
+import { removeEntity } from 'bitecs';
+
+export enum CollisionGroup {
+    ALL = 0xFFFF,
+    WALL = 0b0001,   // 1
+    TANK = 0b0010,   // 2
+    BULLET = 0b0100, // 4
+}
 
 type CommonRigidOptions = BodyOptions & {
     mass?: number,
-    belongsCollisionGroup?: number,
-    interactsCollisionGroup?: number,
-    belongsSolverGroup?: number,
-    interactsSolverGroup?: number,
-
+    belongsCollisionGroup?: 0 | CollisionGroup,
+    interactsCollisionGroup?: 0 | CollisionGroup,
+    belongsSolverGroup?: 0 | CollisionGroup,
+    interactsSolverGroup?: 0 | CollisionGroup,
+    collisionEvent?: ActiveEvents
     activeCollisionTypes?: ActiveCollisionTypes
 }
 
@@ -19,12 +28,6 @@ export type RigidRectangleOptions = CommonRigidOptions & {
     rotation: number,
 }
 
-export enum CollisionGroup {
-    ALL = 0xFFFF,
-    WALL = 0b0001,   // 1
-    TANK = 0b0010,   // 2
-    BULLET = 0b0100, // 4
-}
 
 function prepareColliderDesc(shape: ColliderDesc, o: CommonRigidOptions): ColliderDesc {
     return shape.setDensity(o.mass ?? 0)
@@ -60,4 +63,11 @@ export function createRigidCircle(
     physicalWorld.createCollider(colliderDesc, body);
 
     return body.handle;
+}
+
+export function removeRigidEntity(eid: number, { world, physicalWorld } = DI) {
+    const pid = RigidBodyRef.id[eid];
+    const body = physicalWorld.getRigidBody(pid);
+    physicalWorld.removeRigidBody(body);
+    removeEntity(world, eid);
 }

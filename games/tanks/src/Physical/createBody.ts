@@ -1,4 +1,4 @@
-import { ActiveEvents, RigidBody, RigidBodyDesc } from '@dimforge/rapier2d';
+import { RigidBody, RigidBodyDesc } from '@dimforge/rapier2d';
 import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
 import { DI } from '../DI';
 
@@ -13,7 +13,6 @@ export type BodyOptions = {
     linearDamping?: number,
     angularDamping?: number,
     additionalMass?: number,
-    collisionEvent?: ActiveEvents
     continuousCollisionDetection?: boolean,
 }
 
@@ -31,4 +30,8 @@ export function createBody(
         .setAngularDamping(o.angularDamping ?? 1)
         .setCcdEnabled(o.continuousCollisionDetection ?? false);
     return physicalWorld.createRigidBody(bodyDesc);
+}
+
+export function removeBody(body: RigidBody, { physicalWorld } = DI) {
+    physicalWorld.removeRigidBody(body);
 }
