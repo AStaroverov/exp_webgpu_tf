@@ -9,7 +9,8 @@ import { GlobalTransform } from '../../Components/Transform.ts';
 
 export function createDrawShapeSystem(world: IWorld, device: GPUDevice) {
     const gpuShader = new GPUShader(shaderMeta);
-    const pipeline = gpuShader.getRenderPipeline(device);
+    const pipelineSdf = gpuShader.getRenderPipeline(device, 'vs_main', 'fs_main');
+    const pipelineShadow = gpuShader.getRenderPipeline(device, 'vs_shadow', 'fs_shadow');
     const bindGroup0 = gpuShader.getBindGroup(device, 0);
     const bindGroup1 = gpuShader.getBindGroup(device, 1);
 
@@ -59,9 +60,13 @@ export function createDrawShapeSystem(world: IWorld, device: GPUDevice) {
             device.queue.writeBuffer(gpuShader.uniforms.transform.getGPUBuffer(device), 0, transformCollect);
         }
 
-        renderPass.setPipeline(pipeline);
         renderPass.setBindGroup(0, bindGroup0);
         renderPass.setBindGroup(1, bindGroup1);
+
+        renderPass.setPipeline(pipelineShadow);
+        renderPass.draw(6, entities.length, 0, 0);
+
+        renderPass.setPipeline(pipelineSdf);
         renderPass.draw(6, entities.length, 0, 0);
     };
 }

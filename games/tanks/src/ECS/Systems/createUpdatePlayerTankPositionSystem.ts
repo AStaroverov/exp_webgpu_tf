@@ -1,102 +1,3 @@
-// import { DI } from '../../DI';
-// import { RigidBodyRef } from '../Components/Physical.ts';
-// import { Vector2 } from '@dimforge/rapier2d';
-// import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';
-//
-// export function createUpdatePlayerTankPositionSystem(tankId: number, { document, physicalWorld } = DI) {
-//     let speed = 0;
-//     let rotation = 0;
-//
-//     let dSpeed = 0;
-//     let dRotation = 0;
-//
-//     const maxAbsSpeed = 1;
-//     const maxAbsRotation = 0.1;
-//
-//     const nextLinvel = new Vector2(0, 0);
-//
-//     document.addEventListener('keydown', (event) => {
-//         switch (event.key) {
-//             case 'w':
-//             case 'ArrowUp': {
-//                 dSpeed = 0.1;
-//                 break;
-//             }
-//             case 's':
-//             case 'ArrowDown': {
-//                 dSpeed = -0.1;
-//                 break;
-//             }
-//             case 'a':
-//             case 'ArrowLeft': {
-//                 dRotation = -0.005;
-//                 break;
-//             }
-//             case 'd':
-//             case 'ArrowRight': {
-//                 dRotation = 0.005;
-//                 break;
-//             }
-//         }
-//     });
-//
-//     document.addEventListener('keyup', (event) => {
-//         switch (event.key) {
-//             case 'w':
-//             case 's':
-//             case 'ArrowUp':
-//             case 'ArrowDown': {
-//                 dSpeed = 0;
-//                 break;
-//             }
-//             case 'a':
-//             case 'd':
-//             case 'ArrowLeft':
-//             case 'ArrowRight': {
-//                 dRotation = 0;
-//                 break;
-//             }
-//         }
-//     });
-//
-//     return function () {
-//         if (speed < maxAbsSpeed && speed > -maxAbsSpeed) {
-//             speed += dSpeed;
-//         }
-//         if (rotation < maxAbsRotation && rotation > -maxAbsRotation) {
-//             rotation += dRotation;
-//         }
-//
-//         const rb = physicalWorld.getRigidBody(RigidBodyRef.id[tankId]);
-//         const nextRotation = rb.rotation() + rotation;
-//         // const nextRotation = rb.rotation();
-//         // const nextTranslation = rb.translation();
-//
-//         nextLinvel.x = 0;
-//         nextLinvel.y = -speed * 800;
-//         applyRotationToVector(nextLinvel, nextLinvel, nextRotation);
-//
-//         // rb.setLinvel(nextLinvel, true);
-//         // rb.setAngvel(rotation * 1000, true);
-//
-//         nextLinvel.x *= 10000;
-//         nextLinvel.y *= 10000;
-//         console.log('>>', rb.mass());
-//
-//         rb.applyImpulse(nextLinvel, true);
-//         rb.applyTorqueImpulse(nextRotation * 100000, true);
-//         //
-//         // nextTranslation.y += speed * 80;
-//         // rb.setNextKinematicRotation(nextRotation);
-//         // rb.setNextKinematicTranslation(nextTranslation);
-//
-//         // speed *= 0.9;
-//         // rotation *= 0.9;
-//
-//         speed = 0;
-//         rotation = 0;
-//     };
-// }
 import { DI } from '../../DI';
 import { RigidBodyRef } from '../Components/Physical.ts';
 import { Vector2 } from '@dimforge/rapier2d';
@@ -122,21 +23,25 @@ export function createUpdatePlayerTankPositionSystem(tankId: number, { document,
             case 'w':
             case 'ArrowUp': {
                 moveDirection = 1;
+                event.preventDefault();
                 break;
             }
             case 's':
             case 'ArrowDown': {
                 moveDirection = -1;
+                event.preventDefault();
                 break;
             }
             case 'a':
             case 'ArrowLeft': {
                 rotationDirection = -1;
+                event.preventDefault();
                 break;
             }
             case 'd':
             case 'ArrowRight': {
                 rotationDirection = 1;
+                event.preventDefault();
                 break;
             }
         }

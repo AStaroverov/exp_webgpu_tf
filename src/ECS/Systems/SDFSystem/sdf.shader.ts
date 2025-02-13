@@ -29,6 +29,82 @@ export const shaderMeta = new ShaderMeta(
             @builtin(vertex_index) vertex_index: u32,
             @builtin(instance_index) instance_index: u32
         ) -> VertexOutput {
+            let rect_vertex = compute_rect_vertex(vertex_index, instance_index);
+        
+            let position = vec4<f32>(
+                to_final_position(uTransform[instance_index], rect_vertex),
+                0.0,
+                1.0
+            );
+            
+            return VertexOutput(position, instance_index, rect_vertex);
+        }
+        
+        @fragment
+        fn fs_main(
+            @location(0) @interpolate(flat) instance_index: u32,
+            @location(1) local_position: vec2<f32>,
+        ) -> @location(0) vec4<f32> {
+            var dist = sd_shape(local_position, instance_index);
+            var color = uColor[instance_index];
+            
+            if (dist > 0.0 || color.a == 0.0) { 
+                discard;
+//                return vec4<f32>(1.0, 1.0, 1.0, 0.1);
+            }
+
+            return color;
+        }
+
+        @vertex
+        fn vs_shadow(
+            @builtin(vertex_index) vertex_index: u32,
+            @builtin(instance_index) instance_index: u32
+        ) -> VertexOutput {
+            let original_vertex = compute_rect_vertex(vertex_index, instance_index);
+            let rect_vertex = original_vertex + normalize(original_vertex) * 6.0;
+        
+            let position = vec4<f32>(
+                to_final_position(uTransform[instance_index], rect_vertex),
+                0.0,
+                1.0
+            );
+            
+            return VertexOutput(position, instance_index, rect_vertex);
+        }
+
+        @fragment
+        fn fs_shadow(
+            @location(0) @interpolate(flat) instance_index: u32,
+            @location(1) local_position: vec2<f32>,
+        ) -> @location(0) vec4<f32> {
+            let color = uColor[instance_index];
+        
+            if (sd_shape(local_position, instance_index) <= 0.0 || color.a == 0.0) {
+                discard;
+            }
+
+            let transform = uTransform[instance_index];
+            let rotation = mat2x2<f32>(transform[0].xy, transform[1].xy);
+            let light_dir = normalize(vec2<f32>(-0.5, -0.5) * rotation);
+
+            let shadow = compute_shadow(local_position, light_dir, instance_index);
+//            return vec4<f32>(vec3<f32>(0.0), shadow);
+                            
+            // Вычисляем расстояние до объекта по SDF (абсолютное значение)
+            let dist = abs(sd_shape(local_position, instance_index));
+        
+            // Задаём параметры интерполяции (эти значения можно настраивать)
+            let fadeStart = 1.0;  // расстояние, при котором тень начинает ослабевать
+            let fadeEnd = 3.0;   // расстояние, при котором тень почти исчезает
+        
+            // Чем ближе точка к объекту, тем тень темнее.
+            let brightnessFactor = 1.0 - smoothstep(fadeStart, fadeEnd, dist);
+        
+            return vec4<f32>(color.rgb * 0.2, shadow * brightnessFactor);
+        }
+        
+        fn compute_rect_vertex(vertex_index: u32, instance_index: u32) -> vec2<f32> {
             var kind = uKind[instance_index];
             var width = uValues[instance_index*6+0];
             var height = uValues[instance_index*6+1];
@@ -54,28 +130,26 @@ export const shaderMeta = new ShaderMeta(
                 select(min.x, max.x, vertex_index > 0u && vertex_index < 4u),
                 select(min.y, max.y, vertex_index > 1u && vertex_index < 5u),
             );
-        
-            var position = vec4<f32>(
-                to_final_position(uTransform[instance_index], rect_vertex),
-                0.0,
-                1.0
-            );
             
-            return VertexOutput(position, instance_index, rect_vertex);
+            return rect_vertex;
+        }
+
+        fn to_final_position(transform: mat4x4<f32>, pos: vec2<f32>) -> vec2<f32> {
+            var res = (uProjection * transform * vec4<f32>(pos, 0.0, 1.0)).xy; 
+            return vec2<f32>(res.x, -res.y);
+        }
+            
+        fn op_round(d: f32, r: f32) -> f32 {
+          return d - r;
         }
         
-        @fragment
-        fn fs_main(
-            @location(0) @interpolate(flat) instance_index: u32,
-            @location(1) local_position: vec2<f32>,
-        ) -> @location(0) vec4<f32> {
-            var pos = local_position; 
+        fn sd_shape(pos: vec2<f32>, instance_index: u32) -> f32 {
             var kind = uKind[instance_index];
             var width = uValues[instance_index*6+0];
             var height = uValues[instance_index*6+1];
             var roundness = uRoundness[instance_index];
             var dist = 1.0;
-            
+ 
             if (kind == 0u) {
                 dist = sd_circle(pos, width / 2);
             } else if (kind == 1u) {
@@ -109,22 +183,8 @@ export const shaderMeta = new ShaderMeta(
             if (kind != 0u) {
                 dist = op_round(dist, roundness);
             }
-        
-            if (dist > 0.0 || uColor[instance_index].a == 0.0) { 
-                discard;
-//                return vec4<f32>(1.0, 1.0, 1.0, 0.1);
-            }
-
-            return uColor[instance_index];
-        }
-
-        fn to_final_position(transform: mat4x4<f32>, pos: vec2<f32>) -> vec2<f32> {
-            var res = (uProjection * transform * vec4<f32>(pos, 0.0, 1.0)).xy; 
-            return vec2<f32>(res.x, -res.y);
-        }
             
-        fn op_round(d: f32, r: f32) -> f32 {
-          return d - r;
+            return dist;
         }
         
         fn sd_circle(p: vec2<f32>, r: f32) -> f32 {
@@ -215,7 +275,24 @@ export const shaderMeta = new ShaderMeta(
             
             return -sqrt(d.x) * sign(d.y);
         }
+                
+        const SHADOW_MAX_STEPS: i32 = 16;
+        const SHADOW_K: f32 = 8;
+        
+        fn compute_shadow(ro: vec2<f32>, light_dir: vec2<f32>, instance_index: u32) -> f32 {
+            var t: f32 = 0.02;
+            var light: f32 = 1.0;
+            for (var i: i32 = 0; i < SHADOW_MAX_STEPS; i = i + 1) {
+                let pos = ro + light_dir * t;
+                let dist = sd_shape(pos, instance_index);
+
+                light = min(light, SHADOW_K * dist / t);
+                t = t + dist;
+            }
+
+            return 1.0 - clamp(light, 0.0, 1.0);
+        }
     `,
 );
-//
+
 // console.log('>>', shaderMeta.shader.trim());

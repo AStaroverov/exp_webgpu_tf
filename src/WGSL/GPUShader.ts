@@ -6,8 +6,8 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
     attributes = {} as Record<keyof M['attributes'], GPUVariable>;
 
     private shaderModule?: GPUShaderModule;
-    private renderPipeline?: GPURenderPipeline;
     private pipelineLayout?: GPUPipelineLayout;
+    private mapRenderPipeline: Map<string, GPURenderPipeline> = new Map();
     private mapBindGroup: Map<number, GPUBindGroup> = new Map();
     private mapGPUBindGroupLayout: Map<number, GPUBindGroupLayout> = new Map();
 
@@ -29,31 +29,51 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
 
     getRenderPipeline(
         device: GPUDevice,
+        vertexName: string,
+        fragmentName: string,
         shaderModule = this.getShaderModule(device),
     ): GPURenderPipeline {
-        return this.renderPipeline ?? (this.renderPipeline = device.createRenderPipeline({
-            layout: this.getGPUPipelineLayout(device),
-            vertex: {
-                module: shaderModule,
-                entryPoint: this.shaderMeta.vertexName,
-            },
-            fragment: {
-                module: shaderModule,
-                entryPoint: this.shaderMeta.fragmentName,
-                targets: [
-                    {
-                        // TODO: get from context format
-                        format: navigator.gpu.getPreferredCanvasFormat(),
-                    },
-                ],
-            },
-            primitive: {
-                topology: 'triangle-list',
-            },
-        }));
+        const key = `${ vertexName }-${ fragmentName }`;
+
+        if (!this.mapRenderPipeline.has(key)) {
+            const value = device.createRenderPipeline({
+                layout: this.getGPUPipelineLayout(device),
+                vertex: {
+                    module: shaderModule,
+                    entryPoint: vertexName,
+                },
+                fragment: {
+                    module: shaderModule,
+                    entryPoint: fragmentName,
+                    targets: [
+                        {
+                            format: navigator.gpu.getPreferredCanvasFormat(),
+                            blend: {
+                                color: {
+                                    srcFactor: 'src-alpha',
+                                    dstFactor: 'one-minus-src-alpha',
+                                    operation: 'add',
+                                },
+                                alpha: {
+                                    srcFactor: 'one',
+                                    dstFactor: 'one-minus-src-alpha',
+                                    operation: 'add',
+                                },
+                            },
+                        },
+                    ],
+                },
+                primitive: {
+                    topology: 'triangle-list',
+                },
+            });
+            this.mapRenderPipeline.set(key, value);
+        }
+
+        return this.mapRenderPipeline.get(key)!;
     }
 
-    getBindGroup(device: GPUDevice, group: number): GPUBindGroup { //, pipeline: GPURenderPipeline = this.getRenderPipeline(device)
+    getBindGroup(device: GPUDevice, group: number): GPUBindGroup {
         if (!this.mapBindGroup.has(group)) {
             const bindGroupLayout = device.createBindGroup({
                 layout: this.createBindGroupLayout(device, group),

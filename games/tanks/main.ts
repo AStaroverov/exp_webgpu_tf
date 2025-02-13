@@ -15,6 +15,7 @@ import { createUpdatePlayerTankPositionSystem } from './src/ECS/Systems/createUp
 import { createSpawnerBulletsSystem } from './src/ECS/Systems/createControllBulletSystem.ts';
 import { createRectangleRR } from './src/ECS/Components/RigidRender.ts';
 import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
+import { stats } from './src/stats.ts';
 
 const canvas = document.querySelector('canvas')!;
 const { device, context } = await initWebGPU(canvas);
@@ -64,7 +65,19 @@ for (let i = 0; i < 100; i++) {
         gravityScale: 0,
         mass: 1,
     });
+
 }
+createRectangleRR({
+    x: 400,
+    y: 400,
+    width: 50,
+    height: 50,
+    rotation: Math.PI / 4,
+    color: [1, 0, 1, 1],
+    bodyType: RigidBodyType.Dynamic,
+    gravityScale: 0,
+    mass: 1,
+});
 
 const spawnBullets = createSpawnerBulletsSystem(tankId);
 const execTransformSystem = createTransformSystem(DI.world);
@@ -105,7 +118,7 @@ const renderFrame = createFrameTick({
     drawShapeSystem(passEncoder);
 });
 
-
+document.body.appendChild(stats.dom);
 // let timeStart = performance.now();
 frameTasks.addInterval(() => {
     // const time = performance.now();
@@ -115,7 +128,10 @@ frameTasks.addInterval(() => {
 
     physicalFrame();
 
+    stats.begin();
     renderFrame();
+    stats.end();
+    stats.update();
 
     inputFrame();
 }, 1);

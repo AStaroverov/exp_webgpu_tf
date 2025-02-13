@@ -14,6 +14,7 @@ import { defineQuery, removeEntity } from 'bitecs';
 export function createSpawnerBulletsSystem(tankId: number, { world, document, canvas } = DI) {
     const initSpawnBullet = once(() => {
         document.addEventListener('keypress', (event) => {
+            event.preventDefault();
             switch (event.code) {
                 case 'Space': {
                     spawnBullet(tankId);
