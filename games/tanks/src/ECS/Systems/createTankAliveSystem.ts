@@ -11,16 +11,14 @@ export function createTankAliveSystem({ world, physicalWorld } = DI) {
     return () => {
         const tanksEids = tanksQuery(world);
 
-        for (let i = 0; i < tanksEids.length; i++) {
-            const tankEid = tanksEids[i];
-
-            if (Children.entitiesCount[tankEid] < MIN_ALIVE_PARTS) {
-                for (const tankPartEid of Children.entitiesIds[tankEid]) {
+        for (const tanksEid of tanksEids) {
+            if (Children.entitiesCount[tanksEid] < MIN_ALIVE_PARTS) {
+                for (const tankPartEid of Children.entitiesIds[tanksEid]) {
                     const joinId = TankPart.jointId[tankPartEid];
                     const joint = physicalWorld.getImpulseJoint(joinId);
                     joint && physicalWorld.removeImpulseJoint(joint, true);
                 }
-                removeEntity(world, tankEid);
+                removeEntity(world, tanksEid);
             }
         }
     };
