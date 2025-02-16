@@ -15,6 +15,7 @@ export default defineConfig({
         },
     },
     optimizeDeps: {
+        include: ['lodash/fp'],
         exclude: [
             '@dimforge/rapier2d',
         ],

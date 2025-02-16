@@ -7,7 +7,7 @@ import { initPhysicalWorld } from './src';
 import {
     createApplyRigidBodyDeltaToLocalTransformSystem,
 } from './src/ECS/Systems/createApplyRigidBodyDeltaToLocalTransformSystem.ts';
-import { EventQueue } from '@dimforge/rapier2d';
+import { Cuboid, EventQueue } from '@dimforge/rapier2d';
 import { createTankRR } from './src/ECS/Components/Tank.ts';
 import { DI } from './src/DI';
 import { createTransformSystem } from '../../src/ECS/Systems/createTransformSystem.ts';
@@ -19,6 +19,11 @@ import { hasComponent } from 'bitecs';
 import { hit, Hitable } from './src/ECS/Components/Hitable.ts';
 import { createHitableSystem } from './src/ECS/Systems/createHitableSystem.ts';
 import { createTankAliveSystem } from './src/ECS/Systems/createTankAliveSystem.ts';
+import { fillEnvironment } from './src/TilesMatrix/fillers/environment.ts';
+import { Matrix } from '../../lib/Matrix';
+import { getEmptyTile, TileType } from './src/TilesMatrix/def.ts';
+import { fillWalls } from './src/TilesMatrix/fillers/walls.ts';
+import { createWallRR } from './src/ECS/Components/Wall.ts';
 
 const canvas = document.querySelector('canvas')!;
 const { device, context } = await initWebGPU(canvas);
@@ -34,20 +39,20 @@ const tankId = createTankRR({
     rotation: Math.PI / 1.3,
     color: [1, 0, 0, 1],
 });
-
-const tankId2 = createTankRR({
-    x: 250,
-    y: 250,
-    rotation: Math.PI / 2,
-    color: [1, 1, 0, 1],
-});
-
-const tankId3 = createTankRR({
-    x: 500,
-    y: 100,
-    rotation: Math.PI / 3,
-    color: [1, 0, 1, 1],
-});
+//
+// const tankId2 = createTankRR({
+//     x: 250,
+//     y: 250,
+//     rotation: Math.PI / 2,
+//     color: [1, 1, 0, 1],
+// });
+//
+// const tankId3 = createTankRR({
+//     x: 500,
+//     y: 100,
+//     rotation: Math.PI / 3,
+//     color: [1, 0, 1, 1],
+// });
 
 const tankId4 = createTankRR({
     x: 500,
@@ -81,6 +86,28 @@ const tankId4 = createTankRR({
 //     gravityScale: 0,
 //     mass: 100,
 // });
+
+const matrix = Matrix.create(100, 100, getEmptyTile);
+fillEnvironment(matrix);
+fillWalls(matrix);
+
+// place tanks
+physicalWorld.step();
+
+Matrix.forEach(matrix, (item, x, y) => {
+    if (item.type === TileType.wall) {
+        const options = {
+            x: x * 10,
+            y: y * 10,
+            width: 10,
+            height: 10,
+        };
+        const intersected = null !== physicalWorld.intersectionWithShape(
+            options, 0, new Cuboid(10 * options.width / 2, 10 * options.height / 2),
+        );
+        !intersected && createWallRR(options);
+    }
+});
 
 const spawnBullets = createSpawnerBulletsSystem(tankId);
 const execTransformSystem = createTransformSystem(DI.world);
