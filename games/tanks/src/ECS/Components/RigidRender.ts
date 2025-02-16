@@ -1,15 +1,10 @@
-import {
-    createRigidCircle,
-    createRigidRectangle,
-    RigidCircleOptions,
-    RigidRectangleOptions,
-} from '../../Physical/createRigid.ts';
+import { createRigidCircle, createRigidRectangle } from '../../Physical/createRigid.ts';
 import { createCircle, createRectangle } from '../../../../../src/ECS/Entities/Shapes.ts';
 import { addRigidBodyRef } from './Physical.ts';
 import { DI } from '../../DI';
 
 export function createCirceRR(
-    options: RigidCircleOptions & { color: [number, number, number, number], },
+    options: Parameters<typeof createCircle>[1] & Parameters<typeof createRigidCircle>[0],
     { world } = DI,
 ): [id: number, physicalId: number] {
     const renderId = createCircle(world, options);
@@ -19,7 +14,7 @@ export function createCirceRR(
 }
 
 export function createRectangleRR(
-    options: RigidRectangleOptions & { color: [number, number, number, number], },
+    options: Parameters<typeof createRectangle>[1] & Parameters<typeof createRigidRectangle>[0],
     { world } = DI,
 ): [id: number, physicalId: number] {
     const renderId = createRectangle(world, options);

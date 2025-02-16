@@ -14,6 +14,9 @@ export const shaderMeta = new ShaderMeta(
         color: new VariableMeta('uColor', VariableKind.StorageRead, `array<vec4<f32>, ${ MAX_INSTANCE_COUNT }>`),
         values: new VariableMeta('uValues', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT * 6 }>`),
         roundness: new VariableMeta('uRoundness', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT }>`),
+
+        // shadow [shadowFadeStart, shadowFadeEnd]
+        shadow: new VariableMeta('uShadow', VariableKind.StorageRead, `array<vec2<f32>, ${ MAX_INSTANCE_COUNT }>`),
     },
     {},
     // language=WGSL
@@ -61,8 +64,9 @@ export const shaderMeta = new ShaderMeta(
             @builtin(vertex_index) vertex_index: u32,
             @builtin(instance_index) instance_index: u32
         ) -> VertexOutput {
+            let fadeEnd = uShadow[instance_index][1]; 
             let original_vertex = compute_rect_vertex(vertex_index, instance_index);
-            let rect_vertex = original_vertex + normalize(original_vertex) * 6.0;
+            let rect_vertex = original_vertex + normalize(original_vertex) * fadeEnd;
         
             let position = vec4<f32>(
                 to_final_position(uTransform[instance_index], rect_vertex),
@@ -78,9 +82,16 @@ export const shaderMeta = new ShaderMeta(
             @location(0) @interpolate(flat) instance_index: u32,
             @location(1) local_position: vec2<f32>,
         ) -> @location(0) vec4<f32> {
-            let color = uColor[instance_index];
+            let fadeStart = uShadow[instance_index][0];
+            let fadeEnd = uShadow[instance_index][1]; 
+           
+            if (fadeEnd == 0) {
+                discard;
+            }
+            
+            let dist = sd_shape(local_position, instance_index);
         
-            if (sd_shape(local_position, instance_index) <= 0.0 || color.a == 0.0) {
+            if (dist <= 0.0 ) {
                 discard;
             }
 
@@ -91,17 +102,9 @@ export const shaderMeta = new ShaderMeta(
             let shadow = compute_shadow(local_position, light_dir, instance_index);
 //            return vec4<f32>(vec3<f32>(0.0), shadow);
                             
-            // Вычисляем расстояние до объекта по SDF (абсолютное значение)
-            let dist = abs(sd_shape(local_position, instance_index));
+            let brightnessFactor = 1.0 - smoothstep(fadeStart, fadeEnd, abs(dist));
         
-            // Задаём параметры интерполяции (эти значения можно настраивать)
-            let fadeStart = 1.0;  // расстояние, при котором тень начинает ослабевать
-            let fadeEnd = 3.0;   // расстояние, при котором тень почти исчезает
-        
-            // Чем ближе точка к объекту, тем тень темнее.
-            let brightnessFactor = 1.0 - smoothstep(fadeStart, fadeEnd, dist);
-        
-            return vec4<f32>(color.rgb * 0.2, shadow * brightnessFactor);
+            return vec4<f32>(uColor[instance_index].rgb * 0.2, shadow * brightnessFactor);
         }
         
         fn compute_rect_vertex(vertex_index: u32, instance_index: u32) -> vec2<f32> {

@@ -22,13 +22,6 @@ type CommonRigidOptions = BodyOptions & {
     activeCollisionTypes?: ActiveCollisionTypes
 }
 
-export type RigidRectangleOptions = CommonRigidOptions & {
-    width: number,
-    height: number,
-    rotation: number,
-}
-
-
 function prepareColliderDesc(shape: ColliderDesc, o: CommonRigidOptions): ColliderDesc {
     return shape.setDensity(o.mass ?? 0)
         .setCollisionGroups(((o.belongsCollisionGroup ?? CollisionGroup.ALL) << 16) | (o.interactsCollisionGroup ?? CollisionGroup.ALL))
@@ -38,7 +31,11 @@ function prepareColliderDesc(shape: ColliderDesc, o: CommonRigidOptions): Collid
 }
 
 export function createRigidRectangle(
-    o: RigidRectangleOptions,
+    o: CommonRigidOptions & {
+        width: number,
+        height: number,
+        rotation: number,
+    },
     { physicalWorld } = DI,
 ) {
     const body = createBody(o);
@@ -48,14 +45,12 @@ export function createRigidRectangle(
     return body.handle;
 }
 
-export type RigidCircleOptions = CommonRigidOptions & {
-    x: number,
-    y: number,
-    radius: number,
-}
-
 export function createRigidCircle(
-    o: RigidCircleOptions,
+    o: CommonRigidOptions & {
+        x: number,
+        y: number,
+        radius: number,
+    },
     { physicalWorld } = DI,
 ) {
     const body = createBody(o);

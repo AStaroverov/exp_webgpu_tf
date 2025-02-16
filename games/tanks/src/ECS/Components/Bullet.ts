@@ -18,12 +18,13 @@ type Options = Parameters<typeof createRectangleRR>[0]
 export const mutatedOptions: Options = {
     x: 0,
     y: 0,
+    width: 10,
+    height: 10,
     speedX: 0,
     speedY: 0,
     rotation: 0,
-    color: [1, 1, 1, 1],
-    width: 10,
-    height: 10,
+    color: new Float32Array([1, 1, 1, 1]),
+    shadow: new Float32Array([0, 2]),
     bodyType: RigidBodyType.Dynamic,
     mass: 10,
     angularDamping: 0.1,
@@ -50,7 +51,6 @@ export function createBulletRR(options: Options & { speed: number, playerId: num
     addPlayerComponent(world, bulletId, options.playerId);
     addHitableComponent(world, bulletId);
     addTransformComponents(world, bulletId);
-
 
     return bulletId;
 }

@@ -5,11 +5,13 @@ import { addComponent, defineComponent, Types } from 'bitecs';
 import { addTransformComponents } from '../../../../../src/ECS/Components/Transform.ts';
 import { DI } from '../../DI';
 import { Children } from './Children.ts';
-import { CollisionGroup } from '../../Physical/createRigid.ts';
+import { CollisionGroup, createRigidCircle } from '../../Physical/createRigid.ts';
 import { addPlayerComponent, getNewPlayerId } from './Player.ts';
 import { addHitableComponent } from './Hitable.ts';
 import { Parent } from './Parent.ts';
 import { RigidBodyRef } from './Physical.ts';
+import { TColor } from '../../../../../src/ECS/Components/Common.ts';
+import { createRigidGroup } from './RigidGroup.ts';
 
 export const Tank = defineComponent({
     bulletSpeed: Types.f64,
@@ -64,7 +66,9 @@ export const mutatedOptions: Options = {
     height: 0,
     radius: 0,
     rotation: 0,
-    color: [1, 0, 0, 1],
+    color: new Float32Array([1, 0, 0, 1]),
+    shadow: new Float32Array([0, 3]),
+    bodyType: RigidBodyType.Dynamic,
     mass: 10,
     linearDamping: 5,
     angularDamping: 5,
@@ -74,7 +78,25 @@ export const mutatedOptions: Options = {
     playerId: 0,
 };
 
-export const defaultOptions = { ...mutatedOptions };
+const defaultOptions = structuredClone(mutatedOptions);
+const resetOptions = (target: Options, source: Parameters<typeof createTankRR>[0]) => {
+    target.x = source?.x ?? defaultOptions.x;
+    target.y = source?.y ?? defaultOptions.y;
+    target.width = defaultOptions.width;
+    target.height = defaultOptions.height;
+    target.radius = defaultOptions.radius;
+    target.rotation = source?.rotation ?? defaultOptions.rotation;
+    (target.color as Float32Array).set(source?.color ?? defaultOptions.color, 0);
+    (target.shadow as Float32Array).set(defaultOptions.shadow, 0);
+    target.mass = defaultOptions.mass;
+    target.linearDamping = defaultOptions.linearDamping;
+    target.angularDamping = defaultOptions.angularDamping;
+    target.belongsCollisionGroup = defaultOptions.belongsCollisionGroup;
+    target.interactsCollisionGroup = defaultOptions.interactsCollisionGroup;
+};
+const updateColorOptions = (target: Options, color: TColor) => {
+    (target.color as Float32Array).set(color, 0);
+};
 
 const parentVector = new Vector2(0, 0);
 const childVector = new Vector2(0, 0);
@@ -122,36 +144,30 @@ export function createTankRR(options: {
     x: number,
     y: number,
     rotation: number,
-    color: [number, number, number, number],
+    color: TColor,
 }, { world } = DI) {
-    Object.assign(mutatedOptions, defaultOptions, options);
-
+    resetOptions(mutatedOptions, options);
+    mutatedOptions.playerId = getNewPlayerId();
     mutatedOptions.radius = PADDING * 22;
-    mutatedOptions.bodyType = RigidBodyType.Dynamic;
     mutatedOptions.belongsCollisionGroup = 0;
     mutatedOptions.interactsCollisionGroup = 0;
-    mutatedOptions.color = [0.2, 0.1, 0.1, 0];
-    mutatedOptions.playerId = getNewPlayerId();
 
-    const [tankId] = createCirceRR(mutatedOptions);
-
-
+    const [tankId] = createRigidGroup(createRigidCircle(mutatedOptions));
     const partsEntityIds = new Float64Array(COMMON_LENGTH);
 
     mutatedOptions.rotation = 0;
-    mutatedOptions.bodyType = RigidBodyType.Dynamic;
     mutatedOptions.belongsCollisionGroup = undefined;
     mutatedOptions.interactsCollisionGroup = undefined;
 
     // === Hull ===
-    mutatedOptions.color = options.color;
+    updateColorOptions(mutatedOptions, options.color);
     partsEntityIds.set(
         createRectanglesRR(tankId, mainHullBase, mutatedOptions, 0 - 3 * PADDING, 0 - 3 * PADDING),
         0,
     );
 
     // === Turret and Gun (8 прямоугольников) ===
-    mutatedOptions.color = [0.5, 1, 0.5, 1];
+    updateColorOptions(mutatedOptions, [0.5, 1, 0.5, 1]);
     mutatedOptions.interactsCollisionGroup = CollisionGroup.WALL | CollisionGroup.TANK;
     partsEntityIds.set(
         createRectanglesRR(tankId, turretAndGun, mutatedOptions, 0, 0 - 10 * PADDING),
@@ -160,7 +176,7 @@ export function createTankRR(options: {
     mutatedOptions.interactsCollisionGroup = CollisionGroup.ALL;
 
     // === Left Track (13 прямоугольников) ===
-    mutatedOptions.color = [0.5, 0.5, 0.5, 1];
+    updateColorOptions(mutatedOptions, [0.5, 0.5, 0.5, 1]);
     partsEntityIds.set(
         createRectanglesRR(tankId, caterpillar, mutatedOptions, 0 - 5 * PADDING, 0 - 4 * PADDING),
         mainHullBase.length + turretAndGun.length,
@@ -171,7 +187,6 @@ export function createTankRR(options: {
         createRectanglesRR(tankId, caterpillar, mutatedOptions, 0 + 5 * PADDING, 0 - 4 * PADDING),
         mainHullBase.length + turretAndGun.length + caterpillar.length,
     );
-
 
     addTransformComponents(world, tankId);
 
