@@ -136,7 +136,7 @@ const renderFrame = createFrameTick({
     device,
     context,
     background: [173 / 255, 193 / 255, 120 / 255, 1],
-    pixelRatio: window.devicePixelRatio,
+    getPixelRatio: () => window.devicePixelRatio,
 }, ({ passEncoder }) => {
     drawShapeSystem(passEncoder);
 });
