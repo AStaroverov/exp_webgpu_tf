@@ -5,13 +5,13 @@ import { addComponent, defineComponent, Types } from 'bitecs';
 import { addTransformComponents } from '../../../../../src/ECS/Components/Transform.ts';
 import { DI } from '../../DI';
 import { Children } from './Children.ts';
-import { CollisionGroup, createRigidCircle } from '../../Physical/createRigid.ts';
+import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { addPlayerComponent, getNewPlayerId } from './Player.ts';
 import { addHitableComponent } from './Hitable.ts';
 import { Parent } from './Parent.ts';
 import { RigidBodyRef } from './Physical.ts';
 import { TColor } from '../../../../../src/ECS/Components/Common.ts';
-import { createRigidGroup } from './RigidGroup.ts';
+import { createCircleRigidGroup } from './RigidGroup.ts';
 
 export const Tank = defineComponent({
     bulletSpeed: Types.f64,
@@ -152,7 +152,7 @@ export function createTankRR(options: {
     mutatedOptions.belongsCollisionGroup = 0;
     mutatedOptions.interactsCollisionGroup = 0;
 
-    const [tankId] = createRigidGroup(createRigidCircle(mutatedOptions));
+    const [tankId] = createCircleRigidGroup(mutatedOptions);
     const partsEntityIds = new Float64Array(COMMON_LENGTH);
 
     mutatedOptions.rotation = 0;
