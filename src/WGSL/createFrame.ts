@@ -3,19 +3,19 @@ import { world } from '../ECS/world.ts';
 import { createResizeSystem } from '../ECS/Systems/resizeSystem.ts';
 
 export function createFrameTick(
-    { canvas, device, context, background }: {
+    { canvas, device, context, background, pixelRatio }: {
         canvas: HTMLCanvasElement,
         device: GPUDevice,
         context: GPUCanvasContext,
         background: GPUColor,
-
+        pixelRatio: number,
     }, callback: (options: {
         world: IWorld,
         context: GPUCanvasContext,
         device: GPUDevice,
         passEncoder: GPURenderPassEncoder
     }) => void) {
-    const resizeSystem = createResizeSystem(canvas);
+    const resizeSystem = createResizeSystem(canvas, pixelRatio);
 
     const arg = {
         world: world,
