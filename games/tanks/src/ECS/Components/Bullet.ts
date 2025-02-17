@@ -1,29 +1,36 @@
 import { createRectangleRR } from './RigidRender.ts';
 import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
-import { addTransformComponents } from '../../../../../src/ECS/Components/Transform.ts';
+import {
+    addTransformComponents,
+    getMatrixRotationZ,
+    getMatrixTranslationX,
+    getMatrixTranslationY,
+    GlobalTransform,
+} from '../../../../../src/ECS/Components/Transform.ts';
 import { DI } from '../../DI';
 import { addComponent, defineComponent } from 'bitecs';
 import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';
-import { vec2 } from 'gl-matrix';
+import { mat4, vec2, vec3 } from 'gl-matrix';
 import { isNumber } from 'lodash-es';
 import { ActiveEvents } from '@dimforge/rapier2d';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { addHitableComponent } from './Hitable.ts';
-import { addPlayerComponent } from './Player.ts';
+import { addPlayerComponent, Player } from './Player.ts';
+import { Tank } from './Tank.ts';
 
 export const Bullet = defineComponent();
 
-type Options = Parameters<typeof createRectangleRR>[0]
+type Options = Parameters<typeof createRectangleRR>[0] & { speed: number, playerId: number };
 
 export const mutatedOptions: Options = {
     x: 0,
     y: 0,
-    width: 10,
-    height: 10,
+    width: 5,
+    height: 5,
     speedX: 0,
     speedY: 0,
     rotation: 0,
-    color: new Float32Array([1, 1, 1, 1]),
+    color: new Float32Array([1, 0, 0, 1]),
     shadow: new Float32Array([0, 2]),
     bodyType: RigidBodyType.Dynamic,
     density: 10,
@@ -31,12 +38,16 @@ export const mutatedOptions: Options = {
     linearDamping: 0.1,
     collisionEvent: ActiveEvents.CONTACT_FORCE_EVENTS,
     belongsCollisionGroup: CollisionGroup.BULLET,
-    interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_1,
+    interactsCollisionGroup: CollisionGroup.ALL & ~CollisionGroup.TANK_3,
+
+    //
+    speed: 0,
+    playerId: 0,
 };
 
 const tmpSpeed = vec2.create();
 
-export function createBulletRR(options: Options & { speed: number, playerId: number }, { world } = DI) {
+export function createBulletRR(options: Options, { world } = DI) {
     Object.assign(mutatedOptions, options);
 
     if (isNumber(options.speed) && options.speed > 0) {
@@ -54,4 +65,26 @@ export function createBulletRR(options: Options & { speed: number, playerId: num
     addTransformComponents(world, bulletId);
 
     return bulletId;
+}
+
+
+const tmpMatrix = mat4.create();
+const tmpPosition = vec3.create() as Float32Array;
+
+export function spawnBullet(tankId: number) {
+    const globalTransform = GlobalTransform.matrix[Tank.turretEId[tankId]];
+    const bulletDelta = Tank.bulletStartPosition[tankId];
+
+    tmpPosition.set(bulletDelta);
+    mat4.identity(tmpMatrix);
+    mat4.translate(tmpMatrix, tmpMatrix, tmpPosition);
+    mat4.multiply(tmpMatrix, globalTransform, tmpMatrix);
+
+    mutatedOptions.x = getMatrixTranslationX(tmpMatrix);
+    mutatedOptions.y = getMatrixTranslationY(tmpMatrix);
+    mutatedOptions.rotation = getMatrixRotationZ(tmpMatrix);
+    mutatedOptions.speed = Tank.bulletSpeed[tankId];
+    mutatedOptions.playerId = Player.id[tankId];
+
+    createBulletRR(mutatedOptions);
 }

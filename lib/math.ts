@@ -22,3 +22,7 @@ export function uceil(n: number): number {
 export function uround(n: number): number {
     return sign(n) * round(abs(n));
 }
+
+export function length2(x: number, y: number): number {
+    return sqrt(x * x + y * y);
+}

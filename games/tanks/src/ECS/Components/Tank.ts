@@ -12,6 +12,7 @@ import { Parent } from './Parent.ts';
 import { RigidBodyRef } from './Physical.ts';
 import { TColor } from '../../../../../src/ECS/Components/Common.ts';
 import { createRectangleRigidGroup } from './RigidGroup.ts';
+import { addTankControllerComponent } from './TankController.ts';
 
 export const Tank = defineComponent({
     turretEId: Types.f64,
@@ -223,12 +224,14 @@ export function createTankRR(options: {
     // // === Turret and Gun (8 прямоугольников) ===
     mutatedOptions.density = DENSITY;
     mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_2;
-    mutatedOptions.interactsCollisionGroup = CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_2;
+    mutatedOptions.interactsCollisionGroup = CollisionGroup.ALL | CollisionGroup.WALL | CollisionGroup.TANK_2 | CollisionGroup.TANK_3;
     updateColorOptions(mutatedOptions, [0.5, 1, 0.5, 1]);
     partsEntityIds.set(
         createRectanglesRR(turretEid, turretSet, mutatedOptions, 0 - 0.5 * PADDING, 0 - 8 * PADDING),
         hullSet.length + caterpillarSet.length * 2,
     );
+    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_3;
+    mutatedOptions.interactsCollisionGroup = CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_2 | CollisionGroup.TANK_3;
     partsEntityIds.set(
         createRectanglesRR(turretEid, gunSet, mutatedOptions, 0 - 0.5 * PADDING, 0 - 8 * PADDING),
         hullSet.length + turretSet.length + caterpillarSet.length * 2,
@@ -240,11 +243,13 @@ export function createTankRR(options: {
     Tank.turretEId[tankEid] = turretEid;
     Tank.bulletSpeed[tankEid] = 300;
     Tank.bulletStartPosition[tankEid][0] = PADDING / 2;
-    Tank.bulletStartPosition[tankEid][1] = -PADDING * 12;
+    Tank.bulletStartPosition[tankEid][1] = -PADDING * 11;
 
     addComponent(world, Children, tankEid);
     Children.entitiesCount[tankEid] = partsEntityIds.length;
     Children.entitiesIds[tankEid] = partsEntityIds;
+
+    addTankControllerComponent(world, tankEid);
 
     addPlayerComponent(world, tankEid, mutatedOptions.playerId);
 
