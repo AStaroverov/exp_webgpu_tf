@@ -22,9 +22,9 @@ import { hasComponent } from 'bitecs';
 import { hit, Hitable } from './src/ECS/Components/Hitable.ts';
 import { createHitableSystem } from './src/ECS/Systems/createHitableSystem.ts';
 import { createTankAliveSystem } from './src/ECS/Systems/createTankAliveSystem.ts';
-import { fillEnvironment } from './src/TilesMatrix/fillers/environment.ts';
 import { Matrix } from '../../lib/Matrix';
 import { getEmptyTile, TileType } from './src/TilesMatrix/def.ts';
+import { fillEnvironment } from './src/TilesMatrix/fillers/environment.ts';
 import { fillWalls } from './src/TilesMatrix/fillers/walls.ts';
 import { createWallRR } from './src/ECS/Components/Wall.ts';
 
@@ -37,8 +37,8 @@ DI.world = world;
 DI.physicalWorld = physicalWorld;
 
 const tankId = createTankRR({
-    x: 100,
-    y: 100,
+    x: 500,
+    y: 500,
     rotation: Math.PI / 1.3,
     color: [1, 0, 0, 1],
 });
@@ -58,8 +58,8 @@ const tankId = createTankRR({
 // });
 
 const tankId4 = createTankRR({
-    x: 500,
-    y: 500,
+    x: 200,
+    y: 200,
     rotation: Math.PI / 4,
     color: [1, 0, 1, 1],
 });

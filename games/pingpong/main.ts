@@ -38,7 +38,7 @@ for (let i = 0; i < 1000; i++) {
         color: [1, 0, 0, 1],
         bodyType: RigidBodyType.Dynamic,
         gravityScale: 0,
-        mass: 1,
+        density: 1,
         collisionEvent: ActiveEvents.NONE,
     });
 }
@@ -67,7 +67,7 @@ const platformId = createRectangleRR({
     color: [1, 0, 0, 1],
     bodyType: RigidBodyType.KinematicPositionBased,
     gravityScale: 1,
-    mass: 1000,
+    density: 1000,
     collisionEvent: ActiveEvents.NONE,
 });
 

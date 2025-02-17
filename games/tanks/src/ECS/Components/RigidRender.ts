@@ -3,7 +3,7 @@ import { createCircle, createRectangle } from '../../../../../src/ECS/Entities/S
 import { addRigidBodyRef } from './Physical.ts';
 import { DI } from '../../DI';
 
-export function createCirceRR(
+export function createCircleRR(
     options: Parameters<typeof createCircle>[1] & Parameters<typeof createRigidCircle>[0],
     { world } = DI,
 ): [id: number, physicalId: number] {

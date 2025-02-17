@@ -22,7 +22,7 @@ export function createTankAliveSystem({ world } = DI) {
                     removePhysicalJoint(TankPart.jointPid[tankPartEid]);
                     removeTankPartJoint(tankPartEid);
                     // change collision group
-                    resetCollisionsTo(tankPartEid, CollisionGroup.WALL);
+                    resetCollisionsTo(tankPartEid, CollisionGroup.ALL & ~CollisionGroup.TANK_2);
                 }
                 removeTankWithoutParts(tankEid);
             }

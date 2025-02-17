@@ -1,8 +1,8 @@
 import { DI } from '../../DI';
 import { RigidBodyRef } from '../Components/Physical.ts';
-import { Vector2 } from '@dimforge/rapier2d';
+import { RevoluteImpulseJoint, Vector2 } from '@dimforge/rapier2d';
 import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';
-import { Tank } from '../Components/Tank.ts';
+import { Tank, TankPart } from '../Components/Tank.ts';
 
 export function createPlayerTankPositionSystem(tankId: number, { document, physicalWorld } = DI) {
     let speed = 0;
@@ -11,8 +11,8 @@ export function createPlayerTankPositionSystem(tankId: number, { document, physi
     const acceleration = 0.1; // Как быстро набирается скорость
     const maxSpeed = 1.5; // Максимальная скорость танка
     const rotationSpeed = 1; // Скорость поворота
-    const impulseFactor = 10000000; // Масштаб импульса (настраиваемый)
-    const rotationImpulseFactor = 10000000; // Масштаб крутящего момента
+    const impulseFactor = 1000000; // Масштаб импульса (настраиваемый)
+    const rotationImpulseFactor = 3000000; // Масштаб крутящего момента
 
     let moveDirection = 0;
     let rotationDirection = 0;
@@ -107,15 +107,50 @@ export function createPlayerTankPositionSystem(tankId: number, { document, physi
 export function createPlayerTankTurretRotationSystem(tankEid: number, { document, physicalWorld } = DI) {
     const damping = 0.2;   // коэффициент демпфирования
     const stiffness = 1e6; // коэффициент жесткости (подбирается опытным путем)
-    const impulseFactor = 100; // Масштаб импульса (настраиваемый)
-    const mousePosition = new Vector2(0, 0);
 
+    const impulseFactor = 10; // Масштаб импульса (настраиваемый)
+    const inertialFactor = 0.002;
+
+
+    const mousePosition = new Vector2(0, 0);
     document.addEventListener('mousemove', (event) => {
         mousePosition.x = event.clientX;
         mousePosition.y = event.clientY;
     });
 
-    return (delta: number) => {
+    let currentTargetAngle = 0;
+
+    function rotateByMotor(delta: number) {
+        // Получаем RB танка и башни
+        const turretEid = Tank.turretEId[tankEid];
+        const jointPid = TankPart.jointPid[turretEid];
+        const turretJoint = physicalWorld.getImpulseJoint(jointPid);
+        const tankRB = physicalWorld.getRigidBody(RigidBodyRef.id[tankEid]);
+        const turretRB = physicalWorld.getRigidBody(RigidBodyRef.id[Tank.turretEId[tankEid]]);
+        const tankRot = tankRB.rotation();
+        const turretPos = turretRB.translation();
+
+        // Глобальный угол от точки поворота башни к позиции мыши
+        const targetRot = Math.atan2(
+            mousePosition.y - turretPos.y,
+            mousePosition.x - turretPos.x,
+        );
+
+        // Желаемый угол башни относительно танка (при условии, что в состоянии покоя башня выровнена с танком)
+        const targetDeltaRot = targetRot - tankRot + Math.PI / 2;
+        const nextTargetAngle = lerpAngle(currentTargetAngle, targetDeltaRot, inertialFactor * delta) % (2 * Math.PI);
+        (turretJoint as RevoluteImpulseJoint).configureMotorPosition((currentTargetAngle = nextTargetAngle), stiffness, damping);
+    }
+
+    function lerpAngle(a: number, b: number, t: number): number {
+        let diff = b - a;
+        while (diff < -Math.PI) diff += 2 * Math.PI;
+        while (diff > Math.PI) diff -= 2 * Math.PI;
+        return a + diff * t;
+    }
+
+    // @ts-ignore
+    function rotateByImpulse(delta: number) {
         // Получаем RB дула (башни) и родительского танка
         const tankRB = physicalWorld.getRigidBody(RigidBodyRef.id[tankEid]);
         const turretRB = physicalWorld.getRigidBody(RigidBodyRef.id[Tank.turretEId[tankEid]]);
@@ -137,6 +172,12 @@ export function createPlayerTankTurretRotationSystem(tankEid: number, { document
         const torqueImpulse = stiffness * errorAngle - damping * turretRB.angvel();
         // Применяем импульс крутящего момента к RB дула
         turretRB.applyTorqueImpulse(delta * torqueImpulse * impulseFactor, true);
+    }
+
+    return (delta: number) => {
+        rotateByMotor(delta);
+        // rotateByImpulse(delta);
     };
+
 }
 

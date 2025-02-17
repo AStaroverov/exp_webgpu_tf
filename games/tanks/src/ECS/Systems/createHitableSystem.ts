@@ -25,9 +25,9 @@ export function createHitableSystem({ world } = DI) {
             const jointPid = TankPart.jointPid[tankPartEid];
 
             if (damage > 0 && jointPid >= 0) {
-                removePhysicalJoint(jointPid);
                 removeChild(tankEid, tankPartEid);
-                resetCollisionsTo(tankPartEid, CollisionGroup.ALL);
+                resetCollisionsTo(tankPartEid, CollisionGroup.ALL & ~CollisionGroup.TANK_2);
+                removePhysicalJoint(jointPid);
                 removeTankPartJoint(tankPartEid);
             }
         }

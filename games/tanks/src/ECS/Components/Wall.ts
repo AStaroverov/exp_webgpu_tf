@@ -16,7 +16,7 @@ const mutatedOptions: Options = {
     rotation: 0,
     color: new Float32Array([0.9, 0.9, 0.9, 1]),
     shadow: new Float32Array([0, 2]),
-    mass: 1000,
+    density: 1000,
     angularDamping: 0.7,
     linearDamping: 0.7,
     // collisionEvent: ActiveEvents.CONTACT_FORCE_EVENTS,
@@ -31,7 +31,7 @@ const resetOptions = (options: Partial<Options>) => {
     mutatedOptions.rotation = options.rotation ?? defaultOptions.rotation;
     (mutatedOptions.color as Float32Array).set(options.color ?? defaultOptions.color);
     (mutatedOptions.shadow as Float32Array).set(options.shadow ?? defaultOptions.shadow);
-    mutatedOptions.mass = options.mass ?? defaultOptions.mass;
+    mutatedOptions.density = options.density ?? defaultOptions.density;
     mutatedOptions.angularDamping = options.angularDamping ?? defaultOptions.angularDamping;
     mutatedOptions.linearDamping = options.linearDamping ?? defaultOptions.linearDamping;
     // mutatedOptions.collisionEvent = defaultOptions.collisionEvent;

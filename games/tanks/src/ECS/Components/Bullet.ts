@@ -26,11 +26,12 @@ export const mutatedOptions: Options = {
     color: new Float32Array([1, 1, 1, 1]),
     shadow: new Float32Array([0, 2]),
     bodyType: RigidBodyType.Dynamic,
-    mass: 10,
+    density: 10,
     angularDamping: 0.1,
     linearDamping: 0.1,
     collisionEvent: ActiveEvents.CONTACT_FORCE_EVENTS,
     belongsCollisionGroup: CollisionGroup.BULLET,
+    interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_1,
 };
 
 const tmpSpeed = vec2.create();

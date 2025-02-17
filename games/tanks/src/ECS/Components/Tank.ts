@@ -1,4 +1,4 @@
-import { createCirceRR, createRectangleRR } from './RigidRender.ts';
+import { createCircleRR, createRectangleRR } from './RigidRender.ts';
 import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
 import { JointData, Vector2 } from '@dimforge/rapier2d';
 import { addComponent, defineComponent, removeEntity, Types } from 'bitecs';
@@ -11,7 +11,6 @@ import { addHitableComponent } from './Hitable.ts';
 import { Parent } from './Parent.ts';
 import { RigidBodyRef } from './Physical.ts';
 import { TColor } from '../../../../../src/ECS/Components/Common.ts';
-import { createCircleRigidGroup } from './RigidGroup.ts';
 
 export const Tank = defineComponent({
     turretEId: Types.f64,
@@ -59,7 +58,7 @@ const caterpillarSet: [number, number, number, number][] =
 
 const COMMON_LENGTH = hullSet.length + turretSet.length + gunSet.length + caterpillarSet.length * 2;
 
-type Options = Parameters<typeof createRectangleRR>[0] & Parameters<typeof createCirceRR>[0] & {
+type Options = Parameters<typeof createRectangleRR>[0] & Parameters<typeof createCircleRR>[0] & {
     playerId: number,
 };
 
@@ -73,11 +72,11 @@ export const mutatedOptions: Options = {
     color: new Float32Array([1, 0, 0, 1]),
     shadow: new Float32Array([0, 3]),
     bodyType: RigidBodyType.Dynamic,
-    mass: 10,
+    density: 10,
     linearDamping: 5,
     angularDamping: 5,
-    belongsCollisionGroup: CollisionGroup.TANK,
-    interactsCollisionGroup: CollisionGroup.ALL,
+    belongsCollisionGroup: 0,
+    interactsCollisionGroup: 0,
 
     playerId: 0,
 };
@@ -92,7 +91,7 @@ const resetOptions = (target: Options, source: Parameters<typeof createTankRR>[0
     target.rotation = source?.rotation ?? defaultOptions.rotation;
     (target.color as Float32Array).set(source?.color ?? defaultOptions.color, 0);
     (target.shadow as Float32Array).set(defaultOptions.shadow, 0);
-    target.mass = defaultOptions.mass;
+    target.density = defaultOptions.density;
     target.linearDamping = defaultOptions.linearDamping;
     target.angularDamping = defaultOptions.angularDamping;
     target.belongsCollisionGroup = defaultOptions.belongsCollisionGroup;
@@ -106,7 +105,7 @@ const parentVector = new Vector2(0, 0);
 const childVector = new Vector2(0, 0);
 const createRectanglesRR = (
     parentEId: number,
-    coords: [number, number, number, number][],
+    params: [number, number, number, number][],
     options: Options,
     x: number,
     y: number,
@@ -115,7 +114,7 @@ const createRectanglesRR = (
     const rbId = RigidBodyRef.id[parentEId];
     const parentRb = physicalWorld.getRigidBody(rbId);
 
-    return coords.map((param) => {
+    return params.map((param) => {
         const parentTranslation = parentRb.translation();
         options.x = parentTranslation.x + x + param[0];
         options.y = parentTranslation.y + y + param[1];
@@ -127,7 +126,7 @@ const createRectanglesRR = (
         parentVector.x = x + param[0];
         parentVector.y = y + param[1];
         const joint = physicalWorld.createImpulseJoint(
-            JointData.fixed(parentVector, 10, childVector, 10),
+            JointData.fixed(parentVector, 0, childVector, 0),
             parentRb,
             physicalWorld.getRigidBody(pid),
             true,
@@ -144,6 +143,9 @@ const createRectanglesRR = (
     });
 };
 
+
+const DENSITY = 100;
+
 export function createTankRR(options: {
     x: number,
     y: number,
@@ -152,20 +154,29 @@ export function createTankRR(options: {
 }, { world, physicalWorld } = DI) {
     resetOptions(mutatedOptions, options);
     mutatedOptions.playerId = getNewPlayerId();
-    mutatedOptions.radius = PADDING * 22;
     mutatedOptions.belongsCollisionGroup = 0;
     mutatedOptions.interactsCollisionGroup = 0;
 
-    mutatedOptions.mass = 3000;
-    const [tankEid, tankPid] = createCircleRigidGroup(mutatedOptions);
+    mutatedOptions.density = DENSITY;
+    mutatedOptions.radius = PADDING * 40;
+    mutatedOptions.width = PADDING * 12;
+    mutatedOptions.height = PADDING * 14;
+    updateColorOptions(mutatedOptions, [0.5, 0.5, 0.5, 0.5]);
+    const [tankEid, tankPid] = createCircleRR(mutatedOptions);
+    // const [tankEid, tankPid] = createRectangleRigidGroup(mutatedOptions);
     // {
-    mutatedOptions.mass = 300;
-    const [turretEid, turretPid] = createCircleRigidGroup(mutatedOptions);
+    mutatedOptions.density = DENSITY;
+    mutatedOptions.radius = PADDING * 40;
+    mutatedOptions.width = PADDING * 6;
+    mutatedOptions.height = PADDING * 17;
+    updateColorOptions(mutatedOptions, [0.5, 0, 0, 1]);
+    const [turretEid, turretPid] = createCircleRR(mutatedOptions);
+    // const [turretEid, turretPid] = createRectangleRigidGroup(mutatedOptions);
 
     parentVector.x = 0;
-    parentVector.y = 0;
+    parentVector.y = -PADDING;
     childVector.x = 0;
-    childVector.y = PADDING * 3;
+    childVector.y = PADDING * 5;
     const joint = physicalWorld.createImpulseJoint(
         JointData.revolute(parentVector, childVector),
         physicalWorld.getRigidBody(tankPid),
@@ -179,43 +190,44 @@ export function createTankRR(options: {
     addComponent(world, Parent, turretEid);
     Parent.id[turretEid] = tankEid;
     // }
+
     const partsEntityIds = new Float64Array(COMMON_LENGTH);
 
-    mutatedOptions.mass = 10;
-    mutatedOptions.rotation = 0;
-    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK;
-    mutatedOptions.interactsCollisionGroup = CollisionGroup.BULLET | CollisionGroup.WALL;
+    mutatedOptions.density = DENSITY;
+    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_1;
+    mutatedOptions.interactsCollisionGroup = CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_1;
 
     // === Hull ===
     updateColorOptions(mutatedOptions, options.color);
     partsEntityIds.set(
-        createRectanglesRR(tankEid, hullSet, mutatedOptions, 0 - 3 * PADDING, 0 - 3 * PADDING),
+        createRectanglesRR(tankEid, hullSet, mutatedOptions, 0 - 3.5 * PADDING, 0 - 0 * PADDING),
         0,
     );
 
     // === Left Track (13 прямоугольников) ===
     updateColorOptions(mutatedOptions, [0.5, 0.5, 0.5, 1]);
     partsEntityIds.set(
-        createRectanglesRR(tankEid, caterpillarSet, mutatedOptions, 0 - 5 * PADDING, 0 - 4 * PADDING),
+        createRectanglesRR(tankEid, caterpillarSet, mutatedOptions, 0 - 5.5 * PADDING, 0 - 1 * PADDING),
         hullSet.length,
     );
 
     // === Right Track (13 прямоугольников) ===
     updateColorOptions(mutatedOptions, [0.5, 0.5, 0.5, 1]);
     partsEntityIds.set(
-        createRectanglesRR(tankEid, caterpillarSet, mutatedOptions, 0 + 5 * PADDING, 0 - 4 * PADDING),
+        createRectanglesRR(tankEid, caterpillarSet, mutatedOptions, 0 + 4.5 * PADDING, 0 - 1 * PADDING),
         hullSet.length + caterpillarSet.length,
     );
 
     // === Turret and Gun (8 прямоугольников) ===
+    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_2;
+    mutatedOptions.interactsCollisionGroup = CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_2;
     updateColorOptions(mutatedOptions, [0.5, 1, 0.5, 1]);
     partsEntityIds.set(
-        createRectanglesRR(turretEid, turretSet, mutatedOptions, 0, 0 - 7 * PADDING),
+        createRectanglesRR(turretEid, turretSet, mutatedOptions, 0 - 0.5 * PADDING, 0 - 3 * PADDING),
         hullSet.length + caterpillarSet.length * 2,
     );
-    mutatedOptions.interactsCollisionGroup = CollisionGroup.WALL;
     partsEntityIds.set(
-        createRectanglesRR(turretEid, gunSet, mutatedOptions, 0, 0 - 7 * PADDING),
+        createRectanglesRR(turretEid, gunSet, mutatedOptions, 0 - 0.5 * PADDING, 0 - 3 * PADDING),
         hullSet.length + turretSet.length + caterpillarSet.length * 2,
     );
 
