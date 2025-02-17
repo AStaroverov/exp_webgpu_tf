@@ -4,12 +4,12 @@ import { PLAYER_REFS } from './src/consts.ts';
 
 createGame();
 
-// const tankId = createTankRR({
-//     x: 500,
-//     y: 500,
-//     rotation: Math.PI / 1.3,
-//     color: [1, 0, 0, 1],
-// });
+const tankId = createTankRR({
+    x: 500,
+    y: 500,
+    rotation: Math.PI / 1.3,
+    color: [1, 0, 0, 1],
+});
 
 const tankId4 = createTankRR({
     x: 200,

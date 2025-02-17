@@ -9,7 +9,7 @@ export function createCircleRR(
 ): [id: number, physicalId: number] {
     const renderId = createCircle(world, options);
     const physicalId = createRigidCircle(options);
-    addRigidBodyRef(world, renderId, physicalId);
+    addRigidBodyRef(renderId, physicalId);
     return [renderId, physicalId];
 }
 
@@ -19,7 +19,7 @@ export function createRectangleRR(
 ): [id: number, physicalId: number] {
     const renderId = createRectangle(world, options);
     const physicalId = createRigidRectangle(options);
-    addRigidBodyRef(world, renderId, physicalId);
+    addRigidBodyRef(renderId, physicalId);
     return [renderId, physicalId];
 }
 

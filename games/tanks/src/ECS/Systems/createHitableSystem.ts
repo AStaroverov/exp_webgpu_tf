@@ -3,12 +3,13 @@ import { Changed, defineQuery } from 'bitecs';
 import { Hitable } from '../Components/Hitable.ts';
 import { removeTankPartJoint, TankPart } from '../Components/Tank.ts';
 import { Bullet } from '../Components/Bullet.ts';
-import { CollisionGroup, removeRigidEntity } from '../../Physical/createRigid.ts';
+import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { removeChild } from '../Components/Children.ts';
 import { Parent } from '../Components/Parent.ts';
 import { Wall } from '../Components/Wall.ts';
 import { resetCollisionsTo } from '../../Physical/collision.ts';
 import { removePhysicalJoint } from '../../Physical/joint.ts';
+import { recursiveTypicalRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 
 export function createHitableSystem({ world } = DI) {
     const tankPartsQuery = defineQuery([TankPart, Parent, Changed(Hitable)]);
@@ -38,7 +39,7 @@ export function createHitableSystem({ world } = DI) {
             const damage = Hitable.damage[bulletsId];
 
             if (damage > 0) {
-                removeRigidEntity(bulletsId);
+                recursiveTypicalRemoveEntity(bulletsId);
             }
         }
 
@@ -48,7 +49,7 @@ export function createHitableSystem({ world } = DI) {
             const damage = Hitable.damage[wallId];
 
             if (damage > 0) {
-                removeRigidEntity(wallId);
+                recursiveTypicalRemoveEntity(wallId);
             }
         }
     };

@@ -3,7 +3,6 @@ import { DI } from '../DI';
 import { BodyOptions, createBody } from './createBody.ts';
 import { ActiveCollisionTypes } from '@dimforge/rapier2d/src/geometry/collider.ts';
 import { RigidBodyRef } from '../ECS/Components/Physical.ts';
-import { removeEntity } from 'bitecs';
 
 export enum CollisionGroup {
     ALL = 0xFFFF,
@@ -65,9 +64,8 @@ export function createRigidCircle(
     return body.handle;
 }
 
-export function removeRigidEntity(eid: number, { world, physicalWorld } = DI) {
+export function removeRigidShape(eid: number, { physicalWorld } = DI) {
     const pid = RigidBodyRef.id[eid];
     const body = physicalWorld.getRigidBody(pid);
-    physicalWorld.removeRigidBody(body);
-    removeEntity(world, eid);
+    body && physicalWorld.removeRigidBody(body);
 }

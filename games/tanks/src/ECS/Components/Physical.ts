@@ -1,16 +1,22 @@
-import { addComponent, defineComponent, Types } from 'bitecs';
-import { World } from '../../../../../src/ECS/world.ts';
+import { addComponent, defineComponent, removeComponent, Types } from 'bitecs';
+import { DI } from '../../DI';
 
 const mapPhysicalIdToEntityId = new Map<number, number>();
 
 export const RigidBodyRef = defineComponent({
-    id: Types.f64,
+    id: Types.f64, // pid
 });
 
-export function addRigidBodyRef(world: World, worldId: number, physicalId: number) {
-    addComponent(world, RigidBodyRef, worldId);
-    RigidBodyRef.id[worldId] = physicalId;
-    mapPhysicalIdToEntityId.set(physicalId, worldId);
+export function addRigidBodyRef(eid: number, pid: number, { world } = DI) {
+    addComponent(world, RigidBodyRef, eid);
+    RigidBodyRef.id[eid] = pid;
+    mapPhysicalIdToEntityId.set(pid, eid);
+}
+
+export function removeRigidBodyRef(eid: number, { world } = DI) {
+    removeComponent(world, RigidBodyRef, eid);
+    mapPhysicalIdToEntityId.delete(RigidBodyRef.id[eid]);
+    RigidBodyRef.id[eid] = 0;
 }
 
 export function getEntityIdByPhysicalId(physicalId: number): number {

@@ -9,7 +9,7 @@ export function createCircleRigidGroup(
 ): [id: number, physicalId: number] {
     const eid = addEntity(world);
     const physicalId = createRigidCircle(options);
-    addRigidBodyRef(world, eid, physicalId);
+    addRigidBodyRef(eid, physicalId);
     return [eid, physicalId];
 }
 
@@ -19,7 +19,7 @@ export function createRectangleRigidGroup(
 ): [id: number, physicalId: number] {
     const eid = addEntity(world);
     const physicalId = createRigidRectangle(options);
-    addRigidBodyRef(world, eid, physicalId);
+    addRigidBodyRef(eid, physicalId);
     return [eid, physicalId];
 }
 

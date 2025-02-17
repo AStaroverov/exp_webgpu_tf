@@ -230,6 +230,7 @@ export function createTankRR(options: {
         createRectanglesRR(turretEid, turretSet, mutatedOptions, 0 - 0.5 * PADDING, 0 - 8 * PADDING),
         hullSet.length + caterpillarSet.length * 2,
     );
+    mutatedOptions.shadow[1] = 4;
     mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_3;
     mutatedOptions.interactsCollisionGroup = CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_2 | CollisionGroup.TANK_3;
     partsEntityIds.set(

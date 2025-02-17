@@ -23,6 +23,8 @@ import { hit, Hitable } from './src/ECS/Components/Hitable.ts';
 import { createHitableSystem } from './src/ECS/Systems/createHitableSystem.ts';
 import { createTankAliveSystem } from './src/ECS/Systems/createTankAliveSystem.ts';
 import { createTankPositionSystem, createTankTurretRotationSystem } from './src/ECS/Systems/tankControllerSystems.ts';
+import { createOutZoneDestroySystem } from './src/ECS/Systems/createOutZoneDestroySystem.ts';
+import { createMapSystem } from './src/ECS/Systems/createMapSystem.ts';
 
 const canvas = document.querySelector('canvas')!;
 const { device, context } = await initWebGPU(canvas);
@@ -33,7 +35,7 @@ DI.world = world;
 DI.physicalWorld = physicalWorld;
 
 export function createGame() {
-    // const updateMap = createMapSystem();
+    const updateMap = createMapSystem();
     const spawnBullets = createSpawnerBulletsSystem();
     const execTransformSystem = createTransformSystem(DI.world);
 
@@ -93,8 +95,8 @@ export function createGame() {
         updateTankAliveSystem();
     };
 
-    const drawShapeSystem = createDrawShapeSystem(world, device);
 
+    const drawShapeSystem = createDrawShapeSystem(world, device);
     const renderFrame = createFrameTick({
         canvas,
         device,
@@ -105,6 +107,11 @@ export function createGame() {
         drawShapeSystem(passEncoder);
     });
 
+    const destroyOutZone = createOutZoneDestroySystem();
+    const destroyFrame = () => {
+        destroyOutZone();
+    };
+
     document.body.appendChild(stats.dom);
     let timeStart = performance.now();
     frameTasks.addInterval(() => {
@@ -113,9 +120,10 @@ export function createGame() {
         timeStart = time;
         execTransformSystem();
 
-        // updateMap();
 
         physicalFrame(delta);
+
+        updateMap();
 
         stats.begin();
         renderFrame();
@@ -123,6 +131,7 @@ export function createGame() {
         stats.update();
 
         inputFrame();
+        destroyFrame();
     }, 1);
 
     return DI;
