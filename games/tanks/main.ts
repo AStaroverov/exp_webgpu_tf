@@ -14,7 +14,7 @@ import { createTransformSystem } from '../../src/ECS/Systems/createTransformSyst
 import {
     createPlayerTankPositionSystem,
     createPlayerTankTurretRotationSystem,
-} from './src/ECS/Systems/createPlayerTankPositionSystem.ts';
+} from './src/ECS/Systems/playerTankSystems.ts';
 import { createSpawnerBulletsSystem } from './src/ECS/Systems/createControllBulletSystem.ts';
 import { stats } from './src/stats.ts';
 import { getEntityIdByPhysicalId } from './src/ECS/Components/Physical.ts';
@@ -120,9 +120,9 @@ const applyRigidBodyDeltaToLocalTransformSystem = createApplyRigidBodyDeltaToLoc
 const updateHitableSystem = createHitableSystem();
 const updateTankAliveSystem = createTankAliveSystem();
 
-const inputFrame = () => {
-    updatePlayerTankPosition();
-    updatePlayerTankTurretRotation();
+const inputFrame = (delta: number) => {
+    updatePlayerTankPosition(delta);
+    updatePlayerTankTurretRotation(delta);
     spawnBullets();
 };
 
@@ -174,11 +174,11 @@ const renderFrame = createFrameTick({
 });
 
 document.body.appendChild(stats.dom);
-// let timeStart = performance.now();
+let timeStart = performance.now();
 frameTasks.addInterval(() => {
-    // const time = performance.now();
-    // const delta = time - timeStart;
-    // timeStart = time;
+    const time = performance.now();
+    const delta = time - timeStart;
+    timeStart = time;
     execTransformSystem();
 
     physicalFrame();
@@ -188,5 +188,5 @@ frameTasks.addInterval(() => {
     stats.end();
     stats.update();
 
-    inputFrame();
+    inputFrame(delta);
 }, 1);
