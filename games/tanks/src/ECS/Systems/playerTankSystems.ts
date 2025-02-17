@@ -3,6 +3,7 @@ import { RigidBodyRef } from '../Components/Physical.ts';
 import { RevoluteImpulseJoint, Vector2 } from '@dimforge/rapier2d';
 import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';
 import { Tank, TankPart } from '../Components/Tank.ts';
+import { abs, atan2, max, min, sign } from '../../../../../lib/math.ts';
 
 export function createPlayerTankPositionSystem(tankId: number, { document, physicalWorld } = DI) {
     let speed = 0;
@@ -11,8 +12,8 @@ export function createPlayerTankPositionSystem(tankId: number, { document, physi
     const acceleration = 0.1; // Как быстро набирается скорость
     const maxSpeed = 1.5; // Максимальная скорость танка
     const rotationSpeed = 1; // Скорость поворота
-    const impulseFactor = 1000000; // Масштаб импульса (настраиваемый)
-    const rotationImpulseFactor = 3000000; // Масштаб крутящего момента
+    const impulseFactor = 10000000; // Масштаб импульса (настраиваемый)
+    const rotationImpulseFactor = 30000000; // Масштаб крутящего момента
 
     let moveDirection = 0;
     let rotationDirection = 0;
@@ -109,7 +110,7 @@ export function createPlayerTankTurretRotationSystem(tankEid: number, { document
     const stiffness = 1e6; // коэффициент жесткости (подбирается опытным путем)
 
     const impulseFactor = 10; // Масштаб импульса (настраиваемый)
-    const inertialFactor = 0.002;
+    const maxRotationSpeed = Math.PI * 0.8; // Максимальная скорость поворота
 
 
     const mousePosition = new Vector2(0, 0);
@@ -125,28 +126,40 @@ export function createPlayerTankTurretRotationSystem(tankEid: number, { document
         const turretEid = Tank.turretEId[tankEid];
         const jointPid = TankPart.jointPid[turretEid];
         const turretJoint = physicalWorld.getImpulseJoint(jointPid);
+
+        if (turretJoint == null) return;
+
         const tankRB = physicalWorld.getRigidBody(RigidBodyRef.id[tankEid]);
         const turretRB = physicalWorld.getRigidBody(RigidBodyRef.id[Tank.turretEId[tankEid]]);
         const tankRot = tankRB.rotation();
         const turretPos = turretRB.translation();
 
         // Глобальный угол от точки поворота башни к позиции мыши
-        const targetRot = Math.atan2(
+        const targetRot = Math.PI / 2 + atan2(
             mousePosition.y - turretPos.y,
             mousePosition.x - turretPos.x,
         );
 
         // Желаемый угол башни относительно танка (при условии, что в состоянии покоя башня выровнена с танком)
-        const targetDeltaRot = targetRot - tankRot + Math.PI / 2;
-        const nextTargetAngle = lerpAngle(currentTargetAngle, targetDeltaRot, inertialFactor * delta) % (2 * Math.PI);
-        (turretJoint as RevoluteImpulseJoint).configureMotorPosition((currentTargetAngle = nextTargetAngle), stiffness, damping);
-    }
+        // Желаемый угол башни относительно танка
+        const desiredDeltaRot = normalizeAngle(targetRot - tankRot);
 
-    function lerpAngle(a: number, b: number, t: number): number {
-        let diff = b - a;
-        while (diff < -Math.PI) diff += 2 * Math.PI;
-        while (diff > Math.PI) diff -= 2 * Math.PI;
-        return a + diff * t;
+        // Вычисляем разницу между текущим целевым углом и желаемым углом
+        const rawDiff = normalizeAngle(desiredDeltaRot - currentTargetAngle);
+        // Определяем максимально допустимое изменение угла за кадр
+        const maxAngleChange = maxRotationSpeed * delta / 1000;
+        // Определяем дистанцию от мыши до башни
+        // need use smooth step
+        const mouseDist = min(
+            1,
+            max(0.3, Math.sqrt((mousePosition.x - turretPos.x) ** 2 + (mousePosition.y - turretPos.y) ** 2) - 80),
+        );
+        // Ограничиваем изменение угла
+        const diff = sign(rawDiff) * min(abs(rawDiff), maxAngleChange) * mouseDist;
+
+        if ('configureMotorPosition' in turretJoint) {
+            (turretJoint as RevoluteImpulseJoint).configureMotorPosition((currentTargetAngle += diff), stiffness, damping);
+        }
     }
 
     // @ts-ignore
@@ -161,7 +174,7 @@ export function createPlayerTankTurretRotationSystem(tankEid: number, { document
         // Вычисляем локальный угол дула относительно родителя
         const turretDeltaRot = turretRot - tankRot;
         // Глобальный угол от точки поворота к мыши
-        const targetRot = Math.atan2(
+        const targetRot = atan2(
             mousePosition.y - turretPos.y,
             mousePosition.x - turretPos.x,
         );
@@ -181,3 +194,8 @@ export function createPlayerTankTurretRotationSystem(tankEid: number, { document
 
 }
 
+function normalizeAngle(angle: number): number {
+    while (angle < -Math.PI) angle += 2 * Math.PI;
+    while (angle > Math.PI) angle -= 2 * Math.PI;
+    return angle;
+}

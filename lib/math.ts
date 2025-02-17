@@ -9,6 +9,7 @@ export const sin = Math.sin;
 export const cos = Math.cos;
 export const trunc = Math.trunc;
 export const sqrt = Math.sqrt;
+export const atan2 = Math.atan2;
 
 export function ufloor(n: number): number {
     return sign(n) * floor(abs(n));
