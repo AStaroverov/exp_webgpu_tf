@@ -1,14 +1,16 @@
 import { DI } from '../../DI';
 import { Changed, defineQuery } from 'bitecs';
 import { Hitable } from '../Components/Hitable.ts';
-import { TankPart } from '../Components/Tank.ts';
+import { removeTankPartJoint, TankPart } from '../Components/Tank.ts';
 import { Bullet } from '../Components/Bullet.ts';
-import { removeRigidEntity } from '../../Physical/createRigid.ts';
+import { CollisionGroup, removeRigidEntity } from '../../Physical/createRigid.ts';
 import { removeChild } from '../Components/Children.ts';
 import { Parent } from '../Components/Parent.ts';
 import { Wall } from '../Components/Wall.ts';
+import { resetCollisionsTo } from '../../Physical/collision.ts';
+import { removePhysicalJoint } from '../../Physical/joint.ts';
 
-export function createHitableSystem({ world, physicalWorld } = DI) {
+export function createHitableSystem({ world } = DI) {
     const tankPartsQuery = defineQuery([TankPart, Parent, Changed(Hitable)]);
     const bulletsQuery = defineQuery([Bullet, Changed(Hitable)]);
     const wallsQuery = defineQuery([Wall, Changed(Hitable)]);
@@ -17,14 +19,16 @@ export function createHitableSystem({ world, physicalWorld } = DI) {
         const tankPartsEids = tankPartsQuery(world);
 
         for (let i = 0; i < tankPartsEids.length; i++) {
-            const tankPartIed = tankPartsEids[i];
-            const damage = Hitable.damage[tankPartIed];
-            const tankEid = Parent.id[tankPartIed];
+            const tankPartEid = tankPartsEids[i];
+            const damage = Hitable.damage[tankPartEid];
+            const tankEid = Parent.id[tankPartEid];
+            const jointPid = TankPart.jointPid[tankPartEid];
 
-            if (damage > 0) {
-                const joint = physicalWorld.getImpulseJoint(TankPart.jointId[tankPartIed]);
-                joint && physicalWorld.removeImpulseJoint(joint, true);
-                removeChild(tankEid, tankPartIed);
+            if (damage > 0 && jointPid >= 0) {
+                removePhysicalJoint(jointPid);
+                removeChild(tankEid, tankPartEid);
+                resetCollisionsTo(tankPartEid, CollisionGroup.ALL);
+                removeTankPartJoint(tankPartEid);
             }
         }
 

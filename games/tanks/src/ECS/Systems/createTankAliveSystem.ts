@@ -1,24 +1,30 @@
 import { DI } from '../../DI';
-import { Changed, defineQuery, removeEntity } from 'bitecs';
-import { Tank, TankPart } from '../Components/Tank.ts';
+import { Changed, defineQuery } from 'bitecs';
+import { removeTankPartJoint, removeTankWithoutParts, Tank, TankPart } from '../Components/Tank.ts';
 import { Children } from '../Components/Children.ts';
+import { CollisionGroup } from '../../Physical/createRigid.ts';
+import { resetCollisionsTo } from '../../Physical/collision.ts';
+import { removePhysicalJoint } from '../../Physical/joint.ts';
 
 const MIN_ALIVE_PARTS = 190;
 
-export function createTankAliveSystem({ world, physicalWorld } = DI) {
+export function createTankAliveSystem({ world } = DI) {
     const tanksQuery = defineQuery([Tank, Changed(Children)]);
 
     return () => {
-        const tanksEids = tanksQuery(world);
+        const tankEids = tanksQuery(world);
 
-        for (const tanksEid of tanksEids) {
-            if (Children.entitiesCount[tanksEid] < MIN_ALIVE_PARTS) {
-                for (const tankPartEid of Children.entitiesIds[tanksEid]) {
-                    const joinId = TankPart.jointId[tankPartEid];
-                    const joint = physicalWorld.getImpulseJoint(joinId);
-                    joint && physicalWorld.removeImpulseJoint(joint, true);
+        for (const tankEid of tankEids) {
+            if (Children.entitiesCount[tankEid] < MIN_ALIVE_PARTS) {
+                for (let i = 0; i < Children.entitiesCount[tankEid]; i++) {
+                    const tankPartEid = Children.entitiesIds[tankEid][i];
+                    // remove joints
+                    removePhysicalJoint(TankPart.jointPid[tankPartEid]);
+                    removeTankPartJoint(tankPartEid);
+                    // change collision group
+                    resetCollisionsTo(tankPartEid, CollisionGroup.WALL);
                 }
-                removeEntity(world, tanksEid);
+                removeTankWithoutParts(tankEid);
             }
         }
     };

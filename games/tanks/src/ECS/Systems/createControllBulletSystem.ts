@@ -23,6 +23,11 @@ export function createSpawnerBulletsSystem(tankId: number, { world, document, ca
                 }
             }
         });
+
+        canvas.addEventListener('click', (event) => {
+            event.preventDefault();
+            spawnBullet(tankId);
+        });
     });
 
     const query = defineQuery([Bullet, GlobalTransform]);
@@ -55,27 +60,28 @@ const mutatedOptions = {
     rotation: 0,
     speed: 0,
     mass: 100,
-    color: [1, 0, 0, 1] as [number, number, number, number],
+    color: new Float32Array([1, 0, 0, 1]),
     playerId: 0,
+    shadow: new Float32Array([0, 8]),
 };
 
 const tmpMatrix = mat4.create();
 const tmpPosition = vec3.create() as Float32Array;
 
-function spawnBullet(parentId: number) {
-    const tankGlobalTransform = GlobalTransform.matrix[parentId];
-    const bulletDelta = Tank.bulletStartPosition[parentId];
+function spawnBullet(tankId: number) {
+    const globalTransform = GlobalTransform.matrix[Tank.turretEId[tankId]];
+    const bulletDelta = Tank.bulletStartPosition[tankId];
 
     tmpPosition.set(bulletDelta);
     mat4.identity(tmpMatrix);
     mat4.translate(tmpMatrix, tmpMatrix, tmpPosition);
-    mat4.multiply(tmpMatrix, tankGlobalTransform, tmpMatrix);
+    mat4.multiply(tmpMatrix, globalTransform, tmpMatrix);
 
     mutatedOptions.x = getMatrixTranslationX(tmpMatrix);
     mutatedOptions.y = getMatrixTranslationY(tmpMatrix);
     mutatedOptions.rotation = getMatrixRotationZ(tmpMatrix);
-    mutatedOptions.speed = Tank.bulletSpeed[parentId];
-    mutatedOptions.playerId = Player.id[parentId];
+    mutatedOptions.speed = Tank.bulletSpeed[tankId];
+    mutatedOptions.playerId = Player.id[tankId];
 
     createBulletRR(mutatedOptions);
 }

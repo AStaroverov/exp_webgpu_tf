@@ -7,18 +7,30 @@ export const Children = defineComponent({
     entitiesIds: [Types.f64, MAX_CHILDREN],
 });
 
+export function addChildren(entity: number, child: number) {
+    const length = Children.entitiesCount[entity];
+
+    if (length >= MAX_CHILDREN) {
+        throw new Error('Max children reached');
+    }
+
+    Children.entitiesIds[entity][length] = child;
+    Children.entitiesCount[entity] += 1;
+}
+
 export function removeAllChildren(entity: number) {
     Children.entitiesCount[entity] = 0;
 }
 
 export function removeChild(entity: number, child: number) {
     const children = Children.entitiesIds[entity];
-    const index = children.indexOf(child);
+    const length = Children.entitiesCount[entity];
+    const index = children.subarray(0, length).indexOf(child);
 
     if (index === -1) return;
 
     Children.entitiesCount[entity] -= 1;
-    Children.entitiesIds[entity].set(Children.entitiesIds[entity].subarray(0, index), 0);
-    Children.entitiesIds[entity].set(Children.entitiesIds[entity].subarray(index + 1, MAX_CHILDREN), index);
-    Children.entitiesIds[entity][Children.entitiesCount[entity]] = 0;
+    children.set(children.subarray(0, index), 0);
+    children.set(children.subarray(index + 1, length), index);
+    children[Children.entitiesCount[entity]] = 0;
 }

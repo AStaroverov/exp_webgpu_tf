@@ -2,16 +2,17 @@ import { DI } from '../../DI';
 import { RigidBodyRef } from '../Components/Physical.ts';
 import { Vector2 } from '@dimforge/rapier2d';
 import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';
+import { Tank } from '../Components/Tank.ts';
 
-export function createUpdatePlayerTankPositionSystem(tankId: number, { document, physicalWorld } = DI) {
+export function createPlayerTankPositionSystem(tankId: number, { document, physicalWorld } = DI) {
     let speed = 0;
     let rotation = 0;
 
     const acceleration = 0.1; // Как быстро набирается скорость
     const maxSpeed = 1.5; // Максимальная скорость танка
-    const rotationSpeed = 0.003; // Скорость поворота
-    const impulseFactor = 500000; // Масштаб импульса (настраиваемый)
-    const rotationImpulseFactor = 1000000000; // Масштаб крутящего момента
+    const rotationSpeed = 1; // Скорость поворота
+    const impulseFactor = 50000000; // Масштаб импульса (настраиваемый)
+    const rotationImpulseFactor = 100000000; // Масштаб крутящего момента
 
     let moveDirection = 0;
     let rotationDirection = 0;
@@ -66,7 +67,7 @@ export function createUpdatePlayerTankPositionSystem(tankId: number, { document,
         }
     });
 
-    return function () {
+    return () => {
         const rb = physicalWorld.getRigidBody(RigidBodyRef.id[tankId]);
 
         // Управление скоростью
@@ -99,3 +100,40 @@ export function createUpdatePlayerTankPositionSystem(tankId: number, { document,
         rb.applyTorqueImpulse(rotation * rotationImpulseFactor, true);
     };
 }
+
+export function createPlayerTankTurretRotationSystem(tankEid: number, { document, physicalWorld } = DI) {
+    const damping = 0.2;   // коэффициент демпфирования
+    const stiffness = 1e6; // коэффициент жесткости (подбирается опытным путем)
+    const impulseFactor = 400; // Масштаб импульса (настраиваемый)
+    const mousePosition = new Vector2(0, 0);
+
+    document.addEventListener('mousemove', (event) => {
+        mousePosition.x = event.clientX;
+        mousePosition.y = event.clientY;
+    });
+
+    return () => {
+        // Получаем RB дула (башни) и родительского танка
+        const tankRB = physicalWorld.getRigidBody(RigidBodyRef.id[tankEid]);
+        const turretRB = physicalWorld.getRigidBody(RigidBodyRef.id[Tank.turretEId[tankEid]]);
+        // Определяем углы: родителя и дула (в мировых координатах)
+        const tankRot = tankRB.rotation();
+        const turretRot = turretRB.rotation();
+        const turretPos = turretRB.translation();
+        // Вычисляем локальный угол дула относительно родителя
+        const turretDeltaRot = turretRot - tankRot;
+        // Глобальный угол от точки поворота к мыши
+        const targetRot = Math.atan2(
+            mousePosition.y - turretPos.y,
+            mousePosition.x - turretPos.x,
+        );
+        // Желаемый локальный угол дула относительно родителя
+        const targetDeltaRot = targetRot - tankRot;
+        // Вычисляем разницу углов (ошибку) и нормализуем в диапазоне [-π, π]
+        const errorAngle = ((targetDeltaRot - turretDeltaRot + Math.PI * 1.5) % (2 * Math.PI)) - Math.PI;
+        const torqueImpulse = stiffness * errorAngle - damping * turretRB.angvel();
+        // Применяем импульс крутящего момента к RB дула
+        turretRB.applyTorqueImpulse(torqueImpulse * impulseFactor, true);
+    };
+}
+

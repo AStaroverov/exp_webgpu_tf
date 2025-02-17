@@ -11,7 +11,10 @@ import { Cuboid, EventQueue } from '@dimforge/rapier2d';
 import { createTankRR } from './src/ECS/Components/Tank.ts';
 import { DI } from './src/DI';
 import { createTransformSystem } from '../../src/ECS/Systems/createTransformSystem.ts';
-import { createUpdatePlayerTankPositionSystem } from './src/ECS/Systems/createUpdatePlayerTankPositionSystem.ts';
+import {
+    createPlayerTankPositionSystem,
+    createPlayerTankTurretRotationSystem,
+} from './src/ECS/Systems/createPlayerTankPositionSystem.ts';
 import { createSpawnerBulletsSystem } from './src/ECS/Systems/createControllBulletSystem.ts';
 import { stats } from './src/stats.ts';
 import { getEntityIdByPhysicalId } from './src/ECS/Components/Physical.ts';
@@ -111,13 +114,15 @@ Matrix.forEach(matrix, (item, x, y) => {
 
 const spawnBullets = createSpawnerBulletsSystem(tankId);
 const execTransformSystem = createTransformSystem(DI.world);
-const updatePlayerTankPositionSystem = createUpdatePlayerTankPositionSystem(tankId);
+const updatePlayerTankPosition = createPlayerTankPositionSystem(tankId);
+const updatePlayerTankTurretRotation = createPlayerTankTurretRotationSystem(tankId);
 const applyRigidBodyDeltaToLocalTransformSystem = createApplyRigidBodyDeltaToLocalTransformSystem();
 const updateHitableSystem = createHitableSystem();
 const updateTankAliveSystem = createTankAliveSystem();
 
 const inputFrame = () => {
-    updatePlayerTankPositionSystem();
+    updatePlayerTankPosition();
+    updatePlayerTankTurretRotation();
     spawnBullets();
 };
 
