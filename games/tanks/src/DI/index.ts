@@ -6,9 +6,11 @@ export const DI: {
     canvas: HTMLCanvasElement;
     world: World;
     physicalWorld: PhysicalWorld;
+    gameTick: (delta: number) => void;
 } = {
     document: window.document,
     canvas: null as any,
     world: null as any,
     physicalWorld: null as any,
+    gameTick: null as any,
 };

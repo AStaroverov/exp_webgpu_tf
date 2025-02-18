@@ -31,7 +31,11 @@ export function setTankControllerRotate(eid: number, dir: number): void {
     TankController.rotation[eid] = dir;
 }
 
-export function setTankControllerTurretTarget(eid: number, x: number, y: number): void {
+export function setTankControllerEnemyTarget(eid: number, x: number, y: number): void {
     TankController.turretTarget[eid][0] = x;
     TankController.turretTarget[eid][1] = y;
+}
+
+export function getTankControllerTurretTarget(eid: number): Float64Array {
+    return TankController.turretTarget[eid];
 }

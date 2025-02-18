@@ -4,7 +4,6 @@ import { BodyOptions, createBody } from './createBody.ts';
 import { ActiveCollisionTypes } from '@dimforge/rapier2d/src/geometry/collider.ts';
 import { RigidBodyRef } from '../ECS/Components/Physical.ts';
 
-
 export enum CollisionGroup {
     ALL = 0xFFFF,
     WALL = 0b0000001,

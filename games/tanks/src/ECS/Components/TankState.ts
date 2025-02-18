@@ -22,8 +22,8 @@ export function addTankInputTensorComponent(eid: number, { world } = DI) {
     addComponent(world, TankInputTensor, eid);
 }
 
-export function setTankInputTensorSelf(eid: number, x: number, y: number, speed: number, rotation: number, turretRotation: number, projectileSpeed: number) {
-    TankInputTensor.health[eid] = 100;
+export function setTankInputTensorSelf(eid: number, health: number, x: number, y: number, speed: number, rotation: number, turretRotation: number, projectileSpeed: number) {
+    TankInputTensor.health[eid] = health;
     TankInputTensor.x[eid] = x;
     TankInputTensor.y[eid] = y;
     TankInputTensor.speed[eid] = speed;

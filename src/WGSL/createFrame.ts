@@ -1,5 +1,3 @@
-import { IWorld } from 'bitecs';
-import { world } from '../ECS/world.ts';
 import { createResizeSystem } from '../ECS/Systems/resizeSystem.ts';
 
 export function createFrameTick(
@@ -10,7 +8,6 @@ export function createFrameTick(
         background: GPUColor,
         getPixelRatio: () => number,
     }, callback: (options: {
-        world: IWorld,
         context: GPUCanvasContext,
         device: GPUDevice,
         passEncoder: GPURenderPassEncoder
@@ -18,7 +15,6 @@ export function createFrameTick(
     const resizeSystem = createResizeSystem(canvas, getPixelRatio);
 
     const arg = {
-        world: world,
         context,
         device,
         passEncoder: null as unknown as GPURenderPassEncoder,

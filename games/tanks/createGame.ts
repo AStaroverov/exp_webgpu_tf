@@ -1,6 +1,4 @@
-import { world } from '../../src/ECS/world.ts';
 import { initWebGPU } from '../../src/gpu.ts';
-import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
 import { createFrameTick } from '../../src/WGSL/createFrame.ts';
 import { createDrawShapeSystem } from '../../src/ECS/Systems/SDFSystem/createDrawShapeSystem.ts';
 import { initPhysicalWorld } from './src';
@@ -18,27 +16,27 @@ import {
 import { createSpawnerBulletsSystem } from './src/ECS/Systems/createBulletSystem.ts';
 import { stats } from './src/stats.ts';
 import { getEntityIdByPhysicalId } from './src/ECS/Components/Physical.ts';
-import { hasComponent } from 'bitecs';
+import { createWorld, hasComponent, setDefaultSize } from 'bitecs';
 import { hit, Hitable } from './src/ECS/Components/Hitable.ts';
 import { createHitableSystem } from './src/ECS/Systems/createHitableSystem.ts';
 import { createTankAliveSystem } from './src/ECS/Systems/createTankAliveSystem.ts';
 import { createTankPositionSystem, createTankTurretRotationSystem } from './src/ECS/Systems/tankControllerSystems.ts';
 import { createOutZoneDestroySystem } from './src/ECS/Systems/createOutZoneDestroySystem.ts';
-import { createMapSystem } from './src/ECS/Systems/createMapSystem.ts';
 import { createTankInputTensorSystem } from './src/ECS/Systems/createTankInputTensorSystem.ts';
 
 const canvas = document.querySelector('canvas')!;
 const { device, context } = await initWebGPU(canvas);
-const physicalWorld = initPhysicalWorld();
 
 DI.canvas = canvas;
-DI.world = world;
-DI.physicalWorld = physicalWorld;
 
 export function createGame() {
-    const updateMap = createMapSystem();
+    setDefaultSize(100000);
+    const world = DI.world = createWorld();
+    const physicalWorld = DI.physicalWorld = initPhysicalWorld();
+
+    // const updateMap = createMapSystem();
     const spawnBullets = createSpawnerBulletsSystem();
-    const execTransformSystem = createTransformSystem(DI.world);
+    const execTransformSystem = createTransformSystem(world);
 
     const updateTankPosition = createTankPositionSystem();
     const updateTankTurretRotation = createTankTurretRotationSystem();
@@ -118,18 +116,12 @@ export function createGame() {
         updateTankInputTensor();
     };
 
-    document.body.appendChild(stats.dom);
-    let timeStart = performance.now();
-    frameTasks.addInterval(() => {
-        const time = performance.now();
-        const delta = time - timeStart;
-        timeStart = time;
+    DI.gameTick = (delta: number) => {
         execTransformSystem();
-
 
         physicalFrame(delta);
 
-        updateMap();
+        // updateMap();
 
         stats.begin();
         renderFrame();
@@ -140,7 +132,7 @@ export function createGame() {
         statsFrame();
 
         inputFrame();
-    }, 1);
+    };
 
     return DI;
 }

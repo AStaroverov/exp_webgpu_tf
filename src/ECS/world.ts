@@ -1,4 +1,5 @@
-import { createWorld, IWorld } from 'bitecs';
+import type { IWorld } from 'bitecs';
 
-export const world = createWorld();
+export { createWorld } from 'bitecs';
+
 export type World = IWorld;

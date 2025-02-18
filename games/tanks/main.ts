@@ -1,8 +1,12 @@
 import { createTankRR } from './src/ECS/Components/Tank.ts';
 import { createGame } from './createGame.ts';
 import { PLAYER_REFS } from './src/consts.ts';
+import { stats } from './src/stats.ts';
+import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
 
-createGame();
+document.body.appendChild(stats.dom);
+
+const { gameTick } = createGame();
 
 createTankRR({
     x: 500,
@@ -33,3 +37,14 @@ const tankId4 = createTankRR({
 });
 
 PLAYER_REFS.tankPid = tankId4;
+
+
+let timeStart = performance.now();
+
+frameTasks.addInterval(() => {
+    const time = performance.now();
+    const delta = time - timeStart;
+    timeStart = time;
+
+    gameTick(delta);
+}, 1);

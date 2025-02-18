@@ -1,7 +1,11 @@
-import { defineComponent, Types } from 'bitecs';
+import { addComponent, defineComponent, Types } from 'bitecs';
+import { DI } from '../../DI';
 
 export const Parent = defineComponent({
     id: Types.f64,
 });
 
-// add methods
+export function addParentComponent(entity: number, eid: number, { world } = DI) {
+    addComponent(world, Parent, entity);
+    Parent.id[entity] = eid;
+}

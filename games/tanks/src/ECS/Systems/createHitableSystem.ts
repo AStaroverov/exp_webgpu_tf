@@ -1,7 +1,7 @@
 import { DI } from '../../DI';
 import { Changed, defineQuery } from 'bitecs';
 import { Hitable } from '../Components/Hitable.ts';
-import { removeTankPartJointComponent, TankPart } from '../Components/Tank.ts';
+import { resetTankPartJointComponent, TankPart } from '../Components/Tank.ts';
 import { Bullet } from '../Components/Bullet.ts';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { removeChild } from '../Components/Children.ts';
@@ -22,14 +22,14 @@ export function createHitableSystem({ world } = DI) {
         for (let i = 0; i < tankPartsEids.length; i++) {
             const tankPartEid = tankPartsEids[i];
             const damage = Hitable.damage[tankPartEid];
-            const tankEid = Parent.id[tankPartEid];
+            const parentEid = Parent.id[tankPartEid];
             const jointPid = TankPart.jointPid[tankPartEid];
 
             if (damage > 0 && jointPid >= 0) {
-                removeChild(tankEid, tankPartEid);
-                resetCollisionsTo(tankPartEid, CollisionGroup.ALL & ~CollisionGroup.TANK_GUN_PARTS);
+                removeChild(parentEid, tankPartEid);
                 removePhysicalJoint(jointPid);
-                removeTankPartJointComponent(tankPartEid);
+                resetCollisionsTo(tankPartEid, CollisionGroup.ALL & ~CollisionGroup.TANK_BASE);
+                resetTankPartJointComponent(tankPartEid);
             }
         }
 

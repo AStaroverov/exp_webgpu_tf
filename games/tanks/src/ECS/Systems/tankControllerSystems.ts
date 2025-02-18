@@ -36,7 +36,6 @@ export function createTankPositionSystem({ world, physicalWorld } = DI) {
     };
 }
 
-
 export function createTankTurretRotationSystem({ world } = DI) {
     const tankQuery = defineQuery([Tank, TankController]);
 

@@ -1,10 +1,10 @@
 import { DI } from '../../DI';
 import { PLAYER_REFS } from '../../consts.ts';
 import {
+    setTankControllerEnemyTarget,
     setTankControllerMove,
     setTankControllerRotate,
     setTankControllerShot,
-    setTankControllerTurretTarget,
 } from '../Components/TankController.ts';
 import { isNil } from 'lodash-es';
 
@@ -69,7 +69,7 @@ export function createPlayerTankPositionSystem({ document } = DI) {
 export function createPlayerTankTurretRotationSystem({ document } = DI) {
     document.addEventListener('mousemove', (event) => {
         if (isNil(PLAYER_REFS.tankPid)) return;
-        setTankControllerTurretTarget(PLAYER_REFS.tankPid, event.clientX, event.clientY);
+        setTankControllerEnemyTarget(PLAYER_REFS.tankPid, event.clientX, event.clientY);
     });
 
     return () => {

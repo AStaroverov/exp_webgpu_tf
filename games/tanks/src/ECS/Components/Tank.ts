@@ -1,14 +1,14 @@
 import { createCircleRR, createRectangleRR } from './RigidRender.ts';
 import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
 import { JointData, Vector2 } from '@dimforge/rapier2d';
-import { addComponent, defineComponent, removeComponent, Types } from 'bitecs';
+import { addComponent, defineComponent, Types } from 'bitecs';
 import { addTransformComponents } from '../../../../../src/ECS/Components/Transform.ts';
 import { DI } from '../../DI';
-import { addChildrenComponent } from './Children.ts';
+import { addChildren, addChildrenComponent, Children, removeChild } from './Children.ts';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { addPlayerComponent, getNewPlayerId } from './Player.ts';
 import { addHitableComponent } from './Hitable.ts';
-import { Parent } from './Parent.ts';
+import { addParentComponent, Parent } from './Parent.ts';
 import { RigidBodyRef } from './Physical.ts';
 import { TColor } from '../../../../../src/ECS/Components/Common.ts';
 import { createRectangleRigidGroup } from './RigidGroup.ts';
@@ -20,6 +20,7 @@ export const Tank = defineComponent({
     turretEId: Types.f64,
     bulletSpeed: Types.f64,
     bulletStartPosition: [Types.f64, 2],
+    initialPartsCount: Types.f64,
 });
 
 export const TankPart = defineComponent({
@@ -60,7 +61,7 @@ const caterpillarSet: [number, number, number, number][] =
         ];
     });
 
-const COMMON_LENGTH = hullSet.length + turretSet.length + gunSet.length + caterpillarSet.length * 2;
+const PARTS_COUNT = hullSet.length + turretSet.length + gunSet.length + caterpillarSet.length * 2;
 
 type Options = Parameters<typeof createRectangleRR>[0] & Parameters<typeof createCircleRR>[0] & {
     playerId: number,
@@ -147,8 +148,9 @@ const createRectanglesRR = (
         addHitableComponent(world, eid);
         addComponent(world, TankPart, eid);
         TankPart.jointPid[eid] = joint.handle;
-        addComponent(world, Parent, eid);
-        Parent.id[eid] = parentEId;
+        addParentComponent(eid, parentEId);
+
+        addChildren(parentEId, eid);
 
         return eid;
     });
@@ -174,6 +176,21 @@ export function createTankRR(options: {
     updateColorOptions(mutatedOptions, [0.5, 0.5, 0.5, 0.5]);
     // const [tankEid, tankPid] = createRectangleRR(mutatedOptions);
     const [tankEid, tankPid] = createRectangleRigidGroup(mutatedOptions);
+
+    addComponent(world, Tank, tankEid);
+    Tank.bulletSpeed[tankEid] = 300;
+    Tank.bulletStartPosition[tankEid][0] = PADDING / 2;
+    Tank.bulletStartPosition[tankEid][1] = -PADDING * 11;
+    Tank.initialPartsCount[tankEid] = PARTS_COUNT;
+
+    addTransformComponents(world, tankEid);
+    addTankControllerComponent(world, tankEid);
+    addChildrenComponent(tankEid);
+    addPlayerComponent(tankEid, mutatedOptions.playerId);
+
+    // for ML learning
+    addTankInputTensorComponent(tankEid);
+
     // {
     mutatedOptions.density = DENSITY;
     mutatedOptions.width = PADDING * 6;
@@ -183,6 +200,7 @@ export function createTankRR(options: {
     updateColorOptions(mutatedOptions, [0.5, 0, 0, 1]);
     // const [turretEid, turretPid] = createRectangleRR(mutatedOptions);
     const [turretEid, turretPid] = createRectangleRigidGroup(mutatedOptions);
+
 
     parentVector.x = 0;
     parentVector.y = 0;
@@ -200,9 +218,11 @@ export function createTankRR(options: {
     TankPart.jointPid[turretEid] = joint.handle;
     addComponent(world, Parent, turretEid);
     Parent.id[turretEid] = tankEid;
+    addChildrenComponent(turretEid);
     // }
 
-    const partsEntityIds = new Float64Array(COMMON_LENGTH);
+    Tank.turretEId[tankEid] = turretEid;
+    addChildren(tankEid, turretEid);
 
     mutatedOptions.density = DENSITY * 10;
     mutatedOptions.belongsSolverGroup = CollisionGroup.ALL;
@@ -212,67 +232,49 @@ export function createTankRR(options: {
 
     // === Hull ===
     updateColorOptions(mutatedOptions, options.color);
-    partsEntityIds.set(
-        createRectanglesRR(tankEid, hullSet, mutatedOptions, 0 - 3.5 * PADDING, 0 - 5 * PADDING),
-        0,
-    );
+    createRectanglesRR(tankEid, hullSet, mutatedOptions, 0 - 3.5 * PADDING, 0 - 5 * PADDING);
 
     // === Left Track (13 прямоугольников) ===
     updateColorOptions(mutatedOptions, [0.5, 0.5, 0.5, 1]);
-    partsEntityIds.set(
-        createRectanglesRR(tankEid, caterpillarSet, mutatedOptions, 0 - 5.5 * PADDING, 0 - 6 * PADDING),
-        hullSet.length,
-    );
+    createRectanglesRR(tankEid, caterpillarSet, mutatedOptions, 0 - 5.5 * PADDING, 0 - 6 * PADDING);
 
     // === Right Track (13 прямоугольников) ===
     updateColorOptions(mutatedOptions, [0.5, 0.5, 0.5, 1]);
-    partsEntityIds.set(
-        createRectanglesRR(tankEid, caterpillarSet, mutatedOptions, 0 + 4.5 * PADDING, 0 - 6 * PADDING),
-        hullSet.length + caterpillarSet.length,
-    );
+    createRectanglesRR(tankEid, caterpillarSet, mutatedOptions, 0 + 4.5 * PADDING, 0 - 6 * PADDING);
 
     // // === Turret and Gun (8 прямоугольников) ===
     mutatedOptions.density = DENSITY;
     mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_TURRET_PARTS;
     mutatedOptions.interactsCollisionGroup = CollisionGroup.ALL | CollisionGroup.WALL | CollisionGroup.TANK_TURRET_PARTS | CollisionGroup.TANK_GUN_PARTS;
     updateColorOptions(mutatedOptions, [0.5, 1, 0.5, 1]);
-    partsEntityIds.set(
-        createRectanglesRR(turretEid, turretSet, mutatedOptions, 0 - 0.5 * PADDING, 0 - 8 * PADDING),
-        hullSet.length + caterpillarSet.length * 2,
-    );
+    createRectanglesRR(turretEid, turretSet, mutatedOptions, 0 - 0.5 * PADDING, 0 - 8 * PADDING);
+
     mutatedOptions.shadow[1] = 4;
     mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_GUN_PARTS;
     mutatedOptions.interactsCollisionGroup = CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_TURRET_PARTS | CollisionGroup.TANK_GUN_PARTS;
-    partsEntityIds.set(
-        createRectanglesRR(turretEid, gunSet, mutatedOptions, 0 - 0.5 * PADDING, 0 - 8 * PADDING),
-        hullSet.length + turretSet.length + caterpillarSet.length * 2,
-    );
-
-
-    addComponent(world, Tank, tankEid);
-    Tank.turretEId[tankEid] = turretEid;
-    Tank.bulletSpeed[tankEid] = 300;
-    Tank.bulletStartPosition[tankEid][0] = PADDING / 2;
-    Tank.bulletStartPosition[tankEid][1] = -PADDING * 11;
-
-    addTransformComponents(world, tankEid);
-    addTankControllerComponent(world, tankEid);
-    addChildrenComponent(tankEid, COMMON_LENGTH, partsEntityIds);
-    addPlayerComponent(tankEid, mutatedOptions.playerId);
-
-    // for ML learning
-    addTankInputTensorComponent(tankEid);
+    createRectanglesRR(turretEid, gunSet, mutatedOptions, 0 - 0.5 * PADDING, 0 - 8 * PADDING);
 
     return tankEid;
 }
 
 export function removeTankComponentsWithoutParts(tankEid: number) {
     const turretEid = Tank.turretEId[tankEid];
+    removeChild(tankEid, turretEid);
     typicalRemoveEntity(tankEid);
     typicalRemoveEntity(turretEid);
 }
 
-export function removeTankPartJointComponent(tankPartEid: number, { world } = DI) {
+export function resetTankPartJointComponent(tankPartEid: number) {
     TankPart.jointPid[tankPartEid] = -1;
-    removeComponent(world, TankPart, tankPartEid);
+}
+
+export function getTankCurrentPartsCount(tankEid: number) {
+    return Children.entitiesCount[tankEid] + Children.entitiesCount[Tank.turretEId[tankEid]];
+}
+
+// return from 0 to 1
+export function getTankHealth(tankEid: number) {
+    const initialPartsCount = Tank.initialPartsCount[tankEid];
+    const partsCount = getTankCurrentPartsCount(tankEid);
+    return partsCount / initialPartsCount;
 }

@@ -1,14 +1,15 @@
 import { DI } from '../../DI';
 import { defineQuery } from 'bitecs';
-import { Tank } from '../Components/Tank.ts';
+import { getTankHealth, Tank } from '../Components/Tank.ts';
 import {
+    resetTankInputTensorEnemy,
     setTankInputTensorEnemy,
     setTankInputTensorSelf,
     TANK_INPUT_TENSOR_MAX_ENEMIES,
     TankInputTensor,
 } from '../Components/TankState.ts';
 import { getEntityIdByPhysicalId, RigidBodyRef } from '../Components/Physical.ts';
-import { length2 } from '../../../../../lib/math.ts';
+import { hypot } from '../../../../../lib/math.ts';
 import { Ball, Collider } from '@dimforge/rapier2d';
 import { CollisionGroup, createCollisionGroups } from '../../Physical/createRigid.ts';
 
@@ -21,23 +22,25 @@ export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
         const tankEids = tanksQuery(world);
 
         for (let i = 0; i < tankEids.length; i++) {
-            const eid = tankEids[i];
-            const pid = RigidBodyRef.id[eid];
-            const rb = physicalWorld.getRigidBody(pid);
+            const tankEid = tankEids[i];
+            const tankPid = RigidBodyRef.id[tankEid];
+            const rb = physicalWorld.getRigidBody(tankPid);
+            const health = getTankHealth(tankEid);
             const translation = rb.translation();
             const linearVelocity = rb.linvel();
             const rotation = rb.rotation();
-            const turretEid = Tank.turretEId[eid];
+            const turretEid = Tank.turretEId[tankEid];
             const turretPid = RigidBodyRef.id[turretEid];
             const turretRb = physicalWorld.getRigidBody(turretPid);
             const turretRotation = turretRb.rotation();
-            const projectileSpeed = Tank.bulletSpeed[eid];
+            const projectileSpeed = Tank.bulletSpeed[tankEid];
 
             setTankInputTensorSelf(
-                eid,
+                tankEid,
+                health,
                 translation.x,
                 translation.y,
-                length2(linearVelocity.x, linearVelocity.y),
+                hypot(linearVelocity.x, linearVelocity.y),
                 rotation,
                 turretRotation,
                 projectileSpeed,
@@ -49,7 +52,7 @@ export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
                 rotation,
                 new Ball(10000),
                 (collider: Collider) => {
-                    if (pid !== collider.handle) {
+                    if (tankPid !== collider.handle) {
                         colliderIds[index++] = collider.handle;
                     }
 
@@ -59,7 +62,7 @@ export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
                 createCollisionGroups(CollisionGroup.TANK_BASE, CollisionGroup.TANK_BASE),
             );
 
-            for (let j = 0; j < TANK_INPUT_TENSOR_MAX_ENEMIES; j++) {
+            for (let j = 0; j < index; j++) {
                 const pid = colliderIds[j];
                 const eid = getEntityIdByPhysicalId(pid);
                 const rb = physicalWorld.getRigidBody(pid);
@@ -72,14 +75,18 @@ export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
                 const turretRotation = turretRb.rotation();
 
                 setTankInputTensorEnemy(
-                    eid,
+                    tankEid,
                     j,
                     translation.x,
                     translation.y,
-                    length2(linearVelocity.x, linearVelocity.y),
+                    hypot(linearVelocity.x, linearVelocity.y),
                     rotation,
                     turretRotation,
                 );
+            }
+
+            for (let j = index; j < TANK_INPUT_TENSOR_MAX_ENEMIES; j++) {
+                resetTankInputTensorEnemy(tankEid, j);
             }
         }
     };

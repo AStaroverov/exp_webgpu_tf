@@ -10,6 +10,7 @@ export const cos = Math.cos;
 export const trunc = Math.trunc;
 export const sqrt = Math.sqrt;
 export const atan2 = Math.atan2;
+export const hypot = Math.hypot;
 
 export function ufloor(n: number): number {
     return sign(n) * floor(abs(n));
@@ -23,6 +24,6 @@ export function uround(n: number): number {
     return sign(n) * round(abs(n));
 }
 
-export function length2(x: number, y: number): number {
-    return sqrt(x * x + y * y);
+export function dist2(x1: number, y1: number, x2: number, y2: number): number {
+    return hypot(x2 - x1, y2 - y1);
 }
