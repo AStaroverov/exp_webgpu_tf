@@ -38,7 +38,7 @@ export const mutatedOptions: Options = {
     linearDamping: 0.1,
     collisionEvent: ActiveEvents.CONTACT_FORCE_EVENTS,
     belongsCollisionGroup: CollisionGroup.BULLET,
-    interactsCollisionGroup: CollisionGroup.ALL & ~CollisionGroup.TANK_GUN,
+    interactsCollisionGroup: CollisionGroup.ALL & ~CollisionGroup.TANK_GUN_PARTS,
 
     //
     speed: 0,
@@ -60,7 +60,7 @@ export function createBulletRR(options: Options, { world } = DI) {
 
     const [bulletId] = createRectangleRR(mutatedOptions);
     addComponent(world, Bullet, bulletId);
-    addPlayerComponent(world, bulletId, options.playerId);
+    addPlayerComponent(bulletId, options.playerId);
     addHitableComponent(world, bulletId);
     addTransformComponents(world, bulletId);
 

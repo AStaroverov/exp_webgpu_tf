@@ -4,16 +4,17 @@ import { BodyOptions, createBody } from './createBody.ts';
 import { ActiveCollisionTypes } from '@dimforge/rapier2d/src/geometry/collider.ts';
 import { RigidBodyRef } from '../ECS/Components/Physical.ts';
 
+
 export enum CollisionGroup {
     ALL = 0xFFFF,
-    WALL = 0b000001,
-    BULLET = 0b000010,
-    TANK_BASE = 0b000100,
-    TANK_TURRET = 0b001000,
-    TANK_GUN = 0b010000,
-    TANK = CollisionGroup.TANK_BASE | CollisionGroup.TANK_TURRET | CollisionGroup.TANK_GUN,
+    WALL = 0b0000001,
+    BULLET = 0b0000010,
+    TANK_BASE = 0b0000100,
+    TANK_BODY_PARTS = 0b0001000,
+    TANK_TURRET_PARTS = 0b0100000,
+    TANK_GUN_PARTS = 0b1000000,
+    TANK_PARTS = CollisionGroup.TANK_BODY_PARTS | CollisionGroup.TANK_TURRET_PARTS | CollisionGroup.TANK_GUN_PARTS,
 }
-
 
 type CommonRigidOptions = BodyOptions & {
     density?: number,
@@ -25,11 +26,25 @@ type CommonRigidOptions = BodyOptions & {
     activeCollisionTypes?: ActiveCollisionTypes
 }
 
+export function createCollisionGroups(belongs: 0 | CollisionGroup, interacts: 0 | CollisionGroup) {
+    return (belongs << 16) | interacts;
+}
+
 function prepareColliderDesc(shape: ColliderDesc, o: CommonRigidOptions): ColliderDesc {
     return shape
         .setDensity(o.density ?? 0)
-        .setCollisionGroups(((o.belongsCollisionGroup ?? CollisionGroup.ALL) << 16) | (o.interactsCollisionGroup ?? CollisionGroup.ALL))
-        .setSolverGroups(((o.belongsSolverGroup ?? CollisionGroup.ALL) << 16) | (o.interactsSolverGroup ?? CollisionGroup.ALL))
+        .setCollisionGroups(
+            createCollisionGroups(
+                o.belongsCollisionGroup ?? CollisionGroup.ALL,
+                o.interactsCollisionGroup ?? CollisionGroup.ALL,
+            ),
+        )
+        .setSolverGroups(
+            createCollisionGroups(
+                o.belongsSolverGroup ?? CollisionGroup.ALL,
+                o.interactsSolverGroup ?? CollisionGroup.ALL,
+            ),
+        )
         .setActiveEvents(o.collisionEvent ?? ActiveEvents.NONE)
         .setActiveCollisionTypes(o.activeCollisionTypes ?? ActiveCollisionTypes.DEFAULT);
 }

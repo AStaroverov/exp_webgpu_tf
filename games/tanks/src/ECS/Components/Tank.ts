@@ -4,7 +4,7 @@ import { JointData, Vector2 } from '@dimforge/rapier2d';
 import { addComponent, defineComponent, removeComponent, Types } from 'bitecs';
 import { addTransformComponents } from '../../../../../src/ECS/Components/Transform.ts';
 import { DI } from '../../DI';
-import { Children } from './Children.ts';
+import { addChildrenComponent } from './Children.ts';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { addPlayerComponent, getNewPlayerId } from './Player.ts';
 import { addHitableComponent } from './Hitable.ts';
@@ -14,6 +14,7 @@ import { TColor } from '../../../../../src/ECS/Components/Common.ts';
 import { createRectangleRigidGroup } from './RigidGroup.ts';
 import { addTankControllerComponent } from './TankController.ts';
 import { typicalRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
+import { addTankInputTensorComponent } from './TankState.ts';
 
 export const Tank = defineComponent({
     turretEId: Types.f64,
@@ -78,6 +79,8 @@ export const mutatedOptions: Options = {
     density: 10,
     linearDamping: 5,
     angularDamping: 5,
+    belongsSolverGroup: 0,
+    interactsSolverGroup: 0,
     belongsCollisionGroup: 0,
     interactsCollisionGroup: 0,
 
@@ -97,6 +100,8 @@ const resetOptions = (target: Options, source: Parameters<typeof createTankRR>[0
     target.density = defaultOptions.density;
     target.linearDamping = defaultOptions.linearDamping;
     target.angularDamping = defaultOptions.angularDamping;
+    target.belongsSolverGroup = defaultOptions.belongsSolverGroup;
+    target.interactsSolverGroup = defaultOptions.interactsSolverGroup;
     target.belongsCollisionGroup = defaultOptions.belongsCollisionGroup;
     target.interactsCollisionGroup = defaultOptions.interactsCollisionGroup;
 };
@@ -138,7 +143,7 @@ const createRectanglesRR = (
             true,
         );
 
-        addPlayerComponent(world, eid, options.playerId);
+        addPlayerComponent(eid, options.playerId);
         addHitableComponent(world, eid);
         addComponent(world, TankPart, eid);
         TankPart.jointPid[eid] = joint.handle;
@@ -160,12 +165,12 @@ export function createTankRR(options: {
 }, { world, physicalWorld } = DI) {
     resetOptions(mutatedOptions, options);
     mutatedOptions.playerId = getNewPlayerId();
-    mutatedOptions.belongsCollisionGroup = 0;
-    mutatedOptions.interactsCollisionGroup = 0;
 
     mutatedOptions.density = DENSITY * 10;
     mutatedOptions.width = PADDING * 12;
     mutatedOptions.height = PADDING * 14;
+    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_BASE;
+    mutatedOptions.interactsCollisionGroup = CollisionGroup.TANK_BASE;
     updateColorOptions(mutatedOptions, [0.5, 0.5, 0.5, 0.5]);
     // const [tankEid, tankPid] = createRectangleRR(mutatedOptions);
     const [tankEid, tankPid] = createRectangleRigidGroup(mutatedOptions);
@@ -173,6 +178,8 @@ export function createTankRR(options: {
     mutatedOptions.density = DENSITY;
     mutatedOptions.width = PADDING * 6;
     mutatedOptions.height = PADDING * 17;
+    mutatedOptions.belongsCollisionGroup = 0;
+    mutatedOptions.interactsCollisionGroup = 0;
     updateColorOptions(mutatedOptions, [0.5, 0, 0, 1]);
     // const [turretEid, turretPid] = createRectangleRR(mutatedOptions);
     const [turretEid, turretPid] = createRectangleRigidGroup(mutatedOptions);
@@ -198,8 +205,10 @@ export function createTankRR(options: {
     const partsEntityIds = new Float64Array(COMMON_LENGTH);
 
     mutatedOptions.density = DENSITY * 10;
-    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_BASE;
-    mutatedOptions.interactsCollisionGroup = CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_BASE;
+    mutatedOptions.belongsSolverGroup = CollisionGroup.ALL;
+    mutatedOptions.interactsSolverGroup = CollisionGroup.ALL;
+    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_BODY_PARTS;
+    mutatedOptions.interactsCollisionGroup = CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_BODY_PARTS;
 
     // === Hull ===
     updateColorOptions(mutatedOptions, options.color);
@@ -224,22 +233,21 @@ export function createTankRR(options: {
 
     // // === Turret and Gun (8 прямоугольников) ===
     mutatedOptions.density = DENSITY;
-    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_TURRET;
-    mutatedOptions.interactsCollisionGroup = CollisionGroup.ALL | CollisionGroup.WALL | CollisionGroup.TANK_TURRET | CollisionGroup.TANK_GUN;
+    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_TURRET_PARTS;
+    mutatedOptions.interactsCollisionGroup = CollisionGroup.ALL | CollisionGroup.WALL | CollisionGroup.TANK_TURRET_PARTS | CollisionGroup.TANK_GUN_PARTS;
     updateColorOptions(mutatedOptions, [0.5, 1, 0.5, 1]);
     partsEntityIds.set(
         createRectanglesRR(turretEid, turretSet, mutatedOptions, 0 - 0.5 * PADDING, 0 - 8 * PADDING),
         hullSet.length + caterpillarSet.length * 2,
     );
     mutatedOptions.shadow[1] = 4;
-    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_GUN;
-    mutatedOptions.interactsCollisionGroup = CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_TURRET | CollisionGroup.TANK_GUN;
+    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_GUN_PARTS;
+    mutatedOptions.interactsCollisionGroup = CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_TURRET_PARTS | CollisionGroup.TANK_GUN_PARTS;
     partsEntityIds.set(
         createRectanglesRR(turretEid, gunSet, mutatedOptions, 0 - 0.5 * PADDING, 0 - 8 * PADDING),
         hullSet.length + turretSet.length + caterpillarSet.length * 2,
     );
 
-    addTransformComponents(world, tankEid);
 
     addComponent(world, Tank, tankEid);
     Tank.turretEId[tankEid] = turretEid;
@@ -247,13 +255,13 @@ export function createTankRR(options: {
     Tank.bulletStartPosition[tankEid][0] = PADDING / 2;
     Tank.bulletStartPosition[tankEid][1] = -PADDING * 11;
 
-    addComponent(world, Children, tankEid);
-    Children.entitiesCount[tankEid] = partsEntityIds.length;
-    Children.entitiesIds[tankEid] = partsEntityIds;
-
+    addTransformComponents(world, tankEid);
     addTankControllerComponent(world, tankEid);
+    addChildrenComponent(tankEid, COMMON_LENGTH, partsEntityIds);
+    addPlayerComponent(tankEid, mutatedOptions.playerId);
 
-    addPlayerComponent(world, tankEid, mutatedOptions.playerId);
+    // for ML learning
+    addTankInputTensorComponent(tankEid);
 
     return tankEid;
 }

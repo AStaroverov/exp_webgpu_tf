@@ -25,6 +25,7 @@ import { createTankAliveSystem } from './src/ECS/Systems/createTankAliveSystem.t
 import { createTankPositionSystem, createTankTurretRotationSystem } from './src/ECS/Systems/tankControllerSystems.ts';
 import { createOutZoneDestroySystem } from './src/ECS/Systems/createOutZoneDestroySystem.ts';
 import { createMapSystem } from './src/ECS/Systems/createMapSystem.ts';
+import { createTankInputTensorSystem } from './src/ECS/Systems/createTankInputTensorSystem.ts';
 
 const canvas = document.querySelector('canvas')!;
 const { device, context } = await initWebGPU(canvas);
@@ -112,6 +113,11 @@ export function createGame() {
         destroyOutZone();
     };
 
+    const updateTankInputTensor = createTankInputTensorSystem();
+    const statsFrame = () => {
+        updateTankInputTensor();
+    };
+
     document.body.appendChild(stats.dom);
     let timeStart = performance.now();
     frameTasks.addInterval(() => {
@@ -130,8 +136,10 @@ export function createGame() {
         stats.end();
         stats.update();
 
-        inputFrame();
         destroyFrame();
+        statsFrame();
+
+        inputFrame();
     }, 1);
 
     return DI;

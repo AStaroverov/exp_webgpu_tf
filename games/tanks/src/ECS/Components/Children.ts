@@ -1,4 +1,5 @@
-import { defineComponent, Types } from 'bitecs';
+import { addComponent, defineComponent, Types } from 'bitecs';
+import { DI } from '../../DI';
 
 const MAX_CHILDREN = 1000;
 
@@ -6,6 +7,12 @@ export const Children = defineComponent({
     entitiesCount: Types.f64,
     entitiesIds: [Types.f64, MAX_CHILDREN],
 });
+
+export function addChildrenComponent(entity: number, count: number = 0, ids: number[] | Float64Array = [], { world } = DI) {
+    addComponent(world, Children, entity);
+    Children.entitiesCount[entity] = count;
+    Children.entitiesIds[entity].set(ids);
+}
 
 export function addChildren(entity: number, child: number) {
     const length = Children.entitiesCount[entity];
