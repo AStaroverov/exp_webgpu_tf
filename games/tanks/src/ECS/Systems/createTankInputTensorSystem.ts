@@ -59,7 +59,6 @@ export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
                 createCollisionGroups(CollisionGroup.TANK_BASE, CollisionGroup.TANK_BASE),
             );
 
-            console.log('>>', index);
             for (let j = 0; j < TANK_INPUT_TENSOR_MAX_ENEMIES; j++) {
                 const pid = colliderIds[j];
                 const eid = getEntityIdByPhysicalId(pid);
