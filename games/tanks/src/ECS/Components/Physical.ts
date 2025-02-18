@@ -1,4 +1,4 @@
-import { addComponent, defineComponent, removeComponent, Types } from 'bitecs';
+import { addComponent, defineComponent, Types } from 'bitecs';
 import { DI } from '../../DI';
 
 const mapPhysicalIdToEntityId = new Map<number, number>();
@@ -13,8 +13,7 @@ export function addRigidBodyRef(eid: number, pid: number, { world } = DI) {
     mapPhysicalIdToEntityId.set(pid, eid);
 }
 
-export function removeRigidBodyRef(eid: number, { world } = DI) {
-    removeComponent(world, RigidBodyRef, eid);
+export function resetRigidBodyRef(eid: number) {
     mapPhysicalIdToEntityId.delete(RigidBodyRef.id[eid]);
     RigidBodyRef.id[eid] = 0;
 }
