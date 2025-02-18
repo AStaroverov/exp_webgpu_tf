@@ -8,10 +8,10 @@ export enum CollisionGroup {
     ALL = 0xFFFF,
     WALL = 0b000001,
     BULLET = 0b000010,
-    TANK_1 = 0b000100,
-    TANK_2 = 0b001000,
-    TANK_3 = 0b010000,
-    TANK = CollisionGroup.TANK_1 | CollisionGroup.TANK_2 | CollisionGroup.TANK_3,
+    TANK_BASE = 0b000100,
+    TANK_TURRET = 0b001000,
+    TANK_GUN = 0b010000,
+    TANK = CollisionGroup.TANK_BASE | CollisionGroup.TANK_TURRET | CollisionGroup.TANK_GUN,
 }
 
 

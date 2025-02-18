@@ -1,7 +1,7 @@
 import { createCircleRR, createRectangleRR } from './RigidRender.ts';
 import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
 import { JointData, Vector2 } from '@dimforge/rapier2d';
-import { addComponent, defineComponent, removeEntity, Types } from 'bitecs';
+import { addComponent, defineComponent, removeComponent, Types } from 'bitecs';
 import { addTransformComponents } from '../../../../../src/ECS/Components/Transform.ts';
 import { DI } from '../../DI';
 import { Children } from './Children.ts';
@@ -13,6 +13,7 @@ import { RigidBodyRef } from './Physical.ts';
 import { TColor } from '../../../../../src/ECS/Components/Common.ts';
 import { createRectangleRigidGroup } from './RigidGroup.ts';
 import { addTankControllerComponent } from './TankController.ts';
+import { typicalRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 
 export const Tank = defineComponent({
     turretEId: Types.f64,
@@ -197,8 +198,8 @@ export function createTankRR(options: {
     const partsEntityIds = new Float64Array(COMMON_LENGTH);
 
     mutatedOptions.density = DENSITY * 10;
-    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_1;
-    mutatedOptions.interactsCollisionGroup = CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_1;
+    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_BASE;
+    mutatedOptions.interactsCollisionGroup = CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_BASE;
 
     // === Hull ===
     updateColorOptions(mutatedOptions, options.color);
@@ -223,16 +224,16 @@ export function createTankRR(options: {
 
     // // === Turret and Gun (8 прямоугольников) ===
     mutatedOptions.density = DENSITY;
-    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_2;
-    mutatedOptions.interactsCollisionGroup = CollisionGroup.ALL | CollisionGroup.WALL | CollisionGroup.TANK_2 | CollisionGroup.TANK_3;
+    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_TURRET;
+    mutatedOptions.interactsCollisionGroup = CollisionGroup.ALL | CollisionGroup.WALL | CollisionGroup.TANK_TURRET | CollisionGroup.TANK_GUN;
     updateColorOptions(mutatedOptions, [0.5, 1, 0.5, 1]);
     partsEntityIds.set(
         createRectanglesRR(turretEid, turretSet, mutatedOptions, 0 - 0.5 * PADDING, 0 - 8 * PADDING),
         hullSet.length + caterpillarSet.length * 2,
     );
     mutatedOptions.shadow[1] = 4;
-    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_3;
-    mutatedOptions.interactsCollisionGroup = CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_2 | CollisionGroup.TANK_3;
+    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_GUN;
+    mutatedOptions.interactsCollisionGroup = CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_TURRET | CollisionGroup.TANK_GUN;
     partsEntityIds.set(
         createRectanglesRR(turretEid, gunSet, mutatedOptions, 0 - 0.5 * PADDING, 0 - 8 * PADDING),
         hullSet.length + turretSet.length + caterpillarSet.length * 2,
@@ -257,12 +258,13 @@ export function createTankRR(options: {
     return tankEid;
 }
 
-export function removeTankWithoutParts(tankEid: number, { world } = DI) {
+export function removeTankComponentsWithoutParts(tankEid: number) {
     const turretEid = Tank.turretEId[tankEid];
-    removeEntity(world, tankEid);
-    removeEntity(world, turretEid);
+    typicalRemoveEntity(tankEid);
+    typicalRemoveEntity(turretEid);
 }
 
-export function removeTankPartJoint(tankPartEid: number) {
+export function removeTankPartJointComponent(tankPartEid: number, { world } = DI) {
     TankPart.jointPid[tankPartEid] = -1;
+    removeComponent(world, TankPart, tankPartEid);
 }

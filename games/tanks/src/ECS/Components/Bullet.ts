@@ -38,7 +38,7 @@ export const mutatedOptions: Options = {
     linearDamping: 0.1,
     collisionEvent: ActiveEvents.CONTACT_FORCE_EVENTS,
     belongsCollisionGroup: CollisionGroup.BULLET,
-    interactsCollisionGroup: CollisionGroup.ALL & ~CollisionGroup.TANK_3,
+    interactsCollisionGroup: CollisionGroup.ALL & ~CollisionGroup.TANK_GUN,
 
     //
     speed: 0,

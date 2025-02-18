@@ -1,6 +1,6 @@
 import { DI } from '../../DI';
 import { Changed, defineQuery } from 'bitecs';
-import { removeTankPartJoint, removeTankWithoutParts, Tank, TankPart } from '../Components/Tank.ts';
+import { removeTankComponentsWithoutParts, removeTankPartJointComponent, Tank, TankPart } from '../Components/Tank.ts';
 import { Children } from '../Components/Children.ts';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { resetCollisionsTo } from '../../Physical/collision.ts';
@@ -15,16 +15,19 @@ export function createTankAliveSystem({ world } = DI) {
         const tankEids = tanksQuery(world);
 
         for (const tankEid of tankEids) {
-            if (Children.entitiesCount[tankEid] < MIN_ALIVE_PARTS) {
-                for (let i = 0; i < Children.entitiesCount[tankEid]; i++) {
+            const childrenLength = Children.entitiesCount[tankEid];
+
+            if (childrenLength < MIN_ALIVE_PARTS) {
+                for (let i = 0; i < childrenLength; i++) {
                     const tankPartEid = Children.entitiesIds[tankEid][i];
+                    const jointPid = TankPart.jointPid[tankPartEid];
                     // remove joints
-                    removePhysicalJoint(TankPart.jointPid[tankPartEid]);
-                    removeTankPartJoint(tankPartEid);
+                    removePhysicalJoint(jointPid);
+                    removeTankPartJointComponent(tankPartEid);
                     // change collision group
-                    resetCollisionsTo(tankPartEid, CollisionGroup.ALL & ~CollisionGroup.TANK_2);
+                    resetCollisionsTo(tankPartEid, CollisionGroup.ALL & ~CollisionGroup.TANK_GUN);
                 }
-                removeTankWithoutParts(tankEid);
+                removeTankComponentsWithoutParts(tankEid);
             }
         }
     };
