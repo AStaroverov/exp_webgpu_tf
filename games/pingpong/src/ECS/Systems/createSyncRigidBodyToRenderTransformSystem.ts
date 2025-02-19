@@ -1,31 +1,23 @@
 import { PhysicalWorld } from '../../index.ts';
-import { defineQuery } from 'bitecs';
-import { LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
+import { GlobalTransform, setMatrixRotateZ, setMatrixTranslate } from '../../../../../src/ECS/Components/Transform.ts';
 import { PhysicalRef } from '../Components/Physical.ts';
-import { world } from '../../../../../src/ECS/world.ts';
-import { mat4, vec3 } from 'gl-matrix';
+import { query, World } from 'bitecs';
 
-export function createSyncRigidBodyToRenderTransformSystem(physicalWorld: PhysicalWorld) {
-    const query = defineQuery([LocalTransform, PhysicalRef]);
-
+export function createSyncRigidBodyToRenderTransformSystem(world: World, physicalWorld: PhysicalWorld) {
     return function syncRigidBodyToRenderTransformSystem() {
-        const entities = query(world);
-        const translation = vec3.create();
+        const entities = query(world, [GlobalTransform, PhysicalRef]);
+        // const translation = vec3.create();
 
         for (let i = 0; i < entities.length; i++) {
             const id = entities[i];
             const physicalId = PhysicalRef.id[id];
+            const globalMatrix = GlobalTransform.matrix.getBatche(id);
             const rigidBody = physicalWorld.getRigidBody(physicalId);
-            const matrix = LocalTransform.matrix[id];
-
-            const position = rigidBody.translation();
-            translation[0] = position.x;
-            translation[1] = position.y;
             const rotationAngle = rigidBody.rotation();
+            const position = rigidBody.translation();
 
-            mat4.identity(matrix);
-            mat4.translate(matrix, matrix, translation);
-            mat4.rotateZ(matrix, matrix, rotationAngle);
+            setMatrixTranslate(globalMatrix, position.x, position.y);
+            setMatrixRotateZ(globalMatrix, rotationAngle);
         }
     };
 }

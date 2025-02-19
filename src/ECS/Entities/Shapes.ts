@@ -1,9 +1,9 @@
-import { addComponent, addEntity, IWorld } from 'bitecs';
+import { addComponent, addEntity, World } from 'bitecs';
 import { addTransformComponents, applyMatrixTranslate, LocalTransform } from '../Components/Transform.ts';
 import { Color, Roundness, setColor, setShadow, Shadow, TColor, TShadow } from '../Components/Common.ts';
 import { setCircle, setRectangle, setTriangle, Shape } from '../Components/Shape.ts';
 
-export function createCircle(world: IWorld, { x, y, radius, color, shadow }: {
+export function createCircle(world: World, { x, y, radius, color, shadow }: {
     x: number;
     y: number;
     radius: number;
@@ -11,13 +11,13 @@ export function createCircle(world: IWorld, { x, y, radius, color, shadow }: {
     shadow: TShadow;
 }) {
     const id = addEntity(world);
-    addComponent(world, Roundness, id);
-    addComponent(world, Color, id);
-    addComponent(world, Shape, id);
-    addComponent(world, Shadow, id);
+    addComponent(world, id, Roundness);
+    addComponent(world, id, Color);
+    addComponent(world, id, Shape);
+    addComponent(world, id, Shadow);
 
     addTransformComponents(world, id);
-    applyMatrixTranslate(LocalTransform.matrix[id], x, y);
+    applyMatrixTranslate(LocalTransform.matrix.getBatche(id), x, y);
 
     setCircle(id, radius);
     setColor(id, color[0], color[1], color[2], color[3]);
@@ -26,7 +26,7 @@ export function createCircle(world: IWorld, { x, y, radius, color, shadow }: {
     return id;
 }
 
-export function createRectangle(world: IWorld, { x, y, width, height, color, shadow }: {
+export function createRectangle(world: World, { x, y, width, height, color, shadow }: {
     x: number;
     y: number;
     width: number;
@@ -35,13 +35,13 @@ export function createRectangle(world: IWorld, { x, y, width, height, color, sha
     shadow: TShadow;
 }) {
     const id = addEntity(world);
-    addComponent(world, Roundness, id);
-    addComponent(world, Color, id);
-    addComponent(world, Shape, id);
-    addComponent(world, Shadow, id);
+    addComponent(world, id, Roundness);
+    addComponent(world, id, Color);
+    addComponent(world, id, Shape);
+    addComponent(world, id, Shadow);
 
     addTransformComponents(world, id);
-    applyMatrixTranslate(LocalTransform.matrix[id], x, y);
+    applyMatrixTranslate(LocalTransform.matrix.getBatche(id), x, y);
 
     setRectangle(id, width, height);
     setColor(id, color[0], color[1], color[2], color[3]);
@@ -50,7 +50,7 @@ export function createRectangle(world: IWorld, { x, y, width, height, color, sha
     return id;
 }
 
-export function createTriangle(world: IWorld, { x, y, color, point1, point2, point3, shadow }: {
+export function createTriangle(world: World, { x, y, color, point1, point2, point3, shadow }: {
     x: number;
     y: number;
     point1: [number, number];
@@ -60,13 +60,13 @@ export function createTriangle(world: IWorld, { x, y, color, point1, point2, poi
     shadow: TShadow;
 }) {
     const id = addEntity(world);
-    addComponent(world, LocalTransform, id);
-    addComponent(world, Roundness, id);
-    addComponent(world, Color, id);
-    addComponent(world, Shape, id);
+    addComponent(world, id, LocalTransform);
+    addComponent(world, id, Roundness);
+    addComponent(world, id, Color);
+    addComponent(world, id, Shape);
 
     addTransformComponents(world, id);
-    applyMatrixTranslate(LocalTransform.matrix[id], x, y);
+    applyMatrixTranslate(LocalTransform.matrix.getBatche(id), x, y);
 
     setTriangle(id, point1[0], point1[1], point2[0], point2[1], point3[0], point3[1]);
     setColor(id, color[0], color[1], color[2], color[3]);

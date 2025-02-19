@@ -3,16 +3,19 @@ import { World } from '../../../../../src/ECS/world.ts';
 import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
 import { PhysicalWorld } from '../../index.ts';
 import { ActiveEvents } from '@dimforge/rapier2d';
+import { TColor, TShadow } from '../../../../../src/ECS/Components/Common.ts';
 
 export function createFiled(physicalWorld: PhysicalWorld, renderWorld: World, canvas: HTMLCanvasElement) {
     const common = {
         physicalWorld,
         renderWorld,
-        color: [0, 1, 0, 1] as [number, number, number, number],
+        color: [0, 1, 0, 1] as TColor,
         bodyType: RigidBodyType.Fixed,
         gravityScale: 0,
-        mass: 1,
+        density: 1,
         collisionEvent: ActiveEvents.NONE,
+        shadow: [0, 0] as TShadow,
+        rotation: 0,
     };
     // top
     createRectangleRR({
@@ -21,7 +24,6 @@ export function createFiled(physicalWorld: PhysicalWorld, renderWorld: World, ca
         y: 0,
         width: canvas.width,
         height: 10,
-        rotation: 0,
     });
     // right
     createRectangleRR({
@@ -30,7 +32,6 @@ export function createFiled(physicalWorld: PhysicalWorld, renderWorld: World, ca
         y: canvas.height / 2,
         width: 10,
         height: canvas.height,
-        rotation: 0,
     });
     // bottom
     // createRectangleRR({
@@ -39,7 +40,6 @@ export function createFiled(physicalWorld: PhysicalWorld, renderWorld: World, ca
     //     y: canvas.height,
     //     width: canvas.width,
     //     height: 10,
-    //     rotation: 0,
     // });
     // left
     createRectangleRR({
@@ -48,6 +48,5 @@ export function createFiled(physicalWorld: PhysicalWorld, renderWorld: World, ca
         y: canvas.height / 2,
         width: 10,
         height: canvas.height,
-        rotation: 0,
     });
 }

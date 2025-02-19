@@ -1,5 +1,5 @@
-import { defineComponent, Types } from 'bitecs';
+import { delegate } from '../../../../../src/delegate.ts';
 
-export const PhysicalRef = defineComponent({
-    id: Types.f64,
+export const PhysicalRef = ({
+    id: new Float64Array(delegate.defaultSize),
 });

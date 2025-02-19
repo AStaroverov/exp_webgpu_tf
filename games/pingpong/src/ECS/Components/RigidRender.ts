@@ -6,13 +6,15 @@ import {
 } from '../../Physical/createCollider.ts';
 import { createCircle, createRectangle } from '../../../../../src/ECS/Entities/Shapes.ts';
 import { PhysicalWorld } from '../../index.ts';
-import { addComponent, IWorld } from 'bitecs';
+import { addComponent, World } from 'bitecs';
 import { PhysicalRef } from './Physical.ts';
+import { TColor, TShadow } from '../../../../../src/ECS/Components/Common.ts';
 
 export function createCirceRR(options: CircleColliderOptions & {
     physicalWorld: PhysicalWorld,
-    renderWorld: IWorld,
-    color: [number, number, number, number],
+    renderWorld: World,
+    color: TColor,
+    shadow: TShadow,
 }) {
     const physicalId = createCircleCollider(options.physicalWorld, options);
     const renderId = createCircle(options.renderWorld, options);
@@ -22,8 +24,9 @@ export function createCirceRR(options: CircleColliderOptions & {
 
 export function createRectangleRR(options: RectangleColliderOptions & {
     physicalWorld: PhysicalWorld,
-    renderWorld: IWorld,
-    color: [number, number, number, number],
+    renderWorld: World,
+    color: TColor,
+    shadow: TShadow,
 }) {
     const physicalId = createRectangleCollider(options.physicalWorld, options);
     const renderId = createRectangle(options.renderWorld, options);
@@ -31,8 +34,7 @@ export function createRectangleRR(options: RectangleColliderOptions & {
     return renderId;
 }
 
-
-function connectPhysicalToRender(renderWorld: IWorld, physicalId: number, renderId: number) {
-    addComponent(renderWorld, PhysicalRef, renderId);
+function connectPhysicalToRender(renderWorld: World, physicalId: number, renderId: number) {
+    addComponent(renderWorld, renderId, PhysicalRef);
     PhysicalRef.id[renderId] = physicalId;
 }

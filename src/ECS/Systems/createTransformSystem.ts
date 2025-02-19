@@ -1,35 +1,32 @@
 import { Children } from '../../../games/tanks/src/ECS/Components/Children.ts';
-import { defineQuery } from 'bitecs';
 import { GlobalTransform, LocalTransform } from '../Components/Transform.ts';
 import { mat4 } from 'gl-matrix';
 import { World } from '../world.ts';
+import { query } from 'bitecs';
 
 export function createTransformSystem(world: World) {
-    const queryAll = defineQuery([LocalTransform, GlobalTransform]);
-    const queryGlobalWithChilds = defineQuery([GlobalTransform, Children]);
-
     return function execMainTransformSystem() {
         {
-            const entities = queryAll(world);
+            const entities = query(world, [LocalTransform, GlobalTransform]);
 
             for (let i = 0; i < entities.length; i++) {
                 const id = entities[i];
-                const local = LocalTransform.matrix[id];
-                const global = GlobalTransform.matrix[id];
+                const local = LocalTransform.matrix.getBatche(id);
+                const global = GlobalTransform.matrix.getBatche(id);
                 mat4.copy(global, local);
             }
         }
 
         {
-            const entities = queryGlobalWithChilds(world);
+            const entities = query(world, [GlobalTransform, Children]);
 
             for (let i = 0; i < entities.length; i++) {
                 const id = entities[i];
-                const globalParent = GlobalTransform.matrix[id];
+                const globalParent = GlobalTransform.matrix.getBatche(id);
                 for (let j = 0; j < Children.entitiesCount[id]; j++) {
                     const childId = Children.entitiesIds[id][j];
-                    const localChild = LocalTransform.matrix[childId];
-                    const globalChild = GlobalTransform.matrix[childId];
+                    const localChild = LocalTransform.matrix.getBatche(childId);
+                    const globalChild = GlobalTransform.matrix.getBatche(childId);
                     mat4.multiply(globalChild, globalParent, localChild);
                 }
             }

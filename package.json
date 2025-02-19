@@ -21,7 +21,7 @@
     "@types/lodash": "^4.17.15",
     "@types/lodash-es": "^4.17.12",
     "@webgpu/types": "^0.1.31",
-    "bitecs": "^0.3.38",
+    "bitecs": "github:NateTheGreatt/bitECS#rc-0-4-0",
     "gl-matrix": "^3.4.3",
     "lodash": "^4.17.21",
     "lodash-es": "^4.17.21",

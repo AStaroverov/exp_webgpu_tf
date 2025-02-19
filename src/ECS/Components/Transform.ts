@@ -1,20 +1,22 @@
-import { addComponent, defineComponent, Types } from 'bitecs';
+import { addComponent } from 'bitecs';
 import { mat4 } from 'gl-matrix';
 import { World } from '../world.ts';
+import { NestedArray } from '../../utils.ts';
+import { delegate } from '../../delegate.ts';
 
-export const LocalTransform = defineComponent({
-    matrix: [Types.f32, 16],
+export const LocalTransform = ({
+    matrix: NestedArray.f32(16, delegate.defaultSize),
 });
 
-export const GlobalTransform = defineComponent({
-    matrix: [Types.f32, 16],
+export const GlobalTransform = ({
+    matrix: NestedArray.f32(16, delegate.defaultSize),
 });
 
 export function addTransformComponents(world: World, id: number) {
-    addComponent(world, LocalTransform, id);
-    addComponent(world, GlobalTransform, id);
-    resetMatrix(LocalTransform.matrix[id] as unknown as mat4);
-    resetMatrix(GlobalTransform.matrix[id] as unknown as mat4);
+    addComponent(world, id, LocalTransform);
+    addComponent(world, id, GlobalTransform);
+    resetMatrix(LocalTransform.matrix.getBatche(id) as unknown as mat4);
+    resetMatrix(GlobalTransform.matrix.getBatche(id) as unknown as mat4);
 }
 
 const tmpTranslate: [number, number, number] = [0, 0, 0];
