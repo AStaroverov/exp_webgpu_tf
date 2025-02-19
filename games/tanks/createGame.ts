@@ -14,7 +14,6 @@ import {
     createPlayerTankTurretRotationSystem,
 } from './src/ECS/Systems/playerTankControllerSystems.ts';
 import { createSpawnerBulletsSystem } from './src/ECS/Systems/createBulletSystem.ts';
-import { stats } from './src/stats.ts';
 import { getEntityIdByPhysicalId } from './src/ECS/Components/Physical.ts';
 import { createWorld, hasComponent, setDefaultSize } from 'bitecs';
 import { hit, Hitable } from './src/ECS/Components/Hitable.ts';
@@ -30,6 +29,7 @@ const { device, context } = await initWebGPU(canvas);
 DI.canvas = canvas;
 
 export function createGame() {
+    // document.body.appendChild(stats.dom);
     setDefaultSize(100000);
     const world = DI.world = createWorld();
     const physicalWorld = DI.physicalWorld = initPhysicalWorld();
@@ -53,11 +53,11 @@ export function createGame() {
         updatePlayerBullet();
         updatePlayerTankPosition();
         updatePlayerTankTurretRotation();
-        spawnBullets();
     };
 
     const eventQueue = new EventQueue(true);
     const physicalFrame = (delta: number) => {
+        spawnBullets();
         updateTankPosition(delta);
         updateTankTurretRotation(delta);
 
@@ -123,15 +123,15 @@ export function createGame() {
 
         // updateMap();
 
-        stats.begin();
+        // stats.begin();
         renderFrame();
-        stats.end();
-        stats.update();
-
-        destroyFrame();
+        // stats.end();
+        // stats.update();
+        //
+        // destroyFrame();
         statsFrame();
 
-        inputFrame();
+        // inputFrame();
     };
 
     return DI;

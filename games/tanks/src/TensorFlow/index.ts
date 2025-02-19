@@ -25,7 +25,7 @@ const POPULATION_SIZE = TANK_COUNT_SIMULATION * 10;
 const GENERATIONS = 100;
 const ELITE_COUNT = 2; // число лучших особей, сохраняемых без изменений
 const MUTATION_RATE = 0.1; // вероятность мутации каждого веса
-const SIMULATION_STEPS = 1000; // число шагов симуляции (можно увеличить для длительной симуляции)
+const SIMULATION_STEPS = 1000 / 50; // число шагов симуляции (можно увеличить для длительной симуляции)
 
 // Функция симуляции игры для N танков
 // Здесь один танк ассоциирован с одним противником (если противников меньше, можно добавить padding или повторять существующих)
@@ -106,7 +106,7 @@ async function simulateGame(models: tf.LayersModel[]): Promise<number[]> {
                 const tankEid = tankInputTensorEids[i];
                 const model = mapTankToModel.get(tankEid)!;
                 let fitness = mapModelToFitness.get(model) ?? 0;
-                const outputTensor = mapTankToOutputTensor.get(tankInputTensorEids[i])!;
+                const outputTensor = mapTankToOutputTensor.get(tankEid)!;
                 const output = outputTensor.dataSync(); // [shot, move, turn, targetX, targetY]
                 tf.dispose([outputTensor]);
                 const shouldShot = output[0] > 0;

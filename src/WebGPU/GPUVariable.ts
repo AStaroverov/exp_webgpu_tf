@@ -31,9 +31,10 @@ export class GPUVariable {
     }
 
     destroy() {
-        this.gpuGroupEntry = null!;
         this.gpuBuffer?.destroy();
         this.gpuBuffer = null!;
+        this.gpuGroupEntry = null!;
+        this.gpuBindGroupLayoutEntry = null!;
     }
 }
 

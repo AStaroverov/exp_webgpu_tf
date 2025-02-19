@@ -120,8 +120,11 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
             this.attributes[key].destroy();
         }
 
-        this.attributes = null!;
+        this.mapBindGroup.clear();
+        this.mapRenderPipeline.clear();
+        this.mapGPUBindGroupLayout.clear();
+
         this.uniforms = null!;
-        this.mapBindGroup = null!;
+        this.attributes = null!;
     }
 }

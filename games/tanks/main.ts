@@ -1,10 +1,7 @@
 import { createTankRR } from './src/ECS/Components/Tank.ts';
 import { createGame } from './createGame.ts';
 import { PLAYER_REFS } from './src/consts.ts';
-import { stats } from './src/stats.ts';
 import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
-
-document.body.appendChild(stats.dom);
 
 const { gameTick } = createGame();
 

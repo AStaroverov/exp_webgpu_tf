@@ -10,7 +10,7 @@ import { GlobalTransform } from '../../Components/Transform.ts';
 
 export function createDrawRopeSystem(world: IWorld, device: GPUDevice) {
     const gpuShader = new GPUShader(shaderMeta);
-    const pipeline = gpuShader.getRenderPipeline(device);
+    const pipeline = gpuShader.getRenderPipeline(device, 'vertex', 'fragment');
     const bindGroup0 = gpuShader.getBindGroup(device, 0);
     const bindGroup1 = gpuShader.getBindGroup(device, 1);
 
