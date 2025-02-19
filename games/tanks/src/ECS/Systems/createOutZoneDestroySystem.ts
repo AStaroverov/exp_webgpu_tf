@@ -4,20 +4,18 @@ import {
     getMatrixTranslationY,
     GlobalTransform,
 } from '../../../../../src/ECS/Components/Transform.ts';
-import { defineQuery, Not } from 'bitecs';
+import { Not, query } from 'bitecs';
 import { Parent } from '../Components/Parent.ts';
 import { recursiveTypicalRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 
 export function createOutZoneDestroySystem({ world, canvas } = DI) {
-    const query = defineQuery([GlobalTransform, Not(Parent)]);
-
     return () => {
         const { width, height } = canvas;
-        const eids = query(world);
+        const eids = query(world, [GlobalTransform, Not(Parent)]);
 
         for (let i = 0; i < eids.length; i++) {
             const eid = eids[i];
-            const globalTransform = GlobalTransform.matrix[eid];
+            const globalTransform = GlobalTransform.matrix.getBatche(eid);
             const x = getMatrixTranslationX(globalTransform);
             const y = getMatrixTranslationY(globalTransform);
 

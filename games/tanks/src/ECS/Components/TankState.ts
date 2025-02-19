@@ -1,25 +1,27 @@
-import { addComponent, defineComponent, Types } from 'bitecs';
+import { addComponent } from 'bitecs';
 import { DI } from '../../DI';
+import { NestedArray, TypedArray } from '../../../../../src/utils.ts';
+import { delegate } from '../../../../../src/delegate.ts';
 
 export const TANK_INPUT_TENSOR_MAX_ENEMIES = 4;
-export const TankInputTensor = defineComponent({
-    health: Types.f64,
-    x: Types.f64,
-    y: Types.f64,
-    speed: Types.f64,
-    rotation: Types.f64,
-    turretRotation: Types.f64,
-    projectileSpeed: Types.f64,
+export const TankInputTensor = ({
+    health: TypedArray.f64(delegate.defaultSize),
+    x: TypedArray.f64(delegate.defaultSize),
+    y: TypedArray.f64(delegate.defaultSize),
+    speed: TypedArray.f64(delegate.defaultSize),
+    rotation: TypedArray.f64(delegate.defaultSize),
+    turretRotation: TypedArray.f64(delegate.defaultSize),
+    projectileSpeed: TypedArray.f64(delegate.defaultSize),
     // Enemies
-    enemiesX: [Types.f64, TANK_INPUT_TENSOR_MAX_ENEMIES],
-    enemiesY: [Types.f64, TANK_INPUT_TENSOR_MAX_ENEMIES],
-    enemiesSpeed: [Types.f64, TANK_INPUT_TENSOR_MAX_ENEMIES],
-    enemiesRotation: [Types.f64, TANK_INPUT_TENSOR_MAX_ENEMIES],
-    enemiesTurretRotation: [Types.f64, TANK_INPUT_TENSOR_MAX_ENEMIES],
+    enemiesX: NestedArray.f64(TANK_INPUT_TENSOR_MAX_ENEMIES, delegate.defaultSize),
+    enemiesY: NestedArray.f64(TANK_INPUT_TENSOR_MAX_ENEMIES, delegate.defaultSize),
+    enemiesSpeed: NestedArray.f64(TANK_INPUT_TENSOR_MAX_ENEMIES, delegate.defaultSize),
+    enemiesRotation: NestedArray.f64(TANK_INPUT_TENSOR_MAX_ENEMIES, delegate.defaultSize),
+    enemiesTurretRotation: NestedArray.f64(TANK_INPUT_TENSOR_MAX_ENEMIES, delegate.defaultSize),
 });
 
 export function addTankInputTensorComponent(eid: number, { world } = DI) {
-    addComponent(world, TankInputTensor, eid);
+    addComponent(world, eid, TankInputTensor);
 }
 
 export function setTankInputTensorSelf(eid: number, health: number, x: number, y: number, speed: number, rotation: number, turretRotation: number, projectileSpeed: number) {
@@ -33,17 +35,17 @@ export function setTankInputTensorSelf(eid: number, health: number, x: number, y
 }
 
 export function setTankInputTensorEnemy(eid: number, index: number, x: number, y: number, speed: number, rotation: number, turretRotation: number) {
-    TankInputTensor.enemiesX[eid][index] = x;
-    TankInputTensor.enemiesY[eid][index] = y;
-    TankInputTensor.enemiesSpeed[eid][index] = speed;
-    TankInputTensor.enemiesRotation[eid][index] = rotation;
-    TankInputTensor.enemiesTurretRotation[eid][index] = turretRotation;
+    TankInputTensor.enemiesX.set(eid, index, x);
+    TankInputTensor.enemiesY.set(eid, index, y);
+    TankInputTensor.enemiesSpeed.set(eid, index, speed);
+    TankInputTensor.enemiesRotation.set(eid, index, rotation);
+    TankInputTensor.enemiesTurretRotation.set(eid, index, turretRotation);
 }
 
 export function resetTankInputTensorEnemy(eid: number, index: number) {
-    TankInputTensor.enemiesX[eid][index] = 0;
-    TankInputTensor.enemiesY[eid][index] = 0;
-    TankInputTensor.enemiesSpeed[eid][index] = 0;
-    TankInputTensor.enemiesRotation[eid][index] = 0;
-    TankInputTensor.enemiesTurretRotation[eid][index] = 0;
+    TankInputTensor.enemiesX.set(eid, index, 0);
+    TankInputTensor.enemiesY.set(eid, index, 0);
+    TankInputTensor.enemiesSpeed.set(eid, index, 0);
+    TankInputTensor.enemiesRotation.set(eid, index, 0);
+    TankInputTensor.enemiesTurretRotation.set(eid, index, 0);
 }

@@ -1,21 +1,19 @@
 import { DI } from '../../DI';
 import { TankController } from '../Components/TankController.ts';
 import { RevoluteImpulseJoint, Vector2 } from '@dimforge/rapier2d';
-import { defineQuery } from 'bitecs';
 import { Tank, TankPart } from '../Components/Tank.ts';
 import { RigidBodyRef } from '../Components/Physical.ts';
 import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';
 import { sqrt } from '../../../../../lib/math.ts';
+import { query } from 'bitecs';
 
 export function createTankPositionSystem({ world, physicalWorld } = DI) {
     const nextLinvel = new Vector2(0, 0);
     const impulseFactor = 15000000000; // Масштаб импульса (настраиваемый)
     const rotationImpulseFactor = 100000000000; // Масштаб крутящего момента
 
-    const tanksQuery = defineQuery([Tank, TankController]);
-
     return (delta: number) => {
-        const tankPids = tanksQuery(world);
+        const tankPids = query(world, [Tank, TankController]);
         for (let i = 0; i < tankPids.length; i++) {
             const tankId = tankPids[i];
             const moveDirection = TankController.move[tankId];
@@ -37,10 +35,8 @@ export function createTankPositionSystem({ world, physicalWorld } = DI) {
 }
 
 export function createTankTurretRotationSystem({ world } = DI) {
-    const tankQuery = defineQuery([Tank, TankController]);
-
     return (delta: number) => {
-        const tankPids = tankQuery(world);
+        const tankPids = query(world, [Tank, TankController]);
 
         for (let i = 0; i < tankPids.length; i++) {
             const tankEid = tankPids[i];
@@ -65,7 +61,7 @@ function rotateByMotor(delta: number, tankEid: number, { physicalWorld } = DI) {
     const tankRot = tankRB.rotation();
     const turretRot = turretRB.rotation();
     const turretPos = turretRB.translation();
-    const targetPos = TankController.turretTarget[tankEid];
+    const targetPos = TankController.turretTarget.getBatche(tankEid);
     // Глобальный угол от дула к позиции цели
     const targetRot = Math.atan2(targetPos[1] - turretPos.y, targetPos[0] - turretPos.x) + Math.PI / 2;
     const relTurretRot = normalizeAngle(turretRot - tankRot);

@@ -1,30 +1,32 @@
 import { createCircleRR, createRectangleRR } from './RigidRender.ts';
 import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
 import { JointData, Vector2 } from '@dimforge/rapier2d';
-import { addComponent, defineComponent, Types } from 'bitecs';
+import { addComponent } from 'bitecs';
 import { addTransformComponents } from '../../../../../src/ECS/Components/Transform.ts';
 import { DI } from '../../DI';
 import { addChildren, addChildrenComponent, Children, removeChild } from './Children.ts';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { addPlayerComponent, getNewPlayerId } from './Player.ts';
-import { addHitableComponent } from './Hitable.ts';
+import { HitableMethods } from './Hitable.ts';
 import { addParentComponent, Parent } from './Parent.ts';
 import { RigidBodyRef } from './Physical.ts';
 import { TColor } from '../../../../../src/ECS/Components/Common.ts';
 import { createRectangleRigidGroup } from './RigidGroup.ts';
-import { addTankControllerComponent } from './TankController.ts';
+import { TankControllerMethods } from './TankController.ts';
 import { typicalRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 import { addTankInputTensorComponent } from './TankState.ts';
+import { delegate } from '../../../../../src/delegate.ts';
+import { NestedArray, TypedArray } from '../../../../../src/utils.ts';
 
-export const Tank = defineComponent({
-    turretEId: Types.f64,
-    bulletSpeed: Types.f64,
-    bulletStartPosition: [Types.f64, 2],
-    initialPartsCount: Types.f64,
+export const Tank = ({
+    turretEId: TypedArray.f64(delegate.defaultSize),
+    bulletSpeed: TypedArray.f64(delegate.defaultSize),
+    bulletStartPosition: NestedArray.f64(2, delegate.defaultSize),
+    initialPartsCount: TypedArray.f64(delegate.defaultSize),
 });
 
-export const TankPart = defineComponent({
-    jointPid: Types.f64,
+export const TankPart = ({
+    jointPid: TypedArray.f64(delegate.defaultSize),
 });
 
 const SIZE = 5;
@@ -145,12 +147,12 @@ const createRectanglesRR = (
         );
 
         addPlayerComponent(eid, options.playerId);
-        addHitableComponent(world, eid);
-        addComponent(world, TankPart, eid);
-        TankPart.jointPid[eid] = joint.handle;
+        HitableMethods.addComponent(eid);
         addParentComponent(eid, parentEId);
-
         addChildren(parentEId, eid);
+
+        addComponent(world, eid, TankPart);
+        TankPart.jointPid[eid] = joint.handle;
 
         return eid;
     });
@@ -177,14 +179,14 @@ export function createTankRR(options: {
     // const [tankEid, tankPid] = createRectangleRR(mutatedOptions);
     const [tankEid, tankPid] = createRectangleRigidGroup(mutatedOptions);
 
-    addComponent(world, Tank, tankEid);
+    addComponent(world, tankEid, Tank);
     Tank.bulletSpeed[tankEid] = 300;
-    Tank.bulletStartPosition[tankEid][0] = PADDING / 2;
-    Tank.bulletStartPosition[tankEid][1] = -PADDING * 11;
+    Tank.bulletStartPosition.set(tankEid, 0, PADDING / 2);
+    Tank.bulletStartPosition.set(tankEid, 1, -PADDING * 11);
     Tank.initialPartsCount[tankEid] = PARTS_COUNT;
 
     addTransformComponents(world, tankEid);
-    addTankControllerComponent(world, tankEid);
+    TankControllerMethods.addComponent(tankEid);
     addChildrenComponent(tankEid);
     addPlayerComponent(tankEid, mutatedOptions.playerId);
 
@@ -214,9 +216,9 @@ export function createTankRR(options: {
     );
 
     addTransformComponents(world, turretEid);
-    addComponent(world, TankPart, turretEid);
+    addComponent(world, turretEid, TankPart);
     TankPart.jointPid[turretEid] = joint.handle;
-    addComponent(world, Parent, turretEid);
+    addComponent(world, turretEid, Parent);
     Parent.id[turretEid] = tankEid;
     addChildrenComponent(turretEid);
     // }

@@ -1,14 +1,14 @@
-import { addComponent, defineComponent, IWorld, Types } from 'bitecs';
+import { addComponent, World } from 'bitecs';
+import { delegate } from '../../../../../src/delegate.ts';
+import { createMethods, TypedArray } from '../../../../../src/utils.ts';
 
-export const Hitable = defineComponent({
-    damage: Types.f64,
+export const Hitable = ({
+    damage: TypedArray.f64(delegate.defaultSize),
 });
 
-export function addHitableComponent(world: IWorld, entity: number) {
-    addComponent(world, Hitable, entity);
-    Hitable.damage[entity] = 0;
-}
-
-export function hit(entity: number, damage: number) {
-    Hitable.damage[entity] += damage;
-}
+export const HitableMethods = createMethods(Hitable, {
+    addComponent: (world: World, eid: number) => addComponent(world, eid, Hitable),
+    hit$: (eid: number, damage: number) => {
+        Hitable.damage[eid] += damage;
+    },
+});

@@ -1,8 +1,9 @@
-import { addComponent, defineComponent, Types } from 'bitecs';
+import { addComponent } from 'bitecs';
 import { DI } from '../../DI';
+import { delegate } from '../../../../../src/delegate.ts';
 
-export const Player = defineComponent({
-    id: Types.f64,
+export const Player = ({
+    id: new Float64Array(delegate.defaultSize),
 });
 
 let playerId = 0;
@@ -12,6 +13,6 @@ export function getNewPlayerId() {
 }
 
 export function addPlayerComponent(entityId: number, playerId: number, { world } = DI) {
-    addComponent(world, Player, entityId);
+    addComponent(world, entityId, Player);
     Player.id[playerId] = playerId;
 }

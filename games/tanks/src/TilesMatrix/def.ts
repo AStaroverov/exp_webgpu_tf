@@ -1,7 +1,6 @@
 import { TVector } from '../../../../lib/Matrix/utils/shape';
 import { Assign } from '../../../../lib/Types';
 
-
 export type UnknownTile = TVector & {
     type: Exclude<TileType, TileType.road>;
 };

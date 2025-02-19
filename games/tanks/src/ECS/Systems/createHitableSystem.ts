@@ -1,26 +1,26 @@
 import { DI } from '../../DI';
-import { Changed, defineQuery } from 'bitecs';
 import { Hitable } from '../Components/Hitable.ts';
 import { resetTankPartJointComponent, TankPart } from '../Components/Tank.ts';
-import { Bullet } from '../Components/Bullet.ts';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { removeChild } from '../Components/Children.ts';
 import { Parent } from '../Components/Parent.ts';
-import { Wall } from '../Components/Wall.ts';
 import { resetCollisionsTo } from '../../Physical/collision.ts';
 import { removePhysicalJoint } from '../../Physical/joint.ts';
 import { recursiveTypicalRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
+import { onSet, query } from 'bitecs';
+import { Bullet } from '../Components/Bullet.ts';
+import { Wall } from '../Components/Wall.ts';
+import { createChangedDetector } from '../../../../../src/ECS/Systems/ChangedDetectorSystem.ts';
 
 export function createHitableSystem({ world } = DI) {
-    const tankPartsQuery = defineQuery([TankPart, Parent, Changed(Hitable)]);
-    const bulletsQuery = defineQuery([Bullet, Changed(Hitable)]);
-    const wallsQuery = defineQuery([Wall, Changed(Hitable)]);
+    const hitableChanges = createChangedDetector(world, [onSet(Hitable)]);
 
     return () => {
-        const tankPartsEids = tankPartsQuery(world);
+        const tankPartsEids = query(world, [TankPart, Parent, Hitable]);
 
         for (let i = 0; i < tankPartsEids.length; i++) {
             const tankPartEid = tankPartsEids[i];
+            if (!hitableChanges.has(tankPartEid)) continue;
             const damage = Hitable.damage[tankPartEid];
             const parentEid = Parent.id[tankPartEid];
             const jointPid = TankPart.jointPid[tankPartEid];
@@ -33,22 +33,22 @@ export function createHitableSystem({ world } = DI) {
             }
         }
 
-        const bulletsIds = bulletsQuery(world);
+        const bulletsIds = query(world, [Bullet, Hitable]);
         for (let i = 0; i < bulletsIds.length; i++) {
             const bulletsId = bulletsIds[i];
             const damage = Hitable.damage[bulletsId];
 
-            if (damage > 0) {
+            if (hitableChanges.has(bulletsId) && damage > 0) {
                 recursiveTypicalRemoveEntity(bulletsId);
             }
         }
 
-        const wallsIds = wallsQuery(world);
+        const wallsIds = query(world, [Wall, Hitable]);
         for (let i = 0; i < wallsIds.length; i++) {
             const wallId = wallsIds[i];
             const damage = Hitable.damage[wallId];
 
-            if (damage > 0) {
+            if (hitableChanges.has(wallId) && damage > 0) {
                 recursiveTypicalRemoveEntity(wallId);
             }
         }

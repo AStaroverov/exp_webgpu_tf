@@ -1,5 +1,4 @@
 import { DI } from '../../DI';
-import { Changed, defineQuery } from 'bitecs';
 import {
     getTankHealth,
     removeTankComponentsWithoutParts,
@@ -11,12 +10,11 @@ import { Children } from '../Components/Children.ts';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { resetCollisionsTo } from '../../Physical/collision.ts';
 import { removePhysicalJoint } from '../../Physical/joint.ts';
+import { query } from 'bitecs';
 
 export function createTankAliveSystem({ world } = DI) {
-    const tanksQuery = defineQuery([Tank, Changed(Children)]);
-
     return () => {
-        const tankEids = tanksQuery(world);
+        const tankEids = query(world, [Tank, Children]);
 
         for (const tankEid of tankEids) {
             const hp = getTankHealth(tankEid);
@@ -38,7 +36,7 @@ export function createTankAliveSystem({ world } = DI) {
 }
 
 function breakPartFromTank(eid: number, index: number) {
-    const tankPartEid = Children.entitiesIds[eid][index];
+    const tankPartEid = Children.entitiesIds.get(eid, index);
     const jointPid = TankPart.jointPid[tankPartEid];
     // remove joints
     removePhysicalJoint(jointPid);

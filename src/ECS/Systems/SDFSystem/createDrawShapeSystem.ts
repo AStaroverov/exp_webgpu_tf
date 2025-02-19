@@ -2,11 +2,12 @@ import { hasComponent, onAdd, onSet, query, World } from 'bitecs';
 import { shaderMeta } from './sdf.shader.ts';
 import { GPUShader } from '../../../WGSL/GPUShader.ts';
 import { getTypeTypedArray } from '../../../Shader';
-import { projectionMatrix } from '../resizeSystem.ts';
+import { projectionMatrix } from '../ResizeSystem.ts';
 import { Color, Roundness, Shadow } from '../../Components/Common.ts';
 import { Shape } from '../../Components/Shape.ts';
 import { GlobalTransform } from '../../Components/Transform.ts';
-import { createChangedDetector } from '../../../utils.ts';
+
+import { createChangedDetector } from '../ChangedDetectorSystem.ts';
 
 export function createDrawShapeSystem(world: World, device: GPUDevice) {
     const gpuShader = new GPUShader(shaderMeta);
@@ -74,21 +75,17 @@ export function createDrawShapeSystem(world: World, device: GPUDevice) {
         device.queue.writeBuffer(gpuShader.uniforms.transform.getGPUBuffer(device), 0, transformCollect);
 
         if (shapeChanges.hasChanges()) {
-            shapeChanges.clear();
             device.queue.writeBuffer(gpuShader.uniforms.kind.getGPUBuffer(device), 0, kindCollect);
             device.queue.writeBuffer(gpuShader.uniforms.values.getGPUBuffer(device), 0, valuesCollect);
         }
 
         if (colorChanges.hasChanges()) {
-            colorChanges.clear();
             device.queue.writeBuffer(gpuShader.uniforms.color.getGPUBuffer(device), 0, colorCollect);
         }
         if (shadowChanges.hasChanges()) {
-            shadowChanges.clear();
             device.queue.writeBuffer(gpuShader.uniforms.shadow.getGPUBuffer(device), 0, shadowCollect);
         }
         if (roundnessChanges.hasChanges()) {
-            roundnessChanges.clear();
             device.queue.writeBuffer(gpuShader.uniforms.roundness.getGPUBuffer(device), 0, roundnessCollect);
         }
 

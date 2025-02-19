@@ -1,21 +1,13 @@
 import * as tf from '@tensorflow/tfjs';
 import { layers, LayersModel, sequential, Sequential, tensor } from '@tensorflow/tfjs';
-import { defineQuery } from 'bitecs';
 import { TANK_INPUT_TENSOR_MAX_ENEMIES, TankInputTensor } from '../ECS/Components/TankState.ts';
-import { DI } from '../DI';
 import { Tank } from '../ECS/Components/Tank.ts';
-import {
-    getTankControllerTurretTarget,
-    setTankControllerEnemyTarget,
-    setTankControllerMove,
-    setTankControllerRotate,
-    setTankControllerShot,
-    TankController,
-} from '../ECS/Components/TankController.ts';
+import { TankController, TankControllerMethods } from '../ECS/Components/TankController.ts';
 import { inRange } from 'lodash-es';
-import { initGame } from './initGame.ts';
+import { createBattlefield } from './createBattlefield.ts';
 import { macroTasks } from '../../../../lib/TasksScheduler/macroTasks.ts';
 import { dist2, max } from '../../../../lib/math.ts';
+import { query } from 'bitecs';
 
 export const TANK_COUNT_SIMULATION = 9;
 
@@ -25,14 +17,13 @@ const POPULATION_SIZE = TANK_COUNT_SIMULATION * 10;
 const GENERATIONS = 100;
 const ELITE_COUNT = 2; // число лучших особей, сохраняемых без изменений
 const MUTATION_RATE = 0.1; // вероятность мутации каждого веса
-const SIMULATION_STEPS = 1000 / 50; // число шагов симуляции (можно увеличить для длительной симуляции)
+const SIMULATION_STEPS = 1000; // число шагов симуляции (можно увеличить для длительной симуляции)
 
 // Функция симуляции игры для N танков
 // Здесь один танк ассоциирован с одним противником (если противников меньше, можно добавить padding или повторять существующих)
 async function simulateGame(models: tf.LayersModel[]): Promise<number[]> {
     return new Promise(resolve => {
-        const { gameTick, destroy } = initGame(TANK_COUNT_SIMULATION);
-        const query = defineQuery([Tank, TankController, TankInputTensor]);
+        const { world, canvas, gameTick, destroy } = createBattlefield(TANK_COUNT_SIMULATION);
 
         const mapTankToModel = new Map<number, LayersModel>();
         const mapTankToOutputTensor = new Map<number, tf.Tensor>();
@@ -42,9 +33,9 @@ async function simulateGame(models: tf.LayersModel[]): Promise<number[]> {
         const stopInterval = macroTasks.addInterval(() => {
             gameTick(TICK_TIME_SIMULATION); // 60 FPS
 
-            const tankInputTensorEids = query(DI.world);
-            const width = DI.canvas.offsetWidth;
-            const height = DI.canvas.offsetHeight;
+            const tankInputTensorEids = query(world, [Tank, TankController, TankInputTensor]);
+            const width = canvas.offsetWidth;
+            const height = canvas.offsetHeight;
 
             if (tankInputTensorEids.length === 1) {
                 const id = tankInputTensorEids[0];
@@ -88,11 +79,11 @@ async function simulateGame(models: tf.LayersModel[]): Promise<number[]> {
                 // enemies
                 for (let j = 0; j < TANK_INPUT_TENSOR_MAX_ENEMIES; j++) {
                     inputVector.push(
-                        TankInputTensor.enemiesX[tankEid][j],
-                        TankInputTensor.enemiesY[tankEid][j],
-                        TankInputTensor.enemiesSpeed[tankEid][j],
-                        TankInputTensor.enemiesRotation[tankEid][j],
-                        TankInputTensor.enemiesTurretRotation[tankEid][j],
+                        TankInputTensor.enemiesX.get(tankEid, j),
+                        TankInputTensor.enemiesY.get(tankEid, j),
+                        TankInputTensor.enemiesSpeed.get(tankEid, j),
+                        TankInputTensor.enemiesRotation.get(tankEid, j),
+                        TankInputTensor.enemiesTurretRotation.get(tankEid, j),
                     );
                 }
 
@@ -110,20 +101,20 @@ async function simulateGame(models: tf.LayersModel[]): Promise<number[]> {
                 const output = outputTensor.dataSync(); // [shot, move, turn, targetX, targetY]
                 tf.dispose([outputTensor]);
                 const shouldShot = output[0] > 0;
-                shouldShot && setTankControllerShot(tankEid);
-                setTankControllerMove(tankEid, output[1]);
-                setTankControllerRotate(tankEid, output[2]);
-                setTankControllerEnemyTarget(
+                shouldShot && TankControllerMethods.setShot$(tankEid);
+                TankControllerMethods.setMove$(tankEid, output[1]);
+                TankControllerMethods.setRotate$(tankEid, output[2]);
+                TankControllerMethods.setTurretTarget$(
                     tankEid,
                     ((output[3] + 1) / 2) * width,
                     ((output[4] + 1) / 2) * height,
                 );
 
                 // Если цель пушки указывает на один из танков
-                const turretTarget = getTankControllerTurretTarget(tankEid);
+                const turretTarget = TankControllerMethods.getTurretTarget(tankEid);
                 for (let j = 0; j < TANK_INPUT_TENSOR_MAX_ENEMIES; j++) {
-                    const enemyX = TankInputTensor.enemiesX[tankEid][j];
-                    const enemyY = TankInputTensor.enemiesY[tankEid][j];
+                    const enemyX = TankInputTensor.enemiesX.get(tankEid, j);
+                    const enemyY = TankInputTensor.enemiesY.get(tankEid, j);
                     // stupid condition
                     if (enemyX !== 0 && enemyY !== 0) {
                         fitness += max(0, (1.0 - dist2(turretTarget[0], turretTarget[1], enemyX, enemyY)) * 10);

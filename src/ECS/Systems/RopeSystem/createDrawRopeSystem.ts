@@ -1,7 +1,7 @@
 import { shaderMeta } from './rope.shader.ts';
 import { GPUShader } from '../../../WGSL/GPUShader.ts';
 import { getTypeTypedArray } from '../../../Shader';
-import { projectionMatrix } from '../resizeSystem.ts';
+import { projectionMatrix } from '../ResizeSystem.ts';
 import { Rope, ROPE_BUFFER_LENGTH, ROPE_POINTS_COUNT } from '../../Components/Rope.ts';
 import { Color, Thinness } from '../../Components/Common.ts';
 import { GlobalTransform } from '../../Components/Transform.ts';

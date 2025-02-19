@@ -24,7 +24,7 @@ export function createTransformSystem(world: World) {
                 const id = entities[i];
                 const globalParent = GlobalTransform.matrix.getBatche(id);
                 for (let j = 0; j < Children.entitiesCount[id]; j++) {
-                    const childId = Children.entitiesIds[id][j];
+                    const childId = Children.entitiesIds.get(id, j);
                     const localChild = LocalTransform.matrix.getBatche(childId);
                     const globalChild = GlobalTransform.matrix.getBatche(childId);
                     mat4.multiply(globalChild, globalParent, localChild);

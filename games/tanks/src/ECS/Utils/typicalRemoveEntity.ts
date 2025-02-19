@@ -5,7 +5,7 @@ import { Children } from '../Components/Children.ts';
 import { DI } from '../../DI';
 
 export function typicalRemoveEntity(eid: number, { world } = DI) {
-    if (hasComponent(world, RigidBodyRef, eid)) {
+    if (hasComponent(world, eid, RigidBodyRef)) {
         removeRigidShape(eid);
     }
 
@@ -13,10 +13,9 @@ export function typicalRemoveEntity(eid: number, { world } = DI) {
 }
 
 export function recursiveTypicalRemoveEntity(eid: number, { world } = DI) {
-    if (hasComponent(world, Children, eid)) {
-        const children = Children.entitiesIds[eid];
+    if (hasComponent(world, eid, Children)) {
         for (let i = 0; i < Children.entitiesCount[eid]; i++) {
-            recursiveTypicalRemoveEntity(children[i]);
+            recursiveTypicalRemoveEntity(Children.entitiesIds.get(eid, i));
         }
         Children.entitiesCount[eid] = 0;
     }

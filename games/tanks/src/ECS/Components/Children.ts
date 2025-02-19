@@ -1,17 +1,19 @@
-import { addComponent, defineComponent, Types } from 'bitecs';
+import { addComponent } from 'bitecs';
 import { DI } from '../../DI';
+import { delegate } from '../../../../../src/delegate.ts';
+import { NestedArray } from '../../../../../src/utils.ts';
 
 const MAX_CHILDREN = 1000;
 
-export const Children = defineComponent({
-    entitiesCount: Types.f64,
-    entitiesIds: [Types.f64, MAX_CHILDREN],
+export const Children = ({
+    entitiesCount: new Float64Array(delegate.defaultSize),
+    entitiesIds: NestedArray.f64(MAX_CHILDREN, delegate.defaultSize),
 });
 
 export function addChildrenComponent(entity: number, count: number = 0, ids: number[] | Float64Array = [], { world } = DI) {
-    addComponent(world, Children, entity);
+    addComponent(world, entity, Children);
     Children.entitiesCount[entity] = count;
-    Children.entitiesIds[entity].set(ids);
+    Children.entitiesIds.setBatch(entity, ids);
 }
 
 export function addChildren(entity: number, child: number) {
@@ -21,7 +23,7 @@ export function addChildren(entity: number, child: number) {
         throw new Error('Max children reached');
     }
 
-    Children.entitiesIds[entity][length] = child;
+    Children.entitiesIds.set(entity, length, child);
     Children.entitiesCount[entity] += 1;
 }
 
@@ -30,7 +32,7 @@ export function removeAllChildren(entity: number) {
 }
 
 export function removeChild(entity: number, child: number) {
-    const children = Children.entitiesIds[entity];
+    const children = Children.entitiesIds.getBatche(entity);
     const length = Children.entitiesCount[entity];
     const index = children.subarray(0, length).indexOf(child);
 

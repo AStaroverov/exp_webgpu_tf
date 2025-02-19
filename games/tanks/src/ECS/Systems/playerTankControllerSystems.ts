@@ -1,11 +1,6 @@
 import { DI } from '../../DI';
 import { PLAYER_REFS } from '../../consts.ts';
-import {
-    setTankControllerEnemyTarget,
-    setTankControllerMove,
-    setTankControllerRotate,
-    setTankControllerShot,
-} from '../Components/TankController.ts';
+import { TankControllerMethods } from '../Components/TankController.ts';
 import { isNil } from 'lodash-es';
 
 export function createPlayerTankPositionSystem({ document } = DI) {
@@ -14,25 +9,25 @@ export function createPlayerTankPositionSystem({ document } = DI) {
         switch (event.key) {
             case 'w':
             case 'ArrowUp': {
-                setTankControllerMove(PLAYER_REFS.tankPid, 1);
+                TankControllerMethods.setMove$(PLAYER_REFS.tankPid, 1);
                 event.preventDefault();
                 break;
             }
             case 's':
             case 'ArrowDown': {
-                setTankControllerMove(PLAYER_REFS.tankPid, -1);
+                TankControllerMethods.setMove$(PLAYER_REFS.tankPid, -1);
                 event.preventDefault();
                 break;
             }
             case 'a':
             case 'ArrowLeft': {
-                setTankControllerRotate(PLAYER_REFS.tankPid, -1);
+                TankControllerMethods.setRotate$(PLAYER_REFS.tankPid, -1);
                 event.preventDefault();
                 break;
             }
             case 'd':
             case 'ArrowRight': {
-                setTankControllerRotate(PLAYER_REFS.tankPid, 1);
+                TankControllerMethods.setRotate$(PLAYER_REFS.tankPid, 1);
                 event.preventDefault();
                 break;
             }
@@ -48,14 +43,14 @@ export function createPlayerTankPositionSystem({ document } = DI) {
             case 's':
             case 'ArrowUp':
             case 'ArrowDown': {
-                setTankControllerMove(tankPid, 0);
+                TankControllerMethods.setMove$(tankPid, 0);
                 break;
             }
             case 'a':
             case 'd':
             case 'ArrowLeft':
             case 'ArrowRight': {
-                setTankControllerRotate(tankPid, 0);
+                TankControllerMethods.setRotate$(tankPid, 0);
                 break;
             }
         }
@@ -69,7 +64,7 @@ export function createPlayerTankPositionSystem({ document } = DI) {
 export function createPlayerTankTurretRotationSystem({ document } = DI) {
     document.addEventListener('mousemove', (event) => {
         if (isNil(PLAYER_REFS.tankPid)) return;
-        setTankControllerEnemyTarget(PLAYER_REFS.tankPid, event.clientX, event.clientY);
+        TankControllerMethods.setTurretTarget$(PLAYER_REFS.tankPid, event.clientX, event.clientY);
     });
 
     return () => {
@@ -81,7 +76,7 @@ export function createPlayerTankBulletSystem({ document, canvas } = DI) {
         event.preventDefault();
         switch (event.code) {
             case 'Space': {
-                !isNil(PLAYER_REFS.tankPid) && setTankControllerShot(PLAYER_REFS.tankPid);
+                !isNil(PLAYER_REFS.tankPid) && TankControllerMethods.setShot$(PLAYER_REFS.tankPid);
                 break;
             }
         }
@@ -89,7 +84,7 @@ export function createPlayerTankBulletSystem({ document, canvas } = DI) {
 
     canvas.addEventListener('click', (event) => {
         event.preventDefault();
-        !isNil(PLAYER_REFS.tankPid) && setTankControllerShot(PLAYER_REFS.tankPid);
+        !isNil(PLAYER_REFS.tankPid) && TankControllerMethods.setShot$(PLAYER_REFS.tankPid);
     });
 
     return () => {

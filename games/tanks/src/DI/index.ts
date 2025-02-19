@@ -7,10 +7,12 @@ export const DI: {
     world: World;
     physicalWorld: PhysicalWorld;
     gameTick: (delta: number) => void;
+    destroy: () => void;
 } = {
     document: window.document,
     canvas: null as any,
     world: null as any,
     physicalWorld: null as any,
     gameTick: null as any,
+    destroy: null as any,
 };

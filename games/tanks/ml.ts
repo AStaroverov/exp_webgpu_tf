@@ -1,1 +1,1 @@
-import './src/TensorFlow/initGame.ts';
+import './src/TensorFlow';

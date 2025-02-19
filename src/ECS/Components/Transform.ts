@@ -15,15 +15,13 @@ export const GlobalTransform = ({
 export function addTransformComponents(world: World, id: number) {
     addComponent(world, id, LocalTransform);
     addComponent(world, id, GlobalTransform);
-    resetMatrix(LocalTransform.matrix.getBatche(id) as unknown as mat4);
-    resetMatrix(GlobalTransform.matrix.getBatche(id) as unknown as mat4);
+    LocalTransform.matrix.setBatch(id, IDENTIFY_MATRIX);
+    GlobalTransform.matrix.setBatch(id, IDENTIFY_MATRIX);
 }
+
+const IDENTIFY_MATRIX: mat4 = mat4.create();
 
 const tmpTranslate: [number, number, number] = [0, 0, 0];
-
-export function resetMatrix(m: mat4) {
-    mat4.identity(m);
-}
 
 export function applyMatrixTranslate(m: mat4, x: number, y: number) {
     tmpTranslate[0] = x;

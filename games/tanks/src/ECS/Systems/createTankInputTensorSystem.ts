@@ -1,5 +1,4 @@
 import { DI } from '../../DI';
-import { defineQuery } from 'bitecs';
 import { getTankHealth, Tank } from '../Components/Tank.ts';
 import {
     resetTankInputTensorEnemy,
@@ -12,14 +11,13 @@ import { getEntityIdByPhysicalId, RigidBodyRef } from '../Components/Physical.ts
 import { hypot } from '../../../../../lib/math.ts';
 import { Ball, Collider } from '@dimforge/rapier2d';
 import { CollisionGroup, createCollisionGroups } from '../../Physical/createRigid.ts';
+import { query } from 'bitecs';
 
 export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
-    const tanksQuery = defineQuery([Tank, TankInputTensor, RigidBodyRef]);
-
     const colliderIds = new Float64Array(4);
 
     return () => {
-        const tankEids = tanksQuery(world);
+        const tankEids = query(world, [Tank, TankInputTensor, RigidBodyRef]);
 
         for (let i = 0; i < tankEids.length; i++) {
             const tankEid = tankEids[i];

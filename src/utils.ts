@@ -1,5 +1,5 @@
-import { observe, World } from 'bitecs';
-import { ObservableHook } from 'bitecs/dist/core/Query';
+import { addComponent, set, World } from 'bitecs';
+import { DI } from '../games/tanks/src/DI';
 
 export function uniq<T>(arr: T[]): T[] {
     return Array.from(new Set(arr));
@@ -24,6 +24,14 @@ export function isNil<T>(v: T | null | undefined): v is null | undefined {
 
 export function notNil<T>(v: T | null | undefined): v is T {
     return v !== null && v !== undefined;
+}
+
+export class TypedArray {
+    public static f64 = (length: number) => new Float64Array(length);
+    public static f32 = (length: number) => new Float32Array(length);
+    public static u32 = (length: number) => new Uint32Array(length);
+    public static i32 = (length: number) => new Int32Array(length);
+    public static i8 = (length: number) => new Int8Array(length);
 }
 
 type ArrayLikeConstructor =
@@ -74,17 +82,41 @@ export class NestedArray<T extends ArrayLikeConstructor> {
     }
 }
 
-export function createChangedDetector(world: World, hooks: ObservableHook[]) {
-    const value = new Set<number>();
-    const stops = hooks.map((hook) => observe(world, hook, (eid) => value.add(eid)));
-    const stop = () => stops.forEach((s) => s());
-    const hasChanges = () => value.size > 0;
-    const has = (eid: number) => value.has(eid);
-    const clear = () => value.clear();
-    const destroy = () => {
-        stop();
-        value.clear();
-    };
+type UnknownMethod<A extends any[]> = (...args: A) => any;
+type BindedUnknownMethod<A extends any[]> = (...args: A) => any;
 
-    return { has, hasChanges, clear, destroy };
+type WorldMethod<A extends any[]> = (world: World, eid: number, ...args: A) => any;
+type BindedWorldMethod<A extends any[]> = (eid: number, ...args: A) => any;
+
+type Method<A extends any[]> = UnknownMethod<A> | WorldMethod<A>;
+type Methods<M extends Record<string, Method<any[]>>> = {
+    [K in keyof M]: M[K] extends UnknownMethod<infer A>
+        ? BindedUnknownMethod<A>
+        : M[K] extends WorldMethod<infer A>
+            ? BindedWorldMethod<A>
+            : never;
+}
+
+export function createMethods<T, M extends Record<string, (...args: any[]) => any>>(comp: T, methods: M): Methods<M> {
+    const result = {} as Methods<M>;
+
+    for (const key in methods) {
+        const method = methods[key];
+        if (key.endsWith('$')) {
+            // @ts-ignore
+            result[key] = (eid: number, ...args: any[]) => {
+                const data = method(eid, ...args);
+                addComponent(DI.world, eid, set(comp, null));
+                return data;
+            };
+        } else if (key.endsWith('Component')) {
+            // @ts-ignore
+            result[key] = (...args) => method(DI.world, ...args);
+        } else {
+            // @ts-ignore
+            result[key] = method;
+        }
+    }
+
+    return result;
 }

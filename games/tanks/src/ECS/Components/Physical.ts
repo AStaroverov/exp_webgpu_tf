@@ -1,14 +1,15 @@
-import { addComponent, defineComponent, Types } from 'bitecs';
+import { addComponent } from 'bitecs';
 import { DI } from '../../DI';
+import { delegate } from '../../../../../src/delegate.ts';
 
 const mapPhysicalIdToEntityId = new Map<number, number>();
 
-export const RigidBodyRef = defineComponent({
-    id: Types.f64, // pid
+export const RigidBodyRef = ({
+    id: new Float64Array(delegate.defaultSize),
 });
 
 export function addRigidBodyRef(eid: number, pid: number, { world } = DI) {
-    addComponent(world, RigidBodyRef, eid);
+    addComponent(world, eid, RigidBodyRef);
     RigidBodyRef.id[eid] = pid;
     mapPhysicalIdToEntityId.set(pid, eid);
 }

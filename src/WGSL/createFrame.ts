@@ -1,4 +1,4 @@
-import { createResizeSystem } from '../ECS/Systems/resizeSystem.ts';
+import { createResizeSystem } from '../ECS/Systems/ResizeSystem.ts';
 
 export function createFrameTick(
     { canvas, device, context, background, getPixelRatio }: {
