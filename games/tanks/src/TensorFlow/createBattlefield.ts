@@ -9,8 +9,8 @@ export function createBattlefield(tanksCount: number) {
 
     for (let i = 0; i < tanksCount; i++) {
         createTankRR({
-            x: 200 + (i % 3) * DI.canvas.offsetWidth / 3,
-            y: 100 + floor(i / 3) * DI.canvas.offsetHeight / 3,
+            x: 200 + (i % 3) * DI.canvas.offsetWidth / 3 + 100 * random(),
+            y: 100 + floor(i / 3) * DI.canvas.offsetHeight / 3 + 100 * random(),
             rotation: Math.PI / random(),
             color: [random(), random(), random(), 1],
         });
