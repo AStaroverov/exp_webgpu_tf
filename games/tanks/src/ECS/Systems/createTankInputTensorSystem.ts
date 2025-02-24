@@ -51,7 +51,7 @@ export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
             // Find enemies
             let enemyIndex = 0;
 
-            for (let j = 1; j < 4; j++) {
+            for (let j = 1; j < 5; j++) {
                 const radius = 10 ** j;
                 physicalWorld.intersectionsWithShape(
                     translation,
@@ -111,7 +111,7 @@ export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
                     break;
                 }
             }
-            
+
             for (let j = 0; j < bulletIndex; j++) {
                 const pid = colliderIds[j];
                 const rb = physicalWorld.getRigidBody(pid);

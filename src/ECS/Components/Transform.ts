@@ -23,10 +23,10 @@ const IDENTIFY_MATRIX: mat4 = mat4.create();
 
 const tmpTranslate: [number, number, number] = [0, 0, 0];
 
-export function applyMatrixTranslate(m: mat4, x: number, y: number) {
+export function applyMatrixTranslate(m: mat4, x: number, y: number, z: number) {
     tmpTranslate[0] = x;
     tmpTranslate[1] = y;
-    tmpTranslate[2] = 0;
+    tmpTranslate[2] = z;
     mat4.translate(m, m, tmpTranslate);
 }
 

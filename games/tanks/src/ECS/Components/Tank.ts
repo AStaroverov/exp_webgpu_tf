@@ -17,6 +17,7 @@ import { typicalRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 import { addTankInputTensorComponent } from './TankState.ts';
 import { delegate } from '../../../../../src/delegate.ts';
 import { component, NestedArray, TypedArray } from '../../../../../src/utils.ts';
+import { ZIndex } from '../../consts.ts';
 
 export const Tank = component({
     turretEId: TypedArray.f64(delegate.defaultSize),
@@ -68,6 +69,7 @@ const PARTS_COUNT = hullSet.length + turretSet.length + gunSet.length + caterpil
 const mutatedOptions = {
     x: 0,
     y: 0,
+    z: 0,
     width: 0,
     height: 0,
     radius: 0,
@@ -91,6 +93,7 @@ const defaultOptions = structuredClone(mutatedOptions);
 const resetOptions = (target: Options, source: Parameters<typeof createTankRR>[0]) => {
     target.x = source?.x ?? defaultOptions.x;
     target.y = source?.y ?? defaultOptions.y;
+    target.z = defaultOptions.z;
     target.width = defaultOptions.width;
     target.height = defaultOptions.height;
     target.radius = defaultOptions.radius;
@@ -187,7 +190,7 @@ export function createTankRR(options: {
     addChildrenComponent(tankEid);
     addPlayerComponent(tankEid, mutatedOptions.playerId);
 
-    // for ML learning
+    // for ML learning -- rework to reactivity?
     addTankInputTensorComponent(tankEid);
 
     // {
@@ -199,7 +202,6 @@ export function createTankRR(options: {
     updateColorOptions(mutatedOptions, [0.5, 0, 0, 1]);
     // const [turretEid, turretPid] = createRectangleRR(mutatedOptions);
     const [turretEid, turretPid] = createRectangleRigidGroup(mutatedOptions);
-
 
     parentVector.x = 0;
     parentVector.y = 0;
@@ -223,11 +225,12 @@ export function createTankRR(options: {
     Tank.turretEId[tankEid] = turretEid;
     addChildren(tankEid, turretEid);
 
+    mutatedOptions.z = ZIndex.TankHull;
     mutatedOptions.density = DENSITY * 10;
     mutatedOptions.belongsSolverGroup = CollisionGroup.ALL;
     mutatedOptions.interactsSolverGroup = CollisionGroup.ALL;
-    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_BODY_PARTS;
-    mutatedOptions.interactsCollisionGroup = CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_BODY_PARTS;
+    mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_HULL_PARTS;
+    mutatedOptions.interactsCollisionGroup = CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_HULL_PARTS;
 
     // === Hull ===
     updateColorOptions(mutatedOptions, options.color);
@@ -241,7 +244,8 @@ export function createTankRR(options: {
     updateColorOptions(mutatedOptions, [0.5, 0.5, 0.5, 1]);
     createRectanglesRR(tankEid, caterpillarSet, mutatedOptions, 0 + 4.5 * PADDING, 0 - 6 * PADDING);
 
-    // // === Turret and Gun (8 прямоугольников) ===
+    // === Turret and Gun (8 прямоугольников) ===
+    mutatedOptions.z = ZIndex.TankTurret;
     mutatedOptions.density = DENSITY;
     mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_TURRET_PARTS;
     mutatedOptions.interactsCollisionGroup = CollisionGroup.ALL | CollisionGroup.WALL | CollisionGroup.TANK_TURRET_PARTS | CollisionGroup.TANK_GUN_PARTS;

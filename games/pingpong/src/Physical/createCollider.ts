@@ -11,15 +11,13 @@ type CommonPhysicalOptions = {
     collisionEvent: ActiveEvents
 }
 
-export type RectangleColliderOptions = CommonPhysicalOptions & {
-    width: number,
-    height: number,
-    rotation: number,
-}
-
 export function createRectangleCollider(
     physicalWorld: PhysicalWorld,
-    o: RectangleColliderOptions,
+    o: CommonPhysicalOptions & {
+        width: number,
+        height: number,
+        rotation: number,
+    },
 ) {
     let bodyDesc = (new RigidBodyDesc(o.bodyType))
         .setTranslation(o.x, o.y)
@@ -35,17 +33,15 @@ export function createRectangleCollider(
     return body.handle;
 }
 
-export type CircleColliderOptions = CommonPhysicalOptions & {
-    x: number,
-    y: number,
-    radius: number,
-    bodyType: RigidBodyType,
-    density: number,
-}
-
 export function createCircleCollider(
     physicalWorld: PhysicalWorld,
-    o: CircleColliderOptions,
+    o: CommonPhysicalOptions & {
+        x: number,
+        y: number,
+        radius: number,
+        bodyType: RigidBodyType,
+        density: number,
+    },
 ) {
     let bodyDesc = (new RigidBodyDesc(o.bodyType))
         .setTranslation(o.x, o.y)

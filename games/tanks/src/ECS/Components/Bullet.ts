@@ -18,6 +18,7 @@ import { Hitable } from './Hitable.ts';
 import { addPlayerComponent, Player } from './Player.ts';
 import { Tank } from './Tank.ts';
 import { random } from '../../../../../lib/random.ts';
+import { ZIndex } from '../../consts.ts';
 
 export const Bullet = {};
 
@@ -26,6 +27,7 @@ type Options = Parameters<typeof createRectangleRR>[0] & { speed: number, player
 export const mutatedOptions: Options = {
     x: 0,
     y: 0,
+    z: ZIndex.Bullet,
     width: 5,
     height: 5,
     speedX: 0,

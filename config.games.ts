@@ -7,16 +7,8 @@ export default defineConfig({
         wasm(),
         topLevelAwait(),
     ],
-    build: {
-        rollupOptions: {
-            input: {
-                app: './games/pingpong/index.html', // default
-            },
-        },
-    },
     optimizeDeps: {
-        exclude: [
-            '@dimforge/rapier2d',
-        ],
+        include: ['lodash/fp'],
+        exclude: ['@dimforge/rapier2d'],
     },
 });

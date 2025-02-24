@@ -27,6 +27,11 @@ export const shaderMeta = new ShaderMeta(
             @location(1) local_position: vec2<f32>,
         };
         
+        struct FragmentOutput {
+            @location(0) color : vec4<f32>,
+            @builtin(frag_depth) depth : f32,
+        };
+        
         @vertex
         fn vs_main(
             @builtin(vertex_index) vertex_index: u32,
@@ -47,7 +52,7 @@ export const shaderMeta = new ShaderMeta(
         fn fs_main(
             @location(0) @interpolate(flat) instance_index: u32,
             @location(1) local_position: vec2<f32>,
-        ) -> @location(0) vec4<f32> {
+        ) -> FragmentOutput {
             var dist = sd_shape(local_position, instance_index);
             var color = uColor[instance_index];
             
@@ -56,7 +61,10 @@ export const shaderMeta = new ShaderMeta(
 //                return vec4<f32>(1.0, 1.0, 1.0, 0.1);
             }
 
-            return color;
+            return FragmentOutput(
+                color,
+                uTransform[instance_index][3].z
+            );
         }
 
         @vertex
@@ -75,7 +83,7 @@ export const shaderMeta = new ShaderMeta(
             );
             
             return VertexOutput(position, instance_index, rect_vertex);
-        }
+        }    
 
         @fragment
         fn fs_shadow(

@@ -38,6 +38,9 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
         if (!this.mapRenderPipeline.has(key)) {
             const value = device.createRenderPipeline({
                 layout: this.getGPUPipelineLayout(device),
+                primitive: {
+                    topology: 'triangle-list',
+                },
                 vertex: {
                     module: shaderModule,
                     entryPoint: vertexName,
@@ -63,8 +66,10 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
                         },
                     ],
                 },
-                primitive: {
-                    topology: 'triangle-list',
+                depthStencil: {
+                    format: 'depth32float',
+                    depthCompare: 'greater-equal',
+                    depthWriteEnabled: true,
                 },
             });
             this.mapRenderPipeline.set(key, value);

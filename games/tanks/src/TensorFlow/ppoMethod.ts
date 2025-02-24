@@ -38,7 +38,6 @@ class ExperienceBuffer {
     oldLogProbs: tf.Tensor[] = [];
     rewards: number[] = [];
     values: tf.Tensor[] = [];
-    dones: boolean[] = [];
 
     constructor(private capacity: number = 1024) {
     }
@@ -47,13 +46,12 @@ class ExperienceBuffer {
         return this.states.length;
     }
 
-    add(state: tf.Tensor, action: tf.Tensor, logProb: tf.Tensor, reward: number, value: tf.Tensor, done: boolean) {
+    add(state: tf.Tensor, action: tf.Tensor, logProb: tf.Tensor, reward: number, value: tf.Tensor) {
         this.states.push(state);
         this.actions.push(action);
         this.oldLogProbs.push(logProb);
         this.rewards.push(reward);
         this.values.push(value);
-        this.dones.push(done);
 
         // Trim if exceeding capacity
         if (this.states.length > this.capacity) {
@@ -62,7 +60,6 @@ class ExperienceBuffer {
             this.oldLogProbs.shift();
             this.rewards.shift();
             this.values.shift();
-            this.dones.shift();
         }
     }
 
@@ -78,7 +75,6 @@ class ExperienceBuffer {
         this.oldLogProbs = [];
         this.rewards = [];
         this.values = [];
-        this.dones = [];
     }
 
     // Calculate advantages using Generalized Advantage Estimation (GAE)
@@ -90,14 +86,13 @@ class ExperienceBuffer {
         let nextAdvantage = 0;
 
         for (let i = this.rewards.length - 1; i >= 0; i--) {
-            const done = this.dones[i] ? 1 : 0;
             const reward = this.rewards[i];
             const value = this.values[i].dataSync()[0];
 
             // Compute TD error and GAE
-            const delta = reward + GAMMA * nextReturn * (1 - done) - value;
-            nextAdvantage = delta + GAMMA * LAMBDA * nextAdvantage * (1 - done);
-            nextReturn = reward + GAMMA * nextReturn * (1 - done);
+            const delta = reward + GAMMA * nextReturn - value;
+            nextAdvantage = delta + GAMMA * LAMBDA * nextAdvantage;
+            nextReturn = reward + GAMMA * nextReturn;
 
             returns[i] = nextReturn;
             advantages[i] = nextAdvantage;
@@ -293,8 +288,8 @@ class PPOAgent {
     }
 
     // Store experience in buffer
-    storeExperience(state: tf.Tensor, action: tf.Tensor, logProb: tf.Tensor, reward: number, value: tf.Tensor, done: boolean) {
-        this.buffer.add(state.clone(), action.clone(), logProb.clone(), reward, value.clone(), done);
+    storeExperience(state: tf.Tensor, action: tf.Tensor, logProb: tf.Tensor, reward: number, value: tf.Tensor) {
+        this.buffer.add(state.clone(), action.clone(), logProb.clone(), reward, value.clone());
     }
 
     // Train using PPO algorithm
@@ -479,7 +474,6 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
         const mapTankToLogProb = new Map<number, tf.Tensor>();
         const mapTankToValue = new Map<number, tf.Tensor>();
         const mapTankToReward = new Map<number, number>();
-        const mapTankToDone = new Map<number, boolean>();
 
         let steps = 0;
         const stopInterval = macroTasks.addInterval(() => {
@@ -488,7 +482,14 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
 
             // Terminate if episode is too long or all tanks are destroyed
             const tankEids = query(world, [Tank, TankController, TankInputTensor]);
-            if (steps >= maxSteps || tankEids.length === 0) {
+            const onlyOneTankLeft = tankEids.length === 1;
+
+            if (onlyOneTankLeft) {
+                // Reward for surviving
+                mapTankToReward.set(tankEids[0], mapTankToReward.get(tankEids[0])! * 1.1);
+            }
+
+            if (steps >= maxSteps || onlyOneTankLeft) {
                 console.log(`Episode ended after ${ steps } steps with avg reward: ${
                     episodeReward.length > 0 ?
                         (episodeReward.reduce((a, b) => a + b, 0) / episodeReward.length).toFixed(2) :
@@ -511,7 +512,6 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                 // Initialize reward for this tank if not existing
                 if (!mapTankToReward.has(tankEid)) {
                     mapTankToReward.set(tankEid, 0);
-                    mapTankToDone.set(tankEid, false);
                 }
 
                 // Prepare state tensor
@@ -572,21 +572,48 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                 );
 
                 // Calculate reward components
-                let reward = 0;
+                const rewardRecord = {
+                    map: 0,
+                    aim: 0,
+                    avoid: 0,
+                    health: 0,
+                };
+
+                // Reward for staying within map
+                if (inRange(tankX, 0, width) && inRange(tankY, 0, height)) {
+                    rewardRecord.map += 1;
+                } else {
+                    rewardRecord.map -= 1;
+                }
+
+                // Reward for health
+                rewardRecord.health += TankInputTensor.health[tankEid] * 0.01;
 
                 // Reward for aiming at enemies
                 const turretTarget = TankController.getTurretTarget(tankEid);
+                let hasTargets = false;
                 for (let j = 0; j < TANK_INPUT_TENSOR_MAX_ENEMIES; j++) {
                     const enemyX = TankInputTensor.enemiesData.get(tankEid, j * 4);
                     const enemyY = TankInputTensor.enemiesData.get(tankEid, j * 4 + 1);
 
                     if (enemyX !== 0 && enemyY !== 0) {
+                        hasTargets = true;
                         const distFromTargetToEnemy = dist2(turretTarget[0], turretTarget[1], enemyX, enemyY);
                         const distFromTankToEnemy = dist2(tankX, tankY, enemyX, enemyY);
                         const aimReward = max(0, (50 - distFromTargetToEnemy) / 50) *
                             max(0, (1000 - distFromTankToEnemy) / 1000);
-                        reward += aimReward * 0.5;
+                        rewardRecord.aim += aimReward;
                     }
+                }
+
+                if (!hasTargets) {
+                    console.warn('No target found');
+                }
+                if (hasTargets && rewardRecord.aim === 0) {
+                    rewardRecord.aim = -0.5;
+                }
+                if (hasTargets && rewardRecord.aim > 0 && shouldShoot) {
+                    rewardRecord.aim += 1;
                 }
 
                 // Reward for avoiding bullets
@@ -596,26 +623,11 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
 
                     if (bulletX !== 0 && bulletY !== 0) {
                         const distToBullet = dist2(tankX, tankY, bulletX, bulletY);
-                        reward += distToBullet > 50 ? 0.1 : -0.2;
+                        rewardRecord.avoid += distToBullet > 50 ? 1 : -2;
                     }
                 }
 
-                // Reward for staying within map
-                if (inRange(tankX, 0, width) && inRange(tankY, 0, height)) {
-                    reward += 0.1;
-                } else {
-                    reward -= 1.0;
-                    mapTankToDone.set(tankEid, true);
-                }
-
-                // Reward for health
-                reward += TankInputTensor.health[tankEid] * 0.01;
-
-                // Penalty for dying
-                if (TankInputTensor.health[tankEid] <= 0) {
-                    reward -= 5.0;
-                    mapTankToDone.set(tankEid, true);
-                }
+                const reward = rewardRecord.map * 0.1 + rewardRecord.aim * 0.5 + rewardRecord.avoid * 0.1 + rewardRecord.health * 0.05;
 
                 // Store total reward
                 const newTotalReward = (mapTankToReward.get(tankEid) || 0) + reward;
@@ -629,7 +641,6 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                         prevLogProb,
                         reward,
                         prevValue,
-                        mapTankToDone.get(tankEid) || false,
                     );
 
                     // Add to episode reward tracking
@@ -701,4 +712,4 @@ async function trainPPO(episodes: number = 100): Promise<void> {
 }
 
 // Start the training
-trainPPO(100);
+trainPPO(1e6);

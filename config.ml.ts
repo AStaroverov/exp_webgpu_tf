@@ -7,17 +7,11 @@ export default defineConfig({
         wasm(),
         topLevelAwait(),
     ],
-    build: {
-        rollupOptions: {
-            input: {
-                app: './games/pingpong/index.html', // default
-            },
-        },
+    server: {
+        hmr: false, // Disable hot module reload
     },
     optimizeDeps: {
         include: ['lodash/fp'],
-        exclude: [
-            '@dimforge/rapier2d',
-        ],
+        exclude: ['@dimforge/rapier2d'],
     },
 });

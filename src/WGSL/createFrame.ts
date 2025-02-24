@@ -20,7 +20,16 @@ export function createFrameTick(
         passEncoder: null as unknown as GPURenderPassEncoder,
     };
 
+
     return () => {
+        const depthTexture = device.createTexture({
+            size: [canvas.width, canvas.height, 1],
+            format: 'depth32float',
+            usage: GPUTextureUsage.RENDER_ATTACHMENT,
+        });
+
+
+        const depthView = depthTexture.createView();
         const textureView = context.getCurrentTexture().createView();
         const commandEncoder = device.createCommandEncoder();
         const passEncoder = commandEncoder.beginRenderPass({
@@ -32,6 +41,12 @@ export function createFrameTick(
                     storeOp: 'store',
                 },
             ],
+            depthStencilAttachment: {
+                view: depthView,
+                depthClearValue: 0,
+                depthLoadOp: 'clear',
+                depthStoreOp: 'store',
+            },
         });
 
         arg.passEncoder = passEncoder;

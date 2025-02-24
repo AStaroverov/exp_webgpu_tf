@@ -28,10 +28,9 @@ for (let i = 0; i < 1000; i++) {
     const y = Math.floor(i / 50) * 6;
     const x = 150 + i * 6 - y * 50;
     createRectangleRR({
-        physicalWorld,
-        renderWorld: world,
         x,
         y: y + 50,
+        z: 0,
         width: 5,
         height: 5,
         rotation: 0,
@@ -45,10 +44,9 @@ for (let i = 0; i < 1000; i++) {
 }
 
 createCirceRR({
-    physicalWorld,
-    renderWorld: world,
     x: 300,
     y: 300,
+    z: 0,
     radius: 40,
     color: [0, 1, 0, 1],
     shadow: [0, 0],
@@ -59,10 +57,9 @@ createCirceRR({
 });
 
 const platformId = createRectangleRR({
-    physicalWorld,
-    renderWorld: world,
     x: canvas.width / 2,
     y: canvas.height - 50,
+    z: 0,
     width: 100,
     height: 10,
     rotation: 0,
