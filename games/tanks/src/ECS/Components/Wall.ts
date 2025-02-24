@@ -2,7 +2,7 @@ import { createRectangleRR } from './RigidRender.ts';
 import { DI } from '../../DI';
 import { addComponent } from 'bitecs';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
-import { HitableMethods } from './Hitable.ts';
+import { Hitable } from './Hitable.ts';
 
 export const Wall = {};
 
@@ -44,7 +44,7 @@ export function createWallRR(options: Partial<Options>, { world } = DI) {
     const [eid] = createRectangleRR(mutatedOptions);
 
     addComponent(world, eid, Wall);
-    HitableMethods.addComponent(eid);
+    Hitable.addComponent(eid);
 
     return eid;
 }

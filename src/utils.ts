@@ -1,4 +1,4 @@
-import { addComponent, set, World } from 'bitecs';
+import { addComponent } from 'bitecs';
 import { DI } from '../games/tanks/src/DI';
 
 export function uniq<T>(arr: T[]): T[] {
@@ -55,6 +55,8 @@ export class NestedArray<T extends ArrayLikeConstructor> {
 
     public static f32 = (batchLength: number, batchCount: number, seed?: ArrayLike<number>) => new NestedArray(Float32Array, batchLength, batchCount, seed);
 
+    public static f16 = (batchLength: number, batchCount: number, seed?: ArrayLike<number>) => new NestedArray(Float32Array, batchLength, batchCount, seed);
+
     public static u32 = (batchLength: number, batchCount: number, seed?: ArrayLike<number>) => new NestedArray(Uint32Array, batchLength, batchCount, seed);
 
     public static i32 = (batchLength: number, batchCount: number, seed?: ArrayLike<number>) => new NestedArray(Int32Array, batchLength, batchCount, seed);
@@ -73,6 +75,10 @@ export class NestedArray<T extends ArrayLikeConstructor> {
         this.buffer[batchIndex * this.batchLength + index] = value;
     }
 
+    public fill(value: number) {
+        this.buffer.fill(value);
+    }
+
     public setBatch(batchIndex: number, values: ArrayLike<number>) {
         this.buffer.set(values, batchIndex * this.batchLength);
     }
@@ -82,41 +88,21 @@ export class NestedArray<T extends ArrayLikeConstructor> {
     }
 }
 
-type UnknownMethod<A extends any[]> = (...args: A) => any;
-type BindedUnknownMethod<A extends any[]> = (...args: A) => any;
+const $CompRef = Symbol('CompRef');
+let indexCompRef = 0;
+let nextCompRef: any = { [$CompRef]: indexCompRef++ };
 
-type WorldMethod<A extends any[]> = (world: World, eid: number, ...args: A) => any;
-type BindedWorldMethod<A extends any[]> = (eid: number, ...args: A) => any;
-
-type Method<A extends any[]> = UnknownMethod<A> | WorldMethod<A>;
-type Methods<M extends Record<string, Method<any[]>>> = {
-    [K in keyof M]: M[K] extends UnknownMethod<infer A>
-        ? BindedUnknownMethod<A>
-        : M[K] extends WorldMethod<infer A>
-            ? BindedWorldMethod<A>
-            : never;
+export function component<T>(_comp: T): T {
+    const comp = Object.assign(nextCompRef, _comp);
+    nextCompRef = { [$CompRef]: indexCompRef++ };
+    return comp;
 }
 
-export function createMethods<T, M extends Record<string, (...args: any[]) => any>>(comp: T, methods: M): Methods<M> {
-    const result = {} as Methods<M>;
-
-    for (const key in methods) {
-        const method = methods[key];
-        if (key.endsWith('$')) {
-            // @ts-ignore
-            result[key] = (eid: number, ...args: any[]) => {
-                const data = method(eid, ...args);
-                addComponent(DI.world, eid, set(comp, null));
-                return data;
-            };
-        } else if (key.endsWith('Component')) {
-            // @ts-ignore
-            result[key] = (...args) => method(DI.world, ...args);
-        } else {
-            // @ts-ignore
-            result[key] = method;
-        }
-    }
-
-    return result;
+export function obs<T extends (eid: number, ...args: A) => void, A extends any[]>(setter: T): T {
+    const setData = { component: nextCompRef, data: null };
+    return ((eid: number, ...args: A) => {
+        const r = setter(eid, ...args);
+        addComponent(DI.world, eid, setData);
+        return r;
+    }) as T;
 }

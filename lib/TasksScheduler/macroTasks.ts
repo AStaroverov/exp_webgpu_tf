@@ -1,7 +1,7 @@
 import { TasksManager } from './TasksManager';
 
 class MacroTasks extends TasksManager {
-    constructor(delay = 8) {
+    constructor(delay = 4) {
         super((fn) => {
             const id = window.setInterval(fn, delay);
             return () => window.clearInterval(id);

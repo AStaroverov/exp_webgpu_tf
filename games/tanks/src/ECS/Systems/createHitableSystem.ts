@@ -10,10 +10,10 @@ import { recursiveTypicalRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 import { onSet, query } from 'bitecs';
 import { Bullet } from '../Components/Bullet.ts';
 import { Wall } from '../Components/Wall.ts';
-import { createChangedDetector } from '../../../../../src/ECS/Systems/ChangedDetectorSystem.ts';
+import { createChangeDetector } from '../../../../../src/ECS/Systems/ChangedDetectorSystem.ts';
 
 export function createHitableSystem({ world } = DI) {
-    const hitableChanges = createChangedDetector(world, [onSet(Hitable)]);
+    const hitableChanges = createChangeDetector(world, [onSet(Hitable)]);
 
     return () => {
         const tankPartsEids = query(world, [TankPart, Parent, Hitable]);

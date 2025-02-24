@@ -16,15 +16,15 @@ import {
 import { createSpawnerBulletsSystem } from './src/ECS/Systems/createBulletSystem.ts';
 import { getEntityIdByPhysicalId } from './src/ECS/Components/Physical.ts';
 import { createWorld, deleteWorld, hasComponent, resetWorld } from 'bitecs';
-import { Hitable, HitableMethods } from './src/ECS/Components/Hitable.ts';
+import { Hitable } from './src/ECS/Components/Hitable.ts';
 import { createHitableSystem } from './src/ECS/Systems/createHitableSystem.ts';
 import { createTankAliveSystem } from './src/ECS/Systems/createTankAliveSystem.ts';
 import { createTankPositionSystem, createTankTurretRotationSystem } from './src/ECS/Systems/tankControllerSystems.ts';
 import { createOutZoneDestroySystem } from './src/ECS/Systems/createOutZoneDestroySystem.ts';
 import { createTankInputTensorSystem } from './src/ECS/Systems/createTankInputTensorSystem.ts';
 import {
-    createChangedDetectorSystem,
-    destroyChangedDetectorSystem,
+    createChangeDetectorSystem,
+    destroyChangeDetectorSystem,
 } from '../../src/ECS/Systems/ChangedDetectorSystem.ts';
 
 const canvas = document.querySelector('canvas')!;
@@ -35,7 +35,7 @@ DI.canvas = canvas;
 export function createGame() {
     const world = DI.world = createWorld();
     const physicalWorld = DI.physicalWorld = initPhysicalWorld();
-    const updateChangedDetector = createChangedDetectorSystem(world);
+    const updateChangedDetector = createChangeDetectorSystem(world);
 
     // const updateMap = createMapSystem();
     const execTransformSystem = createTransformSystem(world);
@@ -83,10 +83,10 @@ export function createGame() {
                 const eid2 = rb2 && getEntityIdByPhysicalId(rb2.handle);
 
                 if (eid1 && hasComponent(world, eid1, Hitable)) {
-                    HitableMethods.hit$(eid1, 1);
+                    Hitable.hit$(eid1, 1);
                 }
                 if (eid2 && hasComponent(world, eid2, Hitable)) {
-                    HitableMethods.hit$(eid2, 1);
+                    Hitable.hit$(eid2, 1);
                 }
             }
         });
@@ -108,8 +108,8 @@ export function createGame() {
     });
 
     const spawnBullets = createSpawnerBulletsSystem();
-    const spawnFrame = () => {
-        spawnBullets();
+    const spawnFrame = (delta: number) => {
+        spawnBullets(delta);
     };
 
     const destroyOutZone = createOutZoneDestroySystem();
@@ -124,7 +124,7 @@ export function createGame() {
     };
 
     DI.gameTick = (delta: number) => {
-        spawnFrame();
+        spawnFrame(delta);
 
         physicalFrame(delta);
 
@@ -147,7 +147,7 @@ export function createGame() {
         physicalWorld.free();
         resetWorld(world);
         deleteWorld(world);
-        destroyChangedDetectorSystem(world);
+        destroyChangeDetectorSystem(world);
 
         DI.world = null!;
         DI.physicalWorld = null!;

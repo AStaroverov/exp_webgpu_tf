@@ -2,14 +2,15 @@ import { createGame } from '../../createGame.ts';
 import { createTankRR } from '../ECS/Components/Tank.ts';
 import { random } from '../../../../lib/random.ts';
 import { floor } from '../../../../lib/math.ts';
+import { DI } from '../DI';
 
 export function createBattlefield(tanksCount: number) {
     const game = createGame();
 
     for (let i = 0; i < tanksCount; i++) {
         createTankRR({
-            x: 100 + (i % 3) * 300,
-            y: 100 + floor(i / 3) * 300,
+            x: 200 + (i % 3) * DI.canvas.offsetWidth / 3,
+            y: 100 + floor(i / 3) * DI.canvas.offsetHeight / 3,
             rotation: Math.PI / random(),
             color: [random(), random(), random(), 1],
         });

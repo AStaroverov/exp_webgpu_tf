@@ -14,5 +14,5 @@ export function getNewPlayerId() {
 
 export function addPlayerComponent(entityId: number, playerId: number, { world } = DI) {
     addComponent(world, entityId, Player);
-    Player.id[playerId] = playerId;
+    Player.id[entityId] = playerId;
 }

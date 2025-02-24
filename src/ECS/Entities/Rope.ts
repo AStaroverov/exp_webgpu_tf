@@ -1,7 +1,7 @@
 import { addEntity, World } from 'bitecs';
 import { addTransformComponents, applyMatrixTranslate, LocalTransform } from '../Components/Transform.ts';
-import { ColorMethods, ThinnessMethods } from '../Components/Common.ts';
-import { RopeMethods } from '../Components/Rope.ts';
+import { Color, Thinness } from '../Components/Common.ts';
+import { Rope } from '../Components/Rope.ts';
 
 export function createRope(world: World, { x, y, thinness, color, points }: {
     x: number;
@@ -15,9 +15,9 @@ export function createRope(world: World, { x, y, thinness, color, points }: {
     addTransformComponents(world, id);
     applyMatrixTranslate(LocalTransform.matrix.getBatche(id), x, y);
 
-    RopeMethods.addComponent(id, points);
-    ColorMethods.addComponent(id, color[0], color[1], color[2], color[3]);
-    ThinnessMethods.addComponent(id, thinness);
+    Rope.addComponent(world, id, points);
+    Color.addComponent(world, id, color[0], color[1], color[2], color[3]);
+    Thinness.addComponent(world, id, thinness);
 
     return id;
 }

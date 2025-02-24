@@ -1,4 +1,4 @@
-import { createCircleRR, createRectangleRR } from './RigidRender.ts';
+import { createRectangleRR } from './RigidRender.ts';
 import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
 import { JointData, Vector2 } from '@dimforge/rapier2d';
 import { addComponent } from 'bitecs';
@@ -7,18 +7,18 @@ import { DI } from '../../DI';
 import { addChildren, addChildrenComponent, Children, removeChild } from './Children.ts';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { addPlayerComponent, getNewPlayerId } from './Player.ts';
-import { HitableMethods } from './Hitable.ts';
+import { Hitable } from './Hitable.ts';
 import { addParentComponent, Parent } from './Parent.ts';
 import { RigidBodyRef } from './Physical.ts';
 import { TColor } from '../../../../../src/ECS/Components/Common.ts';
 import { createRectangleRigidGroup } from './RigidGroup.ts';
-import { TankControllerMethods } from './TankController.ts';
+import { TankController } from './TankController.ts';
 import { typicalRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 import { addTankInputTensorComponent } from './TankState.ts';
 import { delegate } from '../../../../../src/delegate.ts';
-import { NestedArray, TypedArray } from '../../../../../src/utils.ts';
+import { component, NestedArray, TypedArray } from '../../../../../src/utils.ts';
 
-export const Tank = ({
+export const Tank = component({
     turretEId: TypedArray.f64(delegate.defaultSize),
     bulletSpeed: TypedArray.f64(delegate.defaultSize),
     bulletStartPosition: NestedArray.f64(2, delegate.defaultSize),
@@ -65,11 +65,7 @@ const caterpillarSet: [number, number, number, number][] =
 
 const PARTS_COUNT = hullSet.length + turretSet.length + gunSet.length + caterpillarSet.length * 2;
 
-type Options = Parameters<typeof createRectangleRR>[0] & Parameters<typeof createCircleRR>[0] & {
-    playerId: number,
-};
-
-export const mutatedOptions: Options = {
+const mutatedOptions = {
     x: 0,
     y: 0,
     width: 0,
@@ -89,6 +85,7 @@ export const mutatedOptions: Options = {
 
     playerId: 0,
 };
+type Options = typeof mutatedOptions;
 
 const defaultOptions = structuredClone(mutatedOptions);
 const resetOptions = (target: Options, source: Parameters<typeof createTankRR>[0]) => {
@@ -147,7 +144,7 @@ const createRectanglesRR = (
         );
 
         addPlayerComponent(eid, options.playerId);
-        HitableMethods.addComponent(eid);
+        Hitable.addComponent(eid);
         addParentComponent(eid, parentEId);
         addChildren(parentEId, eid);
 
@@ -181,12 +178,12 @@ export function createTankRR(options: {
 
     addComponent(world, tankEid, Tank);
     Tank.bulletSpeed[tankEid] = 300;
-    Tank.bulletStartPosition.set(tankEid, 0, PADDING / 2);
-    Tank.bulletStartPosition.set(tankEid, 1, -PADDING * 11);
+    Tank.bulletStartPosition.set(tankEid, 0, 0);
+    Tank.bulletStartPosition.set(tankEid, 1, -PADDING * 9);
     Tank.initialPartsCount[tankEid] = PARTS_COUNT;
 
     addTransformComponents(world, tankEid);
-    TankControllerMethods.addComponent(tankEid);
+    TankController.addComponent(tankEid);
     addChildrenComponent(tankEid);
     addPlayerComponent(tankEid, mutatedOptions.playerId);
 

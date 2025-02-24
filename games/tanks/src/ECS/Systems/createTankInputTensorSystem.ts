@@ -1,9 +1,8 @@
 import { DI } from '../../DI';
 import { getTankHealth, Tank } from '../Components/Tank.ts';
 import {
-    resetTankInputTensorEnemy,
-    setTankInputTensorEnemy,
     setTankInputTensorSelf,
+    TANK_INPUT_TENSOR_MAX_BULLETS,
     TANK_INPUT_TENSOR_MAX_ENEMIES,
     TankInputTensor,
 } from '../Components/TankState.ts';
@@ -12,6 +11,7 @@ import { hypot } from '../../../../../lib/math.ts';
 import { Ball, Collider } from '@dimforge/rapier2d';
 import { CollisionGroup, createCollisionGroups } from '../../Physical/createRigid.ts';
 import { query } from 'bitecs';
+import { Player } from '../Components/Player.ts';
 
 export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
     const colliderIds = new Float64Array(4);
@@ -19,9 +19,13 @@ export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
     return () => {
         const tankEids = query(world, [Tank, TankInputTensor, RigidBodyRef]);
 
+        TankInputTensor.resetEnemiesCoords();
+        TankInputTensor.resetBulletsCoords();
+
         for (let i = 0; i < tankEids.length; i++) {
             const tankEid = tankEids[i];
             const tankPid = RigidBodyRef.id[tankEid];
+            const playerId = Player.id[tankEid];
             const rb = physicalWorld.getRigidBody(tankPid);
             const health = getTankHealth(tankEid);
             const translation = rb.translation();
@@ -44,47 +48,80 @@ export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
                 projectileSpeed,
             );
 
-            let index = 0;
-            physicalWorld.intersectionsWithShape(
-                translation,
-                rotation,
-                new Ball(10000),
-                (collider: Collider) => {
-                    if (tankPid !== collider.handle) {
-                        colliderIds[index++] = collider.handle;
-                    }
+            // Find enemies
+            let enemyIndex = 0;
 
-                    return index < TANK_INPUT_TENSOR_MAX_ENEMIES;
-                },
-                undefined,
-                createCollisionGroups(CollisionGroup.TANK_BASE, CollisionGroup.TANK_BASE),
-            );
+            for (let j = 1; j < 4; j++) {
+                const radius = 10 ** j;
+                physicalWorld.intersectionsWithShape(
+                    translation,
+                    rotation,
+                    new Ball(radius),
+                    (collider: Collider) => {
+                        if (tankPid !== collider.handle) {
+                            colliderIds[enemyIndex++] = collider.handle;
+                        }
 
-            for (let j = 0; j < index; j++) {
+                        return enemyIndex < TANK_INPUT_TENSOR_MAX_ENEMIES;
+                    },
+                    undefined,
+                    createCollisionGroups(CollisionGroup.TANK_BASE, CollisionGroup.TANK_BASE),
+                );
+                if (enemyIndex >= TANK_INPUT_TENSOR_MAX_ENEMIES) {
+                    break;
+                }
+            }
+
+            for (let j = 0; j < enemyIndex; j++) {
                 const pid = colliderIds[j];
-                const eid = getEntityIdByPhysicalId(pid);
                 const rb = physicalWorld.getRigidBody(pid);
-                const translation = rb.translation();
-                const rotation = rb.rotation();
-                const linearVelocity = rb.linvel();
-                const turretEid = Tank.turretEId[eid];
-                const turretPid = RigidBodyRef.id[turretEid];
-                const turretRb = physicalWorld.getRigidBody(turretPid);
-                const turretRotation = turretRb.rotation();
 
-                setTankInputTensorEnemy(
+                rb && TankInputTensor.setEnemiesData(
                     tankEid,
                     j,
-                    translation.x,
-                    translation.y,
-                    hypot(linearVelocity.x, linearVelocity.y),
-                    rotation,
-                    turretRotation,
+                    rb.translation(),
+                    rb.linvel(),
                 );
             }
 
-            for (let j = index; j < TANK_INPUT_TENSOR_MAX_ENEMIES; j++) {
-                resetTankInputTensorEnemy(tankEid, j);
+            // Find bullets
+            let bulletIndex = 0;
+
+            for (let j = 1; j < 4; j++) {
+                const radius = 10 ** j;
+                physicalWorld.intersectionsWithShape(
+                    translation,
+                    rotation,
+                    new Ball(radius),
+                    (collider: Collider) => {
+                        const eid = getEntityIdByPhysicalId(collider.handle);
+
+                        if (Player.id[eid] === playerId) {
+                            return true;
+                        }
+
+                        colliderIds[bulletIndex++] = collider.handle;
+
+                        return bulletIndex < TANK_INPUT_TENSOR_MAX_BULLETS;
+                    },
+                    undefined,
+                    createCollisionGroups(CollisionGroup.BULLET, CollisionGroup.BULLET),
+                );
+                if (bulletIndex >= TANK_INPUT_TENSOR_MAX_BULLETS) {
+                    break;
+                }
+            }
+            
+            for (let j = 0; j < bulletIndex; j++) {
+                const pid = colliderIds[j];
+                const rb = physicalWorld.getRigidBody(pid);
+
+                rb && TankInputTensor.setBulletsData(
+                    tankEid,
+                    j,
+                    rb.translation(),
+                    rb.linvel(),
+                );
             }
         }
     };

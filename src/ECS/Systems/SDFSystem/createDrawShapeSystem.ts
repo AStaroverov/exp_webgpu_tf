@@ -6,8 +6,7 @@ import { projectionMatrix } from '../ResizeSystem.ts';
 import { Color, Roundness, Shadow } from '../../Components/Common.ts';
 import { Shape } from '../../Components/Shape.ts';
 import { GlobalTransform } from '../../Components/Transform.ts';
-
-import { createChangedDetector } from '../ChangedDetectorSystem.ts';
+import { createChangeDetector } from '../ChangedDetectorSystem.ts';
 
 export function createDrawShapeSystem(world: World, device: GPUDevice) {
     const gpuShader = new GPUShader(shaderMeta);
@@ -23,13 +22,13 @@ export function createDrawShapeSystem(world: World, device: GPUDevice) {
     const roundnessCollect = getTypeTypedArray(shaderMeta.uniforms.roundness.type);
     const shadowCollect = getTypeTypedArray(shaderMeta.uniforms.shadow.type);
 
-    const colorChanges = createChangedDetector(world, [onAdd(Color), onSet(Color)]);
-    const shapeChanges = createChangedDetector(world, [onAdd(Shape), onSet(Shape)]);
-    const shadowChanges = createChangedDetector(world, [onAdd(Shadow), onSet(Shadow)]);
-    const roundnessChanges = createChangedDetector(world, [onAdd(Roundness), onSet(Roundness)]);
+    const colorChanges = createChangeDetector(world, [onAdd(Color), onSet(Color)]);
+    const shapeChanges = createChangeDetector(world, [onAdd(Shape), onSet(Shape)]);
+    const shadowChanges = createChangeDetector(world, [onAdd(Shadow), onSet(Shadow)]);
+    const roundnessChanges = createChangeDetector(world, [onAdd(Roundness), onSet(Roundness)]);
 
     return function drawShapeSystem(renderPass: GPURenderPassEncoder) {
-        const entities = query(world, [Shape, GlobalTransform, Color]);
+        const entities = query(world, [Shape, GlobalTransform, Color, Roundness]); // Shadow is optional
 
         if (entities.length === 0) return;
 

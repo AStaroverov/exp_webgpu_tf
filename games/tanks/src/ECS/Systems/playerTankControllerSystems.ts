@@ -1,6 +1,6 @@
 import { DI } from '../../DI';
 import { PLAYER_REFS } from '../../consts.ts';
-import { TankControllerMethods } from '../Components/TankController.ts';
+import { TankController } from '../Components/TankController.ts';
 import { isNil } from 'lodash-es';
 
 export function createPlayerTankPositionSystem({ document } = DI) {
@@ -9,25 +9,25 @@ export function createPlayerTankPositionSystem({ document } = DI) {
         switch (event.key) {
             case 'w':
             case 'ArrowUp': {
-                TankControllerMethods.setMove$(PLAYER_REFS.tankPid, 1);
+                TankController.setMove$(PLAYER_REFS.tankPid, 1);
                 event.preventDefault();
                 break;
             }
             case 's':
             case 'ArrowDown': {
-                TankControllerMethods.setMove$(PLAYER_REFS.tankPid, -1);
+                TankController.setMove$(PLAYER_REFS.tankPid, -1);
                 event.preventDefault();
                 break;
             }
             case 'a':
             case 'ArrowLeft': {
-                TankControllerMethods.setRotate$(PLAYER_REFS.tankPid, -1);
+                TankController.setRotate$(PLAYER_REFS.tankPid, -1);
                 event.preventDefault();
                 break;
             }
             case 'd':
             case 'ArrowRight': {
-                TankControllerMethods.setRotate$(PLAYER_REFS.tankPid, 1);
+                TankController.setRotate$(PLAYER_REFS.tankPid, 1);
                 event.preventDefault();
                 break;
             }
@@ -43,14 +43,14 @@ export function createPlayerTankPositionSystem({ document } = DI) {
             case 's':
             case 'ArrowUp':
             case 'ArrowDown': {
-                TankControllerMethods.setMove$(tankPid, 0);
+                TankController.setMove$(tankPid, 0);
                 break;
             }
             case 'a':
             case 'd':
             case 'ArrowLeft':
             case 'ArrowRight': {
-                TankControllerMethods.setRotate$(tankPid, 0);
+                TankController.setRotate$(tankPid, 0);
                 break;
             }
         }
@@ -64,7 +64,7 @@ export function createPlayerTankPositionSystem({ document } = DI) {
 export function createPlayerTankTurretRotationSystem({ document } = DI) {
     document.addEventListener('mousemove', (event) => {
         if (isNil(PLAYER_REFS.tankPid)) return;
-        TankControllerMethods.setTurretTarget$(PLAYER_REFS.tankPid, event.clientX, event.clientY);
+        TankController.setTurretTarget$(PLAYER_REFS.tankPid, event.clientX, event.clientY);
     });
 
     return () => {
@@ -72,19 +72,33 @@ export function createPlayerTankTurretRotationSystem({ document } = DI) {
 }
 
 export function createPlayerTankBulletSystem({ document, canvas } = DI) {
-    document.addEventListener('keypress', (event) => {
+    document.addEventListener('keydown', (event) => {
         event.preventDefault();
         switch (event.code) {
             case 'Space': {
-                !isNil(PLAYER_REFS.tankPid) && TankControllerMethods.setShot$(PLAYER_REFS.tankPid);
+                !isNil(PLAYER_REFS.tankPid) && TankController.setShooting(PLAYER_REFS.tankPid, true);
+                break;
+            }
+        }
+    });
+    document.addEventListener('keyup', (event) => {
+        event.preventDefault();
+        switch (event.code) {
+            case 'Space': {
+                !isNil(PLAYER_REFS.tankPid) && TankController.setShooting(PLAYER_REFS.tankPid, false);
                 break;
             }
         }
     });
 
-    canvas.addEventListener('click', (event) => {
+    canvas.addEventListener('mousedown', (event) => {
         event.preventDefault();
-        !isNil(PLAYER_REFS.tankPid) && TankControllerMethods.setShot$(PLAYER_REFS.tankPid);
+        !isNil(PLAYER_REFS.tankPid) && TankController.setShooting(PLAYER_REFS.tankPid, true);
+    });
+
+    canvas.addEventListener('mouseup', (event) => {
+        event.preventDefault();
+        !isNil(PLAYER_REFS.tankPid) && TankController.setShooting(PLAYER_REFS.tankPid, false);
     });
 
     return () => {

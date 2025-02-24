@@ -1,14 +1,15 @@
-import { addComponent, World } from 'bitecs';
+import { addComponent } from 'bitecs';
 import { delegate } from '../../../../../src/delegate.ts';
-import { createMethods, TypedArray } from '../../../../../src/utils.ts';
+import { component, obs, TypedArray } from '../../../../../src/utils.ts';
+import { DI } from '../../DI';
 
-export const Hitable = ({
+export const Hitable = component(({
     damage: TypedArray.f64(delegate.defaultSize),
-});
 
-export const HitableMethods = createMethods(Hitable, {
-    addComponent: (world: World, eid: number) => addComponent(world, eid, Hitable),
-    hit$: (eid: number, damage: number) => {
-        Hitable.damage[eid] += damage;
+    addComponent: (eid: number) => {
+        addComponent(DI.world, eid, Hitable);
     },
-});
+    hit$: obs((eid: number, damage: number) => {
+        Hitable.damage[eid] += damage;
+    }),
+}));

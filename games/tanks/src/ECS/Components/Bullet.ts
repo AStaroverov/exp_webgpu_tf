@@ -14,9 +14,10 @@ import { mat4, vec2, vec3 } from 'gl-matrix';
 import { isNumber } from 'lodash-es';
 import { ActiveEvents } from '@dimforge/rapier2d';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
-import { HitableMethods } from './Hitable.ts';
+import { Hitable } from './Hitable.ts';
 import { addPlayerComponent, Player } from './Player.ts';
 import { Tank } from './Tank.ts';
+import { random } from '../../../../../lib/random.ts';
 
 export const Bullet = {};
 
@@ -61,7 +62,7 @@ export function createBulletRR(options: Options, { world } = DI) {
     const [bulletId] = createRectangleRR(mutatedOptions);
     addComponent(world, bulletId, Bullet);
     addPlayerComponent(bulletId, options.playerId);
-    HitableMethods.addComponent(bulletId);
+    Hitable.addComponent(bulletId);
     addTransformComponents(world, bulletId);
 
     return bulletId;
@@ -80,6 +81,9 @@ export function spawnBullet(tankId: number) {
     mat4.translate(tmpMatrix, tmpMatrix, tmpPosition);
     mat4.multiply(tmpMatrix, globalTransform, tmpMatrix);
 
+    mutatedOptions.color[0] = random();
+    mutatedOptions.color[1] = random();
+    mutatedOptions.color[2] = random();
     mutatedOptions.x = getMatrixTranslationX(tmpMatrix);
     mutatedOptions.y = getMatrixTranslationY(tmpMatrix);
     mutatedOptions.rotation = getMatrixRotationZ(tmpMatrix);
