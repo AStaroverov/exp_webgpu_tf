@@ -3,6 +3,7 @@ import { createTankRR } from '../ECS/Components/Tank.ts';
 import { random } from '../../../../lib/random.ts';
 import { floor } from '../../../../lib/math.ts';
 import { DI } from '../DI';
+import { getDrawState } from './utils.ts';
 
 export function createBattlefield(tanksCount: number) {
     const game = createGame();
@@ -16,7 +17,11 @@ export function createBattlefield(tanksCount: number) {
         });
     }
 
-    return game;
+    const gameTick = (delta: number) => {
+        game.gameTick(delta, getDrawState());
+    };
+
+    return { ...game, gameTick };
 }
 
 // let game;

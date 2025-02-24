@@ -469,9 +469,8 @@ class PPOAgent {
 }
 
 // Function to run a simulation episode
-async function runEpisode(agent: PPOAgent, maxSteps: number, episodeNumber: number): Promise<number> {
+async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
     const episodeReward: number[] = [];
-    const withDraw = episodeNumber % 10 === 0;
     return new Promise(resolve => {
         const { world, canvas, gameTick, destroy } = createBattlefield(TANK_COUNT_SIMULATION);
 
@@ -484,7 +483,7 @@ async function runEpisode(agent: PPOAgent, maxSteps: number, episodeNumber: numb
 
         let steps = 0;
         const stopInterval = macroTasks.addInterval(() => {
-            gameTick(TICK_TIME_SIMULATION, withDraw);
+            gameTick(TICK_TIME_SIMULATION);
             steps++;
 
             // Terminate if episode is too long or all tanks are destroyed
@@ -676,7 +675,7 @@ async function trainPPO(episodes: number = 100): Promise<void> {
             console.log(`Starting episode ${ i + 1 }/${ episodes }`);
 
             // Run episode
-            const episodeReward = await runEpisode(agent, 5000, episodesCompleted);
+            const episodeReward = await runEpisode(agent, 5000);
             totalReward += episodeReward;
             episodesCompleted++;
 
