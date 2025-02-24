@@ -18,7 +18,7 @@ setWasmPaths('/node_modules/@tensorflow/tfjs-backend-wasm/dist/');
 await tf.setBackend('wasm');
 
 // Configuration constants
-export const TANK_COUNT_SIMULATION = 4; // Reduced to make training more manageable
+export const TANK_COUNT_SIMULATION = 6; // Reduced to make training more manageable
 const TICK_TIME_REAL = 1;
 const TICK_TIME_SIMULATION = 16.6667; // 60 FPS
 const INPUT_DIM = 65; // Tank state dimensions (same as your original implementation)
@@ -469,8 +469,9 @@ class PPOAgent {
 }
 
 // Function to run a simulation episode
-async function runEpisode(agent: PPOAgent, maxSteps: number = 1000): Promise<number> {
+async function runEpisode(agent: PPOAgent, maxSteps: number, episodeNumber: number): Promise<number> {
     const episodeReward: number[] = [];
+    const withDraw = episodeNumber % 10 === 0;
     return new Promise(resolve => {
         const { world, canvas, gameTick, destroy } = createBattlefield(TANK_COUNT_SIMULATION);
 
@@ -483,7 +484,7 @@ async function runEpisode(agent: PPOAgent, maxSteps: number = 1000): Promise<num
 
         let steps = 0;
         const stopInterval = macroTasks.addInterval(() => {
-            gameTick(TICK_TIME_SIMULATION);
+            gameTick(TICK_TIME_SIMULATION, withDraw);
             steps++;
 
             // Terminate if episode is too long or all tanks are destroyed
@@ -675,7 +676,7 @@ async function trainPPO(episodes: number = 100): Promise<void> {
             console.log(`Starting episode ${ i + 1 }/${ episodes }`);
 
             // Run episode
-            const episodeReward = await runEpisode(agent);
+            const episodeReward = await runEpisode(agent, 5000, episodesCompleted);
             totalReward += episodeReward;
             episodesCompleted++;
 

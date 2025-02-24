@@ -123,7 +123,7 @@ export function createGame() {
         updateTankInputTensor();
     };
 
-    DI.gameTick = (delta: number) => {
+    DI.gameTick = (delta: number, withDraw: boolean = true) => {
         spawnFrame(delta);
 
         physicalFrame(delta);
@@ -131,7 +131,7 @@ export function createGame() {
         // updateMap();
 
         // stats.begin();
-        renderFrame();
+        withDraw && renderFrame();
         // stats.end();
         // stats.update();
         //

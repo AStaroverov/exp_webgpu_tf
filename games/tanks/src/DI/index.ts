@@ -6,7 +6,7 @@ export const DI: {
     canvas: HTMLCanvasElement;
     world: World;
     physicalWorld: PhysicalWorld;
-    gameTick: (delta: number) => void;
+    gameTick: (delta: number, withDraw?: boolean) => void;
     destroy: () => void;
 } = {
     document: window.document,
