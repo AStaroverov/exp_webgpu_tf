@@ -11,7 +11,7 @@ import { TankController } from '../ECS/Components/TankController.ts';
 import { inRange } from 'lodash-es';
 import { createBattlefield } from './createBattlefield.ts';
 import { macroTasks } from '../../../../lib/TasksScheduler/macroTasks.ts';
-import { abs, dist2, hypot, max } from '../../../../lib/math.ts';
+import { abs, dist2, hypot, max, min } from '../../../../lib/math.ts';
 import { query } from 'bitecs';
 
 setWasmPaths('/node_modules/@tensorflow/tfjs-backend-wasm/dist/');
@@ -30,6 +30,8 @@ const CLIP_EPSILON = 0.2;
 const ENTROPY_BETA = 0.01;
 const GAMMA = 0.99; // Discount factor
 const LAMBDA = 0.95; // GAE parameter
+
+const TANK_RADIUS = 80;
 
 // Experience buffer
 class ExperienceBuffer {
@@ -575,7 +577,8 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                 const rewardRecord = {
                     map: 0,
                     aim: 0,
-                    avoid: 0,
+                    avoidBullets: 0,
+                    avoidEnemies: 0,
                     health: 0,
                 };
 
@@ -598,9 +601,13 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                         hasTargets = true;
                         const distFromTargetToEnemy = dist2(turretTarget[0], turretTarget[1], enemyX, enemyY);
                         const distFromTankToEnemy = dist2(tankX, tankY, enemyX, enemyY);
-                        const aimReward = max(0, (50 - distFromTargetToEnemy) / 50) *
-                            max(0, (1000 - distFromTankToEnemy) / 1000);
+                        const aimReward =
+                            max(0, 1 - distFromTargetToEnemy / TANK_RADIUS)
+                            * max(0, 1 - distFromTankToEnemy / 1000);
                         rewardRecord.aim += aimReward;
+
+                        const avoidEnemyReward = 0.2 * min(1, distFromTankToEnemy / (TANK_RADIUS * 3));
+                        rewardRecord.avoidEnemies += avoidEnemyReward;
                     }
                 }
 
@@ -626,12 +633,17 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                     const bY2 = bY1 + bVY;
                     const distToBulletTraverse = abs((bX2 - bX1) * (bY1 - tankX) - (bX1 - tankX) * (bY2 - bY1)) / hypot(bX2 - bX1, bY2 - bY1);
 
-                    if (distToBullet > 300 || distToBulletTraverse > 80) continue;
+                    if (distToBullet > 300 || distToBulletTraverse > TANK_RADIUS) continue;
 
-                    rewardRecord.avoid += -0.2;
+                    rewardRecord.avoidBullets += -0.2;
                 }
 
-                const reward = rewardRecord.map * 3 + rewardRecord.aim * 10 + rewardRecord.avoid * 2 + rewardRecord.health * 0.1;
+                const reward =
+                    rewardRecord.map * 3
+                    + rewardRecord.aim * 10
+                    + rewardRecord.avoidEnemies * 3
+                    + rewardRecord.avoidBullets * 2
+                    + rewardRecord.health * 0.1;
 
                 // Store total reward
                 const newTotalReward = (mapTankToReward.get(tankEid) || 0) + reward;
