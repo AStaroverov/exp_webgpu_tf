@@ -8,7 +8,7 @@ import {
 } from '../ECS/Components/TankState.ts';
 import { Tank } from '../ECS/Components/Tank.ts';
 import { TankController } from '../ECS/Components/TankController.ts';
-import { inRange } from 'lodash-es';
+import { clamp, inRange } from 'lodash-es';
 import { createBattlefield } from './createBattlefield.ts';
 import { macroTasks } from '../../../../lib/TasksScheduler/macroTasks.ts';
 import { abs, dist2, hypot, max, min } from '../../../../lib/math.ts';
@@ -20,8 +20,8 @@ await tf.setBackend('wasm');
 // Configuration constants
 export const TANK_COUNT_SIMULATION = 6; // Reduced to make training more manageable
 const TICK_TIME_REAL = 1;
-const TICK_TIME_SIMULATION = 16.6667; // 60 FPS
-const INPUT_DIM = 65; // Tank state dimensions (same as your original implementation)
+const TICK_TIME_SIMULATION = 16.6667 * 2;
+const INPUT_DIM = 63; // Tank state dimensions (same as your original implementation)
 const ACTION_DIM = 5; // [shoot, move, turn, targetX, targetY]
 
 const PPO_EPOCHS = 4;
@@ -508,6 +508,10 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
 
             const width = canvas.offsetWidth;
             const height = canvas.offsetHeight;
+            const vDelta = 200;
+            const vWidth = width + vDelta;
+            const vHeight = height + vDelta;
+            const maxSpeed = 10_000;
 
             // Process each tank
             for (let tankEid of tankEids) {
@@ -517,31 +521,39 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                 }
 
                 // Prepare state tensor
-                const tankX = TankInputTensor.x[tankEid];
-                const tankY = TankInputTensor.y[tankEid];
+                const tankX = TankInputTensor.x[tankEid] + vDelta;
+                const tankY = TankInputTensor.y[tankEid] + vDelta;
                 const inputVector = new Float32Array(INPUT_DIM);
                 let k = 0;
 
-                // Map dimensions
-                inputVector[k++] = width;
-                inputVector[k++] = height;
-
                 // Tank state
                 inputVector[k++] = TankInputTensor.health[tankEid];
-                inputVector[k++] = tankX;
-                inputVector[k++] = tankY;
-                inputVector[k++] = TankInputTensor.speed[tankEid];
-                inputVector[k++] = TankInputTensor.rotation[tankEid];
-                inputVector[k++] = TankInputTensor.turretRotation[tankEid];
-                inputVector[k++] = TankInputTensor.projectileSpeed[tankEid];
+                inputVector[k++] = clamp(tankX / vWidth, 0, 1);
+                inputVector[k++] = clamp(tankY / vHeight, 0, 1);
+                inputVector[k++] = TankInputTensor.speed[tankEid] / maxSpeed;
+                inputVector[k++] = TankInputTensor.rotation[tankEid] / Math.PI;
+                inputVector[k++] = TankInputTensor.turretRotation[tankEid] / Math.PI;
+                inputVector[k++] = TankInputTensor.projectileSpeed[tankEid] / maxSpeed;
 
                 // Enemies data
                 const enemiesBuffer = TankInputTensor.enemiesData.getBatche(tankEid);
+                for (let i = 0; i < TANK_INPUT_TENSOR_MAX_ENEMIES; i++) {
+                    enemiesBuffer[i * 4 + 0] = clamp(enemiesBuffer[i * 4 + 0] / vWidth, 0, 1);
+                    enemiesBuffer[i * 4 + 1] = clamp(enemiesBuffer[i * 4 + 1] / vHeight, 0, 1);
+                    enemiesBuffer[i * 4 + 2] = enemiesBuffer[i * 4 + 2] / maxSpeed;
+                    enemiesBuffer[i * 4 + 3] = enemiesBuffer[i * 4 + 3] / maxSpeed;
+                }
                 inputVector.set(enemiesBuffer, k);
                 k += enemiesBuffer.length;
 
                 // Bullets data
                 const bulletsBuffer = TankInputTensor.bulletsData.getBatche(tankEid);
+                for (let i = 0; i < TANK_INPUT_TENSOR_MAX_BULLETS; i++) {
+                    bulletsBuffer[i * 4 + 0] = clamp(bulletsBuffer[i * 4 + 0] / vWidth, 0, 1);
+                    bulletsBuffer[i * 4 + 1] = clamp(bulletsBuffer[i * 4 + 1] / vHeight, 0, 1);
+                    bulletsBuffer[i * 4 + 2] = bulletsBuffer[i * 4 + 2] / maxSpeed;
+                    bulletsBuffer[i * 4 + 3] = bulletsBuffer[i * 4 + 3] / maxSpeed;
+                }
                 inputVector.set(bulletsBuffer, k);
                 k += bulletsBuffer.length;
 
@@ -721,9 +733,11 @@ async function trainPPO(episodes: number = 100): Promise<void> {
         // Final save
         await agent.saveModels();
         console.log('Training completed!');
-
     } catch (error) {
         console.error('Error during training:', error);
+        setTimeout(() => {
+            window.location.reload();
+        }, 10_000);
     }
 }
 
