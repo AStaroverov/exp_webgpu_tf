@@ -175,7 +175,7 @@ export function createTankRR(options: {
     mutatedOptions.height = PADDING * 14;
     mutatedOptions.belongsCollisionGroup = CollisionGroup.TANK_BASE;
     mutatedOptions.interactsCollisionGroup = CollisionGroup.TANK_BASE;
-    updateColorOptions(mutatedOptions, [0.5, 0.5, 0.5, 0.5]);
+    // updateColorOptions(mutatedOptions, [0.5, 0.5, 0.5, 0.5]);
     // const [tankEid, tankPid] = createRectangleRR(mutatedOptions);
     const [tankEid, tankPid] = createRectangleRigidGroup(mutatedOptions);
 
@@ -200,7 +200,6 @@ export function createTankRR(options: {
     mutatedOptions.belongsCollisionGroup = 0;
     mutatedOptions.interactsCollisionGroup = 0;
     updateColorOptions(mutatedOptions, [0.5, 0, 0, 1]);
-    // const [turretEid, turretPid] = createRectangleRR(mutatedOptions);
     const [turretEid, turretPid] = createRectangleRigidGroup(mutatedOptions);
 
     parentVector.x = 0;

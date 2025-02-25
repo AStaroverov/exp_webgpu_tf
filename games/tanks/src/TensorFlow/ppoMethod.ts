@@ -11,7 +11,7 @@ import { TankController } from '../ECS/Components/TankController.ts';
 import { inRange } from 'lodash-es';
 import { createBattlefield } from './createBattlefield.ts';
 import { macroTasks } from '../../../../lib/TasksScheduler/macroTasks.ts';
-import { dist2, max } from '../../../../lib/math.ts';
+import { abs, dist2, hypot, max } from '../../../../lib/math.ts';
 import { query } from 'bitecs';
 
 setWasmPaths('/node_modules/@tensorflow/tfjs-backend-wasm/dist/');
@@ -582,12 +582,10 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                 // Reward for staying within map
                 if (inRange(tankX, 0, width) && inRange(tankY, 0, height)) {
                     rewardRecord.map += 1;
-                } else {
-                    rewardRecord.map -= 1;
                 }
 
                 // Reward for health
-                rewardRecord.health += TankInputTensor.health[tankEid] * 0.01;
+                rewardRecord.health += TankInputTensor.health[tankEid];
 
                 // Reward for aiming at enemies
                 const turretTarget = TankController.getTurretTarget(tankEid);
@@ -609,25 +607,31 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                 if (!hasTargets) {
                     console.warn('No target found');
                 }
-                if (hasTargets && rewardRecord.aim === 0) {
-                    rewardRecord.aim = -0.5;
-                }
                 if (hasTargets && rewardRecord.aim > 0 && shouldShoot) {
-                    rewardRecord.aim += 1;
+                    rewardRecord.aim += 0.5;
                 }
 
                 // Reward for avoiding bullets
-                for (let j = 0; j < TANK_INPUT_TENSOR_MAX_BULLETS; j++) {
-                    const bulletX = TankInputTensor.bulletsData.get(tankEid, j * 4);
-                    const bulletY = TankInputTensor.bulletsData.get(tankEid, j * 4 + 1);
 
-                    if (bulletX !== 0 && bulletY !== 0) {
-                        const distToBullet = dist2(tankX, tankY, bulletX, bulletY);
-                        rewardRecord.avoid += distToBullet > 50 ? 1 : -2;
-                    }
+                for (let j = 0; j < TANK_INPUT_TENSOR_MAX_BULLETS; j++) {
+                    const bX1 = TankInputTensor.bulletsData.get(tankEid, j * 4);
+                    const bY1 = TankInputTensor.bulletsData.get(tankEid, j * 4 + 1);
+                    const bVX = TankInputTensor.bulletsData.get(tankEid, j * 4 + 2);
+                    const bVY = TankInputTensor.bulletsData.get(tankEid, j * 4 + 3);
+
+                    if ((bX1 === 0 && bY1 === 0) || hypot(bVX, bVY) < 100) continue;
+
+                    const distToBullet = hypot(bX1 - tankX, bY1 - tankY);
+                    const bX2 = bX1 + bVX;
+                    const bY2 = bY1 + bVY;
+                    const distToBulletTraverse = abs((bX2 - bX1) * (bY1 - tankX) - (bX1 - tankX) * (bY2 - bY1)) / hypot(bX2 - bX1, bY2 - bY1);
+
+                    if (distToBullet > 300 || distToBulletTraverse > 80) continue;
+
+                    rewardRecord.avoid += -0.2;
                 }
 
-                const reward = rewardRecord.map * 0.1 + rewardRecord.aim * 0.5 + rewardRecord.avoid * 0.1 + rewardRecord.health * 0.05;
+                const reward = rewardRecord.map * 3 + rewardRecord.aim * 10 + rewardRecord.avoid * 2 + rewardRecord.health * 0.1;
 
                 // Store total reward
                 const newTotalReward = (mapTankToReward.get(tankEid) || 0) + reward;
