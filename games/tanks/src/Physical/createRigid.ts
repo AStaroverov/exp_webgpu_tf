@@ -52,7 +52,6 @@ export function createRigidRectangle(
     o: CommonRigidOptions & {
         width: number,
         height: number,
-        rotation: number,
     },
     { physicalWorld } = DI,
 ) {
@@ -65,8 +64,6 @@ export function createRigidRectangle(
 
 export function createRigidCircle(
     o: CommonRigidOptions & {
-        x: number,
-        y: number,
         radius: number,
     },
     { physicalWorld } = DI,
