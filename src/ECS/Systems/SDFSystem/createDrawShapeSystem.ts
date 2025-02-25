@@ -28,7 +28,7 @@ export function createDrawShapeSystem(world: World, device: GPUDevice) {
     const roundnessChanges = createChangeDetector(world, [onAdd(Roundness), onSet(Roundness)]);
 
     return function drawShapeSystem(renderPass: GPURenderPassEncoder) {
-        const entities = query(world, [Shape, GlobalTransform, Color, Roundness]); // Shadow is optional
+        const entities = query(world, [Shape, GlobalTransform, Color]); // Roundness, Shadow is optional
 
         if (entities.length === 0) return;
 
