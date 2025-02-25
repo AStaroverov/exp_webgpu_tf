@@ -521,15 +521,17 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                 }
 
                 // Prepare state tensor
-                const tankX = TankInputTensor.x[tankEid] + vDelta;
-                const tankY = TankInputTensor.y[tankEid] + vDelta;
+                const tankX = TankInputTensor.x[tankEid];
+                const tankY = TankInputTensor.y[tankEid];
+                const vTankX = tankX + vDelta;
+                const vTankY = TankInputTensor.y[tankEid] + vDelta;
                 const inputVector = new Float32Array(INPUT_DIM);
                 let k = 0;
 
                 // Tank state
                 inputVector[k++] = TankInputTensor.health[tankEid];
-                inputVector[k++] = clamp(tankX / vWidth, 0, 1);
-                inputVector[k++] = clamp(tankY / vHeight, 0, 1);
+                inputVector[k++] = clamp(vTankX / vWidth, 0, 1);
+                inputVector[k++] = clamp(vTankY / vHeight, 0, 1);
                 inputVector[k++] = TankInputTensor.speed[tankEid] / maxSpeed;
                 inputVector[k++] = TankInputTensor.rotation[tankEid] / Math.PI;
                 inputVector[k++] = TankInputTensor.turretRotation[tankEid] / Math.PI;
@@ -572,9 +574,9 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                 // Get action from policy
                 const [actionTensor, logProbTensor] = agent.sampleAction(stateTensor);
                 const valueTensor = agent.evaluateState(stateTensor);
-
                 // Apply action to the game
                 const actions = actionTensor.dataSync();
+
                 const shouldShoot = actions[0] > 0;
                 TankController.setShooting(tankEid, shouldShoot);
                 TankController.setMove$(tankEid, actions[1]);

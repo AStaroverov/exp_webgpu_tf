@@ -7,11 +7,13 @@ import { getDrawState } from './utils.ts';
 
 export function createBattlefield(tanksCount: number) {
     const game = createGame();
+    const width = DI.canvas.offsetWidth;
+    const height = DI.canvas.offsetHeight;
 
     for (let i = 0; i < tanksCount; i++) {
         createTankRR({
-            x: 200 + (i % 3) * DI.canvas.offsetWidth / 3 + 100 * random(),
-            y: 100 + floor(i / 3) * DI.canvas.offsetHeight / 3 + 100 * random(),
+            x: 200 + (i % 3) * width / 3 + 100 * random(),
+            y: 200 + floor(i / 3) * height / 3 + 100 * random(),
             rotation: Math.PI / random(),
             color: [random(), random(), random(), 1],
         });

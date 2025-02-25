@@ -14,8 +14,7 @@ export const TankController = component(({
     addComponent(eid: number) {
         addComponent(DI.world, eid, TankController);
     },
-    shouldShoot(eid: number, delta: number = 0): boolean {
-        TankController.updateCooldown(eid, delta);
+    shouldShoot(eid: number): boolean {
         return TankController.shot[eid] > 0 && TankController.shotCooldown[eid] <= 0;
     },
     setShooting: ((eid: number, v: boolean): void => {
