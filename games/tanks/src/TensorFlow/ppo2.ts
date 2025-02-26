@@ -17,6 +17,8 @@ import { macroTasks } from '../../../../lib/TasksScheduler/macroTasks.ts';
 setWasmPaths('/node_modules/@tensorflow/tfjs-backend-wasm/dist/');
 await tf.setBackend('wasm');
 
+const TANK_RADIUS = 80;
+
 // Configuration constants
 export const TANK_COUNT_SIMULATION = 6; // Reduced to make training more manageable
 const TICK_TIME_REAL = 1;
@@ -31,8 +33,6 @@ const CLIP_EPSILON = 0.2;
 const ENTROPY_WEIGHTS = [0.02, 0.01, 0.01, 0.005, 0.005]; // [shoot, move, turn, targetX, targetY]
 const GAMMA = 0.99; // Discount factor
 const LAMBDA = 0.95; // GAE parameter
-
-const TANK_RADIUS = 80;
 
 // Dynamic learning rate based on episode count
 function getLearningRate(episodeNum: number, initialLR: number = 0.0003): number {
@@ -112,8 +112,7 @@ class PrioritizedExperienceBuffer {
     }
 
     // Calculate advantages using Generalized Advantage Estimation (GAE)
-    // Улучшенная версия с учетом флагов терминальных состояний
-    computeReturnsAndAdvantages(): [tf.Tensor, tf.Tensor] {
+    computeReturnsAndAdvantages(gamma = GAMMA, lambda = LAMBDA): [tf.Tensor, tf.Tensor] {
         const returns: number[] = new Array(this.rewards.length);
         const advantages: number[] = new Array(this.rewards.length);
 
@@ -129,17 +128,43 @@ class PrioritizedExperienceBuffer {
             const nextStateValue = done ? 0 : (i < this.rewards.length - 1 ? this.values[i + 1].dataSync()[0] : 0);
 
             // Compute TD error and GAE
-            const delta = reward + (done ? 0 : GAMMA * nextStateValue) - value;
-            nextAdvantage = delta + (done ? 0 : GAMMA * LAMBDA * nextAdvantage);
-            nextReturn = reward + (done ? 0 : GAMMA * nextReturn);
+            const delta = reward + (done ? 0 : gamma * nextStateValue) - value;
+            nextAdvantage = delta + (done ? 0 : gamma * lambda * nextAdvantage);
+            nextReturn = reward + (done ? 0 : gamma * nextReturn);
 
             returns[i] = nextReturn;
             advantages[i] = nextAdvantage;
         }
 
+        // Normalize advantages
+        let advantageSum = 0;
+        let advantageSqSum = 0;
+        for (let i = 0; i < advantages.length; i++) {
+            advantageSum += advantages[i];
+        }
+        const advantageMean = advantageSum / advantages.length;
+        for (let i = 0; i < advantages.length; i++) {
+            advantageSqSum += Math.pow(advantages[i] - advantageMean, 2);
+        }
+        const advantageStd = Math.sqrt(advantageSqSum / advantages.length) + 1e-8;
+        const normalizedAdvantages = advantages.map(adv => (adv - advantageMean) / advantageStd);
+
+        // Normalize returns
+        let returnSum = 0;
+        let returnSqSum = 0;
+        for (let i = 0; i < returns.length; i++) {
+            returnSum += returns[i];
+        }
+        const returnMean = returnSum / returns.length;
+        for (let i = 0; i < returns.length; i++) {
+            returnSqSum += Math.pow(returns[i] - returnMean, 2);
+        }
+        const returnStd = Math.sqrt(returnSqSum / returns.length) + 1e-8;
+        const normalizedReturns = returns.map(ret => (ret - returnMean) / returnStd);
+
         return [
-            tf.tensor1d(returns),
-            tf.tensor1d(advantages),
+            tf.tensor1d(normalizedReturns),
+            tf.tensor1d(normalizedAdvantages),
         ];
     }
 
@@ -274,9 +299,9 @@ class InputNormalizer {
     }
 }
 
-// Create Actor (Policy) Network - using separate models for means and std
+// Create Actor (Policy) Network with LSTM layer for better handling of partial observations
 function createActorModel(): { meanModel: LayersModel, stdModel: LayersModel } {
-    // Mean model
+    // Mean model with LSTM
     const meanModel = sequential();
     meanModel.add(layers.dense({
         inputShape: [INPUT_DIM],
@@ -284,11 +309,17 @@ function createActorModel(): { meanModel: LayersModel, stdModel: LayersModel } {
         activation: 'relu',
         kernelInitializer: 'glorotNormal',
     }));
-    meanModel.add(layers.dense({
+
+    // Reshape for LSTM
+    meanModel.add(layers.reshape({ targetShape: [1, 128] }));
+
+    // LSTM layer for sequence modeling
+    meanModel.add(layers.lstm({
         units: 64,
-        activation: 'relu',
+        returnSequences: false,
         kernelInitializer: 'glorotNormal',
     }));
+
     meanModel.add(layers.dense({
         units: ACTION_DIM,
         activation: 'tanh',  // Using tanh for [-1, 1] range
@@ -305,8 +336,9 @@ function createActorModel(): { meanModel: LayersModel, stdModel: LayersModel } {
     }));
     stdModel.add(layers.dense({
         units: ACTION_DIM,
-        activation: 'tanh',  // Constrain the log std for stability
-        biasInitializer: tf.initializers.constant({ value: -0.5 }),  // Initialize with small std
+        // Используем softplus вместо tanh для более мягкого ограничения логарифма стандартного отклонения
+        activation: 'softplus',
+        biasInitializer: tf.initializers.constant({ value: -1.0 }), // Начинаем с меньшего стандартного отклонения
     }));
 
     // Compile the models individually
@@ -316,7 +348,7 @@ function createActorModel(): { meanModel: LayersModel, stdModel: LayersModel } {
     return { meanModel, stdModel };
 }
 
-// Create Critic (Value) Network
+// Create Critic (Value) Network - также с LSTM
 function createCriticModel(): LayersModel {
     const model = sequential();
 
@@ -328,10 +360,13 @@ function createCriticModel(): LayersModel {
         kernelInitializer: 'glorotNormal',
     }));
 
-    // Hidden layers
-    model.add(layers.dense({
+    // Reshape for LSTM
+    model.add(layers.reshape({ targetShape: [1, 128] }));
+
+    // LSTM layer for sequence modeling
+    model.add(layers.lstm({
         units: 64,
-        activation: 'relu',
+        returnSequences: false,
         kernelInitializer: 'glorotNormal',
     }));
 
@@ -342,7 +377,7 @@ function createCriticModel(): LayersModel {
     }));
 
     model.compile({
-        optimizer: 'adam',
+        optimizer: tf.train.adam(0.0001), // Меньшая скорость обучения
         loss: 'meanSquaredError',
     });
 
@@ -847,9 +882,8 @@ function calculateReward(
         // Вычисляем точку ближайшего прохождения пули
         // (Упрощенно, используем линейное приближение траектории)
         const bulletSpeed = hypot(bulletVx, bulletVy);
-        const bulletDirectionX = bulletVx / bulletSpeed;
-        const bulletDirectionY = bulletVy / bulletSpeed;
-
+        const bulletDirectionX = bulletSpeed > 0.001 ? bulletVx / bulletSpeed : 0;
+        const bulletDirectionY = bulletSpeed > 0.001 ? bulletVy / bulletSpeed : 0;
         // Вектор от пули к танку
         const toTankX = tankX - bulletX;
         const toTankY = tankY - bulletY;
@@ -944,6 +978,10 @@ function calculateReward(
         rewardRecord.movement * 2.0 +
         rewardRecord.survival * 1.0;
 
+    if (totalReward < -20 || totalReward > 20) {
+        console.log('>> unexpected reward:', totalReward, rewardRecord);
+    }
+
     return {
         totalReward,
         rewards: rewardRecord,
@@ -964,7 +1002,7 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
         survival: [],
     };
 
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
         const { world, canvas, gameTick, destroy } = createBattlefield(TANK_COUNT_SIMULATION);
 
         // Maps to track tank state and metrics
@@ -994,256 +1032,265 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
         }
 
         const stopInterval = macroTasks.addInterval(() => {
-            steps++;
+            try {
 
-            // Terminate if episode is too long or all tanks are destroyed
-            const onlyOneTankLeft = tankEids.length === 1;
-            if (steps >= maxSteps || onlyOneTankLeft) {
-                if (onlyOneTankLeft) {
-                    // Reward for surviving
-                    const survivorEid = tankEids[0];
-                    const baseReward = mapTankToReward.get(survivorEid) || 0;
-                    const survivalBonus = 5.0; // Существенный бонус за победу
-                    mapTankToReward.set(survivorEid, baseReward + survivalBonus);
 
-                    // Логируем победителя
-                    console.log(`Tank ${ survivorEid } survived and got a bonus: ${ survivalBonus }`);
+                steps++;
+
+                // Terminate if episode is too long or all tanks are destroyed
+                const onlyOneTankLeft = tankEids.length === 1;
+                if (steps >= maxSteps || onlyOneTankLeft) {
+                    if (onlyOneTankLeft) {
+                        // Reward for surviving
+                        const survivorEid = tankEids[0];
+                        const baseReward = mapTankToReward.get(survivorEid) || 0;
+                        const survivalBonus = 5.0; // Существенный бонус за победу
+                        mapTankToReward.set(survivorEid, baseReward + survivalBonus);
+
+                        // Логируем победителя
+                        console.log(`Tank ${ survivorEid } survived and got a bonus: ${ survivalBonus }`);
+                    }
+
+                    // Статистика эпизода
+                    const rewardStats = Object.entries(episodeRewardComponents).map(([key, values]) => {
+                        const sum = values.reduce((a, b) => a + b, 0);
+                        const avg = values.length > 0 ? sum / values.length : 0;
+                        return `${ key }: ${ avg.toFixed(2) }`;
+                    }).join(', ');
+
+                    console.log(`Episode ended after ${ steps } steps with avg reward: ${
+                        episodeReward.length > 0 ?
+                            (episodeReward.reduce((a, b) => a + b, 0) / episodeReward.length).toFixed(2) :
+                            'N/A'
+                    }`);
+                    console.log(`Reward components: ${ rewardStats }`);
+
+                    destroy();
+                    stopInterval();
+
+                    const totalReward = episodeReward.reduce((a, b) => a + b, 0);
+                    resolve(totalReward);
+                    return;
                 }
 
-                // Статистика эпизода
-                const rewardStats = Object.entries(episodeRewardComponents).map(([key, values]) => {
-                    const sum = values.reduce((a, b) => a + b, 0);
-                    const avg = values.length > 0 ? sum / values.length : 0;
-                    return `${ key }: ${ avg.toFixed(2) }`;
-                }).join(', ');
+                const width = canvas.offsetWidth;
+                const height = canvas.offsetHeight;
+                const maxSpeed = 10_000;
 
-                console.log(`Episode ended after ${ steps } steps with avg reward: ${
-                    episodeReward.length > 0 ?
-                        (episodeReward.reduce((a, b) => a + b, 0) / episodeReward.length).toFixed(2) :
-                        'N/A'
-                }`);
-                console.log(`Reward components: ${ rewardStats }`);
+                // PHASE 1: Process each tank for state evaluation and action determination
+                for (let tankEid of tankEids) {
+                    // Initialize reward for this tank if not existing
+                    if (!mapTankToReward.has(tankEid)) {
+                        mapTankToReward.set(tankEid, 0);
+                    }
 
+                    // Check if tank is in a terminal state (flag from previous tick)
+                    if (mapTankToDone.get(tankEid)) continue;
+
+                    // Prepare state tensor
+                    const tankX = TankInputTensor.x[tankEid];
+                    const tankY = TankInputTensor.y[tankEid];
+                    const inputVector = new Float32Array(INPUT_DIM);
+                    let k = 0;
+
+                    // Tank state
+                    inputVector[k++] = TankInputTensor.health[tankEid];
+                    inputVector[k++] = tankX / width;
+                    inputVector[k++] = tankY / height;
+                    inputVector[k++] = TankInputTensor.speed[tankEid] / maxSpeed;
+                    inputVector[k++] = TankInputTensor.rotation[tankEid] / Math.PI;
+                    inputVector[k++] = TankInputTensor.turretRotation[tankEid] / Math.PI;
+                    inputVector[k++] = TankInputTensor.projectileSpeed[tankEid] / maxSpeed;
+
+                    // Enemies data
+                    const enemiesBuffer = TankInputTensor.enemiesData.getBatche(tankEid);
+                    for (let i = 0; i < TANK_INPUT_TENSOR_MAX_ENEMIES; i++) {
+                        enemiesBuffer[i * 4 + 0] = enemiesBuffer[i * 4 + 0] / width;
+                        enemiesBuffer[i * 4 + 1] = enemiesBuffer[i * 4 + 1] / height;
+                        enemiesBuffer[i * 4 + 2] = enemiesBuffer[i * 4 + 2] / maxSpeed;
+                        enemiesBuffer[i * 4 + 3] = enemiesBuffer[i * 4 + 3] / maxSpeed;
+                    }
+                    inputVector.set(enemiesBuffer, k);
+                    k += enemiesBuffer.length;
+
+                    // Bullets data
+                    const bulletsBuffer = TankInputTensor.bulletsData.getBatche(tankEid);
+                    for (let i = 0; i < TANK_INPUT_TENSOR_MAX_BULLETS; i++) {
+                        bulletsBuffer[i * 4 + 0] = bulletsBuffer[i * 4 + 0] / width;
+                        bulletsBuffer[i * 4 + 1] = bulletsBuffer[i * 4 + 1] / height;
+                        bulletsBuffer[i * 4 + 2] = bulletsBuffer[i * 4 + 2] / maxSpeed;
+                        bulletsBuffer[i * 4 + 3] = bulletsBuffer[i * 4 + 3] / maxSpeed;
+                    }
+                    inputVector.set(bulletsBuffer, k);
+                    k += bulletsBuffer.length;
+
+                    // Normalize input using the agent's input normalizer
+                    const normalizedInputVector = agent.inputNormalizer.normalize(inputVector);
+
+                    // Update normalizer with new data
+                    agent.inputNormalizer.update(inputVector);
+
+                    // Keep track of history for this tank
+                    let history = tankStateHistory.get(tankEid);
+                    if (history) {
+                        history.push(new Float32Array(normalizedInputVector));
+                        // Limit history length
+                        if (history.length > MAX_HISTORY_LENGTH) {
+                            history.shift();
+                        }
+                        tankStateHistory.set(tankEid, history);
+                    }
+
+                    // Create tensor from normalized input vector
+                    const stateTensor = tf.tensor2d(
+                        // @ts-ignore
+                        [normalizedInputVector],
+                    );
+
+                    // Get action from policy
+                    const [actionTensor, logProbTensor] = agent.sampleAction(stateTensor);
+                    const valueTensor = agent.evaluateState(stateTensor);
+
+                    // Apply action to the game
+                    const actions = actionTensor.dataSync();
+
+                    const shouldShoot = actions[0] > 0;
+                    TankController.setShooting(tankEid, shouldShoot);
+                    TankController.setMove$(tankEid, actions[1]);
+                    TankController.setRotate$(tankEid, actions[2]);
+                    TankController.setTurretTarget$(
+                        tankEid,
+                        ((actions[3] + 1) / 2) * width,
+                        ((actions[4] + 1) / 2) * height,
+                    );
+
+                    // Store tensors for later use after the game tick
+                    mapTankToState.set(tankEid, stateTensor);
+                    mapTankToAction.set(tankEid, actionTensor);
+                    mapTankToLogProb.set(tankEid, logProbTensor);
+                    mapTankToValue.set(tankEid, valueTensor);
+                }
+
+                // PHASE 2: Execute game tick after all controller updates
+                gameTick(TICK_TIME_SIMULATION);
+
+                // Get list of tanks after the game tick (some might be destroyed)
+                const previousTankEids = tankEids;
+                tankEids = [...query(world, [Tank, TankController, TankInputTensor])];
+
+                // Find tanks that were destroyed in this tick
+                const destroyedTanks = previousTankEids.filter(eid => !tankEids.includes(eid));
+
+                // Add terminal states for destroyed tanks
+                for (let destroyedEid of destroyedTanks) {
+                    mapTankToDone.set(destroyedEid, true);
+
+                    // Apply death penalty to destroyed tanks
+                    const prevReward = mapTankToReward.get(destroyedEid) || 0;
+                    const prevState = mapTankToState.get(destroyedEid);
+                    const prevAction = mapTankToAction.get(destroyedEid);
+                    const prevLogProb = mapTankToLogProb.get(destroyedEid);
+                    const prevValue = mapTankToValue.get(destroyedEid);
+
+                    const totalReward = prevReward - 3.0;
+                    mapTankToReward.set(destroyedEid, totalReward);
+
+                    // If we have a valid state-action pair from previous step, add it to the buffer
+                    if (prevState && prevAction && prevLogProb && prevValue) {
+                        agent.storeExperience(
+                            prevState,
+                            prevAction,
+                            prevLogProb,
+                            totalReward,
+                            prevValue,
+                            true,
+                        );
+
+                        // Add to episode reward tracking
+                        episodeReward.push(totalReward);
+                    }
+
+                    // If this is a terminal state, clean up the history
+                    tankStateHistory.delete(destroyedEid);
+
+                    console.log(`Tank ${ destroyedEid } was destroyed, terminal state applied`);
+                }
+
+                // PHASE 3: Calculate rewards and store experiences after the game tick
+                for (let tankEid of tankEids) {
+                    // Get previous health
+                    const prevHealth = mapTankToHealth.get(tankEid) || 1.0;
+                    const currentHealth = TankInputTensor.health[tankEid];
+
+                    // Update health tracking
+                    mapTankToHealth.set(tankEid, currentHealth);
+
+                    // Get previous action for reward calculation
+                    const actions = mapTankToAction.get(tankEid)?.dataSync();
+
+                    // Calculate reward using the enhanced reward function
+                    const { totalReward, rewards } = calculateReward(
+                        tankEid,
+                        actions || [0, 0, 0, 0, 0],
+                        prevHealth,
+                        width,
+                        height,
+                    );
+
+                    // Keep track of individual reward components for debugging
+                    Object.entries(rewards).forEach(([key, value]) => {
+                        if (episodeRewardComponents[key]) {
+                            episodeRewardComponents[key].push(value);
+                        }
+                    });
+
+                    // Add to total reward for this tank
+                    const newTotalReward = (mapTankToReward.get(tankEid) || 0) + totalReward;
+                    mapTankToReward.set(tankEid, newTotalReward);
+
+                    // Get previous tensor states
+                    const prevState = mapTankToState.get(tankEid);
+                    const prevAction = mapTankToAction.get(tankEid);
+                    const prevLogProb = mapTankToLogProb.get(tankEid);
+                    const prevValue = mapTankToValue.get(tankEid);
+
+                    // If we have a valid state-action pair from previous step, add it to the buffer
+                    if (prevState && prevAction && prevLogProb && prevValue) {
+                        agent.storeExperience(
+                            prevState,
+                            prevAction,
+                            prevLogProb,
+                            totalReward,
+                            prevValue,
+                            false,
+                        );
+
+                        // Add to episode reward tracking
+                        episodeReward.push(totalReward);
+                    }
+                }
+
+                // // Report progress every 100 steps
+                // if (steps % 100 === 0) {
+                //     const activeCount = tankEids.length;
+                //     const avgReward = episodeReward.length > 0 ?
+                //         episodeReward.slice(-100).reduce((a, b) => a + b, 0) / Math.min(100, episodeReward.length) :
+                //         0;
+                //
+                //     console.log(`Step ${ steps }: ${ activeCount } tanks active, recent avg reward: ${ avgReward.toFixed(2) }`);
+                // }
+            } catch (error) {
+                console.error('Error in game tick:', error);
                 destroy();
                 stopInterval();
-
-                const totalReward = episodeReward.reduce((a, b) => a + b, 0);
-                resolve(totalReward);
-                return;
+                reject(error);
             }
-
-            const width = canvas.offsetWidth;
-            const height = canvas.offsetHeight;
-            const maxSpeed = 10_000;
-
-            // PHASE 1: Process each tank for state evaluation and action determination
-            for (let tankEid of tankEids) {
-                // Initialize reward for this tank if not existing
-                if (!mapTankToReward.has(tankEid)) {
-                    mapTankToReward.set(tankEid, 0);
-                }
-
-                // Check if tank is in a terminal state (flag from previous tick)
-                if (mapTankToDone.get(tankEid)) continue;
-
-                // Prepare state tensor
-                const tankX = TankInputTensor.x[tankEid];
-                const tankY = TankInputTensor.y[tankEid];
-                const inputVector = new Float32Array(INPUT_DIM);
-                let k = 0;
-
-                // Tank state
-                inputVector[k++] = TankInputTensor.health[tankEid];
-                inputVector[k++] = tankX / width;
-                inputVector[k++] = tankY / height;
-                inputVector[k++] = TankInputTensor.speed[tankEid] / maxSpeed;
-                inputVector[k++] = TankInputTensor.rotation[tankEid] / Math.PI;
-                inputVector[k++] = TankInputTensor.turretRotation[tankEid] / Math.PI;
-                inputVector[k++] = TankInputTensor.projectileSpeed[tankEid] / maxSpeed;
-
-                // Enemies data
-                const enemiesBuffer = TankInputTensor.enemiesData.getBatche(tankEid);
-                for (let i = 0; i < TANK_INPUT_TENSOR_MAX_ENEMIES; i++) {
-                    enemiesBuffer[i * 4 + 0] = enemiesBuffer[i * 4 + 0] / width;
-                    enemiesBuffer[i * 4 + 1] = enemiesBuffer[i * 4 + 1] / height;
-                    enemiesBuffer[i * 4 + 2] = enemiesBuffer[i * 4 + 2] / maxSpeed;
-                    enemiesBuffer[i * 4 + 3] = enemiesBuffer[i * 4 + 3] / maxSpeed;
-                }
-                inputVector.set(enemiesBuffer, k);
-                k += enemiesBuffer.length;
-
-                // Bullets data
-                const bulletsBuffer = TankInputTensor.bulletsData.getBatche(tankEid);
-                for (let i = 0; i < TANK_INPUT_TENSOR_MAX_BULLETS; i++) {
-                    bulletsBuffer[i * 4 + 0] = bulletsBuffer[i * 4 + 0] / width;
-                    bulletsBuffer[i * 4 + 1] = bulletsBuffer[i * 4 + 1] / height;
-                    bulletsBuffer[i * 4 + 2] = bulletsBuffer[i * 4 + 2] / maxSpeed;
-                    bulletsBuffer[i * 4 + 3] = bulletsBuffer[i * 4 + 3] / maxSpeed;
-                }
-                inputVector.set(bulletsBuffer, k);
-                k += bulletsBuffer.length;
-
-                // Normalize input using the agent's input normalizer
-                const normalizedInputVector = agent.inputNormalizer.normalize(inputVector);
-
-                // Update normalizer with new data
-                agent.inputNormalizer.update(inputVector);
-
-                // Keep track of history for this tank
-                let history = tankStateHistory.get(tankEid);
-                if (history) {
-                    history.push(new Float32Array(normalizedInputVector));
-                    // Limit history length
-                    if (history.length > MAX_HISTORY_LENGTH) {
-                        history.shift();
-                    }
-                    tankStateHistory.set(tankEid, history);
-                }
-
-                // Create tensor from normalized input vector
-                const stateTensor = tf.tensor2d(
-                    // @ts-ignore
-                    [normalizedInputVector],
-                );
-
-                // Get action from policy
-                const [actionTensor, logProbTensor] = agent.sampleAction(stateTensor);
-                const valueTensor = agent.evaluateState(stateTensor);
-
-                // Apply action to the game
-                const actions = actionTensor.dataSync();
-
-                const shouldShoot = actions[0] > 0;
-                TankController.setShooting(tankEid, shouldShoot);
-                TankController.setMove$(tankEid, actions[1]);
-                TankController.setRotate$(tankEid, actions[2]);
-                TankController.setTurretTarget$(
-                    tankEid,
-                    ((actions[3] + 1) / 2) * width,
-                    ((actions[4] + 1) / 2) * height,
-                );
-
-                // Store tensors for later use after the game tick
-                mapTankToState.set(tankEid, stateTensor);
-                mapTankToAction.set(tankEid, actionTensor);
-                mapTankToLogProb.set(tankEid, logProbTensor);
-                mapTankToValue.set(tankEid, valueTensor);
-            }
-
-            // PHASE 2: Execute game tick after all controller updates
-            gameTick(TICK_TIME_SIMULATION);
-
-            // Get list of tanks after the game tick (some might be destroyed)
-            const previousTankEids = tankEids;
-            tankEids = [...query(world, [Tank, TankController, TankInputTensor])];
-
-            // Find tanks that were destroyed in this tick
-            const destroyedTanks = previousTankEids.filter(eid => !tankEids.includes(eid));
-
-            // Add terminal states for destroyed tanks
-            for (let destroyedEid of destroyedTanks) {
-                mapTankToDone.set(destroyedEid, true);
-
-                // Apply death penalty to destroyed tanks
-                const prevReward = mapTankToReward.get(destroyedEid) || 0;
-                const prevState = mapTankToState.get(destroyedEid);
-                const prevAction = mapTankToAction.get(destroyedEid);
-                const prevLogProb = mapTankToLogProb.get(destroyedEid);
-                const prevValue = mapTankToValue.get(destroyedEid);
-
-                const totalReward = prevReward - 3.0;
-                mapTankToReward.set(destroyedEid, totalReward);
-
-                // If we have a valid state-action pair from previous step, add it to the buffer
-                if (prevState && prevAction && prevLogProb && prevValue) {
-                    agent.storeExperience(
-                        prevState,
-                        prevAction,
-                        prevLogProb,
-                        totalReward,
-                        prevValue,
-                        true,
-                    );
-
-                    // Add to episode reward tracking
-                    episodeReward.push(totalReward);
-                }
-
-                // If this is a terminal state, clean up the history
-                tankStateHistory.delete(destroyedEid);
-
-                console.log(`Tank ${ destroyedEid } was destroyed, terminal state applied`);
-            }
-
-            // PHASE 3: Calculate rewards and store experiences after the game tick
-            for (let tankEid of tankEids) {
-                // Get previous health
-                const prevHealth = mapTankToHealth.get(tankEid) || 1.0;
-                const currentHealth = TankInputTensor.health[tankEid];
-
-                // Update health tracking
-                mapTankToHealth.set(tankEid, currentHealth);
-
-                // Get previous action for reward calculation
-                const actions = mapTankToAction.get(tankEid)?.dataSync();
-
-                // Calculate reward using the enhanced reward function
-                const { totalReward, rewards } = calculateReward(
-                    tankEid,
-                    actions || [0, 0, 0, 0, 0],
-                    prevHealth,
-                    width,
-                    height,
-                );
-
-                // Keep track of individual reward components for debugging
-                Object.entries(rewards).forEach(([key, value]) => {
-                    if (episodeRewardComponents[key]) {
-                        episodeRewardComponents[key].push(value);
-                    }
-                });
-
-                // Add to total reward for this tank
-                const newTotalReward = (mapTankToReward.get(tankEid) || 0) + totalReward;
-                mapTankToReward.set(tankEid, newTotalReward);
-
-                // Get previous tensor states
-                const prevState = mapTankToState.get(tankEid);
-                const prevAction = mapTankToAction.get(tankEid);
-                const prevLogProb = mapTankToLogProb.get(tankEid);
-                const prevValue = mapTankToValue.get(tankEid);
-
-                // If we have a valid state-action pair from previous step, add it to the buffer
-                if (prevState && prevAction && prevLogProb && prevValue) {
-                    agent.storeExperience(
-                        prevState,
-                        prevAction,
-                        prevLogProb,
-                        totalReward,
-                        prevValue,
-                        false,
-                    );
-
-                    // Add to episode reward tracking
-                    episodeReward.push(totalReward);
-                }
-            }
-
-            // // Report progress every 100 steps
-            // if (steps % 100 === 0) {
-            //     const activeCount = tankEids.length;
-            //     const avgReward = episodeReward.length > 0 ?
-            //         episodeReward.slice(-100).reduce((a, b) => a + b, 0) / Math.min(100, episodeReward.length) :
-            //         0;
-            //
-            //     console.log(`Step ${ steps }: ${ activeCount } tanks active, recent avg reward: ${ avgReward.toFixed(2) }`);
-            // }
         }, TICK_TIME_REAL);
     });
 }
 
 // Main enhanced PPO training function with better tracking and checkpointing
-async function trainPPO(episodes: number = 100, checkpointInterval: number = 5): Promise<void> {
+async function trainPPO(checkpointInterval: number = 5): Promise<void> {
     console.log('Starting enhanced PPO training...');
 
     const agent = new PPOAgent();
@@ -1280,15 +1327,15 @@ async function trainPPO(episodes: number = 100, checkpointInterval: number = 5):
         }
 
         // Training loop with improved checkpointing and error handling
-        for (let i = episodesCompleted; i < episodesCompleted + episodes; i++) {
-            console.log(`Starting episode ${ i + 1 }/${ episodesCompleted + episodes }`);
+        for (let i = episodesCompleted; i < Infinity; i++) {
+            console.log(`Starting episode ${ i + 1 }`);
 
             // Track episode start time for performance monitoring
             const episodeStartTime = performance.now();
 
             try {
                 // Run episode with a reasonable step limit
-                const maxSteps = 100; // Limit episode length
+                const maxSteps = 5000; // Limit episode length
                 const episodeReward = await runEpisode(agent, maxSteps);
                 totalReward += episodeReward;
 
@@ -1419,7 +1466,6 @@ async function trainPPO(episodes: number = 100, checkpointInterval: number = 5):
         console.log('Training completed successfully!');
         console.log(`Total episodes: ${ agent.episodeCount }`);
         console.log(`Best episode reward: ${ bestEpisodeReward.toFixed(2) }`);
-        console.log(`Average reward: ${ (totalReward / episodes).toFixed(2) }`);
 
         if (summaryWriter) {
             summaryWriter.close();
@@ -1444,4 +1490,4 @@ async function trainPPO(episodes: number = 100, checkpointInterval: number = 5):
     }
 }
 
-trainPPO(1_000, 5);
+trainPPO(5);
