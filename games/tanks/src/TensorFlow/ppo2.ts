@@ -7,7 +7,7 @@ import {
     TankInputTensor,
 } from '../ECS/Components/TankState';
 import { hypot, max, smoothstep } from '../../../../lib/math';
-import { clamp, inRange } from 'lodash-es';
+import { inRange } from 'lodash-es';
 import { TankController } from '../ECS/Components/TankController.ts';
 import { createBattlefield } from './createBattlefield.ts';
 import { query } from 'bitecs';
@@ -274,9 +274,9 @@ class InputNormalizer {
     }
 }
 
-// Create Actor (Policy) Network with LSTM layer for better handling of partial observations
+// Create Actor (Policy) Network - using separate models for means and std
 function createActorModel(): { meanModel: LayersModel, stdModel: LayersModel } {
-    // Mean model with LSTM
+    // Mean model
     const meanModel = sequential();
     meanModel.add(layers.dense({
         inputShape: [INPUT_DIM],
@@ -284,17 +284,11 @@ function createActorModel(): { meanModel: LayersModel, stdModel: LayersModel } {
         activation: 'relu',
         kernelInitializer: 'glorotNormal',
     }));
-
-    // Reshape for LSTM
-    meanModel.add(layers.reshape({ targetShape: [1, 128] }));
-
-    // LSTM layer for sequence modeling
-    meanModel.add(layers.lstm({
+    meanModel.add(layers.dense({
         units: 64,
-        returnSequences: false,
+        activation: 'relu',
         kernelInitializer: 'glorotNormal',
     }));
-
     meanModel.add(layers.dense({
         units: ACTION_DIM,
         activation: 'tanh',  // Using tanh for [-1, 1] range
@@ -311,9 +305,8 @@ function createActorModel(): { meanModel: LayersModel, stdModel: LayersModel } {
     }));
     stdModel.add(layers.dense({
         units: ACTION_DIM,
-        // Используем softplus вместо tanh для более мягкого ограничения логарифма стандартного отклонения
-        activation: 'softplus',
-        biasInitializer: tf.initializers.constant({ value: -1.0 }), // Начинаем с меньшего стандартного отклонения
+        activation: 'tanh',  // Constrain the log std for stability
+        biasInitializer: tf.initializers.constant({ value: -0.5 }),  // Initialize with small std
     }));
 
     // Compile the models individually
@@ -323,7 +316,7 @@ function createActorModel(): { meanModel: LayersModel, stdModel: LayersModel } {
     return { meanModel, stdModel };
 }
 
-// Create Critic (Value) Network - также с LSTM
+// Create Critic (Value) Network
 function createCriticModel(): LayersModel {
     const model = sequential();
 
@@ -335,13 +328,10 @@ function createCriticModel(): LayersModel {
         kernelInitializer: 'glorotNormal',
     }));
 
-    // Reshape for LSTM
-    model.add(layers.reshape({ targetShape: [1, 128] }));
-
-    // LSTM layer for sequence modeling
-    model.add(layers.lstm({
+    // Hidden layers
+    model.add(layers.dense({
         units: 64,
-        returnSequences: false,
+        activation: 'relu',
         kernelInitializer: 'glorotNormal',
     }));
 
@@ -1298,7 +1288,7 @@ async function trainPPO(episodes: number = 100, checkpointInterval: number = 5):
 
             try {
                 // Run episode with a reasonable step limit
-                const maxSteps = 5000; // Limit episode length
+                const maxSteps = 100; // Limit episode length
                 const episodeReward = await runEpisode(agent, maxSteps);
                 totalReward += episodeReward;
 
