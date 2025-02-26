@@ -11,7 +11,7 @@ import { TankController } from '../ECS/Components/TankController.ts';
 import { clamp, inRange } from 'lodash-es';
 import { createBattlefield } from './createBattlefield.ts';
 import { macroTasks } from '../../../../lib/TasksScheduler/macroTasks.ts';
-import { abs, dist2, hypot, max, min } from '../../../../lib/math.ts';
+import { abs, dist2, hypot, max, smoothstep } from '../../../../lib/math.ts';
 import { query } from 'bitecs';
 
 setWasmPaths('/node_modules/@tensorflow/tfjs-backend-wasm/dist/');
@@ -477,21 +477,22 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
         const mapTankToValue = new Map<number, tf.Tensor>();
         const mapTankToReward = new Map<number, number>();
 
+        // initial game tick
+        gameTick(TICK_TIME_SIMULATION);
+
         let steps = 0;
+        let tankEids = query(world, [Tank, TankController, TankInputTensor]);
         const stopInterval = macroTasks.addInterval(() => {
-            gameTick(TICK_TIME_SIMULATION);
             steps++;
 
             // Terminate if episode is too long or all tanks are destroyed
-            const tankEids = query(world, [Tank, TankController, TankInputTensor]);
             const onlyOneTankLeft = tankEids.length === 1;
-
-            if (onlyOneTankLeft) {
-                // Reward for surviving
-                mapTankToReward.set(tankEids[0], mapTankToReward.get(tankEids[0])! * 1.1);
-            }
-
             if (steps >= maxSteps || onlyOneTankLeft) {
+                if (onlyOneTankLeft) {
+                    // Reward for surviving
+                    mapTankToReward.set(tankEids[0], mapTankToReward.get(tankEids[0])! * 1.1);
+                }
+
                 console.log(`Episode ended after ${ steps } steps with avg reward: ${
                     episodeReward.length > 0 ?
                         (episodeReward.reduce((a, b) => a + b, 0) / episodeReward.length).toFixed(2) :
@@ -513,7 +514,7 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
             const vHeight = height + vDelta;
             const maxSpeed = 10_000;
 
-            // Process each tank
+            // PHASE 1: Process each tank for state evaluation and action determination
             for (let tankEid of tankEids) {
                 // Initialize reward for this tank if not existing
                 if (!mapTankToReward.has(tankEid)) {
@@ -521,9 +522,7 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                 }
 
                 // Prepare state tensor
-                const tankX = TankInputTensor.x[tankEid];
-                const tankY = TankInputTensor.y[tankEid];
-                const vTankX = tankX + vDelta;
+                const vTankX = TankInputTensor.x[tankEid] + vDelta;
                 const vTankY = TankInputTensor.y[tankEid] + vDelta;
                 const inputVector = new Float32Array(INPUT_DIM);
                 let k = 0;
@@ -565,15 +564,10 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                     [inputVector],
                 );
 
-                // Store previous state if it exists (for later training)
-                const prevState = mapTankToState.get(tankEid);
-                const prevAction = mapTankToAction.get(tankEid);
-                const prevLogProb = mapTankToLogProb.get(tankEid);
-                const prevValue = mapTankToValue.get(tankEid);
-
                 // Get action from policy
                 const [actionTensor, logProbTensor] = agent.sampleAction(stateTensor);
                 const valueTensor = agent.evaluateState(stateTensor);
+
                 // Apply action to the game
                 const actions = actionTensor.dataSync();
 
@@ -586,6 +580,23 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                     ((actions[3] + 1) / 2) * width,
                     ((actions[4] + 1) / 2) * height,
                 );
+
+                // Store tensors for later use after the game tick
+                mapTankToState.set(tankEid, stateTensor);
+                mapTankToAction.set(tankEid, actionTensor);
+                mapTankToLogProb.set(tankEid, logProbTensor);
+                mapTankToValue.set(tankEid, valueTensor);
+            }
+
+            // PHASE 2: Execute game tick after all controller updates
+            gameTick(TICK_TIME_SIMULATION);
+
+            tankEids = query(world, [Tank, TankController, TankInputTensor]);
+
+            // PHASE 3: Calculate rewards and store experiences after the game tick
+            for (let tankEid of tankEids) {
+                const tankX = TankInputTensor.x[tankEid];
+                const tankY = TankInputTensor.y[tankEid];
 
                 // Calculate reward components
                 const rewardRecord = {
@@ -617,10 +628,10 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                         const distFromTankToEnemy = dist2(tankX, tankY, enemyX, enemyY);
                         const aimReward =
                             max(0, 1 - distFromTargetToEnemy / TANK_RADIUS)
-                            * max(0, 1 - distFromTankToEnemy / 1000);
+                            * (1 - smoothstep(200, 800, distFromTankToEnemy));
                         rewardRecord.aim += aimReward;
 
-                        const avoidEnemyReward = 0.2 * min(1, distFromTankToEnemy / (TANK_RADIUS * 3));
+                        const avoidEnemyReward = distFromTankToEnemy > 200 ? 0.1 : 0;
                         rewardRecord.avoidEnemies += avoidEnemyReward;
                     }
                 }
@@ -628,12 +639,15 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                 if (!hasTargets) {
                     console.warn('No target found');
                 }
+
+                const actions = mapTankToAction.get(tankEid)?.dataSync();
+                const shouldShoot = actions && actions[0] > 0;
+
                 if (hasTargets && rewardRecord.aim > 0 && shouldShoot) {
                     rewardRecord.aim += 0.5;
                 }
 
                 // Reward for avoiding bullets
-
                 for (let j = 0; j < TANK_INPUT_TENSOR_MAX_BULLETS; j++) {
                     const bX1 = TankInputTensor.bulletsData.get(tankEid, j * 4);
                     const bY1 = TankInputTensor.bulletsData.get(tankEid, j * 4 + 1);
@@ -663,7 +677,13 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                 const newTotalReward = (mapTankToReward.get(tankEid) || 0) + reward;
                 mapTankToReward.set(tankEid, newTotalReward);
 
-                // If we have a previous state-action pair, add it to the buffer
+                // Get previous tensor states
+                const prevState = mapTankToState.get(tankEid);
+                const prevAction = mapTankToAction.get(tankEid);
+                const prevLogProb = mapTankToLogProb.get(tankEid);
+                const prevValue = mapTankToValue.get(tankEid);
+
+                // If we have a valid state-action pair from previous step, add it to the buffer
                 if (prevState && prevAction && prevLogProb && prevValue) {
                     agent.storeExperience(
                         prevState,
@@ -675,23 +695,10 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
 
                     // Add to episode reward tracking
                     episodeReward.push(reward);
-
-                    // Cleanup previous tensors
-                    prevState.dispose();
-                    prevAction.dispose();
-                    prevLogProb.dispose();
-                    prevValue.dispose();
                 }
-
-                // Update state, action map for next step
-                mapTankToState.set(tankEid, stateTensor);
-                mapTankToAction.set(tankEid, actionTensor);
-                mapTankToLogProb.set(tankEid, logProbTensor);
-                mapTankToValue.set(tankEid, valueTensor);
             }
         }, TICK_TIME_REAL);
     });
-
 }
 
 // Main PPO training function

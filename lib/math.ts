@@ -27,3 +27,8 @@ export function uround(n: number): number {
 export function dist2(x1: number, y1: number, x2: number, y2: number): number {
     return hypot(x2 - x1, y2 - y1);
 }
+
+export function smoothstep(edge0: number, edge1: number, x: number): number {
+    const t = max(0, min(1, (x - edge0) / (edge1 - edge0)));
+    return t * t * (3 - 2 * t);
+}

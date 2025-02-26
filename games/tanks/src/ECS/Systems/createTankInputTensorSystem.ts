@@ -87,7 +87,7 @@ export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
             // Find bullets
             let bulletIndex = 0;
 
-            for (let j = 1; j < 4; j++) {
+            for (let j = 1; j < 5; j++) {
                 const radius = 10 ** j;
                 physicalWorld.intersectionsWithShape(
                     translation,
@@ -95,8 +95,9 @@ export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
                     new Ball(radius),
                     (collider: Collider) => {
                         const eid = getEntityIdByPhysicalId(collider.handle);
+                        const vel = collider.parent()?.linvel();
 
-                        if (Player.id[eid] === playerId) {
+                        if (Player.id[eid] === playerId || vel == null || hypot(vel.x, vel.y) < 100) {
                             return true;
                         }
 

@@ -19,7 +19,7 @@ export function createTankAliveSystem({ world } = DI) {
         for (const tankEid of tankEids) {
             const hp = getTankHealth(tankEid);
 
-            if (hp < 0.75) {
+            if (hp === 0) {
                 // turret
                 const turretEid = Tank.turretEId[tankEid];
                 for (let i = 0; i < Children.entitiesCount[turretEid]; i++) {

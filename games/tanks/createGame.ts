@@ -78,7 +78,7 @@ export function createGame() {
             const rb2 = physicalWorld.getCollider(handle2).parent();
 
             // TODO: Replace magic number with a constant.
-            if (event.totalForceMagnitude() > 2642367.5) {
+            if (event.totalForceMagnitude() > 5_000_000) {
                 const eid1 = rb1 && getEntityIdByPhysicalId(rb1.handle);
                 const eid2 = rb2 && getEntityIdByPhysicalId(rb2.handle);
 

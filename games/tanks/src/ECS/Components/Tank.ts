@@ -18,6 +18,7 @@ import { addTankInputTensorComponent } from './TankState.ts';
 import { delegate } from '../../../../../src/delegate.ts';
 import { component, NestedArray, TypedArray } from '../../../../../src/utils.ts';
 import { ZIndex } from '../../consts.ts';
+import { min, smoothstep } from '../../../../../lib/math.ts';
 
 export const Tank = component({
     turretEId: TypedArray.f64(delegate.defaultSize),
@@ -274,9 +275,14 @@ export function getTankCurrentPartsCount(tankEid: number) {
     return Children.entitiesCount[tankEid] + Children.entitiesCount[Tank.turretEId[tankEid]];
 }
 
+export const HEALTH_THRESHOLD = 0.75;
+
 // return from 0 to 1
-export function getTankHealth(tankEid: number) {
+export function getTankHealth(tankEid: number): number {
     const initialPartsCount = Tank.initialPartsCount[tankEid];
     const partsCount = getTankCurrentPartsCount(tankEid);
-    return partsCount / initialPartsCount;
+    const absHealth = min(1, partsCount / initialPartsCount);
+    const health = smoothstep(HEALTH_THRESHOLD, 1, absHealth);
+    
+    return health;
 }
