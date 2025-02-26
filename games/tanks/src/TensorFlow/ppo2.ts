@@ -820,11 +820,6 @@ function calculateReward(
 
             rewardRecord.aim += max(0, aimQuality) * distanceImportance;
 
-            // Дополнительное вознаграждение за прицеливание в ближайшего врага
-            if (distFromTankToEnemy === closestEnemyDist && aimQuality > 0.7) {
-                rewardRecord.aim += 0.3;
-            }
-
             // Вознаграждение за поддержание безопасной дистанции
             if (distFromTankToEnemy < 150) {
                 // Слишком близко - опасно
@@ -1049,9 +1044,6 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
 
             const width = canvas.offsetWidth;
             const height = canvas.offsetHeight;
-            const vDelta = 200;
-            const vWidth = width + vDelta;
-            const vHeight = height + vDelta;
             const maxSpeed = 10_000;
 
             // PHASE 1: Process each tank for state evaluation and action determination
@@ -1065,15 +1057,15 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                 if (mapTankToDone.get(tankEid)) continue;
 
                 // Prepare state tensor
-                const vTankX = TankInputTensor.x[tankEid] + vDelta;
-                const vTankY = TankInputTensor.y[tankEid] + vDelta;
+                const tankX = TankInputTensor.x[tankEid];
+                const tankY = TankInputTensor.y[tankEid];
                 const inputVector = new Float32Array(INPUT_DIM);
                 let k = 0;
 
                 // Tank state
                 inputVector[k++] = TankInputTensor.health[tankEid];
-                inputVector[k++] = clamp(vTankX / vWidth, 0, 1);
-                inputVector[k++] = clamp(vTankY / vHeight, 0, 1);
+                inputVector[k++] = tankX / width;
+                inputVector[k++] = tankY / height;
                 inputVector[k++] = TankInputTensor.speed[tankEid] / maxSpeed;
                 inputVector[k++] = TankInputTensor.rotation[tankEid] / Math.PI;
                 inputVector[k++] = TankInputTensor.turretRotation[tankEid] / Math.PI;
@@ -1082,8 +1074,8 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                 // Enemies data
                 const enemiesBuffer = TankInputTensor.enemiesData.getBatche(tankEid);
                 for (let i = 0; i < TANK_INPUT_TENSOR_MAX_ENEMIES; i++) {
-                    enemiesBuffer[i * 4 + 0] = clamp(enemiesBuffer[i * 4 + 0] / vWidth, 0, 1);
-                    enemiesBuffer[i * 4 + 1] = clamp(enemiesBuffer[i * 4 + 1] / vHeight, 0, 1);
+                    enemiesBuffer[i * 4 + 0] = enemiesBuffer[i * 4 + 0] / width;
+                    enemiesBuffer[i * 4 + 1] = enemiesBuffer[i * 4 + 1] / height;
                     enemiesBuffer[i * 4 + 2] = enemiesBuffer[i * 4 + 2] / maxSpeed;
                     enemiesBuffer[i * 4 + 3] = enemiesBuffer[i * 4 + 3] / maxSpeed;
                 }
@@ -1093,8 +1085,8 @@ async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
                 // Bullets data
                 const bulletsBuffer = TankInputTensor.bulletsData.getBatche(tankEid);
                 for (let i = 0; i < TANK_INPUT_TENSOR_MAX_BULLETS; i++) {
-                    bulletsBuffer[i * 4 + 0] = clamp(bulletsBuffer[i * 4 + 0] / vWidth, 0, 1);
-                    bulletsBuffer[i * 4 + 1] = clamp(bulletsBuffer[i * 4 + 1] / vHeight, 0, 1);
+                    bulletsBuffer[i * 4 + 0] = bulletsBuffer[i * 4 + 0] / width;
+                    bulletsBuffer[i * 4 + 1] = bulletsBuffer[i * 4 + 1] / height;
                     bulletsBuffer[i * 4 + 2] = bulletsBuffer[i * 4 + 2] / maxSpeed;
                     bulletsBuffer[i * 4 + 3] = bulletsBuffer[i * 4 + 3] / maxSpeed;
                 }
@@ -1417,7 +1409,7 @@ async function trainPPO(episodes: number = 100, checkpointInterval: number = 5):
 
                 // Wait a moment before continuing to next episode
                 await new Promise(resolve => setTimeout(resolve, 5000));
-                 // Skip to next episode instead of crashing
+                // Skip to next episode instead of crashing
             }
         }
 
