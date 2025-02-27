@@ -1,7 +1,8 @@
-import { component, NestedArray, obs, TypedArray } from '../../../../../src/utils.ts';
+import { NestedArray, TypedArray } from '../../../../../src/utils.ts';
 import { delegate } from '../../../../../src/delegate.ts';
 import { addComponent } from 'bitecs';
 import { DI } from '../../DI';
+import { component, obs } from '../../../../../src/ECS/utils.ts';
 
 export const TankController = component(({
     move: TypedArray.f64(delegate.defaultSize),

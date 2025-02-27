@@ -1,6 +1,7 @@
 import { delegate } from '../../delegate.ts';
-import { component, obs, TypedArray } from '../../utils.ts';
+import { TypedArray } from '../../utils.ts';
 import { addComponent, World } from 'bitecs';
+import { component, obs } from '../utils.ts';
 
 export const Thinness = component({
     value: TypedArray.f64(delegate.defaultSize),

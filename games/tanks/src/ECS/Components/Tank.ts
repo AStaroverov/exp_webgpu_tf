@@ -16,9 +16,10 @@ import { TankController } from './TankController.ts';
 import { typicalRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 import { addTankInputTensorComponent } from './TankState.ts';
 import { delegate } from '../../../../../src/delegate.ts';
-import { component, NestedArray, TypedArray } from '../../../../../src/utils.ts';
+import { NestedArray, TypedArray } from '../../../../../src/utils.ts';
 import { ZIndex } from '../../consts.ts';
 import { min, smoothstep } from '../../../../../lib/math.ts';
+import { component } from '../../../../../src/ECS/utils.ts';
 
 export const Tank = component({
     turretEId: TypedArray.f64(delegate.defaultSize),
@@ -283,6 +284,6 @@ export function getTankHealth(tankEid: number): number {
     const partsCount = getTankCurrentPartsCount(tankEid);
     const absHealth = min(1, partsCount / initialPartsCount);
     const health = smoothstep(HEALTH_THRESHOLD, 1, absHealth);
-    
+
     return health;
 }

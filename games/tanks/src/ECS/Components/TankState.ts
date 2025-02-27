@@ -1,7 +1,8 @@
 import { addComponent } from 'bitecs';
 import { DI } from '../../DI';
-import { component, NestedArray, TypedArray } from '../../../../../src/utils.ts';
+import { NestedArray, TypedArray } from '../../../../../src/utils.ts';
 import { delegate } from '../../../../../src/delegate.ts';
+import { component } from '../../../../../src/ECS/utils.ts';
 
 export const TANK_INPUT_TENSOR_MAX_ENEMIES = 4;
 export const TANK_INPUT_TENSOR_MAX_BULLETS = 10;

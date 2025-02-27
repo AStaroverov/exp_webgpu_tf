@@ -1,7 +1,8 @@
-import { component, TypedArray } from '../../../../../src/utils.ts';
+import { TypedArray } from '../../../../../src/utils.ts';
 import { delegate } from '../../../../../src/delegate.ts';
 import { addComponent } from 'bitecs';
 import { DI } from '../../DI';
+import { component } from '../../../../../src/ECS/utils.ts';
 
 export const DestroyByTimeout = component({
     timeout: TypedArray.f64(delegate.defaultSize),
