@@ -5,13 +5,13 @@ import {
     TANK_INPUT_TENSOR_MAX_BULLETS,
     TANK_INPUT_TENSOR_MAX_ENEMIES,
     TankInputTensor,
-} from '../ECS/Components/TankState.ts';
-import { Tank } from '../ECS/Components/Tank.ts';
-import { TankController } from '../ECS/Components/TankController.ts';
+} from '../../ECS/Components/TankState.ts';
+import { Tank } from '../../ECS/Components/Tank.ts';
+import { TankController } from '../../ECS/Components/TankController.ts';
 import { inRange } from 'lodash-es';
-import { createBattlefield } from './createBattlefield.ts';
-import { macroTasks } from '../../../../lib/TasksScheduler/macroTasks.ts';
-import { dist2, max } from '../../../../lib/math.ts';
+import { createBattlefield } from '../createBattlefield.ts';
+import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
+import { dist2, max } from '../../../../../lib/math.ts';
 import { query } from 'bitecs';
 
 setWasmPaths('/node_modules/@tensorflow/tfjs-backend-wasm/dist/');

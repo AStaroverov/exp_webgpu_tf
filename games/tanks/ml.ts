@@ -1,4 +1,4 @@
-import './src/TensorFlow/ppo2.ts';
+import './src/TensorFlow/trainPPO.ts';
 
 window.onerror = () => {
     window.location.reload();
