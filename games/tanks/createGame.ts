@@ -27,6 +27,7 @@ import {
     destroyChangeDetectorSystem,
 } from '../../src/ECS/Systems/ChangedDetectorSystem.ts';
 import { createDestroyByTimeoutSystem } from './src/ECS/Systems/createDestroyByTimeoutSystem.ts';
+import { createDrawGrassSystem } from './src/ECS/Systems/Render/createDrawGrassSystem.ts';
 
 const canvas = document.querySelector('canvas')!;
 const { device, context } = await initWebGPU(canvas);
@@ -97,15 +98,17 @@ export function createGame() {
     };
 
 
-    const drawShapeSystem = createDrawShapeSystem(world, device);
+    const drawGrass = createDrawGrassSystem(device);
+    const drawShape = createDrawShapeSystem(world, device);
     const renderFrame = createFrameTick({
         canvas,
         device,
         context,
         background: [173, 193, 120, 255].map(v => v / 255),
         getPixelRatio: () => window.devicePixelRatio,
-    }, ({ passEncoder }) => {
-        drawShapeSystem(passEncoder);
+    }, ({ passEncoder, delta }) => {
+        drawGrass(passEncoder, delta);
+        drawShape(passEncoder);
     });
 
     const spawnBullets = createSpawnerBulletsSystem();
@@ -134,7 +137,7 @@ export function createGame() {
         // updateMap();
 
         // stats.begin();
-        withDraw && renderFrame();
+        withDraw && renderFrame(delta);
         // stats.end();
         // stats.update();
         //

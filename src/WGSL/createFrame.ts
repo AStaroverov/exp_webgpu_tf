@@ -8,6 +8,7 @@ export function createFrameTick(
         background: GPUColor,
         getPixelRatio: () => number,
     }, callback: (options: {
+        delta: number,
         context: GPUCanvasContext,
         device: GPUDevice,
         passEncoder: GPURenderPassEncoder
@@ -15,20 +16,18 @@ export function createFrameTick(
     const resizeSystem = createResizeSystem(canvas, getPixelRatio);
 
     const arg = {
+        delta: 0,
         context,
         device,
         passEncoder: null as unknown as GPURenderPassEncoder,
     };
 
-
-    return () => {
+    return (delta: number) => {
         const depthTexture = device.createTexture({
             size: [canvas.width, canvas.height, 1],
             format: 'depth32float',
             usage: GPUTextureUsage.RENDER_ATTACHMENT,
         });
-
-
         const depthView = depthTexture.createView();
         const textureView = context.getCurrentTexture().createView();
         const commandEncoder = device.createCommandEncoder();
@@ -49,6 +48,7 @@ export function createFrameTick(
             },
         });
 
+        arg.delta = delta;
         arg.passEncoder = passEncoder;
 
         resizeSystem();
