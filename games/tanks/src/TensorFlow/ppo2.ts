@@ -23,6 +23,9 @@ const TANK_RADIUS = 80;
 export const TANK_COUNT_SIMULATION = 6; // Reduced to make training more manageable
 const TICK_TIME_REAL = 1;
 const TICK_TIME_SIMULATION = 16.6667 * 2;
+
+const MAX_STEPS = 3000; // Limit episode length
+
 const INPUT_DIM = 63; // Tank state dimensions (same as your original implementation)
 const ACTION_DIM = 5; // [shoot, move, turn, targetX, targetY]
 
@@ -1335,8 +1338,7 @@ async function trainPPO(checkpointInterval: number = 5): Promise<void> {
 
             try {
                 // Run episode with a reasonable step limit
-                const maxSteps = 5000; // Limit episode length
-                const episodeReward = await runEpisode(agent, maxSteps);
+                const episodeReward = await runEpisode(agent, MAX_STEPS);
                 totalReward += episodeReward;
 
                 // Track episode duration for metrics
@@ -1345,7 +1347,7 @@ async function trainPPO(checkpointInterval: number = 5): Promise<void> {
 
                 // Update metrics
                 trainingMetrics.episodeRewards.push(episodeReward);
-                trainingMetrics.episodeLengths.push(maxSteps); // This will be actual steps if terminated early
+                trainingMetrics.episodeLengths.push(MAX_STEPS); // This will be actual steps if terminated early
                 trainingMetrics.avgRewards.push(totalReward / (i + 1 - episodesCompleted));
 
                 // Train after each episode
@@ -1418,6 +1420,11 @@ async function trainPPO(checkpointInterval: number = 5): Promise<void> {
                     } catch (error) {
                         console.warn('Failed to save metrics:', error);
                     }
+
+                    if (i >= 100) {
+                        // because of tensoflow.js memory leak
+                        window.location.reload();
+                    }
                 }
 
                 // Log to tensorboard if available
@@ -1429,7 +1436,7 @@ async function trainPPO(checkpointInterval: number = 5): Promise<void> {
                         summaryWriter.scalar('loss/critic', criticLossSum / trainingIterations, i);
                     }
                     summaryWriter.scalar('training/buffer_size', agent.buffer.size, i);
-                    summaryWriter.scalar('training/episode_length', maxSteps, i);
+                    summaryWriter.scalar('training/episode_length', MAX_STEPS, i);
                     summaryWriter.flush();
                 }
 

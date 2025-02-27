@@ -19,6 +19,7 @@ import { addPlayerComponent, Player } from './Player.ts';
 import { Tank } from './Tank.ts';
 import { random } from '../../../../../lib/random.ts';
 import { ZIndex } from '../../consts.ts';
+import { DestroyByTimeout } from './Destroy.ts';
 
 export const Bullet = {};
 
@@ -60,9 +61,10 @@ export function createBulletRR(options: Partial<Options> & { speed: number, play
 
     const [bulletId] = createCircleRR(optionsBulletRR);
     addComponent(world, bulletId, Bullet);
+    addTransformComponents(world, bulletId);
     addPlayerComponent(bulletId, options.playerId);
     Hitable.addComponent(bulletId);
-    addTransformComponents(world, bulletId);
+    DestroyByTimeout.addComponent(bulletId, 20_000);
 
     return bulletId;
 }

@@ -26,6 +26,7 @@ import {
     createChangeDetectorSystem,
     destroyChangeDetectorSystem,
 } from '../../src/ECS/Systems/ChangedDetectorSystem.ts';
+import { createDestroyByTimeoutSystem } from './src/ECS/Systems/createDestroyByTimeoutSystem.ts';
 
 const canvas = document.querySelector('canvas')!;
 const { device, context } = await initWebGPU(canvas);
@@ -113,8 +114,10 @@ export function createGame() {
     };
 
     const destroyOutZone = createOutZoneDestroySystem();
-    const destroyFrame = () => {
+    const destroyByTimeout = createDestroyByTimeoutSystem();
+    const destroyFrame = (delta: number) => {
         destroyOutZone();
+        destroyByTimeout(delta);
     };
 
 
@@ -135,7 +138,7 @@ export function createGame() {
         // stats.end();
         // stats.update();
         //
-        destroyFrame();
+        destroyFrame(delta);
 
         statsFrame();
 
