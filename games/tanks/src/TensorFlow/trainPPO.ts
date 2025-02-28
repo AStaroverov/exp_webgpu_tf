@@ -20,7 +20,7 @@ const TRAINING_CONFIG = {
     MODEL_VERSION_INTERVAL: 100,    // Интервал для сохранения версионных моделей
     WARMUP_EPISODES: 10,            // Количество эпизодов разминки перед обучением
     RECOVERY_WAIT_TIME: 5000,       // Время ожидания после ошибки (мс)
-    MAJOR_VERSION_INTERVAL: 1000,   // Интервал для сохранения основных версий модели
+    MAJOR_VERSION_INTERVAL: 200,   // Интервал для сохранения основных версий модели
 };
 
 // Определение типа для состояния обучения (для восстановления)
@@ -35,9 +35,6 @@ interface TrainingState {
 // Полная обновленная функция обучения с улучшенными механизмами
 async function trainPPO(): Promise<void> {
     console.log('Запуск улучшенного PPO обучения...');
-
-    // Инициализация TensorFlow.js для отслеживания утечек памяти
-    tf.engine().startScope(); // Начинаем новую область для отслеживания тензоров
 
     // Попытка загрузки предыдущего состояния обучения
     let trainingState: TrainingState = {
@@ -246,18 +243,6 @@ async function trainPPO(): Promise<void> {
                     console.log('Перезагрузка страницы для очистки памяти...');
                     window.location.reload();
                     return; // Выход из функции, т.к. страница будет перезагружена
-                }
-
-                // Очистка тензоров для предотвращения утечек памяти
-                if (trainingState.currentEpisode % 10 === 0) {
-                    // Проверяем, сколько тензоров не было убрано сборщиком мусора
-                    const numTensors = tf.memory().numTensors;
-                    if (numTensors > 1000) {  // Порог для принудительной очистки
-                        console.log(`Обнаружена потенциальная утечка памяти: ${ numTensors } тензоров. Запуск принудительной сборки мусора.`);
-                        tf.engine().endScope();
-                        tf.engine().startScope();
-                        await tf.nextFrame();  // Даем время для сборки мусора
-                    }
                 }
             } catch (error) {
                 console.error(`Ошибка в эпизоде ${ trainingState.currentEpisode }:`, error);
