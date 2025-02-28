@@ -61,7 +61,7 @@ async function trainPPO(): Promise<void> {
 
     try {
         // Пытаемся загрузить существующие модели
-        const loaded = await agent.loadModels();
+        const loaded = await agent.loadModels('latest');
         if (!loaded) {
             console.log('Начинаем с новыми моделями');
 
@@ -86,7 +86,6 @@ async function trainPPO(): Promise<void> {
                 && trainingState.explorationEndEpisode !== null
                 && trainingState.currentEpisode >= trainingState.explorationEndEpisode
             ) {
-
                 console.log('Выход из режима усиленного исследования');
                 trainingState.explorationModeActive = false;
 
@@ -113,11 +112,9 @@ async function trainPPO(): Promise<void> {
 
                 episodeRewards.add(episodeReward);
 
-                // После добавления награды эпизода в массив
-                if (episodeRewards.isFull()) {
-                    const avgReward = episodeRewards.toArray().reduce((a, b) => a + b, 0) / episodeRewards.getPos();
-                    console.log(`Средняя награда (100 эпизодов): ${ avgReward.toFixed(4) }`);
-                }
+                // выводим среднюю награду
+                const avgReward = episodeRewards.toArray().reduce((a, b) => a + b, 0) / episodeRewards.getBufferLength();
+                console.log(`Средняя награда (${ episodeRewards.getBufferLength() } эпизодов): ${ avgReward.toFixed(4) }`);
 
                 // И проверку на застой:
                 if (
@@ -133,7 +130,7 @@ async function trainPPO(): Promise<void> {
                 }
 
                 // Обучение на собранном опыте
-                if (trainingState.currentEpisode >= TRAINING_CONFIG.WARMUP_EPISODES) {
+                {
                     const trainingStartTime = performance.now();
                     let actorLossSum = 0;
                     let criticLossSum = 0;
@@ -187,20 +184,13 @@ async function trainPPO(): Promise<void> {
                     console.log(`Новая лучшая модель сохранена с наградой: ${ trainingState.bestReward.toFixed(2) }`);
                 }
 
-                // Сохраняем состояние обучения
-                localStorage.setItem('tank-training-state', JSON.stringify(trainingState));
-
                 // Регулярное создание контрольных точек
                 if ((trainingState.currentEpisode) % TRAINING_CONFIG.CHECKPOINT_INTERVAL === 0) {
-                    await agent.saveModels();
+                    // Сохраняем состояние обучения
+                    localStorage.setItem('tank-training-state', JSON.stringify(trainingState));
+                    await agent.saveModels('latest');
                     console.log(`Контрольная точка сохранена на эпизоде ${ trainingState.currentEpisode }`);
                     trainingState.lastCheckpoint = trainingState.currentEpisode;
-                }
-
-                // Сохраняем версионную модель с номером эпизода
-                if ((trainingState.currentEpisode) % TRAINING_CONFIG.MODEL_VERSION_INTERVAL === 0) {
-                    await agent.saveModels(`ep${ trainingState.currentEpisode }`);
-                    console.log(`Версионная модель ep${ trainingState.currentEpisode } сохранена`);
                 }
 
                 // Периодический сброс для усиления исследования
@@ -208,11 +198,10 @@ async function trainPPO(): Promise<void> {
                     trainingState.currentEpisode % TRAINING_CONFIG.EXPLORATION_RESET_INTERVAL === 0
                     && !trainingState.explorationModeActive
                 ) {
-
                     console.log(`Плановое усиление исследования на эпизоде ${ trainingState.currentEpisode }`);
 
                     // Сохраняем текущую модель
-                    await agent.saveModels(`before_exploration_${ trainingState.currentEpisode }`);
+                    await agent.saveModels(`before_exploration`);
 
                     // Применяем частичный сброс весов к stdModel для увеличения исследования
                     await resetPartialWeights(agent.actorStd, 0.5);
@@ -236,7 +225,7 @@ async function trainPPO(): Promise<void> {
                 // Для основных версий моделей (каждые 1000 эпизодов)
                 if (trainingState.currentEpisode % TRAINING_CONFIG.MAJOR_VERSION_INTERVAL === 0) {
                     const majorVersion = Math.floor(trainingState.currentEpisode / TRAINING_CONFIG.MAJOR_VERSION_INTERVAL);
-                    await agent.saveModels(`v${ majorVersion }`);
+                    await agent.saveModels('latest');
                     console.log(`Основная версия модели v${ majorVersion } сохранена`);
 
                     // Перезагрузка страницы для борьбы с утечкой памяти в TensorFlow.js
@@ -249,14 +238,13 @@ async function trainPPO(): Promise<void> {
 
                 // Пытаемся сохранить текущее состояние перед восстановлением
                 try {
-                    await agent.saveModels('recovery');
+                    await agent.saveModels('latest');
                     console.log('Сохранена точка восстановления');
+                    // Сохраняем состояние обучения
+                    localStorage.setItem('tank-training-state', JSON.stringify(trainingState));
                 } catch (saveError) {
                     console.error('Не удалось сохранить точку восстановления:', saveError);
                 }
-
-                // Сохраняем состояние обучения
-                localStorage.setItem('tank-training-state', JSON.stringify(trainingState));
 
                 // Ждем перед продолжением
                 await new Promise(resolve => setTimeout(resolve, TRAINING_CONFIG.RECOVERY_WAIT_TIME));
@@ -267,20 +255,16 @@ async function trainPPO(): Promise<void> {
 
         // Пытаемся экстренно сохранить
         try {
-            await agent.saveModels('emergency');
-            console.log('Экстренное сохранение выполнено');
+            await agent.saveModels('latest');
+            console.log('Сохранена точка восстановления');
+            // Сохраняем состояние обучения
+            localStorage.setItem('tank-training-state', JSON.stringify(trainingState));
         } catch (saveError) {
             console.error('Не удалось выполнить экстренное сохранение:', saveError);
         }
 
-        // Сохраняем состояние обучения
-        localStorage.setItem('tank-training-state', JSON.stringify(trainingState));
-
         // Ждем перед перезагрузкой страницы
         window.location.reload();
-    } finally {
-        // Заканчиваем область отслеживания тензоров
-        tf.engine().endScope();
     }
 }
 

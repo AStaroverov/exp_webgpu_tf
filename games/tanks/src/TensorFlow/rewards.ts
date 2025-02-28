@@ -7,23 +7,23 @@ import {
 import { TankController } from '../ECS/Components/TankController.ts';
 import { hypot } from '../../../../lib/math.ts';
 import { TANK_RADIUS } from './consts.ts';
-import { clamp } from 'lodash-es';
 
 // Константы для калибровки вознаграждений
 const REWARD_WEIGHTS = {
-    HEALTH_CHANGE: 15.0,       // Значительный вес за изменение здоровья
-    HEALTH_BONUS: 0.1,         // Небольшой бонус за оставшееся здоровье
-    AIM_QUALITY: 5.0,                  // Вес за точное прицеливание
-    SHOOTING_AIMED: 1.5,        // Бонус за стрельбу при хорошем прицеливании
-    SHOOTING_RANDOM: -0.3,      // Штраф за случайную стрельбу
-    BULLET_AVOIDANCE: -1.2,     // Штраф за нахождение на пути пули
-    MOVEMENT_BASE: 0.05,        // Базовый бонус за движение
-    STRATEGIC_MOVEMENT: 0.2,    // Бонус за стратегическое движение
-    SURVIVAL: 0.02,             // Основной бонус за выживание
-    MAP_BORDER: -5.0,           // Значительный штраф за выход за границы
-    BORDER_GRADIENT: -0.5,      // Градиентный штраф при приближении к границе
+    HEALTH_CHANGE: 7.0,        // За потерю всего здоровья (от 1 до 0) штраф -7
+    HEALTH_BONUS: 0.05,        // За полное здоровье бонус +0.05 (незначительный)
+    AIM_QUALITY: 2.5,                  // Максимум +2.5 за идеальное прицеливание
+    SHOOTING_AIMED: 1.0,        // +1.0 за стрельбу при хорошем прицеливании
+    SHOOTING_RANDOM: -0.5,      // -0.5 за случайную стрельбу
+    BULLET_AVOIDANCE: -2.0,     // До -2.0 за нахождение на пути пули
+    MOVEMENT_BASE: 0.05,        // Незначительный бонус за движение
+    STRATEGIC_MOVEMENT: 0.2,    // Небольшой бонус за стратегическое движение
+    SURVIVAL: 0.02,             // Маленький постоянный бонус за выживание
+    MAP_BORDER: -3.0,           // Значительный штраф за выход за границы
+    BORDER_GRADIENT: -0.5,      // Умеренный штраф при приближении к границе
     DISTANCE_KEEPING: 0.3,      // Бонус за поддержание оптимальной дистанции
-    VICTORY: 5.0,                // Бонус за победу (последний оставшийся танк)
+    VICTORY: 10.0,              // Полный бонус +10 за победу (лучший исход)
+    DEATH: -5.0,                 // Существенный штраф -5 за уничтожение (но не самый худший)
 };
 
 // Хранение предыдущих состояний для каждого танка
@@ -299,8 +299,6 @@ export function calculateReward(
         rewardRecord.exploration = repeatedActionPenalty;
     }
 
-    // Рассчитываем итоговое вознаграждение
-    // Упрощаем структуру - делаем линейное вознаграждение без множителей
     const totalReward =
         rewardRecord.map +
         rewardRecord.health +
@@ -311,11 +309,10 @@ export function calculateReward(
         rewardRecord.survival +
         rewardRecord.exploration;
 
-    // Клиппирование вознаграждения для предотвращения экстремальных значений
-    const clippedReward = clamp(totalReward, -10, 10);
+    const clippedReward = Math.max(-15, Math.min(15, totalReward));
 
-    if (Math.abs(totalReward - clippedReward) > 0.001) {
-        console.log('Warning: Reward clipped from', totalReward, 'to', clippedReward);
+    if (Math.abs(totalReward - clippedReward) > 3.0) {
+        console.warn('Warning: Extreme reward clipped from', totalReward, 'to', clippedReward);
     }
 
     return {

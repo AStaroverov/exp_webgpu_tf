@@ -2,11 +2,11 @@ import * as tf from '@tensorflow/tfjs';
 import { LayersModel, Scalar } from '@tensorflow/tfjs';
 import { createActorModel, createCriticModel, createExplorationBiasedActorModel } from './models.ts';
 import { ACTION_DIM, INPUT_DIM } from './consts.ts';
+import { clamp } from 'lodash-es';
 
-const PPO_EPOCHS = 8;
+const PPO_EPOCHS = 4;
 export const BATCH_SIZE = 128;
-const CLIP_EPSILON = 0.3;
-const ENTROPY_WEIGHTS = [0.05, 0.02, 0.02, 0.01, 0.01];
+const CLIP_EPSILON = 0.2;
 const GAMMA = 0.99; // Discount factor
 const LAMBDA = 0.95; // GAE parameter
 
@@ -23,7 +23,7 @@ class PrioritizedExperienceBuffer {
     beta: number = 0.4; // Исходное значение бета для важности выборки (начинаем с 0.4 и увеличиваем до 1)
     betaAnnealing: number = 0.001; // Скорость увеличения бета
 
-    constructor(private capacity: number = 1024 * 4) {
+    constructor(private capacity: number = 1024 * 2) {
     }
 
     get size() {
@@ -87,51 +87,83 @@ class PrioritizedExperienceBuffer {
         const returns: number[] = new Array(this.rewards.length);
         const advantages: number[] = new Array(this.rewards.length);
 
-        let nextReturn = 0; // Для терминального состояния, начинаем с нуля
+        let nextReturn = 0;
         let nextAdvantage = 0;
 
+        // Первый проход: вычисление исходных значений
         for (let i = this.rewards.length - 1; i >= 0; i--) {
             const reward = this.rewards[i];
             const value = this.values[i].dataSync()[0];
             const done = this.dones[i];
 
-            // Для терминальных состояний, следующее возвращаемое значение - это только reward
             const nextStateValue = done ? 0 : (i < this.rewards.length - 1 ? this.values[i + 1].dataSync()[0] : 0);
 
-            // Compute TD error and GAE
-            const delta = reward + (done ? 0 : gamma * nextStateValue) - value;
+            // Клиппинг разницы между наградой и ценностью для избежания экстремальных значений
+            const delta = Math.max(-50, Math.min(50, reward + (done ? 0 : gamma * nextStateValue) - value));
+
+            // Аккумулируем преимущество с ограничением
             nextAdvantage = delta + (done ? 0 : gamma * lambda * nextAdvantage);
+            nextAdvantage = Math.max(-100, Math.min(100, nextAdvantage)); // Явное ограничение
+
+            // Аккумулируем возвращаемое значение с ограничением
             nextReturn = reward + (done ? 0 : gamma * nextReturn);
+            nextReturn = Math.max(-100, Math.min(100, nextReturn)); // Явное ограничение
 
             returns[i] = nextReturn;
             advantages[i] = nextAdvantage;
         }
 
-        // Normalize advantages
+        // Второй проход: нормализация и более агрессивное клиппинг
         let advantageSum = 0;
-        let advantageSqSum = 0;
         for (let i = 0; i < advantages.length; i++) {
             advantageSum += advantages[i];
         }
         const advantageMean = advantageSum / advantages.length;
+
+        let advantageSqSum = 0;
         for (let i = 0; i < advantages.length; i++) {
             advantageSqSum += Math.pow(advantages[i] - advantageMean, 2);
         }
         const advantageStd = Math.sqrt(advantageSqSum / advantages.length) + 1e-8;
-        const normalizedAdvantages = advantages.map(adv => (adv - advantageMean) / advantageStd);
 
-        // Normalize returns
+        // Нормализация с жёстким клиппингом до диапазона [-5, 5]
+        const normalizedAdvantages = advantages.map(adv => {
+            const normalized = (adv - advantageMean) / advantageStd;
+            return Math.max(-5, Math.min(5, normalized)); // Жесткий клиппинг
+        });
+
+        // Аналогично для returns
         let returnSum = 0;
-        let returnSqSum = 0;
         for (let i = 0; i < returns.length; i++) {
             returnSum += returns[i];
         }
         const returnMean = returnSum / returns.length;
+
+        let returnSqSum = 0;
         for (let i = 0; i < returns.length; i++) {
             returnSqSum += Math.pow(returns[i] - returnMean, 2);
         }
         const returnStd = Math.sqrt(returnSqSum / returns.length) + 1e-8;
-        const normalizedReturns = returns.map(ret => (ret - returnMean) / returnStd);
+
+        const normalizedReturns = returns.map(ret => {
+            const normalized = (ret - returnMean) / returnStd;
+            return Math.max(-5, Math.min(5, normalized)); // Жесткий клиппинг
+        });
+
+        // Проверка на NaN
+        if (normalizedReturns.some(isNaN)) {
+            console.error('NaN in normalized returns:', returns, returnMean, returnStd);
+        }
+        if (normalizedAdvantages.some(isNaN)) {
+            console.error('NaN in normalized advantages:', advantages, advantageMean, advantageStd);
+        }
+
+        // Необязательно: лог статистики для мониторинга
+        const advMax = Math.max(...normalizedAdvantages);
+        const advMin = Math.min(...normalizedAdvantages);
+        const retMax = Math.max(...normalizedReturns);
+        const retMin = Math.min(...normalizedReturns);
+        console.log(`Advantage range: [${ advMin.toFixed(2) }, ${ advMax.toFixed(2) }], Return range: [${ retMin.toFixed(2) }, ${ retMax.toFixed(2) }]`);
 
         return [
             tf.tensor1d(normalizedReturns),
@@ -204,62 +236,134 @@ class PrioritizedExperienceBuffer {
 // Input statistics for normalization
 class InputNormalizer {
     private mean: number[];
-    private var: number[];
+    private std: number[];
     private count: number;
     private runningStats: boolean;
+    private clipValue: number;
+    private minStd: number;
 
-    constructor(inputDim: number, runningStats: boolean = true) {
+    constructor(inputDim: number, runningStats: boolean = true, clipValue: number = 3.0) {
         this.mean = new Array(inputDim).fill(0);
-        this.var = new Array(inputDim).fill(1);
+        this.std = new Array(inputDim).fill(1);
         this.count = 0;
         this.runningStats = runningStats;
+        this.clipValue = clipValue;
+        this.minStd = 0.1; // Минимальное стандартное отклонение для предотвращения деления на близкие к нулю значения
     }
 
     update(inputVector: Float32Array) {
         if (!this.runningStats) return;
 
         this.count++;
+
+        // Разные коэффициенты обновления для начального периода и для зрелого обучения
+        let alpha: number;
+
+        if (this.count <= 1000) {
+            // Для начальных наблюдений используем более быстрое обновление
+            alpha = 1.0 / this.count;
+        } else {
+            // После накопления базовой статистики используем экспоненциальное скользящее среднее
+            // 0.001 означает, что учитываем 0.1% нового наблюдения и 99.9% накопленной статистики
+            alpha = 0.001;
+        }
+
         for (let i = 0; i < inputVector.length; i++) {
-            const delta = inputVector[i] - this.mean[i];
-            this.mean[i] += delta / this.count;
-            this.var[i] += delta * (inputVector[i] - this.mean[i]);
+            // Пропускаем невалидные значения
+            if (!isFinite(inputVector[i])) {
+                console.warn(`Невалидное значение в inputVector[${ i }]: ${ inputVector[i] }, пропускаем`);
+                continue;
+            }
+
+            // Вычисляем разницу от текущего среднего
+            const oldMean = this.mean[i];
+            const delta = inputVector[i] - oldMean;
+
+            // Обновляем среднее значение
+            this.mean[i] += alpha * delta;
+
+            // Обновляем стандартное отклонение через скользящую дисперсию
+            if (this.count > 1) {
+                // Рекуррентная формула для обновления дисперсии
+                const newDelta = inputVector[i] - this.mean[i]; // Дельта с учетом обновленного среднего
+                this.std[i] = (1 - alpha) * this.std[i] + alpha * (Math.abs(delta) + Math.abs(newDelta)) / 2;
+            }
         }
     }
 
     normalize(inputVector: Float32Array): Float32Array {
         const normalizedInput = new Float32Array(inputVector.length);
 
-        if (this.count > 1) {
+        if (this.count > 10) { // Начинаем нормализацию только после некоторого количества наблюдений
             for (let i = 0; i < inputVector.length; i++) {
-                const std = Math.sqrt(this.var[i] / (this.count - 1));
-                normalizedInput[i] = (inputVector[i] - this.mean[i]) / (std + 1e-8);
+                // Проверка на валидность входных данных
+                if (!isFinite(inputVector[i])) {
+                    normalizedInput[i] = 0; // Заменяем невалидные значения нулями
+                    console.warn(`Невалидное значение на входе normalize(): ${ inputVector[i] } на позиции ${ i }`);
+                    continue;
+                }
+
+                // Используем стандартную нормализацию (z-score) с защитой от малых значений std
+                const stdValue = Math.max(this.minStd, this.std[i]);
+
+                // Нормализуем и клиппируем значения
+                let normalizedValue = (inputVector[i] - this.mean[i]) / stdValue;
+
+                // Клиппирование для предотвращения выбросов
+                normalizedInput[i] = clamp(
+                    normalizedValue,
+                    -this.clipValue,
+                    this.clipValue,
+                );
+            }
+
+            const min = Math.min(...normalizedInput);
+            const max = Math.max(...normalizedInput);
+            if (min < -this.clipValue || max > this.clipValue) {
+                console.warn('Min/Max normalized value:', min, max);
             }
         } else {
-            // Если мало данных, просто копируем вектор
-            normalizedInput.set(inputVector);
+            // Если не накоплено достаточно статистики, используем простое масштабирование
+            for (let i = 0; i < inputVector.length; i++) {
+                if (!isFinite(inputVector[i])) {
+                    normalizedInput[i] = 0;
+                    continue;
+                }
+
+                // Простое деление на константу для первых эпизодов
+                let scaledValue = inputVector[i] / 100.0;
+
+                normalizedInput[i] = clamp(
+                    scaledValue,
+                    -this.clipValue,
+                    this.clipValue,
+                );
+            }
         }
 
         return normalizedInput;
     }
 
-    // Сохранение и загрузка статистики
+    // Сохранение статистики
     async save(key: string = 'tank-input-stats') {
         const saveObj = {
             mean: this.mean,
-            var: this.var,
+            std: this.std,
             count: this.count,
         };
         localStorage.setItem(key, JSON.stringify(saveObj));
     }
 
+    // Загрузка статистики
     async load(key: string = 'tank-input-stats'): Promise<boolean> {
         try {
             const saved = localStorage.getItem(key);
             if (saved) {
                 const stats = JSON.parse(saved);
                 this.mean = stats.mean;
-                this.var = stats.var;
+                this.std = stats.std;
                 this.count = stats.count;
+
                 return true;
             }
             return false;
@@ -473,15 +577,11 @@ export class PPOAgent {
                 // PPO loss terms
                 const surrogateLoss1 = tf.mul(ratio, advantages);
                 const surrogateLoss2 = tf.mul(clippedRatio, advantages);
-                const ppoLoss = tf.neg(tf.mean(tf.minimum(surrogateLoss1, surrogateLoss2)));
-
-                // Entropy bonus for exploration - с различными весами для разных действий
-                // Рассчитываем энтропию для каждого измерения
                 const entropyPerDimension = tf.tidy(() => {
                     const entropyValues = [];
                     for (let i = 0; i < ACTION_DIM; i++) {
                         const entropyDim = tf.mean(tf.add(
-                            tf.slice(stdTensor, [0, i], [-1, 1]),
+                            tf.log(tf.slice(stdTensor, [0, i], [-1, 1])),
                             tf.scalar(0.5 * Math.log(2 * Math.PI * Math.E)),
                         ));
                         entropyValues.push(entropyDim);
@@ -489,22 +589,32 @@ export class PPOAgent {
                     return entropyValues;
                 });
 
-                // Применяем разные веса к разным измерениям
-                const weightedEntropy = tf.tidy(() => {
+                // Рассчитываем общую энтропию (среднее значение всех размерностей)
+                const entropy = tf.tidy(() => {
                     let totalEntropy = tf.scalar(0);
-                    for (let i = 0; i < ACTION_DIM; i++) {
-                        totalEntropy = tf.add(
-                            totalEntropy,
-                            tf.mul(entropyPerDimension[i], tf.scalar(ENTROPY_WEIGHTS[i])),
-                        );
+                    for (let i = 0; i < entropyPerDimension.length; i++) {
+                        totalEntropy = tf.add(totalEntropy, entropyPerDimension[i]);
                     }
-                    return totalEntropy;
+                    return tf.div(totalEntropy, tf.scalar(entropyPerDimension.length));
                 });
 
-                // Dispose entropy tensors
-                entropyPerDimension.forEach(t => t.dispose());
+                // Устанавливаем небольшой коэффициент энтропии
+                const entropyCoeff = tf.scalar(0.01);
 
-                const totalLoss = tf.sub(ppoLoss, weightedEntropy);
+                // Рассчитываем бонус энтропии
+                const entropyBonus = tf.mul(entropy, entropyCoeff);
+
+                // Рассчитываем функцию потерь политики (негативную, чтобы минимизировать)
+                const policyLoss = tf.neg(tf.mean(tf.minimum(surrogateLoss1, surrogateLoss2)));
+
+                // Итоговые потери (минимизируем policy loss, максимизируем энтропию)
+                const totalLoss = tf.sub(policyLoss, entropyBonus);
+
+                // Не забудьте очистить тензоры
+                entropy.dispose();
+                entropyCoeff.dispose();
+                entropyBonus.dispose();
+                policyLoss.dispose();
 
                 return totalLoss;
             }) as Scalar;
@@ -581,18 +691,20 @@ export class PPOAgent {
         return history.history.loss[0] as number;
     }
 
-    async saveModels(version: string = 'latest') {
+    async saveModels(version: 'best' | 'latest' | 'before_exploration') {
         const suffix = version === 'latest' ? '' : `-${ version }`;
 
-        await this.actorMean.save(`indexeddb://tank-actor-mean-model${ suffix }`);
-        await this.actorStd.save(`indexeddb://tank-actor-std-model${ suffix }`);
-        await this.critic.save(`indexeddb://tank-critic-model${ suffix }`);
-        await this.inputNormalizer.save(`tank-input-stats${ suffix }`);
+        await Promise.all([
+            this.actorMean.save(`indexeddb://tank-actor-mean-model${ suffix }`),
+            this.actorStd.save(`indexeddb://tank-actor-std-model${ suffix }`),
+            this.critic.save(`indexeddb://tank-critic-model${ suffix }`),
+            this.inputNormalizer.save(`tank-input-stats${ suffix }`),
+        ]);
 
         console.log(`Models and input statistics saved successfully (version: ${ version })`);
     }
 
-    async loadModels(version: string = 'latest') {
+    async loadModels(version: 'latest' | 'before_exploration') {
         try {
             const suffix = version === 'latest' ? '' : `-${ version }`;
 

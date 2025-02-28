@@ -39,7 +39,6 @@ export const TankInputTensor = component({
     resetBulletsCoords() {
         TankInputTensor.bulletsData.fill(0);
     },
-
 });
 
 export function addTankInputTensorComponent(eid: number, { world } = DI) {
