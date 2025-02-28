@@ -28,6 +28,7 @@ export function createDrawGrassSystem(device: GPUDevice, { canvas } = DI) {
     device.queue.writeBuffer(gpuShader.uniforms.tileSize.getGPUBuffer(device), 0, tileSizeBuffer);
     device.queue.writeBuffer(gpuShader.uniforms.pixelSize.getGPUBuffer(device), 0, pixelSize);
     device.queue.writeBuffer(gpuShader.uniforms.colorCount.getGPUBuffer(device), 0, colorCount);
+    device.queue.writeBuffer(gpuShader.uniforms.grassDensity.getGPUBuffer(device), 0, grassDensityBuffer);
 
     let time = 0;
     return (renderPass: GPURenderPassEncoder, delta: number) => {
@@ -38,9 +39,8 @@ export function createDrawGrassSystem(device: GPUDevice, { canvas } = DI) {
         windDirectionBuffer[0] = sin(windDirectionBuffer[0] + randomSign() * random() * delta / 100);
         windDirectionBuffer[1] = sin(windDirectionBuffer[1] + randomSign() * random() * delta / 100);
 
-        device.queue.writeBuffer(gpuShader.uniforms.screenSize.getGPUBuffer(device), 0, screenSizeBuffer);
         device.queue.writeBuffer(gpuShader.uniforms.time.getGPUBuffer(device), 0, timeBuffer);
-        device.queue.writeBuffer(gpuShader.uniforms.grassDensity.getGPUBuffer(device), 0, grassDensityBuffer);
+        device.queue.writeBuffer(gpuShader.uniforms.screenSize.getGPUBuffer(device), 0, screenSizeBuffer);
         device.queue.writeBuffer(gpuShader.uniforms.windStrength.getGPUBuffer(device), 0, windStrengthBuffer);
         device.queue.writeBuffer(gpuShader.uniforms.windDirection.getGPUBuffer(device), 0, windDirectionBuffer);
 

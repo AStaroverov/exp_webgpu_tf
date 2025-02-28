@@ -57,11 +57,6 @@ export const shaderMeta = new ShaderMeta(
             return floor(coord / size) * size;
         }
         
-        // Quantize a color to limit the color palette
-        fn quantizeColor(color: vec3f, levels: f32) -> vec3f {
-            return floor(color * levels) / levels;
-        }
-        
         // Noise function for wind variation
         fn noise(p: vec2f) -> f32 {
             let i = floor(p);
@@ -149,14 +144,14 @@ export const shaderMeta = new ShaderMeta(
             let tileVariation = hash21(tileUV + vec2f(123.45, 678.9));
             
             // Define pixel art palette based around #ACC178
-            let baseGreen = vec3f(0.549, 0.631, 0.365);      // #8CA15D - Deeper olive
-            let midGreen = vec3f(0.675, 0.757, 0.471);       // #ACC178 - Main olive green
-            let lightGreen = vec3f(0.792, 0.839, 0.592);     // #CAD697 - Light olive
-            let brightGreen = vec3f(0.878, 0.914, 0.741);    // #E0E9BD - Very light olive
+            let baseColor = vec4f(0.0);
+            let midGreen = vec4f(0.675, 0.757, 0.471, 0.8);       // #ACC178 - Main olive green
+            let lightGreen = vec4f(0.792, 0.839, 0.592, 0.8);     // #CAD697 - Light olive
+            let brightGreen = vec4f(0.878, 0.914, 0.741, 0.8);    // #E0E9BD - Very light olive
             
             // Determine if this tile has grass based on density
             if (rnd.x > uGrassDensity) {
-                return vec4f(quantizeColor(baseGreen, uColorCount), 1.0); // Base ground color
+                discard;
             }
             
             // Randomize grass properties with more variation
@@ -169,7 +164,7 @@ export const shaderMeta = new ShaderMeta(
             let grassHeight = 0.4 + floor((rnd.y + heightVar) * 4.0) / 4.0 * 0.6;
             
             // Initialize with ground color
-            var color = baseGreen;
+            var color = baseColor;
             
             // Calculate wind offset with improved variation
             let windOffset = calculatePixelWind(
@@ -216,7 +211,7 @@ export const shaderMeta = new ShaderMeta(
                             if (!(tileLocalUV.x > grassBaseX + appliedXOffset && 
                                   tileLocalUV.x < grassBaseX + grassWidth + appliedXOffset &&
                                   tileLocalUV.y < grassHeight + appliedYOffset)) {
-                                color = baseGreen; // If wind moved grass away, show ground
+                                color = baseColor; // If wind moved grass away, show ground
                             }
                         }
                     }
@@ -293,11 +288,8 @@ export const shaderMeta = new ShaderMeta(
                     }
                 }
             }
-            
-            // Quantize final color for pixel art look
-            color = quantizeColor(color, uColorCount);
-            
-            return vec4f(color, 1.0);
+    
+            return color;
         }
     `,
 );
