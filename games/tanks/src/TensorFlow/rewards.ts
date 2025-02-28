@@ -1,13 +1,40 @@
-// Enhanced reward calculation
+// Enhanced reward calculation with simplified structure
 import {
     TANK_INPUT_TENSOR_MAX_BULLETS,
     TANK_INPUT_TENSOR_MAX_ENEMIES,
     TankInputTensor,
 } from '../ECS/Components/TankState.ts';
 import { TankController } from '../ECS/Components/TankController.ts';
-import { inRange } from 'lodash-es';
-import { hypot, max, smoothstep } from '../../../../lib/math.ts';
+import { hypot } from '../../../../lib/math.ts';
 import { TANK_RADIUS } from './consts.ts';
+import { clamp } from 'lodash-es';
+
+// Константы для калибровки вознаграждений
+const REWARD_WEIGHTS = {
+    HEALTH_CHANGE: 15.0,       // Значительный вес за изменение здоровья
+    HEALTH_BONUS: 0.1,         // Небольшой бонус за оставшееся здоровье
+    AIM_QUALITY: 5.0,                  // Вес за точное прицеливание
+    SHOOTING_AIMED: 1.5,        // Бонус за стрельбу при хорошем прицеливании
+    SHOOTING_RANDOM: -0.3,      // Штраф за случайную стрельбу
+    BULLET_AVOIDANCE: -1.2,     // Штраф за нахождение на пути пули
+    MOVEMENT_BASE: 0.05,        // Базовый бонус за движение
+    STRATEGIC_MOVEMENT: 0.2,    // Бонус за стратегическое движение
+    SURVIVAL: 0.02,             // Основной бонус за выживание
+    MAP_BORDER: -5.0,           // Значительный штраф за выход за границы
+    BORDER_GRADIENT: -0.5,      // Градиентный штраф при приближении к границе
+    DISTANCE_KEEPING: 0.3,      // Бонус за поддержание оптимальной дистанции
+    VICTORY: 5.0,                // Бонус за победу (последний оставшийся танк)
+};
+
+// Хранение предыдущих состояний для каждого танка
+const prevTankStates = new Map<number, {
+    // Последние N позиций танка для определения застревания
+    positions: Array<{ x: number, y: number }>,
+    // Количество последовательных тиков для определения однотипного поведения
+    sameActionCounter: number,
+    // Последнее действие
+    lastAction?: number[]
+}>();
 
 export function calculateReward(
     tankEid: number,
@@ -22,123 +49,136 @@ export function calculateReward(
     const tankSpeed = TankInputTensor.speed[tankEid];
     const turretTarget = TankController.getTurretTarget(tankEid);
 
-    // Расширенные компоненты вознаграждения
+    // Инициализируем состояние танка, если оно еще не существует
+    if (!prevTankStates.has(tankEid)) {
+        prevTankStates.set(tankEid, {
+            positions: Array(10).fill({ x: tankX, y: tankY }),
+            sameActionCounter: 0,
+        });
+    }
+
+    // Получаем предыдущее состояние
+    const tankState = prevTankStates.get(tankEid)!;
+
+    // Обновляем историю позиций (для определения застревания)
+    tankState.positions.push({ x: tankX, y: tankY });
+    if (tankState.positions.length > 10) {
+        tankState.positions.shift();
+    }
+
+    // Проверка на повторяющиеся действия
+    let repeatedActionPenalty = 0;
+    if (tankState.lastAction) {
+        // Сравниваем текущее и предыдущее действия
+        let actionSimilarity = 0;
+        for (let i = 0; i < 5; i++) {
+            if (Math.abs((actions[i] || 0) - (tankState.lastAction[i] || 0)) < 0.1) {
+                actionSimilarity++;
+            }
+        }
+
+        // Если все 5 действий почти идентичны
+        if (actionSimilarity >= 5) {
+            tankState.sameActionCounter++;
+            // Применяем штраф только если действия повторяются долго
+            if (tankState.sameActionCounter > 20) {
+                repeatedActionPenalty = -0.05 * (tankState.sameActionCounter - 20);
+                // Ограничиваем максимальный штраф
+                repeatedActionPenalty = Math.max(repeatedActionPenalty, -0.5);
+            }
+        } else {
+            tankState.sameActionCounter = 0;
+        }
+    }
+
+    // Сохраняем текущее действие для следующего сравнения
+    tankState.lastAction = Array.from(actions);
+
+    // Компоненты вознаграждения
     const rewardRecord = {
         map: 0,              // Нахождение в пределах карты
         aim: 0,              // Наведение на врагов
         avoidBullets: 0,     // Избегание пуль
         avoidEnemies: 0,     // Поддержание дистанции от врагов
         health: 0,           // Сохранение/потеря здоровья
-        damageDealt: 0,      // Нанесение урона -- TODO: Добавить
+        damageDealt: 0,      // Нанесение урона
         movement: 0,         // Эффективность движения
         survival: 0,         // Бонус за выживание
+        exploration: 0,      // Исследование карты
     };
 
-    // 1. Reward for staying within map (with distance-based gradient)
-    if (inRange(tankX, 0, width) && inRange(tankY, 0, height)) {
-        // Базовое вознаграждение за нахождение в пределах карты
-        rewardRecord.map = 1.0;
+    // 1. Базовое вознаграждение за пребывание в пределах карты - упрощено
+    if (tankX >= 0 && tankX <= width && tankY >= 0 && tankY <= height) {
+        rewardRecord.map = 0; // Нейтральное вознаграждение в пределах карты
 
-        // Дополнительный штраф, если танк близок к границе
-        const distToBorder = Math.min(
+        // Градиентный штраф при приближении к краю
+        const borderDistance = Math.min(
             tankX,
             tankY,
             width - tankX,
             height - tankY,
         );
 
-        // Если ближе 50 единиц к границе - начинаем уменьшать награду
-        if (distToBorder < 50) {
-            rewardRecord.map -= (1 - distToBorder / 50) * 0.8;
+        if (borderDistance < 50) {
+            // Линейный штраф: от 0 до BORDER_GRADIENT
+            rewardRecord.map = (borderDistance / 50) * REWARD_WEIGHTS.BORDER_GRADIENT;
         }
     } else {
-        // Существенный штраф за выход за пределы карты
-        rewardRecord.map = -2.0;
+        // Существенный штраф за выход за границы
+        rewardRecord.map = REWARD_WEIGHTS.MAP_BORDER;
     }
 
-    // 2. Reward/penalty for health changes
+    // 2. Здоровье - сильно упрощено и с высоким весом
     const healthChange = currentHealth - prevHealth;
-    if (healthChange < 0) {
-        // Штраф за потерю здоровья
-        rewardRecord.health = healthChange * 0.5; // Умножаем на 0.5 для смягчения штрафа
-    } else if (healthChange > 0) {
-        // Бонус за восстановление здоровья (если такая механика присутствует)
-        rewardRecord.health = healthChange * 0.3;
-    }
+    rewardRecord.health = healthChange * REWARD_WEIGHTS.HEALTH_CHANGE;
 
-    // Базовое вознаграждение за оставшееся здоровье
-    rewardRecord.health += currentHealth * 0.05;
+    // Небольшой бонус за оставшееся здоровье (мотивация выживать)
+    rewardRecord.health += currentHealth * REWARD_WEIGHTS.HEALTH_BONUS;
 
-    // 3. Reward for aiming at enemies
+    // 3. Прицеливание - упрощенная логика
+    let bestAimQuality = 0;
     let hasTargets = false;
     let closestEnemyDist = Number.MAX_VALUE;
-    let enemiesNearby = 0;
 
     for (let j = 0; j < TANK_INPUT_TENSOR_MAX_ENEMIES; j++) {
         const enemyX = TankInputTensor.enemiesData.get(tankEid, j * 4);
         const enemyY = TankInputTensor.enemiesData.get(tankEid, j * 4 + 1);
-        const enemyVx = TankInputTensor.enemiesData.get(tankEid, j * 4 + 2);
-        const enemyVy = TankInputTensor.enemiesData.get(tankEid, j * 4 + 3);
 
-        // Проверяем, что враг существует
+        // Если враг существует (не нулевые координаты)
         if (enemyX !== 0 || enemyY !== 0) {
             hasTargets = true;
-            const distFromTankToEnemy = hypot(tankX - enemyX, tankY - enemyY);
+            const distToEnemy = hypot(tankX - enemyX, tankY - enemyY);
 
             // Обновляем дистанцию до ближайшего врага
-            if (distFromTankToEnemy < closestEnemyDist) {
-                closestEnemyDist = distFromTankToEnemy;
-            }
+            closestEnemyDist = Math.min(closestEnemyDist, distToEnemy);
 
-            // Подсчитываем врагов в радиусе 400 единиц
-            if (distFromTankToEnemy < 400) {
-                enemiesNearby++;
-            }
-
-            // Вознаграждение за наведение
+            // Простая оценка точности прицеливания
             const distFromTargetToEnemy = hypot(turretTarget[0] - enemyX, turretTarget[1] - enemyY);
+            const aimQuality = Math.max(0, 1 - distFromTargetToEnemy / (TANK_RADIUS * 3));
 
-            // Прогнозируем будущую позицию врага (упрощенно)
-            const futureEnemyX = enemyX + enemyVx * 0.5; // Прогноз на 0.5 секунд
-            const futureEnemyY = enemyY + enemyVy * 0.5;
-            const distToFuturePosition = hypot(turretTarget[0] - futureEnemyX, turretTarget[1] - futureEnemyY);
-
-            // Учитываем как текущую, так и прогнозируемую позицию
-            const aimQuality = Math.max(
-                1 - distFromTargetToEnemy / TANK_RADIUS,
-                1 - distToFuturePosition / TANK_RADIUS,
-            );
-
-            // Масштабируем по расстоянию (ближе = важнее)
-            const distanceImportance = 1 - smoothstep(200, 800, distFromTankToEnemy);
-
-            rewardRecord.aim += max(0, aimQuality) * distanceImportance;
-
-            // Вознаграждение за поддержание безопасной дистанции
-            if (distFromTankToEnemy < 150) {
-                // Слишком близко - опасно
-                rewardRecord.avoidEnemies -= 0.2;
-            } else if (distFromTankToEnemy > 200 && distFromTankToEnemy < 600) {
-                // Идеальный диапазон
-                rewardRecord.avoidEnemies += 0.15;
-            } else if (distFromTankToEnemy > 800) {
-                // Слишком далеко - малоэффективно
-                rewardRecord.avoidEnemies -= 0.05;
-            }
+            // Сохраняем лучшее прицеливание
+            bestAimQuality = Math.max(bestAimQuality, aimQuality);
         }
     }
 
-    // Если цели есть, и прицелился хорошо, и стреляет - дополнительный бонус
-    const shouldShoot = actions && actions[0] > 0;
-    if (hasTargets && rewardRecord.aim > 0.7 && shouldShoot) {
-        rewardRecord.aim += 0.5;
-    } else if (shouldShoot && rewardRecord.aim < 0.3) {
-        // Штраф за стрельбу без прицеливания
-        rewardRecord.aim -= 0.2;
+    // Устанавливаем награду за прицеливание
+    rewardRecord.aim = bestAimQuality * REWARD_WEIGHTS.AIM_QUALITY;
+
+    // Бонус/штраф за стрельбу в зависимости от точности прицеливания
+    const shouldShoot = actions[0] > 0;
+    if (shouldShoot) {
+        if (bestAimQuality > 0.7) {
+            // Бонус за хорошее прицеливание при стрельбе
+            rewardRecord.aim += REWARD_WEIGHTS.SHOOTING_AIMED;
+        } else if (bestAimQuality < 0.3) {
+            // Штраф за стрельбу без прицеливания
+            rewardRecord.aim += REWARD_WEIGHTS.SHOOTING_RANDOM;
+        }
     }
 
-    // 4. Reward for avoiding bullets
+    // 4. Уклонение от пуль - упрощено
     let bulletDangerLevel = 0;
+    let closestBulletDistance = Number.MAX_VALUE;
 
     for (let j = 0; j < TANK_INPUT_TENSOR_MAX_BULLETS; j++) {
         const bulletX = TankInputTensor.bulletsData.get(tankEid, j * 4);
@@ -148,111 +188,138 @@ export function calculateReward(
 
         if ((bulletX === 0 && bulletY === 0) || hypot(bulletVx, bulletVy) < 100) continue;
 
-        // Вычисляем точку ближайшего прохождения пули
-        // (Упрощенно, используем линейное приближение траектории)
-        const bulletSpeed = hypot(bulletVx, bulletVy);
-        const bulletDirectionX = bulletSpeed > 0.001 ? bulletVx / bulletSpeed : 0;
-        const bulletDirectionY = bulletSpeed > 0.001 ? bulletVy / bulletSpeed : 0;
         // Вектор от пули к танку
         const toTankX = tankX - bulletX;
         const toTankY = tankY - bulletY;
 
-        // Скалярное произведение для определения, движется ли пуля к танку
+        // Скорость пули и ее направление
+        const bulletSpeed = hypot(bulletVx, bulletVy);
+        const bulletDirectionX = bulletSpeed > 0.001 ? bulletVx / bulletSpeed : 0;
+        const bulletDirectionY = bulletSpeed > 0.001 ? bulletVy / bulletSpeed : 0;
+
+        // Определяем, движется ли пуля к танку
         const dotProduct = toTankX * bulletDirectionX + toTankY * bulletDirectionY;
 
-        // Если пуля движется от танка, игнорируем ее
+        // Если пуля движется от танка, игнорируем
         if (dotProduct <= 0) continue;
 
-        // Проекция вектора toTank на направление пули
+        // Расстояние от танка до пули
+        const bulletDist = hypot(toTankX, toTankY);
+        closestBulletDistance = Math.min(closestBulletDistance, bulletDist);
+
+        // Проекция вектора на направление пули
         const projLength = dotProduct;
 
-        // Точка ближайшего прохождения
+        // Точка ближайшего прохождения пули к танку
         const closestPointX = bulletX + bulletDirectionX * projLength;
         const closestPointY = bulletY + bulletDirectionY * projLength;
 
-        // Минимальное расстояние до траектории пули
+        // Расстояние в точке наибольшего сближения
         const minDist = hypot(closestPointX - tankX, closestPointY - tankY);
 
-        // Если пуля пройдет близко к танку, увеличиваем опасность
-        if (minDist < TANK_RADIUS * 1.5) {
-            // Время до точки ближайшего прохождения
+        // Оценка опасности пули
+        if (minDist < TANK_RADIUS * 2) {
+            // Время до точки сближения
             const timeToClosest = projLength / bulletSpeed;
 
-            // Чем меньше времени, тем выше опасность
+            // Чем ближе пуля и меньше времени, тем выше опасность
             if (timeToClosest < 1.0) {
-                // Очень высокая опасность для близких пуль
-                bulletDangerLevel += (1.0 - minDist / (TANK_RADIUS * 1.5)) * (1.0 - timeToClosest);
+                bulletDangerLevel += (1.0 - minDist / (TANK_RADIUS * 2)) * (1.0 - timeToClosest);
             }
         }
     }
 
-    // Штраф за нахождение на траектории пуль
+    // Награда за избегание пуль - упрощена
     if (bulletDangerLevel > 0) {
-        rewardRecord.avoidBullets = -bulletDangerLevel * 0.4;
+        rewardRecord.avoidBullets = bulletDangerLevel * REWARD_WEIGHTS.BULLET_AVOIDANCE;
 
-        // Если танк движется (пытается уклониться) - снижаем штраф
-        if (tankSpeed > 300) {
-            rewardRecord.avoidBullets *= 0.7;
-        }
-    } else {
-        // Небольшое вознаграждение за отсутствие опасных пуль рядом
-        rewardRecord.avoidBullets = 0.05;
-    }
-
-    // 5. Reward for effective movement
-    // Анализируем движение в зависимости от ситуации
-    if (enemiesNearby > 1) {
-        // При нескольких врагах рядом, движение важно для выживания
+        // Если танк движется при наличии опасных пуль - уменьшаем штраф
         if (tankSpeed > 200) {
-            rewardRecord.movement = 0.2;
-        }
-    } else if (closestEnemyDist < 200) {
-        // При близком враге, движение должно быть для уклонения
-        if (tankSpeed > 200) {
-            rewardRecord.movement = 0.15;
-        }
-    } else if (bulletDangerLevel > 0.3) {
-        // При опасных пулях рядом, поощряем движение
-        if (tankSpeed > 300) {
-            rewardRecord.movement = 0.25;
-        }
-    } else if (!hasTargets) {
-        // Если враги не видны, поощряем исследование
-        if (tankSpeed > 100) {
-            rewardRecord.movement = 0.1;
-        }
-    } else {
-        // В обычных условиях, небольшое поощрение за умеренное движение
-        if (tankSpeed > 50 && tankSpeed < 500) {
-            rewardRecord.movement = 0.05;
+            rewardRecord.avoidBullets *= 0.5; // Уменьшаем штраф вдвое если танк активно движется
         }
     }
 
-    // 6. Survival bonus - награда за каждый шаг выживания
-    rewardRecord.survival = 0.01;
+    // 5. Награда за движение - упрощено
+    rewardRecord.movement = 0;
 
-    // Дополнительный бонус за выживание с низким здоровьем
+    // Базовый бонус за движение
+    if (tankSpeed > 50) {
+        rewardRecord.movement += REWARD_WEIGHTS.MOVEMENT_BASE;
+    }
+
+    // Стратегическое движение в зависимости от ситуации
+    if (bulletDangerLevel > 0.3 && tankSpeed > 200) {
+        // Бонус за быстрое движение при опасности
+        rewardRecord.movement += REWARD_WEIGHTS.STRATEGIC_MOVEMENT;
+    } else if (closestEnemyDist < 150 && tankSpeed > 100) {
+        // Бонус за движение при близком враге
+        rewardRecord.movement += REWARD_WEIGHTS.STRATEGIC_MOVEMENT;
+    } else if (!hasTargets && tankSpeed > 100) {
+        // Бонус за исследование когда нет видимых врагов
+        rewardRecord.movement += REWARD_WEIGHTS.STRATEGIC_MOVEMENT;
+    }
+
+    // Проверка на застревание (перемещение меньше порога)
+    if (tankState.positions.length >= 10) {
+        let totalMovement = 0;
+        for (let i = 1; i < tankState.positions.length; i++) {
+            totalMovement += hypot(
+                tankState.positions[i].x - tankState.positions[i - 1].x,
+                tankState.positions[i].y - tankState.positions[i - 1].y,
+            );
+        }
+
+        // Если танк практически не двигался за последние 10 тиков
+        if (totalMovement < 50) {
+            rewardRecord.movement -= 0.2; // Штраф за застревание
+        }
+    }
+
+    // 6. Поддержание оптимальной дистанции от врагов
+    if (hasTargets) {
+        if (closestEnemyDist < 150) {
+            // Слишком близко - опасно
+            rewardRecord.avoidEnemies = -0.2;
+        } else if (closestEnemyDist > 200 && closestEnemyDist < 500) {
+            // Оптимальная дистанция
+            rewardRecord.avoidEnemies = REWARD_WEIGHTS.DISTANCE_KEEPING;
+        }
+    }
+
+    // 7. Бонус за выживание
+    rewardRecord.survival = REWARD_WEIGHTS.SURVIVAL;
+
+    // Дополнительный бонус при низком здоровье
     if (currentHealth < 0.3) {
-        rewardRecord.survival += 0.02;
+        rewardRecord.survival += REWARD_WEIGHTS.SURVIVAL;
     }
 
-    // Рассчитываем общее вознаграждение с разными весами для каждого компонента
-    const totalReward =
-        rewardRecord.map * 3.0 +
-        rewardRecord.aim * 10.0 +
-        rewardRecord.avoidBullets * 5.0 +
-        rewardRecord.avoidEnemies * 3.0 +
-        rewardRecord.health * 2.0 +
-        rewardRecord.damageDealt * 8.0 +
-        rewardRecord.movement * 2.0 +
-        rewardRecord.survival * 1.0;
+    // Финальный штраф за повторяющиеся действия
+    if (repeatedActionPenalty !== 0) {
+        rewardRecord.exploration = repeatedActionPenalty;
+    }
 
-    if (totalReward < -20 || totalReward > 20) {
-        console.log('>> unexpected reward:', totalReward, rewardRecord);
+    // Рассчитываем итоговое вознаграждение
+    // Упрощаем структуру - делаем линейное вознаграждение без множителей
+    const totalReward =
+        rewardRecord.map +
+        rewardRecord.health +
+        rewardRecord.aim +
+        rewardRecord.avoidBullets +
+        rewardRecord.avoidEnemies +
+        rewardRecord.movement +
+        rewardRecord.survival +
+        rewardRecord.exploration;
+
+    // Клиппирование вознаграждения для предотвращения экстремальных значений
+    const clippedReward = clamp(totalReward, -10, 10);
+
+    if (Math.abs(totalReward - clippedReward) > 0.001) {
+        console.log('Warning: Reward clipped from', totalReward, 'to', clippedReward);
     }
 
     return {
-        totalReward,
+        totalReward: clippedReward,
         rewards: rewardRecord,
     };
 }

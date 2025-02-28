@@ -3,182 +3,324 @@ import { setWasmPaths } from '@tensorflow/tfjs-backend-wasm';
 import { MAX_STEPS } from './consts.ts';
 import { BATCH_SIZE, PPOAgent } from './PPOAgent.ts';
 import { runEpisode } from './runEpisode.ts';
+import { createActorModel, createExplorationBiasedActorModel, resetPartialWeights } from './models.ts';
+import { RingBuffer } from 'ring-buffer-ts';
 
 setWasmPaths('/node_modules/@tensorflow/tfjs-backend-wasm/dist/');
 await tf.setBackend('wasm');
 
-// Main enhanced PPO training function with better tracking and checkpointing
-async function trainPPO(checkpointInterval: number = 5): Promise<void> {
-    console.log('Starting enhanced PPO training...');
+// Конфигурация обучения
+const TRAINING_CONFIG = {
+    CHECKPOINT_INTERVAL: 5,         // Сохранять каждые N эпизодов
+    EXPLORATION_RESET_INTERVAL: 500, // Периодически усиливать исследование
+    STALL_DETECTION_WINDOW: 20,     // Окно для обнаружения застоя
+    STALL_THRESHOLD: 0.05,          // Порог улучшения для определения застоя
+    MAX_TRAIN_ITERATIONS: 5,        // Максимальное количество итераций обучения за эпизод
+    MIN_BATCHES_FOR_TRAINING: 3,    // Минимальное количество батчей для начала обучения
+    MODEL_VERSION_INTERVAL: 100,    // Интервал для сохранения версионных моделей
+    WARMUP_EPISODES: 10,            // Количество эпизодов разминки перед обучением
+    RECOVERY_WAIT_TIME: 5000,       // Время ожидания после ошибки (мс)
+    MAJOR_VERSION_INTERVAL: 1000,   // Интервал для сохранения основных версий модели
+};
 
-    const agent = new PPOAgent();
-    let episodesCompleted = 0;
-    let totalReward = 0;
-    let bestEpisodeReward = -Infinity;
+// Определение типа для состояния обучения (для восстановления)
+interface TrainingState {
+    currentEpisode: number;
+    bestReward: number;
+    lastCheckpoint: number;
+    explorationModeActive: boolean;
+    explorationEndEpisode: number | null;
+}
 
-    // Track metrics for visualization and analysis
-    const trainingMetrics = {
-        episodeRewards: [] as number[],
-        actorLosses: [] as number[],
-        criticLosses: [] as number[],
-        avgRewards: [] as number[],
-        episodeLengths: [] as number[],
+// Полная обновленная функция обучения с улучшенными механизмами
+async function trainPPO(): Promise<void> {
+    console.log('Запуск улучшенного PPO обучения...');
+
+    // Инициализация TensorFlow.js для отслеживания утечек памяти
+    tf.engine().startScope(); // Начинаем новую область для отслеживания тензоров
+
+    // Попытка загрузки предыдущего состояния обучения
+    let trainingState: TrainingState = {
+        currentEpisode: 0,
+        bestReward: -Infinity,
+        lastCheckpoint: 0,
+        explorationModeActive: false,
+        explorationEndEpisode: null,
     };
 
     try {
-        // Try to load existing models
+        const savedState = localStorage.getItem('tank-training-state');
+        if (savedState) {
+            trainingState = JSON.parse(savedState);
+            console.log(`Загружено предыдущее состояние обучения: эпизод ${ trainingState.currentEpisode }`);
+        }
+    } catch (error) {
+        console.warn('Не удалось загрузить предыдущее состояние обучения:', error);
+    }
+
+    // Создаем агента
+    const agent = new PPOAgent(true);
+    const episodeRewards = new RingBuffer<number>(100);
+
+    try {
+        // Пытаемся загрузить существующие модели
         const loaded = await agent.loadModels();
-        if (loaded) {
-            console.log('Loaded existing models, continuing training from episode', agent.episodeCount);
-            episodesCompleted = agent.episodeCount;
-        } else {
-            console.log('Starting with new models');
+        if (!loaded) {
+            console.log('Начинаем с новыми моделями');
+
+            // Если начинаем с нуля, активируем режим исследования на первые 100 эпизодов
+            trainingState.explorationModeActive = true;
+            trainingState.explorationEndEpisode = trainingState.currentEpisode + 100;
+
+            // Используем модель с усиленным исследованием
+            const { meanModel, stdModel } = createExplorationBiasedActorModel();
+            agent.actorMean = meanModel;
+            agent.actorStd = stdModel;
+            console.log('Активирован режим усиленного исследования для начала обучения');
         }
 
-        // Training loop with improved checkpointing and error handling
-        for (let i = episodesCompleted; i < Infinity; i++) {
-            console.log(`Starting episode ${ i + 1 }`);
+        // Основной цикл обучения
+        while (true) {
+            trainingState.currentEpisode++;
 
-            // Track episode start time for performance monitoring
-            const episodeStartTime = performance.now();
+            // Проверяем, нужно ли выйти из режима исследования
+            if (
+                trainingState.explorationModeActive
+                && trainingState.explorationEndEpisode !== null
+                && trainingState.currentEpisode >= trainingState.explorationEndEpisode
+            ) {
+
+                console.log('Выход из режима усиленного исследования');
+                trainingState.explorationModeActive = false;
+
+                // Если мы не начинали с нуля, восстановим сохраненную модель
+                if (trainingState.currentEpisode > 100) {
+                    await agent.loadModels('before_exploration');
+                    console.log('Восстановлена модель перед режимом исследования');
+                } else {
+                    // Если это начальное обучение, просто уменьшаем исследование
+                    const { meanModel, stdModel } = createActorModel();
+                    // Сохраняем веса mean модели, чтобы не потерять прогресс
+                    const meanWeights = agent.actorMean.getWeights();
+                    agent.actorMean = meanModel;
+                    agent.actorMean.setWeights(meanWeights);
+                    agent.actorStd = stdModel;
+                }
+            }
+
+            console.log(`Запуск эпизода ${ trainingState.currentEpisode }`);
 
             try {
-                // Run episode with a reasonable step limit
+                // Запускаем эпизод
                 const episodeReward = await runEpisode(agent, MAX_STEPS);
-                totalReward += episodeReward;
 
-                // Track episode duration for metrics
-                const episodeDuration = performance.now() - episodeStartTime;
-                console.log(`Episode ${ i + 1 } completed in ${ (episodeDuration / 1000).toFixed(2) }s with reward: ${ episodeReward.toFixed(2) }`);
+                episodeRewards.add(episodeReward);
 
-                // Update metrics
-                trainingMetrics.episodeRewards.push(episodeReward);
-                trainingMetrics.episodeLengths.push(MAX_STEPS); // This will be actual steps if terminated early
-                trainingMetrics.avgRewards.push(totalReward / (i + 1 - episodesCompleted));
+                // После добавления награды эпизода в массив
+                if (episodeRewards.isFull()) {
+                    const avgReward = episodeRewards.toArray().reduce((a, b) => a + b, 0) / episodeRewards.getPos();
+                    console.log(`Средняя награда (100 эпизодов): ${ avgReward.toFixed(4) }`);
+                }
 
-                // Train after each episode
-                const trainingStartTime = performance.now();
+                // И проверку на застой:
+                if (
+                    trainingState.currentEpisode > 200
+                    && trainingState.currentEpisode % 20 === 0
+                    && isTrainingStalled(episodeRewards, TRAINING_CONFIG.STALL_DETECTION_WINDOW)
+                ) {
+                    console.log('Обнаружен застой в обучении. Применяем корректирующие меры...');
 
-                // Track losses for this training session
-                let actorLossSum = 0;
-                let criticLossSum = 0;
-                let trainingIterations = 0;
+                    // Здесь добавьте стратегию восстановления, например:
+                    await resetPartialWeights(agent.actorMean, 0.3);
+                    await resetPartialWeights(agent.critic, 0.3);
+                }
 
-                // Multiple training iterations if enough data is available
-                const minBatchesForTraining = 3; // Train only if we have at least 3x batch size data
-                const minSamplesRequired = BATCH_SIZE * minBatchesForTraining;
+                // Обучение на собранном опыте
+                if (trainingState.currentEpisode >= TRAINING_CONFIG.WARMUP_EPISODES) {
+                    const trainingStartTime = performance.now();
+                    let actorLossSum = 0;
+                    let criticLossSum = 0;
+                    let trainingIterations = 0;
 
-                if (agent.buffer.size >= minSamplesRequired) {
-                    // Number of training iterations based on buffer size
-                    const trainIterations = Math.min(
-                        Math.floor(agent.buffer.size / BATCH_SIZE),
-                        5, // Cap maximum iterations per episode
-                    );
+                    // Определяем, достаточно ли данных для обучения
+                    const minSamplesRequired = BATCH_SIZE * TRAINING_CONFIG.MIN_BATCHES_FOR_TRAINING;
 
-                    for (let iter = 0; iter < trainIterations; iter++) {
-                        // Train and get average losses
-                        const { actorLoss, criticLoss } = await agent.train();
+                    if (agent.buffer.size >= minSamplesRequired) {
+                        // Вычисляем оптимальное количество итераций обучения
+                        const trainIterations = Math.min(
+                            Math.floor(agent.buffer.size / BATCH_SIZE),
+                            TRAINING_CONFIG.MAX_TRAIN_ITERATIONS,
+                        );
 
-                        if (actorLoss !== undefined && criticLoss !== undefined) {
-                            actorLossSum += actorLoss;
-                            criticLossSum += criticLoss;
-                            trainingIterations++;
+                        for (let iter = 0; iter < trainIterations; iter++) {
+                            // Обучаем с текущей скоростью обучения
+                            const {
+                                actorLoss,
+                                criticLoss,
+                            } = await agent.train(getLearningRate(trainingState.currentEpisode));
+
+                            if (actorLoss !== undefined && criticLoss !== undefined) {
+                                actorLossSum += actorLoss;
+                                criticLossSum += criticLoss;
+                                trainingIterations++;
+                            }
                         }
-                    }
 
-                    // Log average losses
-                    if (trainingIterations > 0) {
-                        const avgActorLoss = actorLossSum / trainingIterations;
-                        const avgCriticLoss = criticLossSum / trainingIterations;
+                        // Логируем средние потери
+                        if (trainingIterations > 0) {
+                            const avgActorLoss = actorLossSum / trainingIterations;
+                            const avgCriticLoss = criticLossSum / trainingIterations;
 
-                        trainingMetrics.actorLosses.push(avgActorLoss);
-                        trainingMetrics.criticLosses.push(avgCriticLoss);
-
-                        console.log(`Training complete (${ trainingIterations } iterations, ${ (performance.now() - trainingStartTime).toFixed(0) }ms)`);
-                        console.log(`Average Actor Loss: ${ avgActorLoss.toFixed(4) }, Critic Loss: ${ avgCriticLoss.toFixed(4) }`);
+                            console.log(`Обучение завершено (${ trainingIterations } итераций, ${ (performance.now() - trainingStartTime).toFixed(0) }мс)`);
+                            console.log(`Средние потери: Actor = ${ avgActorLoss.toFixed(4) }, Critic = ${ avgCriticLoss.toFixed(4) }`);
+                        } else {
+                            console.log('В этом эпизоде не было валидного обучения');
+                        }
                     } else {
-                        console.log('No valid training occurred this episode');
+                        console.log(`Недостаточно примеров для обучения: ${ agent.buffer.size }/${ minSamplesRequired }`);
                     }
-                } else {
-                    console.log(`Not enough samples for training: ${ agent.buffer.size }/${ minSamplesRequired }`);
                 }
 
-                // Update episode counter
-                agent.episodeCount = i + 1;
+                // Проверяем, лучший ли это эпизод
+                if (episodeReward > trainingState.bestReward) {
+                    trainingState.bestReward = episodeReward;
 
-                // Check if this is the best episode so far
-                if (episodeReward > bestEpisodeReward) {
-                    bestEpisodeReward = episodeReward;
-
-                    // Save best model separately
+                    // Сохраняем лучшую модель
                     await agent.saveModels('best');
-                    console.log(`New best model saved with reward: ${ bestEpisodeReward.toFixed(2) }`);
+                    console.log(`Новая лучшая модель сохранена с наградой: ${ trainingState.bestReward.toFixed(2) }`);
                 }
 
-                // Regular checkpointing
-                if ((i + 1) % checkpointInterval === 0) {
+                // Сохраняем состояние обучения
+                localStorage.setItem('tank-training-state', JSON.stringify(trainingState));
+
+                // Регулярное создание контрольных точек
+                if ((trainingState.currentEpisode) % TRAINING_CONFIG.CHECKPOINT_INTERVAL === 0) {
                     await agent.saveModels();
-                    console.log(`Checkpoint saved at episode ${ i + 1 }`);
+                    console.log(`Контрольная точка сохранена на эпизоде ${ trainingState.currentEpisode }`);
+                    trainingState.lastCheckpoint = trainingState.currentEpisode;
+                }
 
-                    // Save metrics
-                    try {
-                        localStorage.setItem('tank-training-metrics', JSON.stringify(trainingMetrics));
-                    } catch (error) {
-                        console.warn('Failed to save metrics:', error);
-                    }
+                // Сохраняем версионную модель с номером эпизода
+                if ((trainingState.currentEpisode) % TRAINING_CONFIG.MODEL_VERSION_INTERVAL === 0) {
+                    await agent.saveModels(`ep${ trainingState.currentEpisode }`);
+                    console.log(`Версионная модель ep${ trainingState.currentEpisode } сохранена`);
+                }
 
-                    if ((i + 1) % (checkpointInterval * 20) === 0) {
-                        // because of tensoflow.js memory leak
-                        window.location.reload();
+                // Периодический сброс для усиления исследования
+                if (
+                    trainingState.currentEpisode % TRAINING_CONFIG.EXPLORATION_RESET_INTERVAL === 0
+                    && !trainingState.explorationModeActive
+                ) {
+
+                    console.log(`Плановое усиление исследования на эпизоде ${ trainingState.currentEpisode }`);
+
+                    // Сохраняем текущую модель
+                    await agent.saveModels(`before_exploration_${ trainingState.currentEpisode }`);
+
+                    // Применяем частичный сброс весов к stdModel для увеличения исследования
+                    await resetPartialWeights(agent.actorStd, 0.5);
+
+                    // Добавляем положительное смещение к выходному слою стандартных отклонений
+                    const lastLayer = agent.actorStd.layers[agent.actorStd.layers.length - 1] as tf.layers.Layer;
+                    const biasWeights = lastLayer.getWeights()[1];
+                    const newBiasWeights = tf.tidy(() => {
+                        return tf.add(biasWeights, tf.ones(biasWeights.shape).mul(tf.scalar(0.5)));
+                    });
+
+                    lastLayer.setWeights([
+                        lastLayer.getWeights()[0],
+                        newBiasWeights,
+                    ]);
+
+                    console.log('Исследование временно усилено');
+                    newBiasWeights.dispose();
+                }
+
+                // Для основных версий моделей (каждые 1000 эпизодов)
+                if (trainingState.currentEpisode % TRAINING_CONFIG.MAJOR_VERSION_INTERVAL === 0) {
+                    const majorVersion = Math.floor(trainingState.currentEpisode / TRAINING_CONFIG.MAJOR_VERSION_INTERVAL);
+                    await agent.saveModels(`v${ majorVersion }`);
+                    console.log(`Основная версия модели v${ majorVersion } сохранена`);
+
+                    // Перезагрузка страницы для борьбы с утечкой памяти в TensorFlow.js
+                    console.log('Перезагрузка страницы для очистки памяти...');
+                    window.location.reload();
+                    return; // Выход из функции, т.к. страница будет перезагружена
+                }
+
+                // Очистка тензоров для предотвращения утечек памяти
+                if (trainingState.currentEpisode % 10 === 0) {
+                    // Проверяем, сколько тензоров не было убрано сборщиком мусора
+                    const numTensors = tf.memory().numTensors;
+                    if (numTensors > 1000) {  // Порог для принудительной очистки
+                        console.log(`Обнаружена потенциальная утечка памяти: ${ numTensors } тензоров. Запуск принудительной сборки мусора.`);
+                        tf.engine().endScope();
+                        tf.engine().startScope();
+                        await tf.nextFrame();  // Даем время для сборки мусора
                     }
                 }
             } catch (error) {
-                console.error(`Error in episode ${ i + 1 }:`, error);
+                console.error(`Ошибка в эпизоде ${ trainingState.currentEpisode }:`, error);
 
-                // Try to save current state before potential recovery
+                // Пытаемся сохранить текущее состояние перед восстановлением
                 try {
                     await agent.saveModels('recovery');
-                    console.log('Recovery checkpoint saved');
+                    console.log('Сохранена точка восстановления');
                 } catch (saveError) {
-                    console.error('Failed to save recovery checkpoint:', saveError);
+                    console.error('Не удалось сохранить точку восстановления:', saveError);
                 }
 
-                // Wait a moment before continuing to next episode
-                await new Promise(resolve => setTimeout(resolve, 5000));
-                // Skip to next episode instead of crashing
+                // Сохраняем состояние обучения
+                localStorage.setItem('tank-training-state', JSON.stringify(trainingState));
+
+                // Ждем перед продолжением
+                await new Promise(resolve => setTimeout(resolve, TRAINING_CONFIG.RECOVERY_WAIT_TIME));
             }
         }
-
-        // Final save and cleanup
-        await agent.saveModels();
-
-        // Save final metrics
-        try {
-            localStorage.setItem('tank-training-metrics', JSON.stringify(trainingMetrics));
-        } catch (error) {
-            console.warn('Failed to save final metrics:', error);
-        }
-
-        console.log('Training completed successfully!');
-        console.log(`Total episodes: ${ agent.episodeCount }`);
-        console.log(`Best episode reward: ${ bestEpisodeReward.toFixed(2) }`);
     } catch (error) {
-        console.error('Critical error during training:', error);
+        console.error('Критическая ошибка во время обучения:', error);
 
-        // Try emergency save
+        // Пытаемся экстренно сохранить
         try {
             await agent.saveModels('emergency');
-            console.log('Emergency save completed');
+            console.log('Экстренное сохранение выполнено');
         } catch (saveError) {
-            console.error('Failed to perform emergency save:', saveError);
+            console.error('Не удалось выполнить экстренное сохранение:', saveError);
         }
 
-        // Wait before potentially reloading page
-        console.log('Reloading page in 10 seconds...');
-        setTimeout(() => {
-            window.location.reload();
-        }, 10_000);
+        // Сохраняем состояние обучения
+        localStorage.setItem('tank-training-state', JSON.stringify(trainingState));
+
+        // Ждем перед перезагрузкой страницы
+        window.location.reload();
+    } finally {
+        // Заканчиваем область отслеживания тензоров
+        tf.engine().endScope();
     }
 }
 
-trainPPO(5);
+function getLearningRate(episodeNum: number): number {
+    // Начинаем с 0.0003 и медленно снижаем до 0.00006 (1/5 от начальной)
+    const initialLR = 0.0003;
+    const minLR = 0.00006;
+    const decay = 3000; // Более медленный спад - за 3000 эпизодов
+
+    return Math.max(minLR, initialLR * Math.exp(-episodeNum / decay));
+}
+
+function isTrainingStalled(rewards: RingBuffer<number>, window: number): boolean {
+    if (rewards.getBufferLength() < window * 2) return false;
+
+    const doubleWindowRewards = rewards.getLastN(window * 2);
+    const recentRewards = doubleWindowRewards.slice(-window);
+    const prevRewards = doubleWindowRewards.slice(0, window);
+
+    const recentAvg = recentRewards.reduce((a, b) => a + b, 0) / window;
+    const prevAvg = prevRewards.reduce((a, b) => a + b, 0) / window;
+
+    return recentAvg <= prevAvg || (recentAvg - prevAvg) / Math.abs(prevAvg) < TRAINING_CONFIG.STALL_THRESHOLD;
+}
+
+// Запуск обучения
+trainPPO();
+

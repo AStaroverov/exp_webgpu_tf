@@ -1,20 +1,14 @@
 import * as tf from '@tensorflow/tfjs';
 import { LayersModel, Scalar } from '@tensorflow/tfjs';
-import { createActorModel, createCriticModel } from './models.ts';
+import { createActorModel, createCriticModel, createExplorationBiasedActorModel } from './models.ts';
 import { ACTION_DIM, INPUT_DIM } from './consts.ts';
 
-const PPO_EPOCHS = 4;
-export const BATCH_SIZE = 64;
-const CLIP_EPSILON = 0.2;
-// Индивидуальные веса энтропии для разных действий
-const ENTROPY_WEIGHTS = [0.02, 0.01, 0.01, 0.005, 0.005]; // [shoot, move, turn, targetX, targetY]
+const PPO_EPOCHS = 8;
+export const BATCH_SIZE = 128;
+const CLIP_EPSILON = 0.3;
+const ENTROPY_WEIGHTS = [0.05, 0.02, 0.02, 0.01, 0.01];
 const GAMMA = 0.99; // Discount factor
 const LAMBDA = 0.95; // GAE parameter
-
-// Dynamic learning rate based on episode count
-function getLearningRate(episodeNum: number, initialLR: number = 0.0003): number {
-    return initialLR * Math.max(0.1, 1.0 - episodeNum / 1000);
-}
 
 // Prioritized Experience Buffer for better experience sampling
 class PrioritizedExperienceBuffer {
@@ -29,7 +23,7 @@ class PrioritizedExperienceBuffer {
     beta: number = 0.4; // Исходное значение бета для важности выборки (начинаем с 0.4 и увеличиваем до 1)
     betaAnnealing: number = 0.001; // Скорость увеличения бета
 
-    constructor(private capacity: number = 1024) {
+    constructor(private capacity: number = 1024 * 4) {
     }
 
     get size() {
@@ -283,16 +277,21 @@ export class PPOAgent {
     critic: LayersModel;
     buffer: PrioritizedExperienceBuffer;
     inputNormalizer: InputNormalizer;
-    episodeCount: number;
 
-    constructor() {
-        const { meanModel, stdModel } = createActorModel();
-        this.actorMean = meanModel;
-        this.actorStd = stdModel;
+    constructor(useExplorationBias: boolean = false) {
+        if (useExplorationBias) {
+            const { meanModel, stdModel } = createExplorationBiasedActorModel();
+            this.actorMean = meanModel;
+            this.actorStd = stdModel;
+        } else {
+            const { meanModel, stdModel } = createActorModel();
+            this.actorMean = meanModel;
+            this.actorStd = stdModel;
+        }
+
         this.critic = createCriticModel();
         this.buffer = new PrioritizedExperienceBuffer();
         this.inputNormalizer = new InputNormalizer(INPUT_DIM);
-        this.episodeCount = 0;
     }
 
     // Sample action from policy
@@ -355,16 +354,13 @@ export class PPOAgent {
     }
 
     // Train using improved PPO algorithm
-    async train() {
+    async train(learningRate: number) {
         if (this.buffer.size < BATCH_SIZE) {
             console.log('Not enough samples for training');
             return {};
         }
 
-        console.log(`Training PPO with ${ this.buffer.size } samples, episode count: ${ this.episodeCount }`);
-
         // Динамически определяем скорость обучения на основе номера эпизода
-        const learningRate = getLearningRate(this.episodeCount);
         console.log(`Current learning rate: ${ learningRate.toFixed(6) }`);
 
         // Tracking for priorities update
@@ -435,8 +431,6 @@ export class PPOAgent {
 
         // Clear buffer after training (for on-policy algorithm)
         // this.buffer.clear(); // Закомментировано для поддержки смешанного режима on-policy/off-policy
-
-        this.episodeCount++;
 
         return {
             actorLoss: totalActorLoss / PPO_EPOCHS,
@@ -595,9 +589,6 @@ export class PPOAgent {
         await this.critic.save(`indexeddb://tank-critic-model${ suffix }`);
         await this.inputNormalizer.save(`tank-input-stats${ suffix }`);
 
-        // Сохраним также счетчик эпизодов
-        localStorage.setItem(`tank-episode-count${ suffix }`, this.episodeCount.toString());
-
         console.log(`Models and input statistics saved successfully (version: ${ version })`);
     }
 
@@ -616,11 +607,6 @@ export class PPOAgent {
             await this.inputNormalizer.load(`tank-input-stats${ suffix }`);
 
             // Загрузим счетчик эпизодов
-            const episodeCount = localStorage.getItem(`tank-episode-count${ suffix }`);
-            if (episodeCount) {
-                this.episodeCount = parseInt(episodeCount);
-            }
-
             console.log(`Models and input statistics loaded successfully (version: ${ version })`);
             return true;
         } catch (error) {

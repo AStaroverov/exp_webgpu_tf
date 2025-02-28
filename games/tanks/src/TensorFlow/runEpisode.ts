@@ -1,7 +1,7 @@
 // Function to run a simulation episode with improved handling and rewards
 import { PPOAgent } from './PPOAgent.ts';
 import { createBattlefield } from './createBattlefield.ts';
-import { INPUT_DIM, TANK_COUNT_SIMULATION, TICK_TIME_REAL, TICK_TIME_SIMULATION } from './consts.ts';
+import { INPUT_DIM, SKIP_TICKS, TANK_COUNT_SIMULATION, TICK_TIME_REAL, TICK_TIME_SIMULATION } from './consts.ts';
 import * as tf from '@tensorflow/tfjs';
 import { query } from 'bitecs';
 import { Tank } from '../ECS/Components/Tank.ts';
@@ -136,6 +136,9 @@ export async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<num
 
                 // PHASE 2: Execute game tick after all controller updates
                 gameTick(TICK_TIME_SIMULATION);
+                for (let i = 0; i < SKIP_TICKS; i++) {
+                    gameTick(TICK_TIME_SIMULATION);
+                }
 
                 // Get list of tanks after the game tick (some might be destroyed)
                 const previousTankEids = tankEids;

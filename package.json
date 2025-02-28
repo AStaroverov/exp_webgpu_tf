@@ -25,6 +25,7 @@
     "gl-matrix": "^3.4.3",
     "lodash": "^4.17.21",
     "lodash-es": "^4.17.21",
+    "ring-buffer-ts": "^1.2.0",
     "stats-gl": "^3.6.0",
     "vite-plugin-top-level-await": "^1.4.4",
     "vite-plugin-wasm": "^3.4.1"
