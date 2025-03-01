@@ -1,8 +1,8 @@
-import { createGame } from '../../createGame.ts';
-import { createTankRR } from '../ECS/Components/Tank.ts';
-import { random } from '../../../../lib/random.ts';
-import { floor, sqrt } from '../../../../lib/math.ts';
-import { DI } from '../DI';
+import { createGame } from '../../../createGame.ts';
+import { createTankRR } from '../../ECS/Components/Tank.ts';
+import { random } from '../../../../../lib/random.ts';
+import { floor, sqrt } from '../../../../../lib/math.ts';
+import { DI } from '../../DI';
 import { getDrawState } from './utils.ts';
 
 export function createBattlefield(tanksCount: number) {

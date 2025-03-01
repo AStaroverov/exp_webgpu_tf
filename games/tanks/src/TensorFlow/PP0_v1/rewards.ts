@@ -3,9 +3,9 @@ import {
     TANK_INPUT_TENSOR_MAX_BULLETS,
     TANK_INPUT_TENSOR_MAX_ENEMIES,
     TankInputTensor,
-} from '../ECS/Components/TankState.ts';
-import { TankController } from '../ECS/Components/TankController.ts';
-import { hypot } from '../../../../lib/math.ts';
+} from '../../ECS/Components/TankState.ts';
+import { TankController } from '../../ECS/Components/TankController.ts';
+import { hypot } from '../../../../../lib/math.ts';
 import { TANK_RADIUS } from './consts.ts';
 
 // Константы для калибровки вознаграждений

@@ -4,14 +4,14 @@ import { createBattlefield } from './createBattlefield.ts';
 import { INPUT_DIM, SKIP_TICKS, TANK_COUNT_SIMULATION, TICK_TIME_REAL, TICK_TIME_SIMULATION } from './consts.ts';
 import * as tf from '@tensorflow/tfjs';
 import { query } from 'bitecs';
-import { Tank } from '../ECS/Components/Tank.ts';
-import { TankController } from '../ECS/Components/TankController.ts';
+import { Tank } from '../../ECS/Components/Tank.ts';
+import { TankController } from '../../ECS/Components/TankController.ts';
 import {
     TANK_INPUT_TENSOR_MAX_BULLETS,
     TANK_INPUT_TENSOR_MAX_ENEMIES,
     TankInputTensor,
-} from '../ECS/Components/TankState.ts';
-import { macroTasks } from '../../../../lib/TasksScheduler/macroTasks.ts';
+} from '../../ECS/Components/TankState.ts';
+import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
 import { calculateReward } from './rewards.ts';
 
 const MAX_SPEED = 10_000;
