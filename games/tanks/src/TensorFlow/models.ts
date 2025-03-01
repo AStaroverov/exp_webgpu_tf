@@ -169,7 +169,7 @@ export function createExplorationBiasedActorModel(): { meanModel: LayersModel, s
 }
 
 // Function to partially reset weights to help escape local minima
-export async function resetPartialWeights(model: LayersModel, resetProbability: number): Promise<void> {
+export function resetPartialWeights(model: LayersModel, resetProbability: number): void {
     // For each layer (except the last layer)
     for (let i = 0; i < model.layers.length - 1; i++) {
         const layer = model.layers[i];
@@ -211,7 +211,4 @@ export async function resetPartialWeights(model: LayersModel, resetProbability: 
             newKernel.dispose();
         }
     }
-
-    // For memory management
-    await tf.nextFrame();
 }

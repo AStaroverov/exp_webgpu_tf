@@ -17,6 +17,8 @@ import { calculateReward } from './rewards.ts';
 const MAX_SPEED = 10_000;
 
 export async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<number> {
+    const { world, canvas, gameTick, destroy } = createBattlefield(TANK_COUNT_SIMULATION);
+
     const episodeReward: number[] = [];
     const episodeRewardComponents: Record<string, number[]> = {
         map: [],
@@ -28,18 +30,20 @@ export async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<num
         movement: [],
         survival: [],
     };
+    // Maps to track tank state and metrics
+    const mapTankToState = new Map<number, tf.Tensor>();
+    const mapTankToAction = new Map<number, tf.Tensor>();
+    const mapTankToLogProb = new Map<number, tf.Tensor>();
+    const mapTankToValue = new Map<number, tf.Tensor>();
+    const mapTankToReward = new Map<number, number>();
+    const mapTankToHealth = new Map<number, number>(); // Track previous health for damage calculation
+    const mapTankToDone = new Map<number, boolean>(); // Track terminal states
+
+    const destroyEpisode = () => {
+        destroy();
+    };
 
     return new Promise((resolve, reject) => {
-        const { world, canvas, gameTick, destroy } = createBattlefield(TANK_COUNT_SIMULATION);
-
-        // Maps to track tank state and metrics
-        const mapTankToState = new Map<number, tf.Tensor>();
-        const mapTankToAction = new Map<number, tf.Tensor>();
-        const mapTankToLogProb = new Map<number, tf.Tensor>();
-        const mapTankToValue = new Map<number, tf.Tensor>();
-        const mapTankToReward = new Map<number, number>();
-        const mapTankToHealth = new Map<number, number>(); // Track previous health for damage calculation
-        const mapTankToDone = new Map<number, boolean>(); // Track terminal states
 
         // initial game tick
         gameTick(TICK_TIME_SIMULATION);
@@ -85,7 +89,7 @@ export async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<num
                     }`);
                     console.log(`Reward components: ${ rewardStats }`);
 
-                    destroy();
+                    destroyEpisode();
                     stopInterval();
 
                     const totalReward = episodeReward.reduce((a, b) => a + b, 0);
@@ -234,7 +238,7 @@ export async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<num
                 }
             } catch (error) {
                 console.error('Error in game tick:', error);
-                destroy();
+                destroyEpisode();
                 stopInterval();
                 reject(error);
             }
