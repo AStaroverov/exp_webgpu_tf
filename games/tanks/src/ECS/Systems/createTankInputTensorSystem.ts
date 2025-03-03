@@ -7,14 +7,14 @@ import {
     TankInputTensor,
 } from '../Components/TankState.ts';
 import { getEntityIdByPhysicalId, RigidBodyRef } from '../Components/Physical.ts';
-import { hypot } from '../../../../../lib/math.ts';
+import { hypot, max } from '../../../../../lib/math.ts';
 import { Ball, Collider } from '@dimforge/rapier2d';
 import { CollisionGroup, createCollisionGroups } from '../../Physical/createRigid.ts';
 import { query } from 'bitecs';
 import { Player } from '../Components/Player.ts';
 
 export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
-    const colliderIds = new Float64Array(4);
+    const colliderIds = new Float64Array(max(TANK_INPUT_TENSOR_MAX_ENEMIES, TANK_INPUT_TENSOR_MAX_BULLETS));
 
     return () => {
         const tankEids = query(world, [Tank, TankInputTensor, RigidBodyRef]);
@@ -79,6 +79,7 @@ export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
                 rb && TankInputTensor.setEnemiesData(
                     tankEid,
                     j,
+                    getEntityIdByPhysicalId(pid),
                     rb.translation(),
                     rb.linvel(),
                 );
@@ -120,6 +121,7 @@ export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
                 rb && TankInputTensor.setBulletsData(
                     tankEid,
                     j,
+                    getEntityIdByPhysicalId(pid),
                     rb.translation(),
                     rb.linvel(),
                 );

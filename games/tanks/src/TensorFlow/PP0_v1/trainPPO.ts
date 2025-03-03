@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { setWasmPaths } from '@tensorflow/tfjs-backend-wasm';
-import { MAX_STEPS } from './consts.ts';
+import { MAX_STEPS } from '../Common/consts.ts';
 import { BATCH_SIZE, PPOAgent } from './PPOAgent.ts';
 import { runEpisode } from './runEpisode.ts';
 import { createActorModel, createExplorationBiasedActorModel, resetPartialWeights } from './models.ts';

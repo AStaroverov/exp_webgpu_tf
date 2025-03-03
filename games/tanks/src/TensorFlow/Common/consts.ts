@@ -6,4 +6,4 @@ export const TICK_TIME_SIMULATION = 16.6667 * 2;
 export const SKIP_TICKS = 2;
 export const MAX_STEPS = 2000; // Limit episode length
 export const INPUT_DIM = 63; // Tank state dimensions (same as your original implementation)
-export const ACTION_DIM = 5; // [shoot, move, turn, targetX, targetY]
+export const ACTION_DIM = 5; // [shoot, moveX, moveY, targetX, targetY]

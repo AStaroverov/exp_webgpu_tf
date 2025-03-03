@@ -76,7 +76,7 @@ export function createPlayerTankBulletSystem({ document, canvas } = DI) {
         event.preventDefault();
         switch (event.code) {
             case 'Space': {
-                !isNil(PLAYER_REFS.tankPid) && TankController.setShooting(PLAYER_REFS.tankPid, true);
+                !isNil(PLAYER_REFS.tankPid) && TankController.setShooting$(PLAYER_REFS.tankPid, true);
                 break;
             }
         }
@@ -85,7 +85,7 @@ export function createPlayerTankBulletSystem({ document, canvas } = DI) {
         event.preventDefault();
         switch (event.code) {
             case 'Space': {
-                !isNil(PLAYER_REFS.tankPid) && TankController.setShooting(PLAYER_REFS.tankPid, false);
+                !isNil(PLAYER_REFS.tankPid) && TankController.setShooting$(PLAYER_REFS.tankPid, false);
                 break;
             }
         }
@@ -93,12 +93,12 @@ export function createPlayerTankBulletSystem({ document, canvas } = DI) {
 
     canvas.addEventListener('mousedown', (event) => {
         event.preventDefault();
-        !isNil(PLAYER_REFS.tankPid) && TankController.setShooting(PLAYER_REFS.tankPid, true);
+        !isNil(PLAYER_REFS.tankPid) && TankController.setShooting$(PLAYER_REFS.tankPid, true);
     });
 
     canvas.addEventListener('mouseup', (event) => {
         event.preventDefault();
-        !isNil(PLAYER_REFS.tankPid) && TankController.setShooting(PLAYER_REFS.tankPid, false);
+        !isNil(PLAYER_REFS.tankPid) && TankController.setShooting$(PLAYER_REFS.tankPid, false);
     });
 
     return () => {

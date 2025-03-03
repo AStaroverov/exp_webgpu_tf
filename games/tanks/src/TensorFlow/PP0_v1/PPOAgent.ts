@@ -1,7 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
 import { LayersModel, Scalar } from '@tensorflow/tfjs';
 import { createActorModel, createCriticModel, createExplorationBiasedActorModel } from './models.ts';
-import { ACTION_DIM, INPUT_DIM } from './consts.ts';
+import { ACTION_DIM, INPUT_DIM } from '../Common/consts.ts';
 import { clamp } from 'lodash-es';
 import { PrioritizedExperienceBuffer } from './PrioritizedExperienceBuffer.ts';
 

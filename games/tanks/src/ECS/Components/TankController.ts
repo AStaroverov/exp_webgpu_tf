@@ -5,10 +5,15 @@ import { DI } from '../../DI';
 import { component, obs } from '../../../../../src/ECS/utils.ts';
 
 export const TankController = component(({
-    move: TypedArray.f64(delegate.defaultSize),
-    rotation: TypedArray.f64(delegate.defaultSize),
     shot: TypedArray.i8(delegate.defaultSize),
     shotCooldown: TypedArray.f32(delegate.defaultSize),
+
+    // Control tank by player
+    move: TypedArray.f64(delegate.defaultSize),
+    rotation: TypedArray.f64(delegate.defaultSize),
+    // Alternative way control tank by AI agent
+    moveTarget: NestedArray.f64(2, delegate.defaultSize),
+
     turretTarget: NestedArray.f64(2, delegate.defaultSize),
 
     // Methods
@@ -18,7 +23,7 @@ export const TankController = component(({
     shouldShoot(eid: number): boolean {
         return TankController.shot[eid] > 0 && TankController.shotCooldown[eid] <= 0;
     },
-    setShooting: ((eid: number, v: boolean): void => {
+    setShooting$: obs((eid: number, v: boolean): void => {
         TankController.shot[eid] = v ? 1 : 0;
     }),
     startCooldown: ((eid: number): void => {
@@ -32,6 +37,10 @@ export const TankController = component(({
     }),
     setRotate$: obs((eid: number, dir: number): void => {
         TankController.rotation[eid] = dir;
+    }),
+    setMoveTarget$: obs((eid: number, x: number, y: number): void => {
+        TankController.moveTarget.set(eid, 0, x);
+        TankController.moveTarget.set(eid, 1, y);
     }),
     setTurretTarget$: obs((eid: number, x: number, y: number): void => {
         TankController.turretTarget.set(eid, 0, x);

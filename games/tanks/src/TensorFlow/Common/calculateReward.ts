@@ -10,7 +10,7 @@ import { TANK_RADIUS } from './consts.ts';
 
 // Константы для калибровки вознаграждений
 const REWARD_WEIGHTS = {
-    HEALTH_CHANGE: 7.0,        // За потерю всего здоровья (от 1 до 0) штраф -7
+    HEALTH_CHANGE: 0.5,        // За потерю всего здоровья (от 1 до 0) штраф -7
     HEALTH_BONUS: 0.05,        // За полное здоровье бонус +0.05 (незначительный)
     AIM_QUALITY: 2.5,                  // Максимум +2.5 за идеальное прицеливание
     SHOOTING_AIMED: 1.0,        // +1.0 за стрельбу при хорошем прицеливании
@@ -26,16 +26,6 @@ const REWARD_WEIGHTS = {
     DEATH: -5.0,                 // Существенный штраф -5 за уничтожение (но не самый худший)
 };
 
-// Хранение предыдущих состояний для каждого танка
-const prevTankStates = new Map<number, {
-    // Последние N позиций танка для определения застревания
-    positions: Array<{ x: number, y: number }>,
-    // Количество последовательных тиков для определения однотипного поведения
-    sameActionCounter: number,
-    // Последнее действие
-    lastAction?: number[]
-}>();
-
 export function calculateReward(
     tankEid: number,
     actions: ArrayLike<number>,
@@ -49,51 +39,6 @@ export function calculateReward(
     const tankSpeed = TankInputTensor.speed[tankEid];
     const turretTarget = TankController.getTurretTarget(tankEid);
 
-    // Инициализируем состояние танка, если оно еще не существует
-    if (!prevTankStates.has(tankEid)) {
-        prevTankStates.set(tankEid, {
-            positions: Array(10).fill({ x: tankX, y: tankY }),
-            sameActionCounter: 0,
-        });
-    }
-
-    // Получаем предыдущее состояние
-    const tankState = prevTankStates.get(tankEid)!;
-
-    // Обновляем историю позиций (для определения застревания)
-    tankState.positions.push({ x: tankX, y: tankY });
-    if (tankState.positions.length > 10) {
-        tankState.positions.shift();
-    }
-
-    // Проверка на повторяющиеся действия
-    let repeatedActionPenalty = 0;
-    if (tankState.lastAction) {
-        // Сравниваем текущее и предыдущее действия
-        let actionSimilarity = 0;
-        for (let i = 0; i < 5; i++) {
-            if (Math.abs((actions[i] || 0) - (tankState.lastAction[i] || 0)) < 0.1) {
-                actionSimilarity++;
-            }
-        }
-
-        // Если все 5 действий почти идентичны
-        if (actionSimilarity >= 5) {
-            tankState.sameActionCounter++;
-            // Применяем штраф только если действия повторяются долго
-            if (tankState.sameActionCounter > 20) {
-                repeatedActionPenalty = -0.05 * (tankState.sameActionCounter - 20);
-                // Ограничиваем максимальный штраф
-                repeatedActionPenalty = Math.max(repeatedActionPenalty, -0.5);
-            }
-        } else {
-            tankState.sameActionCounter = 0;
-        }
-    }
-
-    // Сохраняем текущее действие для следующего сравнения
-    tankState.lastAction = Array.from(actions);
-
     // Компоненты вознаграждения
     const rewardRecord = {
         map: 0,              // Нахождение в пределах карты
@@ -104,7 +49,6 @@ export function calculateReward(
         damageDealt: 0,      // Нанесение урона
         movement: 0,         // Эффективность движения
         survival: 0,         // Бонус за выживание
-        exploration: 0,      // Исследование карты
     };
 
     // 1. Базовое вознаграждение за пребывание в пределах карты - упрощено
@@ -141,8 +85,8 @@ export function calculateReward(
     let closestEnemyDist = Number.MAX_VALUE;
 
     for (let j = 0; j < TANK_INPUT_TENSOR_MAX_ENEMIES; j++) {
-        const enemyX = TankInputTensor.enemiesData.get(tankEid, j * 4);
-        const enemyY = TankInputTensor.enemiesData.get(tankEid, j * 4 + 1);
+        const enemyX = TankInputTensor.enemiesData.get(tankEid, j * 5 + 1);
+        const enemyY = TankInputTensor.enemiesData.get(tankEid, j * 5 + 2);
 
         // Если враг существует (не нулевые координаты)
         if (enemyX !== 0 || enemyY !== 0) {
@@ -181,10 +125,10 @@ export function calculateReward(
     let closestBulletDistance = Number.MAX_VALUE;
 
     for (let j = 0; j < TANK_INPUT_TENSOR_MAX_BULLETS; j++) {
-        const bulletX = TankInputTensor.bulletsData.get(tankEid, j * 4);
-        const bulletY = TankInputTensor.bulletsData.get(tankEid, j * 4 + 1);
-        const bulletVx = TankInputTensor.bulletsData.get(tankEid, j * 4 + 2);
-        const bulletVy = TankInputTensor.bulletsData.get(tankEid, j * 4 + 3);
+        const bulletX = TankInputTensor.bulletsData.get(tankEid, j * 5 + 1);
+        const bulletY = TankInputTensor.bulletsData.get(tankEid, j * 5 + 2);
+        const bulletVx = TankInputTensor.bulletsData.get(tankEid, j * 5 + 3);
+        const bulletVy = TankInputTensor.bulletsData.get(tankEid, j * 5 + 4);
 
         if ((bulletX === 0 && bulletY === 0) || hypot(bulletVx, bulletVy) < 100) continue;
 
@@ -259,22 +203,6 @@ export function calculateReward(
         rewardRecord.movement += REWARD_WEIGHTS.STRATEGIC_MOVEMENT;
     }
 
-    // Проверка на застревание (перемещение меньше порога)
-    if (tankState.positions.length >= 10) {
-        let totalMovement = 0;
-        for (let i = 1; i < tankState.positions.length; i++) {
-            totalMovement += hypot(
-                tankState.positions[i].x - tankState.positions[i - 1].x,
-                tankState.positions[i].y - tankState.positions[i - 1].y,
-            );
-        }
-
-        // Если танк практически не двигался за последние 10 тиков
-        if (totalMovement < 50) {
-            rewardRecord.movement -= 0.2; // Штраф за застревание
-        }
-    }
-
     // 6. Поддержание оптимальной дистанции от врагов
     if (hasTargets) {
         if (closestEnemyDist < 150) {
@@ -294,11 +222,6 @@ export function calculateReward(
         rewardRecord.survival += REWARD_WEIGHTS.SURVIVAL;
     }
 
-    // Финальный штраф за повторяющиеся действия
-    if (repeatedActionPenalty !== 0) {
-        rewardRecord.exploration = repeatedActionPenalty;
-    }
-
     const totalReward =
         rewardRecord.map +
         rewardRecord.health +
@@ -306,8 +229,7 @@ export function calculateReward(
         rewardRecord.avoidBullets +
         rewardRecord.avoidEnemies +
         rewardRecord.movement +
-        rewardRecord.survival +
-        rewardRecord.exploration;
+        rewardRecord.survival;
 
     const clippedReward = Math.max(-15, Math.min(15, totalReward));
 

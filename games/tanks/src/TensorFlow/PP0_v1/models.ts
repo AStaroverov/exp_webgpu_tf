@@ -1,7 +1,7 @@
 // Improved models.ts with optimized network architecture
 import * as tf from '@tensorflow/tfjs';
 import { layers, LayersModel, sequential } from '@tensorflow/tfjs';
-import { ACTION_DIM, INPUT_DIM } from './consts.ts';
+import { ACTION_DIM, INPUT_DIM } from '../Common/consts.ts';
 import { Regularizer, RegularizerIdentifier } from '@tensorflow/tfjs-layers/dist/regularizers';
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 

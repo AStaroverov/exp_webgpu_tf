@@ -1,18 +1,15 @@
 // Function to run a simulation episode with improved handling and rewards
 import { PPOAgent } from './PPOAgent.ts';
-import { createBattlefield } from './createBattlefield.ts';
-import { INPUT_DIM, SKIP_TICKS, TANK_COUNT_SIMULATION, TICK_TIME_REAL, TICK_TIME_SIMULATION } from './consts.ts';
+import { createBattlefield } from '../Common/createBattlefield.ts';
+import { SKIP_TICKS, TANK_COUNT_SIMULATION, TICK_TIME_REAL, TICK_TIME_SIMULATION } from '../Common/consts.ts';
 import * as tf from '@tensorflow/tfjs';
 import { query } from 'bitecs';
 import { Tank } from '../../ECS/Components/Tank.ts';
 import { TankController } from '../../ECS/Components/TankController.ts';
-import {
-    TANK_INPUT_TENSOR_MAX_BULLETS,
-    TANK_INPUT_TENSOR_MAX_ENEMIES,
-    TankInputTensor,
-} from '../../ECS/Components/TankState.ts';
+import { TankInputTensor } from '../../ECS/Components/TankState.ts';
 import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
-import { calculateReward } from './rewards.ts';
+import { calculateReward } from '../Common/calculateReward.ts';
+import { createInputVector } from '../Common/createInputVector.ts';
 
 const MAX_SPEED = 10_000;
 
@@ -44,7 +41,6 @@ export async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<num
     };
 
     return new Promise((resolve, reject) => {
-
         // initial game tick
         gameTick(TICK_TIME_SIMULATION);
 
@@ -246,49 +242,9 @@ export async function runEpisode(agent: PPOAgent, maxSteps: number): Promise<num
     });
 }
 
-function createInputVector(tankEid: number, width: number, height: number, maxSpeed: number) {
-    const inputVector = new Float32Array(INPUT_DIM);
-    const tankX = TankInputTensor.x[tankEid];
-    const tankY = TankInputTensor.y[tankEid];
-    let k = 0;
-
-    // Tank state
-    inputVector[k++] = TankInputTensor.health[tankEid];
-    inputVector[k++] = tankX / width;
-    inputVector[k++] = tankY / height;
-    inputVector[k++] = TankInputTensor.speed[tankEid] / maxSpeed;
-    inputVector[k++] = TankInputTensor.rotation[tankEid] / Math.PI;
-    inputVector[k++] = TankInputTensor.turretRotation[tankEid] / Math.PI;
-    inputVector[k++] = TankInputTensor.projectileSpeed[tankEid] / maxSpeed;
-
-    // Enemies data
-    const enemiesBuffer = TankInputTensor.enemiesData.getBatche(tankEid);
-    for (let i = 0; i < TANK_INPUT_TENSOR_MAX_ENEMIES; i++) {
-        enemiesBuffer[i * 4 + 0] = enemiesBuffer[i * 4 + 0] / width;
-        enemiesBuffer[i * 4 + 1] = enemiesBuffer[i * 4 + 1] / height;
-        enemiesBuffer[i * 4 + 2] = enemiesBuffer[i * 4 + 2] / maxSpeed;
-        enemiesBuffer[i * 4 + 3] = enemiesBuffer[i * 4 + 3] / maxSpeed;
-    }
-    inputVector.set(enemiesBuffer, k);
-    k += enemiesBuffer.length;
-
-    // Bullets data
-    const bulletsBuffer = TankInputTensor.bulletsData.getBatche(tankEid);
-    for (let i = 0; i < TANK_INPUT_TENSOR_MAX_BULLETS; i++) {
-        bulletsBuffer[i * 4 + 0] = bulletsBuffer[i * 4 + 0] / width;
-        bulletsBuffer[i * 4 + 1] = bulletsBuffer[i * 4 + 1] / height;
-        bulletsBuffer[i * 4 + 2] = bulletsBuffer[i * 4 + 2] / maxSpeed;
-        bulletsBuffer[i * 4 + 3] = bulletsBuffer[i * 4 + 3] / maxSpeed;
-    }
-    inputVector.set(bulletsBuffer, k);
-    k += bulletsBuffer.length;
-
-    return inputVector;
-}
-
 function applyActions(tankEid: number, actions: ArrayLike<number>, width: number, height: number) {
     const shouldShoot = actions[0] > 0;
-    TankController.setShooting(tankEid, shouldShoot);
+    TankController.setShooting$(tankEid, shouldShoot);
     TankController.setMove$(tankEid, actions[1]);
     TankController.setRotate$(tankEid, actions[2]);
     TankController.setTurretTarget$(
