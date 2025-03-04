@@ -1,9 +1,9 @@
-// Main entry point for the Shared Tank RL system
+// Main entry point for the Shared Tank PPO system
 import { setExperiment } from './experiment-config';
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
-import { SharedRLGameManager } from './SharedRLGameManager.ts';
 import { setWasmPaths } from '@tensorflow/tfjs-backend-wasm';
+import { getRLGameManger } from './manager.ts';
 
 // Initialize TensorFlow.js with WASM backend
 async function initTensorFlow() {
@@ -26,7 +26,7 @@ async function initTensorFlow() {
 }
 
 // Main initialization function
-async function initSharedRLSystem(options: {
+async function initSharedPPOSystem(options: {
     isTraining?: boolean;
     experimentName?: string;
 } = {}) {
@@ -36,7 +36,7 @@ async function initSharedRLSystem(options: {
     } = options;
 
     console.log('===================================');
-    console.log('Initializing Shared Tank RL System');
+    console.log('Initializing Shared Tank PPO System');
     console.log(`Mode: ${ isTraining ? 'Training' : 'Evaluation' }`);
     console.log(`Experiment: ${ experimentName }`);
     console.log('===================================');
@@ -50,23 +50,22 @@ async function initSharedRLSystem(options: {
 
     // Set experiment configuration
     setExperiment(experimentName);
-    console.log('Using experiment configuration: ' + experimentName);
-    // console.log(getExperimentSettings());
+    console.log('Using PPO experiment configuration: ' + experimentName);
 
     // Start the game
     try {
-        const gameManager = new SharedRLGameManager(isTraining);
+        const gameManager = getRLGameManger();
         await gameManager.init();
         gameManager.start();
 
-        console.log('Shared Tank RL System successfully initialized');
+        console.log('Shared Tank PPO System successfully initialized');
 
         return gameManager;
     } catch (error) {
-        console.error('Failed to start Shared Tank RL Game:', error);
+        console.error('Failed to start Shared Tank PPO Game:', error);
         return null;
     }
 }
 
 // Export the main initialization function
-export { initSharedRLSystem };
+export { initSharedPPOSystem };

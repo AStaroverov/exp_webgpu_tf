@@ -1,15 +1,17 @@
 // Debug visualization for the Shared Tank RL system
 import { getCurrentExperiment } from './experiment-config';
 import { getSharedAgent } from './agent.ts';
+import { getRLGameManger } from './manager.ts';
 
 // DebugInfo singleton to track statistics
 export const DebugInfo = {
     getStatsSummary() {
+        const manager = getRLGameManger();
         const agent = getSharedAgent();
         const agentStats = agent.getStats();
 
         return {
-            episodeCount: agentStats.episodeCount,
+            episodeCount: manager.getEpisodeCount(),
             avgReward: agentStats.avgReward,
             memoryUsage: (performance as any).memory.usedJSHeapSize / (1024 * 1024),
             epsilon: agentStats.epsilon,

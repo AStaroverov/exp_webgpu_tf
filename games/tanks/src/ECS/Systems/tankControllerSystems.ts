@@ -12,7 +12,9 @@ export function createTankPositionSystem({ world, physicalWorld } = DI) {
     const impulseFactor = 15000000000; // Масштаб импульса (настраиваемый)
     const rotationImpulseFactor = 100000000000; // Масштаб крутящего момента
 
-    const controlByPlayer = (tankEids: readonly number[], delta: number) => {
+    return (delta: number) => {
+        const tankEids = query(world, [Tank, TankController]);
+
         for (let i = 0; i < tankEids.length; i++) {
             const tankId = tankEids[i];
             const moveDirection = TankController.move[tankId];
@@ -33,75 +35,6 @@ export function createTankPositionSystem({ world, physicalWorld } = DI) {
             // Применяем крутящий момент для поворота
             rb.applyTorqueImpulse(rotationDirection * rotationImpulseFactor * delta / 1000, true);
         }
-    };
-
-
-    const targetDir = new Vector2(0, 0);
-    const controlByAI = (tankEids: readonly number[], delta: number) => {
-        for (let i = 0; i < tankEids.length; i++) {
-            const tankEid = tankEids[i];
-            const targetPos = TankController.moveTarget.getBatche(tankEid);
-
-            // Пропускаем танки без целевой точки
-            if (targetPos[0] === 0 && targetPos[1] === 0) continue;
-
-            const tankRB = physicalWorld.getRigidBody(RigidBodyRef.id[tankEid]);
-            const tankRot = tankRB.rotation();
-            const tankPos = tankRB.translation();
-
-            // Вычисляем направление к цели
-            targetDir.x = targetPos[0] - tankPos.x;
-            targetDir.y = targetPos[1] - tankPos.y;
-
-            // Расстояние до цели
-            const distanceToTarget = Math.sqrt(targetDir.x * targetDir.x + targetDir.y * targetDir.y);
-
-            // Если мы достигли цели (с некоторой погрешностью), останавливаемся
-            if (distanceToTarget < 10) continue;
-
-            // Вычисляем угол, на который нужно повернуться
-            const targetRot = Math.atan2(targetDir.y, targetDir.x) + Math.PI / 2;
-            let deltaRot = targetRot - tankRot;
-
-            // Нормализуем угол поворота в диапазоне [-PI, PI]
-            while (deltaRot > Math.PI) deltaRot -= 2 * Math.PI;
-            while (deltaRot < -Math.PI) deltaRot += 2 * Math.PI;
-
-            // Определяем направление поворота
-            const rotationDirection = Math.sign(deltaRot);
-
-            // Определяем, можем ли мы двигаться вперед
-            // Если угол между текущим направлением и целью слишком большой,
-            // то сначала поворачиваемся, а потом едем
-            const canMoveForward = Math.abs(deltaRot) < Math.PI / 4; // 45 градусов
-
-            // Настраиваем линейную скорость
-            nextLinvel.x = 0;
-            nextLinvel.y = 0;
-
-            if (canMoveForward) {
-                // Движемся вперед с силой, пропорциональной расстоянию до цели
-                // Но не более максимального импульса
-                const speedFactor = Math.min(distanceToTarget / 100, 1.0);
-                nextLinvel.y = -speedFactor * impulseFactor * delta / 1000;
-                applyRotationToVector(nextLinvel, nextLinvel, tankRot);
-
-                // Применяем импульс для движения
-                tankRB.applyImpulse(nextLinvel, true);
-            }
-
-            // Применяем крутящий момент для поворота
-            // Сила поворота зависит от угла, который нужно преодолеть
-            const rotationFactor = Math.min(Math.abs(deltaRot) / Math.PI, 1.0);
-            tankRB.applyTorqueImpulse(rotationDirection * rotationFactor * rotationImpulseFactor * delta / 1000, true);
-        }
-    };
-
-    return (delta: number) => {
-        const tankEids = query(world, [Tank, TankController]);
-
-        controlByPlayer(tankEids, delta);
-        controlByAI(tankEids, delta);
     };
 }
 

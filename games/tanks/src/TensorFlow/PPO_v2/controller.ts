@@ -9,31 +9,21 @@ const tankStates = new Map<number, Float32Array>();
 // Map to track previous health values
 const prevHealth = new Map<number, number>();
 // Map to store previous actions
-const prevActions = new Map<number, Float32Array>();
+const prevActions = new Map<number, {
+    action: number[];
+    logProb: tf.Tensor;
+    value: tf.Tensor;
+}>();
 // Track accumulated rewards per tank
 const tankRewards = new Map<number, number>();
 // Track active status of tanks
 const activeTanks = new Map<number, boolean>();
 
-export async function initSharedRLController(_useTrainedModel = true) {
-    console.log('Initializing shared RL controller');
+export function initSharedRLController(_useTrainedModel = true) {
+    console.log('Initializing shared PPO controller');
 
     // Get shared agent
     const agent = getSharedAgent();
-
-    // Load trained model if requested
-    // if (useTrainedModel) {
-    try {
-        const loaded = await agent.loadModel();
-        if (loaded) {
-            console.log('Loaded trained shared model');
-        } else {
-            console.warn('Failed to load shared model, starting with a new one');
-        }
-    } catch (error) {
-        console.error('Error loading shared model:', error);
-    }
-    // }
 
     // Clear previous state maps
     tankStates.clear();
@@ -43,6 +33,18 @@ export async function initSharedRLController(_useTrainedModel = true) {
     activeTanks.clear();
 
     return agent;
+}
+
+export function resetSharedRLController() {
+    // Clear previous state maps
+    tankStates.clear();
+    prevHealth.clear();
+    prevActions.clear();
+    tankRewards.clear();
+    activeTanks.clear();
+    // Reset agent
+    // const agent = getSharedAgent();
+    // agent.dispose();
 }
 
 /**
@@ -58,12 +60,10 @@ export function registerTank(tankEid: number) {
 
     // Initialize rewards
     tankRewards.set(tankEid, 0);
-
-    console.log(`Tank ${ tankEid } registered with shared RL controller`);
 }
 
 /**
- * Update tank using the shared RL controller
+ * Update tank using the shared PPO controller
  * @param tankEid Tank entity ID
  * @param width Canvas width
  * @param height Canvas height
@@ -93,21 +93,22 @@ export function updateTankWithSharedRL(
 
     try {
         // Get action from agent
-        const action = agent.act(currentState, tankEid, isTraining);
+        const result = agent.act(currentState, tankEid, isTraining);
+        const { action } = result;
 
         // Apply action to tank controller
         applyActionToTank(tankEid, action, width, height);
 
-        // If in training mode and we have a previous state, calculate reward and learn
-        if (isTraining && tankStates.has(tankEid)) {
+        if (!result.onPolicy) return;
+
+        // If in training mode and we have a previous state, calculate reward and store experience
+        if (isTraining && tankStates.has(tankEid) && prevActions.has(tankEid)) {
             const prevState = tankStates.get(tankEid)!;
             const prevStateTensor = tf.tensor1d(prevState);
-
-            const prevAction = prevActions.get(tankEid)!;
-            const prevActionTensor = tf.tensor1d(prevAction);
+            const { action: prevAction, logProb: prevLogProb, value: prevValue } = prevActions.get(tankEid)!;
 
             // Calculate reward
-            const rewardComponents = calculateMultiHeadReward(
+            const reward = calculateTotalReward(
                 tankEid,
                 prevAction,
                 prevHealth.get(tankEid)!,
@@ -117,25 +118,28 @@ export function updateTankWithSharedRL(
 
             // Accumulate reward for this tank
             const currentReward = tankRewards.get(tankEid) || 0;
-            tankRewards.set(tankEid, currentReward + rewardComponents.totalReward);
+            tankRewards.set(tankEid, currentReward + reward);
+
+            // Check if tank is "dead" based on health
+            const isDone = inputVector[0] <= 0;
 
             // Store experience in agent's memory
-            const isDone = inputVector[0] <= 0; // Check if tank is "dead" based on health
             agent.remember(
                 prevStateTensor,
-                prevActionTensor,
-                rewardComponents,
-                currentState,
+                tf.tensor1d(prevAction),
+                prevLogProb,
+                prevValue,
+                reward,
                 isDone,
             );
-
-            // Clean up tensors
-            prevStateTensor.dispose();
-            prevActionTensor.dispose();
         }
 
-        // Store current action for next update
-        prevActions.set(tankEid, new Float32Array(action));
+        // Store current action, logProb, and value for next update
+        prevActions.set(tankEid, {
+            action,
+            value: result.value,
+            logProb: result.logProb,
+        });
 
         // Update previous health
         prevHealth.set(tankEid, inputVector[0]);
@@ -146,21 +150,25 @@ export function updateTankWithSharedRL(
         // Clean up tensors
         currentState.dispose();
     } catch (error) {
-        console.error(`Error updating shared RL controller for tank ${ tankEid }:`, error);
+        console.error(`Error updating shared PPO controller for tank ${ tankEid }:`, error);
         currentState.dispose();
     }
 }
 
 /**
- * Apply the RL agent's action to the tank controller
+ * Apply the PPO agent's action to the tank controller
  * @param tankEid Tank entity ID
  * @param action Array of action values [shoot, move, rotate, aimX, aimY]
  * @param width Canvas width
  * @param height Canvas height
  */
 function applyActionToTank(tankEid: number, action: number[], width: number, height: number) {
-    const [shoot, move, rotate, aimX, aimY] = action;
-    
+    const [shoot, moveX, moveY, aimX, aimY] = action;
+
+    // Combined move and rotate into single vector
+    const move = moveX;  // Forward/backward movement
+    const rotate = moveY;  // Left/right rotation
+
     TankController.setShooting$(tankEid, shoot > 0.5);
     TankController.setMove$(tankEid, move);
     TankController.setRotate$(tankEid, rotate);
@@ -169,6 +177,29 @@ function applyActionToTank(tankEid: number, action: number[], width: number, hei
     const turretTargetX = (aimX + 1) / 2 * width;
     const turretTargetY = (aimY + 1) / 2 * height;
     TankController.setTurretTarget$(tankEid, turretTargetX, turretTargetY);
+}
+
+/**
+ * Calculates the total reward based on multi-head reward components
+ */
+function calculateTotalReward(
+    tankEid: number,
+    action: number[],
+    prevHealth: number,
+    width: number,
+    height: number,
+): number {
+    // Используем существующую функцию для расчета компонентов наград
+    const rewardComponents = calculateMultiHeadReward(
+        tankEid,
+        action,
+        prevHealth,
+        width,
+        height,
+    );
+
+    // Просто возвращаем общую награду
+    return rewardComponents.totalReward;
 }
 
 export function isActiveTank(tankEid: number): boolean {
@@ -182,7 +213,6 @@ export function isActiveTank(tankEid: number): boolean {
 export function deactivateTank(tankEid: number) {
     // Mark tank as inactive
     activeTanks.set(tankEid, false);
-    console.log(`Tank ${ tankEid } deactivated`);
 }
 
 /**
@@ -209,6 +239,13 @@ export async function trainSharedModel() {
  * @param tankEid Tank entity ID
  */
 export function cleanupTankRL(tankEid: number) {
+    // Free tensors
+    if (prevActions.has(tankEid)) {
+        const { logProb, value } = prevActions.get(tankEid)!;
+        logProb.dispose();
+        value.dispose();
+    }
+
     // Remove from maps
     tankStates.delete(tankEid);
     prevHealth.delete(tankEid);
@@ -221,6 +258,12 @@ export function cleanupTankRL(tankEid: number) {
  * Clean up all RL resources
  */
 export function cleanupAllRL() {
+    // Free tensors
+    for (const { logProb, value } of prevActions.values()) {
+        logProb.dispose();
+        value.dispose();
+    }
+
     // Clear maps
     tankStates.clear();
     prevHealth.clear();
@@ -231,7 +274,7 @@ export function cleanupAllRL() {
     // Dispose shared agent
     disposeSharedAgent();
 
-    console.log('All RL resources cleaned up');
+    console.log('All PPO resources cleaned up');
 }
 
 /**
@@ -239,7 +282,7 @@ export function cleanupAllRL() {
  * @param episodeLength Length of the episode in frames
  * @returns Agent statistics
  */
-export function logEpisodeCompletion(episodeLength: number) {
+export function completeAgentEpisode(episodeLength: number) {
     // Calculate average reward across all tanks
     let totalReward = 0;
     let tankCount = 0;
@@ -265,7 +308,7 @@ export function logEpisodeCompletion(episodeLength: number) {
 /**
  * Save the shared model
  */
-export async function saveSharedModel() {
+export async function saveSharedAgent() {
     const agent = getSharedAgent();
-    return agent.saveModel();
+    return agent.save();
 }
