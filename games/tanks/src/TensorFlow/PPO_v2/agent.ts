@@ -3,112 +3,19 @@ import '@tensorflow/tfjs-backend-wasm';
 import { ACTION_DIM, INPUT_DIM } from '../Common/consts';
 import { getCurrentExperiment, RLExperimentConfig } from './experiment-config';
 import { random } from '../../../../../lib/random.ts';
-import { generateGuidedRandomAction, generatePureRandomAction } from './generateActions.ts';
-
-// Буфер опыта для PPO
-class PPOMemory {
-    private states: tf.Tensor[] = [];
-    private actions: tf.Tensor[] = [];
-    private logProbs: tf.Tensor[] = [];
-    private values: tf.Tensor[] = [];
-    private rewards: number[] = [];
-    private dones: boolean[] = [];
-
-    constructor() {
-    }
-
-
-    size() {
-        return this.states.length;
-    }
-
-    add(state: tf.Tensor, action: tf.Tensor, logProb: tf.Tensor, value: tf.Tensor, reward: number, done: boolean) {
-        this.states.push(state.clone());
-        this.actions.push(action.clone());
-        this.logProbs.push(logProb.clone());
-        this.values.push(value.clone());
-        this.rewards.push(reward);
-        this.dones.push(done);
-    }
-
-    // Метод для получения батча для обучения
-    getBatch() {
-        if (this.states.length === 0) {
-            throw new Error('Memory is empty');
-        }
-
-        return {
-            states: tf.stack(this.states),
-            actions: tf.stack(this.actions),
-            logProbs: tf.stack(this.logProbs),
-            values: tf.stack(this.values),
-            rewards: tf.tensor1d(this.rewards),
-            dones: tf.tensor1d(this.dones.map(done => done ? 1.0 : 0.0)),
-        };
-    }
-
-    computeReturnsAndAdvantages(gamma: number, lam: number, lastValue: number = 0) {
-        const n = this.states.length;
-        const returns: number[] = new Array(n).fill(0);
-        const advantages: number[] = new Array(n).fill(0);
-
-        // Скачаем values в CPU, чтоб проще считать
-        const valuesArr = tf.stack(this.values).dataSync(); // shape [n]
-
-        let adv = 0;
-        // bootstrap, если последний transition не done
-        let lastVal = lastValue; // Если done в конце, возьмём 0
-
-        // Идём с конца вперёд
-        for (let i = n - 1; i >= 0; i--) {
-            if (this.dones[i]) {
-                // если done, то обнуляем хвост
-                adv = 0;
-                lastVal = 0;
-            }
-            const delta = this.rewards[i]
-                + gamma * lastVal * (this.dones[i] ? 0 : 1)
-                - valuesArr[i];
-            adv = delta + gamma * lam * adv * (this.dones[i] ? 0 : 1);
-
-            advantages[i] = adv;
-            returns[i] = valuesArr[i] + adv;
-
-            lastVal = valuesArr[i];
-        }
-
-        return { returns: tf.tensor1d(returns), advantages: tf.tensor1d(advantages) };
-    }
-
-    dispose() {
-        // Освобождаем все тензоры
-        this.states.forEach(state => state.dispose());
-        this.actions.forEach(action => action.dispose());
-        this.logProbs.forEach(logProb => logProb.dispose());
-        this.values.forEach(value => value.dispose());
-
-        // Сбрасываем массивы
-        this.states = [];
-        this.actions = [];
-        this.logProbs = [];
-        this.values = [];
-        this.rewards = [];
-        this.dones = [];
-    }
-
-}
+import { Memory } from './Memory.ts';
 
 // Общий PPO агент для всех танков
 export class SharedTankPPOAgent {
-    private memory: PPOMemory;
+    private memory: Memory;
     private policyNetwork: tf.LayersModel;  // Сеть политики
     private valueNetwork: tf.LayersModel;   // Сеть критика
-    private optimizer: tf.Optimizer;        // Оптимизатор для обучения
-    private epsilon: number;                // Параметр для исследования среды
-    private config: RLExperimentConfig;
-    private ppoEpsilon: number;             // Параметр клиппирования для PPO
-    private epochs: number;                 // Количество эпох обучения на одном батче
-    private entropyCoeff: number;           // Коэффициент энтропии для поощрения исследования
+    private optimizer!: tf.Optimizer;        // Оптимизатор для обучения
+    private epsilon!: number;                // Параметр для исследования среды
+    private config!: RLExperimentConfig;
+    private ppoEpsilon!: number;             // Параметр клиппирования для PPO
+    private ppoEpochs!: number;                 // Количество эпох обучения на одном батче
+    private entropyCoeff!: number;           // Коэффициент энтропии для поощрения исследования
 
     private logger: {
         episodeRewards: number[];
@@ -121,18 +28,10 @@ export class SharedTankPPOAgent {
     };
 
     constructor() {
-        // Получаем текущую конфигурацию эксперимента
-        this.config = getCurrentExperiment();
-
         // Инициализируем с значениями из конфига
-        this.memory = new PPOMemory();
-        this.epsilon = this.config.epsilon;
-        this.optimizer = tf.train.adam(this.config.learningRate);
-
+        this.memory = new Memory();
+        this.applyConfig(getCurrentExperiment());
         // PPO-специфичные параметры
-        this.ppoEpsilon = 0.2;              // Клиппирование соотношения вероятностей
-        this.epochs = 4;                    // Количество эпох обучения на одном батче
-        this.entropyCoeff = 0.01;           // Коэффициент энтропии
 
         // Инициализируем логгер
         this.logger = {
@@ -153,18 +52,11 @@ export class SharedTankPPOAgent {
     }
 
     // Метод для сохранения опыта в буфер
-    remember(state: tf.Tensor, action: tf.Tensor, logProb: tf.Tensor, value: tf.Tensor, reward: number, done: boolean) {
-        this.memory.add(state, action, logProb, value, reward, done);
+    remember(tankId: number, state: tf.Tensor, action: tf.Tensor, logProb: tf.Tensor, value: tf.Tensor, reward: number, done: boolean) {
+        this.memory.add(tankId, state, action, logProb, value, reward, done);
     }
 
-    /**
-     * Выбор действия с использованием политики
-     * @param state Состояние танка
-     * @param tankId ID танка
-     * @param isTraining Находимся ли мы в режиме обучения
-     * @returns Объект с действием, логарифмом вероятности и значением состояния
-     */
-    act(state: tf.Tensor, tankId: number, isTraining: boolean = true): {
+    act(state: tf.Tensor, _tankId: number, _isTraining: boolean = true): {
         onPolicy: true,
         action: number[],
         logProb: tf.Tensor,
@@ -173,77 +65,108 @@ export class SharedTankPPOAgent {
         onPolicy: false,
         action: number[],
     } {
-        // Если не в режиме обучения или случайное значение больше epsilon, используем сеть
-        if (!isTraining || random() > this.epsilon) {
-            return this.getActionFromPolicy(state);
-        }
-
-        // В противном случае, используем стратегию исследования
-        const strategy = selectStrategy(this.epsilon, this.config.epsilon, this.config.epsilonMin);
-
-        let action: number[];
-        switch (strategy) {
-            case 'pure_random':
-                // Полностью случайные действия
-                action = generatePureRandomAction();
-                break;
-            case 'guided_random':
-                // Управляемое случайное исследование
-                action = generateGuidedRandomAction(tankId);
-                break;
-            default:
-                // Используем обученную модель
-                return this.getActionFromPolicy(state);
-        }
-
-        return { onPolicy: false, action };
+        return this.getActionFromPolicy(state);
+        // // Если не в режиме обучения или случайное значение больше epsilon, используем сеть
+        // if (!isTraining || random() > this.epsilon) {
+        //     return this.getActionFromPolicy(state);
+        // }
+        //
+        // // В противном случае, используем стратегию исследования
+        // const strategy = selectStrategy(this.epsilon, this.config.epsilon, this.config.epsilonMin);
+        //
+        // let action: number[];
+        // switch (strategy) {
+        //     case 'pure_random':
+        //         // Полностью случайные действия
+        //         action = generatePureRandomAction();
+        //         break;
+        //     case 'guided_random':
+        //         // Управляемое случайное исследование
+        //         action = generateGuidedRandomAction(tankId);
+        //         break;
+        //     default:
+        //         // Используем обученную модель
+        //         return this.getActionFromPolicy(state);
+        // }
+        //
+        // return { onPolicy: false, action };
     }
 
     // Обучение агента по собранному опыту
+    // train() {
+    //     const batches = this.memory.getBatches(
+    //         this.config.gamma,
+    //         this.config.lam,
+    //     );
+    //
+    //     let policyLossSum = 0, valueLossSum = 0, epochSum = 0;
+    //     for (const [_, batch] of batches) {
+    //         // 2) Несколько эпох PPO
+    //         for (let i = 0; i < this.ppoEpochs; i++) {
+    //             epochSum++;
+    //             // Обучение политики
+    //             const policyLoss = this.trainPolicyNetwork(
+    //                 batch.states, batch.actions, batch.logProbs, batch.advantages,
+    //             );
+    //             policyLossSum += policyLoss;
+    //
+    //             // Обучение критика
+    //             const valueLoss = this.trainValueNetwork(
+    //                 batch.states, batch.returns, batch.values,
+    //             );
+    //             valueLossSum += valueLoss;
+    //
+    //             console.log(`Epoch: ${ i }, Batch Size: ${ batch.size }, Policy loss: ${ policyLoss.toFixed(4) }, Value loss: ${ valueLoss.toFixed(4) }`);
+    //         }
+    //     }
+    //
+    //     this.memory.dispose();
+    //
+    //     const avgPolicyLoss = policyLossSum / epochSum;
+    //     const avgValueLoss = valueLossSum / epochSum;
+    //
+    //     this.logger.losses.policy.push(avgPolicyLoss);
+    //     this.logger.losses.value.push(avgValueLoss);
+    //
+    //     return { policy: avgPolicyLoss, value: avgValueLoss };
+    // }
     train() {
-        const batch = this.memory.getBatch();
-
-        const { states, actions, logProbs: oldLogProbs, values: oldValues, rewards, dones } = batch;
-        const { returns, advantages } = this.memory.computeReturnsAndAdvantages(
+        const batch = this.memory.getBatch(
             this.config.gamma,
-            this.config.lam,    // lambda GAE
-            0,                   // lastValue если эпизод не done
+            this.config.lam,
         );
 
         let policyLossSum = 0, valueLossSum = 0;
+
         // 2) Несколько эпох PPO
-        for (let epoch = 0; epoch < this.epochs; epoch++) {
+        for (let i = 0; i < this.ppoEpochs; i++) {
             // Обучение политики
             const policyLoss = this.trainPolicyNetwork(
-                states, actions, oldLogProbs, advantages,
+                batch.states, batch.actions, batch.logProbs, batch.advantages,
             );
             policyLossSum += policyLoss;
 
             // Обучение критика
             const valueLoss = this.trainValueNetwork(
-                states, returns, oldValues,
+                batch.states, batch.returns, batch.values,
             );
             valueLossSum += valueLoss;
 
+            console.log(`Epoch: ${ i }, Batch Size: ${ batch.size }, Policy loss: ${ policyLoss.toFixed(4) }, Value loss: ${ valueLoss.toFixed(4) }`);
         }
 
-        states.dispose();
-        actions.dispose();
-        oldLogProbs.dispose();
-        oldValues.dispose();
-        rewards.dispose();
-        dones.dispose();
-        returns.dispose();
-        advantages.dispose();
+        for (const tensor of Object.values(batch)) {
+            if (tensor instanceof tf.Tensor) {
+                tensor.dispose();
+            }
+        }
+        this.memory.dispose();
 
-        const avgPolicyLoss = policyLossSum / this.epochs;
-        const avgValueLoss = valueLossSum / this.epochs;
-        // Лог
+        const avgPolicyLoss = policyLossSum / this.ppoEpochs;
+        const avgValueLoss = valueLossSum / this.ppoEpochs;
+
         this.logger.losses.policy.push(avgPolicyLoss);
         this.logger.losses.value.push(avgValueLoss);
-
-        // По желанию — очистить память (если вы обучаетесь по эпизодам)
-        this.memory.dispose();
 
         return { policy: avgPolicyLoss, value: avgValueLoss };
     }
@@ -296,14 +219,14 @@ export class SharedTankPPOAgent {
             await this.valueNetwork.save('indexeddb://tank-rl-value-model');
 
             localStorage.setItem('tank-rl-agent-state', JSON.stringify({
+                config: this.config,
                 epsilon: this.epsilon,
-                experimentName: this.config.name,
                 timestamp: new Date().toISOString(),
                 losses: {
-                    policy: this.logger.losses.policy.slice(-10),
-                    value: this.logger.losses.value.slice(-10),
+                    policy: this.logger.losses.policy.slice(-100),
+                    value: this.logger.losses.value.slice(-100),
                 },
-                rewards: this.logger.episodeRewards.slice(-10), // Последние 10 наград
+                rewards: this.logger.episodeRewards.slice(-100),
             }));
 
             console.log(`PPO models saved`);
@@ -324,7 +247,13 @@ export class SharedTankPPOAgent {
 
             const metadata = JSON.parse(localStorage.getItem('tank-rl-agent-state') ?? '{}');
             if (metadata) {
-                this.epsilon = metadata.epsilon || this.config.epsilon;
+                if (metadata.config) {
+                    this.applyConfig(metadata.config);
+                }
+
+                if (metadata.epsilon) {
+                    this.epsilon = metadata.epsilon;
+                }
 
                 // Загружаем историю потерь и наград, если она есть
                 if (metadata.losses) {
@@ -355,6 +284,16 @@ export class SharedTankPPOAgent {
         this.valueNetwork.dispose();
         this.memory.dispose();
         console.log('PPO Agent resources disposed');
+    }
+
+    private applyConfig(config: RLExperimentConfig) {
+        this.config = config;
+        this.epsilon = this.config.epsilon;
+        this.ppoEpsilon = config.ppoEpsilon;
+        this.ppoEpochs = config.ppoEpochs;
+        this.entropyCoeff = config.entropyCoeff;
+        // TODO: useless on load, fix it later
+        this.optimizer = tf.train.adam(this.config.learningRate);
     }
 
     // Получение действия из сети политики

@@ -31,14 +31,14 @@ export const DEFAULT_EXPERIMENT: RLExperimentConfig = {
     // Network architecture
     hiddenLayers: [128, 64],
     // Learning parameters
-    learningRate: 0.0003,           // Generally smaller for PPO
+    learningRate: 0.0002,           // Generally smaller for PPO
     gamma: 0.99,
     lam: 0.95,                      // GAE lambda for advantage estimation
     epsilon: 1.0,
     epsilonMin: 0.15,
     epsilonDecay: 0.9995,
     // PPO-specific parameters
-    ppoEpsilon: 0.2,                // Standard PPO clipping parameter
+    ppoEpsilon: 0.15,                // Standard PPO clipping parameter
     ppoEpochs: 4,                   // Train 4 epochs over the same data
     entropyCoeff: 0.01,             // Entropy regularization coefficient
     // Memory parameters

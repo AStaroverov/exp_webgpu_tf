@@ -6,27 +6,29 @@ import {
 import { TankController } from '../../ECS/Components/TankController.ts';
 import { hypot, smoothstep } from '../../../../../lib/math.ts';
 import { TANK_RADIUS } from './consts.ts';
+import { isVerboseLog } from './utils.ts';
 
 // Константы для калибровки вознаграждений
 export const REWARD_WEIGHTS = {
     // Основные компоненты наград
     HEALTH_CHANGE: 0.5,          // За потерю здоровья
     HEALTH_BONUS: 0.05,          // За поддержание здоровья
-    AIM_QUALITY: 1.5,            // За точное прицеливание
-    SHOOTING_AIMED: 1.2,         // За прицельную стрельбу
-    SHOOTING_RANDOM: -0.7,       // За беспорядочную стрельбу
-    BULLET_AVOIDANCE: -3.0,      // За попадание под пули
-    MOVEMENT_BASE: 0.1,          // За базовое движение
-    STRATEGIC_MOVEMENT: 0.3,     // За стратегическое движение
     SURVIVAL: 0.05,              // За выживание
-    MAP_BORDER: -3.0,            // За выход за границы
+
+    MOVEMENT_BASE: 0.1,          // За базовое движение
+    BULLET_AVOIDANCE: -2.0,      // За попадание под пули
+    STRATEGIC_MOVEMENT: 0.3,     // За стратегическое движение
+
+    MAP_BORDER: -2.0,            // За выход за границы
     BORDER_GRADIENT: -0.8,       // За приближение к границе
     DISTANCE_KEEPING: 0.5,       // За поддержание дистанции
 
-    // Новые и улучшенные компоненты
+    SHOOTING_AIMED: 1.2,         // За прицельную стрельбу
+    SHOOTING_RANDOM: -0.7,       // За беспорядочную стрельбу
+
+    AIM_QUALITY: 1.5,            // За точное прицеливание
     AIM_TRACKING: 2.0,           // За активное отслеживание врага
     AIM_STATIC_PENALTY: -0.2,    // Штраф за неподвижный прицел
-    CONSISTENCY: 0.1,            // За последовательные действия
 };
 
 // Структура для хранения многокомпонентных наград
@@ -155,6 +157,9 @@ export function calculateMultiHeadReward(
 
     // Ограничиваем итоговое значение
     rewards.totalReward = Math.max(-10, Math.min(10, rewards.totalReward));
+
+    isVerboseLog()
+    && console.log(`Rewards common: ${ rewards.common.total.toFixed(2) }, aim: ${ rewards.aim.total.toFixed(2) }, shoot: ${ rewards.shoot.total.toFixed(2) }, movement: ${ rewards.movement.total.toFixed(2) }`);
 
     return rewards;
 }

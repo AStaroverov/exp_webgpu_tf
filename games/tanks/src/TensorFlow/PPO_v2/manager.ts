@@ -198,7 +198,7 @@ export class SharedRLGameManager {
             // Update frame counter
             this.frameCount++;
 
-            if (this.frameCount % 30 === 0 || this.frameCount >= MAX_STEPS) {
+            if (this.frameCount % 15 === 0 || this.frameCount >= MAX_STEPS) {
                 // Get active tanks (with health > 0)
                 const activeTanks = this.battlefield.tanks.filter(tankEid => {
                     if (entityExists(this.battlefield.world, tankEid)) return true;

@@ -3,12 +3,12 @@ import { round, trunc } from './math';
 export const random = Math.random;
 export const randomInt = (random() * Number.MAX_SAFE_INTEGER) | 0;
 
-export function randomArbitraryFloat(min: number, max: number): number {
+export function randomRangeFloat(min: number, max: number): number {
     return random() * (max - min) + min;
 }
 
-export function randomArbitraryInt(min: number, max: number): number {
-    return round(randomArbitraryFloat(min, max));
+export function randomRangeInt(min: number, max: number): number {
+    return round(randomRangeFloat(min, max));
 }
 
 export function randomSign(): number {
@@ -20,6 +20,7 @@ export function getRandomId(): string {
 }
 
 const CHARACTERS = 'abcdefghijklmnopqrstuvwxyz';
+
 export function getRandomChar(): string {
-    return CHARACTERS[randomArbitraryInt(0, CHARACTERS.length - 1)];
+    return CHARACTERS[randomRangeInt(0, CHARACTERS.length - 1)];
 }

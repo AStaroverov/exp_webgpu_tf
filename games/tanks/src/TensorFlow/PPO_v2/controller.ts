@@ -125,6 +125,7 @@ export function updateTankWithSharedRL(
 
             // Store experience in agent's memory
             agent.remember(
+                tankEid,
                 prevStateTensor,
                 tf.tensor1d(prevAction),
                 prevLogProb,

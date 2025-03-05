@@ -12,20 +12,28 @@
         }
 
         canvas {
-            width: 800px;
-            height: 800px;
+            width: 1000px;
+            height: 1000px;
         }
 
         button {
             position: fixed;
             top: 10px;
-            left: 10px;
             z-index: 100;
+        }
+
+        #toggleRender {
+            left: 10px;
+        }
+
+        #toggleVerbose {
+            left: 120px;
         }
     </style>
 </head>
 <body>
 <button id="toggleRender">Toggle render</button>
+<button id="toggleVerbose">Toggle verbose</button>
 <canvas></canvas>
 <script src="./ml.ts" type="module"></script>
 </body>

@@ -1,4 +1,4 @@
-export const TANK_COUNT_SIMULATION = 4;
+export const TANK_COUNT_SIMULATION = 6;
 export const TANK_RADIUS = 80;
 
 export const TICK_TIME_REAL = 1;
