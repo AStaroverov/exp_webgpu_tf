@@ -1,5 +1,6 @@
 // Буфер опыта для PPO
 import * as tf from '@tensorflow/tfjs';
+import { shuffle } from '../../../../../lib/shuffle.ts';
 
 type Batch = {
     size: number,
@@ -38,7 +39,7 @@ export class Memory {
 
     getBatch(gamma: number, lam: number): Batch {
         const batches = this.getBatches(gamma, lam);
-        const values = Array.from(batches.values());
+        const values = shuffle(Array.from(batches.values()));
 
         return {
             size: values.reduce((acc, batch) => acc + batch.size, 0),

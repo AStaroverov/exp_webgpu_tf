@@ -7,6 +7,43 @@ import { random, randomSign } from '../../../../../lib/random.ts';
 import { TANK_RADIUS } from '../Common/consts.ts';
 import { smoothstep } from '../../../../../lib/math.ts';
 
+
+/**
+ * Выбор стратегии на основе текущего значения epsilon и других факторов
+ * @returns Выбранная стратегия
+ */
+function selectStrategy(epsilon: number, epsilonBase: number, epsilonMin: number): 'pure_random' | 'guided_random' | 'exploitation' {
+    // По мере уменьшения epsilon, мы снижаем вероятность случайных действий
+    // и увеличиваем вероятность использования модели
+
+    // Начальное распределение:
+    // - 5% полностью случайные
+    // - 10% управляемые случайные
+
+    // Конечное распределение:
+    // - 1% полностью случайные
+    // - 1% управляемые случайные
+
+    // Вычисляем, как далеко мы продвинулись в обучении (от 0 до 1)
+    const progress = 1 - ((epsilon - epsilonMin) /
+        (epsilonBase - epsilonMin));
+
+    // Вычисляем вероятности каждой стратегии
+    const pureRandomProb = 0.05 - 0.04 * progress;
+    const guidedRandomProb = 0.1 - 0.09 * progress;
+    // exploitationProb = 1 - pureRandomProb - guidedRandomProb; // от 20% до 85%
+
+    // Выбираем стратегию на основе вероятностей
+    const rand = random();
+    if (rand < pureRandomProb) {
+        return 'pure_random';
+    } else if (rand < pureRandomProb + guidedRandomProb) {
+        return 'guided_random';
+    } else {
+        return 'exploitation';
+    }
+}
+
 /**
  * Генерация управляемых случайных действий с элементами простых стратегий
  * @param tankId ID танка

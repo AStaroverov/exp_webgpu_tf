@@ -2,7 +2,6 @@ import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { ACTION_DIM, INPUT_DIM } from '../Common/consts';
 import { getCurrentExperiment, RLExperimentConfig } from './experiment-config';
-import { random } from '../../../../../lib/random.ts';
 import { Memory } from './Memory.ts';
 
 // Общий PPO агент для всех танков
@@ -92,44 +91,6 @@ export class SharedTankPPOAgent {
         // return { onPolicy: false, action };
     }
 
-    // Обучение агента по собранному опыту
-    // train() {
-    //     const batches = this.memory.getBatches(
-    //         this.config.gamma,
-    //         this.config.lam,
-    //     );
-    //
-    //     let policyLossSum = 0, valueLossSum = 0, epochSum = 0;
-    //     for (const [_, batch] of batches) {
-    //         // 2) Несколько эпох PPO
-    //         for (let i = 0; i < this.ppoEpochs; i++) {
-    //             epochSum++;
-    //             // Обучение политики
-    //             const policyLoss = this.trainPolicyNetwork(
-    //                 batch.states, batch.actions, batch.logProbs, batch.advantages,
-    //             );
-    //             policyLossSum += policyLoss;
-    //
-    //             // Обучение критика
-    //             const valueLoss = this.trainValueNetwork(
-    //                 batch.states, batch.returns, batch.values,
-    //             );
-    //             valueLossSum += valueLoss;
-    //
-    //             console.log(`Epoch: ${ i }, Batch Size: ${ batch.size }, Policy loss: ${ policyLoss.toFixed(4) }, Value loss: ${ valueLoss.toFixed(4) }`);
-    //         }
-    //     }
-    //
-    //     this.memory.dispose();
-    //
-    //     const avgPolicyLoss = policyLossSum / epochSum;
-    //     const avgValueLoss = valueLossSum / epochSum;
-    //
-    //     this.logger.losses.policy.push(avgPolicyLoss);
-    //     this.logger.losses.value.push(avgValueLoss);
-    //
-    //     return { policy: avgPolicyLoss, value: avgValueLoss };
-    // }
     train() {
         const batch = this.memory.getBatch(
             this.config.gamma,
@@ -206,6 +167,7 @@ export class SharedTankPPOAgent {
             epsilon: this.epsilon,
             memorySize: this.memory.size(),
             avgReward: avgReward,
+            lastReward: this.logger.episodeRewards[this.logger.episodeRewards.length - 1] ?? 0,
             avgPolicyLoss: avgPolicyLoss,
             avgValueLoss: avgValueLoss,
             experimentName: this.config.name,
@@ -655,41 +617,5 @@ export function disposeSharedAgent() {
     if (sharedAgent) {
         sharedAgent.dispose();
         sharedAgent = null;
-    }
-}
-
-/**
- * Выбор стратегии на основе текущего значения epsilon и других факторов
- * @returns Выбранная стратегия
- */
-function selectStrategy(epsilon: number, epsilonBase: number, epsilonMin: number): 'pure_random' | 'guided_random' | 'exploitation' {
-    // По мере уменьшения epsilon, мы снижаем вероятность случайных действий
-    // и увеличиваем вероятность использования модели
-
-    // Начальное распределение:
-    // - 5% полностью случайные
-    // - 10% управляемые случайные
-
-    // Конечное распределение:
-    // - 1% полностью случайные
-    // - 1% управляемые случайные
-
-    // Вычисляем, как далеко мы продвинулись в обучении (от 0 до 1)
-    const progress = 1 - ((epsilon - epsilonMin) /
-        (epsilonBase - epsilonMin));
-
-    // Вычисляем вероятности каждой стратегии
-    const pureRandomProb = 0.05 - 0.04 * progress;
-    const guidedRandomProb = 0.1 - 0.09 * progress;
-    // exploitationProb = 1 - pureRandomProb - guidedRandomProb; // от 20% до 85%
-
-    // Выбираем стратегию на основе вероятностей
-    const rand = random();
-    if (rand < pureRandomProb) {
-        return 'pure_random';
-    } else if (rand < pureRandomProb + guidedRandomProb) {
-        return 'guided_random';
-    } else {
-        return 'exploitation';
     }
 }

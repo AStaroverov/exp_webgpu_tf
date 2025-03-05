@@ -13,6 +13,7 @@ export const DebugInfo = {
         return {
             episodeCount: manager.getEpisodeCount(),
             avgReward: agentStats.avgReward,
+            lastReward: agentStats.lastReward,
             memoryUsage: (performance as any).memory.usedJSHeapSize / (1024 * 1024),
             epsilon: agentStats.epsilon,
             experimentName: getCurrentExperiment().name,
@@ -61,7 +62,7 @@ export function createDebugVisualization(container: HTMLElement) {
         statsContainer.innerHTML = `
             <div>Episode: ${ stats.episodeCount }</div>
             <div>Avg Reward: ${ stats.avgReward.toFixed(2) }</div>
-            <div>Epsilon: ${ stats.epsilon.toFixed(4) }</div>
+            <div>Last Reward: ${ stats.lastReward.toFixed(2) }</div>
             <div>Memory Size: ${ stats.memorySize }</div>
             <div>Experiment: ${ stats.experimentName }</div>
             <div>Memory: ${ stats.memoryUsage.toFixed(2) }MB</div>
