@@ -15,9 +15,17 @@ import {
     updateTankWithSharedRL,
 } from './controller.ts';
 import { createBattlefield } from '../Common/createBattlefield.ts';
-import { MAX_STEPS, TANK_COUNT_SIMULATION, TICK_TIME_REAL, TICK_TIME_SIMULATION } from '../Common/consts.ts';
+import {
+    MAX_STEPS,
+    TANK_COUNT_SIMULATION_MAX,
+    TANK_COUNT_SIMULATION_MIN,
+    TICK_TIME_REAL,
+    TICK_TIME_SIMULATION,
+} from '../Common/consts.ts';
 import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
 import { RingBuffer } from 'ring-buffer-ts';
+import { randomRangeInt } from '../../../../../lib/random.ts';
+import { resetRewardMemory } from '../Common/calculateMultiHeadReward.ts';
 
 let sharedRLGameManager: SharedRLGameManager | null = null;
 
@@ -85,11 +93,13 @@ export class SharedRLGameManager {
 
     // Reset environment for a new episode
     resetEnvironment() {
+        resetRewardMemory();
+        resetSharedRLController();
+
         // Create new battlefield
         this.battlefield?.destroy();
-        this.battlefield = createBattlefield(TANK_COUNT_SIMULATION);
+        this.battlefield = createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX));
 
-        resetSharedRLController();
         // Register each tank with the RL system
         for (const tankEid of this.battlefield.tanks) {
             registerTank(tankEid);

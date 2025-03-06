@@ -1,7 +1,6 @@
 import { DI } from '../../DI';
 import { getTankHealth, Tank } from '../Components/Tank.ts';
 import {
-    setTankInputTensorSelf,
     TANK_INPUT_TENSOR_MAX_BULLETS,
     TANK_INPUT_TENSOR_MAX_ENEMIES,
     TankInputTensor,
@@ -12,6 +11,7 @@ import { Ball, Collider } from '@dimforge/rapier2d';
 import { CollisionGroup, createCollisionGroups } from '../../Physical/createRigid.ts';
 import { query } from 'bitecs';
 import { Player } from '../Components/Player.ts';
+import { TankController } from '../Components/TankController.ts';
 
 export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
     const colliderIds = new Float64Array(max(TANK_INPUT_TENSOR_MAX_ENEMIES, TANK_INPUT_TENSOR_MAX_BULLETS));
@@ -31,21 +31,14 @@ export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
             const translation = rb.translation();
             const linearVelocity = rb.linvel();
             const rotation = rb.rotation();
-            const turretEid = Tank.turretEId[tankEid];
-            const turretPid = RigidBodyRef.id[turretEid];
-            const turretRb = physicalWorld.getRigidBody(turretPid);
-            const turretRotation = turretRb.rotation();
-            const projectileSpeed = Tank.bulletSpeed[tankEid];
+            const turretTarget = TankController.turretTarget.getBatche(tankEid);
 
-            setTankInputTensorSelf(
+            TankInputTensor.setTankData(
                 tankEid,
                 health,
-                translation.x,
-                translation.y,
-                hypot(linearVelocity.x, linearVelocity.y),
-                rotation,
-                turretRotation,
-                projectileSpeed,
+                translation,
+                linearVelocity,
+                turretTarget,
             );
 
             // Find enemies
@@ -80,6 +73,7 @@ export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
                     tankEid,
                     j,
                     getEntityIdByPhysicalId(pid),
+                    getTankHealth(tankEid),
                     rb.translation(),
                     rb.linvel(),
                 );

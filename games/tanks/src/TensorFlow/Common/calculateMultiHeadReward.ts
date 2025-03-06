@@ -4,7 +4,7 @@ import {
     TankInputTensor,
 } from '../../ECS/Components/TankState.ts';
 import { TankController } from '../../ECS/Components/TankController.ts';
-import { hypot, smoothstep } from '../../../../../lib/math.ts';
+import { centerStep, hypot, lerp, max, min, smoothstep } from '../../../../../lib/math.ts';
 import { TANK_RADIUS } from './consts.ts';
 import { isVerboseLog } from './utils.ts';
 
@@ -16,19 +16,18 @@ export const REWARD_WEIGHTS = {
     SURVIVAL: 0.05,              // За выживание
 
     MOVEMENT_BASE: 0.1,          // За базовое движение
-    BULLET_AVOIDANCE: -2.0,      // За попадание под пули
+    BULLET_AVOIDANCE: -1.0,      // За попадание под пули
     STRATEGIC_MOVEMENT: 0.3,     // За стратегическое движение
 
-    MAP_BORDER: -2.0,            // За выход за границы
-    BORDER_GRADIENT: -0.8,       // За приближение к границе
+    MAP_BORDER: -1.0,            // За выход за границы
+    BORDER_GRADIENT: -0.5,       // За приближение к границе
     DISTANCE_KEEPING: 0.5,       // За поддержание дистанции
 
     SHOOTING_AIMED: 1.2,         // За прицельную стрельбу
-    SHOOTING_RANDOM: -0.7,       // За беспорядочную стрельбу
+    SHOOTING_RANDOM: -0.2,       // За беспорядочную стрельбу
 
     AIM_QUALITY: 1.5,            // За точное прицеливание
-    AIM_TRACKING: 2.0,           // За активное отслеживание врага
-    AIM_STATIC_PENALTY: -0.2,    // Штраф за неподвижный прицел
+    AIM_TRACKING: 1.0,           // За активное отслеживание врага
 };
 
 // Структура для хранения многокомпонентных наград
@@ -82,8 +81,16 @@ export type BulletInfo = {
 const bulletMemory = new Map<number, Map<number, BulletInfo>>();
 
 // Хранение предыдущих действий и состояний для анализа изменений
-const previousTurretTargets = new Map<number, [number, number]>();
-const previousEnemyPositions = new Map<number, Map<number, [number, number]>>();
+const previousBestAim = new Map<number, {
+    quality: number;
+    targetId: number;
+}>();
+
+
+export function resetRewardMemory() {
+    bulletMemory.clear();
+    previousBestAim.clear();
+}
 
 /**
  * Расчет многокомпонентной награды для танка с плавными переходами
@@ -95,9 +102,8 @@ export function calculateMultiHeadReward(
     width: number,
     height: number,
 ): ComponentRewards {
-    const tankX = TankInputTensor.x[tankEid];
-    const tankY = TankInputTensor.y[tankEid];
-    const tankSpeed = TankInputTensor.speed[tankEid];
+    const [tankX, tankY] = TankInputTensor.position.getBatche(tankEid);
+    const [tankSpeedX, tankSpeedY] = TankInputTensor.speed.getBatche(tankEid);
     const turretTarget = TankController.getTurretTarget(tankEid);
     const currentHealth = TankInputTensor.health[tankEid];
     const isShooting = actions[0] > 0.5;
@@ -111,7 +117,7 @@ export function calculateMultiHeadReward(
 
     // Анализ целей и прицеливания
     const aimingResult = analyzeAiming(tankEid, tankX, tankY, turretTarget);
-    const trackingReward = calculateTrackingReward(tankEid, turretTarget, aimingResult);
+    const trackingReward = calculateTrackingReward(tankEid, aimingResult);
     const shootingReward = calculateShootingReward(isShooting, aimingResult.bestAimQuality);
 
     // Анализ избегания пуль
@@ -119,7 +125,8 @@ export function calculateMultiHeadReward(
 
     // Анализ движения
     const movementReward = calculateMovementReward(
-        tankSpeed,
+        tankSpeedX,
+        tankSpeedY,
         bulletAvoidanceResult.maxDangerLevel,
         aimingResult.hasTargets,
         aimingResult.closestEnemyDist,
@@ -155,11 +162,13 @@ export function calculateMultiHeadReward(
     rewards.totalReward = rewards.shoot.total + rewards.movement.total +
         rewards.aim.total + rewards.common.total;
 
-    // Ограничиваем итоговое значение
-    rewards.totalReward = Math.max(-10, Math.min(10, rewards.totalReward));
-
     isVerboseLog()
     && console.log(`Rewards common: ${ rewards.common.total.toFixed(2) }, aim: ${ rewards.aim.total.toFixed(2) }, shoot: ${ rewards.shoot.total.toFixed(2) }, movement: ${ rewards.movement.total.toFixed(2) }`);
+
+    previousBestAim.set(tankEid, {
+        quality: aimingResult.bestAimQuality,
+        targetId: aimingResult.bestAimTargetId,
+    });
 
     return rewards;
 }
@@ -188,16 +197,16 @@ function calculateMapReward(
 ): number {
     if (tankX >= 0 && tankX <= width && tankY >= 0 && tankY <= height) {
         // Танк в пределах карты - используем плавный градиент
-        const borderDistance = Math.min(
+        const borderDistance = min(
             tankX,
             tankY,
             width - tankX,
             height - tankY,
         );
-
         // Плавное уменьшение награды при приближении к границе
-        const borderFactor = smoothstep(0, 150, borderDistance);
-        return REWARD_WEIGHTS.BORDER_GRADIENT * (1 - borderFactor);
+        const borderFactor = 1 - smoothstep(0, 50, borderDistance);
+
+        return REWARD_WEIGHTS.BORDER_GRADIENT * borderFactor;
     } else {
         // Танк вышел за границы карты
         return REWARD_WEIGHTS.MAP_BORDER;
@@ -223,6 +232,7 @@ function calculateHealthReward(
     };
 }
 
+
 /**
  * Анализ прицеливания и видимых врагов
  */
@@ -233,19 +243,16 @@ function analyzeAiming(
     turretTarget: Float64Array,
 ): {
     bestAimQuality: number;
+    bestAimTargetId: number;
     aimQualityReward: number;
     hasTargets: boolean;
     closestEnemyDist: number;
     enemyPositions: Map<number, [number, number]>;
 } {
     let bestAimQuality = 0;
+    let bestAimQualityToTargetId = 0;
     let hasTargets = false;
     let closestEnemyDist = Number.MAX_VALUE;
-
-    // Инициализация хранилища для позиций врагов
-    if (!previousEnemyPositions.has(tankEid)) {
-        previousEnemyPositions.set(tankEid, new Map());
-    }
 
     // Текущие позиции врагов
     const currentEnemyPositions = new Map<number, [number, number]>();
@@ -273,28 +280,23 @@ function analyzeAiming(
 
         // Оценка точности прицеливания с плавным переходом
         const distFromTargetToEnemy = hypot(turretTarget[0] - enemyX, turretTarget[1] - enemyY);
-        const targetRadius = TANK_RADIUS * 3;
-        const aimQuality = Math.max(0, 1 - smoothstep(0, targetRadius, distFromTargetToEnemy));
+        const aimQuality = 1 - smoothstep(0, TANK_RADIUS * 3, distFromTargetToEnemy);
 
         // Отслеживаем лучшее прицеливание
         if (aimQuality > bestAimQuality) {
             bestAimQuality = aimQuality;
+            bestAimQualityToTargetId = enemyId;
         }
     }
 
     // Награда за качество прицеливания
     const aimQualityReward = bestAimQuality * REWARD_WEIGHTS.AIM_QUALITY;
 
-    // Сохраняем текущие позиции врагов для следующего кадра
-    previousEnemyPositions.set(tankEid, currentEnemyPositions);
-
-    // Сохраняем текущую позицию прицела для следующего кадра
-    previousTurretTargets.set(tankEid, [...turretTarget] as [number, number]);
-
     return {
-        bestAimQuality,
         aimQualityReward,
         hasTargets,
+        bestAimQuality,
+        bestAimTargetId: bestAimQualityToTargetId,
         closestEnemyDist,
         enemyPositions: currentEnemyPositions,
     };
@@ -305,65 +307,29 @@ function analyzeAiming(
  */
 function calculateTrackingReward(
     tankEid: number,
-    turretTarget: Float64Array,
     aimingResult: ReturnType<typeof analyzeAiming>,
 ): number {
     let trackingReward = 0;
 
-    // Проверяем движение прицела
-    if (previousTurretTargets.has(tankEid)) {
-        const prevTarget = previousTurretTargets.get(tankEid)!;
+    const { bestAimTargetId } = aimingResult;
+    const prevBestAim = previousBestAim.get(tankEid);
 
-        // Расстояние, на которое переместился прицел
-        const targetMovement = hypot(turretTarget[0] - prevTarget[0], turretTarget[1] - prevTarget[1]);
-
-        // Штраф за статичный прицел (небольшое движение прицела допускается)
-        if (targetMovement < 5) {
-            trackingReward += REWARD_WEIGHTS.AIM_STATIC_PENALTY;
-        }
-    }
+    // Проверяем наличие предыдущего лучшего прицеливания
+    if (!prevBestAim) return 0;
 
     // Проверяем отслеживание движущихся врагов
-    if (previousEnemyPositions.has(tankEid) && previousTurretTargets.has(tankEid)) {
-        const prevEnemyPositions = previousEnemyPositions.get(tankEid)!;
-        const prevTurretTarget = previousTurretTargets.get(tankEid)!;
+    const enemyId = bestAimTargetId;
+    const prevEnemyId = prevBestAim!.targetId;
 
-        // Перебираем всех текущих врагов
-        for (const [enemyId, [enemyX, enemyY]] of aimingResult.enemyPositions.entries()) {
-            // Если у нас есть информация о предыдущей позиции врага
-            if (prevEnemyPositions.has(enemyId)) {
-                const [prevEnemyX, prevEnemyY] = prevEnemyPositions.get(enemyId)!;
+    // Штраф за смену цели
+    if (enemyId !== prevEnemyId) return REWARD_WEIGHTS.AIM_TRACKING * -0.2;
+    // штраф за потерю цели
+    if (enemyId === 0) return REWARD_WEIGHTS.AIM_TRACKING * -0.1;
 
-                // Расстояние, на которое переместился враг
-                const enemyMovement = hypot(enemyX - prevEnemyX, enemyY - prevEnemyY);
+    const bestAimQuality = aimingResult.bestAimQuality;
+    const prevBestAimQuality = prevBestAim!.quality;
 
-                // Если враг двигался достаточно сильно
-                if (enemyMovement > 5) {
-                    // Вектор движения врага
-                    const enemyDirX = enemyX - prevEnemyX;
-                    const enemyDirY = enemyY - prevEnemyY;
-
-                    // Вектор движения прицела
-                    const turretDirX = turretTarget[0] - prevTurretTarget[0];
-                    const turretDirY = turretTarget[1] - prevTurretTarget[1];
-
-                    // Если прицел тоже двигался
-                    if (Math.hypot(turretDirX, turretDirY) > 0.1) {
-                        // Косинус угла между векторами (dot product / product of magnitudes)
-                        const cosBetweenVectors =
-                            (enemyDirX * turretDirX + enemyDirY * turretDirY) /
-                            (Math.sqrt(enemyDirX * enemyDirX + enemyDirY * enemyDirY) *
-                                Math.sqrt(turretDirX * turretDirX + turretDirY * turretDirY) || 1);
-
-                        // Награда за отслеживание движения врага (максимум при cosBetweenVectors = 1)
-                        if (cosBetweenVectors > 0) {
-                            trackingReward += cosBetweenVectors * REWARD_WEIGHTS.AIM_TRACKING;
-                        }
-                    }
-                }
-            }
-        }
-    }
+    trackingReward += ((bestAimQuality - prevBestAimQuality) > 0 ? 1 : 0.7) * REWARD_WEIGHTS.AIM_TRACKING;
 
     return trackingReward;
 }
@@ -378,12 +344,12 @@ function calculateShootingReward(
     let shootingReward = 0;
 
     if (isShooting) {
-        // Плавная награда за стрельбу в зависимости от точности прицеливания
-        shootingReward += smoothstep(0.3, 0.8, bestAimQuality) * REWARD_WEIGHTS.SHOOTING_AIMED;
-
-        // Штраф за стрельбу при плохом прицеливании (плавно уменьшается с ростом точности)
-        if (bestAimQuality < 0.3) {
-            shootingReward += smoothstep(0.3, 0, bestAimQuality) * REWARD_WEIGHTS.SHOOTING_RANDOM;
+        if (bestAimQuality < 0.01) {
+            // Штраф за стрельбу при плохом прицеливании (плавно уменьшается с ростом точности)
+            shootingReward += (1 - smoothstep(0, 0.3, bestAimQuality)) * REWARD_WEIGHTS.SHOOTING_RANDOM;
+        } else {
+            // Плавная награда за стрельбу в зависимости от точности прицеливания
+            shootingReward += bestAimQuality * REWARD_WEIGHTS.SHOOTING_AIMED;
         }
     } else if (bestAimQuality > 0.8) {
         // Небольшой штраф за отсутствие стрельбы при хорошем прицеливании
@@ -397,7 +363,8 @@ function calculateShootingReward(
  * Расчет награды за движение
  */
 function calculateMovementReward(
-    tankSpeed: number,
+    tankSpeedX: number,
+    tankSpeedY: number,
     maxDangerLevel: number,
     hasTargets: boolean,
     closestEnemyDist: number,
@@ -406,6 +373,7 @@ function calculateMovementReward(
     let positioningReward = 0;
 
     // Базовая награда за движение (плавно растет с увеличением скорости)
+    const tankSpeed = hypot(tankSpeedX, tankSpeedY);
     const speedFactor = smoothstep(0, 300, tankSpeed);
     speedReward += speedFactor * REWARD_WEIGHTS.MOVEMENT_BASE;
 
@@ -419,20 +387,18 @@ function calculateMovementReward(
 
     // Награда за позиционирование относительно врагов
     if (hasTargets) {
-        // Оптимальная дистанция: от 3*TANK_RADIUS до 500
         if (closestEnemyDist < 3 * TANK_RADIUS) {
             // Штраф за слишком близкое расстояние
-            const tooClosePenalty = smoothstep(TANK_RADIUS, 3 * TANK_RADIUS, closestEnemyDist) - 1;
-            positioningReward += tooClosePenalty * 0.3;
-        } else if (closestEnemyDist <= 500) {
+            const tooClosePenalty = 1 - smoothstep(0, 3 * TANK_RADIUS, closestEnemyDist);
+            positioningReward -= tooClosePenalty * REWARD_WEIGHTS.DISTANCE_KEEPING;
+        } else if (closestEnemyDist <= 600) {
             // Награда за оптимальную дистанцию
-            const optimalDistanceReward = smoothstep(3 * TANK_RADIUS, 200, closestEnemyDist) *
-                (1 - smoothstep(200, 500, closestEnemyDist));
+            const optimalDistanceReward = lerp(0.3, 1, centerStep(3 * TANK_RADIUS, 600, closestEnemyDist));
             positioningReward += optimalDistanceReward * REWARD_WEIGHTS.DISTANCE_KEEPING;
         } else {
             // Мягкий штраф за слишком большую дистанцию
-            const tooFarPenalty = smoothstep(500, 800, closestEnemyDist) * -0.1;
-            positioningReward += tooFarPenalty;
+            const tooFarPenalty = smoothstep(600, 800, closestEnemyDist) * REWARD_WEIGHTS.DISTANCE_KEEPING / 5;
+            positioningReward -= tooFarPenalty;
         }
     }
 
@@ -459,8 +425,8 @@ function calculateSurvivalReward(currentHealth: number): number {
  */
 function calculateBulletAvoidanceReward(tankEid: number) {
     let reward = 0;
-    const tankX = TankInputTensor.x[tankEid];
-    const tankY = TankInputTensor.y[tankEid];
+    const tankX = TankInputTensor.position.get(tankEid, 0);
+    const tankY = TankInputTensor.position.get(tankEid, 1);
 
     // Инициализируем хранилище пуль для танка, если его еще нет
     if (!bulletMemory.has(tankEid)) {
@@ -497,7 +463,7 @@ function calculateBulletAvoidanceReward(tankEid: number) {
 
         if (bulletResult.isDangerous) {
             dangerousBullets++;
-            maxDangerLevel = Math.max(maxDangerLevel, bulletResult.dangerLevel);
+            maxDangerLevel = max(maxDangerLevel, bulletResult.dangerLevel);
         }
 
         if (bulletResult.wasAvoided) {
@@ -516,7 +482,7 @@ function calculateBulletAvoidanceReward(tankEid: number) {
     // Дополнительный бонус за отсутствие опасных пуль при наличии избежанных
     if (dangerousBullets === 0 && avoidedBullets > 0) {
         // Бонус растет нелинейно с количеством избежанных пуль
-        reward += Math.min(1.5, avoidedBullets * 0.2);
+        reward += min(1.5, avoidedBullets * 0.2);
     }
 
     return { reward, maxDangerLevel, avoidedBullets, dangerousBullets };
@@ -560,7 +526,7 @@ function analyzeBullet(
     let dangerLevel = 0;
 
     // Анализируем опасность пули
-    const bulletSpeed = Math.hypot(bulletVx, bulletVy);
+    const bulletSpeed = hypot(bulletVx, bulletVy);
     if (bulletSpeed < 0.001) return { reward, isDangerous, wasAvoided, dangerLevel };
 
     const bulletDirectionX = bulletVx / bulletSpeed;
@@ -583,7 +549,7 @@ function analyzeBullet(
         const closestPointY = bulletY + bulletDirectionY * projLength;
 
         // Расстояние в точке наибольшего сближения
-        const minDist = Math.hypot(closestPointX - tankX, closestPointY - tankY);
+        const minDist = hypot(closestPointX - tankX, closestPointY - tankY);
 
         // Оценка опасности пули с плавным переходом
         if (minDist < 120) { // Увеличенное расстояние обнаружения для плавного перехода
@@ -609,7 +575,7 @@ function analyzeBullet(
                 wasAvoided = true;
 
                 // Плавное увеличение награды в зависимости от того, насколько близко была пуля
-                const avoidFactor = smoothstep(200, 120, minDist);
+                const avoidFactor = 1 - smoothstep(120, 200, minDist);
                 reward += 0.5 * (1 + avoidFactor); // От 0.5 до 1.0
             }
         }

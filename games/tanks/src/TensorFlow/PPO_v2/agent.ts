@@ -65,30 +65,6 @@ export class SharedTankPPOAgent {
         action: number[],
     } {
         return this.getActionFromPolicy(state);
-        // // Если не в режиме обучения или случайное значение больше epsilon, используем сеть
-        // if (!isTraining || random() > this.epsilon) {
-        //     return this.getActionFromPolicy(state);
-        // }
-        //
-        // // В противном случае, используем стратегию исследования
-        // const strategy = selectStrategy(this.epsilon, this.config.epsilon, this.config.epsilonMin);
-        //
-        // let action: number[];
-        // switch (strategy) {
-        //     case 'pure_random':
-        //         // Полностью случайные действия
-        //         action = generatePureRandomAction();
-        //         break;
-        //     case 'guided_random':
-        //         // Управляемое случайное исследование
-        //         action = generateGuidedRandomAction(tankId);
-        //         break;
-        //     default:
-        //         // Используем обученную модель
-        //         return this.getActionFromPolicy(state);
-        // }
-        //
-        // return { onPolicy: false, action };
     }
 
     train() {
