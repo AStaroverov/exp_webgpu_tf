@@ -1,3 +1,5 @@
+import devtoolsDetect from 'devtools-detect';
+
 let isVerbose = localStorage.getItem('verbose') === 'true';
 let shouldDraw = localStorage.getItem('shouldDraw') === 'true';
 
@@ -16,5 +18,5 @@ export function getDrawState(): boolean {
 }
 
 export function isVerboseLog() {
-    return isVerbose;
+    return isVerbose && devtoolsDetect.isOpen;
 }

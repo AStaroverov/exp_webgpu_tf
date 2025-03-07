@@ -1,3 +1,3 @@
 export const delegate = {
-    defaultSize: 100_000,
+    defaultSize: 1_00_000,
 };

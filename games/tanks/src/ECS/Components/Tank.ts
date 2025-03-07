@@ -20,8 +20,10 @@ import { NestedArray, TypedArray } from '../../../../../src/utils.ts';
 import { ZIndex } from '../../consts.ts';
 import { min, smoothstep } from '../../../../../lib/math.ts';
 import { component } from '../../../../../src/ECS/utils.ts';
+import { createCircle } from '../../../../../src/ECS/Entities/Shapes.ts';
 
 export const Tank = component({
+    aimEid: TypedArray.f64(delegate.defaultSize),
     turretEId: TypedArray.f64(delegate.defaultSize),
     bulletSpeed: TypedArray.f64(delegate.defaultSize),
     bulletStartPosition: NestedArray.f64(2, delegate.defaultSize),
@@ -181,7 +183,13 @@ export function createTankRR(options: {
     // const [tankEid, tankPid] = createRectangleRR(mutatedOptions);
     const [tankEid, tankPid] = createRectangleRigidGroup(mutatedOptions);
 
+    mutatedOptions.radius = 16;
+    const aimEid = createCircle(DI.world, mutatedOptions);
+    addParentComponent(aimEid, tankEid);
+    addChildren(tankEid, aimEid);
+
     addComponent(world, tankEid, Tank);
+    Tank.aimEid[tankEid] = aimEid;
     Tank.bulletSpeed[tankEid] = 300;
     Tank.bulletStartPosition.set(tankEid, 0, 0);
     Tank.bulletStartPosition.set(tankEid, 1, -PADDING * 9);
@@ -262,10 +270,13 @@ export function createTankRR(options: {
 }
 
 export function removeTankComponentsWithoutParts(tankEid: number) {
+    const aimEid = Tank.aimEid[tankEid];
     const turretEid = Tank.turretEId[tankEid];
+    removeChild(tankEid, aimEid);
     removeChild(tankEid, turretEid);
-    typicalRemoveEntity(tankEid);
+    typicalRemoveEntity(aimEid);
     typicalRemoveEntity(turretEid);
+    typicalRemoveEntity(tankEid);
 }
 
 export function resetTankPartJointComponent(tankPartEid: number) {

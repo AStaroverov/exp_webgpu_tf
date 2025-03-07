@@ -220,7 +220,7 @@ export class SharedRLGameManager {
                 const width = this.battlefield.canvas.offsetWidth;
                 const height = this.battlefield.canvas.offsetHeight;
                 for (const tankEid of activeTanks) {
-                    updateTankWithSharedRL(tankEid, width, height, 1000, this.isTraining);
+                    updateTankWithSharedRL(tankEid, width, height, this.isTraining);
                 }
             }
             // Execute game tick

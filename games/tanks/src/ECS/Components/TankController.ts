@@ -7,11 +7,11 @@ import { component, obs } from '../../../../../src/ECS/utils.ts';
 export const TankController = component(({
     shot: TypedArray.i8(delegate.defaultSize),
     shotCooldown: TypedArray.f32(delegate.defaultSize),
+    turretTarget: NestedArray.f64(2, delegate.defaultSize),
 
-    // Control tank
+    // Control user tank
     move: TypedArray.f64(delegate.defaultSize),
     rotation: TypedArray.f64(delegate.defaultSize),
-    turretTarget: NestedArray.f64(2, delegate.defaultSize),
 
     // Methods
     addComponent(eid: number) {

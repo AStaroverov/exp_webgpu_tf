@@ -67,14 +67,12 @@ export function registerTank(tankEid: number) {
  * @param tankEid Tank entity ID
  * @param width Canvas width
  * @param height Canvas height
- * @param maxSpeed Maximum tank speed
  * @param isTraining Whether we're in training mode
  */
 export function updateTankWithSharedRL(
     tankEid: number,
     width: number,
     height: number,
-    maxSpeed: number,
     isTraining = false,
 ) {
     // Check if tank is active
@@ -86,7 +84,7 @@ export function updateTankWithSharedRL(
     const agent = getSharedAgent();
 
     // Create input vector for the current state
-    const inputVector = createInputVector(tankEid, width, height, maxSpeed);
+    const inputVector = createInputVector(tankEid, width, height);
 
     // Create tensor from input vector
     const currentState = tf.tensor1d(inputVector);
@@ -98,8 +96,6 @@ export function updateTankWithSharedRL(
 
         // Apply action to tank controller
         applyActionToTank(tankEid, action, width, height);
-
-        if (!result.onPolicy) return;
 
         // If in training mode and we have a previous state, calculate reward and store experience
         if (isTraining && tankStates.has(tankEid) && prevActions.has(tankEid)) {
@@ -164,19 +160,15 @@ export function updateTankWithSharedRL(
  * @param height Canvas height
  */
 function applyActionToTank(tankEid: number, action: number[], width: number, height: number) {
-    const [shoot, moveX, moveY, aimX, aimY] = action;
-
-    // Combined move and rotate into single vector
-    const move = moveX;  // Forward/backward movement
-    const rotate = moveY;  // Left/right rotation
+    const [shoot, move, rotate, aimDX, aimDY] = action;
 
     TankController.setShooting$(tankEid, shoot > 0.5);
     TankController.setMove$(tankEid, move);
     TankController.setRotate$(tankEid, rotate);
 
     // Set turret target (aiming)
-    const turretTargetX = (aimX + 1) / 2 * width;
-    const turretTargetY = (aimY + 1) / 2 * height;
+    const turretTargetX = TankController.turretTarget.get(tankEid, 0) + aimDX * width * 0.05;
+    const turretTargetY = TankController.turretTarget.get(tankEid, 1) + aimDY * height * 0.05;
     TankController.setTurretTarget$(tankEid, turretTargetX, turretTargetY);
 }
 

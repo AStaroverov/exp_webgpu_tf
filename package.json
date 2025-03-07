@@ -22,6 +22,7 @@
     "@types/lodash-es": "^4.17.12",
     "@webgpu/types": "^0.1.31",
     "bitecs": "github:NateTheGreatt/bitECS#rc-0-4-0",
+    "devtools-detect": "^4.0.2",
     "gl-matrix": "^3.4.3",
     "lodash": "^4.17.21",
     "lodash-es": "^4.17.21",

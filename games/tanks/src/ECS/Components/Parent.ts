@@ -6,7 +6,7 @@ export const Parent = ({
     id: new Float64Array(delegate.defaultSize),
 });
 
-export function addParentComponent(entity: number, eid: number, { world } = DI) {
+export function addParentComponent(entity: number, parentEid: number, { world } = DI) {
     addComponent(world, entity, Parent);
-    Parent.id[entity] = eid;
+    Parent.id[entity] = parentEid;
 }

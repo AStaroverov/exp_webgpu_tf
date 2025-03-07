@@ -1,10 +1,10 @@
 import { DI } from '../../DI';
-import { spawnBullet } from '../Components/Bullet.ts';
 import { Tank } from '../Components/Tank.ts';
 import { TankController } from '../Components/TankController.ts';
 import { query } from 'bitecs';
 import { Player } from '../Components/Player.ts';
 import { GlobalTransform } from '../../../../../src/ECS/Components/Transform.ts';
+import { spawnBullet } from '../Components/Bullet.ts';
 
 export function createSpawnerBulletsSystem({ world } = DI) {
     return ((delta: number) => {

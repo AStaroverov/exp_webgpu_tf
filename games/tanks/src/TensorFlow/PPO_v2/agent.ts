@@ -30,7 +30,6 @@ export class SharedTankPPOAgent {
         // Инициализируем с значениями из конфига
         this.memory = new Memory();
         this.applyConfig(getCurrentExperiment());
-        // PPO-специфичные параметры
 
         // Инициализируем логгер
         this.logger = {
@@ -56,15 +55,85 @@ export class SharedTankPPOAgent {
     }
 
     act(state: tf.Tensor, _tankId: number, _isTraining: boolean = true): {
-        onPolicy: true,
         action: number[],
         logProb: tf.Tensor,
         value: tf.Tensor
-    } | {
-        onPolicy: false,
-        action: number[],
     } {
-        return this.getActionFromPolicy(state);
+        return tf.tidy(() => {
+            const stateTensor = state.expandDims(0);
+
+            // Получаем выходы из сети политики
+            const policyOutputs = this.policyNetwork.predict(stateTensor) as tf.Tensor[];
+
+            // Параметры распределений для различных компонентов действия
+
+            // 1. Стрельба (дискретное действие с распределением Бернулли)
+            const shootProb = policyOutputs[0].squeeze();
+
+            // 2. Движение (непрерывное действие с нормальным распределением)
+            const moveMean = policyOutputs[1].squeeze();
+            const moveStd = tf.exp(policyOutputs[2].squeeze()).clipByValue(0.1, 1.0);
+
+            // 3. Прицеливание (непрерывное действие с нормальным распределением)
+            const aimMean = policyOutputs[3].squeeze();
+            const aimStd = tf.exp(policyOutputs[4].squeeze()).clipByValue(0.1, 1.0);
+
+            // Сэмплируем действия из соответствующих распределений
+
+            // Стрельба (бинарное действие)
+            const shootRandom = tf.less(tf.randomUniform([1]), shootProb);
+            const shootAction = shootRandom.asType('float32');
+
+            // Движение (непрерывное действие)
+            const moveNoise = tf.randomNormal([2]);
+            const moveAction = moveMean.add(moveNoise.mul(moveStd));
+
+            // Прицеливание (непрерывное действие)
+            const aimNoise = tf.randomNormal([2]);
+            const aimAction = aimMean.add(aimNoise.mul(aimStd));
+
+            // Комбинируем в одно действие
+            const action = [
+                ...shootAction.dataSync(),
+                ...moveAction.dataSync(),
+                ...aimAction.dataSync(),
+            ];
+
+            if (action.length !== ACTION_DIM) {
+                throw new Error(`Invalid action length: ${ action.length }`);
+            }
+
+            // Вычисляем логарифм вероятности действия
+
+            // Логарифм вероятности стрельбы (распределение Бернулли)
+            const shootLogProb = tf.where(
+                tf.equal(shootAction, 1),
+                tf.log(shootProb.add(1e-8)),
+                tf.log(tf.scalar(1).sub(shootProb).add(1e-8)),
+            );
+
+            // Логарифм вероятности движения (нормальное распределение)
+            const moveLogProbDist = tf.sub(moveAction, moveMean).div(moveStd.add(1e-8)).square().mul(-0.5)
+                .sub(tf.log(moveStd.mul(Math.sqrt(2 * Math.PI))));
+
+            // Логарифм вероятности прицеливания (нормальное распределение)
+            const aimLogProbDist = tf.sub(aimAction, aimMean).div(aimStd.add(1e-8)).square().mul(-0.5)
+                .sub(tf.log(aimStd.mul(Math.sqrt(2 * Math.PI))));
+
+            // Объединяем логарифмы вероятностей (сумма, т.к. компоненты независимы)
+            let totalLogProb = shootLogProb.add(moveLogProbDist.sum()).add(aimLogProbDist.sum());
+
+            totalLogProb = totalLogProb.squeeze();
+
+            // Получаем оценку состояния из сети критика
+            const value = this.valueNetwork.predict(stateTensor) as tf.Tensor;
+
+            return {
+                action,
+                logProb: totalLogProb,
+                value: value.squeeze(),
+            };
+        });
     }
 
     train() {
@@ -232,91 +301,6 @@ export class SharedTankPPOAgent {
         this.entropyCoeff = config.entropyCoeff;
         // TODO: useless on load, fix it later
         this.optimizer = tf.train.adam(this.config.learningRate);
-    }
-
-    // Получение действия из сети политики
-    private getActionFromPolicy(state: tf.Tensor): {
-        onPolicy: boolean,
-        action: number[],
-        logProb: tf.Tensor,
-        value: tf.Tensor
-    } {
-        return tf.tidy(() => {
-            const stateTensor = state.expandDims(0);
-
-            // Получаем выходы из сети политики
-            const policyOutputs = this.policyNetwork.predict(stateTensor) as tf.Tensor[];
-
-            // Параметры распределений для различных компонентов действия
-
-            // 1. Стрельба (дискретное действие с распределением Бернулли)
-            const shootProb = policyOutputs[0].squeeze();
-
-            // 2. Движение (непрерывное действие с нормальным распределением)
-            const moveMean = policyOutputs[1].squeeze();
-            const moveStd = tf.exp(policyOutputs[2].squeeze()).clipByValue(0.1, 1.0);
-
-            // 3. Прицеливание (непрерывное действие с нормальным распределением)
-            const aimMean = policyOutputs[3].squeeze();
-            const aimStd = tf.exp(policyOutputs[4].squeeze()).clipByValue(0.1, 1.0);
-
-            // Сэмплируем действия из соответствующих распределений
-
-            // Стрельба (бинарное действие)
-            const shootRandom = tf.less(tf.randomUniform([1]), shootProb);
-            const shootAction = shootRandom.asType('float32');
-
-            // Движение (непрерывное действие)
-            const moveNoise = tf.randomNormal([2]);
-            const moveAction = moveMean.add(moveNoise.mul(moveStd));
-
-            // Прицеливание (непрерывное действие)
-            const aimNoise = tf.randomNormal([2]);
-            const aimAction = aimMean.add(aimNoise.mul(aimStd));
-
-            // Комбинируем в одно действие
-            const action = [
-                ...shootAction.dataSync(),
-                ...moveAction.dataSync(),
-                ...aimAction.dataSync(),
-            ];
-
-            if (action.length !== ACTION_DIM) {
-                throw new Error(`Invalid action length: ${ action.length }`);
-            }
-
-            // Вычисляем логарифм вероятности действия
-
-            // Логарифм вероятности стрельбы (распределение Бернулли)
-            const shootLogProb = tf.where(
-                tf.equal(shootAction, 1),
-                tf.log(shootProb.add(1e-8)),
-                tf.log(tf.scalar(1).sub(shootProb).add(1e-8)),
-            );
-
-            // Логарифм вероятности движения (нормальное распределение)
-            const moveLogProbDist = tf.sub(moveAction, moveMean).div(moveStd.add(1e-8)).square().mul(-0.5)
-                .sub(tf.log(moveStd.mul(Math.sqrt(2 * Math.PI))));
-
-            // Логарифм вероятности прицеливания (нормальное распределение)
-            const aimLogProbDist = tf.sub(aimAction, aimMean).div(aimStd.add(1e-8)).square().mul(-0.5)
-                .sub(tf.log(aimStd.mul(Math.sqrt(2 * Math.PI))));
-
-            // Объединяем логарифмы вероятностей (сумма, т.к. компоненты независимы)
-            let totalLogProb = shootLogProb.add(moveLogProbDist.sum()).add(aimLogProbDist.sum());
-
-            totalLogProb = totalLogProb.squeeze();
-
-            // Получаем оценку состояния из сети критика
-            const value = this.valueNetwork.predict(stateTensor) as tf.Tensor;
-
-            return {
-                action,
-                onPolicy: true,
-                logProb: totalLogProb,
-                value: value.squeeze(),
-            };
-        });
     }
 
     // Обучение сети политики

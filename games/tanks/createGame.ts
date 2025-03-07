@@ -28,6 +28,7 @@ import {
 } from '../../src/ECS/Systems/ChangedDetectorSystem.ts';
 import { createDestroyByTimeoutSystem } from './src/ECS/Systems/createDestroyByTimeoutSystem.ts';
 import { createDrawGrassSystem } from './src/ECS/Systems/Render/createDrawGrassSystem.ts';
+import { createAimSystem } from './src/ECS/Systems/createAimSystem.ts';
 
 const canvas = document.querySelector('canvas')!;
 const { device, context } = await initWebGPU(canvas);
@@ -50,6 +51,7 @@ export function createGame() {
     const updatePlayerTankTurretRotation = createPlayerTankTurretRotationSystem();
 
     const applyRigidBodyDeltaToLocalTransformSystem = createApplyRigidBodyDeltaToLocalTransformSystem();
+
     const updateHitableSystem = createHitableSystem();
     const updateTankAliveSystem = createTankAliveSystem();
 
@@ -123,17 +125,20 @@ export function createGame() {
         destroyByTimeout(delta);
     };
 
-
     const updateTankInputTensor = createTankInputTensorSystem();
     const statsFrame = () => {
         updateTankInputTensor();
     };
+
+    const aimUpdate = createAimSystem();
+
 
     DI.gameTick = (delta: number, withDraw: boolean = true) => {
         spawnFrame(delta);
 
         physicalFrame(delta);
 
+        aimUpdate();
         // updateMap();
 
         // stats.begin();
