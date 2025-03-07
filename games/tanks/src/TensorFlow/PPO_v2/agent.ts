@@ -312,8 +312,7 @@ export class SharedTankPPOAgent {
     ): number {
         // 1) Собираем массив tf.Variable
         const trainableVars = this.policyNetwork.trainableWeights.map(
-            // @ts-ignore
-            w => w.val,
+            w => w.read(),
         );
 
         // 2) Всё оборачиваем в tf.tidy
@@ -401,7 +400,7 @@ export class SharedTankPPOAgent {
                 const totalLoss = policyLoss.sub(totalEntropy.mul(this.entropyCoeff));
 
                 return totalLoss as tf.Scalar;
-            }, trainableVars);
+            }, trainableVars as tf.Variable[]);
 
             // j) Применяем градиенты
             this.optimizer.applyGradients(grads);
@@ -419,8 +418,7 @@ export class SharedTankPPOAgent {
     ): number {
         // Собираем tf.Variable
         const trainableVars = this.valueNetwork.trainableWeights.map(
-            // @ts-ignore
-            w => w.val,
+            w => w.read(),
         );
 
         return tf.tidy(() => {
@@ -442,7 +440,7 @@ export class SharedTankPPOAgent {
                 const finalValueLoss = tf.maximum(vfLoss1, vfLoss2).mean();
 
                 return finalValueLoss as tf.Scalar;
-            }, trainableVars);
+            }, trainableVars as tf.Variable[]);
 
             this.optimizer.applyGradients(grads);
 

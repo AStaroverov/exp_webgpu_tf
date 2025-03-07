@@ -186,9 +186,7 @@ fn hue_to_rgb(p: f32, q: f32, t: f32) -> f32 {
   return p;
 }
 
-// Функция для дизеринга
-fn dither8x8(pos: vec2f, color: vec3f) -> vec3f {
-  let ditherMatrix = array<f32, 64>(
+const DITHER_MATRIX = array<f32, 64>(
     0.0/64.0, 32.0/64.0, 8.0/64.0, 40.0/64.0, 2.0/64.0, 34.0/64.0, 10.0/64.0, 42.0/64.0,
     48.0/64.0, 16.0/64.0, 56.0/64.0, 24.0/64.0, 50.0/64.0, 18.0/64.0, 58.0/64.0, 26.0/64.0,
     12.0/64.0, 44.0/64.0, 4.0/64.0, 36.0/64.0, 14.0/64.0, 46.0/64.0, 6.0/64.0, 38.0/64.0,
@@ -197,11 +195,11 @@ fn dither8x8(pos: vec2f, color: vec3f) -> vec3f {
     51.0/64.0, 19.0/64.0, 59.0/64.0, 27.0/64.0, 49.0/64.0, 17.0/64.0, 57.0/64.0, 25.0/64.0,
     15.0/64.0, 47.0/64.0, 7.0/64.0, 39.0/64.0, 13.0/64.0, 45.0/64.0, 5.0/64.0, 37.0/64.0,
     63.0/64.0, 31.0/64.0, 55.0/64.0, 23.0/64.0, 61.0/64.0, 29.0/64.0, 53.0/64.0, 21.0/64.0
-  );
-  
-  let x = u32(pos.x) % 8;
+);
+// Функция для дизеринга
+fn dither8x8(pos: vec2f, color: vec3f) -> vec3f {let x = u32(pos.x) % 8;
   let y = u32(pos.y) % 8;
-  let threshold = ditherMatrix[y * 8 + x];
+  let threshold = DITHER_MATRIX[y * 8 + x];
   
   // Квантование цвета с диффузией ошибки
   let colorDepth = max(2.0, COLOR_DEPTH);
@@ -217,9 +215,6 @@ fn dither8x8(pos: vec2f, color: vec3f) -> vec3f {
   result = clamp(result, vec3f(0.0), vec3f(1.0));
   
   return result;
-}
-    
+}    
     `,
 );
-
-console.log(shaderMeta.shader);

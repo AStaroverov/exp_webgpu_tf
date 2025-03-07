@@ -3,10 +3,10 @@ import {
     TANK_INPUT_TENSOR_MAX_ENEMIES,
     TankInputTensor,
 } from '../../ECS/Components/TankState.ts';
-import { TankController } from '../../ECS/Components/TankController.ts';
 import { centerStep, hypot, lerp, max, min, smoothstep } from '../../../../../lib/math.ts';
 import { TANK_RADIUS } from './consts.ts';
 import { isVerboseLog } from './utils.ts';
+import { TankController } from '../../ECS/Components/TankController.ts';
 
 // Константы для калибровки вознаграждений
 export const REWARD_WEIGHTS = {
@@ -27,6 +27,7 @@ export const REWARD_WEIGHTS = {
     SHOOTING_RANDOM: -0.2,       // За беспорядочную стрельбу
 
     AIM_QUALITY: 2.0,            // За точное прицеливание
+    AIM_DISTANCE: -1.0,            // За точное прицеливание
     AIM_TRACKING: 2.0,           // За активное отслеживание врага
 };
 
@@ -50,6 +51,7 @@ export interface ComponentRewards {
 
     // Награды для головы прицеливания
     aim: {
+        distance: number;    // Нахождение в пределах карты
         accuracy: number;        // Точность прицеливания
         tracking: number;        // Активное отслеживание цели
         total: number;           // Суммарная награда для головы прицеливания
@@ -105,6 +107,7 @@ export function calculateMultiHeadReward(
     const [tankX, tankY] = TankInputTensor.position.getBatche(tankEid);
     const [tankSpeedX, tankSpeedY] = TankInputTensor.speed.getBatche(tankEid);
     const currentHealth = TankInputTensor.health[tankEid];
+    const turretTarget = TankController.getTurretTarget(tankEid);
     const isShooting = actions[0] > 0.5;
 
     // Инициализируем пустую структуру наград
@@ -115,7 +118,7 @@ export function calculateMultiHeadReward(
     const healthReward = calculateHealthReward(currentHealth, prevHealth);
 
     // Анализ целей и прицеливания
-    const aimingResult = analyzeAiming(tankEid, tankX, tankY);
+    const aimingResult = analyzeAiming(tankEid, tankX, tankY, turretTarget[0], turretTarget[1]);
     const trackingReward = calculateTrackingReward(tankEid, aimingResult);
     const shootingReward = calculateShootingReward(isShooting, aimingResult.bestAimQuality);
 
@@ -138,6 +141,7 @@ export function calculateMultiHeadReward(
     rewards.common.health = healthReward.health;
 
     rewards.aim.accuracy = aimingResult.aimQualityReward;
+    rewards.aim.distance = aimingResult.aimDistanceReward;
     rewards.aim.tracking = trackingReward;
 
     rewards.shoot.aimQuality = aimingResult.aimQualityReward;
@@ -154,7 +158,7 @@ export function calculateMultiHeadReward(
     rewards.shoot.total = rewards.shoot.aimQuality + rewards.shoot.shootDecision;
     rewards.movement.total = rewards.movement.speed + rewards.movement.positioning +
         rewards.movement.avoidance + rewards.movement.mapAwareness;
-    rewards.aim.total = rewards.aim.accuracy + rewards.aim.tracking;
+    rewards.aim.total = rewards.aim.accuracy + rewards.aim.tracking + rewards.aim.distance;
     rewards.common.total = rewards.common.health + rewards.common.survival;
 
     // Общая итоговая награда
@@ -179,7 +183,7 @@ function initializeRewards(): ComponentRewards {
     return {
         shoot: { aimQuality: 0, shootDecision: 0, total: 0 },
         movement: { speed: 0, positioning: 0, avoidance: 0, mapAwareness: 0, total: 0 },
-        aim: { accuracy: 0, tracking: 0, total: 0 },
+        aim: { accuracy: 0, tracking: 0, distance: 0, total: 0 },
         common: { health: 0, survival: 0, total: 0 },
         totalReward: 0,
     };
@@ -189,25 +193,25 @@ function initializeRewards(): ComponentRewards {
  * Расчет награды за нахождение в пределах карты
  */
 function calculateMapReward(
-    tankX: number,
-    tankY: number,
+    entityX: number,
+    entityY: number,
     width: number,
     height: number,
 ): number {
-    if (tankX >= 0 && tankX <= width && tankY >= 0 && tankY <= height) {
-        // Танк в пределах карты - используем плавный градиент
+    if (entityX >= 0 && entityX <= width && entityY >= 0 && entityY <= height) {
+        // пределах карты - используем плавный градиент
         const borderDistance = min(
-            tankX,
-            tankY,
-            width - tankX,
-            height - tankY,
+            entityX,
+            entityY,
+            width - entityX,
+            height - entityY,
         );
         // Плавное уменьшение награды при приближении к границе
         const borderFactor = 1 - smoothstep(0, 50, borderDistance);
 
         return REWARD_WEIGHTS.BORDER_GRADIENT * borderFactor;
     } else {
-        // Танк вышел за границы карты
+        // вышел за границы карты
         return REWARD_WEIGHTS.MAP_BORDER;
     }
 }
@@ -239,20 +243,22 @@ function analyzeAiming(
     tankEid: number,
     tankX: number,
     tankY: number,
+    turretTargetX: number,
+    turretTargetY: number,
 ): {
     bestAimQuality: number;
     bestAimTargetId: number;
     aimQualityReward: number;
     hasTargets: boolean;
     closestEnemyDist: number;
+    aimDistanceReward: number;
 } {
-    const turretTarget = TankController.getTurretTarget(tankEid);
-
     let bestAimQuality = 0;
     let bestAimTargetId = 0;
     let bestAimDistance = 0;
     let hasTargets = false;
     let closestEnemyDist = Number.MAX_VALUE;
+    const turretTargetDistance = hypot(turretTargetX - tankX, turretTargetY - tankY);
 
     // Анализируем всех видимых врагов
     for (let j = 0; j < TANK_INPUT_TENSOR_MAX_ENEMIES; j++) {
@@ -273,7 +279,7 @@ function analyzeAiming(
         }
 
         // Оценка точности прицеливания с плавным переходом
-        const distFromTargetToEnemy = hypot(turretTarget[0] - enemyX, turretTarget[1] - enemyY);
+        const distFromTargetToEnemy = hypot(turretTargetX - enemyX, turretTargetY - enemyY);
         const aimQuality = 1 - smoothstep(0, TANK_RADIUS * 3, distFromTargetToEnemy);
 
         // Отслеживаем лучшее прицеливание
@@ -286,6 +292,7 @@ function analyzeAiming(
 
     // Награда за качество прицеливания и дистанцию до цели
     const aimQualityReward = bestAimQuality * REWARD_WEIGHTS.AIM_QUALITY * smoothstep(1000, closestEnemyDist, bestAimDistance);
+    const aimDistanceReward = smoothstep(600, 1000, turretTargetDistance) * REWARD_WEIGHTS.AIM_DISTANCE;
 
     return {
         aimQualityReward,
@@ -293,6 +300,7 @@ function analyzeAiming(
         bestAimQuality,
         bestAimTargetId,
         closestEnemyDist,
+        aimDistanceReward,
     };
 }
 
