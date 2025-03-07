@@ -1,6 +1,6 @@
-import { ShaderMeta } from '../../../../../../src/WGSL/ShaderMeta.ts';
-import { VariableKind, VariableMeta } from '../../../../../../src/Struct/VariableMeta.ts';
-import { wgsl } from '../../../../../../src/WGSL/wgsl.ts';
+import { ShaderMeta } from '../../../../../../../src/WGSL/ShaderMeta.ts';
+import { VariableKind, VariableMeta } from '../../../../../../../src/Struct/VariableMeta.ts';
+import { wgsl } from '../../../../../../../src/WGSL/wgsl.ts';
 
 export const shaderMeta = new ShaderMeta(
     {
@@ -50,11 +50,6 @@ export const shaderMeta = new ShaderMeta(
             var p3 = fract(vec3f(p.xyx) * vec3f(0.1031, 0.1030, 0.0973));
             p3 += dot(p3, p3.yzx + 19.19);
             return fract((p3.x + p3.y) * p3.z);
-        }
-        
-        // Pixelate a coordinate
-        fn pixelate(coord: vec2f, size: f32) -> vec2f {
-            return floor(coord / size) * size;
         }
         
         // Noise function for wind variation
@@ -117,8 +112,7 @@ export const shaderMeta = new ShaderMeta(
         
         @fragment
         fn fs_main(@builtin(position) fragCoord : vec4<f32>) -> @location(0) vec4f {
-            // Apply pixel grid
-            let pixelCoord = pixelate(vec2f(fragCoord.x, -fragCoord.y), uPixelSize);
+            let coord = vec2f(fragCoord.x, -fragCoord.y);
             
             // Instead of using the projection matrix for normalization,
             // use the screen size directly to get fixed-size tiles
@@ -126,7 +120,7 @@ export const shaderMeta = new ShaderMeta(
             
             // Calculate normalized coordinates 
             // This is in 0-1 range based on screen dimensions
-            let normalizedCoord = pixelCoord / uScreenSize;
+            let normalizedCoord = coord / uScreenSize;
             
             // Convert to -1 to 1 range for easier tile placement calculation
             let centeredCoord = normalizedCoord * 2.0 - 1.0;

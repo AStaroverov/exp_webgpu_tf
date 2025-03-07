@@ -27,8 +27,9 @@ import {
     destroyChangeDetectorSystem,
 } from '../../src/ECS/Systems/ChangedDetectorSystem.ts';
 import { createDestroyByTimeoutSystem } from './src/ECS/Systems/createDestroyByTimeoutSystem.ts';
-import { createDrawGrassSystem } from './src/ECS/Systems/Render/createDrawGrassSystem.ts';
 import { createAimSystem } from './src/ECS/Systems/createAimSystem.ts';
+import { createPostEffect } from './src/ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
+import { createDrawGrassSystem } from './src/ECS/Systems/Render/Grass/createDrawGrassSystem.ts';
 
 const canvas = document.querySelector('canvas')!;
 const { device, context } = await initWebGPU(canvas);
@@ -102,7 +103,7 @@ export function createGame() {
 
     const drawGrass = createDrawGrassSystem(device);
     const drawShape = createDrawShapeSystem(world, device);
-    const renderFrame = createFrameTick({
+    const { renderFrame, renderTexture } = createFrameTick({
         canvas,
         device,
         context,
@@ -112,6 +113,7 @@ export function createGame() {
         drawGrass(passEncoder, delta);
         drawShape(passEncoder);
     });
+    const postEffectFrame = createPostEffect(device, context, renderTexture);
 
     const spawnBullets = createSpawnerBulletsSystem();
     const spawnFrame = (delta: number) => {
@@ -142,7 +144,12 @@ export function createGame() {
         // updateMap();
 
         // stats.begin();
-        withDraw && renderFrame(delta);
+        if (withDraw) {
+            const commandEncoder = device.createCommandEncoder();
+            renderFrame(commandEncoder, delta);
+            postEffectFrame(commandEncoder);
+            device.queue.submit([commandEncoder.finish()]);
+        }
         // stats.end();
         // stats.update();
         //

@@ -9,7 +9,7 @@ import { query, World } from 'bitecs';
 
 export function createDrawRopeSystem(world: World, device: GPUDevice) {
     const gpuShader = new GPUShader(shaderMeta);
-    const pipeline = gpuShader.getRenderPipeline(device, 'vertex', 'fragment');
+    const pipeline = gpuShader.getRenderPipeline(device, 'vertex', 'fragment', { withDepth: true });
     const bindGroup0 = gpuShader.getBindGroup(device, 0);
     const bindGroup1 = gpuShader.getBindGroup(device, 1);
 

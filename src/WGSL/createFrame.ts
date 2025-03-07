@@ -22,15 +22,20 @@ export function createFrameTick(
         passEncoder: null as unknown as GPURenderPassEncoder,
     };
 
-    return (delta: number) => {
-        const depthTexture = device.createTexture({
-            size: [canvas.width, canvas.height, 1],
-            format: 'depth32float',
-            usage: GPUTextureUsage.RENDER_ATTACHMENT,
-        });
+    const depthTexture = device.createTexture({
+        size: [canvas.width, canvas.height, 1],
+        format: 'depth32float',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+    const renderTexture = device.createTexture({
+        size: [canvas.width, canvas.height, 1],
+        format: 'bgra8unorm',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+    const renderFrame = (commandEncoder: GPUCommandEncoder, delta: number) => {
         const depthView = depthTexture.createView();
-        const textureView = context.getCurrentTexture().createView();
-        const commandEncoder = device.createCommandEncoder();
+        const textureView = renderTexture.createView();
+
         const passEncoder = commandEncoder.beginRenderPass({
             colorAttachments: [
                 {
@@ -56,8 +61,8 @@ export function createFrameTick(
 
         passEncoder.end();
 
-        device.queue.submit([
-            commandEncoder.finish(),
-        ]);
+        return { renderTexture, depthTexture };
     };
+
+    return { renderFrame, renderTexture };
 }

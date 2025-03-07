@@ -10,8 +10,8 @@ import { createChangeDetector } from '../ChangedDetectorSystem.ts';
 
 export function createDrawShapeSystem(world: World, device: GPUDevice) {
     const gpuShader = new GPUShader(shaderMeta);
-    const pipelineSdf = gpuShader.getRenderPipeline(device, 'vs_main', 'fs_main');
-    const pipelineShadow = gpuShader.getRenderPipeline(device, 'vs_shadow', 'fs_shadow');
+    const pipelineShadow = gpuShader.getRenderPipeline(device, 'vs_shadow', 'fs_shadow', { withDepth: true });
+    const pipelineSdf = gpuShader.getRenderPipeline(device, 'vs_main', 'fs_main', { withDepth: true });
     const bindGroup0 = gpuShader.getBindGroup(device, 0);
     const bindGroup1 = gpuShader.getBindGroup(device, 1);
 

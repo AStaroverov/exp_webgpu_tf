@@ -45,6 +45,8 @@ function getSortedDependencies(dependencies: TWGSLModule[]): TWGSLModule[] {
 }
 
 export const mapKindToGroup = {
+    [VariableKind.Texture]: 0,
+    [VariableKind.Sampler]: 0,
     [VariableKind.Uniform]: 0,
     [VariableKind.StorageRead]: 1,
     [VariableKind.StorageWrite]: 2,
@@ -58,12 +60,12 @@ export function setupVariable<M extends Record<string, VariableMeta>>(map: M): R
     }
 
     const sortedByKind = values.sort((a, b) => mapKindToGroup[a.kind] - mapKindToGroup[b.kind]);
-    let prevKind = sortedByKind[0].kind;
+    let prevKindGroup = mapKindToGroup[sortedByKind[0].kind];
     let binding = 0;
 
     for (const meta of sortedByKind) {
-        if (prevKind !== meta.kind) {
-            prevKind = meta.kind;
+        if (prevKindGroup !== mapKindToGroup[meta.kind]) {
+            prevKindGroup = mapKindToGroup[meta.kind];
             binding = 0;
         }
         meta.group = mapKindToGroup[meta.kind];
@@ -81,12 +83,17 @@ export function buildShader<U extends Record<string, VariableMeta>, A extends Re
     const uniformKeys = uniforms ? Object.keys(uniforms) : [];
     const uniformsPart = uniformKeys.reduce((acc, key) => {
         const u = uniforms![key];
+        const variable = u.kind === VariableKind.Uniform
+            ? `var<${ u.kind }>`
+            : u.kind === VariableKind.StorageRead
+                ? `var<${ u.kind }>`
+                : 'var';
         return `
             ${ acc }
 
             @group(${ u.group })
             @binding(${ u.binding })
-            var<${ u.kind }> ${ u.name }: ${ u.type };
+            ${ variable } ${ u.name }: ${ u.type };
         `;
     }, '');
     const attributesKeys = attributes ? Object.keys(attributes) : [];

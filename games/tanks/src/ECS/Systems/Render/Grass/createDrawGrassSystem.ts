@@ -1,13 +1,13 @@
-import { GPUShader } from '../../../../../../src/WGSL/GPUShader.ts';
+import { GPUShader } from '../../../../../../../src/WGSL/GPUShader.ts';
 import { shaderMeta } from './grass5.shader.ts';
-import { getTypeTypedArray } from '../../../../../../src/Shader';
-import { sin } from '../../../../../../lib/math.ts';
-import { random, randomSign } from '../../../../../../lib/random.ts';
-import { DI } from '../../../DI';
+import { getTypeTypedArray } from '../../../../../../../src/Shader';
+import { sin } from '../../../../../../../lib/math.ts';
+import { random, randomSign } from '../../../../../../../lib/random.ts';
+import { DI } from '../../../../DI';
 
 export function createDrawGrassSystem(device: GPUDevice, { canvas } = DI) {
     const gpuShader = new GPUShader(shaderMeta);
-    const pipeline = gpuShader.getRenderPipeline(device, 'vs_main', 'fs_main');
+    const pipeline = gpuShader.getRenderPipeline(device, 'vs_main', 'fs_main', { withDepth: true });
     const bindGroup = gpuShader.getBindGroup(device, 0);
 
     const screenSizeBuffer = getTypeTypedArray(shaderMeta.uniforms.screenSize.type);

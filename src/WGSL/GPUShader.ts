@@ -31,9 +31,14 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
         device: GPUDevice,
         vertexName: string,
         fragmentName: string,
-        shaderModule = this.getShaderModule(device),
+        options?: {
+            withDepth?: boolean,
+            shaderModule?: GPUShaderModule,
+        },
     ): GPURenderPipeline {
         const key = `${ vertexName }-${ fragmentName }`;
+        const withDepth = options?.withDepth ?? false;
+        const shaderModule = options?.shaderModule ?? this.getShaderModule(device);
 
         if (!this.mapRenderPipeline.has(key)) {
             const value = device.createRenderPipeline({
@@ -66,11 +71,11 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
                         },
                     ],
                 },
-                depthStencil: {
+                depthStencil: withDepth ? {
                     format: 'depth32float',
                     depthCompare: 'greater-equal',
                     depthWriteEnabled: true,
-                },
+                } : undefined,
             });
             this.mapRenderPipeline.set(key, value);
         }
