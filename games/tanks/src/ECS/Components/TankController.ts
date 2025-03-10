@@ -39,7 +39,4 @@ export const TankController = component(({
         TankController.turretTarget.set(eid, 0, x);
         TankController.turretTarget.set(eid, 1, y);
     }),
-    getTurretTarget: (eid: number): Float64Array => {
-        return TankController.turretTarget.getBatche(eid);
-    },
 }));

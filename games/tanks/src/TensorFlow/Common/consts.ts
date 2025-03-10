@@ -1,5 +1,5 @@
-export const TANK_COUNT_SIMULATION_MIN = 2;
-export const TANK_COUNT_SIMULATION_MAX = 10;
+export const TANK_COUNT_SIMULATION_MIN = 3;
+export const TANK_COUNT_SIMULATION_MAX = 5;
 export const TANK_RADIUS = 80;
 
 export const TICK_TIME_REAL = 1;

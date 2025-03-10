@@ -451,10 +451,10 @@ export class SharedTankPPOAgent {
 
         // Общие слои
         let shared = input;
-        for (const units of this.config.hiddenLayers) {
+        for (const [activation, units] of this.config.hiddenLayers) {
             shared = tf.layers.dense({
                 units,
-                activation: 'tanh',
+                activation,
                 kernelInitializer: 'glorotUniform',
             }).apply(shared) as tf.SymbolicTensor;
         }
@@ -523,10 +523,10 @@ export class SharedTankPPOAgent {
 
         // Скрытые слои
         let x = input;
-        for (const units of this.config.hiddenLayers) {
+        for (const [activation, units] of this.config.hiddenLayers) {
             x = tf.layers.dense({
                 units,
-                activation: 'tanh',
+                activation,
                 kernelInitializer: 'glorotUniform',
             }).apply(x) as tf.SymbolicTensor;
         }

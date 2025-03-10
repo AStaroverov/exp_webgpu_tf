@@ -63,13 +63,15 @@ export function updateTankBehaviour(
     applyActionToTank(tankEid, result.action, width, height);
     mapLastUpdateData.set(tankEid, { action: result.action });
 
-    !isWarmup && agent.rememberAction(
-        tankEid,
-        tf.tensor1d(inputVector),
-        tf.tensor1d(result.action),
-        result.logProb,
-        result.value,
-    );
+    if (!isWarmup) {
+        agent.rememberAction(
+            tankEid,
+            tf.tensor1d(inputVector),
+            tf.tensor1d(result.action),
+            result.logProb,
+            result.value,
+        );
+    }
 }
 
 export function memorizeTankBehaviour(
@@ -122,8 +124,8 @@ function applyActionToTank(tankEid: number, action: number[], width: number, hei
     TankController.setRotate$(tankEid, rotate);
 
     // Set turret target (aiming)
-    const turretTargetX = TankController.turretTarget.get(tankEid, 0) + aimDX * width * 0.01;
-    const turretTargetY = TankController.turretTarget.get(tankEid, 1) + aimDY * height * 0.01;
+    const turretTargetX = TankController.turretTarget.get(tankEid, 0) + aimDX * width * 0.02;
+    const turretTargetY = TankController.turretTarget.get(tankEid, 1) + aimDY * height * 0.02;
     TankController.setTurretTarget$(tankEid, turretTargetX, turretTargetY);
 }
 

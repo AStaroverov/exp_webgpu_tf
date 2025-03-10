@@ -2,11 +2,13 @@
 // This allows fine-tuning the RL model and experimenting with different hyperparameters
 
 // Define experiment configurations that can be easily switched
+import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
+
 export type RLExperimentConfig = {
     name: string;
     description: string;
     // Network architecture
-    hiddenLayers: number[];
+    hiddenLayers: [ActivationIdentifier, number][];
     // Learning parameters
     learningRate: number;
     gamma: number;                  // Discount factor
@@ -24,9 +26,9 @@ export const DEFAULT_EXPERIMENT: RLExperimentConfig = {
     name: 'ppo-default',
     description: 'Balanced PPO configuration for tank RL training',
     // Network architecture
-    hiddenLayers: [256, 256, 256, 128],
+    hiddenLayers: [['tanh', 256], ['relu', 256], ['relu', 128]],
     // Learning parameters
-    learningRate: 0.0005,           // Generally smaller for PPO
+    learningRate: 0.0001,           // Generally smaller for PPO
     gamma: 0.99,
     lam: 0.95,                      // GAE lambda for advantage estimation
     // PPO-specific parameters

@@ -25,7 +25,6 @@ import {
 } from '../Common/consts.ts';
 import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
 import { RingBuffer } from 'ring-buffer-ts';
-import { resetRewardMemory } from '../Common/calculateMultiHeadReward.ts';
 import { Tank } from '../../ECS/Components/Tank.ts';
 import { DI } from '../../DI';
 import { randomRangeInt } from '../../../../../lib/random.ts';
@@ -95,7 +94,6 @@ export class SharedRLGameManager {
 
     // Reset environment for a new episode
     resetEnvironment() {
-        resetRewardMemory();
         resetController();
 
         // Create new battlefield
