@@ -449,9 +449,7 @@ function calculateBulletAvoidanceReward(tankEid: number) {
         const vx = TankInputTensor.bulletsData.get(tankEid, i * 5 + 3);
         const vy = TankInputTensor.bulletsData.get(tankEid, i * 5 + 4);
 
-        if (id === 0) {
-            continue;
-        }
+        if (id === 0) continue;
 
         // Анализируем пулю
         const bulletResult = analyzeBullet(

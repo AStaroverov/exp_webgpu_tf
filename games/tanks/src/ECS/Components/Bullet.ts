@@ -64,7 +64,7 @@ export function createBulletRR(options: Partial<Options> & { speed: number, play
     addTransformComponents(world, bulletId);
     addPlayerComponent(bulletId, options.playerId);
     Hitable.addComponent(bulletId);
-    DestroyByTimeout.addComponent(bulletId, 20_000);
+    DestroyByTimeout.addComponent(world, bulletId, 20_000);
 
     return bulletId;
 }

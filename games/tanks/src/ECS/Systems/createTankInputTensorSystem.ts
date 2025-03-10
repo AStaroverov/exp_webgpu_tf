@@ -5,7 +5,7 @@ import {
     TANK_INPUT_TENSOR_MAX_ENEMIES,
     TankInputTensor,
 } from '../Components/TankState.ts';
-import { getEntityIdByPhysicalId, RigidBodyRef } from '../Components/Physical.ts';
+import { getEntityIdByPhysicalId, RigidBodyState } from '../Components/Physical.ts';
 import { hypot, max } from '../../../../../lib/math.ts';
 import { Ball, Collider } from '@dimforge/rapier2d';
 import { CollisionGroup, createCollisionGroups } from '../../Physical/createRigid.ts';
@@ -13,113 +13,134 @@ import { query } from 'bitecs';
 import { Player } from '../Components/Player.ts';
 import { TankController } from '../Components/TankController.ts';
 
-export function createTankInputTensorSystem({ world, physicalWorld } = DI) {
+export function createTankInputTensorSystem(options = DI) {
+    const { world } = options;
     const colliderIds = new Float64Array(max(TANK_INPUT_TENSOR_MAX_ENEMIES, TANK_INPUT_TENSOR_MAX_BULLETS));
 
     return () => {
-        const tankEids = query(world, [Tank, TankInputTensor, RigidBodyRef]);
+        if (!options.shouldCollectTensor) return;
+
+        const tankEids = query(world, [Tank, TankInputTensor, RigidBodyState]);
 
         TankInputTensor.resetEnemiesCoords();
         TankInputTensor.resetBulletsCoords();
 
         for (let i = 0; i < tankEids.length; i++) {
             const tankEid = tankEids[i];
-            const tankPid = RigidBodyRef.id[tankEid];
-            const playerId = Player.id[tankEid];
-            const rb = physicalWorld.getRigidBody(tankPid);
             const health = getTankHealth(tankEid);
-            const translation = rb.translation();
-            const linearVelocity = rb.linvel();
-            const rotation = rb.rotation();
+            const linvel = RigidBodyState.linvel.getBatche(tankEid);
+            const position = RigidBodyState.position.getBatche(tankEid);
             const turretTarget = TankController.turretTarget.getBatche(tankEid);
 
             TankInputTensor.setTankData(
                 tankEid,
                 health,
-                translation,
-                linearVelocity,
+                position,
+                linvel,
                 turretTarget,
             );
 
             // Find enemies
-            let enemyIndex = 0;
-
-            for (let j = 1; j < 5; j++) {
-                const radius = 10 ** j;
-                physicalWorld.intersectionsWithShape(
-                    translation,
-                    rotation,
-                    new Ball(radius),
-                    (collider: Collider) => {
-                        if (tankPid !== collider.handle) {
-                            colliderIds[enemyIndex++] = collider.handle;
-                        }
-
-                        return enemyIndex < TANK_INPUT_TENSOR_MAX_ENEMIES;
-                    },
-                    undefined,
-                    createCollisionGroups(CollisionGroup.TANK_BASE, CollisionGroup.TANK_BASE),
-                );
-                if (enemyIndex >= TANK_INPUT_TENSOR_MAX_ENEMIES) {
-                    break;
-                }
-            }
+            const [enemyIndex] = findTankEnemies(tankEid, colliderIds);
 
             for (let j = 0; j < enemyIndex; j++) {
-                const pid = colliderIds[j];
-                const rb = physicalWorld.getRigidBody(pid);
+                const enemyEid = colliderIds[j];
 
-                rb && TankInputTensor.setEnemiesData(
+                TankInputTensor.setEnemiesData(
                     tankEid,
                     j,
-                    getEntityIdByPhysicalId(pid),
-                    getTankHealth(tankEid),
-                    rb.translation(),
-                    rb.linvel(),
+                    enemyEid,
+                    getTankHealth(enemyEid),
+                    RigidBodyState.position.getBatche(enemyEid),
+                    RigidBodyState.linvel.getBatche(enemyEid),
                 );
             }
 
-            // Find bullets
-            let bulletIndex = 0;
-
-            for (let j = 1; j < 5; j++) {
-                const radius = 10 ** j;
-                physicalWorld.intersectionsWithShape(
-                    translation,
-                    rotation,
-                    new Ball(radius),
-                    (collider: Collider) => {
-                        const eid = getEntityIdByPhysicalId(collider.handle);
-                        const vel = collider.parent()?.linvel();
-
-                        if (Player.id[eid] === playerId || vel == null || hypot(vel.x, vel.y) < 100) {
-                            return true;
-                        }
-
-                        colliderIds[bulletIndex++] = collider.handle;
-
-                        return bulletIndex < TANK_INPUT_TENSOR_MAX_BULLETS;
-                    },
-                    undefined,
-                    createCollisionGroups(CollisionGroup.BULLET, CollisionGroup.BULLET),
-                );
-                if (bulletIndex >= TANK_INPUT_TENSOR_MAX_BULLETS) {
-                    break;
-                }
-            }
+            const [bulletIndex] = findTankDangerBullets(tankEid, colliderIds);
 
             for (let j = 0; j < bulletIndex; j++) {
-                const pid = colliderIds[j];
-                const rb = physicalWorld.getRigidBody(pid);
+                const bulletEid = colliderIds[j];
 
-                rb && TankInputTensor.setBulletsData(
+                TankInputTensor.setBulletsData(
                     tankEid,
                     j,
-                    getEntityIdByPhysicalId(pid),
-                    rb.translation(),
-                    rb.linvel(),
+                    bulletEid,
+                    RigidBodyState.position.getBatche(bulletEid),
+                    RigidBodyState.linvel.getBatche(bulletEid),
                 );
             }
         }
     };
+}
+
+export function findTankEnemies(tankEid: number, out = new Float64Array(TANK_INPUT_TENSOR_MAX_ENEMIES), { physicalWorld } = DI) {
+    // Find enemies
+    const position = {
+        x: RigidBodyState.position.get(tankEid, 0),
+        y: RigidBodyState.position.get(tankEid, 1),
+    };
+    const rotation = RigidBodyState.rotation[tankEid];
+
+    let enemyIndex = 0;
+
+    for (let j = 1; j < 5; j++) {
+        const radius = 10 ** j;
+        physicalWorld.intersectionsWithShape(
+            position,
+            rotation,
+            new Ball(radius),
+            (collider: Collider) => {
+                const eid = getEntityIdByPhysicalId(collider.handle);
+                if (eid !== 0 && tankEid !== eid) {
+                    out[enemyIndex++] = eid;
+                }
+
+                return enemyIndex < TANK_INPUT_TENSOR_MAX_ENEMIES;
+            },
+            undefined,
+            createCollisionGroups(CollisionGroup.TANK_BASE, CollisionGroup.TANK_BASE),
+        );
+        if (enemyIndex >= TANK_INPUT_TENSOR_MAX_ENEMIES) {
+            break;
+        }
+    }
+
+    return [enemyIndex, out] as const;
+}
+
+export function findTankDangerBullets(tankEid: number, out = new Float64Array(TANK_INPUT_TENSOR_MAX_BULLETS), { physicalWorld } = DI) {
+    // Find bullets
+    let bulletIndex = 0;
+    const playerId = Player.id[tankEid];
+    const position = {
+        x: RigidBodyState.position.get(tankEid, 0),
+        y: RigidBodyState.position.get(tankEid, 1),
+    };
+    const rotation = RigidBodyState.rotation[tankEid];
+
+    for (let j = 1; j < 5; j++) {
+        const radius = 10 ** j;
+        physicalWorld.intersectionsWithShape(
+            position,
+            rotation,
+            new Ball(radius),
+            (collider: Collider) => {
+                const eid = getEntityIdByPhysicalId(collider.handle);
+                const vel = collider.parent()?.linvel();
+
+                if (eid !== 0 && Player.id[eid] !== playerId && vel != null && hypot(vel.x, vel.y) > 100) {
+                    out[bulletIndex++] = eid;
+                }
+
+                return bulletIndex < TANK_INPUT_TENSOR_MAX_BULLETS;
+            },
+            undefined,
+            createCollisionGroups(CollisionGroup.BULLET, CollisionGroup.BULLET),
+        );
+        if (bulletIndex >= TANK_INPUT_TENSOR_MAX_BULLETS) {
+            break;
+        }
+    }
+
+    return [bulletIndex, out] as const;
 }

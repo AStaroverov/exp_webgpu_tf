@@ -1,6 +1,6 @@
 import { createRigidCircle, createRigidRectangle } from '../../Physical/createRigid.ts';
 import { createCircle, createRectangle } from '../../../../../src/ECS/Entities/Shapes.ts';
-import { addRigidBodyRef } from './Physical.ts';
+import { RigidBodyRef, RigidBodyState } from './Physical.ts';
 import { DI } from '../../DI';
 
 export function createCircleRR(
@@ -9,7 +9,8 @@ export function createCircleRR(
 ): [id: number, physicalId: number] {
     const renderId = createCircle(world, options);
     const physicalId = createRigidCircle(options);
-    addRigidBodyRef(renderId, physicalId);
+    RigidBodyRef.addComponent(world, renderId, physicalId);
+    RigidBodyState.addComponent(world, renderId);
     return [renderId, physicalId];
 }
 
@@ -19,7 +20,8 @@ export function createRectangleRR(
 ): [id: number, physicalId: number] {
     const renderId = createRectangle(world, options);
     const physicalId = createRigidRectangle(options);
-    addRigidBodyRef(renderId, physicalId);
+    RigidBodyRef.addComponent(world, renderId, physicalId);
+    RigidBodyState.addComponent(world, renderId);
     return [renderId, physicalId];
 }
 

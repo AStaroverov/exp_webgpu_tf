@@ -1,18 +1,19 @@
 import * as tf from '@tensorflow/tfjs';
 import { getCurrentExperiment } from './experiment-config';
-import { entityExists } from 'bitecs';
+import { entityExists, hasComponent } from 'bitecs';
 import {
     cleanupAllRL,
     completeAgentEpisode,
     deactivateTank,
     getActiveTankCount,
-    initSharedRLController,
+    initController,
     isActiveTank,
+    memorizeTankBehaviour,
     registerTank,
-    resetSharedRLController,
+    resetController,
     saveSharedAgent,
     trainSharedModel,
-    updateTankWithSharedRL,
+    updateTankBehaviour,
 } from './controller.ts';
 import { createBattlefield } from '../Common/createBattlefield.ts';
 import {
@@ -24,8 +25,10 @@ import {
 } from '../Common/consts.ts';
 import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
 import { RingBuffer } from 'ring-buffer-ts';
-import { randomRangeInt } from '../../../../../lib/random.ts';
 import { resetRewardMemory } from '../Common/calculateMultiHeadReward.ts';
+import { Tank } from '../../ECS/Components/Tank.ts';
+import { DI } from '../../DI';
+import { randomRangeInt } from '../../../../../lib/random.ts';
 
 let sharedRLGameManager: SharedRLGameManager | null = null;
 
@@ -49,7 +52,6 @@ export class SharedRLGameManager {
         duration: number;
         avgReward: number;
         survivingTanks: number;
-        epsilon: number;
         policyLoss: number;
         valueLoss: number;
     }>(10);
@@ -75,7 +77,7 @@ export class SharedRLGameManager {
         console.log('TensorFlow.js ready');
 
         // Initialize shared RL controller
-        const agent = initSharedRLController(!this.isTraining);
+        const agent = initController(!this.isTraining);
 
         // Load trained model if requested
         try {
@@ -94,7 +96,7 @@ export class SharedRLGameManager {
     // Reset environment for a new episode
     resetEnvironment() {
         resetRewardMemory();
-        resetSharedRLController();
+        resetController();
 
         // Create new battlefield
         this.battlefield?.destroy();
@@ -198,6 +200,7 @@ export class SharedRLGameManager {
 
     // Main game loop
     private gameLoop() {
+        let activeTanks: number[];
         this.stopFrameInterval = macroTasks.addInterval(() => {
             if (!this.gameLoopRunning) {
                 this.stopFrameInterval?.();
@@ -208,23 +211,48 @@ export class SharedRLGameManager {
             // Update frame counter
             this.frameCount++;
 
-            if (this.frameCount % 15 === 0 || this.frameCount >= MAX_STEPS) {
-                // Get active tanks (with health > 0)
-                const activeTanks = this.battlefield.tanks.filter(tankEid => {
-                    if (entityExists(this.battlefield.world, tankEid)) return true;
-                    if (isActiveTank(tankEid)) deactivateTank(tankEid);
-                    return false;
+            const width = this.battlefield.canvas.offsetWidth;
+            const height = this.battlefield.canvas.offsetHeight;
+            const isWarmup = this.frameCount < 100;
+            const shouldAction = this.frameCount > 0 && this.frameCount % 10 === 0;
+            const shouldMemorize = this.frameCount > 3 && (
+                (this.frameCount - 3) % 10 === 0
+                || (this.frameCount - 5) % 10 === 0
+                || (this.frameCount - 7) % 10 === 0
+                || (this.frameCount - 9) % 10 === 0
+            );
+            const isLastMemorize = this.frameCount > 3 && (this.frameCount - 9) % 10 === 0;
+
+            DI.shouldCollectTensor = this.frameCount > 0 && (this.frameCount + 1) % 10 === 0;
+
+            if (shouldAction) {
+                activeTanks = this.battlefield.tanks.filter(tankEid => {
+                    if (entityExists(this.battlefield.world, tankEid) && hasComponent(this.battlefield.world, tankEid, Tank)) {
+                        return true;
+                    } else if (isActiveTank(tankEid)) {
+                        deactivateTank(tankEid);
+                        return false;
+                    }
                 });
 
                 // Update each tank's RL controller
-                const width = this.battlefield.canvas.offsetWidth;
-                const height = this.battlefield.canvas.offsetHeight;
                 for (const tankEid of activeTanks) {
-                    updateTankWithSharedRL(tankEid, width, height, this.isTraining);
+                    updateTankBehaviour(tankEid, width, height, isWarmup);
                 }
             }
+
             // Execute game tick
             this.battlefield.gameTick(TICK_TIME_SIMULATION);
+
+            if (isWarmup) {
+                return;
+            }
+
+            if (shouldMemorize) {
+                for (const tankEid of activeTanks) {
+                    memorizeTankBehaviour(tankEid, width, height, this.episodeCount, isLastMemorize ? 0.4 : 0.2, isLastMemorize);
+                }
+            }
 
             // Check if episode is done
             const activeCount = getActiveTankCount();
@@ -237,7 +265,7 @@ export class SharedRLGameManager {
                 console.log(`Episode ${ this.episodeCount } completed after ${ this.frameCount } frames`);
                 console.log(`Surviving tanks: ${ activeCount }`);
 
-                const promiseTrain = trainSharedModel();
+                const promiseTrain = trainSharedModel(this.episodeCount);
 
                 // Log episode completion
                 const stats = completeAgentEpisode(this.frameCount);
@@ -248,7 +276,6 @@ export class SharedRLGameManager {
                     duration: this.frameCount,
                     avgReward: stats.avgReward,
                     survivingTanks: activeCount,
-                    epsilon: stats.epsilon,
                     policyLoss: stats.avgPolicyLoss,
                     valueLoss: stats.avgValueLoss,
                 });
@@ -275,7 +302,6 @@ export class SharedRLGameManager {
         const avgDuration = last10Episodes.reduce((sum, stat) => sum + stat.duration, 0) / Math.max(1, last10Episodes.length);
         const avgReward = last10Episodes.reduce((sum, stat) => sum + stat.avgReward, 0) / Math.max(1, last10Episodes.length);
         const avgSurvivors = last10Episodes.reduce((sum, stat) => sum + stat.survivingTanks, 0) / Math.max(1, last10Episodes.length);
-        const avgEpsilon = last10Episodes.reduce((sum, stat) => sum + stat.epsilon, 0) / Math.max(1, last10Episodes.length);
         const avgPolicyLoss = last10Episodes.reduce((sum, stat) => sum + (stat.policyLoss || 0), 0) / Math.max(1, last10Episodes.length);
         const avgValueLoss = last10Episodes.reduce((sum, stat) => sum + (stat.valueLoss || 0), 0) / Math.max(1, last10Episodes.length);
 
@@ -285,7 +311,6 @@ export class SharedRLGameManager {
         console.log(`Average duration (last 10): ${ avgDuration.toFixed(1) } frames`);
         console.log(`Average reward (last 10): ${ avgReward.toFixed(2) }`);
         console.log(`Average survivors (last 10): ${ avgSurvivors.toFixed(1) } tanks`);
-        console.log(`Current epsilon: ${ avgEpsilon.toFixed(4) }`);
         console.log('Average Losses:');
         console.log(`  Policy: ${ avgPolicyLoss.toFixed(3) }`);
         console.log(`  Value: ${ avgValueLoss.toFixed(3) }`);

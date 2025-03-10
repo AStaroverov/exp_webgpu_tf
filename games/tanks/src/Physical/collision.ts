@@ -6,7 +6,7 @@ export function resetCollisionsTo(eid: number, group: CollisionGroup, { physical
     const physicalId = RigidBodyRef.id[eid];
     const rigidBody = physicalWorld.getRigidBody(physicalId);
 
-    for (let i = 0; i < rigidBody.numColliders(); i++) {
+    for (let i = 0; i < rigidBody?.numColliders(); i++) {
         rigidBody.collider(i).setCollisionGroups(group << 16 | group);
     }
 }

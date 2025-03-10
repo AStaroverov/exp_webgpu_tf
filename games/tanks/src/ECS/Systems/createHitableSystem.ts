@@ -6,7 +6,7 @@ import { removeChild } from '../Components/Children.ts';
 import { Parent } from '../Components/Parent.ts';
 import { resetCollisionsTo } from '../../Physical/collision.ts';
 import { removePhysicalJoint } from '../../Physical/joint.ts';
-import { recursiveTypicalRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
+import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 import { onSet, query } from 'bitecs';
 import { Bullet } from '../Components/Bullet.ts';
 import { Wall } from '../Components/Wall.ts';
@@ -39,7 +39,7 @@ export function createHitableSystem({ world } = DI) {
             const damage = Hitable.damage[bulletsId];
 
             if (hitableChanges.has(bulletsId) && damage > 0) {
-                recursiveTypicalRemoveEntity(bulletsId);
+                scheduleRemoveEntity(bulletsId);
             }
         }
 
@@ -49,7 +49,7 @@ export function createHitableSystem({ world } = DI) {
             const damage = Hitable.damage[wallId];
 
             if (hitableChanges.has(wallId) && damage > 0) {
-                recursiveTypicalRemoveEntity(wallId);
+                scheduleRemoveEntity(wallId);
             }
         }
     };

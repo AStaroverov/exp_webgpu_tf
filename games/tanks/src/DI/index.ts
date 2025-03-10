@@ -8,6 +8,7 @@ export const DI: {
     physicalWorld: PhysicalWorld;
     gameTick: (delta: number, withDraw?: boolean) => void;
     destroy: () => void;
+    shouldCollectTensor: boolean
 } = {
     document: window.document,
     canvas: null as any,
@@ -15,4 +16,5 @@ export const DI: {
     physicalWorld: null as any,
     gameTick: null as any,
     destroy: null as any,
+    shouldCollectTensor: false,
 };

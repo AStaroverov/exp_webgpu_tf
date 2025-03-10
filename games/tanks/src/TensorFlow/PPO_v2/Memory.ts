@@ -30,11 +30,18 @@ export class Memory {
         return size;
     }
 
-    add(id: number, state: tf.Tensor, action: tf.Tensor, logProb: tf.Tensor, value: tf.Tensor, reward: number, done: boolean) {
+    addFirstPart(id: number, state: tf.Tensor, action: tf.Tensor, logProb: tf.Tensor, value: tf.Tensor) {
         if (!this.map.has(id)) {
             this.map.set(id, new SubMemory());
         }
-        this.map.get(id)!.add(state, action, logProb, value, reward, done);
+        this.map.get(id)!.addFirstPart(state, action, logProb, value);
+    }
+
+    updateSecondPart(id: number, reward: number, done: boolean, isLast = false) {
+        if (!this.map.has(id)) {
+            throw new Error('SubMemory not found');
+        }
+        this.map.get(id)!.updateSecondPart(reward, done, isLast);
     }
 
     getBatch(gamma: number, lam: number): Batch {
@@ -79,6 +86,9 @@ export class SubMemory {
     private rewards: number[] = [];
     private dones: boolean[] = [];
 
+    private tmpRewards: number[] = [];
+    private tmpDones: boolean[] = [];
+
     private returns?: tf.Tensor;
     private advantages?: tf.Tensor;
 
@@ -89,19 +99,38 @@ export class SubMemory {
         return this.states.length;
     }
 
-    add(state: tf.Tensor, action: tf.Tensor, logProb: tf.Tensor, value: tf.Tensor, reward: number, done: boolean) {
-        this.states.push(state.clone());
-        this.actions.push(action.clone());
-        this.logProbs.push(logProb.clone());
-        this.values.push(value.clone());
-        this.rewards.push(reward);
-        this.dones.push(done);
+    addFirstPart(state: tf.Tensor, action: tf.Tensor, logProb: tf.Tensor, value: tf.Tensor) {
+        this.states.push(state);
+        this.actions.push(action);
+        this.logProbs.push(logProb);
+        this.values.push(value);
+    }
+
+    updateSecondPart(reward: number, done: boolean, isLast = false) {
+        this.tmpRewards.push(reward);
+        this.tmpDones.push(done);
+
+        if (isLast) {
+            this.collapseTmpData();
+        }
     }
 
     // Метод для получения батча для обучения
     getBatch(gamma: number, lam: number): Batch {
         if (this.states.length === 0) {
             throw new Error('Memory is empty');
+        }
+        if (this.tmpDones.length > 0 || this.tmpRewards.length > 0) {
+            this.collapseTmpData();
+        }
+        if (this.states.length !== this.rewards.length || this.states.length !== this.dones.length) {
+            const minLen = Math.min(this.states.length, this.rewards.length, this.dones.length);
+            this.states.length = minLen;
+            this.actions.length = minLen;
+            this.logProbs.length = minLen;
+            this.values.length = minLen;
+            this.rewards.length = minLen;
+            this.dones.length = minLen;
         }
 
         const { returns, advantages } = this.computeReturnsAndAdvantages(gamma, lam);
@@ -151,14 +180,33 @@ export class SubMemory {
             lastVal = valuesArr[i];
         }
 
+        // Нормализация advantages
+        const advMean = advantages.reduce((sum, val) => sum + val, 0) / n;
+        const advStd = Math.sqrt(
+            advantages.reduce((sum, val) => sum + Math.pow(val - advMean, 2), 0) / n,
+        );
+
+        // Избегаем деления на ноль или очень малые значения
+        const epsilon = 1e-8;
+        const normalizedAdvantages = advantages.map(
+            adv => (adv - advMean) / (advStd + epsilon),
+        );
+
         const minAdv = Math.min(...advantages);
         const maxAdv = Math.max(...advantages);
+        const minNormAdv = Math.min(...normalizedAdvantages);
+        const maxNormAdv = Math.max(...normalizedAdvantages);
         const minRet = Math.min(...returns);
         const maxRet = Math.max(...returns);
-        console.log('Min/Max advantages:', minAdv, maxAdv);
-        console.log('Min/Max returns:', minRet, maxRet);
 
-        return { returns: tf.tensor1d(returns), advantages: tf.tensor1d(advantages) };
+        console.log('Original Min/Max advantages:', minAdv.toFixed(2), maxAdv.toFixed(2));
+        console.log('Normalized Min/Max advantages:', minNormAdv.toFixed(2), maxNormAdv.toFixed(2));
+        console.log('Min/Max returns:', minRet.toFixed(2), maxRet.toFixed(2));
+
+        return {
+            returns: tf.tensor1d(returns),
+            advantages: tf.tensor1d(normalizedAdvantages),  // Возвращаем нормализованные advantages
+        };
     }
 
     dispose() {
@@ -177,5 +225,12 @@ export class SubMemory {
         this.values = [];
         this.rewards = [];
         this.dones = [];
+    }
+
+    private collapseTmpData() {
+        this.rewards.push(this.tmpRewards.reduce((acc, val) => acc + val, 0));
+        this.dones.push(this.tmpDones.reduce((acc, val) => acc && val, true));
+        this.tmpRewards = [];
+        this.tmpDones = [];
     }
 }

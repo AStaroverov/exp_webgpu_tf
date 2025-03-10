@@ -2,9 +2,7 @@ import { initWebGPU } from '../../src/gpu.ts';
 import { createFrameTick } from '../../src/WGSL/createFrame.ts';
 import { createDrawShapeSystem } from '../../src/ECS/Systems/SDFSystem/createDrawShapeSystem.ts';
 import { initPhysicalWorld } from './src';
-import {
-    createApplyRigidBodyDeltaToLocalTransformSystem,
-} from './src/ECS/Systems/createApplyRigidBodyDeltaToLocalTransformSystem.ts';
+import { createApplyRigidBodyToTransformSystem } from './src/ECS/Systems/createApplyRigidBodyToTransformSystem.ts';
 import { EventQueue } from '@dimforge/rapier2d';
 import { DI } from './src/DI';
 import { createTransformSystem } from '../../src/ECS/Systems/TransformSystem.ts';
@@ -30,6 +28,8 @@ import { createDestroyByTimeoutSystem } from './src/ECS/Systems/createDestroyByT
 import { createAimSystem } from './src/ECS/Systems/createAimSystem.ts';
 import { createPostEffect } from './src/ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
 import { createDrawGrassSystem } from './src/ECS/Systems/Render/Grass/createDrawGrassSystem.ts';
+import { createRigidBodyStateSystem } from './src/ECS/Systems/createRigidBodyStateSystem.ts';
+import { createDestroySystem } from './src/ECS/Systems/createDestroySystem.ts';
 
 const canvas = document.querySelector('canvas')!;
 const { device, context } = await initWebGPU(canvas);
@@ -51,7 +51,8 @@ export function createGame() {
     const updatePlayerTankPosition = createPlayerTankPositionSystem();
     const updatePlayerTankTurretRotation = createPlayerTankTurretRotationSystem();
 
-    const applyRigidBodyDeltaToLocalTransformSystem = createApplyRigidBodyDeltaToLocalTransformSystem();
+    const syncRigidBodyState = createRigidBodyStateSystem();
+    const applyRigidBodyDeltaToLocalTransform = createApplyRigidBodyToTransformSystem();
 
     const updateHitableSystem = createHitableSystem();
     const updateTankAliveSystem = createTankAliveSystem();
@@ -69,7 +70,8 @@ export function createGame() {
 
         execTransformSystem();
         physicalWorld.step(eventQueue);
-        applyRigidBodyDeltaToLocalTransformSystem();
+        syncRigidBodyState();
+        applyRigidBodyDeltaToLocalTransform();
 
         // eventQueue.drainCollisionEvents((handle1, handle2, started) => {
         //     console.log('Collision event:', handle1, handle2, started);
@@ -120,11 +122,13 @@ export function createGame() {
         spawnBullets(delta);
     };
 
+    const destroy = createDestroySystem();
     const destroyOutZone = createOutZoneDestroySystem();
     const destroyByTimeout = createDestroyByTimeoutSystem();
     const destroyFrame = (delta: number) => {
-        destroyOutZone();
         destroyByTimeout(delta);
+        destroyOutZone();
+        destroy();
     };
 
     const updateTankInputTensor = createTankInputTensorSystem();

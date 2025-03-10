@@ -5,10 +5,13 @@ import {
     TankInputTensor,
 } from '../../ECS/Components/TankState.ts';
 
-const enemiesNormalizedBuffer = new Float32Array(TANK_INPUT_TENSOR_MAX_ENEMIES * 5);
-const bulletsNormalizedBuffer = new Float32Array(TANK_INPUT_TENSOR_MAX_BULLETS * 4);
+const enemiesNormalizedBuffer = new Float32Array(6 * TANK_INPUT_TENSOR_MAX_ENEMIES);
+const bulletsNormalizedBuffer = new Float32Array(5 * TANK_INPUT_TENSOR_MAX_BULLETS);
 
 export function createInputVector(tankEid: number, width: number, height: number) {
+    enemiesNormalizedBuffer.fill(0);
+    bulletsNormalizedBuffer.fill(0);
+
     const inputVector = new Float32Array(INPUT_DIM);
     const tankX = TankInputTensor.position.get(tankEid, 0);
     const tankY = TankInputTensor.position.get(tankEid, 1);
@@ -30,11 +33,13 @@ export function createInputVector(tankEid: number, width: number, height: number
     // Enemies data
     const enemiesBuffer = TankInputTensor.enemiesData.getBatche(tankEid);
     for (let i = 0; i < TANK_INPUT_TENSOR_MAX_ENEMIES; i++) {
-        enemiesNormalizedBuffer[i * 5 + 0] = ((enemiesBuffer[i * 6 + 1] - tankX) / width);
-        enemiesNormalizedBuffer[i * 5 + 1] = ((enemiesBuffer[i * 6 + 2] - tankY) / height);
-        enemiesNormalizedBuffer[i * 5 + 2] = enemiesBuffer[i * 6 + 3] / width;
-        enemiesNormalizedBuffer[i * 5 + 3] = enemiesBuffer[i * 6 + 4] / height;
-        enemiesNormalizedBuffer[i * 5 + 4] = enemiesBuffer[i * 6 + 5]; // HP
+        if (enemiesBuffer[i * 6] === 0) continue;
+        enemiesNormalizedBuffer[i * 6 + 0] = 1;
+        enemiesNormalizedBuffer[i * 6 + 1] = ((enemiesBuffer[i * 6 + 1] - tankX) / width);
+        enemiesNormalizedBuffer[i * 6 + 2] = ((enemiesBuffer[i * 6 + 2] - tankY) / height);
+        enemiesNormalizedBuffer[i * 6 + 3] = enemiesBuffer[i * 6 + 3] / width;
+        enemiesNormalizedBuffer[i * 6 + 4] = enemiesBuffer[i * 6 + 4] / height;
+        enemiesNormalizedBuffer[i * 6 + 5] = enemiesBuffer[i * 6 + 5]; // HP
     }
     inputVector.set(enemiesNormalizedBuffer, k);
     k += enemiesNormalizedBuffer.length;
@@ -42,10 +47,12 @@ export function createInputVector(tankEid: number, width: number, height: number
     // Bullets data
     const bulletsBuffer = TankInputTensor.bulletsData.getBatche(tankEid);
     for (let i = 0; i < TANK_INPUT_TENSOR_MAX_BULLETS; i++) {
-        bulletsNormalizedBuffer[i * 4 + 0] = ((bulletsBuffer[i * 5 + 1] - tankX) / width);
-        bulletsNormalizedBuffer[i * 4 + 1] = ((bulletsBuffer[i * 5 + 2] - tankY) / height);
-        bulletsNormalizedBuffer[i * 4 + 2] = bulletsBuffer[i * 5 + 3] / width;
-        bulletsNormalizedBuffer[i * 4 + 3] = bulletsBuffer[i * 5 + 4] / height;
+        if (bulletsBuffer[i * 5] === 0) continue;
+        bulletsNormalizedBuffer[i * 5 + 0] = 1;
+        bulletsNormalizedBuffer[i * 5 + 1] = ((bulletsBuffer[i * 5 + 1] - tankX) / width);
+        bulletsNormalizedBuffer[i * 5 + 2] = ((bulletsBuffer[i * 5 + 2] - tankY) / height);
+        bulletsNormalizedBuffer[i * 5 + 3] = bulletsBuffer[i * 5 + 3] / width;
+        bulletsNormalizedBuffer[i * 5 + 4] = bulletsBuffer[i * 5 + 4] / height;
     }
     inputVector.set(bulletsNormalizedBuffer, k);
     k += bulletsNormalizedBuffer.length;

@@ -1,6 +1,6 @@
 import { createGame } from '../../../createGame.ts';
 import { createTankRR } from '../../ECS/Components/Tank.ts';
-import { random, randomRangeFloat } from '../../../../../lib/random.ts';
+import { random, randomRangeFloat, randomSign } from '../../../../../lib/random.ts';
 import { DI } from '../../DI';
 import { getDrawState } from './utils.ts';
 import { TANK_RADIUS } from './consts.ts';
@@ -43,7 +43,11 @@ export function createBattlefield(tanksCount: number) {
             rotation: Math.PI * randomRangeFloat(0, 2), // Случайный поворот от 0 до 2π
             color: [random(), random(), random(), 1],
         });
-        TankController.setTurretTarget$(eid, random() * width, random() * height);
+        TankController.setTurretTarget$(
+            eid,
+            x + randomSign() * randomRangeFloat(100, 200),
+            y + randomSign() * randomRangeFloat(100, 200),
+        );
 
         // Сохраняем ID и координаты танка
         tanks.push(eid);

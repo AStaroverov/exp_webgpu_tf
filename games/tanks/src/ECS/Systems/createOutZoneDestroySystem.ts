@@ -6,7 +6,7 @@ import {
 } from '../../../../../src/ECS/Components/Transform.ts';
 import { Not, query } from 'bitecs';
 import { Parent } from '../Components/Parent.ts';
-import { recursiveTypicalRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
+import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 
 export function createOutZoneDestroySystem({ world, canvas } = DI) {
     return () => {
@@ -20,7 +20,7 @@ export function createOutZoneDestroySystem({ world, canvas } = DI) {
             const y = getMatrixTranslationY(globalTransform);
 
             if (x < -100 || x > width + 100 || y < -100 || y > height + 100) {
-                recursiveTypicalRemoveEntity(eid);
+                scheduleRemoveEntity(eid);
             }
         }
     };

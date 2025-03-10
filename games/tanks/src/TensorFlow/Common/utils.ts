@@ -13,6 +13,13 @@ document.getElementById('toggleVerbose')!.addEventListener('click', () => {
     localStorage.setItem('verbose', isVerbose.toString());
 });
 
+document.getElementById('resetState')!.addEventListener('click', () => {
+    localStorage.removeItem('tank-rl-agent-state');
+    localStorage.removeItem('tank-rl-manager-state');
+    indexedDB.deleteDatabase('tensorflowjs');
+    window.location.reload();
+});
+
 export function getDrawState(): boolean {
     return shouldDraw;
 }

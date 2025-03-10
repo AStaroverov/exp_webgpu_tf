@@ -16,24 +16,22 @@
             height: 1000px;
         }
 
-        button {
+        #buttons {
             position: fixed;
             top: 10px;
-            z-index: 100;
-        }
-
-        #toggleRender {
             left: 10px;
-        }
-
-        #toggleVerbose {
-            left: 120px;
+            z-index: 100;
+            display: flex;
+            gap: 10px;
         }
     </style>
 </head>
 <body>
-<button id="toggleRender">Toggle render</button>
-<button id="toggleVerbose">Toggle verbose</button>
+<div id="buttons">
+    <button id="toggleRender">Toggle render</button>
+    <button id="toggleVerbose">Toggle verbose</button>
+    <button id="resetState">Reset</button>
+</div>
 <canvas></canvas>
 <script src="./ml.ts" type="module"></script>
 </body>

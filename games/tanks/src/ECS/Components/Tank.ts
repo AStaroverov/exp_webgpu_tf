@@ -13,7 +13,7 @@ import { RigidBodyRef } from './Physical.ts';
 import { TColor } from '../../../../../src/ECS/Components/Common.ts';
 import { createRectangleRigidGroup } from './RigidGroup.ts';
 import { TankController } from './TankController.ts';
-import { typicalRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
+import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 import { addTankInputTensorComponent } from './TankState.ts';
 import { delegate } from '../../../../../src/delegate.ts';
 import { NestedArray, TypedArray } from '../../../../../src/utils.ts';
@@ -182,26 +182,24 @@ export function createTankRR(options: {
     // updateColorOptions(mutatedOptions, [0.5, 0.5, 0.5, 0.5]);
     // const [tankEid, tankPid] = createRectangleRR(mutatedOptions);
     const [tankEid, tankPid] = createRectangleRigidGroup(mutatedOptions);
+    addComponent(world, tankEid, Tank);
+    Tank.bulletSpeed[tankEid] = 300;
+    Tank.bulletStartPosition.set(tankEid, 0, 0);
+    Tank.bulletStartPosition.set(tankEid, 1, -PADDING * 9);
+    Tank.initialPartsCount[tankEid] = PARTS_COUNT;
+    addChildrenComponent(tankEid);
+    addTransformComponents(world, tankEid);
+    TankController.addComponent(tankEid);
+    addPlayerComponent(tankEid, mutatedOptions.playerId);
+    addTankInputTensorComponent(tankEid);
 
     mutatedOptions.radius = 16;
     const aimEid = createCircle(DI.world, mutatedOptions);
     addParentComponent(aimEid, tankEid);
     addChildren(tankEid, aimEid);
 
-    addComponent(world, tankEid, Tank);
     Tank.aimEid[tankEid] = aimEid;
-    Tank.bulletSpeed[tankEid] = 300;
-    Tank.bulletStartPosition.set(tankEid, 0, 0);
-    Tank.bulletStartPosition.set(tankEid, 1, -PADDING * 9);
-    Tank.initialPartsCount[tankEid] = PARTS_COUNT;
 
-    addTransformComponents(world, tankEid);
-    TankController.addComponent(tankEid);
-    addChildrenComponent(tankEid);
-    addPlayerComponent(tankEid, mutatedOptions.playerId);
-
-    // for ML learning -- rework to reactivity?
-    addTankInputTensorComponent(tankEid);
 
     // {
     mutatedOptions.density = DENSITY;
@@ -274,9 +272,9 @@ export function removeTankComponentsWithoutParts(tankEid: number) {
     const turretEid = Tank.turretEId[tankEid];
     removeChild(tankEid, aimEid);
     removeChild(tankEid, turretEid);
-    typicalRemoveEntity(aimEid);
-    typicalRemoveEntity(turretEid);
-    typicalRemoveEntity(tankEid);
+    scheduleRemoveEntity(aimEid, false);
+    scheduleRemoveEntity(turretEid, false);
+    scheduleRemoveEntity(tankEid, false);
 }
 
 export function resetTankPartJointComponent(tankPartEid: number) {

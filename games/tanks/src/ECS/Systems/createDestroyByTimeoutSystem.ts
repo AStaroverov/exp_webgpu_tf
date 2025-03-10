@@ -1,7 +1,7 @@
 import { DI } from '../../DI';
 import { query } from 'bitecs';
 import { DestroyByTimeout } from '../Components/Destroy.ts';
-import { typicalRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
+import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 
 export function createDestroyByTimeoutSystem({ world } = DI) {
     return (delta: number) => {
@@ -13,7 +13,7 @@ export function createDestroyByTimeoutSystem({ world } = DI) {
             DestroyByTimeout.updateTimeout(eid, delta);
 
             if (DestroyByTimeout.timeout[eid] <= 0) {
-                typicalRemoveEntity(eid);
+                scheduleRemoveEntity(eid);
             }
         }
     };
