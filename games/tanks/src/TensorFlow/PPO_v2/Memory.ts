@@ -1,6 +1,7 @@
 // Буфер опыта для PPO
 import * as tf from '@tensorflow/tfjs';
 import { shuffle } from '../../../../../lib/shuffle.ts';
+import { max, min } from '../../../../../lib/math.ts';
 
 type Batch = {
     size: number,
@@ -185,23 +186,20 @@ export class SubMemory {
         const advStd = Math.sqrt(
             advantages.reduce((sum, val) => sum + Math.pow(val - advMean, 2), 0) / n,
         );
+        const normalizedAdvantages = advantages.map(adv => (adv - advMean) / (advStd + 1e-8));
+        // const normalizedAdvantages = advantages.map(adv => signedLog(adv, 1));
+        // const normalizedAdvantages = linearScale(signedLogAdvantages, -3, 3);
 
-        // Избегаем деления на ноль или очень малые значения
-        const epsilon = 1e-8;
-        const normalizedAdvantages = advantages.map(
-            adv => (adv - advMean) / (advStd + epsilon),
-        );
+        const orgMinAdv = min(...advantages);
+        const orgMaxAdv = max(...advantages);
+        const minAdv = min(...normalizedAdvantages);
+        const maxAdv = max(...normalizedAdvantages);
+        const minRet = min(...returns);
+        const maxRet = max(...returns);
 
-        const minAdv = Math.min(...advantages);
-        const maxAdv = Math.max(...advantages);
-        const minNormAdv = Math.min(...normalizedAdvantages);
-        const maxNormAdv = Math.max(...normalizedAdvantages);
-        const minRet = Math.min(...returns);
-        const maxRet = Math.max(...returns);
-
-        console.log('Original Min/Max advantages:', minAdv.toFixed(2), maxAdv.toFixed(2));
-        console.log('Normalized Min/Max advantages:', minNormAdv.toFixed(2), maxNormAdv.toFixed(2));
-        console.log('Min/Max returns:', minRet.toFixed(2), maxRet.toFixed(2));
+        console.log('[Advantages]: Original Min/Max', orgMinAdv.toFixed(2), orgMaxAdv.toFixed(2));
+        console.log('[Advantages]: Normaliz Min/Max', minAdv.toFixed(2), maxAdv.toFixed(2));
+        console.log('[Returns] Min/Max:', minRet.toFixed(2), maxRet.toFixed(2));
 
         return {
             returns: tf.tensor1d(returns),

@@ -9,34 +9,56 @@ import { findTankDangerBullets, findTankEnemies } from '../../ECS/Systems/create
 import { centerStep, hypot, lerp, max, min, smoothstep } from '../../../../../lib/math.ts';
 import { TANK_RADIUS } from './consts.ts';
 import { isVerboseLog } from './utils.ts';
+import { Actions, readAction } from '../PPO_v2/utils.ts';
 
 // Константы для калибровки вознаграждений
-const REWARD_WEIGHTS = {
+const REWARD_GROUPS = [
+    'AIM',
+    'MAP_BORDER',
+    'SHOOTING',
+    'DISTANCE_KEEPING',
+    'MOVEMENT',
+    'BULLET_AVOIDANCE',
+] as const;
+let REWARD_WEIGHTS = {
     // Основные компоненты наград
     HEALTH_CHANGE: 0.5,          // За потерю здоровья
     HEALTH_BONUS: 0.05,          // За поддержание здоровья
     SURVIVAL: 0.05,              // За выживание
 
-    MOVEMENT_BASE: 0.1,          // За базовое движение
-    STRATEGIC_MOVEMENT: 0.3,     // За стратегическое движение
+    MOVEMENT: {
+        BASE: 0.1,          // За базовое движение
+        STRATEGIC: 0.3,     // За стратегическое движение
+    },
 
-    BULLET_AVOIDANCE: 0.4,       // За избегание пуль
-    BULLET_AVOIDANCE_PENALTY: -0.4,       // За избегание пуль
+    BULLET_AVOIDANCE: {
+        BASE: 0.4,          // За избегание пуль
+        PENALTY: -0.4,      // За избегание пуль
+    },
 
-    MAP_BORDER_PENALTY: -1.0,            // За выход за границы
-    BORDER_GRADIENT_PENALTY: -0.5,       // За приближение к границе
+    MAP_BORDER: {
+        BASE: 0.1,          // За нахождение в пределах карты
+        PENALTY: -1.0,      // За выход за границы
+        GRADIENT_PENALTY: -0.5, // За приближение к границе
+    },
 
-    DISTANCE_KEEPING: 0.5,       // За поддержание дистанции
-    DISTANCE_KEEPING_PENALTY: -0.5,       // За поддержание дистанции
+    DISTANCE_KEEPING: {
+        BASE: 0.5,          // За поддержание дистанции
+        PENALTY: -0.5,      // За слишком близкое приближение
+    },
 
-    SHOOTING_AIMED: 1.0,         // За прицельную стрельбу
-    SHOOTING_AIMED_PENALTY: -0.5, // Штраф за стрельбу в пустоту
-    SHOOTING_RANDOM_PENALTY: -0.2,       // За беспорядочную стрельбу
+    SHOOTING: {
+        AIMED: 1.0,         // За прицельную стрельбу
+        AIMED_PENALTY: -0.5, // Штраф за стрельбу в пустоту
+        RANDOM_PENALTY: -0.2,       // За беспорядочную стрельбу
+    },
 
-    AIM_QUALITY: 1.0,            // За точное прицеливание
-    AIM_TRACKING: 1.0,           // За активное отслеживание врага
-    AIM_TRACKING_PENALTY: -0.5,           // За активное отслеживание врага
-    AIM_DISTANCE_PENALTY: -0.5,          // За расстояние до цели
+    AIM: {
+        QUALITY: 1.0,       // За точное прицеливание
+        TRACKING: 1.0,      // За активное отслеживание врага
+        TRACKING_PENALTY: -0.5, // За активное отслеживание врага
+        DISTANCE_PENALTY: -0.5, // За расстояние до цели
+    },
 };
 
 const REWARD_WEIGHTS_ORIGINAL = structuredClone(REWARD_WEIGHTS);
@@ -45,7 +67,6 @@ const REWARD_WEIGHTS_ORIGINAL = structuredClone(REWARD_WEIGHTS);
 export interface ComponentRewards {
     // Награды для головы стрельбы
     shoot: {
-        aimQuality: number;      // Качество прицеливания
         shootDecision: number;   // Решение о стрельбе
         total: number;           // Суммарная награда для головы стрельбы
     };
@@ -83,7 +104,7 @@ export interface ComponentRewards {
  */
 function initializeRewards(): ComponentRewards {
     return {
-        shoot: { aimQuality: 0, shootDecision: 0, total: 0 },
+        shoot: { shootDecision: 0, total: 0 },
         movement: { speed: 0, positioning: 0, avoidance: 0, mapAwareness: 0, total: 0 },
         aim: { accuracy: 0, tracking: 0, distance: 0, total: 0 },
         common: { health: 0, survival: 0, total: 0 },
@@ -92,27 +113,36 @@ function initializeRewards(): ComponentRewards {
 }
 
 const TRAIN_SECTION = 1000;
+let lastEpisode = 0;
+
+function updateRewardWeights(episode: number) {
+    if (episode === lastEpisode) return;
+    REWARD_WEIGHTS = structuredClone(REWARD_WEIGHTS_ORIGINAL);
+
+    let stp = -1;
+    for (const group of REWARD_GROUPS) {
+        const rewardMultiplier = smoothstep(TRAIN_SECTION * stp, TRAIN_SECTION * (stp + 1), episode);
+        const penaltyMultiplier = smoothstep(TRAIN_SECTION * stp, TRAIN_SECTION * (stp + 1), episode);
+        // @ts-ignore
+        for (const key in REWARD_WEIGHTS[group]) {
+            // @ts-ignore
+            REWARD_WEIGHTS[group][key] *= key.endsWith('_PENALTY') ? penaltyMultiplier : rewardMultiplier;
+        }
+        if (group === 'AIM') continue;
+        stp += 2;
+    }
+
+    lastEpisode = episode;
+}
 
 export function calculateReward(
     tankEid: number,
-    actions: ArrayLike<number>,
+    actions: Actions,
     width: number,
     height: number,
     episode: number,
 ): ComponentRewards {
-    Object.assign(REWARD_WEIGHTS, REWARD_WEIGHTS_ORIGINAL);
-
-    const aimMultiplier = 1.0;
-    const shootMultiplier = smoothstep(TRAIN_SECTION, TRAIN_SECTION * 2, episode);
-    const moveMultiplier = smoothstep(TRAIN_SECTION * 3, TRAIN_SECTION * 4, episode);
-    const penaltyMultiplier = smoothstep(TRAIN_SECTION * 5, TRAIN_SECTION * 6, episode);
-
-    for (const penaltyKey in REWARD_WEIGHTS) {
-        if (penaltyKey.endsWith('_PENALTY')) {
-            // @ts-ignore
-            REWARD_WEIGHTS[penaltyKey] *= penaltyMultiplier;
-        }
-    }
+    updateRewardWeights(episode);
 
     // before predict
     // const beforePredictHealth = TankInputTensor.health[tankEid];
@@ -131,11 +161,12 @@ export function calculateReward(
     const [currentEnemiesCount, currentEnemiesList] = findTankEnemies(tankEid);
     const [currentDangerBulletsCount, currentDangerBulletsList] = findTankDangerBullets(tankEid);
 
-    const isShooting = actions[0] > 0.5; // выстрел
-    const actionMoveDir = actions[1] || 0; // forward/backward
-    const actionMoveRot = actions[2] || 0; // rotate left/right
-    // const actionAimDeltaX = actions[3] || 0;  // change aim by X[-1,1], from beforePredictTurretTargetXY.x
-    // const actionAimDeltaY = actions[4] || 0;  // change aim by Y[-1,1], from beforePredictTurretTargetXY.y
+    const {
+        shoot: isShooting,
+        move: actionMoveDir,
+        rotate: actionMoveRot,
+        // aim: [actionAimDeltaX, actionAimDeltaY],
+    } = readAction(actions);
 
     // Инициализируем пустую структуру наград
     const rewards = initializeRewards();
@@ -162,7 +193,6 @@ export function calculateReward(
 
     rewards.aim.accuracy = aimingResult.aimQualityReward;
     rewards.aim.distance = aimingResult.aimDistanceReward;
-    rewards.shoot.aimQuality = aimingResult.aimQualityReward;
 
     // 4. Награда за отслеживание целей и изменение прицела
     rewards.aim.tracking = calculateTrackingReward(
@@ -204,9 +234,9 @@ export function calculateReward(
     rewards.movement.positioning = movementRewardResult.positioning;
 
     // Рассчитываем итоговые значения
-    rewards.aim.total = aimMultiplier * (rewards.aim.accuracy + rewards.aim.tracking + rewards.aim.distance);
-    rewards.shoot.total = shootMultiplier * (rewards.shoot.aimQuality + rewards.shoot.shootDecision);
-    rewards.movement.total = moveMultiplier * (rewards.movement.speed + rewards.movement.positioning +
+    rewards.aim.total = (rewards.aim.accuracy + rewards.aim.tracking + rewards.aim.distance);
+    rewards.shoot.total = (rewards.shoot.shootDecision);
+    rewards.movement.total = (rewards.movement.speed + rewards.movement.positioning +
         rewards.movement.avoidance + rewards.movement.mapAwareness);
     rewards.common.total = rewards.common.health + rewards.common.survival;
 
@@ -236,20 +266,19 @@ function calculateMapReward(
     height: number,
 ): number {
     if (entityX >= 0 && entityX <= width && entityY >= 0 && entityY <= height) {
-        // В пределах карты - используем плавный градиент
         const borderDistance = min(
             entityX,
             entityY,
             width - entityX,
             height - entityY,
         );
-        // Плавное уменьшение награды при приближении к границе
-        const borderFactor = 1 - smoothstep(0, 50, borderDistance);
-
-        return REWARD_WEIGHTS.BORDER_GRADIENT_PENALTY * borderFactor;
+        // Базовая награда за нахождение в пределах карты
+        return REWARD_WEIGHTS.MAP_BORDER.BASE
+            // Штраф за приближение к границе
+            + REWARD_WEIGHTS.MAP_BORDER.GRADIENT_PENALTY * (1 - smoothstep(0, 50, borderDistance));
     } else {
         // Вышел за границы карты
-        return REWARD_WEIGHTS.MAP_BORDER_PENALTY;
+        return REWARD_WEIGHTS.MAP_BORDER.PENALTY;
     }
 }
 
@@ -316,6 +345,7 @@ function analyzeAiming(
     let closestEnemyDist = Number.MAX_VALUE;
     const turretTargetDistance = hypot(turretTargetX - tankX, turretTargetY - tankY);
 
+    // Анализируем предыдущее прицеливание
     for (let i = 0; i < TANK_INPUT_TENSOR_MAX_ENEMIES; i++) {
         const enemyId = beforePredictEnemiesData[i * 6];
         const enemyX = beforePredictEnemiesData[i * 6 + 1];
@@ -323,41 +353,12 @@ function analyzeAiming(
 
         if (enemyId === 0) continue;
 
-        // Оценка точности предыдущего прицеливания
-        const prevDistFromTargetToEnemy = hypot(prevTurretTargetX - enemyX, prevTurretTargetY - enemyY);
-        const prevDirectAimQuality = smoothstep(TANK_RADIUS * 1.5, TANK_RADIUS * 0.8, prevDistFromTargetToEnemy);
+        const prevAimQuality = evaluateAimQuality(
+            tankX, tankY, prevTurretTargetX, prevTurretTargetY, enemyX, enemyY,
+        );
 
-        // Оценка совпадения предыдущего прицела с вектором между танком и врагом
-        const prevVectorTankToEnemyX = enemyX - tankX;
-        const prevVectorTankToEnemyY = enemyY - tankY;
-        const prevVectorTankToTargetX = prevTurretTargetX - tankX;
-        const prevVectorTankToTargetY = prevTurretTargetY - tankY;
-
-        // Нормализуем предыдущие вектора
-        const prevTankToEnemyLength = hypot(prevVectorTankToEnemyX, prevVectorTankToEnemyY);
-        const prevTankToTargetLength = hypot(prevVectorTankToTargetX, prevVectorTankToTargetY);
-
-        let prevCombinedAimQuality = prevDirectAimQuality * 0.5; // По умолчанию только 50% от компонента точного попадания
-
-        if (prevTankToEnemyLength > 0 && prevTankToTargetLength > 0) {
-            const prevNormalizedTankToEnemyX = prevVectorTankToEnemyX / prevTankToEnemyLength;
-            const prevNormalizedTankToEnemyY = prevVectorTankToEnemyY / prevTankToEnemyLength;
-            const prevNormalizedTankToTargetX = prevVectorTankToTargetX / prevTankToTargetLength;
-            const prevNormalizedTankToTargetY = prevVectorTankToTargetY / prevTankToTargetLength;
-
-            // Скалярное произведение нормализованных предыдущих векторов
-            const prevDotProduct = prevNormalizedTankToEnemyX * prevNormalizedTankToTargetX +
-                prevNormalizedTankToEnemyY * prevNormalizedTankToTargetY;
-
-            // Преобразуем в диапазон [0, 1]
-            const prevVectorAlignmentQuality = (prevDotProduct + 1) / 2;
-
-            // Объединяем оба компонента предыдущей награды
-            prevCombinedAimQuality = prevDirectAimQuality * 0.5 + prevVectorAlignmentQuality * 0.5;
-        }
-
-        if (prevCombinedAimQuality > prevBestAimQuality) {
-            prevBestAimQuality = prevCombinedAimQuality;
+        if (prevAimQuality > prevBestAimQuality) {
+            prevBestAimQuality = prevAimQuality;
             prevBestAimTargetId = enemyId;
         }
     }
@@ -375,57 +376,23 @@ function analyzeAiming(
             closestEnemyDist = distToEnemy;
         }
 
-        // Оценка точности прицеливания с плавным переходом (50% от общей оценки)
-        const distFromTargetToEnemy = hypot(turretTargetX - enemyX, turretTargetY - enemyY);
-        const directAimQuality = smoothstep(TANK_RADIUS * 1.5, TANK_RADIUS * 0.8, distFromTargetToEnemy);
+        const currentAimQuality = evaluateAimQuality(
+            tankX, tankY, turretTargetX, turretTargetY, enemyX, enemyY,
+        );
 
-        // Оценка совпадения прицела с вектором между танком и врагом (50% от общей оценки)
-        // Вычисляем проекцию вектора прицела на вектор к врагу
-        const vectorTankToEnemyX = enemyX - tankX;
-        const vectorTankToEnemyY = enemyY - tankY;
-        const vectorTankToTargetX = turretTargetX - tankX;
-        const vectorTankToTargetY = turretTargetY - tankY;
-
-        // Нормализуем вектора
-        const tankToEnemyLength = hypot(vectorTankToEnemyX, vectorTankToEnemyY);
-        const tankToTargetLength = hypot(vectorTankToTargetX, vectorTankToTargetY);
-
-        if (tankToEnemyLength > 0 && tankToTargetLength > 0) {
-            const normalizedTankToEnemyX = vectorTankToEnemyX / tankToEnemyLength;
-            const normalizedTankToEnemyY = vectorTankToEnemyY / tankToEnemyLength;
-            const normalizedTankToTargetX = vectorTankToTargetX / tankToTargetLength;
-            const normalizedTankToTargetY = vectorTankToTargetY / tankToTargetLength;
-
-            // Скалярное произведение нормализованных векторов (косинус угла между ними)
-            const dotProduct = normalizedTankToEnemyX * normalizedTankToTargetX +
-                normalizedTankToEnemyY * normalizedTankToTargetY;
-
-            // Преобразуем в диапазон [0, 1], где 1 это полное совпадение направлений
-            const vectorAlignmentQuality = (dotProduct + 1) / 2;
-
-            // Объединяем оба компонента награды (по 50% каждый)
-            const combinedAimQuality = directAimQuality * 0.5 + vectorAlignmentQuality * 0.5;
-
-            // Отслеживаем лучшее прицеливание
-            if (combinedAimQuality > bestAimQuality) {
-                bestAimQuality = combinedAimQuality;
-                bestAimTargetId = enemyId;
-            }
-        } else {
-            // Если нельзя вычислить совпадение векторов, используем только прямое прицеливание
-            if (directAimQuality > bestAimQuality) {
-                bestAimQuality = directAimQuality * 0.5; // только 50% от полной награды
-                bestAimTargetId = enemyId;
-            }
+        // Отслеживаем лучшее прицеливание
+        if (currentAimQuality > bestAimQuality) {
+            bestAimQuality = currentAimQuality;
+            bestAimTargetId = enemyId;
         }
     }
 
     // Награда за качество прицеливания и дистанцию до цели
-    const aimQualityReward = bestAimQuality * REWARD_WEIGHTS.AIM_QUALITY;
+    const aimQualityReward = bestAimQuality * REWARD_WEIGHTS.AIM.QUALITY;
 
     // Награда за дистанцию прицеливания - штраф за слишком далекое прицеливание
     const aimDistanceReward = hasTargets
-        ? smoothstep(600, 1000, turretTargetDistance) * REWARD_WEIGHTS.AIM_DISTANCE_PENALTY
+        ? smoothstep(600, 1000, turretTargetDistance) * REWARD_WEIGHTS.AIM.DISTANCE_PENALTY
         : 0;
 
     return {
@@ -440,58 +407,88 @@ function analyzeAiming(
     };
 }
 
+// Вспомогательная функция для оценки качества прицеливания
+function evaluateAimQuality(
+    tankX: number,
+    tankY: number,
+    targetX: number,
+    targetY: number,
+    enemyX: number,
+    enemyY: number,
+): number {
+    // Оценка точности прямого прицеливания
+    const distFromTargetToEnemy = hypot(targetX - enemyX, targetY - enemyY);
+    const directAimQuality = smoothstep(TANK_RADIUS * 1.5, TANK_RADIUS * 0.8, distFromTargetToEnemy);
+
+    let combinedAimQuality = directAimQuality * 0.5; // По умолчанию только 50% от компонента точного попадания
+
+    // Вычисляем вектора
+    const vectorTankToEnemyX = enemyX - tankX;
+    const vectorTankToEnemyY = enemyY - tankY;
+    const vectorTankToTargetX = targetX - tankX;
+    const vectorTankToTargetY = targetY - tankY;
+
+    // Нормализуем вектора
+    const tankToEnemyLength = hypot(vectorTankToEnemyX, vectorTankToEnemyY);
+    const tankToTargetLength = hypot(vectorTankToTargetX, vectorTankToTargetY);
+
+
+    if (tankToEnemyLength > 0 && tankToTargetLength > 0) {
+        const normalizedTankToEnemyX = vectorTankToEnemyX / tankToEnemyLength;
+        const normalizedTankToEnemyY = vectorTankToEnemyY / tankToEnemyLength;
+        const normalizedTankToTargetX = vectorTankToTargetX / tankToTargetLength;
+        const normalizedTankToTargetY = vectorTankToTargetY / tankToTargetLength;
+
+        // Скалярное произведение нормализованных векторов
+        const dotProduct = normalizedTankToEnemyX * normalizedTankToTargetX +
+            normalizedTankToEnemyY * normalizedTankToTargetY;
+
+        // Проверяем, пересекает ли вектор прицела танк
+        if (dotProduct > 0) {
+            // Вычисляем проекцию точки прицела на линию танк-враг
+            const projectionFactor = (vectorTankToTargetX * normalizedTankToEnemyX +
+                vectorTankToTargetY * normalizedTankToEnemyY) / tankToEnemyLength;
+
+            const projectionX = tankX + normalizedTankToEnemyX * projectionFactor * tankToEnemyLength;
+            const projectionY = tankY + normalizedTankToEnemyY * projectionFactor * tankToEnemyLength;
+
+            // Расстояние от цели прицела до проекции на линию
+            const distToLine = hypot(targetX - projectionX, targetY - projectionY);
+
+            // Оцениваем качество совпадения с вектором
+            const vectorAlignmentQuality = smoothstep(TANK_RADIUS * 1.5, TANK_RADIUS * 0.8, distToLine)
+                * smoothstep(TANK_RADIUS * 4, TANK_RADIUS * 1.5, distFromTargetToEnemy);
+
+            // Объединяем оба компонента награды
+            combinedAimQuality += vectorAlignmentQuality * 0.5;
+        }
+    }
+
+    return combinedAimQuality;
+}
+
 /**
  * Расчет награды за отслеживание целей
  */
 function calculateTrackingReward(
     aimingResult: ReturnType<typeof analyzeAiming>,
 ): number {
-    const { bestAimTargetId, prevBestAimTargetId, bestAimQuality, prevBestAimQuality } = aimingResult;
-    let trackingReward = 0;
+    const { bestAimQuality, prevBestAimQuality } = aimingResult;
 
-    // Награда за поддержание прицела на том же враге
-    if (bestAimTargetId !== 0 && bestAimTargetId === prevBestAimTargetId) {
-        // Вычисляем изменение комбинированного качества прицеливания
-        const deltaAimQuality = bestAimQuality - prevBestAimQuality;
+    // Вычисляем изменение комбинированного качества прицеливания
+    const deltaAimQuality = bestAimQuality - prevBestAimQuality;
 
-        // Базовая награда за отслеживание той же цели
-        const baseTrackingReward = 0.2 * REWARD_WEIGHTS.AIM_TRACKING;
+    // Награда за улучшение качества прицеливания
+    const improvementReward = deltaAimQuality > 0.2
+        ? deltaAimQuality * REWARD_WEIGHTS.AIM.TRACKING
+        : 0;
 
-        // Дополнительная награда за улучшение качества прицеливания
-        const improvementReward = deltaAimQuality > 0
-            ? deltaAimQuality * REWARD_WEIGHTS.AIM_TRACKING
-            : 0;
+    // Небольшой штраф за ухудшение прицеливания, но не такой сильный как награда за улучшение
+    const deteriorationPenalty = deltaAimQuality < 0.2
+        ? deltaAimQuality * 0.5 * REWARD_WEIGHTS.AIM.TRACKING_PENALTY
+        : 0;
 
-        // Небольшой штраф за ухудшение прицеливания, но не такой сильный как награда за улучшение
-        const deteriorationPenalty = deltaAimQuality < 0
-            ? deltaAimQuality * 0.5 * REWARD_WEIGHTS.AIM_TRACKING_PENALTY
-            : 0;
-
-        trackingReward += baseTrackingReward + improvementReward + deteriorationPenalty;
-    }
-    // Штраф за смену цели
-    else if (bestAimTargetId !== 0 && prevBestAimTargetId !== 0 && bestAimTargetId !== prevBestAimTargetId) {
-        // Базовый штраф за смену цели
-        trackingReward += 0.1 * REWARD_WEIGHTS.AIM_TRACKING_PENALTY;
-
-        // Но если новая цель имеет значительно лучшее качество прицеливания, уменьшаем штраф
-        if (bestAimQuality > prevBestAimQuality * 1.2) { // Если новая цель на 20% лучше
-            const qualityImprovement = bestAimQuality - prevBestAimQuality;
-            trackingReward += qualityImprovement * 0.3 * REWARD_WEIGHTS.AIM_TRACKING; // Компенсируем часть штрафа
-        }
-    }
-    // Штраф за потерю цели
-    else if (prevBestAimTargetId !== 0 && bestAimTargetId === 0) {
-        // Штраф зависит от того, насколько хорошо мы целились раньше
-        // Потеря хорошей цели дает больший штраф
-        const lossQualityFactor = Math.min(1, prevBestAimQuality * 2); // Коэффициент от 0 до 1
-        trackingReward += 0.3 * lossQualityFactor * REWARD_WEIGHTS.AIM_TRACKING_PENALTY;
-    }
-    // Награда за обнаружение новой цели, если раньше целей не было
-    else if (prevBestAimTargetId === 0 && bestAimTargetId !== 0) {
-        // Награда зависит от качества прицеливания на новой цели
-        trackingReward += 0.5 * bestAimQuality * REWARD_WEIGHTS.AIM_TRACKING;
-    }
+    const trackingReward = improvementReward + deteriorationPenalty;
 
     return trackingReward;
 }
@@ -508,14 +505,14 @@ function calculateShootingReward(
     if (isShooting) {
         if (bestAimQuality < 0.05) {
             // Штраф за стрельбу при плохом прицеливании (плавно уменьшается с ростом точности)
-            shootingReward += (1 - smoothstep(0, 0.3, bestAimQuality)) * REWARD_WEIGHTS.SHOOTING_RANDOM_PENALTY;
+            shootingReward += (1 - smoothstep(0, 0.3, bestAimQuality)) * REWARD_WEIGHTS.SHOOTING.RANDOM_PENALTY;
         } else {
             // Плавная награда за стрельбу в зависимости от точности прицеливания
-            shootingReward += bestAimQuality * REWARD_WEIGHTS.SHOOTING_AIMED;
+            shootingReward += bestAimQuality * REWARD_WEIGHTS.SHOOTING.AIMED;
         }
     } else if (bestAimQuality > 0.8) {
         // Небольшой штраф за отсутствие стрельбы при хорошем прицеливании
-        shootingReward += REWARD_WEIGHTS.SHOOTING_AIMED_PENALTY * 0.3 * smoothstep(0.8, 1.0, bestAimQuality);
+        shootingReward += REWARD_WEIGHTS.SHOOTING.AIMED_PENALTY * 0.3 * smoothstep(0.8, 1.0, bestAimQuality);
     }
 
     return shootingReward;
@@ -548,23 +545,23 @@ function calculateMovementReward(
     // const isAccelerating = speedChange > 0;
 
     // Базовая награда за движение
-    speedReward += speedFactor * REWARD_WEIGHTS.MOVEMENT_BASE;
+    speedReward += speedFactor * REWARD_WEIGHTS.MOVEMENT.BASE;
 
     // Дополнительная награда за успешное управление
     // if (isAccelerating && Math.abs(moveDirAction) > 0.1) {
     //     // Награда за успешное ускорение
-    //     speedReward += 0.1 * REWARD_WEIGHTS.MOVEMENT_BASE * Math.abs(moveDirAction);
+    //     speedReward += 0.1 * REWARD_WEIGHTS.MOVEMENT.BASE * Math.abs(moveDirAction);
     // }
     //
     // // Награда за маневрирование (поворот)
     // if (Math.abs(moveRotAction) > 0.1) {
-    //     speedReward += 0.1 * REWARD_WEIGHTS.MOVEMENT_BASE * Math.abs(moveRotAction);
+    //     speedReward += 0.1 * REWARD_WEIGHTS.MOVEMENT.BASE * Math.abs(moveRotAction);
     // }
 
     // Стратегическое движение при наличии опасности
     if (maxDangerLevel > 0.3) {
         // Дополнительная награда за движение при наличии опасных пуль
-        speedReward += smoothstep(0.3, 0.6, maxDangerLevel) * REWARD_WEIGHTS.STRATEGIC_MOVEMENT;
+        speedReward += smoothstep(0.3, 0.6, maxDangerLevel) * REWARD_WEIGHTS.MOVEMENT.STRATEGIC;
     }
 
     // Награда за позиционирование относительно врагов
@@ -572,14 +569,14 @@ function calculateMovementReward(
         if (closestEnemyDist < 3 * TANK_RADIUS) {
             // Штраф за слишком близкое расстояние
             const tooClosePenalty = 1 - smoothstep(0, 3 * TANK_RADIUS, closestEnemyDist);
-            positioningReward += tooClosePenalty * REWARD_WEIGHTS.DISTANCE_KEEPING_PENALTY;
+            positioningReward += tooClosePenalty * REWARD_WEIGHTS.DISTANCE_KEEPING.PENALTY;
         } else if (closestEnemyDist <= 600) {
             // Награда за оптимальную дистанцию
             const optimalDistanceReward = lerp(0.3, 1, centerStep(3 * TANK_RADIUS, 600, closestEnemyDist));
-            positioningReward += optimalDistanceReward * REWARD_WEIGHTS.DISTANCE_KEEPING;
+            positioningReward += optimalDistanceReward * REWARD_WEIGHTS.DISTANCE_KEEPING.BASE;
         } else {
             // Мягкий штраф за слишком большую дистанцию
-            const tooFarPenalty = smoothstep(600, 800, closestEnemyDist) * REWARD_WEIGHTS.DISTANCE_KEEPING_PENALTY / 5;
+            const tooFarPenalty = smoothstep(600, 800, closestEnemyDist) * REWARD_WEIGHTS.DISTANCE_KEEPING.PENALTY / 5;
             positioningReward += tooFarPenalty;
         }
     }
@@ -728,7 +725,7 @@ function analyzeBullet(
 
                         // Награда за уклонение пропорциональна тому, насколько близко была пуля
                         const avoidanceQuality = smoothstep(TANK_RADIUS + 100, TANK_RADIUS, prevMinDist);
-                        reward += avoidanceQuality * REWARD_WEIGHTS.BULLET_AVOIDANCE * 0.8;
+                        reward += avoidanceQuality * REWARD_WEIGHTS.BULLET_AVOIDANCE.BASE * 0.8;
                     }
                 }
             }
@@ -749,12 +746,12 @@ function analyzeBullet(
                 isDangerous = true;
 
                 // Штраф пропорционален уровню опасности (уменьшаем, если было уклонение)
-                reward += dangerLevel * REWARD_WEIGHTS.BULLET_AVOIDANCE_PENALTY * (wasAvoided ? 0.5 : 1.0);
+                reward += dangerLevel * REWARD_WEIGHTS.BULLET_AVOIDANCE.PENALTY * (wasAvoided ? 0.5 : 1.0);
             }
         } else if (!wasAvoided) {
             // Пуля пролетит далеко от танка - небольшая позитивная награда
             const avoidFactor = lerp(0.3, 0.8, smoothstep(200, 120, minDist));
-            reward += avoidFactor * REWARD_WEIGHTS.BULLET_AVOIDANCE * 0.2;
+            reward += avoidFactor * REWARD_WEIGHTS.BULLET_AVOIDANCE.BASE * 0.2;
         }
     }
     // else if (!wasAvoided) {

@@ -211,17 +211,15 @@ export class SharedRLGameManager {
 
             const width = this.battlefield.canvas.offsetWidth;
             const height = this.battlefield.canvas.offsetHeight;
-            const isWarmup = this.frameCount < 100;
-            const shouldAction = this.frameCount > 0 && this.frameCount % 10 === 0;
-            const shouldMemorize = this.frameCount > 3 && (
-                (this.frameCount - 3) % 10 === 0
-                || (this.frameCount - 5) % 10 === 0
-                || (this.frameCount - 7) % 10 === 0
-                || (this.frameCount - 9) % 10 === 0
-            );
-            const isLastMemorize = this.frameCount > 3 && (this.frameCount - 9) % 10 === 0;
-
-            DI.shouldCollectTensor = this.frameCount > 0 && (this.frameCount + 1) % 10 === 0;
+            const shouldEvery = 6;
+            const isWarmup = this.frameCount < shouldEvery * 15;
+            const shouldAction = this.frameCount % shouldEvery === 0;
+            const shouldMemorize =
+                (this.frameCount - 2) % shouldEvery === 0
+                || (this.frameCount - 3) % shouldEvery === 0
+                || (this.frameCount - 4) % shouldEvery === 0;
+            const isLastMemorize = this.frameCount > 4 && (this.frameCount - 4) % shouldEvery === 0;
+            DI.shouldCollectTensor = this.frameCount > 0 && (this.frameCount + 1) % shouldEvery === 0;
 
             if (shouldAction) {
                 activeTanks = this.battlefield.tanks.filter(tankEid => {
@@ -248,7 +246,7 @@ export class SharedRLGameManager {
 
             if (shouldMemorize) {
                 for (const tankEid of activeTanks) {
-                    memorizeTankBehaviour(tankEid, width, height, this.episodeCount, isLastMemorize ? 0.4 : 0.2, isLastMemorize);
+                    memorizeTankBehaviour(tankEid, width, height, this.episodeCount, isLastMemorize ? 0.5 : 0.25, isLastMemorize);
                 }
             }
 
@@ -280,8 +278,7 @@ export class SharedRLGameManager {
 
                 // Save model periodically
                 if (this.episodeCount % getCurrentExperiment().saveModelEvery === 0) {
-                    promiseTrain.then(({ value, policy }) => {
-                        console.log(`Model trained with losses value: ${ value }, policy: ${ policy }`);
+                    promiseTrain.then(() => {
                         this.logStats();
                         this.save();
                     });

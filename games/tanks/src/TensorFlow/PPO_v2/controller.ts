@@ -4,10 +4,11 @@ import * as tf from '@tensorflow/tfjs';
 import { disposeSharedAgent, getSharedAgent } from './agent.ts';
 import { getTankHealth } from '../../ECS/Components/Tank.ts';
 import { calculateReward } from '../Common/calculateReward.ts';
+import { Actions, readAction } from './utils.ts';
 
 // Map to store previous actions
 const mapLastUpdateData = new Map<number, {
-    action: number[];
+    action: Actions;
 }>();
 // Track accumulated rewards per tank
 const tankRewards = new Map<number, number>();
@@ -111,21 +112,16 @@ export function memorizeTankBehaviour(
 
 /**
  * Apply the PPO agent's action to the tank controller
- * @param tankEid Tank entity ID
- * @param action Array of action values [shoot, move, rotate, aimX, aimY]
- * @param width Canvas width
- * @param height Canvas height
  */
-function applyActionToTank(tankEid: number, action: number[], width: number, height: number) {
-    const [shoot, move, rotate, aimDX, aimDY] = action;
+function applyActionToTank(tankEid: number, action: Actions, width: number, height: number) {
+    const { shoot, move, rotate, aim } = readAction(action);
 
-    TankController.setShooting$(tankEid, shoot > 0.5);
+    TankController.setShooting$(tankEid, shoot);
     TankController.setMove$(tankEid, move);
     TankController.setRotate$(tankEid, rotate);
 
-    // Set turret target (aiming)
-    const turretTargetX = TankController.turretTarget.get(tankEid, 0) + aimDX * width * 0.02;
-    const turretTargetY = TankController.turretTarget.get(tankEid, 1) + aimDY * height * 0.02;
+    const turretTargetX = TankController.turretTarget.get(tankEid, 0) + aim[0] * width * 0.01;
+    const turretTargetY = TankController.turretTarget.get(tankEid, 1) + aim[1] * height * 0.01;
     TankController.setTurretTarget$(tankEid, turretTargetX, turretTargetY);
 }
 

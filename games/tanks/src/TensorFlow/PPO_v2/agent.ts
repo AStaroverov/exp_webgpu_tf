@@ -3,16 +3,18 @@ import '@tensorflow/tfjs-backend-wasm';
 import { ACTION_DIM, INPUT_DIM } from '../Common/consts';
 import { getCurrentExperiment, RLExperimentConfig } from './experiment-config';
 import { Memory } from './Memory.ts';
+import { Actions, createAction } from './utils.ts';
 
 // Общий PPO агент для всех танков
 export class SharedTankPPOAgent {
     private memory: Memory;
     private policyNetwork: tf.LayersModel;  // Сеть политики
     private valueNetwork: tf.LayersModel;   // Сеть критика
-    private optimizer!: tf.Optimizer;        // Оптимизатор для обучения
+    private policyOptimizer!: tf.Optimizer;        // Оптимизатор для policy network
+    private valueOptimizer!: tf.Optimizer;         // Оптимизатор для value network
     private config!: RLExperimentConfig;
-    private ppoEpsilon!: number;             // Параметр клиппирования для PPO
-    private ppoEpochs!: number;                 // Количество эпох обучения на одном батче
+    private epochs!: number;                 // Количество эпох обучения на одном батче
+    private clipRatio!: number;             // Параметр клиппирования для PPO
     private entropyCoeff!: number;           // Коэффициент энтропии для поощрения исследования
 
     private logger: {
@@ -56,7 +58,7 @@ export class SharedTankPPOAgent {
     }
 
     act(state: Float32Array): {
-        action: number[],
+        action: Actions,
         logProb: tf.Tensor,
         value: tf.Tensor
     } {
@@ -73,11 +75,11 @@ export class SharedTankPPOAgent {
 
             // 2. Движение (непрерывное действие с нормальным распределением)
             const moveMean = policyOutputs[1].squeeze();
-            const moveStd = tf.exp(policyOutputs[2].squeeze()).clipByValue(0.1, 1.0);
+            const moveStd = policyOutputs[2].squeeze().clipByValue(-5, 2).exp();
 
             // 3. Прицеливание (непрерывное действие с нормальным распределением)
             const aimMean = policyOutputs[3].squeeze();
-            const aimStd = tf.exp(policyOutputs[4].squeeze()).clipByValue(0.1, 1.0);
+            const aimStd = policyOutputs[4].squeeze().clipByValue(-5, 2).exp();
 
             // Сэмплируем действия из соответствующих распределений
 
@@ -92,17 +94,6 @@ export class SharedTankPPOAgent {
             // Прицеливание (непрерывное действие)
             const aimNoise = tf.randomNormal([2]);
             const aimAction = aimMean.add(aimNoise.mul(aimStd));
-
-            // Комбинируем в одно действие
-            const action = [
-                ...shootAction.dataSync(),
-                ...moveAction.dataSync(),
-                ...aimAction.dataSync(),
-            ];
-
-            if (action.length !== ACTION_DIM) {
-                throw new Error(`Invalid action length: ${ action.length }`);
-            }
 
             // Вычисляем логарифм вероятности действия
 
@@ -129,6 +120,17 @@ export class SharedTankPPOAgent {
             // Получаем оценку состояния из сети критика
             const value = this.valueNetwork.predict(stateTensor) as tf.Tensor;
 
+            // Комбинируем в одно действие
+            const action = createAction(
+                shootAction.dataSync()[0],
+                moveAction.dataSync() as Float32Array,
+                aimAction.dataSync() as Float32Array,
+            );
+
+            if (action.length !== ACTION_DIM) {
+                throw new Error(`Invalid action length: ${ action.length }`);
+            }
+
             return {
                 action,
                 logProb: totalLogProb,
@@ -137,7 +139,7 @@ export class SharedTankPPOAgent {
         });
     }
 
-    train(episode: number): { policy: number, value: number } {
+    train(episode: number): boolean {
         const batch = this.memory.getBatch(
             this.config.gamma,
             this.config.lam,
@@ -147,7 +149,7 @@ export class SharedTankPPOAgent {
 
         console.log(`[Train]: Episode: ${ episode }, Batch Size: ${ batch.size }`);
         // 2) Несколько эпох PPO
-        for (let i = 0; i < this.ppoEpochs; i++) {
+        for (let i = 0; i < this.epochs; i++) {
             // Обучение политики
             const policyLoss = this.trainPolicyNetwork(
                 batch.states, batch.actions, batch.logProbs, batch.advantages,
@@ -170,13 +172,13 @@ export class SharedTankPPOAgent {
         }
         this.memory.dispose();
 
-        const avgPolicyLoss = policyLossSum / this.ppoEpochs;
-        const avgValueLoss = valueLossSum / this.ppoEpochs;
+        const avgPolicyLoss = policyLossSum / this.epochs;
+        const avgValueLoss = valueLossSum / this.epochs;
 
         this.logger.losses.policy.push(avgPolicyLoss);
         this.logger.losses.value.push(avgValueLoss);
 
-        return { policy: avgPolicyLoss, value: avgValueLoss };
+        return true;
     }
 
     // Логирование данных эпизода
@@ -281,11 +283,12 @@ export class SharedTankPPOAgent {
 
     private applyConfig(config: RLExperimentConfig) {
         this.config = config;
-        this.ppoEpsilon = config.ppoEpsilon;
-        this.ppoEpochs = config.ppoEpochs;
+        this.epochs = config.epochs;
+        this.clipRatio = config.clipRatio;
         this.entropyCoeff = config.entropyCoeff;
         // TODO: useless on load, fix it later
-        this.optimizer = tf.train.adam(this.config.learningRate);
+        this.policyOptimizer = tf.train.adam(this.config.learningRatePolicy);
+        this.valueOptimizer = tf.train.adam(this.config.learningRateValue);
     }
 
     // Обучение сети политики
@@ -338,7 +341,7 @@ export class SharedTankPPOAgent {
                 const moveLogProb = moveLogProbEachDim.sum(1, true); // [batchSize,1]
 
                 // -- aim (Normal, 2D)
-                const clippedAimLogStd = aimLogStd.clipByValue(-2, 2);
+                const clippedAimLogStd = aimLogStd.clipByValue(-5, 2);
                 const aimStd = clippedAimLogStd.exp();
                 const aimDiff = aimActions.sub(aimMean);
                 const aimLogProbEachDim = aimDiff.square().div(aimStd.square().add(1e-8))
@@ -357,7 +360,7 @@ export class SharedTankPPOAgent {
 
                 // g) считаем surrogate1, surrogate2
                 const surr1 = ratio.mul(advantages);
-                const clippedRatio = ratio.clipByValue(1 - this.ppoEpsilon, 1 + this.ppoEpsilon);
+                const clippedRatio = ratio.clipByValue(1 - this.clipRatio, 1 + this.clipRatio);
                 const surr2 = clippedRatio.mul(advantages);
 
                 // policyLoss = - mean( min(surr1, surr2) )
@@ -393,7 +396,7 @@ export class SharedTankPPOAgent {
             // const maxGradValues = Object.values(grads).map(g => g.abs().max().dataSync()[0]);
             // console.log('[Train Policy]: Максимальные градиенты:', maxGradValues);
             // j) Применяем градиенты
-            this.optimizer.applyGradients(grads);
+            this.policyOptimizer.applyGradients(grads);
 
             // Возвращаем число
             return totalLoss.dataSync()[0];
@@ -421,7 +424,7 @@ export class SharedTankPPOAgent {
                 // Клипаем (PPO2 style)
                 const oldVal2D = oldValues.reshape(valuePred.shape);   // тоже [batchSize]
                 const valuePredClipped = oldVal2D.add(
-                    valuePred.sub(oldVal2D).clipByValue(-this.ppoEpsilon, this.ppoEpsilon),
+                    valuePred.sub(oldVal2D).clipByValue(-this.clipRatio, this.clipRatio),
                 );
                 const returns2D = returns.reshape(valuePred.shape);
 
@@ -438,7 +441,7 @@ export class SharedTankPPOAgent {
             // const maxGradValues = Object.values(grads).map(g => g.abs().max().dataSync()[0]);
             // console.log('[Train Critic]: Максимальные градиенты:', maxGradValues);
 
-            this.optimizer.applyGradients(grads);
+            this.valueOptimizer.applyGradients(grads);
 
             return vfLoss.dataSync()[0];
         });
@@ -501,18 +504,6 @@ export class SharedTankPPOAgent {
             outputs: [shootProb, moveMean, moveLogStd, aimMean, aimLogStd],
         });
 
-        // Компилируем модель
-        policyModel.compile({
-            optimizer: this.optimizer,
-            loss: {
-                shoot_prob: 'binaryCrossentropy',
-                move_mean: 'meanSquaredError',
-                move_log_std: 'meanSquaredError',
-                aim_mean: 'meanSquaredError',
-                aim_log_std: 'meanSquaredError',
-            },
-        });
-
         return policyModel;
     }
 
@@ -542,12 +533,6 @@ export class SharedTankPPOAgent {
         const valueModel = tf.model({
             inputs: input,
             outputs: valueOutput,
-        });
-
-        // Компилируем модель
-        valueModel.compile({
-            optimizer: this.optimizer,
-            loss: 'meanSquaredError',
         });
 
         return valueModel;

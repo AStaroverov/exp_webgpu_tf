@@ -10,12 +10,13 @@ export type RLExperimentConfig = {
     // Network architecture
     hiddenLayers: [ActivationIdentifier, number][];
     // Learning parameters
-    learningRate: number;
+    learningRatePolicy: number;     // Learning rate for policy network
+    learningRateValue: number;      // Learning rate for value network
     gamma: number;                  // Discount factor
     lam: number;                    // GAE lambda
     // PPO-specific parameters
-    ppoEpsilon: number;             // PPO clipping parameter
-    ppoEpochs: number;              // Number of epochs to train on the same data
+    clipRatio: number;             // PPO clipping parameter
+    epochs: number;                // Number of epochs to train on the same data
     entropyCoeff: number;           // Entropy coefficient for encouraging exploration
     // Training control
     saveModelEvery: number;         // Save model every N episodes
@@ -26,14 +27,15 @@ export const DEFAULT_EXPERIMENT: RLExperimentConfig = {
     name: 'ppo-default',
     description: 'Balanced PPO configuration for tank RL training',
     // Network architecture
-    hiddenLayers: [['tanh', 256], ['relu', 256], ['relu', 128]],
+    hiddenLayers: [['tanh', 256], ['tanh', 256], ['tanh', 128]],
     // Learning parameters
-    learningRate: 0.0001,           // Generally smaller for PPO
+    learningRatePolicy: 0.0001,           // Generally smaller for PPO
+    learningRateValue: 0.001,           // Generally smaller for PPO
     gamma: 0.99,
-    lam: 0.95,                      // GAE lambda for advantage estimation
+    lam: 0.97,                      // GAE lambda for advantage estimation
     // PPO-specific parameters
-    ppoEpsilon: 0.15,                // Standard PPO clipping parameter
-    ppoEpochs: 4,                   // Train 4 epochs over the same data
+    clipRatio: 0.2,                // Standard PPO clipping parameter
+    epochs: 5,                   // Train 4 epochs over the same data
     entropyCoeff: 0.01,             // Entropy regularization coefficient
     // Memory parameters
     // Training control
