@@ -12,7 +12,7 @@ import {
     registerTank,
     resetController,
     saveSharedAgent,
-    trainSharedModel,
+    tryTrainByTankMemory,
     updateTankBehaviour,
 } from './controller.ts';
 import { createBattlefield } from '../Common/createBattlefield.ts';
@@ -226,6 +226,7 @@ export class SharedRLGameManager {
                     if (entityExists(this.battlefield.world, tankEid) && hasComponent(this.battlefield.world, tankEid, Tank)) {
                         return true;
                     } else if (isActiveTank(tankEid)) {
+                        tryTrainByTankMemory(tankEid, true);
                         deactivateTank(tankEid);
                         return false;
                     }
@@ -247,6 +248,7 @@ export class SharedRLGameManager {
             if (shouldMemorize) {
                 for (const tankEid of activeTanks) {
                     memorizeTankBehaviour(tankEid, width, height, this.episodeCount, isLastMemorize ? 0.5 : 0.25, isLastMemorize);
+                    isLastMemorize && tryTrainByTankMemory(tankEid, false);
                 }
             }
 
@@ -261,7 +263,9 @@ export class SharedRLGameManager {
                 console.log(`Episode ${ this.episodeCount } completed after ${ this.frameCount } frames`);
                 console.log(`Surviving tanks: ${ activeCount }`);
 
-                const promiseTrain = trainSharedModel(this.episodeCount);
+                for (const tankEid of activeTanks) {
+                    tryTrainByTankMemory(tankEid, true);
+                }
 
                 // Log episode completion
                 const stats = completeAgentEpisode(this.frameCount);
@@ -278,10 +282,8 @@ export class SharedRLGameManager {
 
                 // Save model periodically
                 if (this.episodeCount % getCurrentExperiment().saveModelEvery === 0) {
-                    promiseTrain.then(() => {
-                        this.logStats();
-                        this.save();
-                    });
+                    this.logStats();
+                    this.save();
                 }
 
                 this.resetEnvironment();

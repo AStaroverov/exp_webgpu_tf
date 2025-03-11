@@ -4,6 +4,7 @@ import { ACTION_DIM, INPUT_DIM } from '../Common/consts';
 import { getCurrentExperiment, RLExperimentConfig } from './experiment-config';
 import { Memory } from './Memory.ts';
 import { Actions, createAction } from './utils.ts';
+import { floor } from '../../../../../lib/math.ts';
 
 // Общий PPO агент для всех танков
 export class SharedTankPPOAgent {
@@ -13,9 +14,6 @@ export class SharedTankPPOAgent {
     private policyOptimizer!: tf.Optimizer;        // Оптимизатор для policy network
     private valueOptimizer!: tf.Optimizer;         // Оптимизатор для value network
     private config!: RLExperimentConfig;
-    private epochs!: number;                 // Количество эпох обучения на одном батче
-    private clipRatio!: number;             // Параметр клиппирования для PPO
-    private entropyCoeff!: number;           // Коэффициент энтропии для поощрения исследования
 
     private logger: {
         episodeRewards: number[];
@@ -46,6 +44,18 @@ export class SharedTankPPOAgent {
         this.valueNetwork = this.createValueNetwork();
 
         console.log(`Shared PPO Agent initialized with experiment: ${ this.config.name }`);
+    }
+
+    // Освобождение ресурсов
+    dispose() {
+        this.policyNetwork.dispose();
+        this.valueNetwork.dispose();
+        this.memoryDispose();
+        console.log('PPO Agent resources disposed');
+    }
+
+    memoryDispose() {
+        this.memory.dispose();
     }
 
     // Методы для сохранения опыта в буфер
@@ -139,17 +149,32 @@ export class SharedTankPPOAgent {
         });
     }
 
-    train(episode: number): boolean {
-        const batch = this.memory.getBatch(
+    tryTrainByTankMemory(tankId: number, useRest: boolean): boolean {
+        const batchSize = this.config.batchSize;
+        const tankMemory = this.memory.getSubMemory(tankId);
+
+        if (tankMemory === undefined) {
+            return false;
+        }
+        if (useRest && tankMemory.size() < batchSize / 3) {
+            return false;
+        }
+        if (!useRest && tankMemory.size() < batchSize) {
+            return false;
+        }
+
+        const batch = tankMemory.getBatch(
             this.config.gamma,
             this.config.lam,
         );
-
+        const epochs = useRest && batch.size < batchSize
+            ? floor(batch.size / batchSize * this.config.epochs)
+            : this.config.epochs;
         let policyLossSum = 0, valueLossSum = 0;
 
-        console.log(`[Train]: Episode: ${ episode }, Batch Size: ${ batch.size }`);
-        // 2) Несколько эпох PPO
-        for (let i = 0; i < this.epochs; i++) {
+        console.log(`[Train]: Tank: ${ tankId }, Batch size: ${ batch.size }, Epochs: ${ epochs }`);
+
+        for (let i = 0; i < epochs; i++) {
             // Обучение политики
             const policyLoss = this.trainPolicyNetwork(
                 batch.states, batch.actions, batch.logProbs, batch.advantages,
@@ -170,10 +195,11 @@ export class SharedTankPPOAgent {
                 tensor.dispose();
             }
         }
-        this.memory.dispose();
 
-        const avgPolicyLoss = policyLossSum / this.epochs;
-        const avgValueLoss = valueLossSum / this.epochs;
+        tankMemory.dispose();
+
+        const avgPolicyLoss = policyLossSum / epochs;
+        const avgValueLoss = valueLossSum / epochs;
 
         this.logger.losses.policy.push(avgPolicyLoss);
         this.logger.losses.value.push(avgValueLoss);
@@ -271,14 +297,6 @@ export class SharedTankPPOAgent {
             console.warn('Could not load PPO models, starting with new ones:', error);
             return false;
         }
-    }
-
-    // Освобождение ресурсов
-    dispose() {
-        this.policyNetwork.dispose();
-        this.valueNetwork.dispose();
-        this.memory.dispose();
-        console.log('PPO Agent resources disposed');
     }
 
     private applyConfig(config: RLExperimentConfig) {
@@ -480,7 +498,7 @@ export class SharedTankPPOAgent {
         // 3. Стандартное отклонение для движения (параметр масштаба)
         const moveLogStd = tf.layers.dense({
             units: 2,
-            activation: 'tanh',
+            activation: 'linear',
             name: 'move_log_std',
         }).apply(shared) as tf.SymbolicTensor;
 
@@ -494,7 +512,7 @@ export class SharedTankPPOAgent {
         // 5. Стандартное отклонение для прицеливания (параметр масштаба)
         const aimLogStd = tf.layers.dense({
             units: 2,
-            activation: 'tanh',
+            activation: 'linear',
             name: 'aim_log_std',
         }).apply(shared) as tf.SymbolicTensor;
 

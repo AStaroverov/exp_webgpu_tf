@@ -19,7 +19,7 @@ export function createOutZoneDestroySystem({ world, canvas } = DI) {
             const x = getMatrixTranslationX(globalTransform);
             const y = getMatrixTranslationY(globalTransform);
 
-            if (x < -100 || x > width + 100 || y < -100 || y > height + 100) {
+            if (x < -1000 || x > width + 1000 || y < -1000 || y > height + 1000) {
                 scheduleRemoveEntity(eid);
             }
         }

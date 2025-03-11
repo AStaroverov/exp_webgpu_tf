@@ -1,9 +1,8 @@
 // Буфер опыта для PPO
 import * as tf from '@tensorflow/tfjs';
-import { shuffle } from '../../../../../lib/shuffle.ts';
 import { max, min } from '../../../../../lib/math.ts';
 
-type Batch = {
+export type Batch = {
     size: number,
     states: tf.Tensor,
     actions: tf.Tensor,
@@ -45,32 +44,8 @@ export class Memory {
         this.map.get(id)!.updateSecondPart(reward, done, isLast);
     }
 
-    getBatch(gamma: number, lam: number): Batch {
-        const batches = this.getBatches(gamma, lam);
-        const values = shuffle(Array.from(batches.values()));
-
-        return {
-            size: values.reduce((acc, batch) => acc + batch.size, 0),
-            states: tf.concat(values.map(batch => batch.states)),
-            actions: tf.concat(values.map(batch => batch.actions)),
-            logProbs: tf.concat(values.map(batch => batch.logProbs)),
-            values: tf.concat(values.map(batch => batch.values)),
-            rewards: tf.concat(values.map(batch => batch.rewards)),
-            dones: tf.concat(values.map(batch => batch.dones)),
-            returns: tf.concat(values.map(batch => batch.returns)),
-            advantages: tf.concat(values.map(batch => batch.advantages)),
-        };
-    }
-
-    // Метод для получения батча для обучения
-    getBatches(gamma: number, lam: number) {
-        const batches = new Map<number, Batch>();
-
-        this.map.forEach((subMemory, id) => {
-            batches.set(id, subMemory.getBatch(gamma, lam));
-        });
-
-        return batches;
+    getSubMemory(id: number): undefined | SubMemory {
+        return this.map.get(id);
     }
 
     dispose() {

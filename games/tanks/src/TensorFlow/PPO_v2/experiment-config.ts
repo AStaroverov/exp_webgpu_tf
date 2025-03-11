@@ -16,6 +16,7 @@ export type RLExperimentConfig = {
     lam: number;                    // GAE lambda
     // PPO-specific parameters
     clipRatio: number;             // PPO clipping parameter
+    batchSize: number;              // Batch size for training
     epochs: number;                // Number of epochs to train on the same data
     entropyCoeff: number;           // Entropy coefficient for encouraging exploration
     // Training control
@@ -27,15 +28,16 @@ export const DEFAULT_EXPERIMENT: RLExperimentConfig = {
     name: 'ppo-default',
     description: 'Balanced PPO configuration for tank RL training',
     // Network architecture
-    hiddenLayers: [['tanh', 256], ['tanh', 256], ['tanh', 128]],
+    hiddenLayers: [['tanh', 256], ['tanh', 128]],
     // Learning parameters
-    learningRatePolicy: 0.0001,           // Generally smaller for PPO
+    learningRatePolicy: 0.0002,           // Generally smaller for PPO
     learningRateValue: 0.001,           // Generally smaller for PPO
     gamma: 0.99,
     lam: 0.97,                      // GAE lambda for advantage estimation
     // PPO-specific parameters
+    epochs: 10,                   // Train 4 epochs over the same data
+    batchSize: 128,                 // Batch size for training
     clipRatio: 0.2,                // Standard PPO clipping parameter
-    epochs: 5,                   // Train 4 epochs over the same data
     entropyCoeff: 0.01,             // Entropy regularization coefficient
     // Memory parameters
     // Training control

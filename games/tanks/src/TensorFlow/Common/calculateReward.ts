@@ -38,8 +38,9 @@ let REWARD_WEIGHTS = {
 
     MAP_BORDER: {
         BASE: 0.1,          // За нахождение в пределах карты
-        PENALTY: -1.0,      // За выход за границы
-        GRADIENT_PENALTY: -0.5, // За приближение к границе
+        RETURN: 1.0,          // За нахождение в пределах карты
+        PENALTY: -0.3,      // За выход за границы
+        GRADIENT_PENALTY: -0.1, // За приближение к границе
     },
 
     DISTANCE_KEEPING: {
@@ -56,8 +57,8 @@ let REWARD_WEIGHTS = {
     AIM: {
         QUALITY: 1.0,       // За точное прицеливание
         TRACKING: 1.0,      // За активное отслеживание врага
-        TRACKING_PENALTY: -0.5, // За активное отслеживание врага
-        DISTANCE_PENALTY: -0.5, // За расстояние до цели
+        TRACKING_PENALTY: -0.1, // За активное отслеживание врага
+        DISTANCE_PENALTY: -0.2, // За расстояние до цели
     },
 };
 
@@ -176,7 +177,14 @@ export function calculateReward(
     // rewards.common.survival = calculateSurvivalReward(currentHealth);
 
     // 2. Расчет награды за нахождение в пределах карты
-    rewards.movement.mapAwareness = calculateMapReward(currentTankX, currentTankY, width, height);
+    rewards.movement.mapAwareness = calculateMapReward(
+        beforePredictTankX,
+        beforePredictTankY,
+        currentTankX,
+        currentTankY,
+        width,
+        height,
+    );
 
     // 3. Анализ целей и вычисление награды за прицеливание
     const aimingResult = analyzeAiming(
@@ -260,20 +268,27 @@ export function calculateReward(
  * Расчет награды за нахождение в пределах карты
  */
 function calculateMapReward(
-    entityX: number,
-    entityY: number,
+    prevX: number,
+    prevY: number,
+    x: number,
+    y: number,
     width: number,
     height: number,
 ): number {
-    if (entityX >= 0 && entityX <= width && entityY >= 0 && entityY <= height) {
+    const inMap = x >= 0 && x <= width && y >= 0 && y <= height;
+
+    if (inMap) {
         const borderDistance = min(
-            entityX,
-            entityY,
-            width - entityX,
-            height - entityY,
+            x,
+            y,
+            width - x,
+            height - y,
         );
+        const prevInMap = prevX >= 0 && prevX <= width && prevY >= 0 && prevY <= height;
+
         // Базовая награда за нахождение в пределах карты
         return REWARD_WEIGHTS.MAP_BORDER.BASE
+            + (prevInMap ? 0 : 1) * REWARD_WEIGHTS.MAP_BORDER.RETURN
             // Штраф за приближение к границе
             + REWARD_WEIGHTS.MAP_BORDER.GRADIENT_PENALTY * (1 - smoothstep(0, 50, borderDistance));
     } else {

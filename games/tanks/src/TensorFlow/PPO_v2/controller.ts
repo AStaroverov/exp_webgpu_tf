@@ -30,6 +30,7 @@ export function initController(_useTrainedModel = true) {
 }
 
 export function resetController() {
+    getSharedAgent().memoryDispose();
     // Clear previous state maps
     mapLastUpdateData.clear();
     tankRewards.clear();
@@ -110,6 +111,10 @@ export function memorizeTankBehaviour(
     );
 }
 
+export function tryTrainByTankMemory(tankEid: number, useRest: boolean): boolean {
+    return getSharedAgent().tryTrainByTankMemory(tankEid, useRest);
+}
+
 /**
  * Apply the PPO agent's action to the tank controller
  */
@@ -148,14 +153,6 @@ export function getActiveTankCount(): number {
         if (active) count++;
     }
     return count;
-}
-
-/**
- * Train the shared model on the collected experiences
- */
-export async function trainSharedModel(episode: number) {
-    const agent = getSharedAgent();
-    return agent.train(episode);
 }
 
 /**
