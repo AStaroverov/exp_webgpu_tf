@@ -4,13 +4,16 @@ import { ACTION_DIM, INPUT_DIM } from '../Common/consts';
 import { getCurrentExperiment, RLExperimentConfig } from './experiment-config';
 import { Memory } from './Memory.ts';
 import { Actions, createAction } from './utils.ts';
-import { floor } from '../../../../../lib/math.ts';
+import { abs, floor } from '../../../../../lib/math.ts';
+import { isDevtoolsOpen } from '../Common/utils.ts';
 
 // Общий PPO агент для всех танков
 export class SharedTankPPOAgent {
+    private iteration = 0;
     private memory: Memory;
-    private policyNetwork: tf.LayersModel;  // Сеть политики
     private valueNetwork: tf.LayersModel;   // Сеть критика
+    private policyNetwork: tf.LayersModel;  // Сеть политики
+    private policyNetworkOld!: tf.LayersModel;
     private policyOptimizer!: tf.Optimizer;        // Оптимизатор для policy network
     private valueOptimizer!: tf.Optimizer;         // Оптимизатор для value network
     private config!: RLExperimentConfig;
@@ -40,8 +43,12 @@ export class SharedTankPPOAgent {
         };
 
         // Создаем модели
-        this.policyNetwork = this.createPolicyNetwork();
         this.valueNetwork = this.createValueNetwork();
+        this.policyNetwork = this.createPolicyNetwork();
+        this.policyNetworkOld = this.createPolicyNetwork();
+        this.policyNetworkOld.setWeights(
+            this.policyNetwork.getWeights().map(w => w.clone()),
+        );
 
         console.log(`Shared PPO Agent initialized with experiment: ${ this.config.name }`);
     }
@@ -49,6 +56,7 @@ export class SharedTankPPOAgent {
     // Освобождение ресурсов
     dispose() {
         this.policyNetwork.dispose();
+        this.policyNetworkOld.dispose();
         this.valueNetwork.dispose();
         this.memoryDispose();
         console.log('PPO Agent resources disposed');
@@ -76,7 +84,7 @@ export class SharedTankPPOAgent {
             const stateTensor = tf.tensor1d(state).expandDims(0);
 
             // Получаем выходы из сети политики
-            const policyOutputs = this.policyNetwork.predict(stateTensor) as tf.Tensor[];
+            const policyOutputs = this.policyNetworkOld.predict(stateTensor) as tf.Tensor[];
 
             // Параметры распределений для различных компонентов действия
 
@@ -85,11 +93,11 @@ export class SharedTankPPOAgent {
 
             // 2. Движение (непрерывное действие с нормальным распределением)
             const moveMean = policyOutputs[1].squeeze();
-            const moveStd = policyOutputs[2].squeeze().clipByValue(-5, 2).exp();
+            const moveStd = policyOutputs[2].squeeze().clipByValue(-5, 0.5).exp();
 
             // 3. Прицеливание (непрерывное действие с нормальным распределением)
             const aimMean = policyOutputs[3].squeeze();
-            const aimStd = policyOutputs[4].squeeze().clipByValue(-5, 2).exp();
+            const aimStd = policyOutputs[4].squeeze().clipByValue(-5, 0.5).exp();
 
             // Сэмплируем действия из соответствующих распределений
 
@@ -149,31 +157,29 @@ export class SharedTankPPOAgent {
         });
     }
 
-    tryTrainByTankMemory(tankId: number, useRest: boolean): boolean {
+    tryTrain(useTail: boolean): boolean {
         const batchSize = this.config.batchSize;
-        const tankMemory = this.memory.getSubMemory(tankId);
+        const memorySize = this.memory.size();
 
-        if (tankMemory === undefined) {
+        if (useTail && memorySize < batchSize / 6) {
             return false;
         }
-        if (useRest && tankMemory.size() < batchSize / 3) {
-            return false;
-        }
-        if (!useRest && tankMemory.size() < batchSize) {
+        if (!useTail && memorySize < batchSize) {
             return false;
         }
 
-        const batch = tankMemory.getBatch(
+        const batch = this.memory.getBatch(
             this.config.gamma,
             this.config.lam,
         );
-        const epochs = useRest && batch.size < batchSize
+        const epochs = useTail && batch.size < batchSize
             ? floor(batch.size / batchSize * this.config.epochs)
             : this.config.epochs;
         let policyLossSum = 0, valueLossSum = 0;
 
-        console.log(`[Train]: Tank: ${ tankId }, Batch size: ${ batch.size }, Epochs: ${ epochs }`);
+        console.log(`[Train]: Iteration ${ this.iteration }, Batch size: ${ batch.size }, Epochs: ${ epochs }`);
 
+        const prevWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
         for (let i = 0; i < epochs; i++) {
             // Обучение политики
             const policyLoss = this.trainPolicyNetwork(
@@ -189,6 +195,15 @@ export class SharedTankPPOAgent {
 
             console.log(`[Train]: Epoch: ${ i }, Policy loss: ${ policyLoss.toFixed(4) }, Value loss: ${ valueLoss.toFixed(4) }`);
         }
+        const newWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
+
+        isDevtoolsOpen() && console.log('>> WEIGHTS SUM ABS DELTA', newWeights!.reduce((acc, w, i) => {
+            return acc + abs(w.reduce((a, b, j) => a + abs(b - prevWeights![i][j]), 0));
+        }, 0));
+
+        this.policyNetworkOld.setWeights(
+            this.policyNetwork.getWeights().map(w => w.clone()),
+        );
 
         for (const tensor of Object.values(batch)) {
             if (tensor instanceof tf.Tensor) {
@@ -196,7 +211,7 @@ export class SharedTankPPOAgent {
             }
         }
 
-        tankMemory.dispose();
+        this.memory.dispose();
 
         const avgPolicyLoss = policyLossSum / epochs;
         const avgValueLoss = valueLossSum / epochs;
@@ -243,17 +258,19 @@ export class SharedTankPPOAgent {
     // Сохранение модели
     async save() {
         try {
-            await this.policyNetwork.save('indexeddb://tank-rl-policy-model');
             await this.valueNetwork.save('indexeddb://tank-rl-value-model');
+            await this.policyNetwork.save('indexeddb://tank-rl-policy-model');
+            await this.policyNetworkOld.save('indexeddb://tank-rl-policy-old-model');
 
             localStorage.setItem('tank-rl-agent-state', JSON.stringify({
+                iteration: this.iteration,
                 config: this.config,
                 timestamp: new Date().toISOString(),
+                rewards: this.logger.episodeRewards.slice(-100),
                 losses: {
                     policy: this.logger.losses.policy.slice(-100),
                     value: this.logger.losses.value.slice(-100),
                 },
-                rewards: this.logger.episodeRewards.slice(-100),
             }));
 
             console.log(`PPO models saved`);
@@ -267,13 +284,16 @@ export class SharedTankPPOAgent {
     // Загрузка модели из хранилища
     async load() {
         try {
-            this.policyNetwork = await tf.loadLayersModel('indexeddb://tank-rl-policy-model');
             this.valueNetwork = await tf.loadLayersModel('indexeddb://tank-rl-value-model');
+            this.policyNetwork = await tf.loadLayersModel('indexeddb://tank-rl-policy-model');
+            this.policyNetworkOld = await tf.loadLayersModel('indexeddb://tank-rl-policy-old-model');
 
             console.log('PPO models loaded successfully');
 
             const metadata = JSON.parse(localStorage.getItem('tank-rl-agent-state') ?? '{}');
             if (metadata) {
+                this.iteration = metadata.iteration || 0;
+
                 if (metadata.config) {
                     this.applyConfig(metadata.config);
                 }
@@ -301,9 +321,6 @@ export class SharedTankPPOAgent {
 
     private applyConfig(config: RLExperimentConfig) {
         this.config = config;
-        this.epochs = config.epochs;
-        this.clipRatio = config.clipRatio;
-        this.entropyCoeff = config.entropyCoeff;
         // TODO: useless on load, fix it later
         this.policyOptimizer = tf.train.adam(this.config.learningRatePolicy);
         this.valueOptimizer = tf.train.adam(this.config.learningRateValue);
@@ -316,15 +333,8 @@ export class SharedTankPPOAgent {
         oldLogProbs: tf.Tensor,  // [batchSize] или [batchSize,1]
         advantages: tf.Tensor,   // [batchSize]
     ): number {
-        // 1) Собираем массив tf.Variable
-        const trainableVars = this.policyNetwork.trainableWeights.map(
-            w => w.read(),
-        );
-
-        // 2) Всё оборачиваем в tf.tidy
-        //    и всю логику вычисления лосса — внутрь колбэка variableGrads
         return tf.tidy(() => {
-            const { value: totalLoss, grads } = tf.variableGrads(() => {
+            const totalLoss = this.policyOptimizer.minimize(() => {
                 // a) forward pass через policyNetwork в режиме обучения
                 //    Важно: НЕ predict(...), а apply(..., {training: true})
                 const policyOutputs = this.policyNetwork.apply(states, { training: true }) as tf.Tensor[];
@@ -349,7 +359,7 @@ export class SharedTankPPOAgent {
                 ); // [batchSize,1]
 
                 // -- move (Normal, 2D)
-                const clippedMoveLogStd = moveLogStd.clipByValue(-5, 2);
+                const clippedMoveLogStd = moveLogStd.clipByValue(-5, 0.5);
                 const moveStd = clippedMoveLogStd.exp();
                 const moveDiff = moveActions.sub(moveMean);
                 // logprob по оси=2
@@ -359,7 +369,7 @@ export class SharedTankPPOAgent {
                 const moveLogProb = moveLogProbEachDim.sum(1, true); // [batchSize,1]
 
                 // -- aim (Normal, 2D)
-                const clippedAimLogStd = aimLogStd.clipByValue(-5, 2);
+                const clippedAimLogStd = aimLogStd.clipByValue(-5, 0.5);
                 const aimStd = clippedAimLogStd.exp();
                 const aimDiff = aimActions.sub(aimMean);
                 const aimLogProbEachDim = aimDiff.square().div(aimStd.square().add(1e-8))
@@ -375,10 +385,11 @@ export class SharedTankPPOAgent {
 
                 // f) ratio = exp(newLogProb - oldLogProb)
                 const ratio = tf.exp(newLogProbs.sub(oldLogProbs2D));
+                isDevtoolsOpen() && console.log('>> RATIO SUM ABS DELTA', (ratio.dataSync() as Float32Array).reduce((a, b) => a + abs(1 - b), 0));
 
                 // g) считаем surrogate1, surrogate2
                 const surr1 = ratio.mul(advantages);
-                const clippedRatio = ratio.clipByValue(1 - this.clipRatio, 1 + this.clipRatio);
+                const clippedRatio = ratio.clipByValue(1 - this.config.clipRatio, 1 + this.config.clipRatio);
                 const surr2 = clippedRatio.mul(advantages);
 
                 // policyLoss = - mean( min(surr1, surr2) )
@@ -403,21 +414,17 @@ export class SharedTankPPOAgent {
                 const totalEntropy = shootEntropy.add(moveEntropyMean).add(aimEntropyMean);
 
                 // i) full loss = policyLoss - entropyCoeff * entropy
-                const totalLoss = policyLoss.sub(totalEntropy.mul(this.entropyCoeff));
+                const totalLoss = policyLoss.sub(totalEntropy.mul(this.config.entropyCoeff));
 
                 return totalLoss as tf.Scalar;
-            }, trainableVars as tf.Variable[]);
+            }, true);
 
-            // const gradValues = Object.values(grads).map(g => g.abs().mean().dataSync()[0]);
-            // console.log('[Train Policy]: Средние значения градиентов:', gradValues);
-            //
-            // const maxGradValues = Object.values(grads).map(g => g.abs().max().dataSync()[0]);
-            // console.log('[Train Policy]: Максимальные градиенты:', maxGradValues);
-            // j) Применяем градиенты
-            this.policyOptimizer.applyGradients(grads);
+            if (totalLoss == null) {
+                throw new Error('Policy loss is null');
+            }
 
             // Возвращаем число
-            return totalLoss.dataSync()[0];
+            return totalLoss!.dataSync()[0];
         });
     }
 
@@ -427,13 +434,8 @@ export class SharedTankPPOAgent {
         returns: tf.Tensor,  // [batchSize], уже подсчитанные (GAE + V(s) или просто discountedReturns)
         oldValues: tf.Tensor, // [batchSize], для клиппинга
     ): number {
-        // Собираем tf.Variable
-        const trainableVars = this.valueNetwork.trainableWeights.map(
-            w => w.read(),
-        );
-
         return tf.tidy(() => {
-            const { value: vfLoss, grads } = tf.variableGrads(() => {
+            const vfLoss = this.valueOptimizer.minimize(() => {
                 // forward pass
                 const predicted = this.valueNetwork.apply(states, { training: true }) as tf.Tensor;
                 // shape [batchSize,1], приводим к [batchSize]
@@ -442,7 +444,7 @@ export class SharedTankPPOAgent {
                 // Клипаем (PPO2 style)
                 const oldVal2D = oldValues.reshape(valuePred.shape);   // тоже [batchSize]
                 const valuePredClipped = oldVal2D.add(
-                    valuePred.sub(oldVal2D).clipByValue(-this.clipRatio, this.clipRatio),
+                    valuePred.sub(oldVal2D).clipByValue(-this.config.clipRatio, this.config.clipRatio),
                 );
                 const returns2D = returns.reshape(valuePred.shape);
 
@@ -451,17 +453,13 @@ export class SharedTankPPOAgent {
                 const finalValueLoss = tf.maximum(vfLoss1, vfLoss2).mean();
 
                 return finalValueLoss as tf.Scalar;
-            }, trainableVars as tf.Variable[]);
+            }, true);
 
-            // const gradValues = Object.values(grads).map(g => g.abs().mean().dataSync()[0]);
-            // console.log('[Train Critic]: Средние значения градиентов:', gradValues);
-            //
-            // const maxGradValues = Object.values(grads).map(g => g.abs().max().dataSync()[0]);
-            // console.log('[Train Critic]: Максимальные градиенты:', maxGradValues);
+            if (vfLoss == null) {
+                throw new Error('Value loss is null');
+            }
 
-            this.valueOptimizer.applyGradients(grads);
-
-            return vfLoss.dataSync()[0];
+            return vfLoss!.dataSync()[0];
         });
     }
 
@@ -500,6 +498,8 @@ export class SharedTankPPOAgent {
             units: 2,
             activation: 'linear',
             name: 'move_log_std',
+            kernelInitializer: 'zeros',      // веса в ноль
+            biasInitializer: tf.initializers.constant({ value: -1 }),  // логарифм ≈ -1
         }).apply(shared) as tf.SymbolicTensor;
 
         // 4. Прицеливание - среднее значение (mu) нормального распределения
@@ -514,6 +514,8 @@ export class SharedTankPPOAgent {
             units: 2,
             activation: 'linear',
             name: 'aim_log_std',
+            kernelInitializer: 'zeros',      // веса в ноль
+            biasInitializer: tf.initializers.constant({ value: -1 }),  // логарифм ≈ -1
         }).apply(shared) as tf.SymbolicTensor;
 
         // Создаем модель с множественными выходами

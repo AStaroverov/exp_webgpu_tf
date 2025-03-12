@@ -30,14 +30,14 @@ export const DEFAULT_EXPERIMENT: RLExperimentConfig = {
     // Network architecture
     hiddenLayers: [['tanh', 256], ['tanh', 128]],
     // Learning parameters
-    learningRatePolicy: 0.0002,           // Generally smaller for PPO
-    learningRateValue: 0.001,           // Generally smaller for PPO
+    learningRatePolicy: 5e-4,           // Generally smaller for PPO
+    learningRateValue: 5e-4,           // Generally smaller for PPO
     gamma: 0.99,
-    lam: 0.97,                      // GAE lambda for advantage estimation
+    lam: 0.95,                      // GAE lambda for advantage estimation
     // PPO-specific parameters
-    epochs: 10,                   // Train 4 epochs over the same data
-    batchSize: 128,                 // Batch size for training
-    clipRatio: 0.2,                // Standard PPO clipping parameter
+    epochs: 8,                   // Train 4 epochs over the same data
+    batchSize: 512,                 // Batch size for training
+    clipRatio: 0.3,                // Standard PPO clipping parameter
     entropyCoeff: 0.01,             // Entropy regularization coefficient
     // Memory parameters
     // Training control

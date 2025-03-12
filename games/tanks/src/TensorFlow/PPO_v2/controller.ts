@@ -111,8 +111,8 @@ export function memorizeTankBehaviour(
     );
 }
 
-export function tryTrainByTankMemory(tankEid: number, useRest: boolean): boolean {
-    return getSharedAgent().tryTrainByTankMemory(tankEid, useRest);
+export function tryTrain(useTail: boolean): boolean {
+    return getSharedAgent().tryTrain(useTail);
 }
 
 /**
@@ -125,8 +125,8 @@ function applyActionToTank(tankEid: number, action: Actions, width: number, heig
     TankController.setMove$(tankEid, move);
     TankController.setRotate$(tankEid, rotate);
 
-    const turretTargetX = TankController.turretTarget.get(tankEid, 0) + aim[0] * width * 0.01;
-    const turretTargetY = TankController.turretTarget.get(tankEid, 1) + aim[1] * height * 0.01;
+    const turretTargetX = TankController.turretTarget.get(tankEid, 0) + aim[0] * width * 0.02;
+    const turretTargetY = TankController.turretTarget.get(tankEid, 1) + aim[1] * height * 0.02;
     TankController.setTurretTarget$(tankEid, turretTargetX, turretTargetY);
 }
 

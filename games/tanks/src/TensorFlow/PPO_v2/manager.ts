@@ -12,7 +12,7 @@ import {
     registerTank,
     resetController,
     saveSharedAgent,
-    tryTrainByTankMemory,
+    tryTrain,
     updateTankBehaviour,
 } from './controller.ts';
 import { createBattlefield } from '../Common/createBattlefield.ts';
@@ -200,94 +200,96 @@ export class SharedRLGameManager {
     private gameLoop() {
         let activeTanks: number[];
         this.stopFrameInterval = macroTasks.addInterval(() => {
-            if (!this.gameLoopRunning) {
-                this.stopFrameInterval?.();
-                this.stopFrameInterval = null;
-                return;
-            }
+            try {
+                if (!this.gameLoopRunning) {
+                    this.stopFrameInterval?.();
+                    this.stopFrameInterval = null;
+                    return;
+                }
 
-            // Update frame counter
-            this.frameCount++;
+                // Update frame counter
+                this.frameCount++;
 
-            const width = this.battlefield.canvas.offsetWidth;
-            const height = this.battlefield.canvas.offsetHeight;
-            const shouldEvery = 6;
-            const isWarmup = this.frameCount < shouldEvery * 15;
-            const shouldAction = this.frameCount % shouldEvery === 0;
-            const shouldMemorize =
-                (this.frameCount - 2) % shouldEvery === 0
-                || (this.frameCount - 3) % shouldEvery === 0
-                || (this.frameCount - 4) % shouldEvery === 0;
-            const isLastMemorize = this.frameCount > 4 && (this.frameCount - 4) % shouldEvery === 0;
-            DI.shouldCollectTensor = this.frameCount > 0 && (this.frameCount + 1) % shouldEvery === 0;
+                const width = this.battlefield.canvas.offsetWidth;
+                const height = this.battlefield.canvas.offsetHeight;
+                const shouldEvery = 6;
+                const isWarmup = this.frameCount < shouldEvery * 15;
+                const shouldAction = this.frameCount % shouldEvery === 0;
+                const shouldMemorize =
+                    (this.frameCount - 2) % shouldEvery === 0
+                    || (this.frameCount - 3) % shouldEvery === 0
+                    || (this.frameCount - 4) % shouldEvery === 0;
+                const isLastMemorize = this.frameCount > 4 && (this.frameCount - 4) % shouldEvery === 0;
+                DI.shouldCollectTensor = this.frameCount > 0 && (this.frameCount + 1) % shouldEvery === 0;
 
-            if (shouldAction) {
-                activeTanks = this.battlefield.tanks.filter(tankEid => {
-                    if (entityExists(this.battlefield.world, tankEid) && hasComponent(this.battlefield.world, tankEid, Tank)) {
-                        return true;
-                    } else if (isActiveTank(tankEid)) {
-                        tryTrainByTankMemory(tankEid, true);
-                        deactivateTank(tankEid);
-                        return false;
+                if (shouldAction) {
+                    activeTanks = this.battlefield.tanks.filter(tankEid => {
+                        if (entityExists(this.battlefield.world, tankEid) && hasComponent(this.battlefield.world, tankEid, Tank)) {
+                            return true;
+                        } else if (isActiveTank(tankEid)) {
+                            deactivateTank(tankEid);
+                            return false;
+                        }
+                    });
+
+                    // Update each tank's RL controller
+                    for (const tankEid of activeTanks) {
+                        updateTankBehaviour(tankEid, width, height, isWarmup);
                     }
-                });
-
-                // Update each tank's RL controller
-                for (const tankEid of activeTanks) {
-                    updateTankBehaviour(tankEid, width, height, isWarmup);
-                }
-            }
-
-            // Execute game tick
-            this.battlefield.gameTick(TICK_TIME_SIMULATION);
-
-            if (isWarmup) {
-                return;
-            }
-
-            if (shouldMemorize) {
-                for (const tankEid of activeTanks) {
-                    memorizeTankBehaviour(tankEid, width, height, this.episodeCount, isLastMemorize ? 0.5 : 0.25, isLastMemorize);
-                    isLastMemorize && tryTrainByTankMemory(tankEid, false);
-                }
-            }
-
-            // Check if episode is done
-            const activeCount = getActiveTankCount();
-            const isEpisodeDone = activeCount <= 1 || this.frameCount >= MAX_STEPS;
-
-            if (isEpisodeDone) {
-                this.stopFrameInterval?.();
-                this.stopFrameInterval = null;
-
-                console.log(`Episode ${ this.episodeCount } completed after ${ this.frameCount } frames`);
-                console.log(`Surviving tanks: ${ activeCount }`);
-
-                for (const tankEid of activeTanks) {
-                    tryTrainByTankMemory(tankEid, true);
                 }
 
-                // Log episode completion
-                const stats = completeAgentEpisode(this.frameCount);
+                // Execute game tick
+                this.battlefield.gameTick(TICK_TIME_SIMULATION);
 
-                // Save episode stats
-                this.episodeStats.add({
-                    episodeNumber: this.episodeCount,
-                    duration: this.frameCount,
-                    avgReward: stats.avgReward,
-                    survivingTanks: activeCount,
-                    policyLoss: stats.avgPolicyLoss,
-                    valueLoss: stats.avgValueLoss,
-                });
-
-                // Save model periodically
-                if (this.episodeCount % getCurrentExperiment().saveModelEvery === 0) {
-                    this.logStats();
-                    this.save();
+                if (isWarmup) {
+                    return;
                 }
 
-                this.resetEnvironment();
-                this.gameLoop();
+                if (shouldMemorize) {
+                    for (const tankEid of activeTanks) {
+                        memorizeTankBehaviour(tankEid, width, height, this.episodeCount, isLastMemorize ? 0.5 : 0.25, isLastMemorize);
+                    }
+                    isLastMemorize && tryTrain(false);
+                }
+
+                // Check if episode is done
+                const activeCount = getActiveTankCount();
+                const isEpisodeDone = activeCount <= 1 || this.frameCount >= MAX_STEPS;
+
+                if (isEpisodeDone) {
+                    this.stopFrameInterval?.();
+                    this.stopFrameInterval = null;
+
+                    console.log(`Episode ${ this.episodeCount } completed after ${ this.frameCount } frames`);
+                    console.log(`Surviving tanks: ${ activeCount }`);
+
+                    tryTrain(true);
+
+                    // Log episode completion
+                    const stats = completeAgentEpisode(this.frameCount);
+
+                    // Save episode stats
+                    this.episodeStats.add({
+                        episodeNumber: this.episodeCount,
+                        duration: this.frameCount,
+                        avgReward: stats.avgReward,
+                        survivingTanks: activeCount,
+                        policyLoss: stats.avgPolicyLoss,
+                        valueLoss: stats.avgValueLoss,
+                    });
+
+                    // Save model periodically
+                    if (this.episodeCount % getCurrentExperiment().saveModelEvery === 0) {
+                        this.logStats();
+                        this.save();
+                    }
+
+                    this.resetEnvironment();
+                    this.gameLoop();
+                }
+            } catch (error) {
+                console.error('Error in game loop:', error);
+                window.location.reload();
             }
         }, TICK_TIME_REAL);
     }

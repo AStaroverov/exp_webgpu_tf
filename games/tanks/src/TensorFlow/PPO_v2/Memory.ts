@@ -1,5 +1,6 @@
 // Буфер опыта для PPO
 import * as tf from '@tensorflow/tfjs';
+import { shuffle } from '../../../../../lib/shuffle.ts';
 import { max, min } from '../../../../../lib/math.ts';
 
 export type Batch = {
@@ -44,8 +45,32 @@ export class Memory {
         this.map.get(id)!.updateSecondPart(reward, done, isLast);
     }
 
-    getSubMemory(id: number): undefined | SubMemory {
-        return this.map.get(id);
+    getBatch(gamma: number, lam: number): Batch {
+        const batches = this.getBatches(gamma, lam);
+        const values = shuffle(Array.from(batches.values()));
+
+        return {
+            size: values.reduce((acc, batch) => acc + batch.size, 0),
+            states: tf.concat(values.map(batch => batch.states)),
+            actions: tf.concat(values.map(batch => batch.actions)),
+            logProbs: tf.concat(values.map(batch => batch.logProbs)),
+            values: tf.concat(values.map(batch => batch.values)),
+            rewards: tf.concat(values.map(batch => batch.rewards)),
+            dones: tf.concat(values.map(batch => batch.dones)),
+            returns: tf.concat(values.map(batch => batch.returns)),
+            advantages: tf.concat(values.map(batch => batch.advantages)),
+        };
+    }
+
+    // Метод для получения батча для обучения
+    getBatches(gamma: number, lam: number) {
+        const batches = new Map<number, Batch>();
+
+        this.map.forEach((subMemory, id) => {
+            batches.set(id, subMemory.getBatch(gamma, lam));
+        });
+
+        return batches;
     }
 
     dispose() {
@@ -165,16 +190,19 @@ export class SubMemory {
         // const normalizedAdvantages = advantages.map(adv => signedLog(adv, 1));
         // const normalizedAdvantages = linearScale(signedLogAdvantages, -3, 3);
 
+        const minRet = min(...returns);
+        const maxRet = max(...returns);
         const orgMinAdv = min(...advantages);
         const orgMaxAdv = max(...advantages);
         const minAdv = min(...normalizedAdvantages);
         const maxAdv = max(...normalizedAdvantages);
-        const minRet = min(...returns);
-        const maxRet = max(...returns);
+        const negativeAdvSum = normalizedAdvantages.reduce((sum, val) => sum + Math.min(val, 0), 0);
+        const positiveAdvSum = normalizedAdvantages.reduce((sum, val) => sum + Math.max(val, 0), 0);
 
+        console.log('[Returns] Min/Max:', minRet.toFixed(2), maxRet.toFixed(2));
         console.log('[Advantages]: Original Min/Max', orgMinAdv.toFixed(2), orgMaxAdv.toFixed(2));
         console.log('[Advantages]: Normaliz Min/Max', minAdv.toFixed(2), maxAdv.toFixed(2));
-        console.log('[Returns] Min/Max:', minRet.toFixed(2), maxRet.toFixed(2));
+        console.log('[Advantages]: Negative/Positive Sum', negativeAdvSum.toFixed(2), positiveAdvSum.toFixed(2));
 
         return {
             returns: tf.tensor1d(returns),

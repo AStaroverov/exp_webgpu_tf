@@ -27,3 +27,7 @@ export function getDrawState(): boolean {
 export function isVerboseLog() {
     return isVerbose && devtoolsDetect.isOpen;
 }
+
+export function isDevtoolsOpen() {
+    return devtoolsDetect.isOpen;
+}
