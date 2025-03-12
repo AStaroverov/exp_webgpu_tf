@@ -4,12 +4,13 @@ import {
     TankInputTensor,
 } from '../../ECS/Components/TankState.ts';
 import { RigidBodyState } from '../../ECS/Components/Physical.ts';
-import { TankController } from '../../ECS/Components/TankController.ts';
 import { findTankDangerBullets, findTankEnemies } from '../../ECS/Systems/createTankInputTensorSystem.ts';
-import { centerStep, hypot, lerp, max, min, smoothstep } from '../../../../../lib/math.ts';
+import { abs, centerStep, hypot, lerp, max, min, smoothstep } from '../../../../../lib/math.ts';
 import { TANK_RADIUS } from './consts.ts';
 import { isVerboseLog } from './utils.ts';
 import { Actions, readAction } from '../PPO_v2/utils.ts';
+import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
+import { Tank } from '../../ECS/Components/Tank.ts';
 
 // Константы для калибровки вознаграждений
 const REWARD_GROUPS = [
@@ -21,6 +22,26 @@ const REWARD_GROUPS = [
     'BULLET_AVOIDANCE',
 ] as const;
 let REWARD_WEIGHTS = {
+    AIM: {
+        QUALITY: 1.0,       // За точное прицеливание
+        TRACKING: 1.0,      // За активное отслеживание врага
+        DISTANCE: 1.0,      // За расстояние до цели
+        TRACKING_PENALTY: -0.2, // За активное отслеживание врага
+        DISTANCE_PENALTY: -0.2, // За расстояние до цели
+    },
+
+    MAP_BORDER: {
+        BASE: 0.2,          // За нахождение в пределах карты
+        RETURN: 1.0,          // За нахождение в пределах карты
+        PENALTY: -0.2,      // За выход за границы
+    },
+
+    SHOOTING: {
+        AIMED: 1.0,         // За прицельную стрельбу
+        AIMED_PENALTY: -0.5, // Штраф за стрельбу в пустоту
+        RANDOM_PENALTY: -0.2,       // За беспорядочную стрельбу
+    },
+
     // Основные компоненты наград
     HEALTH_CHANGE: 0.5,          // За потерю здоровья
     HEALTH_BONUS: 0.05,          // За поддержание здоровья
@@ -36,29 +57,9 @@ let REWARD_WEIGHTS = {
         PENALTY: -0.4,      // За избегание пуль
     },
 
-    MAP_BORDER: {
-        BASE: 0.1,          // За нахождение в пределах карты
-        RETURN: 1.0,          // За нахождение в пределах карты
-        PENALTY: -0.3,      // За выход за границы
-        GRADIENT_PENALTY: -0.1, // За приближение к границе
-    },
-
     DISTANCE_KEEPING: {
         BASE: 0.5,          // За поддержание дистанции
         PENALTY: -0.5,      // За слишком близкое приближение
-    },
-
-    SHOOTING: {
-        AIMED: 1.0,         // За прицельную стрельбу
-        AIMED_PENALTY: -0.5, // Штраф за стрельбу в пустоту
-        RANDOM_PENALTY: -0.2,       // За беспорядочную стрельбу
-    },
-
-    AIM: {
-        QUALITY: 1.0,       // За точное прицеливание
-        TRACKING: 1.0,      // За активное отслеживание врага
-        TRACKING_PENALTY: -0.1, // За активное отслеживание врага
-        DISTANCE_PENALTY: -0.2, // За расстояние до цели
     },
 };
 
@@ -113,7 +114,7 @@ function initializeRewards(): ComponentRewards {
     };
 }
 
-const TRAIN_SECTION = 1000;
+const TRAIN_SECTION = 10_000;
 let lastEpisode = 0;
 
 function updateRewardWeights(episode: number) {
@@ -157,7 +158,7 @@ export function calculateReward(
     // const currentHealth = getTankHealth(tankEid);
     const [currentTankX, currentTankY] = RigidBodyState.position.getBatche(tankEid);
     const [currentTankSpeedX, currentTankSpeedY] = RigidBodyState.linvel.getBatche(tankEid);
-    const [currentTurretTargetX, currentTurretTargetY] = TankController.turretTarget.getBatche(tankEid);
+    const [currentTurretTargetX, currentTurretTargetY] = getMatrixTranslation(LocalTransform.matrix.getBatche(Tank.aimEid[tankEid]));
     // const currentShootings = TankController.shoot[tankEid] > 0;
     const [currentEnemiesCount, currentEnemiesList] = findTankEnemies(tankEid);
     const [currentDangerBulletsCount, currentDangerBulletsList] = findTankDangerBullets(tankEid);
@@ -290,7 +291,7 @@ function calculateMapReward(
         return REWARD_WEIGHTS.MAP_BORDER.BASE
             + (prevInMap ? 0 : 1) * REWARD_WEIGHTS.MAP_BORDER.RETURN
             // Штраф за приближение к границе
-            + REWARD_WEIGHTS.MAP_BORDER.GRADIENT_PENALTY * (1 - smoothstep(0, 50, borderDistance));
+            + REWARD_WEIGHTS.MAP_BORDER.PENALTY * (1 - smoothstep(0, 50, borderDistance));
     } else {
         // Вышел за границы карты
         return REWARD_WEIGHTS.MAP_BORDER.PENALTY;
@@ -405,10 +406,10 @@ function analyzeAiming(
     // Награда за качество прицеливания и дистанцию до цели
     const aimQualityReward = bestAimQuality * REWARD_WEIGHTS.AIM.QUALITY;
 
-    // Награда за дистанцию прицеливания - штраф за слишком далекое прицеливание
-    const aimDistanceReward = hasTargets
-        ? smoothstep(600, 1000, turretTargetDistance) * REWARD_WEIGHTS.AIM.DISTANCE_PENALTY
-        : 0;
+    // Награда за дистанцию прицеливания
+    const aimDistanceReward =
+        centerStep(0, 700, turretTargetDistance) * REWARD_WEIGHTS.AIM.DISTANCE
+        + smoothstep(700, 1000, turretTargetDistance) * REWARD_WEIGHTS.AIM.DISTANCE_PENALTY;
 
     return {
         bestAimQuality,
@@ -494,13 +495,13 @@ function calculateTrackingReward(
     const deltaAimQuality = bestAimQuality - prevBestAimQuality;
 
     // Награда за улучшение качества прицеливания
-    const improvementReward = deltaAimQuality > 0.2
+    const improvementReward = deltaAimQuality > 0
         ? deltaAimQuality * REWARD_WEIGHTS.AIM.TRACKING
         : 0;
 
     // Небольшой штраф за ухудшение прицеливания, но не такой сильный как награда за улучшение
-    const deteriorationPenalty = deltaAimQuality < 0.2
-        ? deltaAimQuality * 0.5 * REWARD_WEIGHTS.AIM.TRACKING_PENALTY
+    const deteriorationPenalty = deltaAimQuality < 0
+        ? abs(deltaAimQuality) * REWARD_WEIGHTS.AIM.TRACKING_PENALTY
         : 0;
 
     const trackingReward = improvementReward + deteriorationPenalty;

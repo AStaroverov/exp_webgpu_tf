@@ -90,9 +90,6 @@ export class SubMemory {
     private tmpRewards: number[] = [];
     private tmpDones: boolean[] = [];
 
-    private returns?: tf.Tensor;
-    private advantages?: tf.Tensor;
-
     constructor() {
     }
 
@@ -135,8 +132,6 @@ export class SubMemory {
         }
 
         const { returns, advantages } = this.computeReturnsAndAdvantages(gamma, lam);
-        this.returns = returns;
-        this.advantages = advantages;
 
         return {
             size: this.states.length,
@@ -146,8 +141,8 @@ export class SubMemory {
             values: tf.stack(this.values),
             rewards: tf.tensor1d(this.rewards),
             dones: tf.tensor1d(this.dones.map(done => done ? 1.0 : 0.0)),
-            advantages,
-            returns,
+            returns: tf.tensor1d(returns),
+            advantages: tf.tensor1d(advantages),
         };
     }
 
@@ -181,14 +176,13 @@ export class SubMemory {
             lastVal = valuesArr[i];
         }
 
+        // const winsorizedAdvantages = winsorize(advantages, 0.05, 0.95);
         // Нормализация advantages
         const advMean = advantages.reduce((sum, val) => sum + val, 0) / n;
         const advStd = Math.sqrt(
             advantages.reduce((sum, val) => sum + Math.pow(val - advMean, 2), 0) / n,
         );
         const normalizedAdvantages = advantages.map(adv => (adv - advMean) / (advStd + 1e-8));
-        // const normalizedAdvantages = advantages.map(adv => signedLog(adv, 1));
-        // const normalizedAdvantages = linearScale(signedLogAdvantages, -3, 3);
 
         const minRet = min(...returns);
         const maxRet = max(...returns);
@@ -196,17 +190,14 @@ export class SubMemory {
         const orgMaxAdv = max(...advantages);
         const minAdv = min(...normalizedAdvantages);
         const maxAdv = max(...normalizedAdvantages);
-        const negativeAdvSum = normalizedAdvantages.reduce((sum, val) => sum + Math.min(val, 0), 0);
-        const positiveAdvSum = normalizedAdvantages.reduce((sum, val) => sum + Math.max(val, 0), 0);
 
         console.log('[Returns] Min/Max:', minRet.toFixed(2), maxRet.toFixed(2));
         console.log('[Advantages]: Original Min/Max', orgMinAdv.toFixed(2), orgMaxAdv.toFixed(2));
         console.log('[Advantages]: Normaliz Min/Max', minAdv.toFixed(2), maxAdv.toFixed(2));
-        console.log('[Advantages]: Negative/Positive Sum', negativeAdvSum.toFixed(2), positiveAdvSum.toFixed(2));
 
         return {
-            returns: tf.tensor1d(returns),
-            advantages: tf.tensor1d(normalizedAdvantages),  // Возвращаем нормализованные advantages
+            returns: returns,
+            advantages: normalizedAdvantages,  // Возвращаем нормализованные advantages
         };
     }
 
@@ -216,8 +207,6 @@ export class SubMemory {
         this.actions.forEach(action => action.dispose());
         this.logProbs.forEach(logProb => logProb.dispose());
         this.values.forEach(value => value.dispose());
-        this.advantages?.dispose();
-        this.returns?.dispose();
 
         // Сбрасываем массивы
         this.states = [];
@@ -226,6 +215,8 @@ export class SubMemory {
         this.values = [];
         this.rewards = [];
         this.dones = [];
+        this.tmpRewards = [];
+        this.tmpDones = [];
     }
 
     private collapseTmpData() {

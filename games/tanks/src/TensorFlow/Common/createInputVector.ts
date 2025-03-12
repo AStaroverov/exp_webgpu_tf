@@ -57,10 +57,5 @@ export function createInputVector(tankEid: number, width: number, height: number
     inputVector.set(bulletsNormalizedBuffer, k);
     k += bulletsNormalizedBuffer.length;
 
-    if (inputVector.some(isNaN)) {
-        console.error('NaN in inputVector', inputVector);
-        debugger;
-    }
-
     return inputVector;
 }

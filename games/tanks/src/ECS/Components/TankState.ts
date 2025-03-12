@@ -20,15 +20,14 @@ export const TankInputTensor = component({
     setTankData(
         eid: number,
         health: number,
-        position: Float64Array,
         speed: Float64Array,
-        turretTarget: Float64Array,
+        position: Float64Array,
+        turretTarget: Float32Array,
     ) {
         TankInputTensor.health[eid] = health;
-        TankInputTensor.position.setBatch(eid, position);
         TankInputTensor.speed.setBatch(eid, speed);
-        TankInputTensor.turretTarget.set(eid, 0, turretTarget[0]);
-        TankInputTensor.turretTarget.set(eid, 1, turretTarget[1]);
+        TankInputTensor.position.setBatch(eid, position);
+        TankInputTensor.turretTarget.setBatch(eid, turretTarget);
     },
 
     setEnemiesData(eid: number, index: number, enemyEid: EntityId, hp: number, coord: Float64Array, speed: Float64Array) {

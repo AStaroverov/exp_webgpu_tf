@@ -15,7 +15,6 @@ export const DebugInfo = {
             avgReward: agentStats.avgReward,
             lastReward: agentStats.lastReward,
             memoryUsage: (performance as any).memory.usedJSHeapSize / (1024 * 1024),
-            epsilon: agentStats.epsilon,
             experimentName: getCurrentExperiment().name,
             memorySize: agentStats.memorySize,
         };

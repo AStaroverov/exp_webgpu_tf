@@ -6,6 +6,7 @@ import { RigidBodyRef } from '../Components/Physical.ts';
 import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';
 import { sqrt } from '../../../../../lib/math.ts';
 import { query } from 'bitecs';
+import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 
 export function createTankPositionSystem({ world, physicalWorld } = DI) {
     const nextLinvel = new Vector2(0, 0);
@@ -65,7 +66,7 @@ function rotateByMotor(delta: number, tankEid: number, { physicalWorld } = DI) {
     const tankRot = tankRB.rotation();
     const turretRot = turretRB.rotation();
     const turretPos = turretRB.translation();
-    const targetPos = TankController.turretTarget.getBatche(tankEid);
+    const targetPos = getMatrixTranslation(LocalTransform.matrix.getBatche(Tank.aimEid[tankEid]));
     // Глобальный угол от дула к позиции цели
     const targetRot = Math.atan2(targetPos[1] - turretPos.y, targetPos[0] - turretPos.x) + Math.PI / 2;
     const relTurretRot = normalizeAngle(turretRot - tankRot);

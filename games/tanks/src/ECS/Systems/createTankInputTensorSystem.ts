@@ -11,7 +11,7 @@ import { Ball, Collider } from '@dimforge/rapier2d';
 import { CollisionGroup, createCollisionGroups } from '../../Physical/createRigid.ts';
 import { query } from 'bitecs';
 import { Player } from '../Components/Player.ts';
-import { TankController } from '../Components/TankController.ts';
+import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 
 export function createTankInputTensorSystem(options = DI) {
     const { world } = options;
@@ -30,14 +30,14 @@ export function createTankInputTensorSystem(options = DI) {
             const health = getTankHealth(tankEid);
             const linvel = RigidBodyState.linvel.getBatche(tankEid);
             const position = RigidBodyState.position.getBatche(tankEid);
-            const turretTarget = TankController.turretTarget.getBatche(tankEid);
+            const aimLocal = LocalTransform.matrix.getBatche(Tank.aimEid[tankEid]);
 
             TankInputTensor.setTankData(
                 tankEid,
                 health,
-                position,
                 linvel,
-                turretTarget,
+                position,
+                getMatrixTranslation(aimLocal),
             );
 
             // Find enemies

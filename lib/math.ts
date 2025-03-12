@@ -73,3 +73,43 @@ export function linearScale(arr: number[], targetMin: number, targetMax: number)
         ((val - minVal) / (maxVal - minVal)) * (targetMax - targetMin) + targetMin,
     );
 }
+
+/**
+ * Выполняет Winsorization (обрезание выбросов по заданным процентилям)
+ *
+ * @param advantages - Исходный массив преимуществ (может содержать отрицательные, положительные).
+ * @param lowerPerc - Нижний процентиль (0..1). Например, 0.05 обрежет нижние 5%.
+ * @param upperPerc - Верхний процентиль (0..1). Например, 0.95 обрежет верхние 5%.
+ * @returns Новый массив, где выбросы обрезаны, а значения нормализованы.
+ */
+export function winsorize(
+    advantages: number[],
+    lowerPerc = 0.05,
+    upperPerc = 0.95,
+): number[] {
+    if (advantages.length < 2) {
+        // Если массив слишком короткий, вернём копию (или можно вернуть сам массив)
+        return [...advantages];
+    }
+
+    // 1) Копируем и сортируем массив, чтобы найти пороговые значения
+    const sorted = [...advantages].sort((a, b) => a - b);
+    const n = sorted.length;
+
+    // Индексы для процентилей
+    const lowerIndex = Math.floor(n * lowerPerc);
+    const upperIndex = Math.floor(n * upperPerc);
+
+    // Извлекаем значения на границах
+    const lowerVal = sorted[Math.max(0, lowerIndex)];                 // защита от выхода за диапазон
+    const upperVal = sorted[Math.min(upperIndex, n - 1)];
+
+    // 2) Winsorization (обрезаем значения, выходящие за эти границы)
+    const winsorized = advantages.map(a => {
+        if (a < lowerVal) return lowerVal;
+        if (a > upperVal) return upperVal;
+        return a;
+    });
+
+    return winsorized;
+}

@@ -177,7 +177,7 @@ export class SharedTankPPOAgent {
             : this.config.epochs;
         let policyLossSum = 0, valueLossSum = 0;
 
-        console.log(`[Train]: Iteration ${ this.iteration }, Batch size: ${ batch.size }, Epochs: ${ epochs }`);
+        console.log(`[Train]: Iteration ${ this.iteration++ }, Batch size: ${ batch.size }, Epochs: ${ epochs }`);
 
         const prevWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
         for (let i = 0; i < epochs; i++) {
@@ -450,7 +450,7 @@ export class SharedTankPPOAgent {
 
                 const vfLoss1 = returns2D.sub(valuePred).square();
                 const vfLoss2 = returns2D.sub(valuePredClipped).square();
-                const finalValueLoss = tf.maximum(vfLoss1, vfLoss2).mean();
+                const finalValueLoss = tf.maximum(vfLoss1, vfLoss2).mean().mul(0.5);
 
                 return finalValueLoss as tf.Scalar;
             }, true);

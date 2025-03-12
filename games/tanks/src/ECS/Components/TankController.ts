@@ -7,11 +7,12 @@ import { component, obs } from '../../../../../src/ECS/utils.ts';
 export const TankController = component(({
     shoot: TypedArray.i8(delegate.defaultSize),
     shootCooldown: TypedArray.f32(delegate.defaultSize),
-    turretTarget: NestedArray.f64(2, delegate.defaultSize),
 
     // Control user tank
     move: TypedArray.f64(delegate.defaultSize),
     rotation: TypedArray.f64(delegate.defaultSize),
+
+    turretDir: NestedArray.f64(2, delegate.defaultSize),
 
     // Methods
     addComponent(eid: number) {
@@ -35,8 +36,8 @@ export const TankController = component(({
     setRotate$: obs((eid: number, dir: number): void => {
         TankController.rotation[eid] = dir;
     }),
-    setTurretTarget$: obs((eid: number, x: number, y: number): void => {
-        TankController.turretTarget.set(eid, 0, x);
-        TankController.turretTarget.set(eid, 1, y);
+    setTurretDir$: obs((eid: number, x: number, y: number): void => {
+        TankController.turretDir.set(eid, 0, x);
+        TankController.turretDir.set(eid, 1, y);
     }),
 }));

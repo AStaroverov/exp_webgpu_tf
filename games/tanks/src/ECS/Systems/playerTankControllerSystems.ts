@@ -2,6 +2,8 @@ import { DI } from '../../DI';
 import { PLAYER_REFS } from '../../consts.ts';
 import { TankController } from '../Components/TankController.ts';
 import { isNil } from 'lodash-es';
+import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
+import { Tank } from '../Components/Tank.ts';
 
 export function createPlayerTankPositionSystem({ document } = DI) {
     document.addEventListener('keydown', (event) => {
@@ -64,7 +66,8 @@ export function createPlayerTankPositionSystem({ document } = DI) {
 export function createPlayerTankTurretRotationSystem({ document } = DI) {
     document.addEventListener('mousemove', (event) => {
         if (isNil(PLAYER_REFS.tankPid)) return;
-        TankController.setTurretTarget$(PLAYER_REFS.tankPid, event.clientX, event.clientY);
+        const currentPosition = getMatrixTranslation(LocalTransform.matrix.getBatche(Tank.aimEid[PLAYER_REFS.tankPid]));
+        TankController.setTurretDir$(PLAYER_REFS.tankPid, event.clientX - currentPosition[0], event.clientY - currentPosition[1]);
     });
 
     return () => {

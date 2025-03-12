@@ -62,7 +62,7 @@ export function updateTankBehaviour(
     // Get action from agent
     const result = agent.act(inputVector);
     // Apply action to tank controller
-    applyActionToTank(tankEid, result.action, width, height);
+    applyActionToTank(tankEid, result.action);
     mapLastUpdateData.set(tankEid, { action: result.action });
 
     if (!isWarmup) {
@@ -118,16 +118,13 @@ export function tryTrain(useTail: boolean): boolean {
 /**
  * Apply the PPO agent's action to the tank controller
  */
-function applyActionToTank(tankEid: number, action: Actions, width: number, height: number) {
+function applyActionToTank(tankEid: number, action: Actions) {
     const { shoot, move, rotate, aim } = readAction(action);
 
     TankController.setShooting$(tankEid, shoot);
     TankController.setMove$(tankEid, move);
     TankController.setRotate$(tankEid, rotate);
-
-    const turretTargetX = TankController.turretTarget.get(tankEid, 0) + aim[0] * width * 0.02;
-    const turretTargetY = TankController.turretTarget.get(tankEid, 1) + aim[1] * height * 0.02;
-    TankController.setTurretTarget$(tankEid, turretTargetX, turretTargetY);
+    TankController.setTurretDir$(tankEid, aim[0], aim[1]);
 }
 
 

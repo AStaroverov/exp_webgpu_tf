@@ -6,7 +6,6 @@ import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/
 
 export type RLExperimentConfig = {
     name: string;
-    description: string;
     // Network architecture
     hiddenLayers: [ActivationIdentifier, number][];
     // Learning parameters
@@ -26,20 +25,18 @@ export type RLExperimentConfig = {
 // Default experiment configuration for PPO
 export const DEFAULT_EXPERIMENT: RLExperimentConfig = {
     name: 'ppo-default',
-    description: 'Balanced PPO configuration for tank RL training',
     // Network architecture
-    hiddenLayers: [['tanh', 256], ['tanh', 128]],
+    hiddenLayers: [['tanh', 64], ['tanh', 32]],
     // Learning parameters
-    learningRatePolicy: 5e-4,           // Generally smaller for PPO
-    learningRateValue: 5e-4,           // Generally smaller for PPO
+    learningRatePolicy: 1e-3,
+    learningRateValue: 1e-3,
     gamma: 0.99,
-    lam: 0.95,                      // GAE lambda for advantage estimation
+    lam: 0.95,
     // PPO-specific parameters
-    epochs: 8,                   // Train 4 epochs over the same data
-    batchSize: 512,                 // Batch size for training
-    clipRatio: 0.3,                // Standard PPO clipping parameter
-    entropyCoeff: 0.01,             // Entropy regularization coefficient
-    // Memory parameters
+    epochs: 5,
+    batchSize: 256,
+    clipRatio: 0.2,
+    entropyCoeff: 0.03,
     // Training control
     saveModelEvery: 10,
 };
@@ -66,7 +63,6 @@ export function setExperiment(nameOrConfig: string | RLExperimentConfig): RLExpe
         currentExperiment = nameOrConfig;
     }
     console.log(`Activated experiment: ${ currentExperiment.name }`);
-    console.log(`Description: ${ currentExperiment.description }`);
     return currentExperiment;
 }
 

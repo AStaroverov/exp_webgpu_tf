@@ -212,14 +212,14 @@ export class SharedRLGameManager {
 
                 const width = this.battlefield.canvas.offsetWidth;
                 const height = this.battlefield.canvas.offsetHeight;
-                const shouldEvery = 6;
-                const isWarmup = this.frameCount < shouldEvery * 15;
+                const shouldEvery = 12;
+                const isWarmup = this.frameCount < shouldEvery * 8;
                 const shouldAction = this.frameCount % shouldEvery === 0;
                 const shouldMemorize =
-                    (this.frameCount - 2) % shouldEvery === 0
-                    || (this.frameCount - 3) % shouldEvery === 0
-                    || (this.frameCount - 4) % shouldEvery === 0;
-                const isLastMemorize = this.frameCount > 4 && (this.frameCount - 4) % shouldEvery === 0;
+                    (this.frameCount - 4) % shouldEvery === 0
+                    || (this.frameCount - 7) % shouldEvery === 0
+                    || (this.frameCount - 10) % shouldEvery === 0;
+                const isLastMemorize = this.frameCount > 10 && (this.frameCount - 10) % shouldEvery === 0;
                 DI.shouldCollectTensor = this.frameCount > 0 && (this.frameCount + 1) % shouldEvery === 0;
 
                 if (shouldAction) {

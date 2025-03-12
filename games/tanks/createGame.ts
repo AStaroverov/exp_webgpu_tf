@@ -144,7 +144,7 @@ export function createGame() {
 
         physicalFrame(delta);
 
-        aimUpdate();
+        aimUpdate(delta);
         // updateMap();
 
         // stats.begin();
