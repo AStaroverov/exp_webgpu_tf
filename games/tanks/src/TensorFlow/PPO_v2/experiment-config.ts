@@ -26,7 +26,7 @@ export type RLExperimentConfig = {
 export const DEFAULT_EXPERIMENT: RLExperimentConfig = {
     name: 'ppo-default',
     // Network architecture
-    hiddenLayers: [['tanh', 64], ['tanh', 32]],
+    hiddenLayers: [['tanh', 128], ['tanh', 64]],
     // Learning parameters
     learningRatePolicy: 1e-3,
     learningRateValue: 1e-3,

@@ -3,7 +3,6 @@ import '@tensorflow/tfjs-backend-wasm';
 import { ACTION_DIM, INPUT_DIM } from '../Common/consts';
 import { getCurrentExperiment, RLExperimentConfig } from './experiment-config';
 import { Memory } from './Memory.ts';
-import { Actions, createAction } from './utils.ts';
 import { abs, floor } from '../../../../../lib/math.ts';
 import { isDevtoolsOpen } from '../Common/utils.ts';
 
@@ -76,81 +75,31 @@ export class SharedTankPPOAgent {
     }
 
     act(state: Float32Array): {
-        action: Actions,
+        action: Float32Array,
         logProb: tf.Tensor,
         value: tf.Tensor
     } {
         return tf.tidy(() => {
             const stateTensor = tf.tensor1d(state).expandDims(0);
-
-            // Получаем выходы из сети политики
-            const policyOutputs = this.policyNetworkOld.predict(stateTensor) as tf.Tensor[];
-
-            // Параметры распределений для различных компонентов действия
-
-            // 1. Стрельба (дискретное действие с распределением Бернулли)
-            const shootProb = policyOutputs[0].squeeze();
-
-            // 2. Движение (непрерывное действие с нормальным распределением)
-            const moveMean = policyOutputs[1].squeeze();
-            const moveStd = policyOutputs[2].squeeze().clipByValue(-5, 0.5).exp();
-
-            // 3. Прицеливание (непрерывное действие с нормальным распределением)
-            const aimMean = policyOutputs[3].squeeze();
-            const aimStd = policyOutputs[4].squeeze().clipByValue(-5, 0.5).exp();
-
-            // Сэмплируем действия из соответствующих распределений
-
-            // Стрельба (бинарное действие)
-            const shootRandom = tf.less(tf.randomUniform([1]), shootProb);
-            const shootAction = shootRandom.asType('float32');
-
-            // Движение (непрерывное действие)
-            const moveNoise = tf.randomNormal([2]);
-            const moveAction = moveMean.add(moveNoise.mul(moveStd));
-
-            // Прицеливание (непрерывное действие)
-            const aimNoise = tf.randomNormal([2]);
-            const aimAction = aimMean.add(aimNoise.mul(aimStd));
-
-            // Вычисляем логарифм вероятности действия
-
-            // Логарифм вероятности стрельбы (распределение Бернулли)
-            const shootLogProb = tf.where(
-                tf.equal(shootAction, 1),
-                tf.log(shootProb.add(1e-8)),
-                tf.log(tf.scalar(1).sub(shootProb).add(1e-8)),
-            );
-
-            // Логарифм вероятности движения (нормальное распределение)
-            const moveLogProbDist = tf.sub(moveAction, moveMean).div(moveStd.add(1e-8)).square().mul(-0.5)
-                .sub(tf.log(moveStd.mul(Math.sqrt(2 * Math.PI))));
-
-            // Логарифм вероятности прицеливания (нормальное распределение)
-            const aimLogProbDist = tf.sub(aimAction, aimMean).div(aimStd.add(1e-8)).square().mul(-0.5)
-                .sub(tf.log(aimStd.mul(Math.sqrt(2 * Math.PI))));
-
-            // Объединяем логарифмы вероятностей (сумма, т.к. компоненты независимы)
-            let totalLogProb = shootLogProb.add(moveLogProbDist.sum()).add(aimLogProbDist.sum());
-
-            totalLogProb = totalLogProb.squeeze();
-
-            // Получаем оценку состояния из сети критика
+            const rawOutput = this.policyNetworkOld.predict(stateTensor) as tf.Tensor;
+            const rawOutputSqueezed = rawOutput.squeeze(); // [ACTION_DIM * 2] при batch=1
+            const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
+            const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
+            const meanTanh = outMean.tanh();
+            const clippedLogStd = outLogStd.clipByValue(-5, 0.5);
+            const std = clippedLogStd.exp();
+            const noise = tf.randomNormal([5]);
+            const rawAction = meanTanh.add(noise.mul(std));
+            const diff = rawAction.sub(meanTanh);
+            const logProbEachDim = diff.square().div(std.square().add(1e-8))
+                .mul(-0.5)
+                .sub(tf.log(std.mul(Math.sqrt(2 * Math.PI))));
+            const totalLogProb = logProbEachDim.sum();
+            const actionArray = rawAction.dataSync() as Float32Array;
             const value = this.valueNetwork.predict(stateTensor) as tf.Tensor;
 
-            // Комбинируем в одно действие
-            const action = createAction(
-                shootAction.dataSync()[0],
-                moveAction.dataSync() as Float32Array,
-                aimAction.dataSync() as Float32Array,
-            );
-
-            if (action.length !== ACTION_DIM) {
-                throw new Error(`Invalid action length: ${ action.length }`);
-            }
-
             return {
-                action,
+                action: actionArray,
                 logProb: totalLogProb,
                 value: value.squeeze(),
             };
@@ -329,91 +278,35 @@ export class SharedTankPPOAgent {
     // Обучение сети политики
     private trainPolicyNetwork(
         states: tf.Tensor,       // [batchSize, inputDim]
-        actions: tf.Tensor,      // [batchSize, 5] (shoot=1, move=2, aim=2)
+        actions: tf.Tensor,      // [batchSize, actionDim]
         oldLogProbs: tf.Tensor,  // [batchSize] или [batchSize,1]
         advantages: tf.Tensor,   // [batchSize]
     ): number {
         return tf.tidy(() => {
             const totalLoss = this.policyOptimizer.minimize(() => {
-                // a) forward pass через policyNetwork в режиме обучения
-                //    Важно: НЕ predict(...), а apply(..., {training: true})
-                const policyOutputs = this.policyNetwork.apply(states, { training: true }) as tf.Tensor[];
-                // policyOutputs = [shootProb, moveMean, moveLogStd, aimMean, aimLogStd]
-                const shootProb = policyOutputs[0]; // [batchSize,1]
-                const moveMean = policyOutputs[1]; // [batchSize,2]
-                const moveLogStd = policyOutputs[2]; // [batchSize,2]
-                const aimMean = policyOutputs[3]; // [batchSize,2]
-                const aimLogStd = policyOutputs[4]; // [batchSize,2]
-
-                // b) Разбиваем `actions` на shoot / move / aim
-                const shootActions = actions.slice([0, 0], [-1, 1]); // [batchSize,1]
-                const moveActions = actions.slice([0, 1], [-1, 2]); // [batchSize,2]
-                const aimActions = actions.slice([0, 3], [-1, 2]); // [batchSize,2]
-
-                // c) Считаем logProb для каждого компонента (Bernoulli и Normal)
-                // -- shoot (Bernoulli)
-                const shootLogProb = tf.where(
-                    tf.equal(shootActions, 1),
-                    tf.log(shootProb.add(1e-8)),
-                    tf.log(tf.scalar(1).sub(shootProb).add(1e-8)),
-                ); // [batchSize,1]
-
-                // -- move (Normal, 2D)
-                const clippedMoveLogStd = moveLogStd.clipByValue(-5, 0.5);
-                const moveStd = clippedMoveLogStd.exp();
-                const moveDiff = moveActions.sub(moveMean);
-                // logprob по оси=2
-                const moveLogProbEachDim = moveDiff.square().div(moveStd.square().add(1e-8))
+                const rawOutput = this.policyNetwork.apply(states, { training: true }) as tf.Tensor;
+                const outMean = rawOutput.slice([0, 0], [-1, ACTION_DIM]);
+                const outLogStd = rawOutput.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
+                const meanTanh = outMean.tanh();
+                const clippedLogStd = outLogStd.clipByValue(-5, 0.5);
+                const std = clippedLogStd.exp();
+                const diff = actions.sub(meanTanh);
+                const logProbEachDim = diff.square().div(std.square().add(1e-8))
                     .mul(-0.5)
-                    .sub(tf.log(moveStd.mul(Math.sqrt(2 * Math.PI))));
-                const moveLogProb = moveLogProbEachDim.sum(1, true); // [batchSize,1]
-
-                // -- aim (Normal, 2D)
-                const clippedAimLogStd = aimLogStd.clipByValue(-5, 0.5);
-                const aimStd = clippedAimLogStd.exp();
-                const aimDiff = aimActions.sub(aimMean);
-                const aimLogProbEachDim = aimDiff.square().div(aimStd.square().add(1e-8))
-                    .mul(-0.5)
-                    .sub(tf.log(aimStd.mul(Math.sqrt(2 * Math.PI))));
-                const aimLogProb = aimLogProbEachDim.sum(1, true); // [batchSize,1]
-
-                // d) Итоговый logProb на всё действие
-                const newLogProbs = shootLogProb.add(moveLogProb).add(aimLogProb); // [batchSize,1]
-
-                // e) Приводим oldLogProbs к [batchSize,1] (если нужно)
+                    .sub(tf.log(std.mul(Math.sqrt(2 * Math.PI))));
+                const newLogProbs = logProbEachDim.sum(1, true); // [batchSize,1]
                 const oldLogProbs2D = oldLogProbs.reshape(newLogProbs.shape);
-
-                // f) ratio = exp(newLogProb - oldLogProb)
                 const ratio = tf.exp(newLogProbs.sub(oldLogProbs2D));
                 isDevtoolsOpen() && console.log('>> RATIO SUM ABS DELTA', (ratio.dataSync() as Float32Array).reduce((a, b) => a + abs(1 - b), 0));
 
-                // g) считаем surrogate1, surrogate2
                 const surr1 = ratio.mul(advantages);
                 const clippedRatio = ratio.clipByValue(1 - this.config.clipRatio, 1 + this.config.clipRatio);
                 const surr2 = clippedRatio.mul(advantages);
+                const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
 
-                // policyLoss = - mean( min(surr1, surr2) )
-                let policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
-
-                // h) Энтропия
-                // -- shootEntropy
-                const shootEntropy = shootProb.mul(tf.log(shootProb.add(1e-8)))
-                    .add(tf.scalar(1).sub(shootProb).mul(tf.log(tf.scalar(1).sub(shootProb).add(1e-8))))
-                    .mul(-1) // [batchSize,1]
-                    .mean(); // скаляр
-
-                // -- moveEntropy
                 const c = 0.5 * Math.log(2 * Math.PI * Math.E);
-                const moveEntropyEach = clippedMoveLogStd.add(c); // [batchSize,2]
-                const moveEntropyMean = moveEntropyEach.sum(1).mean(); // скаляр
-
-                // -- aimEntropy
-                const aimEntropyEach = clippedAimLogStd.add(c);  // [batchSize,2]
-                const aimEntropyMean = aimEntropyEach.sum(1).mean();
-
-                const totalEntropy = shootEntropy.add(moveEntropyMean).add(aimEntropyMean);
-
-                // i) full loss = policyLoss - entropyCoeff * entropy
+                const entropyEachDim = clippedLogStd.add(c); // [batchSize,5]
+                const totalEntropy = entropyEachDim.sum(1).mean();
                 const totalLoss = policyLoss.sub(totalEntropy.mul(this.config.entropyCoeff));
 
                 return totalLoss as tf.Scalar;
@@ -465,66 +358,33 @@ export class SharedTankPPOAgent {
 
     // Создание сети политики
     private createPolicyNetwork(): tf.LayersModel {
-        // Входной слой
+        // Входной тензор
         const input = tf.layers.input({ shape: [INPUT_DIM] });
 
-        // Общие слои
-        let shared = input;
+        let x = input;
         for (const [activation, units] of this.config.hiddenLayers) {
-            shared = tf.layers.dense({
+            x = tf.layers.dense({
                 units,
                 activation,
                 kernelInitializer: 'glorotUniform',
-            }).apply(shared) as tf.SymbolicTensor;
+            }).apply(x) as tf.SymbolicTensor;
         }
-        // Выходные головы для политики
 
-        // 1. Стрельба - вероятность стрельбы (Бернулли)
-        const shootProb = tf.layers.dense({
-            units: 1,
-            activation: 'sigmoid',
-            name: 'shoot_prob',
-        }).apply(shared) as tf.SymbolicTensor;
+        // Выход: ACTION_DIM * 2 нейронов (ACTION_DIM для mean, ACTION_DIM для logStd).
+        // При использовании:
+        //   mean = tanh(первые ACTION_DIM),
+        //   std  = exp(последние ACTION_DIM).
+        const policyOutput = tf.layers.dense({
+            units: ACTION_DIM * 2,
+            activation: 'linear', // без ограничений, трансформации — вручную (tanh/exp)
+            name: 'policy_output',
+        }).apply(x) as tf.SymbolicTensor;
 
-        // 2. Движение - среднее значение (mu) нормального распределения
-        const moveMean = tf.layers.dense({
-            units: 2,
-            activation: 'tanh',  // Выход в диапазоне [-1, 1]
-            name: 'move_mean',
-        }).apply(shared) as tf.SymbolicTensor;
-
-        // 3. Стандартное отклонение для движения (параметр масштаба)
-        const moveLogStd = tf.layers.dense({
-            units: 2,
-            activation: 'linear',
-            name: 'move_log_std',
-            kernelInitializer: 'zeros',      // веса в ноль
-            biasInitializer: tf.initializers.constant({ value: -1 }),  // логарифм ≈ -1
-        }).apply(shared) as tf.SymbolicTensor;
-
-        // 4. Прицеливание - среднее значение (mu) нормального распределения
-        const aimMean = tf.layers.dense({
-            units: 2,
-            activation: 'tanh',  // Выход в диапазоне [-1, 1]
-            name: 'aim_mean',
-        }).apply(shared) as tf.SymbolicTensor;
-
-        // 5. Стандартное отклонение для прицеливания (параметр масштаба)
-        const aimLogStd = tf.layers.dense({
-            units: 2,
-            activation: 'linear',
-            name: 'aim_log_std',
-            kernelInitializer: 'zeros',      // веса в ноль
-            biasInitializer: tf.initializers.constant({ value: -1 }),  // логарифм ≈ -1
-        }).apply(shared) as tf.SymbolicTensor;
-
-        // Создаем модель с множественными выходами
-        const policyModel = tf.model({
+        // Создаём модель
+        return tf.model({
             inputs: input,
-            outputs: [shootProb, moveMean, moveLogStd, aimMean, aimLogStd],
+            outputs: policyOutput,
         });
-
-        return policyModel;
     }
 
     // Создание сети критика (оценки состояний)
