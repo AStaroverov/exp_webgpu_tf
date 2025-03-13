@@ -86,9 +86,9 @@ export class SharedTankPPOAgent {
             const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
             const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
             const meanTanh = outMean.tanh();
-            const clippedLogStd = outLogStd.clipByValue(-5, 0.5);
+            const clippedLogStd = outLogStd.clipByValue(-2, 0.2);
             const std = clippedLogStd.exp();
-            const noise = tf.randomNormal([5]);
+            const noise = tf.randomNormal([ACTION_DIM]);
             const rawAction = meanTanh.add(noise.mul(std));
             const diff = rawAction.sub(meanTanh);
             const logProbEachDim = diff.square().div(std.square().add(1e-8))
@@ -124,6 +124,11 @@ export class SharedTankPPOAgent {
         const epochs = useTail && batch.size < batchSize
             ? floor(batch.size / batchSize * this.config.epochs)
             : this.config.epochs;
+
+        if (epochs === 0) {
+            return false;
+        }
+
         let policyLossSum = 0, valueLossSum = 0;
 
         console.log(`[Train]: Iteration ${ this.iteration++ }, Batch size: ${ batch.size }, Epochs: ${ epochs }`);
@@ -288,7 +293,7 @@ export class SharedTankPPOAgent {
                 const outMean = rawOutput.slice([0, 0], [-1, ACTION_DIM]);
                 const outLogStd = rawOutput.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
                 const meanTanh = outMean.tanh();
-                const clippedLogStd = outLogStd.clipByValue(-5, 0.5);
+                const clippedLogStd = outLogStd.clipByValue(-2, 0.2);
                 const std = clippedLogStd.exp();
                 const diff = actions.sub(meanTanh);
                 const logProbEachDim = diff.square().div(std.square().add(1e-8))
@@ -300,7 +305,7 @@ export class SharedTankPPOAgent {
                 isDevtoolsOpen() && console.log('>> RATIO SUM ABS DELTA', (ratio.dataSync() as Float32Array).reduce((a, b) => a + abs(1 - b), 0));
 
                 const surr1 = ratio.mul(advantages);
-                const clippedRatio = ratio.clipByValue(1 - this.config.clipRatio, 1 + this.config.clipRatio);
+                const clippedRatio = ratio.clipByValue(1 - this.config.clipRatioPolicy, 1 + this.config.clipRatioPolicy);
                 const surr2 = clippedRatio.mul(advantages);
                 const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
 
@@ -337,7 +342,7 @@ export class SharedTankPPOAgent {
                 // Клипаем (PPO2 style)
                 const oldVal2D = oldValues.reshape(valuePred.shape);   // тоже [batchSize]
                 const valuePredClipped = oldVal2D.add(
-                    valuePred.sub(oldVal2D).clipByValue(-this.config.clipRatio, this.config.clipRatio),
+                    valuePred.sub(oldVal2D).clipByValue(-this.config.clipRatioValue, this.config.clipRatioValue),
                 );
                 const returns2D = returns.reshape(valuePred.shape);
 

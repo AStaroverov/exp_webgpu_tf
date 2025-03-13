@@ -1,7 +1,7 @@
 // Буфер опыта для PPO
 import * as tf from '@tensorflow/tfjs';
 import { shuffle } from '../../../../../lib/shuffle.ts';
-import { max, min } from '../../../../../lib/math.ts';
+import { abs, max, min, signedLog } from '../../../../../lib/math.ts';
 
 export type Batch = {
     size: number,
@@ -151,7 +151,7 @@ export class SubMemory {
         const returns: number[] = new Array(n).fill(0);
         const advantages: number[] = new Array(n).fill(0);
 
-        // Скачаем values в CPU, чтоб проще считать
+        const rewards = this.rewards.map(r => signedLog(r, 10));
         const valuesArr = tf.stack(this.values).dataSync(); // shape [n]
 
         let adv = 0;
@@ -165,7 +165,7 @@ export class SubMemory {
                 adv = 0;
                 lastVal = 0;
             }
-            const delta = this.rewards[i]
+            const delta = rewards[i]
                 + gamma * lastVal * (this.dones[i] ? 0 : 1)
                 - valuesArr[i];
             adv = delta + gamma * lam * adv * (this.dones[i] ? 0 : 1);
@@ -184,16 +184,23 @@ export class SubMemory {
         );
         const normalizedAdvantages = advantages.map(adv => (adv - advMean) / (advStd + 1e-8));
 
+        const minRew = min(...rewards);
+        const maxRew = max(...rewards);
+        const minVal = min(...valuesArr);
+        const maxVal = max(...valuesArr);
         const minRet = min(...returns);
         const maxRet = max(...returns);
-        const orgMinAdv = min(...advantages);
-        const orgMaxAdv = max(...advantages);
+        // const orgMinAdv = min(...advantages);
+        // const orgMaxAdv = max(...advantages);
         const minAdv = min(...normalizedAdvantages);
         const maxAdv = max(...normalizedAdvantages);
 
-        console.log('[Returns] Min/Max:', minRet.toFixed(2), maxRet.toFixed(2));
-        console.log('[Advantages]: Original Min/Max', orgMinAdv.toFixed(2), orgMaxAdv.toFixed(2));
-        console.log('[Advantages]: Normaliz Min/Max', minAdv.toFixed(2), maxAdv.toFixed(2));
+        console.log('[R&A]'
+            , '  Rew:', strgify(minRew), strgify(maxRew)
+            , '| Val:', strgify(minVal), strgify(maxVal)
+            , '| Ret:', strgify(minRet), strgify(maxRet)
+            , '| Adv:', strgify(minAdv), strgify(maxAdv),
+        );
 
         return {
             returns: returns,
@@ -225,4 +232,8 @@ export class SubMemory {
         this.tmpRewards = [];
         this.tmpDones = [];
     }
+}
+
+function strgify(v: number): string {
+    return (v > 0 ? ' ' : '-') + abs(v).toFixed(2);
 }

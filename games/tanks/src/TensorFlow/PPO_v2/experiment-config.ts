@@ -14,7 +14,8 @@ export type RLExperimentConfig = {
     gamma: number;                  // Discount factor
     lam: number;                    // GAE lambda
     // PPO-specific parameters
-    clipRatio: number;             // PPO clipping parameter
+    clipRatioPolicy: number;             // PPO clipping parameter
+    clipRatioValue: number;             // PPO clipping parameter
     batchSize: number;              // Batch size for training
     epochs: number;                // Number of epochs to train on the same data
     entropyCoeff: number;           // Entropy coefficient for encouraging exploration
@@ -28,15 +29,16 @@ export const DEFAULT_EXPERIMENT: RLExperimentConfig = {
     // Network architecture
     hiddenLayers: [['tanh', 128], ['tanh', 64]],
     // Learning parameters
-    learningRatePolicy: 1e-3,
-    learningRateValue: 1e-3,
-    gamma: 0.99,
+    learningRatePolicy: 1e-4,
+    learningRateValue: 1e-5,
+    gamma: 0.97,
     lam: 0.95,
     // PPO-specific parameters
-    epochs: 5,
+    epochs: 14,
     batchSize: 256,
-    clipRatio: 0.2,
-    entropyCoeff: 0.03,
+    clipRatioPolicy: 0.2,
+    clipRatioValue: 0.25,
+    entropyCoeff: 0.01,
     // Training control
     saveModelEvery: 10,
 };
