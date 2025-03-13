@@ -27,18 +27,18 @@ export type RLExperimentConfig = {
 export const DEFAULT_EXPERIMENT: RLExperimentConfig = {
     name: 'ppo-default',
     // Network architecture
-    hiddenLayers: [['relu', 256], ['relu', 128], ['relu', 128], ['relu', 64]],
+    hiddenLayers: [['relu', 256], ['relu', 256], ['relu', 64]],
     // Learning parameters
-    learningRatePolicy: 1e-4,
-    learningRateValue: 1e-5,
+    learningRatePolicy: 1e-5,
+    learningRateValue: 1e-6,
     gamma: 0.95,
     lam: 0.95,
     // PPO-specific parameters
-    epochs: 14,
+    epochs: 10,
     batchSize: 256,
     clipRatioPolicy: 0.15,
     clipRatioValue: 0.25,
-    entropyCoeff: 0.05,
+    entropyCoeff: 0.02,
     // Training control
     saveModelEvery: 10,
 };

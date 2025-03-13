@@ -119,12 +119,12 @@ export function tryTrain(useTail: boolean): boolean {
  * Apply the PPO agent's action to the tank controller
  */
 function applyActionToTank(tankEid: number, action: Actions) {
-    const { shoot, move, rotate, aim } = readAction(action);
+    const { shoot, move, rotate, aimX, aimY } = readAction(action);
 
     TankController.setShooting$(tankEid, shoot);
     TankController.setMove$(tankEid, move);
     TankController.setRotate$(tankEid, rotate);
-    TankController.setTurretDir$(tankEid, aim[0], aim[1]);
+    TankController.setTurretDir$(tankEid, aimX, aimY);
 }
 
 

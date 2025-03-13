@@ -12,6 +12,7 @@ export const trunc = Math.trunc;
 export const sqrt = Math.sqrt;
 export const atan2 = Math.atan2;
 export const hypot = Math.hypot;
+export const tanh = Math.tanh;
 
 export function ufloor(n: number): number {
     return sign(n) * floor(abs(n));

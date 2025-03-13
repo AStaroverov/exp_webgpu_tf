@@ -74,38 +74,6 @@ export class SharedTankPPOAgent {
         this.memory.updateSecondPart(tankId, reward, done, isLast);
     }
 
-    act(state: Float32Array): {
-        action: Float32Array,
-        logProb: tf.Tensor,
-        value: tf.Tensor
-    } {
-        return tf.tidy(() => {
-            const stateTensor = tf.tensor1d(state).expandDims(0);
-            const rawOutput = this.policyNetworkOld.predict(stateTensor) as tf.Tensor;
-            const rawOutputSqueezed = rawOutput.squeeze(); // [ACTION_DIM * 2] при batch=1
-            const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
-            const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
-            const meanTanh = outMean.tanh();
-            const clippedLogStd = outLogStd.clipByValue(-2, 0.2);
-            const std = clippedLogStd.exp();
-            const noise = tf.randomNormal([ACTION_DIM]);
-            const rawAction = meanTanh.add(noise.mul(std));
-            const diff = rawAction.sub(meanTanh);
-            const logProbEachDim = diff.square().div(std.square().add(1e-8))
-                .mul(-0.5)
-                .sub(tf.log(std.mul(Math.sqrt(2 * Math.PI))));
-            const totalLogProb = logProbEachDim.sum();
-            const actionArray = rawAction.dataSync() as Float32Array;
-            const value = this.valueNetwork.predict(stateTensor) as tf.Tensor;
-
-            return {
-                action: actionArray,
-                logProb: totalLogProb,
-                value: value.squeeze(),
-            };
-        });
-    }
-
     tryTrain(useTail: boolean): boolean {
         const batchSize = this.config.batchSize;
         const memorySize = this.memory.size();
@@ -235,6 +203,10 @@ export class SharedTankPPOAgent {
         }
     }
 
+    async download() {
+        return this.policyNetwork.save('downloads://tank-rl-policy-model');
+    }
+
     // Загрузка модели из хранилища
     async load() {
         try {
@@ -273,11 +245,35 @@ export class SharedTankPPOAgent {
         }
     }
 
-    private applyConfig(config: RLExperimentConfig) {
-        this.config = config;
-        // TODO: useless on load, fix it later
-        this.policyOptimizer = tf.train.adam(this.config.learningRatePolicy);
-        this.valueOptimizer = tf.train.adam(this.config.learningRateValue);
+    act(state: Float32Array): {
+        action: Float32Array,
+        logProb: tf.Tensor,
+        value: tf.Tensor
+    } {
+        return tf.tidy(() => {
+            const stateTensor = tf.tensor1d(state).expandDims(0);
+            const predict = this.policyNetworkOld.predict(stateTensor) as tf.Tensor;
+            const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
+            const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
+            const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
+            const clippedLogStd = outLogStd.clipByValue(-5, 2);
+            const std = clippedLogStd.exp();
+            const noise = tf.randomNormal([ACTION_DIM]).mul(std);
+            const action = outMean.add(noise);
+            // const logProbEachDim = noise.square().div(std.square().add(1e-8))
+            //     .mul(-0.5)
+            //     .sub(tf.log(std).add(0.5 * Math.log(2 * Math.PI)));
+            // const logProb = logProbEachDim.sum();
+            const logProb = this.computeLogProb(outMean, action, std);
+            const actionArray = action.dataSync() as Float32Array;
+            const value = this.valueNetwork.predict(stateTensor) as tf.Tensor;
+
+            return {
+                action: actionArray,
+                logProb: logProb,
+                value: value.squeeze(),
+            };
+        });
     }
 
     // Обучение сети политики
@@ -289,17 +285,17 @@ export class SharedTankPPOAgent {
     ): number {
         return tf.tidy(() => {
             const totalLoss = this.policyOptimizer.minimize(() => {
-                const rawOutput = this.policyNetwork.apply(states, { training: true }) as tf.Tensor;
-                const outMean = rawOutput.slice([0, 0], [-1, ACTION_DIM]);
-                const outLogStd = rawOutput.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
-                const meanTanh = outMean.tanh();
-                const clippedLogStd = outLogStd.clipByValue(-2, 0.2);
+                const predict = this.policyNetwork.predict(states) as tf.Tensor;
+                const outMean = predict.slice([0, 0], [-1, ACTION_DIM]);
+                const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
+                const clippedLogStd = outLogStd.clipByValue(-5, 2);
                 const std = clippedLogStd.exp();
-                const diff = actions.sub(meanTanh);
-                const logProbEachDim = diff.square().div(std.square().add(1e-8))
-                    .mul(-0.5)
-                    .sub(tf.log(std.mul(Math.sqrt(2 * Math.PI))));
-                const newLogProbs = logProbEachDim.sum(1, true); // [batchSize,1]
+                // const diff = actions.sub(outMean);
+                // const logProbEachDim = diff.square().div(std.square().add(1e-8))
+                //     .mul(-0.5)
+                //     .sub(tf.log(std).add(0.5 * Math.log(2 * Math.PI)));
+                // const newLogProbs = logProbEachDim.sum(1, true); // [batchSize,1]
+                const newLogProbs = this.computeLogProb(outMean, actions, std);
                 const oldLogProbs2D = oldLogProbs.reshape(newLogProbs.shape);
                 const ratio = tf.exp(newLogProbs.sub(oldLogProbs2D));
                 isDevtoolsOpen() && console.log('>> RATIO SUM ABS DELTA', (ratio.dataSync() as Float32Array).reduce((a, b) => a + abs(1 - b), 0));
@@ -310,7 +306,7 @@ export class SharedTankPPOAgent {
                 const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
 
                 const c = 0.5 * Math.log(2 * Math.PI * Math.E);
-                const entropyEachDim = clippedLogStd.add(c); // [batchSize,5]
+                const entropyEachDim = clippedLogStd.add(c); // [batchSize,ACTION_DIM]
                 const totalEntropy = entropyEachDim.sum(1).mean();
                 const totalLoss = policyLoss.sub(totalEntropy.mul(this.config.entropyCoeff));
 
@@ -335,7 +331,7 @@ export class SharedTankPPOAgent {
         return tf.tidy(() => {
             const vfLoss = this.valueOptimizer.minimize(() => {
                 // forward pass
-                const predicted = this.valueNetwork.apply(states, { training: true }) as tf.Tensor;
+                const predicted = this.valueNetwork.predict(states) as tf.Tensor;
                 // shape [batchSize,1], приводим к [batchSize]
                 const valuePred = predicted.squeeze(); // [batchSize]
 
@@ -360,6 +356,36 @@ export class SharedTankPPOAgent {
             return vfLoss!.dataSync()[0];
         });
     }
+
+    private computeLogProb(predict: tf.Tensor, actions: tf.Tensor, scale: tf.Tensor): tf.Tensor {
+        return tf.tidy(() => {
+            const logUnnormalized = tf.mul(
+                -0.5,
+                tf.square(
+                    tf.sub(
+                        tf.div(actions, scale),
+                        tf.div(predict, scale),
+                    ),
+                ),
+            );
+            const logNormalization = tf.add(
+                tf.scalar(0.5 * Math.log(2.0 * Math.PI)),
+                tf.log(scale),
+            );
+            return tf.sum(
+                tf.sub(logUnnormalized, logNormalization),
+                logUnnormalized.shape.length - 1,
+            );
+        });
+    }
+
+    private applyConfig(config: RLExperimentConfig) {
+        this.config = config;
+        // TODO: useless on load, fix it later
+        this.policyOptimizer = tf.train.adam(this.config.learningRatePolicy);
+        this.valueOptimizer = tf.train.adam(this.config.learningRateValue);
+    }
+
 
     // Создание сети политики
     private createPolicyNetwork(): tf.LayersModel {

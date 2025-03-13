@@ -9,18 +9,16 @@ import { clamp } from 'lodash-es';
 const enemiesNormalizedBuffer = new Float32Array(6 * TANK_INPUT_TENSOR_MAX_ENEMIES);
 const bulletsNormalizedBuffer = new Float32Array(5 * TANK_INPUT_TENSOR_MAX_BULLETS);
 
-// from [-size, size] to [-1, 1]
 function normForTanh(v: number, size: number): number {
-    return v / size; // [-1, 1]
+    return v / size;
 }
 
 function normForRelu(v: number, size: number): number {
-    return (normForTanh(v, size) + 1) / 2; // [0, 1]
+    return (normForTanh(v, size) + 1) / 2;
 }
 
-// bad:0-10, good:10-20, bad:20-30
 function norm(v: number, size: number): number {
-    return clamp(normForRelu(v, size) * 10 + 10, 0, 30);
+    return clamp(normForRelu(v, size) * 0.6 + 0.2, 0, 1);
 }
 
 export function createInputVector(tankEid: number, width: number, height: number) {

@@ -1,4 +1,5 @@
 import devtoolsDetect from 'devtools-detect';
+import { getSharedAgent } from '../PPO_v2/agent.ts';
 
 let isVerbose = localStorage.getItem('verbose') === 'true';
 let shouldDraw = localStorage.getItem('shouldDraw') === 'true';
@@ -18,6 +19,10 @@ document.getElementById('resetState')!.addEventListener('click', () => {
     localStorage.removeItem('tank-rl-manager-state');
     indexedDB.deleteDatabase('tensorflowjs');
     window.location.reload();
+});
+
+document.getElementById('downloadModel')!.addEventListener('click', () => {
+    getSharedAgent().download();
 });
 
 export function getDrawState(): boolean {
