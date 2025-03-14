@@ -1,4 +1,4 @@
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import { getTankHealth, Tank } from '../Components/Tank.ts';
 import {
     TANK_INPUT_TENSOR_MAX_BULLETS,
@@ -13,7 +13,7 @@ import { query } from 'bitecs';
 import { Player } from '../Components/Player.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 
-export function createTankInputTensorSystem(options = DI) {
+export function createTankInputTensorSystem(options = GameDI) {
     const { world } = options;
     const colliderIds = new Float64Array(max(TANK_INPUT_TENSOR_MAX_ENEMIES, TANK_INPUT_TENSOR_MAX_BULLETS));
 
@@ -73,7 +73,7 @@ export function createTankInputTensorSystem(options = DI) {
     };
 }
 
-export function findTankEnemies(tankEid: number, out = new Float64Array(TANK_INPUT_TENSOR_MAX_ENEMIES), { physicalWorld } = DI) {
+export function findTankEnemies(tankEid: number, out = new Float64Array(TANK_INPUT_TENSOR_MAX_ENEMIES), { physicalWorld } = GameDI) {
     // Find enemies
     const position = {
         x: RigidBodyState.position.get(tankEid, 0),
@@ -108,7 +108,7 @@ export function findTankEnemies(tankEid: number, out = new Float64Array(TANK_INP
     return [enemyCount, out] as const;
 }
 
-export function findTankDangerBullets(tankEid: number, out = new Float64Array(TANK_INPUT_TENSOR_MAX_BULLETS), { physicalWorld } = DI) {
+export function findTankDangerBullets(tankEid: number, out = new Float64Array(TANK_INPUT_TENSOR_MAX_BULLETS), { physicalWorld } = GameDI) {
     let bulletCount = 0;
     const playerId = Player.id[tankEid];
     const position = {

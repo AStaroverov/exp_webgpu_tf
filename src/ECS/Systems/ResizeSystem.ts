@@ -19,6 +19,7 @@ export function createResizeSystem(canvas: HTMLCanvasElement, getPixelRatio: () 
         height = canvas.offsetHeight;
         pixelRatio = getPixelRatio();
         if (prevWidth === width && prevHeight === height && pixelRatio === prevPixelRatio) return;
+        debugger
         canvas.width = width * pixelRatio;
         canvas.height = height * pixelRatio;
         mat4.ortho(projectionMatrix, 0, width, 0, height, -1, 1);

@@ -1,11 +1,11 @@
 import { RigidBodyRef, RigidBodyState } from './Physical.ts';
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import { addEntity } from 'bitecs';
 import { createRigidCircle, createRigidRectangle } from '../../Physical/createRigid.ts';
 
 export function createCircleRigidGroup(
     options: Parameters<typeof createRigidCircle>[0],
-    { world } = DI,
+    { world } = GameDI,
 ): [id: number, physicalId: number] {
     const eid = addEntity(world);
     const physicalId = createRigidCircle(options);
@@ -16,7 +16,7 @@ export function createCircleRigidGroup(
 
 export function createRectangleRigidGroup(
     options: Parameters<typeof createRigidRectangle>[0],
-    { world } = DI,
+    { world } = GameDI,
 ): [id: number, physicalId: number] {
     const eid = addEntity(world);
     const physicalId = createRigidRectangle(options);

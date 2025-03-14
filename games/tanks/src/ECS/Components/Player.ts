@@ -1,5 +1,5 @@
 import { addComponent } from 'bitecs';
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import { delegate } from '../../../../../src/delegate.ts';
 
 export const Player = ({
@@ -12,7 +12,7 @@ export function getNewPlayerId() {
     return playerId++;
 }
 
-export function addPlayerComponent(entityId: number, playerId: number, { world } = DI) {
+export function addPlayerComponent(entityId: number, playerId: number, { world } = GameDI) {
     addComponent(world, entityId, Player);
     Player.id[entityId] = playerId;
 }

@@ -1,9 +1,9 @@
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import { query } from 'bitecs';
 import { Destroy } from '../Components/Destroy.ts';
 import { recursiveTypicalRemoveEntity, typicalRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 
-export function createDestroySystem({ world } = DI) {
+export function createDestroySystem({ world } = GameDI) {
     return () => {
         const eids = query(world, [Destroy]);
 

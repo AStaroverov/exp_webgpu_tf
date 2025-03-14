@@ -1,4 +1,4 @@
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import { query } from 'bitecs';
 import { Tank } from '../Components/Tank.ts';
 import { TankController } from '../Components/TankController.ts';
@@ -14,7 +14,7 @@ import { RigidBodyState } from '../Components/Physical.ts';
 
 const MAX_DIST = 1200;
 
-export function createAimSystem({ world } = DI) {
+export function createAimSystem({ world } = GameDI) {
     return ((delta: number) => {
         const tankEids = query(world, [Tank, TankController]);
 

@@ -3,7 +3,7 @@ import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
 import { JointData, Vector2 } from '@dimforge/rapier2d';
 import { addComponent } from 'bitecs';
 import { addTransformComponents } from '../../../../../src/ECS/Components/Transform.ts';
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import { addChildren, addChildrenComponent, Children, removeChild } from './Children.ts';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { addPlayerComponent, getNewPlayerId } from './Player.ts';
@@ -124,7 +124,7 @@ const createRectanglesRR = (
     options: Options,
     x: number,
     y: number,
-    { world, physicalWorld } = DI,
+    { world, physicalWorld } = GameDI,
 ) => {
     const rbId = RigidBodyRef.id[parentEId];
     const parentRb = physicalWorld.getRigidBody(rbId);
@@ -170,7 +170,7 @@ export function createTankRR(options: {
     y: number,
     rotation: number,
     color: TColor,
-}, { world, physicalWorld } = DI) {
+}, { world, physicalWorld } = GameDI) {
     resetOptions(mutatedOptions, options);
     mutatedOptions.playerId = getNewPlayerId();
 
@@ -194,7 +194,7 @@ export function createTankRR(options: {
     addTankInputTensorComponent(tankEid);
 
     mutatedOptions.radius = 16;
-    const aimEid = createCircle(DI.world, mutatedOptions);
+    const aimEid = createCircle(GameDI.world, mutatedOptions);
     addParentComponent(aimEid, tankEid);
     addChildren(tankEid, aimEid);
 

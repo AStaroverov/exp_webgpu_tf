@@ -1,11 +1,11 @@
-import { DI } from '../../DI';
 import { PLAYER_REFS } from '../../consts.ts';
 import { TankController } from '../Components/TankController.ts';
 import { isNil } from 'lodash-es';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 import { Tank } from '../Components/Tank.ts';
+import { PlayerEnvDI } from '../../DI/PlayerEnvDI.ts';
 
-export function createPlayerTankPositionSystem({ document } = DI) {
+export function createPlayerTankPositionSystem({ document } = PlayerEnvDI) {
     document.addEventListener('keydown', (event) => {
         if (isNil(PLAYER_REFS.tankPid)) return;
         switch (event.key) {
@@ -63,7 +63,7 @@ export function createPlayerTankPositionSystem({ document } = DI) {
     };
 }
 
-export function createPlayerTankTurretRotationSystem({ document } = DI) {
+export function createPlayerTankTurretRotationSystem({ document } = PlayerEnvDI) {
     document.addEventListener('mousemove', (event) => {
         if (isNil(PLAYER_REFS.tankPid)) return;
         const currentPosition = getMatrixTranslation(LocalTransform.matrix.getBatche(Tank.aimEid[PLAYER_REFS.tankPid]));
@@ -74,7 +74,7 @@ export function createPlayerTankTurretRotationSystem({ document } = DI) {
     };
 }
 
-export function createPlayerTankBulletSystem({ document, canvas } = DI) {
+export function createPlayerTankBulletSystem({ document, container } = PlayerEnvDI) {
     document.addEventListener('keydown', (event) => {
         event.preventDefault();
         switch (event.code) {
@@ -94,12 +94,12 @@ export function createPlayerTankBulletSystem({ document, canvas } = DI) {
         }
     });
 
-    canvas.addEventListener('mousedown', (event) => {
+    container.addEventListener('mousedown', (event) => {
         event.preventDefault();
         !isNil(PLAYER_REFS.tankPid) && TankController.setShooting$(PLAYER_REFS.tankPid, true);
     });
 
-    canvas.addEventListener('mouseup', (event) => {
+    container.addEventListener('mouseup', (event) => {
         event.preventDefault();
         !isNil(PLAYER_REFS.tankPid) && TankController.setShooting$(PLAYER_REFS.tankPid, false);
     });

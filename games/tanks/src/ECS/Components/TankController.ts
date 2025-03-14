@@ -1,7 +1,7 @@
 import { NestedArray, TypedArray } from '../../../../../src/utils.ts';
 import { delegate } from '../../../../../src/delegate.ts';
 import { addComponent } from 'bitecs';
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import { component, obs } from '../../../../../src/ECS/utils.ts';
 
 export const TankController = component(({
@@ -16,7 +16,7 @@ export const TankController = component(({
 
     // Methods
     addComponent(eid: number) {
-        addComponent(DI.world, eid, TankController);
+        addComponent(GameDI.world, eid, TankController);
     },
     shouldShoot(eid: number): boolean {
         return TankController.shoot[eid] > 0 && TankController.shootCooldown[eid] <= 0;

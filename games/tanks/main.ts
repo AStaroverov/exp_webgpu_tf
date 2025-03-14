@@ -3,7 +3,7 @@ import { createGame } from './createGame.ts';
 import { PLAYER_REFS } from './src/consts.ts';
 import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
 
-const { gameTick } = createGame();
+const { gameTick } = await createGame({ width: 800, height: 800, withRender: true, withPlayer: true });
 
 createTankRR({
     x: 500,

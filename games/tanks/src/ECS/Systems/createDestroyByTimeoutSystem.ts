@@ -1,9 +1,9 @@
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import { query } from 'bitecs';
 import { DestroyByTimeout } from '../Components/Destroy.ts';
 import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 
-export function createDestroyByTimeoutSystem({ world } = DI) {
+export function createDestroyByTimeoutSystem({ world } = GameDI) {
     return (delta: number) => {
         const eids = query(world, [DestroyByTimeout]);
 

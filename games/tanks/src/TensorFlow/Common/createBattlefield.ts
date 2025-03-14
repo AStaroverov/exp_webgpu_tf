@@ -1,15 +1,15 @@
 import { createGame } from '../../../createGame.ts';
 import { createTankRR } from '../../ECS/Components/Tank.ts';
 import { random, randomRangeFloat, randomSign } from '../../../../../lib/random.ts';
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import { getDrawState } from './utils.ts';
 import { TANK_RADIUS } from './consts.ts';
 import { TankController } from '../../ECS/Components/TankController.ts';
 
-export function createBattlefield(tanksCount: number) {
-    const game = createGame();
-    const width = DI.canvas.offsetWidth;
-    const height = DI.canvas.offsetHeight;
+export async function createBattlefield(tanksCount: number) {
+    const game = await createGame({ width: 800, height: 800, withPlayer: false, withRender: true });
+    const width = GameDI.width;
+    const height = GameDI.height;
     let tanks: number[] = [];
 
     // Храним координаты танков в отдельном массиве

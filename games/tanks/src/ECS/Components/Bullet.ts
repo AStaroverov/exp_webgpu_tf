@@ -7,7 +7,7 @@ import {
     getMatrixTranslationY,
     GlobalTransform,
 } from '../../../../../src/ECS/Components/Transform.ts';
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import { addComponent } from 'bitecs';
 import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';
 import { mat4, vec2, vec3 } from 'gl-matrix';
@@ -47,7 +47,7 @@ const defaultOptionsBulletRR = structuredClone(optionsBulletRR);
 
 const tmpSpeed = vec2.create();
 
-export function createBulletRR(options: Partial<Options> & { speed: number, playerId: number }, { world } = DI) {
+export function createBulletRR(options: Partial<Options> & { speed: number, playerId: number }, { world } = GameDI) {
     Object.assign(optionsBulletRR, defaultOptionsBulletRR);
     Object.assign(optionsBulletRR, options);
 

@@ -1,5 +1,5 @@
 import { addComponent, EntityId } from 'bitecs';
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import { NestedArray, TypedArray } from '../../../../../src/utils.ts';
 import { delegate } from '../../../../../src/delegate.ts';
 import { component } from '../../../../../src/ECS/utils.ts';
@@ -53,6 +53,6 @@ export const TankInputTensor = component({
     },
 });
 
-export function addTankInputTensorComponent(eid: number, { world } = DI) {
+export function addTankInputTensorComponent(eid: number, { world } = GameDI) {
     addComponent(world, eid, TankInputTensor);
 }

@@ -1,4 +1,4 @@
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import { TankController } from '../Components/TankController.ts';
 import { RevoluteImpulseJoint, Vector2 } from '@dimforge/rapier2d';
 import { Tank, TankPart } from '../Components/Tank.ts';
@@ -8,7 +8,7 @@ import { sqrt } from '../../../../../lib/math.ts';
 import { query } from 'bitecs';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 
-export function createTankPositionSystem({ world, physicalWorld } = DI) {
+export function createTankPositionSystem({ world, physicalWorld } = GameDI) {
     const nextLinvel = new Vector2(0, 0);
     const impulseFactor = 15000000000; // Масштаб импульса (настраиваемый)
     const rotationImpulseFactor = 100000000000; // Масштаб крутящего момента
@@ -39,7 +39,7 @@ export function createTankPositionSystem({ world, physicalWorld } = DI) {
     };
 }
 
-export function createTankTurretRotationSystem({ world } = DI) {
+export function createTankTurretRotationSystem({ world } = GameDI) {
     return (delta: number) => {
         const tankPids = query(world, [Tank, TankController]);
 
@@ -53,7 +53,7 @@ export function createTankTurretRotationSystem({ world } = DI) {
 const damping = 0.2;   // коэффициент демпфирования
 const stiffness = 1e6; // коэффициент жесткости (подбирается опытным путем)
 const maxRotationSpeed = Math.PI * 0.8; // Максимальная скорость поворота
-function rotateByMotor(delta: number, tankEid: number, { physicalWorld } = DI) {
+function rotateByMotor(delta: number, tankEid: number, { physicalWorld } = GameDI) {
     // Получаем данные для башни
     const turretEid = Tank.turretEId[tankEid];
     const jointPid = TankPart.jointPid[turretEid];

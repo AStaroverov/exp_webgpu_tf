@@ -1,9 +1,9 @@
 import { GlobalTransform, setMatrixRotateZ, setMatrixTranslate } from '../../../../../src/ECS/Components/Transform.ts';
 import { RigidBodyRef, RigidBodyState } from '../Components/Physical.ts';
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import { query } from 'bitecs';
 
-export function createApplyRigidBodyToTransformSystem({ world } = DI) {
+export function createApplyRigidBodyToTransformSystem({ world } = GameDI) {
     return function () {
         const entities = query(world, [GlobalTransform, RigidBodyRef]);
 

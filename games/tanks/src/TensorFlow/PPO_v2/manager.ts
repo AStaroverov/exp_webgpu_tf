@@ -26,7 +26,7 @@ import {
 import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
 import { RingBuffer } from 'ring-buffer-ts';
 import { Tank } from '../../ECS/Components/Tank.ts';
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import { randomRangeInt } from '../../../../../lib/random.ts';
 
 let sharedRLGameManager: SharedRLGameManager | null = null;
@@ -41,7 +41,7 @@ export function getRLGameManger(): SharedRLGameManager {
 
 // Main class to manage PPO reinforcement learning integration with the game
 export class SharedRLGameManager {
-    private battlefield!: ReturnType<typeof createBattlefield>;
+    private battlefield!: Awaited<ReturnType<typeof createBattlefield>>;
     private frameCount: number = 0;
     private episodeCount: number = 0;
     private isTraining: boolean = true;
@@ -87,18 +87,18 @@ export class SharedRLGameManager {
         }
 
         // Initialize battlefield with tanks
-        this.resetEnvironment();
+        await this.resetEnvironment();
 
         return this;
     }
 
     // Reset environment for a new episode
-    resetEnvironment() {
+    async resetEnvironment() {
         resetController();
 
         // Create new battlefield
         this.battlefield?.destroy();
-        this.battlefield = createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX));
+        this.battlefield = await createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX));
 
         // Register each tank with the RL system
         for (const tankEid of this.battlefield.tanks) {
@@ -210,8 +210,8 @@ export class SharedRLGameManager {
                 // Update frame counter
                 this.frameCount++;
 
-                const width = this.battlefield.canvas.offsetWidth;
-                const height = this.battlefield.canvas.offsetHeight;
+                const width = GameDI.width;
+                const height = GameDI.height;
                 const shouldEvery = 12;
                 const isWarmup = this.frameCount < shouldEvery * 8;
                 const shouldAction = this.frameCount % shouldEvery === 0;
@@ -220,7 +220,7 @@ export class SharedRLGameManager {
                     || (this.frameCount - 7) % shouldEvery === 0
                     || (this.frameCount - 10) % shouldEvery === 0;
                 const isLastMemorize = this.frameCount > 10 && (this.frameCount - 10) % shouldEvery === 0;
-                DI.shouldCollectTensor = this.frameCount > 0 && (this.frameCount + 1) % shouldEvery === 0;
+                GameDI.shouldCollectTensor = this.frameCount > 0 && (this.frameCount + 1) % shouldEvery === 0;
 
                 if (shouldAction) {
                     activeTanks = this.battlefield.tanks.filter(tankEid => {
@@ -284,8 +284,7 @@ export class SharedRLGameManager {
                         this.save();
                     }
 
-                    this.resetEnvironment();
-                    this.gameLoop();
+                    this.resetEnvironment().then(() => this.gameLoop());
                 }
             } catch (error) {
                 console.error('Error in game loop:', error);

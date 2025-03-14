@@ -1,6 +1,6 @@
 import { RigidBody, RigidBodyDesc } from '@dimforge/rapier2d';
 import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
-import { DI } from '../DI';
+import { GameDI } from '../DI/GameDI.ts';
 
 export type BodyOptions = {
     x: number,
@@ -18,7 +18,7 @@ export type BodyOptions = {
 
 export function createBody(
     o: BodyOptions,
-    { physicalWorld } = DI,
+    { physicalWorld } = GameDI,
 ): RigidBody {
     let bodyDesc = (new RigidBodyDesc(o.bodyType ?? RigidBodyType.Dynamic))
         .setAdditionalMass(o.additionalMass ?? 0)
@@ -32,6 +32,6 @@ export function createBody(
     return physicalWorld.createRigidBody(bodyDesc);
 }
 
-export function removeBody(body: RigidBody, { physicalWorld } = DI) {
+export function removeBody(body: RigidBody, { physicalWorld } = GameDI) {
     physicalWorld.removeRigidBody(body);
 }
