@@ -12,7 +12,6 @@ export class SharedTankPPOAgent {
     private memory: Memory;
     private valueNetwork: tf.LayersModel;   // Сеть критика
     private policyNetwork: tf.LayersModel;  // Сеть политики
-    private policyNetworkOld!: tf.LayersModel;
     private policyOptimizer!: tf.Optimizer;        // Оптимизатор для policy network
     private valueOptimizer!: tf.Optimizer;         // Оптимизатор для value network
     private config!: RLExperimentConfig;
@@ -44,10 +43,6 @@ export class SharedTankPPOAgent {
         // Создаем модели
         this.valueNetwork = this.createValueNetwork();
         this.policyNetwork = this.createPolicyNetwork();
-        this.policyNetworkOld = this.createPolicyNetwork();
-        this.policyNetworkOld.setWeights(
-            this.policyNetwork.getWeights().map(w => w.clone()),
-        );
 
         console.log(`Shared PPO Agent initialized with experiment: ${ this.config.name }`);
     }
@@ -55,7 +50,6 @@ export class SharedTankPPOAgent {
     // Освобождение ресурсов
     dispose() {
         this.policyNetwork.dispose();
-        this.policyNetworkOld.dispose();
         this.valueNetwork.dispose();
         this.memoryDispose();
         console.log('PPO Agent resources disposed');
@@ -123,10 +117,6 @@ export class SharedTankPPOAgent {
             return acc + abs(w.reduce((a, b, j) => a + abs(b - prevWeights![i][j]), 0));
         }, 0));
 
-        this.policyNetworkOld.setWeights(
-            this.policyNetwork.getWeights().map(w => w.clone()),
-        );
-
         for (const tensor of Object.values(batch)) {
             if (tensor instanceof tf.Tensor) {
                 tensor.dispose();
@@ -182,7 +172,6 @@ export class SharedTankPPOAgent {
         try {
             await this.valueNetwork.save('indexeddb://tank-rl-value-model');
             await this.policyNetwork.save('indexeddb://tank-rl-policy-model');
-            await this.policyNetworkOld.save('indexeddb://tank-rl-policy-old-model');
 
             localStorage.setItem('tank-rl-agent-state', JSON.stringify({
                 iteration: this.iteration,
@@ -212,7 +201,6 @@ export class SharedTankPPOAgent {
         try {
             this.valueNetwork = await tf.loadLayersModel('indexeddb://tank-rl-value-model');
             this.policyNetwork = await tf.loadLayersModel('indexeddb://tank-rl-policy-model');
-            this.policyNetworkOld = await tf.loadLayersModel('indexeddb://tank-rl-policy-old-model');
 
             console.log('PPO models loaded successfully');
 
@@ -252,7 +240,7 @@ export class SharedTankPPOAgent {
     } {
         return tf.tidy(() => {
             const stateTensor = tf.tensor1d(state).expandDims(0);
-            const predict = this.policyNetworkOld.predict(stateTensor) as tf.Tensor;
+            const predict = this.policyNetwork.predict(stateTensor) as tf.Tensor;
             const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
             const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
             const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
