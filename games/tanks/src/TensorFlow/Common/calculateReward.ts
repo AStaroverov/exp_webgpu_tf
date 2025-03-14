@@ -88,13 +88,6 @@ export interface ComponentRewards {
         total: number;           // Суммарная награда для головы прицеливания
     };
 
-    // Общие награды
-    common: {
-        health: number;          // Здоровье
-        survival: number;        // Выживание
-        total: number;           // Общая награда
-    };
-
     // Общая суммарная награда
     totalReward: number;
 }
@@ -107,7 +100,6 @@ function initializeRewards(): ComponentRewards {
         shoot: { shootDecision: 0, total: 0 },
         movement: { speed: 0, positioning: 0, avoidance: 0, mapAwareness: 0, total: 0 },
         aim: { accuracy: 0, tracking: 0, distance: 0, total: 0 },
-        common: { health: 0, survival: 0, total: 0 },
         totalReward: 0,
     };
 }
@@ -246,18 +238,15 @@ export function calculateReward(
     rewards.shoot.total = (rewards.shoot.shootDecision);
     rewards.movement.total = (rewards.movement.speed + rewards.movement.positioning +
         rewards.movement.avoidance + rewards.movement.mapAwareness);
-    rewards.common.total = rewards.common.health + rewards.common.survival;
 
     // Общая итоговая награда
-    rewards.totalReward = rewards.shoot.total + rewards.movement.total +
-        rewards.aim.total + rewards.common.total;
+    rewards.totalReward = rewards.shoot.total + rewards.movement.total + rewards.aim.total;
 
     isVerboseLog() &&
     console.log(`>> Tank ${ tankEid }
     aim: ${ rewards.aim.total }
     shoot: ${ rewards.shoot.total }
     move: ${ rewards.movement.total }
-    common: ${ rewards.common.total }
     total: ${ rewards.totalReward }
     `);
 
@@ -295,38 +284,6 @@ function calculateMapReward(
         // Вышел за границы карты
         return REWARD_WEIGHTS.MAP_BORDER.PENALTY;
     }
-}
-
-/**
- * Расчет награды за сохранение здоровья
- */
-function calculateHealthReward(
-    currentHealth: number,
-    prevHealth: number,
-): number {
-    // Награда за изменение здоровья
-    const healthChange = currentHealth - prevHealth;
-    const healthChangeReward = healthChange * REWARD_WEIGHTS.HEALTH_CHANGE;
-
-    // Бонус за текущее здоровье
-    const healthBonusReward = currentHealth * REWARD_WEIGHTS.HEALTH_BONUS;
-
-    return healthChangeReward + healthBonusReward;
-}
-
-/**
- * Расчет награды за выживание
- */
-function calculateSurvivalReward(currentHealth: number): number {
-    let survivalReward = REWARD_WEIGHTS.SURVIVAL; // Базовый бонус за выживание
-
-    // Дополнительный бонус при низком здоровье (плавно растет по мере снижения здоровья)
-    if (currentHealth < 0.5) {
-        const lowHealthFactor = smoothstep(0.5, 0, currentHealth);
-        survivalReward += lowHealthFactor * REWARD_WEIGHTS.SURVIVAL;
-    }
-
-    return survivalReward;
 }
 
 /**
