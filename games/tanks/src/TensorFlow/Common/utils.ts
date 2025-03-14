@@ -1,5 +1,6 @@
 import devtoolsDetect from 'devtools-detect';
 import { getSharedAgent } from '../PPO_v2/agent.ts';
+import { tanh } from '../../../../../lib/math.ts';
 
 let isVerbose = localStorage.getItem('verbose') === 'true';
 let shouldDraw = localStorage.getItem('shouldDraw') === 'true';
@@ -35,4 +36,16 @@ export function isVerboseLog() {
 
 export function isDevtoolsOpen() {
     return devtoolsDetect.isOpen;
+}
+
+export type Actions = Float32Array;
+
+export function readAction(action: Actions) {
+    return {
+        shoot: tanh(action[0]) > 0,
+        move: tanh(action[1]),
+        rotate: tanh(action[2]),
+        aimX: tanh(action[3]),
+        aimY: tanh(action[4]),
+    };
 }

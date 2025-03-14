@@ -7,16 +7,15 @@ import { RigidBodyState } from '../../ECS/Components/Physical.ts';
 import { findTankDangerBullets, findTankEnemies } from '../../ECS/Systems/createTankInputTensorSystem.ts';
 import { abs, centerStep, hypot, lerp, max, min, smoothstep } from '../../../../../lib/math.ts';
 import { TANK_RADIUS } from './consts.ts';
-import { isVerboseLog } from './utils.ts';
-import { Actions, readAction } from '../PPO_v2/utils.ts';
+import { Actions, isVerboseLog, readAction } from './utils.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 import { Tank } from '../../ECS/Components/Tank.ts';
 
 // Константы для калибровки вознаграждений
 const REWARD_GROUPS = [
     'AIM',
-    'MAP_BORDER',
     'SHOOTING',
+    'MAP_BORDER',
     'DISTANCE_KEEPING',
     'MOVEMENT',
     'BULLET_AVOIDANCE',
@@ -26,6 +25,7 @@ let REWARD_WEIGHTS = {
         QUALITY: 1.0,       // За точное прицеливание
         TRACKING: 1.0,      // За активное отслеживание врага
         DISTANCE: 1.0,      // За расстояние до цели
+        NO_TARGET_PENALTY: -0.1, // За отсутствие целей
         TRACKING_PENALTY: -0.2, // За активное отслеживание врага
         DISTANCE_PENALTY: -0.2, // За расстояние до цели
     },
@@ -38,29 +38,27 @@ let REWARD_WEIGHTS = {
 
     SHOOTING: {
         AIMED: 1.0,         // За прицельную стрельбу
-        AIMED_PENALTY: -0.5, // Штраф за стрельбу в пустоту
-        RANDOM_PENALTY: -0.2,       // За беспорядочную стрельбу
+        AIMED_PENALTY: -0.1, // Штраф за стрельбу в пустоту
     },
 
-    // Основные компоненты наград
-    HEALTH_CHANGE: 0.5,          // За потерю здоровья
-    HEALTH_BONUS: 0.05,          // За поддержание здоровья
-    SURVIVAL: 0.05,              // За выживание
+    DISTANCE_KEEPING: {
+        BASE: 1.0,          // За поддержание дистанции
+        PENALTY: -0.2,      // За слишком близкое приближение
+    },
+
+    BULLET_AVOIDANCE: {
+        BASE: 0.4,          // За избегание пуль
+        PENALTY: -0.2,      // За избегание пуль
+    },
 
     MOVEMENT: {
         BASE: 0.1,          // За базовое движение
         STRATEGIC: 0.3,     // За стратегическое движение
     },
 
-    BULLET_AVOIDANCE: {
-        BASE: 0.4,          // За избегание пуль
-        PENALTY: -0.4,      // За избегание пуль
-    },
-
-    DISTANCE_KEEPING: {
-        BASE: 0.5,          // За поддержание дистанции
-        PENALTY: -0.5,      // За слишком близкое приближение
-    },
+    HEALTH_CHANGE: 0.5,          // За потерю здоровья
+    HEALTH_BONUS: 0.05,          // За поддержание здоровья
+    SURVIVAL: 0.05,              // За выживание
 };
 
 const REWARD_WEIGHTS_ORIGINAL = structuredClone(REWARD_WEIGHTS);
@@ -114,7 +112,7 @@ function initializeRewards(): ComponentRewards {
     };
 }
 
-const TRAIN_SECTION = 10_000;
+const TRAIN_SECTION = 1_000;
 let lastEpisode = 0;
 
 function updateRewardWeights(episode: number) {
@@ -131,6 +129,7 @@ function updateRewardWeights(episode: number) {
             REWARD_WEIGHTS[group][key] *= key.endsWith('_PENALTY') ? penaltyMultiplier : rewardMultiplier;
         }
         if (group === 'AIM') continue;
+        if (group === 'SHOOTING') continue;
         stp += 2;
     }
 
@@ -404,7 +403,9 @@ function analyzeAiming(
     }
 
     // Награда за качество прицеливания и дистанцию до цели
-    const aimQualityReward = bestAimQuality * REWARD_WEIGHTS.AIM.QUALITY;
+    const aimQualityReward =
+        bestAimQuality * REWARD_WEIGHTS.AIM.QUALITY
+        + bestAimTargetId === 0 ? REWARD_WEIGHTS.AIM.NO_TARGET_PENALTY : 0;
 
     // Награда за дистанцию прицеливания
     const aimDistanceReward =
@@ -519,16 +520,11 @@ function calculateShootingReward(
     let shootingReward = 0;
 
     if (isShooting) {
-        if (bestAimQuality < 0.05) {
-            // Штраф за стрельбу при плохом прицеливании (плавно уменьшается с ростом точности)
-            shootingReward += (1 - smoothstep(0, 0.3, bestAimQuality)) * REWARD_WEIGHTS.SHOOTING.RANDOM_PENALTY;
-        } else {
-            // Плавная награда за стрельбу в зависимости от точности прицеливания
-            shootingReward += bestAimQuality * REWARD_WEIGHTS.SHOOTING.AIMED;
-        }
-    } else if (bestAimQuality > 0.8) {
+        // Плавная награда за стрельбу в зависимости от точности прицеливания
+        shootingReward += bestAimQuality * REWARD_WEIGHTS.SHOOTING.AIMED;
+    } else if (bestAimQuality > 0.5) {
         // Небольшой штраф за отсутствие стрельбы при хорошем прицеливании
-        shootingReward += REWARD_WEIGHTS.SHOOTING.AIMED_PENALTY * 0.3 * smoothstep(0.8, 1.0, bestAimQuality);
+        shootingReward += REWARD_WEIGHTS.SHOOTING.AIMED_PENALTY * smoothstep(0.8, 1.0, bestAimQuality);
     }
 
     return shootingReward;

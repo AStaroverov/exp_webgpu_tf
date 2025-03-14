@@ -4,7 +4,7 @@ import * as tf from '@tensorflow/tfjs';
 import { disposeSharedAgent, getSharedAgent } from './agent.ts';
 import { getTankHealth } from '../../ECS/Components/Tank.ts';
 import { calculateReward } from '../Common/calculateReward.ts';
-import { Actions, readAction } from './utils.ts';
+import { Actions, readAction } from '../Common/utils.ts';
 
 // Map to store previous actions
 const mapLastUpdateData = new Map<number, {

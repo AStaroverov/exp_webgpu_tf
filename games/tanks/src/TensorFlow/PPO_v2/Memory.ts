@@ -1,7 +1,8 @@
 // Буфер опыта для PPO
 import * as tf from '@tensorflow/tfjs';
 import { shuffle } from '../../../../../lib/shuffle.ts';
-import { abs, max, min, signedLog } from '../../../../../lib/math.ts';
+import { abs, max, min } from '../../../../../lib/math.ts';
+import { isDevtoolsOpen } from '../Common/utils.ts';
 
 export type Batch = {
     size: number,
@@ -151,7 +152,7 @@ export class SubMemory {
         const returns: number[] = new Array(n).fill(0);
         const advantages: number[] = new Array(n).fill(0);
 
-        const rewards = this.rewards.map(r => signedLog(r, 10));
+        const rewards = this.rewards; //.map(r => signedLog(r, 10));
         const valuesArr = tf.stack(this.values).dataSync(); // shape [n]
 
         let adv = 0;
@@ -176,7 +177,6 @@ export class SubMemory {
             lastVal = valuesArr[i];
         }
 
-        // const winsorizedAdvantages = winsorize(advantages, 0.05, 0.95);
         // Нормализация advantages
         const advMean = advantages.reduce((sum, val) => sum + val, 0) / n;
         const advStd = Math.sqrt(
@@ -184,23 +184,23 @@ export class SubMemory {
         );
         const normalizedAdvantages = advantages.map(adv => (adv - advMean) / (advStd + 1e-8));
 
-        const minRew = min(...rewards);
-        const maxRew = max(...rewards);
-        const minVal = min(...valuesArr);
-        const maxVal = max(...valuesArr);
-        const minRet = min(...returns);
-        const maxRet = max(...returns);
-        // const orgMinAdv = min(...advantages);
-        // const orgMaxAdv = max(...advantages);
-        const minAdv = min(...normalizedAdvantages);
-        const maxAdv = max(...normalizedAdvantages);
+        if (isDevtoolsOpen()) {
+            const minRew = min(...rewards);
+            const maxRew = max(...rewards);
+            const minVal = min(...valuesArr);
+            const maxVal = max(...valuesArr);
+            const minRet = min(...returns);
+            const maxRet = max(...returns);
+            const minAdv = min(...normalizedAdvantages);
+            const maxAdv = max(...normalizedAdvantages);
 
-        console.log('[R&A]'
-            , '  Rew:', strgify(minRew), strgify(maxRew)
-            , '| Val:', strgify(minVal), strgify(maxVal)
-            , '| Ret:', strgify(minRet), strgify(maxRet)
-            , '| Adv:', strgify(minAdv), strgify(maxAdv),
-        );
+            console.log('[R&A]'
+                , '  Rew:', strgify(minRew), strgify(maxRew)
+                , '| Val:', strgify(minVal), strgify(maxVal)
+                , '| Ret:', strgify(minRet), strgify(maxRet)
+                , '| Adv:', strgify(minAdv), strgify(maxAdv),
+            );
+        }
 
         return {
             returns: returns,
