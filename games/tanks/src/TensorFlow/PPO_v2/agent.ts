@@ -244,9 +244,9 @@ export class SharedTankPPOAgent {
             const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
             const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
             const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
-            const clippedLogStd = outLogStd.clipByValue(-5, 2);
+            const clippedLogStd = outLogStd.clipByValue(-2, 0.5);
             const std = clippedLogStd.exp();
-            const noise = tf.randomNormal([ACTION_DIM]).mul(std);
+            const noise = tf.randomNormal([ACTION_DIM]).mul(std).div(10);
             const action = outMean.add(noise);
             const logProb = this.computeLogProb(outMean, action, std);
             const actionArray = action.dataSync() as Float32Array;
@@ -272,7 +272,7 @@ export class SharedTankPPOAgent {
                 const predict = this.policyNetwork.predict(states) as tf.Tensor;
                 const outMean = predict.slice([0, 0], [-1, ACTION_DIM]);
                 const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
-                const clippedLogStd = outLogStd.clipByValue(-5, 2);
+                const clippedLogStd = outLogStd.clipByValue(-2, 0.5);
                 const std = clippedLogStd.exp();
                 const newLogProbs = this.computeLogProb(outMean, actions, std);
                 const oldLogProbs2D = oldLogProbs.reshape(newLogProbs.shape);

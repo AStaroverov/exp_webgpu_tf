@@ -1,51 +1,68 @@
+import Dexie from 'dexie';
 import devtoolsDetect from 'devtools-detect';
 import { getSharedAgent } from '../PPO_v2/agent.ts';
-import { tanh } from '../../../../../lib/math.ts';
 
-let isVerbose = localStorage.getItem('verbose') === 'true';
-let shouldDraw = localStorage.getItem('shouldDraw') === 'true';
+// Инициализируем базу Dexie с таблицей settings
+const db = new Dexie('ui-tank-rl');
+db.version(1).stores({ settings: 'key' });
 
-document.getElementById('toggleRender')!.addEventListener('click', () => {
-    shouldDraw = !shouldDraw;
-    localStorage.setItem('shouldDraw', shouldDraw.toString());
-});
+// Кэш для хранения значений настроек (аналог localStorage)
+let isVerbose = false;
+let shouldDraw = false;
 
-document.getElementById('toggleVerbose')!.addEventListener('click', () => {
-    isVerbose = !isVerbose;
-    localStorage.setItem('verbose', isVerbose.toString());
-});
+// Загружаем настройки из базы (если они там уже сохранены)
+async function initSettings() {
+    const verboseSetting = await db.table('settings').get('verbose');
+    const drawSetting = await db.table('settings').get('shouldDraw');
 
-document.getElementById('resetState')!.addEventListener('click', () => {
-    localStorage.removeItem('tank-rl-agent-state');
-    localStorage.removeItem('tank-rl-manager-state');
-    indexedDB.deleteDatabase('tensorflowjs');
-    window.location.reload();
-});
+    isVerbose = verboseSetting ? verboseSetting.value === 'true' : false;
+    shouldDraw = drawSetting ? drawSetting.value === 'true' : false;
+}
 
-document.getElementById('downloadModel')!.addEventListener('click', () => {
-    getSharedAgent().download();
-});
+initSettings();
+
+if (globalThis && globalThis.document) {
+    document.getElementById('toggleRender')!.addEventListener('click', async () => {
+        // Переключаем состояние отрисовки
+        shouldDraw = !shouldDraw;
+        await db.table('settings').put({ key: 'shouldDraw', value: shouldDraw.toString() });
+    });
+
+    document.getElementById('toggleVerbose')!.addEventListener('click', async () => {
+        // Переключаем режим подробного логирования
+        isVerbose = !isVerbose;
+        await db.table('settings').put({ key: 'verbose', value: isVerbose.toString() });
+    });
+
+    document.getElementById('resetState')!.addEventListener('click', async () => {
+        // Удаляем сохранённые состояния агента и менеджера из базы настроек
+        await db.table('settings').delete('tank-rl-agent-state');
+        await db.table('settings').delete('tank-rl-manager-state');
+        // Удаляем базу данных tensorflowjs
+        localStorage.clear();
+        indexedDB.databases().then((dbs) => {
+            dbs.forEach((db) => {
+                db.name && indexedDB.deleteDatabase(db.name);
+            });
+            window.location.reload();
+        });
+    });
+
+    document.getElementById('downloadModel')!.addEventListener('click', () => {
+        getSharedAgent().download();
+    });
+}
+
+// Экспортируем функции для получения состояния отрисовки и логирования
 
 export function getDrawState(): boolean {
     return shouldDraw;
 }
 
-export function isVerboseLog() {
+export function isVerboseLog(): boolean {
     return isVerbose && devtoolsDetect.isOpen;
 }
 
-export function isDevtoolsOpen() {
+export function isDevtoolsOpen(): boolean {
     return devtoolsDetect.isOpen;
-}
-
-export type Actions = Float32Array;
-
-export function readAction(action: Actions) {
-    return {
-        shoot: tanh(action[0]) > 0,
-        move: tanh(action[1]),
-        rotate: tanh(action[2]),
-        aimX: tanh(action[3]),
-        aimY: tanh(action[4]),
-    };
 }

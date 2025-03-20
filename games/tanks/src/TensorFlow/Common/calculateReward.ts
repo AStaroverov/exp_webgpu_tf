@@ -7,9 +7,10 @@ import { RigidBodyState } from '../../ECS/Components/Physical.ts';
 import { findTankDangerBullets, findTankEnemies } from '../../ECS/Systems/createTankInputTensorSystem.ts';
 import { abs, centerStep, hypot, lerp, max, min, smoothstep } from '../../../../../lib/math.ts';
 import { TANK_RADIUS } from './consts.ts';
-import { Actions, isVerboseLog, readAction } from './utils.ts';
+import { isVerboseLog } from './utils.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 import { Tank } from '../../ECS/Components/Tank.ts';
+import { Actions, readAction } from './readAction.ts';
 
 // Константы для калибровки вознаграждений
 const REWARD_GROUPS = [

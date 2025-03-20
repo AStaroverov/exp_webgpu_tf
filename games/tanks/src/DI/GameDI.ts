@@ -7,7 +7,7 @@ export const GameDI: {
     world: World;
     physicalWorld: PhysicalWorld;
     shouldCollectTensor: boolean
-    gameTick: (delta: number, withDraw?: boolean) => void;
+    gameTick: (delta: number) => void;
     destroy: () => void;
 } = {
     width: null as any,

@@ -16,13 +16,7 @@ import {
     updateTankBehaviour,
 } from './controller.ts';
 import { createBattlefield } from '../Common/createBattlefield.ts';
-import {
-    MAX_STEPS,
-    TANK_COUNT_SIMULATION_MAX,
-    TANK_COUNT_SIMULATION_MIN,
-    TICK_TIME_REAL,
-    TICK_TIME_SIMULATION,
-} from '../Common/consts.ts';
+import { MAX_FRAMES, TANK_COUNT_SIMULATION_MAX, TANK_COUNT_SIMULATION_MIN, TICK_TIME_REAL } from '../Common/consts.ts';
 import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
 import { RingBuffer } from 'ring-buffer-ts';
 import { Tank } from '../../ECS/Components/Tank.ts';
@@ -98,10 +92,10 @@ export class SharedRLGameManager {
 
         // Create new battlefield
         this.battlefield?.destroy();
-        this.battlefield = await createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX));
+        this.battlefield = await createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX), true);
 
         // Register each tank with the RL system
-        for (const tankEid of this.battlefield.tanks) {
+        for (const tankEid of this.battlefield.getTanks()) {
             registerTank(tankEid);
         }
 
@@ -110,7 +104,7 @@ export class SharedRLGameManager {
         // Increment episode counter
         this.episodeCount++;
 
-        console.log(`Environment reset for episode ${ this.episodeCount } with ${ this.battlefield.tanks.length } tanks`);
+        console.log(`Environment reset for episode ${ this.episodeCount }`);
 
         return this.battlefield;
     }
@@ -223,7 +217,7 @@ export class SharedRLGameManager {
                 GameDI.shouldCollectTensor = this.frameCount > 0 && (this.frameCount + 1) % shouldEvery === 0;
 
                 if (shouldAction) {
-                    activeTanks = this.battlefield.tanks.filter(tankEid => {
+                    activeTanks = this.battlefield.getTanks().filter(tankEid => {
                         if (entityExists(this.battlefield.world, tankEid) && hasComponent(this.battlefield.world, tankEid, Tank)) {
                             return true;
                         } else if (isActiveTank(tankEid)) {
@@ -239,7 +233,7 @@ export class SharedRLGameManager {
                 }
 
                 // Execute game tick
-                this.battlefield.gameTick(TICK_TIME_SIMULATION);
+                this.battlefield.gameTick(16.666);
 
                 if (isWarmup) {
                     return;
@@ -254,7 +248,7 @@ export class SharedRLGameManager {
 
                 // Check if episode is done
                 const activeCount = getActiveTankCount();
-                const isEpisodeDone = activeCount <= 1 || this.frameCount >= MAX_STEPS;
+                const isEpisodeDone = activeCount <= 1 || this.frameCount >= MAX_FRAMES;
 
                 if (isEpisodeDone) {
                     this.stopFrameInterval?.();

@@ -1,16 +1,15 @@
 import { createGame } from '../../../createGame.ts';
-import { createTankRR } from '../../ECS/Components/Tank.ts';
+import { createTankRR, Tank } from '../../ECS/Components/Tank.ts';
 import { random, randomRangeFloat, randomSign } from '../../../../../lib/random.ts';
 import { GameDI } from '../../DI/GameDI.ts';
-import { getDrawState } from './utils.ts';
 import { TANK_RADIUS } from './consts.ts';
 import { TankController } from '../../ECS/Components/TankController.ts';
+import { query } from 'bitecs';
 
-export async function createBattlefield(tanksCount: number) {
-    const game = await createGame({ width: 800, height: 800, withPlayer: false, withRender: true });
+export async function createBattlefield(tanksCount: number, withRender = false, withPlayer = false) {
+    const game = await createGame({ width: 800, height: 800, withPlayer, withRender });
     const width = GameDI.width;
     const height = GameDI.height;
-    let tanks: number[] = [];
 
     // Храним координаты танков в отдельном массиве
     let tankPositions: { x: number, y: number }[] = [];
@@ -49,14 +48,16 @@ export async function createBattlefield(tanksCount: number) {
             randomSign() * random(),
         );
 
-        // Сохраняем ID и координаты танка
-        tanks.push(eid);
         tankPositions.push({ x, y });
     }
 
     const gameTick = (delta: number) => {
-        game.gameTick(delta, getDrawState());
+        game.gameTick(delta);
     };
 
-    return { ...game, tanks, gameTick };
+    const getTanks = () => {
+        return [...query(GameDI.world, [Tank])];
+    };
+
+    return { ...game, gameTick, getTanks };
 }
