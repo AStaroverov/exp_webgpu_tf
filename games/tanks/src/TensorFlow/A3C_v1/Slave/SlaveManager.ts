@@ -194,8 +194,6 @@ export class SlaveManager {
     }
 
     private exposeGradients() {
-        console.log('Exposing gradients...');
-
         const grads = this.agent.computeGradients();
 
         return addGradients(grads);

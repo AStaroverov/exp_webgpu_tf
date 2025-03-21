@@ -14,8 +14,6 @@ export type RLExperimentConfig = {
     gamma: number;                  // Discount factor
     lam: number;                    // GAE lambda
     // PPO-specific parameters
-    clipRatioPolicy: number;             // PPO clipping parameter
-    clipRatioValue: number;             // PPO clipping parameter
     batchSize: number;              // Batch size for training
     entropyCoeff: number;           // Entropy coefficient for encouraging exploration
     // Training control
@@ -33,9 +31,7 @@ export const DEFAULT_EXPERIMENT: RLExperimentConfig = {
     gamma: 0.99,
     lam: 0.95,
     // PPO-specific parameters
-    batchSize: 10,
-    clipRatioPolicy: 0.2,
-    clipRatioValue: 0.25,
+    batchSize: 20,
     entropyCoeff: 0.01,
     // Training control
     saveModelEvery: 10,

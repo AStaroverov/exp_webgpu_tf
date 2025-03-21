@@ -41,8 +41,8 @@ export class SharedTankPPOAgent {
         };
 
         // Создаем модели
-        this.valueNetwork = this.createValueNetwork();
         this.policyNetwork = this.createPolicyNetwork();
+        this.valueNetwork = this.createValueNetwork();
 
         console.log(`Shared PPO Agent initialized with experiment: ${ this.config.name }`);
     }
@@ -170,8 +170,8 @@ export class SharedTankPPOAgent {
     // Сохранение модели
     async save() {
         try {
-            await this.valueNetwork.save('indexeddb://tank-rl-value-model');
             await this.policyNetwork.save('indexeddb://tank-rl-policy-model');
+            await this.valueNetwork.save('indexeddb://tank-rl-value-model');
 
             localStorage.setItem('tank-rl-agent-state', JSON.stringify({
                 iteration: this.iteration,
@@ -199,8 +199,8 @@ export class SharedTankPPOAgent {
     // Загрузка модели из хранилища
     async load() {
         try {
-            this.valueNetwork = await tf.loadLayersModel('indexeddb://tank-rl-value-model');
             this.policyNetwork = await tf.loadLayersModel('indexeddb://tank-rl-policy-model');
+            this.valueNetwork = await tf.loadLayersModel('indexeddb://tank-rl-value-model');
 
             console.log('PPO models loaded successfully');
 
@@ -246,7 +246,7 @@ export class SharedTankPPOAgent {
             const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
             const clippedLogStd = outLogStd.clipByValue(-2, 0.5);
             const std = clippedLogStd.exp();
-            const noise = tf.randomNormal([ACTION_DIM]).mul(std).div(10);
+            const noise = tf.randomNormal([ACTION_DIM]).mul(std);
             const action = outMean.add(noise);
             const logProb = this.computeLogProb(outMean, action, std);
             const actionArray = action.dataSync() as Float32Array;

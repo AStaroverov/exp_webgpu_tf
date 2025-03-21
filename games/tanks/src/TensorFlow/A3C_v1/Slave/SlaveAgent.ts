@@ -29,14 +29,12 @@ export class SlaveAgent {
         return new SlaveAgent();
     }
 
-    // Освобождение ресурсов
     dispose() {
         this.policyNetwork?.dispose();
         this.policyOptimizer?.dispose();
         this.valueNetwork?.dispose();
         this.valueOptimizer?.dispose();
         this.memory.dispose();
-        console.log('Slave Agent resources disposed');
     }
 
     isReady(multiplier: number) {
@@ -53,15 +51,13 @@ export class SlaveAgent {
 
     async load() {
         try {
-            const valueNetwork = await tf.loadLayersModel('indexeddb://tank-rl-value-model');
             const policyNetwork = await tf.loadLayersModel('indexeddb://tank-rl-policy-model');
+            const valueNetwork = await tf.loadLayersModel('indexeddb://tank-rl-value-model');
             const agentState = await getAgentState();
 
             if (agentState && agentState.config) {
-                console.log('Models and Metadata loaded successfully');
-
-                this.valueNetwork = valueNetwork;
                 this.policyNetwork = policyNetwork;
+                this.valueNetwork = valueNetwork;
                 this.applyConfig(agentState.config);
                 return true;
             }
@@ -85,7 +81,7 @@ export class SlaveAgent {
             const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
             const clippedLogStd = outLogStd.clipByValue(-2, 0.5);
             const std = clippedLogStd.exp();
-            const noise = tf.randomNormal([ACTION_DIM]).mul(std).div(10);
+            const noise = tf.randomNormal([ACTION_DIM]).mul(std);
             const action = outMean.add(noise);
             const actionArray = action.dataSync() as Float32Array;
             const value = this.valueNetwork.predict(stateTensor) as tf.Tensor;

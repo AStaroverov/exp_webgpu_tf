@@ -11,6 +11,7 @@ import { createBattlefield } from '../../Common/createBattlefield';
 import { createInputVector } from '../../Common/createInputVector.ts';
 import { applyActionToTank } from '../../Common/applyActionToTank.ts';
 import { randomRangeInt } from '../../../../../../lib/random.ts';
+import { frameTasks } from '../../../../../../lib/TasksScheduler/frameTasks.ts';
 
 export class MasterManager {
     public agent!: MasterAgent;
@@ -57,7 +58,7 @@ export class MasterManager {
         this.battlefield = await createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX), true);
         let activeTanks: number[] = [];
 
-        this.stopGameLoopInterval = macroTasks.addInterval(async () => {
+        this.stopGameLoopInterval = frameTasks.addInterval(async () => {
             try {
                 if (this.frameCount === -2) {
                     this.frameCount = -1;

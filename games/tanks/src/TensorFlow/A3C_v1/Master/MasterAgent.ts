@@ -28,39 +28,6 @@ export class MasterAgent {
         return new MasterAgent().init();
     }
 
-    async tryTrain(): Promise<number> {
-        const gradientsList = await getGradientsList();
-
-        if (!gradientsList || gradientsList.length === 0) {
-            return 0;
-        }
-
-        clearGradientsList();
-
-        const prevWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
-
-        for (const gradients of gradientsList) {
-            this.applyGradientsPolicyNetwork(gradients.policy);
-            this.applyGradientsValueNetwork(gradients.value);
-
-            this.logger.add({
-                avgRewards: gradients.avgReward,
-                policyLoss: gradients.policy.loss,
-                valueLoss: gradients.value.loss,
-            });
-        }
-        
-        const newWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
-
-        isDevtoolsOpen() && console.log('>> WEIGHTS SUM ABS DELTA', newWeights!.reduce((acc, w, i) => {
-            return acc + abs(w.reduce((a, b, j) => a + abs(b - prevWeights![i][j]), 0));
-        }, 0));
-
-        console.log(`[Train]: Applied ${ gradientsList.length } gradients`);
-
-        return gradientsList.length;
-    }
-
     getStats() {
         const last10Rewards = this.logger.getLastN(100).map(v => v.avgRewards);
         const avgReward = last10Rewards.length > 0
@@ -93,8 +60,6 @@ export class MasterAgent {
                 config: this.config,
                 logger: this.logger.toArray(),
             });
-
-            console.log(`Models saved`);
             return true;
         } catch (error) {
             console.error('Error saving models:', error);
@@ -108,14 +73,14 @@ export class MasterAgent {
 
     async load() {
         try {
-            const valueNetwork = await tf.loadLayersModel('indexeddb://tank-rl-value-model');
             const policyNetwork = await tf.loadLayersModel('indexeddb://tank-rl-policy-model');
+            const valueNetwork = await tf.loadLayersModel('indexeddb://tank-rl-value-model');
             const agentState = await getAgentState();
 
             if (agentState && agentState.config) {
                 console.log('Models loaded successfully');
-                this.valueNetwork = valueNetwork;
                 this.policyNetwork = policyNetwork;
+                this.valueNetwork = valueNetwork;
 
                 this.applyConfig(agentState.config);
                 this.logger.fromArray(agentState.logger as any);
@@ -141,6 +106,39 @@ export class MasterAgent {
                 action: outMean.dataSync() as Float32Array,
             };
         });
+    }
+
+    async tryTrain(): Promise<number> {
+        const gradientsList = await getGradientsList();
+
+        if (!gradientsList || gradientsList.length === 0) {
+            return 0;
+        }
+
+        clearGradientsList();
+
+        const prevWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
+
+        for (const gradients of gradientsList) {
+            this.applyGradientsPolicyNetwork(gradients.policy);
+            this.applyGradientsValueNetwork(gradients.value);
+
+            this.logger.add({
+                avgRewards: gradients.avgReward,
+                policyLoss: gradients.policy.loss,
+                valueLoss: gradients.value.loss,
+            });
+        }
+
+        const newWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
+
+        isDevtoolsOpen() && console.log('>> WEIGHTS SUM ABS DELTA', newWeights!.reduce((acc, w, i) => {
+            return acc + abs(w.reduce((a, b, j) => a + abs(b - prevWeights![i][j]), 0));
+        }, 0));
+
+        console.log(`[Train]: Applied ${ gradientsList.length } gradients`);
+
+        return gradientsList.length;
     }
 
     private async init() {
@@ -192,11 +190,16 @@ export class MasterAgent {
     // Создание сети политики
     private createPolicyNetwork(): tf.LayersModel {
         // Входной тензор
-        const input = tf.layers.input({ shape: [INPUT_DIM] });
+        const input = tf.layers.input({
+            name: 'policy/input',
+            shape: [INPUT_DIM],
+        });
 
         let x = input;
+        let i = 0;
         for (const [activation, units] of this.config.hiddenLayers) {
             x = tf.layers.dense({
+                name: `policy/dense${ i++ }`,
                 units,
                 activation,
                 kernelInitializer: 'glorotUniform',
@@ -208,13 +211,14 @@ export class MasterAgent {
         //   mean = tanh(первые ACTION_DIM),
         //   std  = exp(последние ACTION_DIM).
         const policyOutput = tf.layers.dense({
+            name: 'policy/output',
             units: ACTION_DIM * 2,
             activation: 'linear', // без ограничений, трансформации — вручную (tanh/exp)
-            name: 'policy_output',
         }).apply(x) as tf.SymbolicTensor;
 
         // Создаём модель
         return tf.model({
+            name: 'policy',
             inputs: input,
             outputs: policyOutput,
         });
@@ -223,12 +227,17 @@ export class MasterAgent {
     // Создание сети критика (оценки состояний)
     private createValueNetwork(): tf.LayersModel {
         // Входной слой
-        const input = tf.layers.input({ shape: [INPUT_DIM] });
+        const input = tf.layers.input({
+            name: 'value/input',
+            shape: [INPUT_DIM],
+        });
 
         // Скрытые слои
         let x = input;
+        let i = 0;
         for (const [activation, units] of this.config.hiddenLayers) {
             x = tf.layers.dense({
+                name: `value/dense${ i++ }`,
                 units,
                 activation,
                 kernelInitializer: 'glorotUniform',
@@ -237,18 +246,16 @@ export class MasterAgent {
 
         // Выходной слой - скалярная оценка состояния
         const valueOutput = tf.layers.dense({
+            name: 'value/output',
             units: 1,
             activation: 'linear',
-            name: 'value_output',
         }).apply(x) as tf.SymbolicTensor;
 
-        // Создаем модель
-        const valueModel = tf.model({
+        return tf.model({
+            name: 'value',
             inputs: input,
             outputs: valueOutput,
         });
-
-        return valueModel;
     }
 }
 

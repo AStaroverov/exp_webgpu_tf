@@ -24,12 +24,12 @@ async function initSystem() {
         MasterManager.create(),
         //
         new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
-        // new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
-        // new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
-        // new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
-        // //
-        // new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
-        // new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
+        new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
+        new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
+        new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
+        //
+        new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
+        new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
         // new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
         // new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
     ]);
