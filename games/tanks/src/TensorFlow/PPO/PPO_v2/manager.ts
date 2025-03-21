@@ -1,5 +1,5 @@
 import * as tf from '@tensorflow/tfjs';
-import { getCurrentExperiment } from './experiment-config';
+import { getCurrentConfig } from '../Common/config.ts';
 import { entityExists, hasComponent } from 'bitecs';
 import {
     cleanupAllRL,
@@ -15,13 +15,18 @@ import {
     tryTrain,
     updateTankBehaviour,
 } from './controller.ts';
-import { createBattlefield } from '../Common/createBattlefield.ts';
-import { MAX_FRAMES, TANK_COUNT_SIMULATION_MAX, TANK_COUNT_SIMULATION_MIN, TICK_TIME_REAL } from '../Common/consts.ts';
-import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
+import { createBattlefield } from '../../Common/createBattlefield.ts';
+import {
+    MAX_FRAMES,
+    TANK_COUNT_SIMULATION_MAX,
+    TANK_COUNT_SIMULATION_MIN,
+    TICK_TIME_REAL,
+} from '../../Common/consts.ts';
+import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { RingBuffer } from 'ring-buffer-ts';
-import { Tank } from '../../ECS/Components/Tank.ts';
-import { GameDI } from '../../DI/GameDI.ts';
-import { randomRangeInt } from '../../../../../lib/random.ts';
+import { Tank } from '../../../ECS/Components/Tank.ts';
+import { GameDI } from '../../../DI/GameDI.ts';
+import { randomRangeInt } from '../../../../../../lib/random.ts';
 
 let sharedRLGameManager: SharedRLGameManager | null = null;
 
@@ -54,7 +59,7 @@ export class SharedRLGameManager {
     constructor(isTraining: boolean = true) {
         this.isTraining = isTraining;
         console.log(`SharedRLGameManager initialized in ${ isTraining ? 'training' : 'evaluation' } mode`);
-        console.log(`Using experiment: ${ getCurrentExperiment().name }`);
+        console.log(`Using experiment: ${ getCurrentConfig().name }`);
     }
 
     getEpisodeCount() {
@@ -273,7 +278,7 @@ export class SharedRLGameManager {
                     });
 
                     // Save model periodically
-                    if (this.episodeCount % getCurrentExperiment().saveModelEvery === 0) {
+                    if (this.episodeCount % getCurrentConfig().saveModelEvery === 0) {
                         this.logStats();
                         this.save();
                     }
@@ -298,7 +303,7 @@ export class SharedRLGameManager {
         const avgValueLoss = last10Episodes.reduce((sum, stat) => sum + (stat.valueLoss || 0), 0) / Math.max(1, last10Episodes.length);
 
         console.log('====== PPO TRAINING STATISTICS ======');
-        console.log(`Current experiment: ${ getCurrentExperiment().name }`);
+        console.log(`Current experiment: ${ getCurrentConfig().name }`);
         console.log(`Episodes completed: ${ this.episodeCount }`);
         console.log(`Average duration (last 10): ${ avgDuration.toFixed(1) } frames`);
         console.log(`Average reward (last 10): ${ avgReward.toFixed(2) }`);

@@ -4,7 +4,7 @@
 // Define experiment configurations that can be easily switched
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 
-export type RLExperimentConfig = {
+export type Config = {
     name: string;
     // Network architecture
     hiddenLayers: [ActivationIdentifier, number][];
@@ -19,46 +19,52 @@ export type RLExperimentConfig = {
     batchSize: number;              // Batch size for training
     epochs: number;                // Number of epochs to train on the same data
     entropyCoeff: number;           // Entropy coefficient for encouraging exploration
+    // Workers
+    workerCount: number;                // Number of parallel workers
     // Training control
     saveModelEvery: number;         // Save model every N episodes
+    savePath: string;
 };
 
 // Default experiment configuration for PPO
-export const DEFAULT_EXPERIMENT: RLExperimentConfig = {
+export const DEFAULT_EXPERIMENT: Config = {
     name: 'ppo-default',
     // Network architecture
     hiddenLayers: [['relu', 256], ['relu', 128], ['relu', 128], ['relu', 64]],
     // Learning parameters
     learningRatePolicy: 3e-4,
     learningRateValue: 1e-4,
-    gamma: 0.99,
+    gamma: 0.97,
     lam: 0.95,
     // PPO-specific parameters
     epochs: 10,
-    batchSize: 256,
+    batchSize: 128,
     clipRatioPolicy: 0.2,
     clipRatioValue: 0.25,
     entropyCoeff: 0.01,
+    // Workers
+    workerCount: 8,
     // Training control
-    saveModelEvery: 10,
+    saveModelEvery: 1,
+    savePath: 'APPO_v1',
 };
 
 
 // Map of available experiments
-export const EXPERIMENTS: { [key: string]: RLExperimentConfig } = {
+export const EXPERIMENTS: { [key: string]: Config } = {
     default: DEFAULT_EXPERIMENT,
 };
 
 // Function to get experiment config by name
-export function getExperimentConfig(name: string): RLExperimentConfig {
+export function getExperimentConfig(name: string): Config {
     return EXPERIMENTS[name] || DEFAULT_EXPERIMENT;
 }
 
 // Current active experiment
-let currentExperiment: RLExperimentConfig = DEFAULT_EXPERIMENT;
+let currentExperiment: Config = DEFAULT_EXPERIMENT;
 
 // Set current experiment
-export function setExperiment(nameOrConfig: string | RLExperimentConfig): RLExperimentConfig {
+export function setExperiment(nameOrConfig: string | Config): Config {
     if (typeof nameOrConfig === 'string') {
         currentExperiment = getExperimentConfig(nameOrConfig);
     } else {
@@ -69,11 +75,6 @@ export function setExperiment(nameOrConfig: string | RLExperimentConfig): RLExpe
 }
 
 // Get current experiment
-export function getCurrentExperiment(): RLExperimentConfig {
+export function getCurrentConfig(): Config {
     return currentExperiment;
-}
-
-// Export experiment settings for logging
-export function getExperimentSettings(): string {
-    return JSON.stringify(currentExperiment, null, 2);
 }

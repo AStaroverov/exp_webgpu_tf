@@ -1,4 +1,4 @@
-import './src/TensorFlow/PPO/PPO_v2';
+import './src/TensorFlow/PPO/APPO_v1';
 
 window.onerror = () => {
     window.location.reload();

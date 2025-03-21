@@ -1,6 +1,6 @@
 import Dexie from 'dexie';
 import devtoolsDetect from 'devtools-detect';
-import { getSharedAgent } from '../PPO_v2/agent.ts';
+import { getSharedAgent } from '../PPO/PPO_v2/agent.ts';
 
 // Инициализируем базу Dexie с таблицей settings
 const db = new Dexie('ui-tank-rl');

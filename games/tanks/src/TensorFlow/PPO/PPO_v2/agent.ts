@@ -1,12 +1,13 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
-import { ACTION_DIM } from '../Common/consts';
-import { getCurrentExperiment, RLExperimentConfig } from './experiment-config';
-import { Memory } from './Memory.ts';
-import { abs, floor } from '../../../../../lib/math.ts';
-import { isDevtoolsOpen } from '../Common/utils.ts';
-import { computeLogProbTanh } from '../Common/computeLogProb.ts';
-import { createPolicyNetwork, createValueNetwork } from '../Common/models.ts';
+import { ACTION_DIM, INPUT_DIM } from '../../Common/consts.ts';
+import { Config, getCurrentConfig } from '../Common/config.ts';
+import { Memory } from '../Common/Memory.ts';
+import { abs, floor } from '../../../../../../lib/math.ts';
+import { isDevtoolsOpen } from '../../Common/utils.ts';
+import { computeLogProbTanh } from '../../Common/computeLogProb.ts';
+import { createPolicyNetwork, createValueNetwork } from '../../Common/models.ts';
+import { trainPolicyNetwork, trainValueNetwork } from '../Common/train.ts';
 
 // Общий PPO агент для всех танков
 export class SharedTankPPOAgent {
@@ -16,7 +17,7 @@ export class SharedTankPPOAgent {
     private policyNetwork: tf.LayersModel;  // Сеть политики
     private policyOptimizer!: tf.Optimizer;        // Оптимизатор для policy network
     private valueOptimizer!: tf.Optimizer;         // Оптимизатор для value network
-    private config!: RLExperimentConfig;
+    private config!: Config;
 
     private logger: {
         episodeRewards: number[];
@@ -30,7 +31,7 @@ export class SharedTankPPOAgent {
     constructor() {
         // Инициализируем с значениями из конфига
         this.memory = new Memory();
-        this.applyConfig(getCurrentExperiment());
+        this.applyConfig(getCurrentConfig());
 
         // Инициализируем логгер
         this.logger = {
@@ -62,7 +63,7 @@ export class SharedTankPPOAgent {
     }
 
     // Методы для сохранения опыта в буфер
-    rememberAction(tankId: number, state: tf.Tensor, action: tf.Tensor, logProb: tf.Tensor, value: tf.Tensor) {
+    rememberAction(tankId: number, state: Float32Array, action: Float32Array, logProb: number, value: number) {
         this.memory.addFirstPart(tankId, state, action, logProb, value);
     }
 
@@ -98,32 +99,44 @@ export class SharedTankPPOAgent {
         console.log(`[Train]: Iteration ${ this.iteration++ }, Batch size: ${ batch.size }, Epochs: ${ epochs }`);
 
         const prevWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
+
+        const tStates = tf.tensor(batch.states, [batch.size, INPUT_DIM]);
+        const tActions = tf.tensor(batch.actions, [batch.size, ACTION_DIM]);
+        const tLogProbs = tf.tensor(batch.logProbs, [batch.size]);
+        const tValues = tf.tensor(batch.values, [batch.size]);
+        const tAdvantages = tf.tensor(batch.advantages, [batch.size]);
+        const tReturns = tf.tensor(batch.returns, [batch.size]);
+
         for (let i = 0; i < epochs; i++) {
             // Обучение политики
-            const policyLoss = this.trainPolicyNetwork(
-                batch.states, batch.actions, batch.logProbs, batch.advantages,
+            const policyLoss = trainPolicyNetwork(
+                this.policyNetwork, this.policyOptimizer, this.config,
+                tStates, tActions, tLogProbs, tAdvantages,
             );
             policyLossSum += policyLoss;
 
             // Обучение критика
-            const valueLoss = this.trainValueNetwork(
-                batch.states, batch.returns, batch.values,
+            const valueLoss = trainValueNetwork(
+                this.valueNetwork, this.valueOptimizer, this.config,
+                tStates, tReturns, tValues,
             );
             valueLossSum += valueLoss;
 
             console.log(`[Train]: Epoch: ${ i }, Policy loss: ${ policyLoss.toFixed(4) }, Value loss: ${ valueLoss.toFixed(4) }`);
         }
+
+        tStates.dispose();
+        tActions.dispose();
+        tLogProbs.dispose();
+        tValues.dispose();
+        tAdvantages.dispose();
+        tReturns.dispose();
+
         const newWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
 
         isDevtoolsOpen() && console.log('>> WEIGHTS SUM ABS DELTA', newWeights!.reduce((acc, w, i) => {
             return acc + abs(w.reduce((a, b, j) => a + abs(b - prevWeights![i][j]), 0));
         }, 0));
-
-        for (const tensor of Object.values(batch)) {
-            if (tensor instanceof tf.Tensor) {
-                tensor.dispose();
-            }
-        }
 
         this.memory.dispose();
 
@@ -236,10 +249,10 @@ export class SharedTankPPOAgent {
     }
 
     act(state: Float32Array): {
-        rawAction: tf.Tensor,
-        action: Float32Array,
-        logProb: tf.Tensor,
-        value: tf.Tensor
+        rawActions: Float32Array,
+        actions: Float32Array,
+        logProb: number,
+        value: number
     } {
         return tf.tidy(() => {
             const stateTensor = tf.tensor1d(state).expandDims(0);
@@ -247,7 +260,7 @@ export class SharedTankPPOAgent {
             const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
             const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
             const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
-            const clippedLogStd = outLogStd.clipByValue(-2, 0.5);
+            const clippedLogStd = outLogStd.clipByValue(-2, 0.2);
             const std = clippedLogStd.exp();
             const noise = tf.randomNormal([ACTION_DIM]).mul(std);
             const action = outMean.add(noise);
@@ -255,91 +268,15 @@ export class SharedTankPPOAgent {
             const value = this.valueNetwork.predict(stateTensor) as tf.Tensor;
 
             return {
-                rawAction: action,
-                action: action.tanh().dataSync() as Float32Array,
-                logProb: logProb,
-                value: value.squeeze(),
+                rawActions: action.dataSync() as Float32Array,
+                actions: action.tanh().dataSync() as Float32Array,
+                logProb: logProb.dataSync()[0],
+                value: value.squeeze().dataSync()[0],
             };
         });
     }
 
-    // Обучение сети политики
-    private trainPolicyNetwork(
-        states: tf.Tensor,       // [batchSize, inputDim]
-        actions: tf.Tensor,      // [batchSize, actionDim]
-        oldLogProbs: tf.Tensor,  // [batchSize] или [batchSize,1]
-        advantages: tf.Tensor,   // [batchSize]
-    ): number {
-        return tf.tidy(() => {
-            const totalLoss = this.policyOptimizer.minimize(() => {
-                const predict = this.policyNetwork.predict(states) as tf.Tensor;
-                const outMean = predict.slice([0, 0], [-1, ACTION_DIM]);
-                const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
-                const clippedLogStd = outLogStd.clipByValue(-2, 0.5);
-                const std = clippedLogStd.exp();
-                const newLogProbs = computeLogProbTanh(actions, outMean, std);
-                const oldLogProbs2D = oldLogProbs.reshape(newLogProbs.shape);
-                const ratio = tf.exp(newLogProbs.sub(oldLogProbs2D));
-                isDevtoolsOpen() && console.log('>> RATIO SUM ABS DELTA', (ratio.dataSync() as Float32Array).reduce((a, b) => a + abs(1 - b), 0));
-
-                const surr1 = ratio.mul(advantages);
-                const clippedRatio = ratio.clipByValue(1 - this.config.clipRatioPolicy, 1 + this.config.clipRatioPolicy);
-                const surr2 = clippedRatio.mul(advantages);
-                const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
-
-                const c = 0.5 * Math.log(2 * Math.PI * Math.E);
-                const entropyEachDim = clippedLogStd.add(c); // [batchSize,ACTION_DIM]
-                const totalEntropy = entropyEachDim.sum(1).mean();
-                const totalLoss = policyLoss.sub(totalEntropy.mul(this.config.entropyCoeff));
-
-                return totalLoss as tf.Scalar;
-            }, true);
-
-            if (totalLoss == null) {
-                throw new Error('Policy loss is null');
-            }
-
-            // Возвращаем число
-            return totalLoss!.dataSync()[0];
-        });
-    }
-
-    // Обучение сети критика (оценка состояний)
-    private trainValueNetwork(
-        states: tf.Tensor,   // [batchSize, inputDim]
-        returns: tf.Tensor,  // [batchSize], уже подсчитанные (GAE + V(s) или просто discountedReturns)
-        oldValues: tf.Tensor, // [batchSize], для клиппинга
-    ): number {
-        return tf.tidy(() => {
-            const vfLoss = this.valueOptimizer.minimize(() => {
-                // forward pass
-                const predicted = this.valueNetwork.predict(states) as tf.Tensor;
-                // shape [batchSize,1], приводим к [batchSize]
-                const valuePred = predicted.squeeze(); // [batchSize]
-
-                // Клипаем (PPO2 style)
-                const oldVal2D = oldValues.reshape(valuePred.shape);   // тоже [batchSize]
-                const valuePredClipped = oldVal2D.add(
-                    valuePred.sub(oldVal2D).clipByValue(-this.config.clipRatioValue, this.config.clipRatioValue),
-                );
-                const returns2D = returns.reshape(valuePred.shape);
-
-                const vfLoss1 = returns2D.sub(valuePred).square();
-                const vfLoss2 = returns2D.sub(valuePredClipped).square();
-                const finalValueLoss = tf.maximum(vfLoss1, vfLoss2).mean().mul(0.5);
-
-                return finalValueLoss as tf.Scalar;
-            }, true);
-
-            if (vfLoss == null) {
-                throw new Error('Value loss is null');
-            }
-
-            return vfLoss!.dataSync()[0];
-        });
-    }
-
-    private applyConfig(config: RLExperimentConfig) {
+    private applyConfig(config: Config) {
         this.config = config;
         // TODO: useless on load, fix it later
         this.policyOptimizer = tf.train.adam(this.config.learningRatePolicy);

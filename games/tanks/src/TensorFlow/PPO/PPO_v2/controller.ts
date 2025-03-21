@@ -1,10 +1,9 @@
-import { createInputVector } from '../Common/createInputVector';
-import { TankController } from '../../ECS/Components/TankController';
-import * as tf from '@tensorflow/tfjs';
+import { createInputVector } from '../../Common/createInputVector.ts';
+import { TankController } from '../../../ECS/Components/TankController.ts';
 import { disposeSharedAgent, getSharedAgent } from './agent.ts';
-import { getTankHealth } from '../../ECS/Components/Tank.ts';
-import { calculateReward } from '../Common/calculateReward.ts';
-import { Actions, readActions } from '../Common/actions.ts';
+import { getTankHealth } from '../../../ECS/Components/Tank.ts';
+import { calculateReward } from '../../Common/calculateReward.ts';
+import { Actions, readActions } from '../../Common/actions.ts';
 
 // Map to store previous actions
 const mapLastUpdateData = new Map<number, {
@@ -62,14 +61,14 @@ export function updateTankBehaviour(
     // Get action from agent
     const result = agent.act(inputVector);
     // Apply action to tank controller
-    applyActionToTank(tankEid, result.action);
-    mapLastUpdateData.set(tankEid, { action: result.action });
+    applyActionToTank(tankEid, result.actions);
+    mapLastUpdateData.set(tankEid, { action: result.actions });
 
     if (!isWarmup) {
         agent.rememberAction(
             tankEid,
-            tf.tensor1d(inputVector),
-            result.rawAction,
+            inputVector,
+            result.rawActions,
             result.logProb,
             result.value,
         );

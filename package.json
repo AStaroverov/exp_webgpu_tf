@@ -18,6 +18,7 @@
     "@dimforge/rapier2d": "^0.14.0",
     "@tensorflow/tfjs": "^4.22.0",
     "@tensorflow/tfjs-backend-wasm": "^4.22.0",
+    "@tensorflow/tfjs-backend-webgpu": "^4.22.0",
     "@types/lodash": "^4.17.15",
     "@types/lodash-es": "^4.17.12",
     "@webgpu/types": "^0.1.31",

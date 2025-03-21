@@ -81,7 +81,7 @@ export class SlaveAgent {
             const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
             const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
             const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
-            const clippedLogStd = outLogStd.clipByValue(-2, 0.5);
+            const clippedLogStd = outLogStd.clipByValue(-2, 0.2);
             const std = clippedLogStd.exp();
             const noise = tf.randomNormal([ACTION_DIM]).mul(std);
             const actions = outMean.add(noise);
@@ -130,7 +130,7 @@ export class SlaveAgent {
             const outMean = predict.slice([0, 0], [-1, ACTION_DIM]);
             const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
             // 2) Можно «клиповать» log std, чтобы не выходило за границы
-            const clippedLogStd = outLogStd.clipByValue(-2, 0.5);
+            const clippedLogStd = outLogStd.clipByValue(-2, 0.2);
             const std = clippedLogStd.exp();
             // 3) Вычисляем лог-вероятности действий
             const newLogProbs = computeLogProbTanh(actions, outMean, std);

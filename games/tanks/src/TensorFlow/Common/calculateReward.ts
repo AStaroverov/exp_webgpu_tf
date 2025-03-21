@@ -13,14 +13,6 @@ import { Actions, readActions } from './actions.ts';
 import { isVerboseLog } from './utils.ts';
 
 // Константы для калибровки вознаграждений
-const REWARD_GROUPS = [
-    'AIM',
-    'SHOOTING',
-    'MAP_BORDER',
-    'DISTANCE_KEEPING',
-    'MOVEMENT',
-    'BULLET_AVOIDANCE',
-] as const;
 let REWARD_WEIGHTS = {
     AIM: {
         QUALITY: 1.0,       // За точное прицеливание
@@ -53,16 +45,10 @@ let REWARD_WEIGHTS = {
     },
 
     MOVEMENT: {
-        BASE: 0.1,          // За базовое движение
+        BASE: 0.2,          // За базовое движение
         STRATEGIC: 0.3,     // За стратегическое движение
     },
-
-    HEALTH_CHANGE: 0.5,          // За потерю здоровья
-    HEALTH_BONUS: 0.05,          // За поддержание здоровья
-    SURVIVAL: 0.05,              // За выживание
 };
-
-const REWARD_WEIGHTS_ORIGINAL = structuredClone(REWARD_WEIGHTS);
 
 // Структура для хранения многокомпонентных наград
 export interface ComponentRewards {
@@ -105,38 +91,47 @@ function initializeRewards(): ComponentRewards {
     };
 }
 
-const TRAIN_SECTION = 10_000;
-let lastEpisode = 0;
-
-function updateRewardWeights(episode: number) {
-    if (episode === lastEpisode) return;
-    REWARD_WEIGHTS = structuredClone(REWARD_WEIGHTS_ORIGINAL);
-
-    let stp = -1;
-    for (const group of REWARD_GROUPS) {
-        const rewardMultiplier = smoothstep(TRAIN_SECTION * stp, TRAIN_SECTION * (stp + 1), episode);
-        const penaltyMultiplier = smoothstep(TRAIN_SECTION * stp, TRAIN_SECTION * (stp + 1), episode);
-        // @ts-ignore
-        for (const key in REWARD_WEIGHTS[group]) {
-            // @ts-ignore
-            REWARD_WEIGHTS[group][key] *= key.endsWith('_PENALTY') ? penaltyMultiplier : rewardMultiplier;
-        }
-        if (group === 'AIM') continue;
-        if (group === 'SHOOTING') continue;
-        stp += 2;
-    }
-
-    lastEpisode = episode;
-}
+// const REWARD_GROUPS = [
+//     'AIM',
+//     'SHOOTING',
+//     'MAP_BORDER',
+//     'DISTANCE_KEEPING',
+//     'MOVEMENT',
+//     'BULLET_AVOIDANCE',
+// ] as const;
+// const REWARD_WEIGHTS_ORIGINAL = structuredClone(REWARD_WEIGHTS);
+// const TRAIN_SECTION = 10_000;
+// let lastEpisode = 0;
+//
+// function updateRewardWeights(episode: number) {
+//     if (episode === lastEpisode) return;
+//     REWARD_WEIGHTS = structuredClone(REWARD_WEIGHTS_ORIGINAL);
+//
+//     let stp = -1;
+//     for (const group of REWARD_GROUPS) {
+//         const rewardMultiplier = smoothstep(TRAIN_SECTION * stp, TRAIN_SECTION * (stp + 1), episode);
+//         const penaltyMultiplier = smoothstep(TRAIN_SECTION * stp, TRAIN_SECTION * (stp + 1), episode);
+//         // @ts-ignore
+//         for (const key in REWARD_WEIGHTS[group]) {
+//             // @ts-ignore
+//             REWARD_WEIGHTS[group][key] *= key.endsWith('_PENALTY') ? penaltyMultiplier : rewardMultiplier;
+//         }
+//         if (group === 'AIM') continue;
+//         if (group === 'SHOOTING') continue;
+//         stp += 2;
+//     }
+//
+//     lastEpisode = episode;
+// }
 
 export function calculateReward(
     tankEid: number,
     actions: Actions,
     width: number,
     height: number,
-    episode: number,
+    _episode: number,
 ): ComponentRewards {
-    updateRewardWeights(episode);
+    // updateRewardWeights(episode);
 
     // before predict
     // const beforePredictHealth = TankInputTensor.health[tankEid];
@@ -164,10 +159,6 @@ export function calculateReward(
 
     // Инициализируем пустую структуру наград
     const rewards = initializeRewards();
-
-    // 1. Расчет награды за здоровье и выживание
-    // rewards.common.health = calculateHealthReward(currentHealth, beforePredictHealth);
-    // rewards.common.survival = calculateSurvivalReward(currentHealth);
 
     // 2. Расчет награды за нахождение в пределах карты
     rewards.movement.mapAwareness = calculateMapReward(

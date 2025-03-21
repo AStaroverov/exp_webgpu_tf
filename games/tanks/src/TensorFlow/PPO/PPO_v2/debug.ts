@@ -1,5 +1,5 @@
 // Debug visualization for the Shared Tank RL system
-import { getCurrentExperiment } from './experiment-config';
+import { getCurrentConfig } from '../Common/config.ts';
 import { getSharedAgent } from './agent.ts';
 import { getRLGameManger } from './manager.ts';
 
@@ -15,7 +15,7 @@ export const DebugInfo = {
             avgReward: agentStats.avgReward,
             lastReward: agentStats.lastReward,
             memoryUsage: (performance as any).memory.usedJSHeapSize / (1024 * 1024),
-            experimentName: getCurrentExperiment().name,
+            experimentName: getCurrentConfig().name,
             memorySize: agentStats.memorySize,
         };
     },

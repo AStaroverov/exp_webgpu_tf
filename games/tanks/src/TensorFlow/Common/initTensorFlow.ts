@@ -1,11 +1,16 @@
-import { setWasmPaths } from '@tensorflow/tfjs-backend-wasm';
 import * as tf from '@tensorflow/tfjs';
 
-export async function initTensorFlow() {
+export async function initTensorFlow(type: 'wasm' | 'webgpu' = 'wasm') {
     try {
-        // Configure TensorFlow.js to use WASM backend
-        setWasmPaths('/node_modules/@tensorflow/tfjs-backend-wasm/dist/');
-        await tf.setBackend('wasm');
+        if (type === 'wasm') {
+            const { setWasmPaths } = await import('@tensorflow/tfjs-backend-wasm');
+            setWasmPaths('/node_modules/@tensorflow/tfjs-backend-wasm/dist/');
+            await tf.setBackend('wasm');
+        }
+        if (type === 'webgpu') {
+            await import('@tensorflow/tfjs-backend-webgpu');
+            await tf.setBackend('webgpu');
+        }
         await tf.ready();
         console.log('TensorFlow.js initialized with WASM backend');
 

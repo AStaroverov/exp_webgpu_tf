@@ -1,19 +1,20 @@
 // Буфер опыта для PPO
-import * as tf from '@tensorflow/tfjs';
-import { shuffle } from '../../../../../lib/shuffle.ts';
-import { abs, max, min } from '../../../../../lib/math.ts';
-import { isDevtoolsOpen } from '../Common/utils.ts';
+import { shuffle } from '../../../../../../lib/shuffle.ts';
+import { abs, max, min } from '../../../../../../lib/math.ts';
+import { isDevtoolsOpen } from '../../Common/utils.ts';
+import { flatFloat32Array } from '../../Common/flat.ts';
 
 export type Batch = {
+    states: Float32Array,
+    actions: Float32Array,
+    logProbs: number[],
+    values: number[],
+    returns: number[],
+    advantages: number[],
+    // meta
     size: number,
-    states: tf.Tensor,
-    actions: tf.Tensor,
-    logProbs: tf.Tensor,
-    values: tf.Tensor,
-    rewards: tf.Tensor,
-    dones: tf.Tensor,
-    returns: tf.Tensor,
-    advantages: tf.Tensor,
+    dones: number[],
+    rewards: number[],
 }
 
 export class Memory {
@@ -32,7 +33,11 @@ export class Memory {
         return size;
     }
 
-    addFirstPart(id: number, state: tf.Tensor, action: tf.Tensor, logProb: tf.Tensor, value: tf.Tensor) {
+    toArray() {
+        return Array.from(this.map.values());
+    }
+
+    addFirstPart(id: number, state: Float32Array, action: Float32Array, logProb: number, value: number) {
         if (!this.map.has(id)) {
             this.map.set(id, new SubMemory());
         }
@@ -52,14 +57,14 @@ export class Memory {
 
         return {
             size: values.reduce((acc, batch) => acc + batch.size, 0),
-            states: tf.concat(values.map(batch => batch.states)),
-            actions: tf.concat(values.map(batch => batch.actions)),
-            logProbs: tf.concat(values.map(batch => batch.logProbs)),
-            values: tf.concat(values.map(batch => batch.values)),
-            rewards: tf.concat(values.map(batch => batch.rewards)),
-            dones: tf.concat(values.map(batch => batch.dones)),
-            returns: tf.concat(values.map(batch => batch.returns)),
-            advantages: tf.concat(values.map(batch => batch.advantages)),
+            states: flatFloat32Array(values.map(batch => batch.states)),
+            actions: flatFloat32Array(values.map(batch => batch.actions)),
+            logProbs: (values.map(batch => batch.logProbs)).flat(),
+            values: (values.map(batch => batch.values)).flat(),
+            rewards: (values.map(batch => batch.rewards)).flat(),
+            dones: (values.map(batch => batch.dones)).flat(),
+            returns: (values.map(batch => batch.returns)).flat(),
+            advantages: (values.map(batch => batch.advantages)).flat(),
         };
     }
 
@@ -81,10 +86,10 @@ export class Memory {
 }
 
 export class SubMemory {
-    private states: tf.Tensor[] = [];
-    private actions: tf.Tensor[] = [];
-    private logProbs: tf.Tensor[] = [];
-    private values: tf.Tensor[] = [];
+    private states: Float32Array[] = [];
+    private actions: Float32Array[] = [];
+    private logProbs: number[] = [];
+    private values: number[] = [];
     private rewards: number[] = [];
     private dones: boolean[] = [];
 
@@ -98,7 +103,7 @@ export class SubMemory {
         return this.states.length;
     }
 
-    addFirstPart(state: tf.Tensor, action: tf.Tensor, logProb: tf.Tensor, value: tf.Tensor) {
+    addFirstPart(state: Float32Array, action: Float32Array, logProb: number, value: number) {
         this.states.push(state);
         this.actions.push(action);
         this.logProbs.push(logProb);
@@ -136,14 +141,14 @@ export class SubMemory {
 
         return {
             size: this.states.length,
-            states: tf.stack(this.states),
-            actions: tf.stack(this.actions),
-            logProbs: tf.stack(this.logProbs),
-            values: tf.stack(this.values),
-            rewards: tf.tensor1d(this.rewards),
-            dones: tf.tensor1d(this.dones.map(done => done ? 1.0 : 0.0)),
-            returns: tf.tensor1d(returns),
-            advantages: tf.tensor1d(advantages),
+            states: flatFloat32Array(this.states),
+            actions: flatFloat32Array(this.actions),
+            logProbs: (this.logProbs),
+            values: (this.values),
+            rewards: (this.rewards),
+            dones: (this.dones.map(done => done ? 1.0 : 0.0)),
+            returns: (returns),
+            advantages: (advantages),
         };
     }
 
@@ -153,7 +158,7 @@ export class SubMemory {
         const advantages: number[] = new Array(n).fill(0);
 
         const rewards = this.rewards; //.map(r => signedLog(r, 10));
-        const valuesArr = tf.stack(this.values).dataSync(); // shape [n]
+        const values = this.values; // shape [n]
 
         let adv = 0;
         // bootstrap, если последний transition не done
@@ -168,13 +173,13 @@ export class SubMemory {
             }
             const delta = rewards[i]
                 + gamma * lastVal * (this.dones[i] ? 0 : 1)
-                - valuesArr[i];
+                - values[i];
             adv = delta + gamma * lam * adv * (this.dones[i] ? 0 : 1);
 
             advantages[i] = adv;
-            returns[i] = valuesArr[i] + adv;
+            returns[i] = values[i] + adv;
 
-            lastVal = valuesArr[i];
+            lastVal = values[i];
         }
 
         // Нормализация advantages
@@ -187,8 +192,8 @@ export class SubMemory {
         if (isDevtoolsOpen()) {
             const minRew = min(...rewards);
             const maxRew = max(...rewards);
-            const minVal = min(...valuesArr);
-            const maxVal = max(...valuesArr);
+            const minVal = min(...values);
+            const maxVal = max(...values);
             const minRet = min(...returns);
             const maxRet = max(...returns);
             const minAdv = min(...normalizedAdvantages);
@@ -209,13 +214,6 @@ export class SubMemory {
     }
 
     dispose() {
-        // Освобождаем все тензоры
-        this.states.forEach(state => state.dispose());
-        this.actions.forEach(action => action.dispose());
-        this.logProbs.forEach(logProb => logProb.dispose());
-        this.values.forEach(value => value.dispose());
-
-        // Сбрасываем массивы
         this.states = [];
         this.actions = [];
         this.logProbs = [];
