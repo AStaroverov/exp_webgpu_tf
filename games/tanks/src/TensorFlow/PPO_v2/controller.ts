@@ -4,7 +4,7 @@ import * as tf from '@tensorflow/tfjs';
 import { disposeSharedAgent, getSharedAgent } from './agent.ts';
 import { getTankHealth } from '../../ECS/Components/Tank.ts';
 import { calculateReward } from '../Common/calculateReward.ts';
-import { Actions, readAction } from '../Common/readAction.ts';
+import { Actions, readActions } from '../Common/actions.ts';
 
 // Map to store previous actions
 const mapLastUpdateData = new Map<number, {
@@ -69,7 +69,7 @@ export function updateTankBehaviour(
         agent.rememberAction(
             tankEid,
             tf.tensor1d(inputVector),
-            tf.tensor1d(result.action),
+            result.rawAction,
             result.logProb,
             result.value,
         );
@@ -119,7 +119,7 @@ export function tryTrain(useTail: boolean): boolean {
  * Apply the PPO agent's action to the tank controller
  */
 function applyActionToTank(tankEid: number, action: Actions) {
-    const { shoot, move, rotate, aimX, aimY } = readAction(action);
+    const { shoot, move, rotate, aimX, aimY } = readActions(action);
 
     TankController.setShooting$(tankEid, shoot);
     TankController.setMove$(tankEid, move);

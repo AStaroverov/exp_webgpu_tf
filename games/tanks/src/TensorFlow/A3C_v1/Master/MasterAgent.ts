@@ -1,12 +1,13 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { getCurrentExperiment, RLExperimentConfig } from '../config.ts';
-import { ACTION_DIM, INPUT_DIM } from '../../Common/consts.ts';
+import { ACTION_DIM } from '../../Common/consts.ts';
 import { GradientData } from '../Slave/SlaveAgent.ts';
 import { clearGradientsList, getAgentState, getGradientsList, setAgentState } from '../Database.ts';
 import { RingBuffer } from 'ring-buffer-ts';
 import { isDevtoolsOpen } from '../../Common/utils.ts';
 import { abs } from '../../../../../../lib/math.ts';
+import { createPolicyNetwork, createValueNetwork } from '../../Common/models.ts';
 
 export class MasterAgent {
     private config!: RLExperimentConfig;
@@ -144,8 +145,8 @@ export class MasterAgent {
     private async init() {
         if (!(await this.load())) {
             this.applyConfig(getCurrentExperiment());
-            this.policyNetwork = this.createPolicyNetwork();
-            this.valueNetwork = this.createValueNetwork();
+            this.policyNetwork = createPolicyNetwork(this.config.hiddenLayers);
+            this.valueNetwork = createValueNetwork(this.config.hiddenLayers);
         }
 
         return this;
@@ -185,77 +186,6 @@ export class MasterAgent {
         this.config = config;
         this.policyOptimizer = tf.train.adam(this.config.learningRatePolicy);
         this.valueOptimizer = tf.train.adam(this.config.learningRateValue);
-    }
-
-    // Создание сети политики
-    private createPolicyNetwork(): tf.LayersModel {
-        // Входной тензор
-        const input = tf.layers.input({
-            name: 'policy/input',
-            shape: [INPUT_DIM],
-        });
-
-        let x = input;
-        let i = 0;
-        for (const [activation, units] of this.config.hiddenLayers) {
-            x = tf.layers.dense({
-                name: `policy/dense${ i++ }`,
-                units,
-                activation,
-                kernelInitializer: 'glorotUniform',
-            }).apply(x) as tf.SymbolicTensor;
-        }
-
-        // Выход: ACTION_DIM * 2 нейронов (ACTION_DIM для mean, ACTION_DIM для logStd).
-        // При использовании:
-        //   mean = tanh(первые ACTION_DIM),
-        //   std  = exp(последние ACTION_DIM).
-        const policyOutput = tf.layers.dense({
-            name: 'policy/output',
-            units: ACTION_DIM * 2,
-            activation: 'linear', // без ограничений, трансформации — вручную (tanh/exp)
-        }).apply(x) as tf.SymbolicTensor;
-
-        // Создаём модель
-        return tf.model({
-            name: 'policy',
-            inputs: input,
-            outputs: policyOutput,
-        });
-    }
-
-    // Создание сети критика (оценки состояний)
-    private createValueNetwork(): tf.LayersModel {
-        // Входной слой
-        const input = tf.layers.input({
-            name: 'value/input',
-            shape: [INPUT_DIM],
-        });
-
-        // Скрытые слои
-        let x = input;
-        let i = 0;
-        for (const [activation, units] of this.config.hiddenLayers) {
-            x = tf.layers.dense({
-                name: `value/dense${ i++ }`,
-                units,
-                activation,
-                kernelInitializer: 'glorotUniform',
-            }).apply(x) as tf.SymbolicTensor;
-        }
-
-        // Выходной слой - скалярная оценка состояния
-        const valueOutput = tf.layers.dense({
-            name: 'value/output',
-            units: 1,
-            activation: 'linear',
-        }).apply(x) as tf.SymbolicTensor;
-
-        return tf.model({
-            name: 'value',
-            inputs: input,
-            outputs: valueOutput,
-        });
     }
 }
 

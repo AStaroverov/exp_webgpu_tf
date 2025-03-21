@@ -4,6 +4,7 @@ import { ACTION_DIM, INPUT_DIM } from '../../Common/consts.ts';
 import { Memory } from '../Memory.ts';
 import { getCurrentExperiment, RLExperimentConfig } from '../config.ts';
 import { getAgentState } from '../Database.ts';
+import { computeLogProbTanh } from '../../Common/computeLogProb.ts';
 
 export type TensorData = {
     data: Float32Array,
@@ -37,8 +38,8 @@ export class SlaveAgent {
         this.memory.dispose();
     }
 
-    isReady(multiplier: number) {
-        return this.memory.size() >= this.config.batchSize * multiplier;
+    isReady() {
+        return this.memory.toArray().some((m) => m.size() >= this.config.batchSize);
     }
 
     rememberAction(tankId: number, state: Float32Array, action: Float32Array, value: tf.Tensor) {
@@ -70,7 +71,8 @@ export class SlaveAgent {
     }
 
     public act(state: Float32Array): {
-        action: Float32Array,
+        rawActions: Float32Array,
+        actions: Float32Array,
         value: tf.Tensor
     } {
         return tf.tidy(() => {
@@ -82,12 +84,12 @@ export class SlaveAgent {
             const clippedLogStd = outLogStd.clipByValue(-2, 0.5);
             const std = clippedLogStd.exp();
             const noise = tf.randomNormal([ACTION_DIM]).mul(std);
-            const action = outMean.add(noise);
-            const actionArray = action.dataSync() as Float32Array;
+            const actions = outMean.add(noise);
             const value = this.valueNetwork.predict(stateTensor) as tf.Tensor;
 
             return {
-                action: actionArray,
+                rawActions: actions.dataSync() as Float32Array,
+                actions: actions.tanh().dataSync() as Float32Array,
                 value: value.squeeze(),
             };
         });
@@ -131,7 +133,7 @@ export class SlaveAgent {
             const clippedLogStd = outLogStd.clipByValue(-2, 0.5);
             const std = clippedLogStd.exp();
             // 3) Вычисляем лог-вероятности действий
-            const newLogProbs = this.computeLogProb(outMean, actions, std);
+            const newLogProbs = computeLogProbTanh(actions, outMean, std);
             // 4) Считаем убыток политики: -E[ A * log(pi(a|s)) ]
             //    (т.е. берем среднее от - (advantages * newLogProbs))
             const policyLoss = newLogProbs.mul(advantages).mean().mul(-1);
@@ -195,28 +197,6 @@ export class SlaveAgent {
         }, {} as { [name: string]: TensorData });
 
         return { loss: valueNumber, grads: gradsRecord };
-    }
-
-    private computeLogProb(predict: tf.Tensor, actions: tf.Tensor, scale: tf.Tensor): tf.Tensor {
-        return tf.tidy(() => {
-            const logUnnormalized = tf.mul(
-                -0.5,
-                tf.square(
-                    tf.sub(
-                        tf.div(actions, scale),
-                        tf.div(predict, scale),
-                    ),
-                ),
-            );
-            const logNormalization = tf.add(
-                tf.scalar(0.5 * Math.log(2.0 * Math.PI)),
-                tf.log(scale),
-            );
-            return tf.sum(
-                tf.sub(logUnnormalized, logNormalization),
-                logUnnormalized.shape.length - 1,
-            );
-        });
     }
 
     private applyConfig(config: RLExperimentConfig) {

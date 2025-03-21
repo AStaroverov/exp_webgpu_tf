@@ -10,7 +10,7 @@ import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { GameDI } from '../../../DI/GameDI.ts';
 import { randomRangeInt } from '../../../../../../lib/random.ts';
 import { SlaveAgent } from './SlaveAgent.ts';
-import { Actions } from '../../Common/readAction.ts';
+import { Actions } from '../../Common/actions.ts';
 import { createInputVector } from '../../Common/createInputVector.ts';
 import { calculateReward } from '../../Common/calculateReward.ts';
 import { getTankHealth } from '../../../ECS/Components/Tank.ts';
@@ -26,7 +26,6 @@ export class SlaveManager {
     private episodeCount: number = 0;
     private stopFrameInterval: VoidFunction | null = null;
 
-    private tanksCount: number = 0;
     private tankRewards = new Map<number, number>();
     private mapLastUpdateData = new Map<number, { action: Actions; }>();
 
@@ -54,8 +53,7 @@ export class SlaveManager {
         this.dispose();
         await this.resetAgent();
 
-        this.tanksCount = randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX);
-        this.battlefield = await createBattlefield(this.tanksCount);
+        this.battlefield = await createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX));
 
         // Reset frame counter
         this.frameCount = 0;
@@ -117,7 +115,7 @@ export class SlaveManager {
                     this.memorizeTankBehaviour(tankEid, width, height, this.episodeCount, isLastMemorize ? 0.5 : 0.25, isLastMemorize);
                 }
 
-                if (isLastMemorize && this.agent.isReady(this.tanksCount)) {
+                if (isLastMemorize && this.agent.isReady()) {
                     skipTick = true;
                     await this.exposeGradients();
                     await this.resetAgent();
@@ -146,15 +144,15 @@ export class SlaveManager {
         // Get action from agent
         const result = this.agent.act(inputVector);
         // Apply action to tank controller
-        applyActionToTank(tankEid, result.action);
+        applyActionToTank(tankEid, result.actions);
 
-        this.mapLastUpdateData.set(tankEid, { action: result.action });
+        this.mapLastUpdateData.set(tankEid, { action: result.actions });
 
         if (!isWarmup) {
             this.agent.rememberAction(
                 tankEid,
                 inputVector,
-                result.action,
+                result.rawActions,
                 result.value,
             );
         }

@@ -9,7 +9,7 @@ import { abs, centerStep, hypot, lerp, max, min, smoothstep } from '../../../../
 import { TANK_RADIUS } from './consts.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 import { Tank } from '../../ECS/Components/Tank.ts';
-import { Actions, readAction } from './readAction.ts';
+import { Actions, readActions } from './actions.ts';
 import { isVerboseLog } from './utils.ts';
 
 // Константы для калибровки вознаграждений
@@ -160,7 +160,7 @@ export function calculateReward(
         move: actionMoveDir,
         rotate: actionMoveRot,
         // aim: [actionAimDeltaX, actionAimDeltaY],
-    } = readAction(actions);
+    } = readActions(actions);
 
     // Инициализируем пустую структуру наград
     const rewards = initializeRewards();

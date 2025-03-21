@@ -1,10 +1,12 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
-import { ACTION_DIM, INPUT_DIM } from '../Common/consts';
+import { ACTION_DIM } from '../Common/consts';
 import { getCurrentExperiment, RLExperimentConfig } from './experiment-config';
 import { Memory } from './Memory.ts';
 import { abs, floor } from '../../../../../lib/math.ts';
 import { isDevtoolsOpen } from '../Common/utils.ts';
+import { computeLogProbTanh } from '../Common/computeLogProb.ts';
+import { createPolicyNetwork, createValueNetwork } from '../Common/models.ts';
 
 // Общий PPO агент для всех танков
 export class SharedTankPPOAgent {
@@ -41,8 +43,8 @@ export class SharedTankPPOAgent {
         };
 
         // Создаем модели
-        this.policyNetwork = this.createPolicyNetwork();
-        this.valueNetwork = this.createValueNetwork();
+        this.policyNetwork = createPolicyNetwork(this.config.hiddenLayers);
+        this.valueNetwork = createValueNetwork(this.config.hiddenLayers);
 
         console.log(`Shared PPO Agent initialized with experiment: ${ this.config.name }`);
     }
@@ -234,6 +236,7 @@ export class SharedTankPPOAgent {
     }
 
     act(state: Float32Array): {
+        rawAction: tf.Tensor,
         action: Float32Array,
         logProb: tf.Tensor,
         value: tf.Tensor
@@ -248,12 +251,12 @@ export class SharedTankPPOAgent {
             const std = clippedLogStd.exp();
             const noise = tf.randomNormal([ACTION_DIM]).mul(std);
             const action = outMean.add(noise);
-            const logProb = this.computeLogProb(outMean, action, std);
-            const actionArray = action.dataSync() as Float32Array;
+            const logProb = computeLogProbTanh(action, outMean, std);
             const value = this.valueNetwork.predict(stateTensor) as tf.Tensor;
 
             return {
-                action: actionArray,
+                rawAction: action,
+                action: action.tanh().dataSync() as Float32Array,
                 logProb: logProb,
                 value: value.squeeze(),
             };
@@ -274,7 +277,7 @@ export class SharedTankPPOAgent {
                 const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
                 const clippedLogStd = outLogStd.clipByValue(-2, 0.5);
                 const std = clippedLogStd.exp();
-                const newLogProbs = this.computeLogProb(outMean, actions, std);
+                const newLogProbs = computeLogProbTanh(actions, outMean, std);
                 const oldLogProbs2D = oldLogProbs.reshape(newLogProbs.shape);
                 const ratio = tf.exp(newLogProbs.sub(oldLogProbs2D));
                 isDevtoolsOpen() && console.log('>> RATIO SUM ABS DELTA', (ratio.dataSync() as Float32Array).reduce((a, b) => a + abs(1 - b), 0));
@@ -336,96 +339,11 @@ export class SharedTankPPOAgent {
         });
     }
 
-    private computeLogProb(predict: tf.Tensor, actions: tf.Tensor, scale: tf.Tensor): tf.Tensor {
-        return tf.tidy(() => {
-            const logUnnormalized = tf.mul(
-                -0.5,
-                tf.square(
-                    tf.sub(
-                        tf.div(actions, scale),
-                        tf.div(predict, scale),
-                    ),
-                ),
-            );
-            const logNormalization = tf.add(
-                tf.scalar(0.5 * Math.log(2.0 * Math.PI)),
-                tf.log(scale),
-            );
-            return tf.sum(
-                tf.sub(logUnnormalized, logNormalization),
-                logUnnormalized.shape.length - 1,
-            );
-        });
-    }
-
     private applyConfig(config: RLExperimentConfig) {
         this.config = config;
         // TODO: useless on load, fix it later
         this.policyOptimizer = tf.train.adam(this.config.learningRatePolicy);
         this.valueOptimizer = tf.train.adam(this.config.learningRateValue);
-    }
-
-
-    // Создание сети политики
-    private createPolicyNetwork(): tf.LayersModel {
-        // Входной тензор
-        const input = tf.layers.input({ shape: [INPUT_DIM] });
-
-        let x = input;
-        for (const [activation, units] of this.config.hiddenLayers) {
-            x = tf.layers.dense({
-                units,
-                activation,
-                kernelInitializer: 'glorotUniform',
-            }).apply(x) as tf.SymbolicTensor;
-        }
-
-        // Выход: ACTION_DIM * 2 нейронов (ACTION_DIM для mean, ACTION_DIM для logStd).
-        // При использовании:
-        //   mean = tanh(первые ACTION_DIM),
-        //   std  = exp(последние ACTION_DIM).
-        const policyOutput = tf.layers.dense({
-            units: ACTION_DIM * 2,
-            activation: 'linear', // без ограничений, трансформации — вручную (tanh/exp)
-            name: 'policy_output',
-        }).apply(x) as tf.SymbolicTensor;
-
-        // Создаём модель
-        return tf.model({
-            inputs: input,
-            outputs: policyOutput,
-        });
-    }
-
-    // Создание сети критика (оценки состояний)
-    private createValueNetwork(): tf.LayersModel {
-        // Входной слой
-        const input = tf.layers.input({ shape: [INPUT_DIM] });
-
-        // Скрытые слои
-        let x = input;
-        for (const [activation, units] of this.config.hiddenLayers) {
-            x = tf.layers.dense({
-                units,
-                activation,
-                kernelInitializer: 'glorotUniform',
-            }).apply(x) as tf.SymbolicTensor;
-        }
-
-        // Выходной слой - скалярная оценка состояния
-        const valueOutput = tf.layers.dense({
-            units: 1,
-            activation: 'linear',
-            name: 'value_output',
-        }).apply(x) as tf.SymbolicTensor;
-
-        // Создаем модель
-        const valueModel = tf.model({
-            inputs: input,
-            outputs: valueOutput,
-        });
-
-        return valueModel;
     }
 }
 

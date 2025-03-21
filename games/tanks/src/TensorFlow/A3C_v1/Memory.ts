@@ -26,6 +26,10 @@ export class Memory {
         return size;
     }
 
+    toArray() {
+        return Array.from(this.map.values());
+    }
+
     addFirstPart(id: number, state: Float32Array, action: Float32Array, value: tf.Tensor) {
         if (!this.map.has(id)) {
             this.map.set(id, new SubMemory());
