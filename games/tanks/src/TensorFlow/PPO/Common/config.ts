@@ -34,9 +34,9 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Network architecture
     hiddenLayers: [['relu', 256], ['relu', 128], ['relu', 128], ['relu', 64]],
     // Learning parameters
-    learningRatePolicy: 3e-4,
-    learningRateValue: 1e-4,
-    gamma: 0.97,
+    learningRatePolicy: 2e-3,
+    learningRateValue: 1e-3,
+    gamma: 0.98,
     lam: 0.95,
     // PPO-specific parameters
     epochs: 10,
@@ -47,7 +47,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     batchSize: 128,
     maxFrames: 1000,
     // Workers
-    workerCount: 1,
+    workerCount: 6,
     // Training control
     saveModelEvery: 1,
     savePath: 'APPO_v1',
