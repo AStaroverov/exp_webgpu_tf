@@ -29,6 +29,7 @@ export class MasterAgent {
         avgRewards: number;
         policyLoss: number;
         valueLoss: number;
+        avgBatchSize: number;
     }>(10);
 
     constructor() {
@@ -56,14 +57,21 @@ export class MasterAgent {
             ? last10ValueLoss.reduce((a, b) => a + b, 0) / last10ValueLoss.length
             : 0;
 
+        const last10BatchSize = this.logger.getLastN(10).map(v => v.avgBatchSize);
+        const avgBatchSize = last10BatchSize.length > 0
+            ? last10BatchSize.reduce((a, b) => a + b, 0) / last10BatchSize.length
+            : 0;
+
         return {
             version: this.version,
             avgReward10: avgReward,
             avgPolicyLoss10: avgPolicyLoss,
             avgValueLoss10: avgValueLoss,
+            avgBatchSize10: avgBatchSize,
             avgRewardLast: this.logger.getLast()?.avgRewards,
             avgPolicyLossLast: this.logger.getLast()?.policyLoss,
             avgValueLossLast: this.logger.getLast()?.valueLoss,
+            avgBatchSizeLast: this.logger.getLast()?.avgBatchSize,
         };
     }
 
@@ -178,6 +186,7 @@ export class MasterAgent {
                 .reduce((acc, v) => acc + v, 0) / batchList.length,
             policyLoss: policyLossSum / CONFIG.epochs,
             valueLoss: valueLossSum / CONFIG.epochs,
+            avgBatchSize: size / batchList.length,
         });
 
         return gradientsCount;

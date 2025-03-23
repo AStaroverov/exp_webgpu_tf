@@ -8,6 +8,7 @@ import { hypot } from '../../../../../../lib/math.ts';
 import { Color } from '../../../../../../src/ECS/Components/Common.ts';
 import { getDrawState } from '../../Common/utils.ts';
 import { frameTasks } from '../../../../../../lib/TasksScheduler/frameTasks.ts';
+import { CONFIG } from '../Common/config.ts';
 
 // Generate debug visualization using HTML and CSS
 export function createDebugVisualization(container: HTMLElement, manager: MasterManager) {
@@ -60,6 +61,7 @@ export function createCommonDebug() {
         const memoryUsage = (performance as any).memory.usedJSHeapSize / (1024 * 1024);
 
         return `
+            <div>Workers: ${ CONFIG.workerCount }</div>
             <div>Memory: ${ memoryUsage.toFixed(2) }MB</div>
         `;
     };
@@ -74,9 +76,11 @@ export function createRLDebug(manager: MasterManager) {
             <div>10 Avg Reward: ${ agentStats.avgReward10.toFixed(2) }</div>
             <div>10 Avg policy loss ${ agentStats.avgPolicyLoss10.toFixed(4) } </div>
             <div>10 Avg value loss ${ agentStats.avgValueLoss10.toFixed(4) } </div>
+            <div>10 Avg batch size ${ agentStats.avgBatchSize10.toFixed(0) } </div>
             <div>Last Avg Reward: ${ agentStats.avgRewardLast?.toFixed(2) }</div>
             <div>Last Avg policy loss ${ agentStats.avgPolicyLossLast?.toFixed(4) } </div>
             <div>Last Avg value loss ${ agentStats.avgValueLossLast?.toFixed(4) } </div>
+            <div>Last Avg batch size ${ agentStats.avgBatchSizeLast?.toFixed(0) } </div>
         `;
     };
 }
@@ -91,9 +95,7 @@ export function createTanksDebug(manager: MasterManager) {
         for (let i = 0; i < tanksEids.length; i++) {
             const tankEid = tanksEids[i];
             const position = Array.from(RigidBodyState.position.getBatche(tankEid)).map(v => v.toFixed(2)).join(', ');
-            const speedBatch = RigidBodyState.linvel.getBatche(tankEid);
-            const vel = hypot(speedBatch[0], speedBatch[1]).toFixed(2);
-            const speed = Array.from(speedBatch).map(v => v.toFixed(2)).join(', ');
+            const speed = hypot(RigidBodyState.linvel.get(tankEid, 0), RigidBodyState.linvel.get(tankEid, 1)).toFixed(2);
             const aim = Tank.aimEid[tankEid];
             const color = `rgba(${ Color.r[aim] * 255 }, ${ Color.g[aim] * 255 }, ${ Color.b[aim] * 255 }, ${ Color.a[aim] })`;
 
@@ -102,7 +104,7 @@ export function createTanksDebug(manager: MasterManager) {
                     <div>Tank ${ tankEid }</div>
                     <div>Reward: ${ manager.getReward(tankEid).toFixed(2) }</div>
                     <div>Position: ${ position }</div>
-                    <div>Speed: ${ vel }, ${ speed }</div>
+                    <div>Speed: ${ speed }</div>
                 </div>
                 <br>
             `;
