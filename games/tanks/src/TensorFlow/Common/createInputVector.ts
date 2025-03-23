@@ -6,7 +6,7 @@ import {
 } from '../../ECS/Components/TankState.ts';
 import { clamp } from 'lodash-es';
 
-const enemiesNormalizedBuffer = new Float32Array(6 * TANK_INPUT_TENSOR_MAX_ENEMIES);
+const enemiesNormalizedBuffer = new Float32Array(7 * TANK_INPUT_TENSOR_MAX_ENEMIES);
 const bulletsNormalizedBuffer = new Float32Array(5 * TANK_INPUT_TENSOR_MAX_BULLETS);
 
 function normForTanh(v: number, size: number): number {
@@ -46,13 +46,14 @@ export function createInputVector(tankEid: number, width: number, height: number
     // Enemies data
     const enemiesBuffer = TankInputTensor.enemiesData.getBatche(tankEid);
     for (let i = 0; i < TANK_INPUT_TENSOR_MAX_ENEMIES; i++) {
-        if (enemiesBuffer[i * 6] === 0) continue;
-        enemiesNormalizedBuffer[i * 6 + 0] = 1;
-        enemiesNormalizedBuffer[i * 6 + 1] = norm(enemiesBuffer[i * 6 + 1] - tankX, width);
-        enemiesNormalizedBuffer[i * 6 + 2] = norm(enemiesBuffer[i * 6 + 2] - tankY, height);
-        enemiesNormalizedBuffer[i * 6 + 3] = norm(enemiesBuffer[i * 6 + 3], width);
-        enemiesNormalizedBuffer[i * 6 + 4] = norm(enemiesBuffer[i * 6 + 4], height);
-        enemiesNormalizedBuffer[i * 6 + 5] = enemiesBuffer[i * 6 + 5]; // HP
+        if (enemiesBuffer[i * 7] === 0) continue;
+        enemiesNormalizedBuffer[i * 7 + 0] = 1;
+        enemiesNormalizedBuffer[i * 7 + 1] = norm(enemiesBuffer[i * 7 + 1] - tankX, width);
+        enemiesNormalizedBuffer[i * 7 + 2] = norm(enemiesBuffer[i * 7 + 2] - tankY, height);
+        enemiesNormalizedBuffer[i * 7 + 3] = norm(enemiesBuffer[i * 7 + 3], width);
+        enemiesNormalizedBuffer[i * 7 + 4] = norm(enemiesBuffer[i * 7 + 4], height);
+        enemiesNormalizedBuffer[i * 7 + 5] = norm(enemiesBuffer[i * 7 + 5] - tankX, width);
+        enemiesNormalizedBuffer[i * 7 + 6] = norm(enemiesBuffer[i * 7 + 6] - tankY, height);
     }
     inputVector.set(enemiesNormalizedBuffer, k);
     k += enemiesNormalizedBuffer.length;

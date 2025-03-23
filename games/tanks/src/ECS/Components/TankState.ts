@@ -13,8 +13,8 @@ export const TankInputTensor = component({
     turretTarget: NestedArray.f64(2, delegate.defaultSize),
     // Bullets -> [id, x,y,vx,vy]
     bulletsData: NestedArray.f64(5 * TANK_INPUT_TENSOR_MAX_BULLETS, delegate.defaultSize),
-    // Enemies [id, x,y,vx,vy,hp]
-    enemiesData: NestedArray.f64(6 * TANK_INPUT_TENSOR_MAX_ENEMIES, delegate.defaultSize),
+    // Enemies [id, x,y,vx,vy,ttx,tty]
+    enemiesData: NestedArray.f64(7 * TANK_INPUT_TENSOR_MAX_ENEMIES, delegate.defaultSize),
 
     // Methods
     setTankData(
@@ -30,13 +30,14 @@ export const TankInputTensor = component({
         TankInputTensor.turretTarget.setBatch(eid, turretTarget);
     },
 
-    setEnemiesData(eid: number, index: number, enemyEid: EntityId, hp: number, coord: Float64Array, speed: Float64Array) {
-        TankInputTensor.enemiesData.set(eid, 6 * index, enemyEid);
-        TankInputTensor.enemiesData.set(eid, 6 * index + 1, coord[0]);
-        TankInputTensor.enemiesData.set(eid, 6 * index + 2, coord[1]);
-        TankInputTensor.enemiesData.set(eid, 6 * index + 3, speed[0]);
-        TankInputTensor.enemiesData.set(eid, 6 * index + 4, speed[1]);
-        TankInputTensor.enemiesData.set(eid, 6 * index + 5, hp);
+    setEnemiesData(eid: number, index: number, enemyEid: EntityId, coord: Float64Array, speed: Float64Array, turretTarget: Float32Array) {
+        TankInputTensor.enemiesData.set(eid, 7 * index, enemyEid);
+        TankInputTensor.enemiesData.set(eid, 7 * index + 1, coord[0]);
+        TankInputTensor.enemiesData.set(eid, 7 * index + 2, coord[1]);
+        TankInputTensor.enemiesData.set(eid, 7 * index + 3, speed[0]);
+        TankInputTensor.enemiesData.set(eid, 7 * index + 4, speed[1]);
+        TankInputTensor.enemiesData.set(eid, 7 * index + 5, turretTarget[0]);
+        TankInputTensor.enemiesData.set(eid, 7 * index + 6, turretTarget[1]);
     },
     resetEnemiesCoords() {
         TankInputTensor.enemiesData.fill(0);

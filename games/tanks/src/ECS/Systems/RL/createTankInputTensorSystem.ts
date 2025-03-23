@@ -50,9 +50,9 @@ export function createTankInputTensorSystem(options = GameDI) {
                     tankEid,
                     j,
                     enemyEid,
-                    getTankHealth(enemyEid),
                     RigidBodyState.position.getBatche(enemyEid),
                     RigidBodyState.linvel.getBatche(enemyEid),
+                    getMatrixTranslation(LocalTransform.matrix.getBatche(Tank.aimEid[enemyEid])),
                 );
             }
 

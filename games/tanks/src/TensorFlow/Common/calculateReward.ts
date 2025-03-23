@@ -10,7 +10,7 @@ import {
     findTankEnemies,
 } from '../../ECS/Systems/RL/createTankInputTensorSystem.ts';
 import { abs, centerStep, hypot, lerp, max, min, sign, smoothstep } from '../../../../../lib/math.ts';
-import { TANK_MAX_SPEED, TANK_RADIUS } from './consts.ts';
+import { TANK_RADIUS } from './consts.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 import { getTankHealth, Tank } from '../../ECS/Components/Tank.ts';
 import { TankController } from '../../ECS/Components/TankController.ts';
@@ -123,10 +123,11 @@ export function calculateReward(
     const beforePredictBulletsData = TankInputTensor.bulletsData.getBatche(tankEid);
 
     // -- current state --
-    const currentHealth = getTankHealth(tankEid);
+    const moveDir = TankController.move[tankEid];
     const isShooting = TankController.shoot[tankEid] > 0;
+    const currentHealth = getTankHealth(tankEid);
     const [currentTankX, currentTankY] = RigidBodyState.position.getBatche(tankEid);
-    const [currentTankSpeedX, currentTankSpeedY] = RigidBodyState.linvel.getBatche(tankEid);
+    // const [currentTankSpeedX, currentTankSpeedY] = RigidBodyState.linvel.getBatche(tankEid);
     const [currentTurretTargetX, currentTurretTargetY] = getMatrixTranslation(LocalTransform.matrix.getBatche(Tank.aimEid[tankEid]));
     // const currentShootings = TankController.shoot[tankEid] > 0;
     const currentEnemies = Array.from(findTankEnemies(tankEid));
@@ -192,8 +193,7 @@ export function calculateReward(
 
     // 7. Награда за движение и позиционирование
     const movementRewardResult = calculateMovementReward(
-        currentTankSpeedX,
-        currentTankSpeedY,
+        moveDir,
         bulletAvoidanceResult.maxDangerLevel,
         aimingResult.hasTargets,
         aimingResult.closestEnemyDist,
@@ -468,8 +468,7 @@ function calculateShootingReward(
  * Расчет награды за движение
  */
 function calculateMovementReward(
-    tankSpeedX: number,
-    tankSpeedY: number,
+    moveDir: number,
     maxDangerLevel: number,
     hasTargets: boolean,
     closestEnemyDist: number,
@@ -477,18 +476,15 @@ function calculateMovementReward(
     let speedReward = 0;
     let positioningReward = 0;
 
-    // Базовая награда за движение (плавно растет с увеличением скорости)
-    const tankSpeed = hypot(tankSpeedX, tankSpeedY);
-    // const prevTankSpeed = hypot(prevTankSpeedX, prevTankSpeedY);
-    const speedFactor = smoothstep(0, TANK_MAX_SPEED, tankSpeed);
+    const moveFactor = abs(moveDir);
 
     // Базовая награда за движение
-    speedReward += speedFactor * REWARD_WEIGHTS.MOVEMENT.BASE;
+    speedReward += moveFactor * REWARD_WEIGHTS.MOVEMENT.BASE;
 
     // Стратегическое движение при наличии опасности
     if (maxDangerLevel > 0) {
         // Дополнительная награда за движение при наличии опасных пуль
-        speedReward += speedFactor * REWARD_WEIGHTS.MOVEMENT.STRATEGIC;
+        speedReward += moveFactor * REWARD_WEIGHTS.MOVEMENT.STRATEGIC;
     }
 
     // Награда за позиционирование относительно врагов

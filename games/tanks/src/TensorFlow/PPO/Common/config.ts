@@ -47,7 +47,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     batchSize: 128,
     maxFrames: 1000,
     // Workers
-    workerCount: 6,
+    workerCount: 10,
     // Training control
     saveModelEvery: 1,
     savePath: 'APPO_v1',
