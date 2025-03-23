@@ -28,6 +28,7 @@ let REWARD_WEIGHTS = {
         QUALITY: 1.0,       // За точное прицеливание
         TRACKING: 1.0,      // За активное отслеживание врага
         DISTANCE: 1.0,      // За расстояние до цели
+        MAP_AWARENESS: 0.1, // За нахождение в пределах карты
         NO_TARGET_PENALTY: -0.1, // За отсутствие целей
         TRACKING_PENALTY: -0.2, // За активное отслеживание врага
         DISTANCE_PENALTY: -0.2, // За расстояние до цели
@@ -35,7 +36,6 @@ let REWARD_WEIGHTS = {
 
     MAP_BORDER: {
         BASE: 0.2,          // За нахождение в пределах карты
-        RETURN: 1.0,          // За нахождение в пределах карты
         PENALTY: -0.2,      // За выход за границы
     },
 
@@ -87,6 +87,7 @@ export interface ComponentRewards {
         distance: number;        // Расстояние до цели
         accuracy: number;        // Точность прицеливания
         tracking: number;        // Активное отслеживание цели
+        mapAwareness: number;    // Нахождение в пределах карты
         total: number;           // Суммарная награда для головы прицеливания
     };
 
@@ -102,7 +103,7 @@ function initializeRewards(): ComponentRewards {
         common: { health: 0, survival: 0, total: 0 },
         shoot: { shootDecision: 0, total: 0 },
         movement: { speed: 0, enemiesPositioning: 0, bulletAvoidance: 0, mapAwareness: 0, total: 0 },
-        aim: { accuracy: 0, tracking: 0, distance: 0, total: 0 },
+        aim: { accuracy: 0, tracking: 0, distance: 0, mapAwareness: 0, total: 0 },
         totalReward: 0,
     };
 }
@@ -139,9 +140,7 @@ export function calculateReward(
     rewards.common.survival = (step / CONFIG.maxFrames) * REWARD_WEIGHTS.COMMON.SURVIVAL;
 
     // 2. Расчет награды за нахождение в пределах карты
-    rewards.movement.mapAwareness = calculateMapReward(
-        beforePredictTankX,
-        beforePredictTankY,
+    rewards.movement.mapAwareness = calculateTankMapAwarenessReward(
         currentTankX,
         currentTankY,
         width,
@@ -160,6 +159,12 @@ export function calculateReward(
         beforePredictEnemiesData,
     );
 
+    rewards.aim.mapAwareness = calculateAimMapAwarenessReward(
+        currentTurretTargetX,
+        currentTurretTargetY,
+        width,
+        height,
+    );
     rewards.aim.accuracy = aimingResult.aimQualityReward;
     rewards.aim.distance = aimingResult.aimDistanceReward;
 
@@ -200,7 +205,7 @@ export function calculateReward(
     rewards.movement.enemiesPositioning = movementRewardResult.positioning;
 
     // Рассчитываем итоговые значения
-    rewards.aim.total = (rewards.aim.accuracy + rewards.aim.tracking + rewards.aim.distance);
+    rewards.aim.total = (rewards.aim.accuracy + rewards.aim.tracking + rewards.aim.distance + rewards.aim.mapAwareness);
     rewards.shoot.total = (rewards.shoot.shootDecision);
     rewards.movement.total = (rewards.movement.speed + rewards.movement.enemiesPositioning +
         rewards.movement.bulletAvoidance + rewards.movement.mapAwareness);
@@ -222,33 +227,40 @@ export function calculateReward(
 /**
  * Расчет награды за нахождение в пределах карты
  */
-function calculateMapReward(
-    prevX: number,
-    prevY: number,
+function calculateTankMapAwarenessReward(
     x: number,
     y: number,
     width: number,
     height: number,
 ): number {
-    const inMap = x >= 0 && x <= width && y >= 0 && y <= height;
-
-    if (inMap) {
+    if (x >= 0 && x <= width && y >= 0 && y <= height) {
         const borderDistance = min(
             x,
             y,
             width - x,
             height - y,
         );
-        const prevInMap = prevX >= 0 && prevX <= width && prevY >= 0 && prevY <= height;
 
         // Базовая награда за нахождение в пределах карты
         return REWARD_WEIGHTS.MAP_BORDER.BASE
-            + (prevInMap ? 0 : 1) * REWARD_WEIGHTS.MAP_BORDER.RETURN
             // Штраф за приближение к границе
             + REWARD_WEIGHTS.MAP_BORDER.PENALTY * (1 - smoothstep(0, 50, borderDistance));
     } else {
         // Вышел за границы карты
         return REWARD_WEIGHTS.MAP_BORDER.PENALTY;
+    }
+}
+
+function calculateAimMapAwarenessReward(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+): number {
+    if (x >= 0 && x <= width && y >= 0 && y <= height) {
+        return REWARD_WEIGHTS.AIM.MAP_AWARENESS;
+    } else {
+        return 0;
     }
 }
 
