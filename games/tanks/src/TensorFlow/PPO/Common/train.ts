@@ -1,8 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { ACTION_DIM } from '../../Common/consts.ts';
 import { computeLogProbTanh } from '../../Common/computeLogProb.ts';
-import { isDevtoolsOpen } from '../../Common/utils.ts';
-import { abs } from '../../../../../../lib/math.ts';
 import { Config } from './config.ts';
 
 export function trainPolicyNetwork(
@@ -24,7 +22,7 @@ export function trainPolicyNetwork(
             const newLogProbs = computeLogProbTanh(actions, outMean, std);
             const oldLogProbs2D = oldLogProbs.reshape(newLogProbs.shape);
             const ratio = tf.exp(newLogProbs.sub(oldLogProbs2D));
-            isDevtoolsOpen() && console.log('>> RATIO SUM ABS DELTA', (ratio.dataSync() as Float32Array).reduce((a, b) => a + abs(1 - b), 0));
+            // isDevtoolsOpen() && console.log('>> RATIO SUM ABS DELTA', (ratio.dataSync() as Float32Array).reduce((a, b) => a + abs(1 - b), 0));
 
             const surr1 = ratio.mul(advantages);
             const clippedRatio = ratio.clipByValue(1 - config.clipRatioPolicy, 1 + config.clipRatioPolicy);

@@ -1,6 +1,5 @@
 import Dexie from 'dexie';
 import { Batch } from '../Common/Memory.ts';
-import { Config } from '../Common/config.ts';
 
 const db = new Dexie('tank-rl');
 
@@ -27,7 +26,6 @@ export function clearMemoryBatchList() {
 
 type AgentState = {
     version: number;
-    config: Config;
     logger: object,
 }
 

@@ -6,10 +6,13 @@ import { TANK_RADIUS } from './consts.ts';
 import { TankController } from '../../ECS/Components/TankController.ts';
 import { query } from 'bitecs';
 
+const MAX_PADDING = 400;
+
 export async function createBattlefield(tanksCount: number, withRender = false, withPlayer = false) {
     const game = await createGame({ width: 800, height: 800, withPlayer, withRender });
     const width = GameDI.width;
     const height = GameDI.height;
+    const padding = random() * MAX_PADDING;
 
     // Храним координаты танков в отдельном массиве
     let tankPositions: { x: number, y: number }[] = [];
@@ -32,15 +35,15 @@ export async function createBattlefield(tanksCount: number, withRender = false, 
 
         // Пытаемся найти подходящую позицию
         do {
-            x = randomRangeFloat(TANK_RADIUS, width - TANK_RADIUS);
-            y = randomRangeFloat(TANK_RADIUS, height - TANK_RADIUS);
+            x = randomRangeFloat(TANK_RADIUS - padding, width - TANK_RADIUS + padding);
+            y = randomRangeFloat(TANK_RADIUS - padding, height - TANK_RADIUS + padding);
         } while (isTooClose(x, y));
 
         const eid = createTankRR({
-            x: x,
-            y: y,
+            x,
+            y,
             rotation: Math.PI * randomRangeFloat(0, 2), // Случайный поворот от 0 до 2π
-            color: [random(), random(), random(), 1],
+            color: [randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1],
         });
         TankController.setTurretDir$(
             eid,

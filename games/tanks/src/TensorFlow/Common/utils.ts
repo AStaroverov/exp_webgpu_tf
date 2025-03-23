@@ -22,19 +22,19 @@ async function initSettings() {
 initSettings();
 
 if (globalThis && globalThis.document) {
-    document.getElementById('toggleRender')!.addEventListener('click', async () => {
+    document.getElementById('toggleRender')?.addEventListener('click', async () => {
         // Переключаем состояние отрисовки
         shouldDraw = !shouldDraw;
         await db.table('settings').put({ key: 'shouldDraw', value: shouldDraw.toString() });
     });
 
-    document.getElementById('toggleVerbose')!.addEventListener('click', async () => {
+    document.getElementById('toggleVerbose')?.addEventListener('click', async () => {
         // Переключаем режим подробного логирования
         isVerbose = !isVerbose;
         await db.table('settings').put({ key: 'verbose', value: isVerbose.toString() });
     });
 
-    document.getElementById('resetState')!.addEventListener('click', async () => {
+    document.getElementById('resetState')?.addEventListener('click', async () => {
         // Удаляем сохранённые состояния агента и менеджера из базы настроек
         await db.table('settings').delete('tank-rl-agent-state');
         await db.table('settings').delete('tank-rl-manager-state');
@@ -48,7 +48,7 @@ if (globalThis && globalThis.document) {
         });
     });
 
-    document.getElementById('downloadModel')!.addEventListener('click', () => {
+    document.getElementById('downloadModel')?.addEventListener('click', () => {
         getSharedAgent().download();
     });
 }
@@ -60,7 +60,7 @@ export function getDrawState(): boolean {
 }
 
 export function isVerboseLog(): boolean {
-    return isVerbose && devtoolsDetect.isOpen;
+    return isVerbose;
 }
 
 export function isDevtoolsOpen(): boolean {

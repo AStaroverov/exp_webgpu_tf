@@ -25,7 +25,7 @@ export const TankController = component(({
         TankController.shoot[eid] = v ? 1 : 0;
     }),
     startCooldown: ((eid: number): void => {
-        TankController.shootCooldown[eid] = 60;
+        TankController.shootCooldown[eid] = 100;
     }),
     updateCooldown: ((eid: number, dt: number): void => {
         TankController.shootCooldown[eid] -= dt;

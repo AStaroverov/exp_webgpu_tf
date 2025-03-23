@@ -19,11 +19,8 @@ import { createHitableSystem } from './src/ECS/Systems/createHitableSystem.ts';
 import { createTankAliveSystem } from './src/ECS/Systems/createTankAliveSystem.ts';
 import { createTankPositionSystem, createTankTurretRotationSystem } from './src/ECS/Systems/tankControllerSystems.ts';
 import { createOutZoneDestroySystem } from './src/ECS/Systems/createOutZoneDestroySystem.ts';
-import { createTankInputTensorSystem } from './src/ECS/Systems/createTankInputTensorSystem.ts';
-import {
-    createChangeDetectorSystem,
-    destroyChangeDetectorSystem,
-} from '../../src/ECS/Systems/ChangedDetectorSystem.ts';
+import { createTankInputTensorSystem } from './src/ECS/Systems/RL/createTankInputTensorSystem.ts';
+import { destroyChangeDetectorSystem } from '../../src/ECS/Systems/ChangedDetectorSystem.ts';
 import { createDestroyByTimeoutSystem } from './src/ECS/Systems/createDestroyByTimeoutSystem.ts';
 import { createAimSystem } from './src/ECS/Systems/createAimSystem.ts';
 import { createPostEffect } from './src/ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
@@ -63,8 +60,6 @@ export async function createGame({ width, height, withRender, withPlayer }: {
         PlayerEnvDI.document = document;
         PlayerEnvDI.window = window;
     }
-
-    const updateChangedDetector = createChangeDetectorSystem(world);
 
     // const updateMap = createMapSystem();
     const execTransformSystem = createTransformSystem(world);
@@ -198,7 +193,6 @@ export async function createGame({ width, height, withRender, withPlayer }: {
         statsFrame();
 
         inputFrame();
-        updateChangedDetector();
     };
 
     GameDI.destroy = () => {

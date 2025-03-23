@@ -85,12 +85,10 @@ export function memorizeTankBehaviour(
 ) {
     // Get shared agent
     const agent = getSharedAgent();
-    const { action } = mapLastUpdateData.get(tankEid)!;
 
     // Calculate reward
     const reward = calculateReward(
         tankEid,
-        action,
         width,
         height,
         episode,

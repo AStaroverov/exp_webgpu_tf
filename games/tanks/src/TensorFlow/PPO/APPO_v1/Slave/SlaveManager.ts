@@ -1,6 +1,5 @@
 import { createBattlefield } from '../../../Common/createBattlefield.ts';
 import {
-    MAX_FRAMES,
     TANK_COUNT_SIMULATION_MAX,
     TANK_COUNT_SIMULATION_MIN,
     TICK_TIME_REAL,
@@ -10,24 +9,21 @@ import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.t
 import { GameDI } from '../../../../DI/GameDI.ts';
 import { randomRangeInt } from '../../../../../../../lib/random.ts';
 import { SlaveAgent } from './SlaveAgent.ts';
-import { Actions } from '../../../Common/actions.ts';
 import { createInputVector } from '../../../Common/createInputVector.ts';
 import { calculateReward } from '../../../Common/calculateReward.ts';
 import { getTankHealth } from '../../../../ECS/Components/Tank.ts';
 import { applyActionToTank } from '../../../Common/applyActionToTank.ts';
 import { addMemoryBatch } from '../Database.ts';
-
+import { CONFIG } from '../../Common/config.ts';
 
 export class SlaveManager {
     private agent!: SlaveAgent;
 
     private battlefield: Awaited<ReturnType<typeof createBattlefield>> | null = null;
     private frameCount: number = -10;
-    private episodeCount: number = 0;
     private stopTrainingLoop: VoidFunction | null = null;
 
     private tankRewards = new Map<number, number>();
-    private mapLastUpdateData = new Map<number, { action: Actions; }>();
 
     constructor() {
     }
@@ -38,7 +34,6 @@ export class SlaveManager {
 
     dispose() {
         this.frameCount = 0;
-        this.mapLastUpdateData.clear();
         this.tankRewards.clear();
         this.stopTrainingLoop?.();
         this.battlefield?.destroy();
@@ -52,11 +47,8 @@ export class SlaveManager {
     }
 
     private async reset() {
-        this.episodeCount++;
         this.battlefield = await createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX));
         await this.agent.sync();
-
-        console.log(`Environment created for episode ${ this.episodeCount }`);
     }
 
     // Main game loop
@@ -123,11 +115,11 @@ export class SlaveManager {
 
             if (shouldMemorize) {
                 for (const tankEid of activeTanks) {
-                    this.memorizeTankBehaviour(tankEid, width, height, this.episodeCount, isLastMemorize ? 0.5 : 0.25, isLastMemorize);
+                    this.memorizeTankBehaviour(tankEid, width, height, this.frameCount, isLastMemorize ? 0.5 : 0.25, isLastMemorize);
                 }
             }
 
-            const isEpisodeDone = activeTanks.length <= 1 || this.frameCount > MAX_FRAMES;
+            const isEpisodeDone = activeTanks.length <= 1 || this.frameCount > CONFIG.maxFrames;
 
             if (isEpisodeDone) {
                 state = 2;
@@ -149,8 +141,6 @@ export class SlaveManager {
         // Apply action to tank controller
         applyActionToTank(tankEid, result.actions);
 
-        this.mapLastUpdateData.set(tankEid, { action: result.actions });
-
         if (!isWarmup) {
             this.agent.rememberAction(
                 tankEid,
@@ -166,19 +156,16 @@ export class SlaveManager {
         tankEid: number,
         width: number,
         height: number,
-        episode: number,
+        step: number,
         rewardMultiplier: number,
         isLast: boolean,
     ) {
-        const { action } = this.mapLastUpdateData.get(tankEid)!;
-
         // Calculate reward
         const reward = calculateReward(
             tankEid,
-            action,
             width,
             height,
-            episode,
+            step,
         ).totalReward;
         // Check if tank is "dead" based on health
         const isDone = getTankHealth(tankEid) <= 0;

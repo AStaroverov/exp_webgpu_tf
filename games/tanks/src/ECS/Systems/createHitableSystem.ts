@@ -51,5 +51,7 @@ export function createHitableSystem({ world } = GameDI) {
         //         scheduleRemoveEntity(wallId);
         //     }
         // }
+
+        hitableChanges.clear();
     };
 }

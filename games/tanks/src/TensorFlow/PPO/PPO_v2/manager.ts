@@ -16,12 +16,7 @@ import {
     updateTankBehaviour,
 } from './controller.ts';
 import { createBattlefield } from '../../Common/createBattlefield.ts';
-import {
-    MAX_FRAMES,
-    TANK_COUNT_SIMULATION_MAX,
-    TANK_COUNT_SIMULATION_MIN,
-    TICK_TIME_REAL,
-} from '../../Common/consts.ts';
+import { TANK_COUNT_SIMULATION_MAX, TANK_COUNT_SIMULATION_MIN, TICK_TIME_REAL } from '../../Common/consts.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { RingBuffer } from 'ring-buffer-ts';
 import { Tank } from '../../../ECS/Components/Tank.ts';
@@ -253,7 +248,7 @@ export class SharedRLGameManager {
 
                 // Check if episode is done
                 const activeCount = getActiveTankCount();
-                const isEpisodeDone = activeCount <= 1 || this.frameCount >= MAX_FRAMES;
+                const isEpisodeDone = activeCount <= 1 || this.frameCount >= 1500;
 
                 if (isEpisodeDone) {
                     this.stopFrameInterval?.();

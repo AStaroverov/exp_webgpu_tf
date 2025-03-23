@@ -6,30 +6,32 @@ import { Tank } from '../Components/Tank.ts';
 import { PlayerEnvDI } from '../../DI/PlayerEnvDI.ts';
 
 export function createPlayerTankPositionSystem({ document } = PlayerEnvDI) {
+    let move = 0;
+    let rotation = 0;
+
     document.addEventListener('keydown', (event) => {
-        if (isNil(PLAYER_REFS.tankPid)) return;
         switch (event.key) {
             case 'w':
             case 'ArrowUp': {
-                TankController.setMove$(PLAYER_REFS.tankPid, 1);
+                move = 1;
                 event.preventDefault();
                 break;
             }
             case 's':
             case 'ArrowDown': {
-                TankController.setMove$(PLAYER_REFS.tankPid, -1);
+                move = -1;
                 event.preventDefault();
                 break;
             }
             case 'a':
             case 'ArrowLeft': {
-                TankController.setRotate$(PLAYER_REFS.tankPid, -1);
+                rotation = -1;
                 event.preventDefault();
                 break;
             }
             case 'd':
             case 'ArrowRight': {
-                TankController.setRotate$(PLAYER_REFS.tankPid, 1);
+                rotation = 1;
                 event.preventDefault();
                 break;
             }
@@ -37,49 +39,53 @@ export function createPlayerTankPositionSystem({ document } = PlayerEnvDI) {
     });
 
     document.addEventListener('keyup', (event) => {
-        const { tankPid } = PLAYER_REFS;
-        if (tankPid == null) return;
-
         switch (event.key) {
             case 'w':
             case 's':
             case 'ArrowUp':
             case 'ArrowDown': {
-                TankController.setMove$(tankPid, 0);
+                move = 0;
                 break;
             }
             case 'a':
             case 'd':
             case 'ArrowLeft':
             case 'ArrowRight': {
-                TankController.setRotate$(tankPid, 0);
+                rotation = 0;
                 break;
             }
         }
     });
 
     return () => {
-
+        if (PLAYER_REFS.tankPid) {
+            TankController.setMove$(PLAYER_REFS.tankPid, move);
+            TankController.setRotate$(PLAYER_REFS.tankPid, rotation);
+        }
     };
 }
 
 export function createPlayerTankTurretRotationSystem({ document } = PlayerEnvDI) {
+    let lastEvent: undefined | MouseEvent;
     document.addEventListener('mousemove', (event) => {
-        if (isNil(PLAYER_REFS.tankPid)) return;
-        const currentPosition = getMatrixTranslation(LocalTransform.matrix.getBatche(Tank.aimEid[PLAYER_REFS.tankPid]));
-        TankController.setTurretDir$(PLAYER_REFS.tankPid, event.clientX - currentPosition[0], event.clientY - currentPosition[1]);
+        lastEvent = event;
     });
 
     return () => {
+        if (PLAYER_REFS.tankPid && lastEvent) {
+            const currentPosition = getMatrixTranslation(LocalTransform.matrix.getBatche(Tank.aimEid[PLAYER_REFS.tankPid]));
+            TankController.setTurretDir$(PLAYER_REFS.tankPid, lastEvent.clientX - currentPosition[0], lastEvent.clientY - currentPosition[1]);
+        }
     };
 }
 
 export function createPlayerTankBulletSystem({ document, container } = PlayerEnvDI) {
+    let shooting = false;
     document.addEventListener('keydown', (event) => {
         event.preventDefault();
         switch (event.code) {
             case 'Space': {
-                !isNil(PLAYER_REFS.tankPid) && TankController.setShooting$(PLAYER_REFS.tankPid, true);
+                shooting = true;
                 break;
             }
         }
@@ -88,7 +94,7 @@ export function createPlayerTankBulletSystem({ document, container } = PlayerEnv
         event.preventDefault();
         switch (event.code) {
             case 'Space': {
-                !isNil(PLAYER_REFS.tankPid) && TankController.setShooting$(PLAYER_REFS.tankPid, false);
+                shooting = false;
                 break;
             }
         }
@@ -96,14 +102,15 @@ export function createPlayerTankBulletSystem({ document, container } = PlayerEnv
 
     container.addEventListener('mousedown', (event) => {
         event.preventDefault();
-        !isNil(PLAYER_REFS.tankPid) && TankController.setShooting$(PLAYER_REFS.tankPid, true);
+        shooting = true;
     });
 
     container.addEventListener('mouseup', (event) => {
         event.preventDefault();
-        !isNil(PLAYER_REFS.tankPid) && TankController.setShooting$(PLAYER_REFS.tankPid, false);
+        shooting = false;
     });
 
     return () => {
+        !isNil(PLAYER_REFS.tankPid) && TankController.setShooting$(PLAYER_REFS.tankPid, shooting);
     };
 }

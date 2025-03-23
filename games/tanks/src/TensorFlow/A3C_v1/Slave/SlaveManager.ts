@@ -1,6 +1,5 @@
 import { createBattlefield } from '../../Common/createBattlefield.ts';
 import {
-    MAX_FRAMES,
     TANK_COUNT_SIMULATION_MAX,
     TANK_COUNT_SIMULATION_MIN,
     TICK_TIME_REAL,
@@ -10,7 +9,6 @@ import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { GameDI } from '../../../DI/GameDI.ts';
 import { randomRangeInt } from '../../../../../../lib/random.ts';
 import { SlaveAgent } from './SlaveAgent.ts';
-import { Actions } from '../../Common/actions.ts';
 import { createInputVector } from '../../Common/createInputVector.ts';
 import { calculateReward } from '../../Common/calculateReward.ts';
 import { getTankHealth } from '../../../ECS/Components/Tank.ts';
@@ -27,7 +25,6 @@ export class SlaveManager {
     private stopFrameInterval: VoidFunction | null = null;
 
     private tankRewards = new Map<number, number>();
-    private mapLastUpdateData = new Map<number, { action: Actions; }>();
 
     constructor() {
     }
@@ -37,7 +34,6 @@ export class SlaveManager {
     }
 
     dispose() {
-        this.mapLastUpdateData.clear();
         this.tankRewards.clear();
         this.battlefield?.destroy();
     }
@@ -124,7 +120,7 @@ export class SlaveManager {
             }
 
             // Check if episode is done
-            const isEpisodeDone = activeTanks.length <= 1 || this.frameCount > MAX_FRAMES;
+            const isEpisodeDone = activeTanks.length <= 1 || this.frameCount > 1500;
 
             if (isEpisodeDone) {
                 this.stopFrameInterval?.();
@@ -146,8 +142,6 @@ export class SlaveManager {
         // Apply action to tank controller
         applyActionToTank(tankEid, result.actions);
 
-        this.mapLastUpdateData.set(tankEid, { action: result.actions });
-
         if (!isWarmup) {
             this.agent.rememberAction(
                 tankEid,
@@ -166,12 +160,10 @@ export class SlaveManager {
         rewardMultiplier: number,
         isLast: boolean,
     ) {
-        const { action } = this.mapLastUpdateData.get(tankEid)!;
 
         // Calculate reward
         const reward = calculateReward(
             tankEid,
-            action,
             width,
             height,
             episode,

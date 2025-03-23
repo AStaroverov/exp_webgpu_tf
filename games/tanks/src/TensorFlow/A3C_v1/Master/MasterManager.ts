@@ -1,11 +1,6 @@
 import { MasterAgent } from './MasterAgent.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
-import {
-    MAX_FRAMES,
-    TANK_COUNT_SIMULATION_MAX,
-    TANK_COUNT_SIMULATION_MIN,
-    TICK_TRAIN_TIME,
-} from '../../Common/consts.ts';
+import { TANK_COUNT_SIMULATION_MAX, TANK_COUNT_SIMULATION_MIN, TICK_TRAIN_TIME } from '../../Common/consts.ts';
 import { GameDI } from '../../../DI/GameDI.ts';
 import { createBattlefield } from '../../Common/createBattlefield';
 import { createInputVector } from '../../Common/createInputVector.ts';
@@ -89,7 +84,7 @@ export class MasterManager {
 
                 this.frameCount++;
 
-                const isEpisodeDone = activeTanks.length <= 1 || this.frameCount > MAX_FRAMES;
+                const isEpisodeDone = activeTanks.length <= 1 || this.frameCount > 1500;
 
                 if (isEpisodeDone) {
                     this.gameLoop();

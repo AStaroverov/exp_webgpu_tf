@@ -22,6 +22,8 @@ import { min, smoothstep } from '../../../../../lib/math.ts';
 import { component } from '../../../../../src/ECS/utils.ts';
 import { createCircle } from '../../../../../src/ECS/Entities/Shapes.ts';
 
+export const TANK_APPROXIMATE_COLLISION_RADIUS = 80;
+
 export const Tank = component({
     aimEid: TypedArray.f64(delegate.defaultSize),
     turretEId: TypedArray.f64(delegate.defaultSize),

@@ -5,7 +5,6 @@ import { RingBuffer } from 'ring-buffer-ts';
 import { isDevtoolsOpen } from '../../../Common/utils.ts';
 import { abs } from '../../../../../../../lib/math.ts';
 import { createPolicyNetwork, createValueNetwork } from '../../../Common/models.ts';
-import { Config, getCurrentConfig } from '../../Common/config.ts';
 import { getStoreModelPath } from '../utils.ts';
 import {
     clearMemoryBatchList,
@@ -17,10 +16,10 @@ import {
 import { Batch } from '../../Common/Memory.ts';
 import { trainPolicyNetwork, trainValueNetwork } from '../../Common/train.ts';
 import { flatFloat32Array } from '../../../Common/flat.ts';
+import { CONFIG } from '../../Common/config.ts';
 
 export class MasterAgent {
     private version = 0;
-    private config!: Config;
     private valueNetwork!: tf.LayersModel;   // Сеть критика
     private policyNetwork!: tf.LayersModel;  // Сеть политики
     private policyOptimizer!: tf.Optimizer;        // Оптимизатор для policy network
@@ -33,9 +32,8 @@ export class MasterAgent {
     }>(10);
 
     constructor() {
-        this.config = getCurrentConfig();
-        this.valueOptimizer = tf.train.adam(this.config.learningRateValue);
-        this.policyOptimizer = tf.train.adam(this.config.learningRatePolicy);
+        this.valueOptimizer = tf.train.adam(CONFIG.learningRateValue);
+        this.policyOptimizer = tf.train.adam(CONFIG.learningRatePolicy);
     }
 
     public static create() {
@@ -76,11 +74,10 @@ export class MasterAgent {
 
             await setAgentState({
                 version: this.version,
-                config: this.config,
                 logger: this.logger.toArray(),
             });
-            await this.valueNetwork.save(getStoreModelPath('value-model', this.config));
-            await this.policyNetwork.save(getStoreModelPath('policy-model', this.config));
+            await this.valueNetwork.save(getStoreModelPath('value-model', CONFIG));
+            await this.policyNetwork.save(getStoreModelPath('policy-model', CONFIG));
 
             return true;
         } catch (error) {
@@ -91,8 +88,8 @@ export class MasterAgent {
 
     async download() {
         return Promise.all([
-            this.valueNetwork.save(getStoreModelPath('value-model', this.config)),
-            this.policyNetwork.save(getStoreModelPath('policy-model', this.config)),
+            this.valueNetwork.save(getStoreModelPath('value-model', CONFIG)),
+            this.policyNetwork.save(getStoreModelPath('policy-model', CONFIG)),
         ]);
     }
 
@@ -101,8 +98,8 @@ export class MasterAgent {
             const agentState = await getAgentState();
             this.version = agentState?.version ?? 0;
             this.logger.fromArray(agentState?.logger as any);
-            this.valueNetwork = await tf.loadLayersModel(getStoreModelPath('value-model', this.config));
-            this.policyNetwork = await tf.loadLayersModel(getStoreModelPath('policy-model', this.config));
+            this.valueNetwork = await tf.loadLayersModel(getStoreModelPath('value-model', CONFIG));
+            this.policyNetwork = await tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG));
             console.log('Models loaded successfully');
             return true;
         } catch (error) {
@@ -127,7 +124,7 @@ export class MasterAgent {
     async tryTrain(): Promise<number> {
         const gradientsCount = await getMemoryBatchCount();
 
-        if (gradientsCount < this.config.workerCount) {
+        if (gradientsCount < CONFIG.workerCount) {
             return 0;
         }
 
@@ -145,15 +142,15 @@ export class MasterAgent {
 
         console.log(`[Train]: Iteration ${ this.version }, Batch size: ${ size }`);
 
-        for (let i = 0; i < this.config.epochs; i++) {
+        for (let i = 0; i < CONFIG.epochs; i++) {
             const policyLoss = trainPolicyNetwork(
-                this.policyNetwork, this.policyOptimizer, this.config,
+                this.policyNetwork, this.policyOptimizer, CONFIG,
                 tStates, tActions, tLogProbs, tAdvantages,
             );
             policyLossSum += policyLoss;
 
             const valueLoss = trainValueNetwork(
-                this.valueNetwork, this.valueOptimizer, this.config,
+                this.valueNetwork, this.valueOptimizer, CONFIG,
                 tStates, tReturns, tValues,
             );
             valueLossSum += valueLoss;
@@ -179,8 +176,8 @@ export class MasterAgent {
             avgRewards: batchList
                 .map((b) => b.rewards.reduce((acc, v) => acc + v, 0) / b.rewards.length)
                 .reduce((acc, v) => acc + v, 0) / batchList.length,
-            policyLoss: policyLossSum / this.config.epochs,
-            valueLoss: valueLossSum / this.config.epochs,
+            policyLoss: policyLossSum / CONFIG.epochs,
+            valueLoss: valueLossSum / CONFIG.epochs,
         });
 
         return gradientsCount;
@@ -188,8 +185,8 @@ export class MasterAgent {
 
     private async init() {
         if (!(await this.load())) {
-            this.policyNetwork = createPolicyNetwork(this.config.hiddenLayers);
-            this.valueNetwork = createValueNetwork(this.config.hiddenLayers);
+            this.policyNetwork = createPolicyNetwork(CONFIG.hiddenLayers);
+            this.valueNetwork = createValueNetwork(CONFIG.hiddenLayers);
         }
 
         return this;

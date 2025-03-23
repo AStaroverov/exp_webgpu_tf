@@ -22,13 +22,13 @@ export function createDrawShapeSystem(world: World, device: GPUDevice) {
     const roundnessCollect = getTypeTypedArray(shaderMeta.uniforms.roundness.type);
     const shadowCollect = getTypeTypedArray(shaderMeta.uniforms.shadow.type);
 
-    const colorChanges = createChangeDetector(world, [onAdd(Color), onSet(Color)]);
     const shapeChanges = createChangeDetector(world, [onAdd(Shape), onSet(Shape)]);
+    const colorChanges = createChangeDetector(world, [onAdd(Color), onSet(Color)]);
     const shadowChanges = createChangeDetector(world, [onAdd(Shadow), onSet(Shadow)]);
     const roundnessChanges = createChangeDetector(world, [onAdd(Roundness), onSet(Roundness)]);
 
     return function drawShapeSystem(renderPass: GPURenderPassEncoder) {
-        const entities = query(world, [Shape, GlobalTransform, Color]); // Roundness, Shadow is optional
+        const entities = query(world, [GlobalTransform, Shape, Color]); // Roundness, Shadow is optional
 
         if (entities.length === 0) return;
 
@@ -44,11 +44,6 @@ export function createDrawShapeSystem(world: World, device: GPUDevice) {
                 valuesCollect.set(Shape.values.getBatche(id), i * 6);
             }
 
-            if (roundnessChanges.has(id)) {
-                // f32
-                roundnessCollect[i] = Roundness.value[id];
-            }
-
             if (colorChanges.has(id)) {
                 // [f32, 4]
                 colorCollect[i * 4 + 0] = Color.r[id];
@@ -61,6 +56,11 @@ export function createDrawShapeSystem(world: World, device: GPUDevice) {
                 // [f32, 2]
                 shadowCollect[i * 2 + 0] = Shadow.fadeStart[id];
                 shadowCollect[i * 2 + 1] = Shadow.fadeEnd[id];
+            }
+
+            if (hasComponent(world, id, Roundness) && roundnessChanges.has(id)) {
+                // f32
+                roundnessCollect[i] = Roundness.value[id];
             }
 
             if (hasComponent(world, id, Shadow) && shadowChanges.has(id)) {
@@ -81,11 +81,13 @@ export function createDrawShapeSystem(world: World, device: GPUDevice) {
         if (colorChanges.hasChanges()) {
             device.queue.writeBuffer(gpuShader.uniforms.color.getGPUBuffer(device), 0, colorCollect);
         }
-        if (shadowChanges.hasChanges()) {
-            device.queue.writeBuffer(gpuShader.uniforms.shadow.getGPUBuffer(device), 0, shadowCollect);
-        }
+
         if (roundnessChanges.hasChanges()) {
             device.queue.writeBuffer(gpuShader.uniforms.roundness.getGPUBuffer(device), 0, roundnessCollect);
+        }
+
+        if (shadowChanges.hasChanges()) {
+            device.queue.writeBuffer(gpuShader.uniforms.shadow.getGPUBuffer(device), 0, shadowCollect);
         }
 
         renderPass.setBindGroup(0, bindGroup0);
@@ -96,5 +98,11 @@ export function createDrawShapeSystem(world: World, device: GPUDevice) {
 
         renderPass.setPipeline(pipelineSdf);
         renderPass.draw(6, entities.length, 0, 0);
+
+
+        shapeChanges.clear();
+        colorChanges.clear();
+        shadowChanges.clear();
+        roundnessChanges.clear();
     };
 }

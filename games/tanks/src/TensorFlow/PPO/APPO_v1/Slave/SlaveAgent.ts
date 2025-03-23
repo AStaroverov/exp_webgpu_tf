@@ -3,14 +3,13 @@ import '@tensorflow/tfjs-backend-wasm';
 import { ACTION_DIM } from '../../../Common/consts.ts';
 import { getAgentState } from '../Database.ts';
 import { computeLogProbTanh } from '../../../Common/computeLogProb.ts';
-import { Config } from '../../Common/config.ts';
 import { Memory } from '../../Common/Memory.ts';
 import { getStoreModelPath } from '../utils.ts';
+import { CONFIG } from '../../Common/config.ts';
 
 export class SlaveAgent {
     private version = -1;
     private memory: Memory;
-    private config!: Config;
     private policyNetwork!: tf.LayersModel;
     private valueNetwork!: tf.LayersModel;
 
@@ -37,7 +36,7 @@ export class SlaveAgent {
     }
 
     readMemory() {
-        return this.memory.getBatch(this.config.gamma, this.config.lam);
+        return this.memory.getBatch(CONFIG.gamma, CONFIG.lam);
     }
 
     disposeMemory() {
@@ -87,11 +86,10 @@ export class SlaveAgent {
         try {
             const agentState = await getAgentState();
 
-            if (agentState && agentState.config) {
+            if (agentState) {
                 this.version = agentState.version;
-                this.config = agentState.config;
-                this.valueNetwork = await tf.loadLayersModel(getStoreModelPath('value-model', this.config));
-                this.policyNetwork = await tf.loadLayersModel(getStoreModelPath('policy-model', this.config));
+                this.valueNetwork = await tf.loadLayersModel(getStoreModelPath('value-model', CONFIG));
+                this.policyNetwork = await tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG));
                 return true;
             }
 

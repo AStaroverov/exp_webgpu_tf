@@ -16,9 +16,11 @@ export type Config = {
     // PPO-specific parameters
     clipRatioPolicy: number;             // PPO clipping parameter
     clipRatioValue: number;             // PPO clipping parameter
-    batchSize: number;              // Batch size for training
     epochs: number;                // Number of epochs to train on the same data
     entropyCoeff: number;           // Entropy coefficient for encouraging exploration
+
+    batchSize: number;              // Batch size for training
+    maxFrames: number;              // Maximum number of frames to train on
     // Workers
     workerCount: number;                // Number of parallel workers
     // Training control
@@ -38,12 +40,14 @@ export const DEFAULT_EXPERIMENT: Config = {
     lam: 0.95,
     // PPO-specific parameters
     epochs: 10,
-    batchSize: 128,
     clipRatioPolicy: 0.2,
     clipRatioValue: 0.25,
     entropyCoeff: 0.01,
+
+    batchSize: 128,
+    maxFrames: 1000,
     // Workers
-    workerCount: 8,
+    workerCount: 1,
     // Training control
     saveModelEvery: 1,
     savePath: 'APPO_v1',
@@ -61,20 +65,20 @@ export function getExperimentConfig(name: string): Config {
 }
 
 // Current active experiment
-let currentExperiment: Config = DEFAULT_EXPERIMENT;
+export let CONFIG: Config = DEFAULT_EXPERIMENT;
 
 // Set current experiment
 export function setExperiment(nameOrConfig: string | Config): Config {
     if (typeof nameOrConfig === 'string') {
-        currentExperiment = getExperimentConfig(nameOrConfig);
+        CONFIG = getExperimentConfig(nameOrConfig);
     } else {
-        currentExperiment = nameOrConfig;
+        CONFIG = nameOrConfig;
     }
-    console.log(`Activated experiment: ${ currentExperiment.name }`);
-    return currentExperiment;
+    console.log(`Activated experiment: ${ CONFIG.name }`);
+    return CONFIG;
 }
 
 // Get current experiment
 export function getCurrentConfig(): Config {
-    return currentExperiment;
+    return CONFIG;
 }

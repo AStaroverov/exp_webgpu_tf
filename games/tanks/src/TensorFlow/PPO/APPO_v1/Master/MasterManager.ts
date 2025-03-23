@@ -1,17 +1,16 @@
 import { MasterAgent } from './MasterAgent.ts';
 import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.ts';
-import {
-    MAX_FRAMES,
-    TANK_COUNT_SIMULATION_MAX,
-    TANK_COUNT_SIMULATION_MIN,
-    TICK_TRAIN_TIME,
-} from '../../../Common/consts.ts';
+import { TANK_COUNT_SIMULATION_MAX, TANK_COUNT_SIMULATION_MIN, TICK_TRAIN_TIME } from '../../../Common/consts.ts';
 import { GameDI } from '../../../../DI/GameDI.ts';
 import { createBattlefield } from '../../../Common/createBattlefield.ts';
 import { createInputVector } from '../../../Common/createInputVector.ts';
 import { applyActionToTank } from '../../../Common/applyActionToTank.ts';
 import { randomRangeInt } from '../../../../../../../lib/random.ts';
 import { frameTasks } from '../../../../../../../lib/TasksScheduler/frameTasks.ts';
+import { CONFIG } from '../../Common/config.ts';
+import { getDrawState } from '../../../Common/utils.ts';
+import { EntityId } from 'bitecs';
+import { calculateReward } from '../../../Common/calculateReward.ts';
 
 export class MasterManager {
     public agent!: MasterAgent;
@@ -19,8 +18,8 @@ export class MasterManager {
     private stopTrainingTimeout: VoidFunction | null = null;
 
     private stopGameLoopInterval: VoidFunction | null = null;
-    private frameCount = -2;
     private battlefield!: Awaited<ReturnType<typeof createBattlefield>>;
+    private tankRewards = new Map<EntityId, number>();
 
     constructor() {
 
@@ -33,6 +32,10 @@ export class MasterManager {
     public start() {
         this.gameLoop();
         this.trainingLoop();
+    }
+
+    public getReward(tankEid: EntityId) {
+        return this.tankRewards.get(tankEid) || 0;
     }
 
     // Save models
@@ -50,53 +53,61 @@ export class MasterManager {
     private async gameLoop() {
         this.stopGameLoopInterval?.();
 
-        this.frameCount = 0;
         this.battlefield?.destroy();
         this.battlefield = await createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX), true);
+        let frameCount = 0;
         let activeTanks: number[] = [];
 
         this.stopGameLoopInterval = frameTasks.addInterval(async () => {
-            try {
-                if (this.frameCount === -2) {
-                    this.frameCount = -1;
-                    activeTanks = [];
+            if (!getDrawState()) return;
 
-                    this.frameCount = 0;
-                }
-                if (this.frameCount < 0) {
-                    return;
-                }
+            if (frameCount === -2) {
+                frameCount = -1;
+                activeTanks = [];
 
-                const width = GameDI.width;
-                const height = GameDI.height;
-                const shouldEvery = 12;
-                const shouldAction = this.frameCount % shouldEvery === 0;
-                GameDI.shouldCollectTensor = this.frameCount > 0 && (this.frameCount + 1) % shouldEvery === 0;
-
-                if (shouldAction) {
-                    activeTanks = this.battlefield.getTanks();
-
-                    // Update each tank's RL controller
-                    for (const tankEid of activeTanks) {
-                        this.updateTankBehaviour(tankEid, width, height);
-                    }
-                }
-
-                this.battlefield.gameTick(16.666);
-
-                this.frameCount++;
-
-                const isEpisodeDone = activeTanks.length <= 1 || this.frameCount > MAX_FRAMES;
-
-                if (isEpisodeDone) {
-                    this.gameLoop();
-                }
-            } catch (error) {
-                console.error('Error during game loop:', error);
-                this.stopGameLoopInterval?.();
-                this.stopGameLoopInterval = null;
-                macroTasks.addTimeout(() => this.gameLoop(), 1000);
+                frameCount = 0;
             }
+
+            if (frameCount < 0) {
+                return;
+            }
+
+            const width = GameDI.width;
+            const height = GameDI.height;
+            const shouldEvery = 12;
+            const shouldAction = frameCount % shouldEvery === 0;
+            const shouldReward = frameCount % shouldEvery === 10;
+            GameDI.shouldCollectTensor = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
+
+            if (shouldAction) {
+                activeTanks = this.battlefield.getTanks();
+
+                // Update each tank's RL controller
+                for (const tankEid of activeTanks) {
+                    this.updateTankBehaviour(tankEid, width, height);
+                }
+            }
+
+            this.battlefield.gameTick(16.666);
+
+            if (shouldReward) {
+                for (const tankEid of activeTanks) {
+                    this.tankRewards.set(
+                        tankEid,
+                        calculateReward(tankEid, GameDI.width, GameDI.height, frameCount).totalReward,
+                    );
+                }
+            }
+
+
+            const isEpisodeDone = activeTanks.length <= 1 || frameCount > CONFIG.maxFrames;
+
+            if (isEpisodeDone) {
+                this.gameLoop();
+                return;
+            }
+
+            frameCount++;
         }, 1);
     }
 
