@@ -44,7 +44,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     clipRatioValue: 0.25,
     entropyCoeff: 0.01,
 
-    batchSize: 128,
+    batchSize: 256,
     maxFrames: 1000,
     // Workers
     workerCount: 4,
