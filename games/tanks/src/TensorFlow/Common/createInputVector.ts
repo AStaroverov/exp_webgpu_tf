@@ -9,8 +9,8 @@ import {
 import { clamp } from 'lodash-es';
 import { shuffle } from '../../../../../lib/shuffle.ts';
 
-const enemiesNormalizedBuffer = new Float32Array(7 * TANK_INPUT_TENSOR_MAX_ENEMIES);
-const bulletsNormalizedBuffer = new Float32Array(5 * TANK_INPUT_TENSOR_MAX_BULLETS);
+const enemiesNormalizedBuffer = new Float32Array(TANK_INPUT_TENSOR_ENEMY_BUFFER * TANK_INPUT_TENSOR_MAX_ENEMIES);
+const bulletsNormalizedBuffer = new Float32Array(TANK_INPUT_TENSOR_BULLET_BUFFER * TANK_INPUT_TENSOR_MAX_BULLETS);
 
 function normForTanh(v: number, size: number): number {
     return v / size;
