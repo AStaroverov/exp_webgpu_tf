@@ -1,19 +1,16 @@
 interface ArrayLike<T> {
     length: number;
+
     [n: number]: T;
 }
 
 export function shuffle<T extends ArrayLike<any>>(array: T): T {
-    let m = array.length,
+    let m = array.length - 1,
         t,
         i;
 
-    // While there remain elements to shuffle…
     while (m > 0) {
-        // Pick a remaining element…
-        i = (Math.random() | 0) * m--;
-
-        // And swap it with the current element.
+        i = Math.round(Math.random() * m--);
         t = array[m];
         array[m] = array[i];
         array[i] = t;
