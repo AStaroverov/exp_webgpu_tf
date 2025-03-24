@@ -104,7 +104,7 @@ export class MasterAgent {
             const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
 
             return {
-                action: outMean.dataSync() as Float32Array,
+                action: outMean.tanh().dataSync() as Float32Array,
             };
         });
     }
@@ -112,13 +112,12 @@ export class MasterAgent {
     async tryTrain(): Promise<boolean> {
         this.batches.push(...await extractMemoryBatchList());
 
-        if (this.batches.length < CONFIG.workerCount) {
+        const size = this.batches.reduce((acc, b) => acc + b.size, 0);
+
+        if (size < CONFIG.batchSize * CONFIG.workerCount / 2) {
             return false;
         }
 
-        const prevWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
-
-        const size = this.batches.reduce((acc, b) => acc + b.size, 0);
         const tStates = tf.tensor(flatFloat32Array(this.batches.map(b => b.states)), [size, INPUT_DIM]);
         const tActions = tf.tensor(flatFloat32Array(this.batches.map(b => b.actions)), [size, ACTION_DIM]);
         const tLogProbs = tf.tensor(this.batches.map(b => b.logProbs).flat(), [size]);
@@ -128,6 +127,7 @@ export class MasterAgent {
         let policyLossSum = 0, valueLossSum = 0;
 
         console.log(`[Train]: Iteration ${ this.version }, Batch size: ${ size }`);
+        const prevWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
 
         for (let i = 0; i < CONFIG.epochs; i++) {
             const policyLoss = trainPolicyNetwork(
@@ -145,13 +145,6 @@ export class MasterAgent {
             console.log(`[Train]: Epoch: ${ i }, Policy loss: ${ policyLoss.toFixed(4) }, Value loss: ${ valueLoss.toFixed(4) }`);
         }
 
-        tStates.dispose();
-        tActions.dispose();
-        tLogProbs.dispose();
-        tValues.dispose();
-        tAdvantages.dispose();
-        tReturns.dispose();
-
         const newWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
 
         isDevtoolsOpen() && console.log('>> WEIGHTS SUM ABS DELTA', newWeights!.reduce((acc, w, i) => {
@@ -168,6 +161,12 @@ export class MasterAgent {
         });
 
         this.batches.length = 0;
+        tStates.dispose();
+        tActions.dispose();
+        tLogProbs.dispose();
+        tValues.dispose();
+        tAdvantages.dispose();
+        tReturns.dispose();
 
         return true;
     }

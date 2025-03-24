@@ -9,7 +9,7 @@ import { CONFIG } from '../../Common/config.ts';
 
 export class SlaveAgent {
     private version = -1;
-    private syncCountWithSameVersion = 0;
+    private syncCountWithSameVersion = -1;
 
     private memory: Memory;
     private policyNetwork!: tf.LayersModel;
@@ -75,24 +75,26 @@ export class SlaveAgent {
 
     async sync() {
         try {
-            if (this.syncCountWithSameVersion >= 1) {
-                // const start = Date.now();
-                await this.waitNewVersion();
-                // console.log('[SlaveAgent] Awaiting', Date.now() - start);
+            let agentState;
+            if (this.syncCountWithSameVersion >= 2) {
+                const start = Date.now();
+                agentState = await this.waitNewVersion();
+                this.syncCountWithSameVersion = 0;
+                console.log('[SlaveAgent] Awaiting', Date.now() - start);
+            } else {
+                agentState = await getAgentState();
             }
 
-            const [agentState, valueNetwork, policyNetwork] = await Promise.all([
-                getAgentState(),
+            const [valueNetwork, policyNetwork] = await Promise.all([
                 tf.loadLayersModel(getStoreModelPath('value-model', CONFIG)),
                 tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG)),
             ]);
 
             if (agentState && valueNetwork && policyNetwork) {
-                this.syncCountWithSameVersion =
-                    this.version === agentState.version ? this.syncCountWithSameVersion + 1 : 1;
                 this.version = agentState.version;
                 this.valueNetwork = valueNetwork;
                 this.policyNetwork = policyNetwork;
+                this.syncCountWithSameVersion++;
                 return true;
             }
 
