@@ -14,7 +14,7 @@ export function createOutZoneDestroySystem({ world, width, height } = GameDI) {
 
         for (let i = 0; i < eids.length; i++) {
             const eid = eids[i];
-            const globalTransform = GlobalTransform.matrix.getBatche(eid);
+            const globalTransform = GlobalTransform.matrix.getBatch(eid);
             const x = getMatrixTranslationX(globalTransform);
             const y = getMatrixTranslationY(globalTransform);
 

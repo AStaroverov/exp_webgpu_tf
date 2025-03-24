@@ -73,7 +73,7 @@ export function createPlayerTankTurretRotationSystem({ document } = PlayerEnvDI)
 
     return () => {
         if (PLAYER_REFS.tankPid && lastEvent) {
-            const currentPosition = getMatrixTranslation(LocalTransform.matrix.getBatche(Tank.aimEid[PLAYER_REFS.tankPid]));
+            const currentPosition = getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[PLAYER_REFS.tankPid]));
             TankController.setTurretDir$(PLAYER_REFS.tankPid, lastEvent.clientX - currentPosition[0], lastEvent.clientY - currentPosition[1]);
         }
     };

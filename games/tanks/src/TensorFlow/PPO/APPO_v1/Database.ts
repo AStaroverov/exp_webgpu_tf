@@ -6,6 +6,7 @@ const db = new Dexie('tank-rl');
 db.version(1).stores({
     memory: '++id',      // автоинкрементное поле id
     'agent-state': '&id',    // фиксированный первичный ключ (уникальный)
+    'agent-log': '&id',    // фиксированный первичный ключ (уникальный)
 });
 
 export function addMemoryBatch(batch: Batch) {
@@ -26,13 +27,24 @@ export function clearMemoryBatchList() {
 
 type AgentState = {
     version: number;
-    logger: object,
 }
 
 export function setAgentState(state: Omit<AgentState, 'id'>) {
-    return db.table('agent-state').put({ id: 'state', ...state });
+    return db.table('agent-state').put({ id: 0, ...state });
 }
 
 export function getAgentState(): Promise<undefined | AgentState> {
-    return db.table<AgentState>('agent-state').get('state');
+    return db.table<AgentState>('agent-state').get(0);
+}
+
+type AgentLog = {
+    logger: object,
+}
+
+export function setAgentLog(state: Omit<AgentLog, 'id'>) {
+    return db.table('agent-log').put({ id: 0, ...state });
+}
+
+export function getAgentLog(): Promise<undefined | AgentLog> {
+    return db.table<AgentLog>('agent-log').get(0);
 }

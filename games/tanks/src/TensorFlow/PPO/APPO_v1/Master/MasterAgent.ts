@@ -8,9 +8,10 @@ import { createPolicyNetwork, createValueNetwork } from '../../../Common/models.
 import { getStoreModelPath } from '../utils.ts';
 import {
     clearMemoryBatchList,
+    getAgentLog,
     getAgentState,
-    getMemoryBatchCount,
     getMemoryBatchList,
+    setAgentLog,
     setAgentState,
 } from '../Database.ts';
 import { Batch } from '../../Common/Memory.ts';
@@ -20,6 +21,7 @@ import { CONFIG } from '../../Common/config.ts';
 
 export class MasterAgent {
     private version = 0;
+    private batches: Batch[] = [];
     private valueNetwork!: tf.LayersModel;   // Сеть критика
     private policyNetwork!: tf.LayersModel;  // Сеть политики
     private policyOptimizer!: tf.Optimizer;        // Оптимизатор для policy network
@@ -80,12 +82,12 @@ export class MasterAgent {
         try {
             this.version += 1;
 
-            await setAgentState({
-                version: this.version,
-                logger: this.logger.toArray(),
-            });
-            await this.valueNetwork.save(getStoreModelPath('value-model', CONFIG));
-            await this.policyNetwork.save(getStoreModelPath('policy-model', CONFIG));
+            await Promise.all([
+                setAgentState({ version: this.version }),
+                setAgentLog({ logger: this.logger.toArray() }),
+                this.valueNetwork.save(getStoreModelPath('value-model', CONFIG)),
+                this.policyNetwork.save(getStoreModelPath('policy-model', CONFIG)),
+            ]);
 
             return true;
         } catch (error) {
@@ -103,15 +105,25 @@ export class MasterAgent {
 
     async load() {
         try {
-            const agentState = await getAgentState();
+            const [agentState, agentLog, valueNetwork, policyNetwork] = await Promise.all([
+                getAgentState(),
+                getAgentLog(),
+                tf.loadLayersModel(getStoreModelPath('value-model', CONFIG)),
+                tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG)),
+            ]);
+
+            if (!valueNetwork || !policyNetwork) {
+                return false;
+            }
+
             this.version = agentState?.version ?? 0;
-            this.logger.fromArray(agentState?.logger as any);
-            this.valueNetwork = await tf.loadLayersModel(getStoreModelPath('value-model', CONFIG));
-            this.policyNetwork = await tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG));
-            console.log('Models loaded successfully');
+            this.logger.fromArray(agentLog?.logger ?? [] as any);
+            this.valueNetwork = valueNetwork;
+            this.policyNetwork = policyNetwork;
+            console.log('[MasterAgent] Models loaded successfully');
             return true;
         } catch (error) {
-            console.warn('Could not load models, starting with new ones:', error);
+            console.warn('[MasterAgent] Could not load models, starting with new ones:', error);
             return false;
         }
     }
@@ -129,23 +141,30 @@ export class MasterAgent {
         });
     }
 
-    async tryTrain(): Promise<number> {
-        const gradientsCount = await getMemoryBatchCount();
+    async tryTrain(): Promise<boolean> {
+        const batches: Batch[] = await getMemoryBatchList();
 
-        if (gradientsCount < CONFIG.workerCount) {
-            return 0;
+        if (batches.length === 0) {
+            return false;
+        }
+
+        clearMemoryBatchList();
+        this.batches.push(...batches);
+
+        const size = this.batches.reduce((acc, b) => acc + b.size, 0);
+
+        if (size < CONFIG.batchSize * CONFIG.workerCount) {
+            return false;
         }
 
         const prevWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
 
-        const batchList: Batch[] = await getMemoryBatchList();
-        const size = batchList.reduce((acc, b) => acc + b.size, 0);
-        const tStates = tf.tensor(flatFloat32Array(batchList.map(b => b.states)), [size, INPUT_DIM]);
-        const tActions = tf.tensor(flatFloat32Array(batchList.map(b => b.actions)), [size, ACTION_DIM]);
-        const tLogProbs = tf.tensor(batchList.map(b => b.logProbs).flat(), [size]);
-        const tValues = tf.tensor(batchList.map(b => b.values).flat(), [size]);
-        const tAdvantages = tf.tensor(batchList.map(b => b.advantages).flat(), [size]);
-        const tReturns = tf.tensor(batchList.map(b => b.returns).flat(), [size]);
+        const tStates = tf.tensor(flatFloat32Array(this.batches.map(b => b.states)), [size, INPUT_DIM]);
+        const tActions = tf.tensor(flatFloat32Array(this.batches.map(b => b.actions)), [size, ACTION_DIM]);
+        const tLogProbs = tf.tensor(this.batches.map(b => b.logProbs).flat(), [size]);
+        const tValues = tf.tensor(this.batches.map(b => b.values).flat(), [size]);
+        const tAdvantages = tf.tensor(this.batches.map(b => b.advantages).flat(), [size]);
+        const tReturns = tf.tensor(this.batches.map(b => b.returns).flat(), [size]);
         let policyLossSum = 0, valueLossSum = 0;
 
         console.log(`[Train]: Iteration ${ this.version }, Batch size: ${ size }`);
@@ -166,7 +185,6 @@ export class MasterAgent {
             console.log(`[Train]: Epoch: ${ i }, Policy loss: ${ policyLoss.toFixed(4) }, Value loss: ${ valueLoss.toFixed(4) }`);
         }
 
-        clearMemoryBatchList();
         tStates.dispose();
         tActions.dispose();
         tLogProbs.dispose();
@@ -181,15 +199,17 @@ export class MasterAgent {
         }, 0));
 
         this.logger.add({
-            avgRewards: batchList
+            avgRewards: this.batches
                 .map((b) => b.rewards.reduce((acc, v) => acc + v, 0) / b.rewards.length)
-                .reduce((acc, v) => acc + v, 0) / batchList.length,
+                .reduce((acc, v) => acc + v, 0) / this.batches.length,
             policyLoss: policyLossSum / CONFIG.epochs,
             valueLoss: valueLossSum / CONFIG.epochs,
-            avgBatchSize: size / batchList.length,
+            avgBatchSize: size / this.batches.length,
         });
 
-        return gradientsCount;
+        this.batches.length = 0;
+
+        return true;
     }
 
     private async init() {

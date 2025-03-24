@@ -1,10 +1,13 @@
 import { INPUT_DIM } from './consts.ts';
 import {
+    TANK_INPUT_TENSOR_BULLET_BUFFER,
+    TANK_INPUT_TENSOR_ENEMY_BUFFER,
     TANK_INPUT_TENSOR_MAX_BULLETS,
     TANK_INPUT_TENSOR_MAX_ENEMIES,
     TankInputTensor,
 } from '../../ECS/Components/TankState.ts';
 import { clamp } from 'lodash-es';
+import { shuffle } from '../../../../../lib/shuffle.ts';
 
 const enemiesNormalizedBuffer = new Float32Array(7 * TANK_INPUT_TENSOR_MAX_ENEMIES);
 const bulletsNormalizedBuffer = new Float32Array(5 * TANK_INPUT_TENSOR_MAX_BULLETS);
@@ -20,6 +23,9 @@ function normForRelu(v: number, size: number): number {
 function norm(v: number, size: number): number {
     return clamp(normForRelu(v, size) * 0.6 + 0.2, 0, 1);
 }
+
+const ENEMIES_INDEXES = new Uint32Array(Array.from({ length: TANK_INPUT_TENSOR_MAX_ENEMIES }, (_, i) => i));
+const BULLETS_INDEXES = new Uint32Array(Array.from({ length: TANK_INPUT_TENSOR_MAX_BULLETS }, (_, i) => i));
 
 export function createInputVector(tankEid: number, width: number, height: number) {
     enemiesNormalizedBuffer.fill(0);
@@ -44,29 +50,33 @@ export function createInputVector(tankEid: number, width: number, height: number
     inputVector[k++] = norm(turretTargetY - tankY, height);
 
     // Enemies data
-    const enemiesBuffer = TankInputTensor.enemiesData.getBatche(tankEid);
-    for (let i = 0; i < TANK_INPUT_TENSOR_MAX_ENEMIES; i++) {
-        if (enemiesBuffer[i * 7] === 0) continue;
-        enemiesNormalizedBuffer[i * 7 + 0] = 1;
-        enemiesNormalizedBuffer[i * 7 + 1] = norm(enemiesBuffer[i * 7 + 1] - tankX, width);
-        enemiesNormalizedBuffer[i * 7 + 2] = norm(enemiesBuffer[i * 7 + 2] - tankY, height);
-        enemiesNormalizedBuffer[i * 7 + 3] = norm(enemiesBuffer[i * 7 + 3], width);
-        enemiesNormalizedBuffer[i * 7 + 4] = norm(enemiesBuffer[i * 7 + 4], height);
-        enemiesNormalizedBuffer[i * 7 + 5] = norm(enemiesBuffer[i * 7 + 5] - tankX, width);
-        enemiesNormalizedBuffer[i * 7 + 6] = norm(enemiesBuffer[i * 7 + 6] - tankY, height);
+    shuffle(ENEMIES_INDEXES);
+    const enemiesBuffer = TankInputTensor.enemiesData.getBatch(tankEid);
+    for (let r = 0, l = TANK_INPUT_TENSOR_ENEMY_BUFFER; r < TANK_INPUT_TENSOR_MAX_ENEMIES; r++) {
+        const w = ENEMIES_INDEXES[r];
+        if (enemiesBuffer[r * l] === 0) continue;
+        enemiesNormalizedBuffer[w * l + 0] = 1;
+        enemiesNormalizedBuffer[w * l + 1] = norm(enemiesBuffer[r * l + 1] - tankX, width);
+        enemiesNormalizedBuffer[w * l + 2] = norm(enemiesBuffer[r * l + 2] - tankY, height);
+        enemiesNormalizedBuffer[w * l + 3] = norm(enemiesBuffer[r * l + 3], width);
+        enemiesNormalizedBuffer[w * l + 4] = norm(enemiesBuffer[r * l + 4], height);
+        enemiesNormalizedBuffer[w * l + 5] = norm(enemiesBuffer[r * l + 5] - tankX, width);
+        enemiesNormalizedBuffer[w * l + 6] = norm(enemiesBuffer[r * l + 6] - tankY, height);
     }
     inputVector.set(enemiesNormalizedBuffer, k);
     k += enemiesNormalizedBuffer.length;
 
     // Bullets data
-    const bulletsBuffer = TankInputTensor.bulletsData.getBatche(tankEid);
-    for (let i = 0; i < TANK_INPUT_TENSOR_MAX_BULLETS; i++) {
-        if (bulletsBuffer[i * 5] === 0) continue;
-        bulletsNormalizedBuffer[i * 5 + 0] = 1;
-        bulletsNormalizedBuffer[i * 5 + 1] = norm(bulletsBuffer[i * 5 + 1] - tankX, width);
-        bulletsNormalizedBuffer[i * 5 + 2] = norm(bulletsBuffer[i * 5 + 2] - tankY, height);
-        bulletsNormalizedBuffer[i * 5 + 3] = norm(bulletsBuffer[i * 5 + 3], width);
-        bulletsNormalizedBuffer[i * 5 + 4] = norm(bulletsBuffer[i * 5 + 4], height);
+    shuffle(BULLETS_INDEXES);
+    const bulletsBuffer = TankInputTensor.bulletsData.getBatch(tankEid);
+    for (let r = 0, l = TANK_INPUT_TENSOR_BULLET_BUFFER; r < TANK_INPUT_TENSOR_MAX_BULLETS; r++) {
+        const w = BULLETS_INDEXES[r];
+        if (bulletsBuffer[r * l] === 0) continue;
+        bulletsNormalizedBuffer[w * l + 0] = 1;
+        bulletsNormalizedBuffer[w * l + 1] = norm(bulletsBuffer[r * l + 1] - tankX, width);
+        bulletsNormalizedBuffer[w * l + 2] = norm(bulletsBuffer[r * l + 2] - tankY, height);
+        bulletsNormalizedBuffer[w * l + 3] = norm(bulletsBuffer[r * l + 3], width);
+        bulletsNormalizedBuffer[w * l + 4] = norm(bulletsBuffer[r * l + 4], height);
     }
     inputVector.set(bulletsNormalizedBuffer, k);
     k += bulletsNormalizedBuffer.length;

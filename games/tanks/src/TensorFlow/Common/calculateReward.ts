@@ -1,4 +1,6 @@
 import {
+    TANK_INPUT_TENSOR_BULLET_BUFFER,
+    TANK_INPUT_TENSOR_ENEMY_BUFFER,
     TANK_INPUT_TENSOR_MAX_BULLETS,
     TANK_INPUT_TENSOR_MAX_ENEMIES,
     TankInputTensor,
@@ -116,19 +118,19 @@ export function calculateReward(
 ): ComponentRewards {
     // -- before predict --
     // const beforePredictHealth = TankInputTensor.health[tankEid];
-    const [beforePredictTankX, beforePredictTankY] = TankInputTensor.position.getBatche(tankEid);
+    const [beforePredictTankX, beforePredictTankY] = TankInputTensor.position.getBatch(tankEid);
     // const [beforePredictTankSpeedX, beforePredictTankSpeedY] = TankInputTensor.speed.getBatche(tankEid);
-    const [beforePredictTurretTargetX, beforePredictTurretTargetY] = TankInputTensor.turretTarget.getBatche(tankEid);
-    const beforePredictEnemiesData = TankInputTensor.enemiesData.getBatche(tankEid);
-    const beforePredictBulletsData = TankInputTensor.bulletsData.getBatche(tankEid);
+    const [beforePredictTurretTargetX, beforePredictTurretTargetY] = TankInputTensor.turretTarget.getBatch(tankEid);
+    const beforePredictEnemiesData = TankInputTensor.enemiesData.getBatch(tankEid);
+    const beforePredictBulletsData = TankInputTensor.bulletsData.getBatch(tankEid);
 
     // -- current state --
     const moveDir = TankController.move[tankEid];
     const isShooting = TankController.shoot[tankEid] > 0;
     const currentHealth = getTankHealth(tankEid);
-    const [currentTankX, currentTankY] = RigidBodyState.position.getBatche(tankEid);
+    const [currentTankX, currentTankY] = RigidBodyState.position.getBatch(tankEid);
     // const [currentTankSpeedX, currentTankSpeedY] = RigidBodyState.linvel.getBatche(tankEid);
-    const [currentTurretTargetX, currentTurretTargetY] = getMatrixTranslation(LocalTransform.matrix.getBatche(Tank.aimEid[tankEid]));
+    const [currentTurretTargetX, currentTurretTargetY] = getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[tankEid]));
     // const currentShootings = TankController.shoot[tankEid] > 0;
     const currentEnemies = Array.from(findTankEnemies(tankEid));
     const currentDangerBullets = Array.from(findTankDangerBullets(tankEid));
@@ -296,12 +298,12 @@ function analyzeAiming(
 
     // Анализируем предыдущее прицеливание
     for (let i = 0; i < TANK_INPUT_TENSOR_MAX_ENEMIES; i++) {
-        const enemyId = beforePredictEnemiesData[i * 6];
-        const enemyX = beforePredictEnemiesData[i * 6 + 1];
-        const enemyY = beforePredictEnemiesData[i * 6 + 2];
+        const enemyId = beforePredictEnemiesData[i * TANK_INPUT_TENSOR_ENEMY_BUFFER];
 
         if (enemyId === 0) continue;
 
+        const enemyX = beforePredictEnemiesData[i * TANK_INPUT_TENSOR_ENEMY_BUFFER + 1];
+        const enemyY = beforePredictEnemiesData[i * TANK_INPUT_TENSOR_ENEMY_BUFFER + 2];
         const prevAimQuality = evaluateAimQuality(
             tankX, tankY, prevTurretTargetX, prevTurretTargetY, enemyX, enemyY,
         );
@@ -525,14 +527,15 @@ function calculateBulletAvoidanceReward(
     const prevBullets = new Map<number, { x: number, y: number, vx: number, vy: number }>();
 
     for (let i = 0; i < TANK_INPUT_TENSOR_MAX_BULLETS; i++) {
-        const id = beforePredictBulletsData[i * 5];
+        const id = beforePredictBulletsData[i * TANK_INPUT_TENSOR_BULLET_BUFFER];
+
         if (id === 0) continue;
 
         prevBullets.set(id, {
-            x: beforePredictBulletsData[i * 5 + 1],
-            y: beforePredictBulletsData[i * 5 + 2],
-            vx: beforePredictBulletsData[i * 5 + 3],
-            vy: beforePredictBulletsData[i * 5 + 4],
+            x: beforePredictBulletsData[i * TANK_INPUT_TENSOR_BULLET_BUFFER + 1],
+            y: beforePredictBulletsData[i * TANK_INPUT_TENSOR_BULLET_BUFFER + 2],
+            vx: beforePredictBulletsData[i * TANK_INPUT_TENSOR_BULLET_BUFFER + 3],
+            vy: beforePredictBulletsData[i * TANK_INPUT_TENSOR_BULLET_BUFFER + 4],
         });
     }
 

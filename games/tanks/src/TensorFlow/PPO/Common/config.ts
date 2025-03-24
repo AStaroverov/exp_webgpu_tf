@@ -19,7 +19,7 @@ export type Config = {
     epochs: number;                // Number of epochs to train on the same data
     entropyCoeff: number;           // Entropy coefficient for encouraging exploration
 
-    batchSize: number;              // Batch size for training
+    batchSize: number;              // Batch size for worker
     maxFrames: number;              // Maximum number of frames to train on
     // Workers
     workerCount: number;                // Number of parallel workers
@@ -47,7 +47,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     batchSize: 128,
     maxFrames: 1000,
     // Workers
-    workerCount: 10,
+    workerCount: 4,
     // Training control
     saveModelEvery: 1,
     savePath: 'APPO_v1',

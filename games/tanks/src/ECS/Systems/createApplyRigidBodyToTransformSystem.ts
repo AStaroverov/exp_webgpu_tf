@@ -9,7 +9,7 @@ export function createApplyRigidBodyToTransformSystem({ world } = GameDI) {
 
         for (let i = 0; i < entities.length; i++) {
             const eid = entities[i];
-            const globalMatrix = GlobalTransform.matrix.getBatche(eid);
+            const globalMatrix = GlobalTransform.matrix.getBatch(eid);
             setMatrixTranslate(globalMatrix, RigidBodyState.position.get(eid, 0), RigidBodyState.position.get(eid, 1));
             setMatrixRotateZ(globalMatrix, RigidBodyState.rotation[eid]);
         }

@@ -94,7 +94,7 @@ export function createTanksDebug(manager: MasterManager) {
 
         for (let i = 0; i < tanksEids.length; i++) {
             const tankEid = tanksEids[i];
-            const position = Array.from(RigidBodyState.position.getBatche(tankEid)).map(v => v.toFixed(2)).join(', ');
+            const position = Array.from(RigidBodyState.position.getBatch(tankEid)).map(v => v.toFixed(2)).join(', ');
             const speed = hypot(RigidBodyState.linvel.get(tankEid, 0), RigidBodyState.linvel.get(tankEid, 1)).toFixed(2);
             const aim = Tank.aimEid[tankEid];
             const color = `rgba(${ Color.r[aim] * 255 }, ${ Color.g[aim] * 255 }, ${ Color.b[aim] * 255 }, ${ Color.a[aim] })`;

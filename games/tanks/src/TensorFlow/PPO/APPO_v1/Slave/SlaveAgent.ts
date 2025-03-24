@@ -9,6 +9,8 @@ import { CONFIG } from '../../Common/config.ts';
 
 export class SlaveAgent {
     private version = -1;
+    private syncCountWithSameVersion = 0;
+
     private memory: Memory;
     private policyNetwork!: tf.LayersModel;
     private valueNetwork!: tf.LayersModel;
@@ -71,7 +73,37 @@ export class SlaveAgent {
         });
     }
 
-    async waitNewVersion() {
+    async sync() {
+        try {
+            if (this.syncCountWithSameVersion >= 1) {
+                const start = Date.now();
+                await this.waitNewVersion();
+                console.log('[SlaveAgent] Awaiting', Date.now() - start);
+            }
+
+            const [agentState, valueNetwork, policyNetwork] = await Promise.all([
+                getAgentState(),
+                tf.loadLayersModel(getStoreModelPath('value-model', CONFIG)),
+                tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG)),
+            ]);
+
+            if (agentState && valueNetwork && policyNetwork) {
+                this.syncCountWithSameVersion =
+                    this.version === agentState.version ? this.syncCountWithSameVersion + 1 : 0;
+                this.version = agentState.version;
+                this.valueNetwork = valueNetwork;
+                this.policyNetwork = policyNetwork;
+                return true;
+            }
+
+            return false;
+        } catch (error) {
+            console.warn('[SlaveAgent] Could not sync models:', error);
+            return false;
+        }
+    }
+
+    private async waitNewVersion() {
         while (true) {
             const agentState = await getAgentState();
             if ((agentState?.version ?? 0) > this.version) {
@@ -79,24 +111,6 @@ export class SlaveAgent {
             }
 
             await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-    }
-
-    async sync() {
-        try {
-            const agentState = await getAgentState();
-
-            if (agentState) {
-                this.version = agentState.version;
-                this.valueNetwork = await tf.loadLayersModel(getStoreModelPath('value-model', CONFIG));
-                this.policyNetwork = await tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG));
-                return true;
-            }
-
-            return false;
-        } catch (error) {
-            console.warn('Could not load PPO models, starting with new ones:', error);
-            return false;
         }
     }
 }

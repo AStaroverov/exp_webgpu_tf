@@ -55,7 +55,7 @@ frameTasks.addInterval(() => {
         calculateReward(tanks[0], GameDI.width, GameDI.height, 0);
     }
 
-    const enemyTankPosition = getMatrixTranslation(GlobalTransform.matrix.getBatche(enemyEid));
+    const enemyTankPosition = getMatrixTranslation(GlobalTransform.matrix.getBatch(enemyEid));
     if (enemyTankPosition[1] < 0) {
         TankController.setMove$(enemyEid, -1);
     }

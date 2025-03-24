@@ -82,8 +82,8 @@ const tmpMatrix = mat4.create();
 const tmpPosition = vec3.create() as Float32Array;
 
 export function spawnBullet(tankId: number) {
-    const globalTransform = GlobalTransform.matrix.getBatche(Tank.turretEId[tankId]);
-    const bulletDelta = Tank.bulletStartPosition.getBatche(tankId);
+    const globalTransform = GlobalTransform.matrix.getBatch(Tank.turretEId[tankId]);
+    const bulletDelta = Tank.bulletStartPosition.getBatch(tankId);
 
     tmpPosition.set(bulletDelta);
     mat4.identity(tmpMatrix);

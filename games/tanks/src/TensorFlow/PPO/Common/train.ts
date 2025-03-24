@@ -9,7 +9,7 @@ export function trainPolicyNetwork(
     config: Config,
     states: tf.Tensor,       // [batchSize, inputDim]
     actions: tf.Tensor,      // [batchSize, actionDim]
-    oldLogProbs: tf.Tensor,  // [batchSize] или [batchSize,1]
+    oldLogProbs: tf.Tensor,  // [batchSize]
     advantages: tf.Tensor,   // [batchSize]
 ): number {
     return tf.tidy(() => {

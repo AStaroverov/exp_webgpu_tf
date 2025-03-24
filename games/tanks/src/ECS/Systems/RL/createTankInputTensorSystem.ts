@@ -28,9 +28,9 @@ export function createTankInputTensorSystem(options = GameDI) {
         for (let i = 0; i < tankEids.length; i++) {
             const tankEid = tankEids[i];
             const health = getTankHealth(tankEid);
-            const linvel = RigidBodyState.linvel.getBatche(tankEid);
-            const position = RigidBodyState.position.getBatche(tankEid);
-            const aimLocal = LocalTransform.matrix.getBatche(Tank.aimEid[tankEid]);
+            const linvel = RigidBodyState.linvel.getBatch(tankEid);
+            const position = RigidBodyState.position.getBatch(tankEid);
+            const aimLocal = LocalTransform.matrix.getBatch(Tank.aimEid[tankEid]);
 
             TankInputTensor.setTankData(
                 tankEid,
@@ -50,9 +50,9 @@ export function createTankInputTensorSystem(options = GameDI) {
                     tankEid,
                     j,
                     enemyEid,
-                    RigidBodyState.position.getBatche(enemyEid),
-                    RigidBodyState.linvel.getBatche(enemyEid),
-                    getMatrixTranslation(LocalTransform.matrix.getBatche(Tank.aimEid[enemyEid])),
+                    RigidBodyState.position.getBatch(enemyEid),
+                    RigidBodyState.linvel.getBatch(enemyEid),
+                    getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[enemyEid])),
                 );
             }
 
@@ -65,8 +65,8 @@ export function createTankInputTensorSystem(options = GameDI) {
                     tankEid,
                     j,
                     bulletEid,
-                    RigidBodyState.position.getBatche(bulletEid),
-                    RigidBodyState.linvel.getBatche(bulletEid),
+                    RigidBodyState.position.getBatch(bulletEid),
+                    RigidBodyState.linvel.getBatch(bulletEid),
                 );
             }
         }
@@ -131,8 +131,8 @@ export function findTankDangerBullets(tankEid: number, { physicalWorld } = GameD
 
                 tested.add(eid);
 
-                const bulletPosition = RigidBodyState.position.getBatche(eid);
-                const bulletVelocity = RigidBodyState.linvel.getBatche(eid);
+                const bulletPosition = RigidBodyState.position.getBatch(eid);
+                const bulletVelocity = RigidBodyState.linvel.getBatch(eid);
                 const dangerSpeed = hypot(bulletPosition[0], bulletPosition[1]) >= BULLET_DANGER_SPEED;
                 const dangerTrajectory = dangerSpeed && hasIntersectionVectorAndCircle(
                     bulletPosition[0],

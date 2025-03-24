@@ -35,13 +35,13 @@ export function createDrawShapeSystem(world: World, device: GPUDevice) {
         for (let i = 0; i < entities.length; i++) {
             const id = entities[i];
 
-            transformCollect.set(GlobalTransform.matrix.getBatche(id), i * 16);
+            transformCollect.set(GlobalTransform.matrix.getBatch(id), i * 16);
 
             // ui8
             if (shapeChanges.has(id)) {
                 kindCollect[i] = Shape.kind[id];
                 // vec4<f32> width, height, ..., ...
-                valuesCollect.set(Shape.values.getBatche(id), i * 6);
+                valuesCollect.set(Shape.values.getBatch(id), i * 6);
             }
 
             if (colorChanges.has(id)) {

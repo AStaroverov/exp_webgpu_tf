@@ -14,7 +14,7 @@ export function createCircle(world: World, { x, y, z, radius, color, shadow }: {
     const id = addEntity(world);
 
     addTransformComponents(world, id);
-    applyMatrixTranslate(LocalTransform.matrix.getBatche(id), x, y, z);
+    applyMatrixTranslate(LocalTransform.matrix.getBatch(id), x, y, z);
 
     Shape.addComponent(world, id, ShapeKind.Circle, radius);
     Color.addComponent(world, id, color[0], color[1], color[2], color[3]);
@@ -36,7 +36,7 @@ export function createRectangle(world: World, { x, y, z, width, height, color, r
     const id = addEntity(world);
 
     addTransformComponents(world, id);
-    applyMatrixTranslate(LocalTransform.matrix.getBatche(id), x, y, z);
+    applyMatrixTranslate(LocalTransform.matrix.getBatch(id), x, y, z);
 
     Shape.addComponent(world, id, ShapeKind.Rectangle, width, height);
     Color.addComponent(world, id, color[0], color[1], color[2], color[3]);
@@ -60,7 +60,7 @@ export function createTriangle(world: World, { x, y, z, color, roundness, point1
     const id = addEntity(world);
 
     addTransformComponents(world, id);
-    applyMatrixTranslate(LocalTransform.matrix.getBatche(id), x, y, z);
+    applyMatrixTranslate(LocalTransform.matrix.getBatch(id), x, y, z);
 
     Shape.addComponent(world, id, ShapeKind.Triangle, point1[0], point1[1], point2[0], point2[1], point3[0], point3[1]);
     Color.addComponent(world, id, color[0], color[1], color[2], color[3]);

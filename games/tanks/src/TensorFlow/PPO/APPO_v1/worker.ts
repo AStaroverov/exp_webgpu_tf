@@ -17,7 +17,7 @@ async function initSystem() {
 
     // Start the game
     try {
-        await SlaveManager.create();
+        SlaveManager.create().start();
 
         console.log('Slave Manager successfully initialized');
     } catch (error) {

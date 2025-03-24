@@ -66,7 +66,7 @@ function rotateByMotor(delta: number, tankEid: number, { physicalWorld } = GameD
     const tankRot = tankRB.rotation();
     const turretRot = turretRB.rotation();
     const turretPos = turretRB.translation();
-    const targetPos = getMatrixTranslation(LocalTransform.matrix.getBatche(Tank.aimEid[tankEid]));
+    const targetPos = getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[tankEid]));
     // Глобальный угол от дула к позиции цели
     const targetRot = Math.atan2(targetPos[1] - turretPos.y, targetPos[0] - turretPos.x) + Math.PI / 2;
     const relTurretRot = normalizeAngle(turretRot - tankRot);

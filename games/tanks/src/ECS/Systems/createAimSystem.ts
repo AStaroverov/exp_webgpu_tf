@@ -21,9 +21,9 @@ export function createAimSystem({ world } = GameDI) {
         for (let i = 0; i < tankEids.length; i++) {
             const tankEid = tankEids[i];
             const aimEid = Tank.aimEid[tankEid];
-            const tankPos = RigidBodyState.position.getBatche(tankEid);
-            const turretLocal = LocalTransform.matrix.getBatche(aimEid);
-            const turretDir = TankController.turretDir.getBatche(tankEid);
+            const tankPos = RigidBodyState.position.getBatch(tankEid);
+            const turretLocal = LocalTransform.matrix.getBatch(aimEid);
+            const turretDir = TankController.turretDir.getBatch(tankEid);
             let turretTargetX = getMatrixTranslationX(turretLocal) + turretDir[0] * delta * 0.1;
             let turretTargetY = getMatrixTranslationY(turretLocal) + turretDir[1] * delta * 0.1;
 
@@ -37,7 +37,7 @@ export function createAimSystem({ world } = GameDI) {
                 turretTargetY = tankPos[1] + nY * MAX_DIST;
             }
 
-            setMatrixTranslate(LocalTransform.matrix.getBatche(aimEid), turretTargetX, turretTargetY, ZIndex.Bullet);
+            setMatrixTranslate(LocalTransform.matrix.getBatch(aimEid), turretTargetX, turretTargetY, ZIndex.Bullet);
         }
     });
 }

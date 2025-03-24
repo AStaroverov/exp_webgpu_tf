@@ -32,7 +32,7 @@ export function removeAllChildren(entity: number) {
 }
 
 export function removeChild(entity: number, child: number) {
-    const children = Children.entitiesIds.getBatche(entity);
+    const children = Children.entitiesIds.getBatch(entity);
     const length = Children.entitiesCount[entity];
     const index = children.subarray(0, length).indexOf(child);
 
