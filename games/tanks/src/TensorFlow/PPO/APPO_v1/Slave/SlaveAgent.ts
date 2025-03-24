@@ -76,9 +76,9 @@ export class SlaveAgent {
     async sync() {
         try {
             if (this.syncCountWithSameVersion >= 1) {
-                const start = Date.now();
+                // const start = Date.now();
                 await this.waitNewVersion();
-                console.log('[SlaveAgent] Awaiting', Date.now() - start);
+                // console.log('[SlaveAgent] Awaiting', Date.now() - start);
             }
 
             const [agentState, valueNetwork, policyNetwork] = await Promise.all([
@@ -89,7 +89,7 @@ export class SlaveAgent {
 
             if (agentState && valueNetwork && policyNetwork) {
                 this.syncCountWithSameVersion =
-                    this.version === agentState.version ? this.syncCountWithSameVersion + 1 : 0;
+                    this.version === agentState.version ? this.syncCountWithSameVersion + 1 : 1;
                 this.version = agentState.version;
                 this.valueNetwork = valueNetwork;
                 this.policyNetwork = policyNetwork;

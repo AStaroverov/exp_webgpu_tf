@@ -1,4 +1,4 @@
-import Dexie from 'dexie';
+import Dexie, { Transaction } from 'dexie';
 import { Batch } from '../Common/Memory.ts';
 
 const db = new Dexie('tank-rl');
@@ -17,12 +17,20 @@ export function getMemoryBatchCount() {
     return db.table('memory').count();
 }
 
-export function getMemoryBatchList() {
-    return db.table<Batch>('memory').toArray();
+export function getMemoryBatchList(tx: Transaction | typeof db = db) {
+    return (tx as Transaction).table<(Batch & { id: number })>('memory').toArray();
 }
 
-export function clearMemoryBatchList() {
-    return db.table('memory').clear();
+export function clearMemoryBatchList(tx: Transaction | typeof db = db) {
+    return (tx as Transaction).table('memory').clear();
+}
+
+export function extractMemoryBatchList() {
+    return db.transaction('rw', db.table('memory'), async (tx) => {
+        const list = await getMemoryBatchList(tx);
+        await clearMemoryBatchList(tx);
+        return list;
+    });
 }
 
 type AgentState = {

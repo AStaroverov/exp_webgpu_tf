@@ -6,14 +6,7 @@ import { isDevtoolsOpen } from '../../../Common/utils.ts';
 import { abs } from '../../../../../../../lib/math.ts';
 import { createPolicyNetwork, createValueNetwork } from '../../../Common/models.ts';
 import { getStoreModelPath } from '../utils.ts';
-import {
-    clearMemoryBatchList,
-    getAgentLog,
-    getAgentState,
-    getMemoryBatchList,
-    setAgentLog,
-    setAgentState,
-} from '../Database.ts';
+import { extractMemoryBatchList, getAgentLog, getAgentState, setAgentLog, setAgentState } from '../Database.ts';
 import { Batch } from '../../Common/Memory.ts';
 import { trainPolicyNetwork, trainValueNetwork } from '../../Common/train.ts';
 import { flatFloat32Array } from '../../../Common/flat.ts';
@@ -103,31 +96,6 @@ export class MasterAgent {
         ]);
     }
 
-    async load() {
-        try {
-            const [agentState, agentLog, valueNetwork, policyNetwork] = await Promise.all([
-                getAgentState(),
-                getAgentLog(),
-                tf.loadLayersModel(getStoreModelPath('value-model', CONFIG)),
-                tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG)),
-            ]);
-
-            if (!valueNetwork || !policyNetwork) {
-                return false;
-            }
-
-            this.version = agentState?.version ?? 0;
-            this.logger.fromArray(agentLog?.logger ?? [] as any);
-            this.valueNetwork = valueNetwork;
-            this.policyNetwork = policyNetwork;
-            console.log('[MasterAgent] Models loaded successfully');
-            return true;
-        } catch (error) {
-            console.warn('[MasterAgent] Could not load models, starting with new ones:', error);
-            return false;
-        }
-    }
-
     predict(state: Float32Array): { action: Float32Array } {
         return tf.tidy(() => {
             const stateTensor = tf.tensor1d(state).expandDims(0);
@@ -142,23 +110,15 @@ export class MasterAgent {
     }
 
     async tryTrain(): Promise<boolean> {
-        const batches: Batch[] = await getMemoryBatchList();
+        this.batches.push(...await extractMemoryBatchList());
 
-        if (batches.length === 0) {
-            return false;
-        }
-
-        clearMemoryBatchList();
-        this.batches.push(...batches);
-
-        const size = this.batches.reduce((acc, b) => acc + b.size, 0);
-
-        if (size < CONFIG.batchSize * CONFIG.workerCount) {
+        if (this.batches.length < CONFIG.workerCount) {
             return false;
         }
 
         const prevWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
 
+        const size = this.batches.reduce((acc, b) => acc + b.size, 0);
         const tStates = tf.tensor(flatFloat32Array(this.batches.map(b => b.states)), [size, INPUT_DIM]);
         const tActions = tf.tensor(flatFloat32Array(this.batches.map(b => b.actions)), [size, ACTION_DIM]);
         const tLogProbs = tf.tensor(this.batches.map(b => b.logProbs).flat(), [size]);
@@ -220,5 +180,32 @@ export class MasterAgent {
 
         return this;
     }
+
+    private async load() {
+        try {
+            const [agentState, agentLog, valueNetwork, policyNetwork] = await Promise.all([
+                getAgentState(),
+                getAgentLog(),
+                tf.loadLayersModel(getStoreModelPath('value-model', CONFIG)),
+                tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG)),
+            ]);
+
+            if (!valueNetwork || !policyNetwork) {
+                return false;
+            }
+
+            this.version = agentState?.version ?? 0;
+            this.logger.fromArray(agentLog?.logger ?? [] as any);
+            this.valueNetwork = valueNetwork;
+            this.policyNetwork = policyNetwork;
+            console.log('[MasterAgent] Models loaded successfully');
+            return true;
+        } catch (error) {
+            console.warn('[MasterAgent] Could not load models, starting with new ones:', error);
+            return false;
+        }
+    }
 }
+
+
 
