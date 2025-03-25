@@ -9,8 +9,9 @@ import { getStoreModelPath } from '../utils.ts';
 import { extractMemoryBatchList, getAgentLog, getAgentState, setAgentLog, setAgentState } from '../Database.ts';
 import { Batch } from '../../Common/Memory.ts';
 import { predict, trainPolicyNetwork, trainValueNetwork } from '../../Common/train.ts';
-import { flatFloat32Array } from '../../../Common/flat.ts';
 import { CONFIG } from '../../Common/config.ts';
+import { batchShuffle, shuffle } from '../../../../../../../lib/shuffle.ts';
+import { flatFloat32Array } from '../../../Common/flat.ts';
 
 export class MasterAgent {
     private version = 0;
@@ -121,32 +122,53 @@ export class MasterAgent {
             return false;
         }
 
-        const size = this.batches.reduce((acc, b) => acc + b.size, 0);
-        const tStates = tf.tensor(flatFloat32Array(this.batches.map(b => b.states)), [size, INPUT_DIM]);
-        const tActions = tf.tensor(flatFloat32Array(this.batches.map(b => b.actions)), [size, ACTION_DIM]);
-        const tLogProbs = tf.tensor(this.batches.map(b => b.logProbs).flat(), [size]);
-        const tValues = tf.tensor(this.batches.map(b => b.values).flat(), [size]);
-        const tAdvantages = tf.tensor(this.batches.map(b => b.advantages).flat(), [size]);
-        const tReturns = tf.tensor(this.batches.map(b => b.returns).flat(), [size]);
-        let policyLossSum = 0, valueLossSum = 0;
+        const sumSize = this.batches.reduce((acc, b) => acc + b.size, 0);
 
-        console.log(`[Train]: Iteration ${ this.version }, Batch size: ${ size }`);
+        console.log(`[Train]: Iteration ${ this.version }, Sum batch size: ${ sumSize }`);
         const prevWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
 
+        let policyLossSum = 0, valueLossSum = 0;
         for (let i = 0; i < CONFIG.epochs; i++) {
-            const policyLoss = trainPolicyNetwork(
-                this.policyNetwork, this.policyOptimizer, CONFIG,
-                tStates, tActions, tLogProbs, tAdvantages,
-            );
-            policyLossSum += policyLoss;
+            shuffle(this.batches);
+            for (let j = 0; j < this.batches.length; j++) {
+                const batch = this.batches[j];
+                batchShuffle(
+                    batch.states,
+                    batch.actions,
+                    batch.logProbs,
+                    batch.values,
+                    batch.advantages,
+                    batch.returns,
+                );
+                const size = batch.size;
+                const tStates = tf.tensor(flatFloat32Array(batch.states), [size, INPUT_DIM]);
+                const tActions = tf.tensor(flatFloat32Array(batch.actions), [size, ACTION_DIM]);
+                const tLogProbs = tf.tensor(batch.logProbs, [size]);
+                const tValues = tf.tensor(batch.values, [size]);
+                const tAdvantages = tf.tensor(batch.advantages, [size]);
+                const tReturns = tf.tensor(batch.returns, [size]);
 
-            const valueLoss = trainValueNetwork(
-                this.valueNetwork, this.valueOptimizer, CONFIG,
-                tStates, tReturns, tValues,
-            );
-            valueLossSum += valueLoss;
+                const policyLoss = trainPolicyNetwork(
+                    this.policyNetwork, this.policyOptimizer, CONFIG,
+                    tStates, tActions, tLogProbs, tAdvantages,
+                );
+                policyLossSum += policyLoss;
 
-            console.log(`[Train]: Epoch: ${ i }, Policy loss: ${ policyLoss.toFixed(4) }, Value loss: ${ valueLoss.toFixed(4) }`);
+                const valueLoss = trainValueNetwork(
+                    this.valueNetwork, this.valueOptimizer, CONFIG,
+                    tStates, tReturns, tValues,
+                );
+                valueLossSum += valueLoss;
+
+                console.log(`[Train]: Epoch: ${ i + 1 }, Batch size: ${ size } Policy loss: ${ policyLoss.toFixed(4) }, Value loss: ${ valueLoss.toFixed(4) }`);
+
+                tStates.dispose();
+                tActions.dispose();
+                tLogProbs.dispose();
+                tValues.dispose();
+                tAdvantages.dispose();
+                tReturns.dispose();
+            }
         }
 
         const newWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
@@ -161,16 +183,10 @@ export class MasterAgent {
                 .reduce((acc, v) => acc + v, 0) / this.batches.length,
             policyLoss: policyLossSum / CONFIG.epochs,
             valueLoss: valueLossSum / CONFIG.epochs,
-            avgBatchSize: size / this.batches.length,
+            avgBatchSize: sumSize / this.batches.length,
         });
 
         this.batches.length = 0;
-        tStates.dispose();
-        tActions.dispose();
-        tLogProbs.dispose();
-        tValues.dispose();
-        tAdvantages.dispose();
-        tReturns.dispose();
 
         return true;
     }

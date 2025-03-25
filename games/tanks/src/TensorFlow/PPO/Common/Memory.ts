@@ -2,11 +2,10 @@
 import { shuffle } from '../../../../../../lib/shuffle.ts';
 import { abs, max, min } from '../../../../../../lib/math.ts';
 import { isDevtoolsOpen } from '../../Common/utils.ts';
-import { flatFloat32Array } from '../../Common/flat.ts';
 
 export type Batch = {
-    states: Float32Array,
-    actions: Float32Array,
+    states: Float32Array[],
+    actions: Float32Array[],
     logProbs: number[],
     values: number[],
     returns: number[],
@@ -57,8 +56,8 @@ export class Memory {
 
         return {
             size: values.reduce((acc, batch) => acc + batch.size, 0),
-            states: flatFloat32Array(values.map(batch => batch.states)),
-            actions: flatFloat32Array(values.map(batch => batch.actions)),
+            states: (values.map(batch => batch.states)).flat(),
+            actions: (values.map(batch => batch.actions)).flat(),
             logProbs: (values.map(batch => batch.logProbs)).flat(),
             values: (values.map(batch => batch.values)).flat(),
             rewards: (values.map(batch => batch.rewards)).flat(),
@@ -141,8 +140,8 @@ export class SubMemory {
 
         return {
             size: this.states.length,
-            states: flatFloat32Array(this.states),
-            actions: flatFloat32Array(this.actions),
+            states: (this.states),
+            actions: (this.actions),
             logProbs: (this.logProbs),
             values: (this.values),
             rewards: (this.rewards),
