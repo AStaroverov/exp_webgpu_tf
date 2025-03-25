@@ -25,6 +25,7 @@ let REWARD_WEIGHTS = {
         HEALTH: 0.3, // За выживание
         SURVIVAL: 1.0, // За выживание
     },
+    COMMON_MULTIPLIER: 1.0,
 
     AIM: {
         QUALITY: 1.0,       // За точное прицеливание
@@ -34,32 +35,34 @@ let REWARD_WEIGHTS = {
         NO_TARGET_PENALTY: -0.1, // За отсутствие целей
         TRACKING_PENALTY: -0.2, // За активное отслеживание врага
         DISTANCE_PENALTY: -0.2, // За расстояние до цели
+        SHOOTING: 1.0,       // За стрельбу в цель
+        SHOOTING_PENALTY: -0.1, // За стрельбу в пустоту
     },
+    AIM_MULTIPLIER: 1.0,
 
     MAP_BORDER: {
         BASE: 0.2,          // За нахождение в пределах карты
         PENALTY: -0.2,      // За выход за границы
     },
-
-    SHOOTING: {
-        AIMED: 1.0,         // За прицельную стрельбу
-        AIMED_PENALTY: -0.1, // Штраф за стрельбу в пустоту
-    },
+    MAP_BORDER_MULTIPLIER: 0.0,
 
     DISTANCE_KEEPING: {
         BASE: 1.0,          // За поддержание дистанции
         PENALTY: -0.2,      // За слишком близкое приближение
     },
+    DISTANCE_KEEPING_MULTIPLIER: 0.0,
 
     MOVEMENT: {
         BASE: 0.2,          // За базовое движение
         STRATEGIC: 0.5,     // За стратегическое движение
     },
+    MOVEMENT_MULTIPLIER: 0.0,
 
     BULLET_AVOIDANCE: {
         PENALTY: -0.1,
         AVOID_QUALITY: 0.1,
     },
+    BULLET_AVOIDANCE_MULTIPLIER: 0.0,
 };
 
 // Структура для хранения многокомпонентных наград
@@ -69,10 +72,14 @@ export interface ComponentRewards {
         survival: number;
         total: number;
     };
-    // Награды для головы стрельбы
-    shoot: {
+
+    aim: {
+        distance: number;        // Расстояние до цели
+        accuracy: number;        // Точность прицеливания
+        tracking: number;        // Активное отслеживание цели
+        mapAwareness: number;    // Нахождение в пределах карты
         shootDecision: number;   // Решение о стрельбе
-        total: number;           // Суммарная награда для головы стрельбы
+        total: number;           // Суммарная награда для головы прицеливания
     };
 
     // Награды для головы движения
@@ -82,15 +89,6 @@ export interface ComponentRewards {
         bulletAvoidance: number;       // Избегание опасности
         mapAwareness: number;    // Нахождение в пределах карты
         total: number;           // Суммарная награда для головы движения
-    };
-
-    // Награды для головы прицеливания
-    aim: {
-        distance: number;        // Расстояние до цели
-        accuracy: number;        // Точность прицеливания
-        tracking: number;        // Активное отслеживание цели
-        mapAwareness: number;    // Нахождение в пределах карты
-        total: number;           // Суммарная награда для головы прицеливания
     };
 
     // Общая суммарная награда
@@ -103,9 +101,8 @@ export interface ComponentRewards {
 function initializeRewards(): ComponentRewards {
     return {
         common: { health: 0, survival: 0, total: 0 },
-        shoot: { shootDecision: 0, total: 0 },
+        aim: { accuracy: 0, tracking: 0, distance: 0, mapAwareness: 0, total: 0, shootDecision: 0 },
         movement: { speed: 0, enemiesPositioning: 0, bulletAvoidance: 0, mapAwareness: 0, total: 0 },
-        aim: { accuracy: 0, tracking: 0, distance: 0, mapAwareness: 0, total: 0 },
         totalReward: 0,
     };
 }
@@ -177,7 +174,7 @@ export function calculateReward(
     );
 
     // 5. Награда за решение о стрельбе
-    rewards.shoot.shootDecision = calculateShootingReward(
+    rewards.aim.shootDecision = calculateShootingReward(
         isShooting,
         aimingResult.bestAimQuality,
     );
@@ -201,24 +198,24 @@ export function calculateReward(
         aimingResult.closestEnemyDist,
     );
 
-    rewards.common.total = rewards.common.health + rewards.common.survival;
 
     rewards.movement.speed = movementRewardResult.speed;
     rewards.movement.enemiesPositioning = movementRewardResult.positioning;
 
     // Рассчитываем итоговые значения
-    rewards.aim.total = (rewards.aim.accuracy + rewards.aim.tracking + rewards.aim.distance + rewards.aim.mapAwareness);
-    rewards.shoot.total = (rewards.shoot.shootDecision);
-    rewards.movement.total = (rewards.movement.speed + rewards.movement.enemiesPositioning +
-        rewards.movement.bulletAvoidance + rewards.movement.mapAwareness);
+    rewards.common.total = REWARD_WEIGHTS.COMMON_MULTIPLIER
+        * (rewards.common.health + rewards.common.survival);
+    rewards.aim.total = REWARD_WEIGHTS.AIM_MULTIPLIER
+        * (rewards.aim.accuracy + rewards.aim.tracking + rewards.aim.distance + rewards.aim.mapAwareness + rewards.aim.shootDecision);
+    rewards.movement.total = REWARD_WEIGHTS.MOVEMENT_MULTIPLIER
+        * (rewards.movement.speed + rewards.movement.enemiesPositioning + rewards.movement.bulletAvoidance + rewards.movement.mapAwareness);
 
     // Общая итоговая награда
-    rewards.totalReward = rewards.shoot.total + rewards.movement.total + rewards.aim.total;
+    rewards.totalReward = rewards.common.total + rewards.aim.total + rewards.movement.total;
 
     isVerboseLog() &&
     console.log(`[Reward] Tank ${ tankEid }
     aim: ${ rewards.aim.total }
-    shoot: ${ rewards.shoot.total }
     move: ${ rewards.movement.total }
     total: ${ rewards.totalReward }
     `);
@@ -457,10 +454,10 @@ function calculateShootingReward(
 
     if (isShooting) {
         // Плавная награда за стрельбу в зависимости от точности прицеливания
-        shootingReward += bestAimQuality * REWARD_WEIGHTS.SHOOTING.AIMED;
+        shootingReward += bestAimQuality * REWARD_WEIGHTS.AIM.SHOOTING;
     } else if (bestAimQuality > 0.5) {
         // Небольшой штраф за отсутствие стрельбы при хорошем прицеливании
-        shootingReward += REWARD_WEIGHTS.SHOOTING.AIMED_PENALTY * smoothstep(0.8, 1.0, bestAimQuality);
+        shootingReward += REWARD_WEIGHTS.AIM.SHOOTING_PENALTY * smoothstep(0.8, 1.0, bestAimQuality);
     }
 
     return shootingReward;

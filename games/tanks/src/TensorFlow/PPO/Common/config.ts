@@ -34,8 +34,8 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Network architecture
     hiddenLayers: [['relu', 256], ['relu', 128], ['relu', 128], ['relu', 64]],
     // Learning parameters
-    learningRatePolicy: 2e-3,
-    learningRateValue: 1e-3,
+    learningRatePolicy: 1e-3,
+    learningRateValue: 1e-4,
     gamma: 0.98,
     lam: 0.95,
     // PPO-specific parameters
@@ -44,15 +44,14 @@ export const DEFAULT_EXPERIMENT: Config = {
     clipRatioValue: 0.25,
     entropyCoeff: 0.01,
 
-    batchSize: 256,
-    maxFrames: 1000,
+    batchSize: 1024, // min 4 worker
+    maxFrames: 1000, // usually produce 300 samples
     // Workers
-    workerCount: 4,
+    workerCount: 9,
     // Training control
     saveModelEvery: 1,
     savePath: 'APPO_v1',
 };
-
 
 // Map of available experiments
 export const EXPERIMENTS: { [key: string]: Config } = {

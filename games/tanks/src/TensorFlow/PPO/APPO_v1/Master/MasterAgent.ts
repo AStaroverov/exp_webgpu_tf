@@ -114,7 +114,7 @@ export class MasterAgent {
 
         const size = this.batches.reduce((acc, b) => acc + b.size, 0);
 
-        if (size < CONFIG.batchSize * CONFIG.workerCount / 2) {
+        if (size < CONFIG.batchSize) {
             return false;
         }
 

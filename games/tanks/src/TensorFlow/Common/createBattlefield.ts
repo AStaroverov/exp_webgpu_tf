@@ -6,7 +6,7 @@ import { TANK_RADIUS } from './consts.ts';
 import { TankController } from '../../ECS/Components/TankController.ts';
 import { query } from 'bitecs';
 
-const MAX_PADDING = 400;
+const MAX_PADDING = 100;
 
 export async function createBattlefield(tanksCount: number, withRender = false, withPlayer = false) {
     const game = await createGame({ width: 800, height: 800, withPlayer, withRender });
