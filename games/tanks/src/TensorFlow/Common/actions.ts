@@ -1,11 +1,13 @@
+import { clamp } from 'lodash-es';
+
 export type Actions = Float32Array;
 
 export function readActions(actions: Actions) {
     return {
-        shoot: (actions[0]) > 0,
-        move: (actions[1]),
-        rotate: (actions[2]),
-        aimX: (actions[3]),
-        aimY: (actions[4]),
+        shoot: clamp(actions[0], -1, 1) > 0,
+        move: clamp(actions[1], -1, 1),
+        rotate: clamp(actions[2], -1, 1),
+        aimX: clamp(actions[3], -1, 1),
+        aimY: clamp(actions[4], -1, 1),
     };
 }

@@ -21,24 +21,3 @@ export function computeLogProb(actions: tf.Tensor, mean: tf.Tensor, std: tf.Tens
         );
     });
 }
-
-export function computeLogProbTanh(actions: tf.Tensor, mean: tf.Tensor, std: tf.Tensor): tf.Tensor {
-    return tf.tidy(() => {
-        let logProbRaw = computeLogProb(actions, mean, std);
-
-        // 2) Якобиан "tanh": вычитаем sum(log(1 - a^2))
-        //    добавляем eps, чтобы избежать log(0)
-        const eps = 1e-6;
-        const logDetJacobian = tf.sum(
-            tf.log(tf.scalar(1).sub(actions.tanh().square()).add(eps)),
-            -1,
-        );
-
-        // logProb = гауссовская часть - \sum log(1 - a^2)
-        // (т.к. log p(a) = log p(rawAct) + log|d rawAct / d a|,
-        //  а log|d rawAct / d a| = - log(1 - a^2))
-        const logProb = tf.sub(logProbRaw, logDetJacobian);
-
-        return logProb;
-    });
-}

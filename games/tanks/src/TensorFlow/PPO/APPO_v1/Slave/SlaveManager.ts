@@ -122,7 +122,7 @@ export class SlaveManager {
             this.agent.rememberAction(
                 tankEid,
                 inputVector,
-                result.rawActions,
+                result.actions,
                 result.logProb,
                 result.value,
             );

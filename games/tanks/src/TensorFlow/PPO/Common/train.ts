@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { ACTION_DIM } from '../../Common/consts.ts';
-import { computeLogProbTanh } from '../../Common/computeLogProb.ts';
+import { computeLogProb } from '../../Common/computeLogProb.ts';
 import { Config } from './config.ts';
 
 export function trainPolicyNetwork(
@@ -19,7 +19,7 @@ export function trainPolicyNetwork(
             const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
             const clippedLogStd = outLogStd.clipByValue(-2, 0.2);
             const std = clippedLogStd.exp();
-            const newLogProbs = computeLogProbTanh(actions, outMean, std);
+            const newLogProbs = computeLogProb(actions, outMean, std);
             const oldLogProbs2D = oldLogProbs.reshape(newLogProbs.shape);
             const ratio = tf.exp(newLogProbs.sub(oldLogProbs2D));
             // isDevtoolsOpen() && console.log('>> RATIO SUM ABS DELTA', (ratio.dataSync() as Float32Array).reduce((a, b) => a + abs(1 - b), 0));
@@ -81,5 +81,48 @@ export function trainValueNetwork(
         }
 
         return vfLoss!.dataSync()[0];
+    });
+}
+
+export function act(
+    policyNetwork: tf.LayersModel,
+    valueNetwork: tf.LayersModel,
+    state: Float32Array,
+): {
+    actions: Float32Array,
+    logProb: number,
+    value: number
+} {
+    return tf.tidy(() => {
+        const stateTensor = tf.tensor1d(state).expandDims(0);
+        const predict = policyNetwork.predict(stateTensor) as tf.Tensor;
+        const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
+        const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
+        const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
+        const clippedLogStd = outLogStd.clipByValue(-2, 0.2);
+        const std = clippedLogStd.exp();
+        const noise = tf.randomNormal([ACTION_DIM]).mul(std);
+        const actions = outMean.add(noise);
+        const logProb = computeLogProb(actions, outMean, std);
+        const value = valueNetwork.predict(stateTensor) as tf.Tensor;
+
+        return {
+            actions: actions.dataSync() as Float32Array,
+            logProb: logProb.dataSync()[0],
+            value: value.squeeze().dataSync()[0],
+        };
+    });
+}
+
+export function predict(policyNetwork: tf.LayersModel, state: Float32Array): { action: Float32Array } {
+    return tf.tidy(() => {
+        const stateTensor = tf.tensor1d(state).expandDims(0);
+        const predict = policyNetwork.predict(stateTensor) as tf.Tensor;
+        const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
+        const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
+
+        return {
+            action: outMean.dataSync() as Float32Array,
+        };
     });
 }

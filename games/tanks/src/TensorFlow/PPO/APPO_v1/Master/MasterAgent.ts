@@ -8,7 +8,7 @@ import { createPolicyNetwork, createValueNetwork } from '../../../Common/models.
 import { getStoreModelPath } from '../utils.ts';
 import { extractMemoryBatchList, getAgentLog, getAgentState, setAgentLog, setAgentState } from '../Database.ts';
 import { Batch } from '../../Common/Memory.ts';
-import { trainPolicyNetwork, trainValueNetwork } from '../../Common/train.ts';
+import { predict, trainPolicyNetwork, trainValueNetwork } from '../../Common/train.ts';
 import { flatFloat32Array } from '../../../Common/flat.ts';
 import { CONFIG } from '../../Common/config.ts';
 
@@ -97,16 +97,10 @@ export class MasterAgent {
     }
 
     predict(state: Float32Array): { action: Float32Array } {
-        return tf.tidy(() => {
-            const stateTensor = tf.tensor1d(state).expandDims(0);
-            const predict = this.policyNetwork.predict(stateTensor) as tf.Tensor;
-            const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
-            const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
-
-            return {
-                action: outMean.tanh().dataSync() as Float32Array,
-            };
-        });
+        return predict(
+            this.policyNetwork,
+            state,
+        );
     }
 
     async tryTrain(): Promise<boolean> {

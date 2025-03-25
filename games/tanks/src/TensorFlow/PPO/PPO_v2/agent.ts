@@ -5,9 +5,8 @@ import { Config, getCurrentConfig } from '../Common/config.ts';
 import { Memory } from '../Common/Memory.ts';
 import { abs, floor } from '../../../../../../lib/math.ts';
 import { isDevtoolsOpen } from '../../Common/utils.ts';
-import { computeLogProbTanh } from '../../Common/computeLogProb.ts';
 import { createPolicyNetwork, createValueNetwork } from '../../Common/models.ts';
-import { trainPolicyNetwork, trainValueNetwork } from '../Common/train.ts';
+import { act, trainPolicyNetwork, trainValueNetwork } from '../Common/train.ts';
 
 // Общий PPO агент для всех танков
 export class SharedTankPPOAgent {
@@ -249,31 +248,15 @@ export class SharedTankPPOAgent {
     }
 
     act(state: Float32Array): {
-        rawActions: Float32Array,
         actions: Float32Array,
         logProb: number,
         value: number
     } {
-        return tf.tidy(() => {
-            const stateTensor = tf.tensor1d(state).expandDims(0);
-            const predict = this.policyNetwork.predict(stateTensor) as tf.Tensor;
-            const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
-            const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
-            const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
-            const clippedLogStd = outLogStd.clipByValue(-2, 0.2);
-            const std = clippedLogStd.exp();
-            const noise = tf.randomNormal([ACTION_DIM]).mul(std);
-            const action = outMean.add(noise);
-            const logProb = computeLogProbTanh(action, outMean, std);
-            const value = this.valueNetwork.predict(stateTensor) as tf.Tensor;
-
-            return {
-                rawActions: action.dataSync() as Float32Array,
-                actions: action.tanh().dataSync() as Float32Array,
-                logProb: logProb.dataSync()[0],
-                value: value.squeeze().dataSync()[0],
-            };
-        });
+        return act(
+            this.policyNetwork,
+            this.valueNetwork,
+            state,
+        );
     }
 
     private applyConfig(config: Config) {
