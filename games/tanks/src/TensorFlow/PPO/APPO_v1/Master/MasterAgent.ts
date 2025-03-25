@@ -117,7 +117,7 @@ export class MasterAgent {
                 .map(b => b.memories),
         );
 
-        if (this.batches.length < CONFIG.workerCount) {
+        if (this.batches.length < CONFIG.workerCount * 3) {
             return false;
         }
 

@@ -45,9 +45,9 @@ export const DEFAULT_EXPERIMENT: Config = {
     entropyCoeff: 0.01,
 
     batchSize: 256, // useless for appo
-    maxFrames: 1000, // usually produce 300 samples
+    maxFrames: 800, // usually produce 250 samples
     // Workers
-    workerCount: 12,
+    workerCount: 10,
     // Training control
     saveModelEvery: 1,
     savePath: 'APPO_v1',
