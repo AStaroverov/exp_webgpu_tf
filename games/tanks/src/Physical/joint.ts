@@ -1,5 +1,5 @@
 import { GameDI } from '../DI/GameDI.ts';
-import { ImpulseJoint } from '@dimforge/rapier2d/src/dynamics';
+import { ImpulseJoint } from '@dimforge/rapier2d';
 
 export function removePhysicalJoint(jointPid: number, { physicalWorld } = GameDI): null | ImpulseJoint {
     if (jointPid < 0) return null;

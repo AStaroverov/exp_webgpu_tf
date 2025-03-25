@@ -1,7 +1,6 @@
-import { ActiveEvents, ColliderDesc } from '@dimforge/rapier2d';
+import { ActiveCollisionTypes, ActiveEvents, ColliderDesc } from '@dimforge/rapier2d';
 import { GameDI } from '../DI/GameDI.ts';
 import { BodyOptions, createBody } from './createBody.ts';
-import { ActiveCollisionTypes } from '@dimforge/rapier2d/src/geometry/collider.ts';
 import { RigidBodyRef } from '../ECS/Components/Physical.ts';
 
 export enum CollisionGroup {

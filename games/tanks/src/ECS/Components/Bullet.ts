@@ -1,5 +1,5 @@
 import { createCircleRR } from './RigidRender.ts';
-import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
+import { ActiveEvents, RigidBodyType } from '@dimforge/rapier2d';
 import {
     addTransformComponents,
     getMatrixRotationZ,
@@ -12,7 +12,6 @@ import { addComponent } from 'bitecs';
 import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';
 import { mat4, vec2, vec3 } from 'gl-matrix';
 import { isNumber } from 'lodash-es';
-import { ActiveEvents } from '@dimforge/rapier2d';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { Hitable } from './Hitable.ts';
 import { addPlayerComponent, Player } from './Player.ts';
