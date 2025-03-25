@@ -127,7 +127,7 @@ export class MasterAgent {
         console.log(`[Train]: Iteration ${ this.version }, Sum batch size: ${ sumSize }`);
         const prevWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
 
-        let policyLossSum = 0, valueLossSum = 0;
+        let policyLossSum = 0, valueLossSum = 0, count = 0;
         for (let i = 0; i < CONFIG.epochs; i++) {
             shuffle(this.batches);
             for (let j = 0; j < this.batches.length; j++) {
@@ -152,13 +152,15 @@ export class MasterAgent {
                     this.policyNetwork, this.policyOptimizer, CONFIG,
                     tStates, tActions, tLogProbs, tAdvantages,
                 );
-                policyLossSum += policyLoss;
 
                 const valueLoss = trainValueNetwork(
                     this.valueNetwork, this.valueOptimizer, CONFIG,
                     tStates, tReturns, tValues,
                 );
+
+                policyLossSum += policyLoss;
                 valueLossSum += valueLoss;
+                count += 1;
 
                 console.log(`[Train]: Epoch: ${ i + 1 }, Batch size: ${ size } Policy loss: ${ policyLoss.toFixed(4) }, Value loss: ${ valueLoss.toFixed(4) }`);
 
@@ -178,12 +180,12 @@ export class MasterAgent {
         }, 0));
 
         this.logger.add({
+            avgBatchSize: sumSize / this.batches.length,
             avgRewards: this.batches
                 .map((b) => b.rewards.reduce((acc, v) => acc + v, 0) / b.rewards.length)
                 .reduce((acc, v) => acc + v, 0) / this.batches.length,
-            policyLoss: policyLossSum / CONFIG.epochs,
-            valueLoss: valueLossSum / CONFIG.epochs,
-            avgBatchSize: sumSize / this.batches.length,
+            policyLoss: policyLossSum / count,
+            valueLoss: valueLossSum / count,
         });
 
         this.batches.length = 0;
