@@ -25,7 +25,7 @@ let REWARD_WEIGHTS = {
         HEALTH: 0.3, // За выживание
         SURVIVAL: 1.0, // За выживание
     },
-    COMMON_MULTIPLIER: 1.0,
+    COMMON_MULTIPLIER: 0.0,
 
     AIM: {
         QUALITY: 1.0,       // За точное прицеливание
