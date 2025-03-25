@@ -35,7 +35,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     hiddenLayers: [['relu', 512], ['relu', 256]],
     // Learning parameters
     learningRatePolicy: 1e-3,
-    learningRateValue: 1e-4,
+    learningRateValue: 1e-3,
     gamma: 0.98,
     lam: 0.95,
     // PPO-specific parameters
@@ -47,7 +47,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     batchSize: 256, // useless for appo
     maxFrames: 800, // usually produce 250 samples
     // Workers
-    workerCount: 10,
+    workerCount: 12,
     // Training control
     saveModelEvery: 1,
     savePath: 'APPO_v1',
