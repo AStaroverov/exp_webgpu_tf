@@ -32,7 +32,7 @@ export type Config = {
 export const DEFAULT_EXPERIMENT: Config = {
     name: 'ppo-default',
     // Network architecture
-    hiddenLayers: [['relu', 256], ['relu', 128], ['relu', 128], ['relu', 64]],
+    hiddenLayers: [['relu', 512], ['relu', 256], ['relu', 128]],
     // Learning parameters
     learningRatePolicy: 1e-3,
     learningRateValue: 1e-4,
