@@ -160,7 +160,6 @@ export class SlaveManager {
     }
 
     private async exposeMemory() {
-        const data = this.agent.readMemory();
-        return addMemoryBatch(data);
+        return addMemoryBatch(this.agent.readMemory());
     }
 }

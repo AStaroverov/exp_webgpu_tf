@@ -104,14 +104,24 @@ export class MasterAgent {
     }
 
     async tryTrain(): Promise<boolean> {
-        this.batches.push(...await extractMemoryBatchList());
+        this.batches.push(
+            ...(await extractMemoryBatchList())
+                .filter(b => {
+                    const delta = this.version - b.version;
+                    if (delta > 2) {
+                        console.log('[Train]: skipping batch with diff', delta);
+                        return false;
+                    }
+                    return true;
+                })
+                .map(b => b.memories),
+        );
 
-        const size = this.batches.reduce((acc, b) => acc + b.size, 0);
-
-        if (size < CONFIG.batchSize) {
+        if (this.batches.length < CONFIG.workerCount) {
             return false;
         }
 
+        const size = this.batches.reduce((acc, b) => acc + b.size, 0);
         const tStates = tf.tensor(flatFloat32Array(this.batches.map(b => b.states)), [size, INPUT_DIM]);
         const tActions = tf.tensor(flatFloat32Array(this.batches.map(b => b.actions)), [size, ACTION_DIM]);
         const tLogProbs = tf.tensor(this.batches.map(b => b.logProbs).flat(), [size]);

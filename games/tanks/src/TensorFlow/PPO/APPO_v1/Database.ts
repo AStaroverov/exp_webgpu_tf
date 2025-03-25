@@ -9,7 +9,7 @@ db.version(1).stores({
     'agent-log': '&id',    // фиксированный первичный ключ (уникальный)
 });
 
-export function addMemoryBatch(batch: Batch) {
+export function addMemoryBatch(batch: { version: number, memories: Batch }) {
     return db.table('memory').add(batch);
 }
 
@@ -18,7 +18,7 @@ export function getMemoryBatchCount() {
 }
 
 export function getMemoryBatchList(tx: Transaction | typeof db = db) {
-    return (tx as Transaction).table<(Batch & { id: number })>('memory').toArray();
+    return (tx as Transaction).table<({ id: number, version: number, memories: Batch })>('memory').toArray();
 }
 
 export function clearMemoryBatchList(tx: Transaction | typeof db = db) {

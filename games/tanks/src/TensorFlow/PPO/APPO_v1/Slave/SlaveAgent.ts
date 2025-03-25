@@ -8,8 +8,6 @@ import { act } from '../../Common/train.ts';
 
 export class SlaveAgent {
     private version = -1;
-    private syncCountWithSameVersion = -1;
-
     private memory: Memory;
     private policyNetwork!: tf.LayersModel;
     private valueNetwork!: tf.LayersModel;
@@ -37,7 +35,10 @@ export class SlaveAgent {
     }
 
     readMemory() {
-        return this.memory.getBatch(CONFIG.gamma, CONFIG.lam);
+        return {
+            version: this.version,
+            memories: this.memory.getBatch(CONFIG.gamma, CONFIG.lam),
+        };
     }
 
     disposeMemory() {
@@ -58,17 +59,8 @@ export class SlaveAgent {
 
     async sync() {
         try {
-            let agentState;
-            if (this.syncCountWithSameVersion >= 2) {
-                const start = Date.now();
-                agentState = await this.waitNewVersion();
-                this.syncCountWithSameVersion = 0;
-                console.log('[SlaveAgent] Awaiting', Date.now() - start);
-            } else {
-                agentState = await getAgentState();
-            }
-
-            const [valueNetwork, policyNetwork] = await Promise.all([
+            const [agentState, valueNetwork, policyNetwork] = await Promise.all([
+                getAgentState(),
                 tf.loadLayersModel(getStoreModelPath('value-model', CONFIG)),
                 tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG)),
             ]);
@@ -77,7 +69,6 @@ export class SlaveAgent {
                 this.version = agentState.version;
                 this.valueNetwork = valueNetwork;
                 this.policyNetwork = policyNetwork;
-                this.syncCountWithSameVersion++;
                 return true;
             }
 
@@ -85,17 +76,6 @@ export class SlaveAgent {
         } catch (error) {
             console.warn('[SlaveAgent] Could not sync models:', error);
             return false;
-        }
-    }
-
-    private async waitNewVersion() {
-        while (true) {
-            const agentState = await getAgentState();
-            if ((agentState?.version ?? 0) > this.version) {
-                return agentState;
-            }
-
-            await new Promise((resolve) => setTimeout(resolve, 100));
         }
     }
 }
