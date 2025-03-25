@@ -36,10 +36,10 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Learning parameters
     learningRatePolicy: 1e-3,
     learningRateValue: 1e-3,
-    gamma: 0.98,
+    gamma: 0.99,
     lam: 0.95,
     // PPO-specific parameters
-    epochs: 10,
+    epochs: 6,
     clipRatioPolicy: 0.2,
     clipRatioValue: 0.25,
     entropyCoeff: 0.01,
