@@ -59,6 +59,10 @@ export class SlaveAgent {
 
     async sync() {
         try {
+            // let agentState: undefined | AgentState;
+            // while (((agentState = await getAgentState())?.version ?? -1) <= this.version) {
+            //     await new Promise(resolve => setTimeout(resolve, 100));
+            // }
             const [agentState, valueNetwork, policyNetwork] = await Promise.all([
                 getAgentState(),
                 tf.loadLayersModel(getStoreModelPath('value-model', CONFIG)),

@@ -33,7 +33,7 @@ export function extractMemoryBatchList() {
     });
 }
 
-type AgentState = {
+export type AgentState = {
     version: number;
 }
 

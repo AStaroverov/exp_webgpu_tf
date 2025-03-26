@@ -73,14 +73,16 @@ export function createRLDebug(manager: MasterManager) {
 
         return `
             <div>Trains: ${ agentStats.version }</div>
-            <div>10 Avg Reward: ${ agentStats.avgReward10.toFixed(2) }</div>
-            <div>10 Avg policy loss ${ agentStats.avgPolicyLoss10.toFixed(4) } </div>
-            <div>10 Avg value loss ${ agentStats.avgValueLoss10.toFixed(4) } </div>
-            <div>10 Avg batch size ${ agentStats.avgBatchSize10.toFixed(0) } </div>
+            <div>Last KL: ${ agentStats.avgKLLast?.toFixed(4) }</div>
+            <div>10 Avg KL: ${ agentStats.avgKL10?.toFixed(4) }</div>
             <div>Last Avg Reward: ${ agentStats.avgRewardLast?.toFixed(2) }</div>
+            <div>10 Avg Reward: ${ agentStats.avgReward10.toFixed(2) }</div>
             <div>Last Avg policy loss ${ agentStats.avgPolicyLossLast?.toFixed(4) } </div>
+            <div>10 Avg policy loss ${ agentStats.avgPolicyLoss10.toFixed(4) } </div>
             <div>Last Avg value loss ${ agentStats.avgValueLossLast?.toFixed(4) } </div>
+            <div>10 Avg value loss ${ agentStats.avgValueLoss10.toFixed(4) } </div>
             <div>Last Avg batch size ${ agentStats.avgBatchSizeLast?.toFixed(0) } </div>
+            <div>10 Avg batch size ${ agentStats.avgBatchSize10.toFixed(0) } </div>
         `;
     };
 }

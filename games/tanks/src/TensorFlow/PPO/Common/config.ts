@@ -18,8 +18,10 @@ export type Config = {
     clipRatioValue: number;             // PPO clipping parameter
     epochs: number;                // Number of epochs to train on the same data
     entropyCoeff: number;           // Entropy coefficient for encouraging exploration
+    maxKL: number;                  // Maximum KL divergence between old and new policy
 
     batchSize: number;              // Batch size for worker
+    miniBatchSize: number,
     maxFrames: number;              // Maximum number of frames to train on
     // Workers
     workerCount: number;                // Number of parallel workers
@@ -34,8 +36,8 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Network architecture
     hiddenLayers: [['relu', 512], ['relu', 256]],
     // Learning parameters
-    learningRatePolicy: 1e-3,
-    learningRateValue: 1e-3,
+    learningRatePolicy: 1e-4,
+    learningRateValue: 1e-4,
     gamma: 0.99,
     lam: 0.95,
     // PPO-specific parameters
@@ -43,8 +45,10 @@ export const DEFAULT_EXPERIMENT: Config = {
     clipRatioPolicy: 0.2,
     clipRatioValue: 0.25,
     entropyCoeff: 0.01,
+    maxKL: 0.05,
 
     batchSize: 256, // useless for appo
+    miniBatchSize: 256,
     maxFrames: 800, // usually produce 250 samples
     // Workers
     workerCount: 12,

@@ -3,14 +3,14 @@ import '@tensorflow/tfjs-backend-wasm';
 import { ACTION_DIM, INPUT_DIM } from '../../../Common/consts.ts';
 import { RingBuffer } from 'ring-buffer-ts';
 import { isDevtoolsOpen } from '../../../Common/utils.ts';
-import { abs } from '../../../../../../../lib/math.ts';
+import { abs, ceil } from '../../../../../../../lib/math.ts';
 import { createPolicyNetwork, createValueNetwork } from '../../../Common/models.ts';
 import { getStoreModelPath } from '../utils.ts';
 import { extractMemoryBatchList, getAgentLog, getAgentState, setAgentLog, setAgentState } from '../Database.ts';
 import { Batch } from '../../Common/Memory.ts';
-import { predict, trainPolicyNetwork, trainValueNetwork } from '../../Common/train.ts';
+import { computeKullbackLeibler, predict, trainPolicyNetwork, trainValueNetwork } from '../../Common/train.ts';
 import { CONFIG } from '../../Common/config.ts';
-import { batchShuffle, shuffle } from '../../../../../../../lib/shuffle.ts';
+import { batchShuffle } from '../../../../../../../lib/shuffle.ts';
 import { flatFloat32Array } from '../../../Common/flat.ts';
 
 export class MasterAgent {
@@ -22,10 +22,11 @@ export class MasterAgent {
     private valueOptimizer!: tf.Optimizer;         // Оптимизатор для value network
 
     private logger = new RingBuffer<{
+        avgBatchSize: number;
         avgRewards: number;
         policyLoss: number;
         valueLoss: number;
-        avgBatchSize: number;
+        avgKl: number;
     }>(10);
 
     constructor() {
@@ -58,15 +59,27 @@ export class MasterAgent {
             ? last10BatchSize.reduce((a, b) => a + b, 0) / last10BatchSize.length
             : 0;
 
+        const last10Kl = this.logger.getLastN(10).map(v => v.avgKl);
+        const avgKl = last10Kl.length > 0
+            ? last10Kl.reduce((a, b) => a + b, 0) / last10Kl.length
+            : 0;
+
         return {
             version: this.version,
+
+            avgKL10: avgKl,
+            avgKLLast: this.logger.getLast()?.avgKl,
+
             avgReward10: avgReward,
-            avgPolicyLoss10: avgPolicyLoss,
-            avgValueLoss10: avgValueLoss,
-            avgBatchSize10: avgBatchSize,
             avgRewardLast: this.logger.getLast()?.avgRewards,
+
+            avgPolicyLoss10: avgPolicyLoss,
             avgPolicyLossLast: this.logger.getLast()?.policyLoss,
+
+            avgValueLoss10: avgValueLoss,
             avgValueLossLast: this.logger.getLast()?.valueLoss,
+
+            avgBatchSize10: avgBatchSize,
             avgBatchSizeLast: this.logger.getLast()?.avgBatchSize,
         };
     }
@@ -118,35 +131,48 @@ export class MasterAgent {
                 .map(b => b.memories),
         );
 
-        if (this.batches.length < CONFIG.workerCount * 3) {
+        if (this.batches.length < CONFIG.workerCount) {
             return false;
         }
 
-        const sumSize = this.batches.reduce((acc, b) => acc + b.size, 0);
-
-        console.log(`[Train]: Iteration ${ this.version }, Sum batch size: ${ sumSize }`);
         const prevWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
 
-        let policyLossSum = 0, valueLossSum = 0, count = 0;
+        const sumSize = this.batches.reduce((acc, b) => acc + b.size, 0);
+        const states = this.batches.map(b => b.states).flat();
+        const actions = this.batches.map(b => b.actions).flat();
+        const logProbs = new Float32Array(this.batches.map(b => b.logProbs).flat());
+        const values = new Float32Array(this.batches.map(b => b.values).flat());
+        const advantages = new Float32Array(this.batches.map(b => b.advantages).flat());
+        const returns = new Float32Array(this.batches.map(b => b.returns).flat());
+        const miniBatchCount = ceil(states.length / CONFIG.miniBatchSize);
+
+        const tAllStates = tf.tensor(flatFloat32Array(states), [sumSize, INPUT_DIM]);
+        const tAllActions = tf.tensor(flatFloat32Array(actions), [sumSize, ACTION_DIM]);
+        const tAllLogProbs = tf.tensor(logProbs);
+
+        console.log(`[Train]: Iteration ${ this.version }, Sum batch size: ${ sumSize }, Mini batch count: ${ miniBatchCount } by ${ CONFIG.miniBatchSize }`);
+
+        let policyLossSum = 0, valueLossSum = 0, klSum = 0, count = 0;
         for (let i = 0; i < CONFIG.epochs; i++) {
-            shuffle(this.batches);
-            for (let j = 0; j < this.batches.length; j++) {
-                const batch = this.batches[j];
-                batchShuffle(
-                    batch.states,
-                    batch.actions,
-                    batch.logProbs,
-                    batch.values,
-                    batch.advantages,
-                    batch.returns,
-                );
-                const size = batch.size;
-                const tStates = tf.tensor(flatFloat32Array(batch.states), [size, INPUT_DIM]);
-                const tActions = tf.tensor(flatFloat32Array(batch.actions), [size, ACTION_DIM]);
-                const tLogProbs = tf.tensor(batch.logProbs, [size]);
-                const tValues = tf.tensor(batch.values, [size]);
-                const tAdvantages = tf.tensor(batch.advantages, [size]);
-                const tReturns = tf.tensor(batch.returns, [size]);
+            batchShuffle(
+                states,
+                actions,
+                logProbs,
+                values,
+                advantages,
+                returns,
+            );
+
+            for (let j = 0; j < miniBatchCount; j++) {
+                const start = j * CONFIG.miniBatchSize;
+                const end = Math.min(start + CONFIG.miniBatchSize, states.length);
+                const size = end - start;
+                const tStates = tf.tensor(flatFloat32Array(states).subarray(start * INPUT_DIM, end * INPUT_DIM), [size, INPUT_DIM]);
+                const tActions = tf.tensor(flatFloat32Array(actions).subarray(start * ACTION_DIM, end * ACTION_DIM), [size, ACTION_DIM]);
+                const tLogProbs = tf.tensor(logProbs.subarray(start, end), [size]);
+                const tValues = tf.tensor(values.subarray(start, end), [size]);
+                const tAdvantages = tf.tensor(advantages.subarray(start, end), [size]);
+                const tReturns = tf.tensor(returns.subarray(start, end), [size]);
 
                 const policyLoss = trainPolicyNetwork(
                     this.policyNetwork, this.policyOptimizer, CONFIG,
@@ -158,11 +184,10 @@ export class MasterAgent {
                     tStates, tReturns, tValues,
                 );
 
+
                 policyLossSum += policyLoss;
                 valueLossSum += valueLoss;
                 count += 1;
-
-                console.log(`[Train]: Epoch: ${ i + 1 }, Batch size: ${ size } Policy loss: ${ policyLoss.toFixed(4) }, Value loss: ${ valueLoss.toFixed(4) }`);
 
                 tStates.dispose();
                 tActions.dispose();
@@ -171,7 +196,26 @@ export class MasterAgent {
                 tAdvantages.dispose();
                 tReturns.dispose();
             }
+
+            const kl = computeKullbackLeibler(
+                this.policyNetwork,
+                tAllStates,
+                tAllActions,
+                tAllLogProbs,
+            );
+
+            if (kl > CONFIG.maxKL) {
+                console.warn(`[Train]: KL divergence is too high: ${ kl }`);
+            }
+
+            console.log(`[Train]: Epoch: ${ i + 1 }, KL: ${ kl }`);
+
+            klSum += kl;
         }
+
+        tAllStates.dispose();
+        tAllActions.dispose();
+        tAllLogProbs.dispose();
 
         const newWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
 
@@ -186,6 +230,7 @@ export class MasterAgent {
                 .reduce((acc, v) => acc + v, 0) / this.batches.length,
             policyLoss: policyLossSum / count,
             valueLoss: valueLossSum / count,
+            avgKl: klSum / CONFIG.epochs,
         });
 
         this.batches.length = 0;
@@ -227,6 +272,3 @@ export class MasterAgent {
         }
     }
 }
-
-
-

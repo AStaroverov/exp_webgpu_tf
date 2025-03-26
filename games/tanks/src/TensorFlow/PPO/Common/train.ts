@@ -15,11 +15,9 @@ export function trainPolicyNetwork(
     return tf.tidy(() => {
         const totalLoss = policyOptimizer.minimize(() => {
             const predict = policyNetwork.predict(states) as tf.Tensor;
-            const outMean = predict.slice([0, 0], [-1, ACTION_DIM]);
-            const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
-            const clippedLogStd = outLogStd.clipByValue(-2, 0.2);
-            const std = clippedLogStd.exp();
-            const newLogProbs = computeLogProb(actions, outMean, std);
+            const { mean, logStd } = parsePredict(predict);
+            const std = logStd.exp();
+            const newLogProbs = computeLogProb(actions, mean, std);
             const oldLogProbs2D = oldLogProbs.reshape(newLogProbs.shape);
             const ratio = tf.exp(newLogProbs.sub(oldLogProbs2D));
             // isDevtoolsOpen() && console.log('>> RATIO SUM ABS DELTA', (ratio.dataSync() as Float32Array).reduce((a, b) => a + abs(1 - b), 0));
@@ -30,7 +28,7 @@ export function trainPolicyNetwork(
             const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
 
             const c = 0.5 * Math.log(2 * Math.PI * Math.E);
-            const entropyEachDim = clippedLogStd.add(c); // [batchSize,ACTION_DIM]
+            const entropyEachDim = logStd.add(c); // [batchSize,ACTION_DIM]
             const totalEntropy = entropyEachDim.sum(1).mean();
             const totalLoss = policyLoss.sub(totalEntropy.mul(config.entropyCoeff));
 
@@ -43,6 +41,31 @@ export function trainPolicyNetwork(
 
         // Возвращаем число
         return totalLoss!.dataSync()[0];
+    });
+}
+
+function parsePredict(predict: tf.Tensor) {
+    const outMean = predict.slice([0, 0], [-1, ACTION_DIM]);
+    const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
+    const clippedLogStd = outLogStd.clipByValue(-2, 0.2);
+
+    return { mean: outMean, logStd: clippedLogStd };
+}
+
+export function computeKullbackLeibler(
+    policyNetwork: tf.LayersModel,
+    states: tf.Tensor,
+    actions: tf.Tensor,
+    logProb: tf.Tensor,
+): number {
+    return tf.tidy(() => {
+        const predict = policyNetwork.predict(states) as tf.Tensor;
+        const { mean, logStd } = parsePredict(predict);
+        const std = logStd.exp();
+        const newLogProbs = computeLogProb(actions, mean, std);
+        const diff = logProb.sub(newLogProbs);
+        const kl = diff.mean();
+        return kl.arraySync() as number;
     });
 }
 
