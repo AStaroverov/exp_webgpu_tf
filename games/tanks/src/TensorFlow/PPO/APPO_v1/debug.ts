@@ -16,7 +16,7 @@ export function createDebugVisualization(container: HTMLElement, manager: Master
     const debugContainer = document.createElement('div');
     debugContainer.className = 'debug-container';
     debugContainer.style.position = 'fixed';
-    debugContainer.style.right = '10px';
+    debugContainer.style.right = '560px';
     debugContainer.style.top = '10px';
     debugContainer.style.width = '300px';
     debugContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
@@ -46,7 +46,6 @@ export function createDebugVisualization(container: HTMLElement, manager: Master
             getDebugInfo(),
             getTanksDebug(),
         ].join('<div>-------------</div>');
-
     }
 
     frameTasks.addInterval(updateDebugInfo, 10);
