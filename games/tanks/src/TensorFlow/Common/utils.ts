@@ -1,6 +1,5 @@
 import Dexie from 'dexie';
 import devtoolsDetect from 'devtools-detect';
-import { getSharedAgent } from '../PPO/PPO_v2/agent.ts';
 
 // Инициализируем базу Dexie с таблицей settings
 const db = new Dexie('ui-tank-rl');
@@ -49,7 +48,7 @@ if (globalThis && globalThis.document) {
     });
 
     document.getElementById('downloadModel')?.addEventListener('click', () => {
-        getSharedAgent().download();
+        throw new Error('Not implemented');
     });
 }
 
