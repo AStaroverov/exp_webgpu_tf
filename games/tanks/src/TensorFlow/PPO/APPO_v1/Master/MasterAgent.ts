@@ -27,7 +27,7 @@ export class MasterAgent {
         policyLoss: number;
         valueLoss: number;
         avgKl: number;
-    }>(10);
+    }>(100);
 
     constructor() {
         this.valueOptimizer = tf.train.adam(CONFIG.learningRateValue);
@@ -39,48 +39,75 @@ export class MasterAgent {
     }
 
     getStats() {
-        const last10Rewards = this.logger.getLastN(10).map(v => v.avgRewards);
-        const avgReward = last10Rewards.length > 0
+        const last100Rewards = this.logger.getLastN(100).map(v => v.avgRewards);
+        const avgReward100 = last100Rewards.length > 0
+            ? last100Rewards.reduce((a, b) => a + b, 0) / last100Rewards.length
+            : 0;
+        const last10Rewards = last100Rewards.slice(-10);
+        const avgReward10 = last10Rewards.length > 0
             ? last10Rewards.reduce((a, b) => a + b, 0) / last10Rewards.length
             : 0;
 
-        const last10PolicyLoss = this.logger.getLastN(10).map(v => v.policyLoss);
-        const avgPolicyLoss = last10PolicyLoss.length > 0
+        const last100PolicyLoss = this.logger.getLastN(100).map(v => v.policyLoss);
+        const avgPolicyLoss100 = last100PolicyLoss.length > 0
+            ? last100PolicyLoss.reduce((a, b) => a + b, 0) / last100PolicyLoss.length
+            : 0;
+        const last10PolicyLoss = last100PolicyLoss.slice(-10);
+        const avgPolicyLoss10 = last10PolicyLoss.length > 0
             ? last10PolicyLoss.reduce((a, b) => a + b, 0) / last10PolicyLoss.length
             : 0;
 
-        const last10ValueLoss = this.logger.getLastN(10).map(v => v.valueLoss);
-        const avgValueLoss = last10ValueLoss.length > 0
+        const last100ValueLoss = this.logger.getLastN(100).map(v => v.valueLoss);
+        const avgValueLoss100 = last100ValueLoss.length > 0
+            ? last100ValueLoss.reduce((a, b) => a + b, 0) / last100ValueLoss.length
+            : 0;
+        const last10ValueLoss = last100ValueLoss.slice(-10);
+        const avgValueLoss10 = last10ValueLoss.length > 0
             ? last10ValueLoss.reduce((a, b) => a + b, 0) / last10ValueLoss.length
             : 0;
 
-        const last10BatchSize = this.logger.getLastN(10).map(v => v.avgBatchSize);
-        const avgBatchSize = last10BatchSize.length > 0
+        const last100BatchSize = this.logger.getLastN(100).map(v => v.avgBatchSize);
+        const avgBatchSize100 = last100BatchSize.length > 0
+            ? last100BatchSize.reduce((a, b) => a + b, 0) / last100BatchSize.length
+            : 0;
+        const last10BatchSize = last100BatchSize.slice(-10);
+        const avgBatchSize10 = last10BatchSize.length > 0
             ? last10BatchSize.reduce((a, b) => a + b, 0) / last10BatchSize.length
             : 0;
 
-        const last10Kl = this.logger.getLastN(10).map(v => v.avgKl);
-        const avgKl = last10Kl.length > 0
+
+        const last100Kl = this.logger.getLastN(100).map(v => v.avgKl);
+        const avgKl100 = last100Kl.length > 0
+            ? last100Kl.reduce((a, b) => a + b, 0) / last100Kl.length
+            : 0;
+        const last10Kl = last100Kl.slice(-10);
+        const avgKl10 = last10Kl.length > 0
             ? last10Kl.reduce((a, b) => a + b, 0) / last10Kl.length
             : 0;
+
 
         return {
             version: this.version,
 
-            avgKL10: avgKl,
             avgKLLast: this.logger.getLast()?.avgKl,
+            avgKL10: avgKl10,
+            avgKL100: avgKl100,
 
-            avgReward10: avgReward,
             avgRewardLast: this.logger.getLast()?.avgRewards,
+            avgReward10: avgReward10,
+            avgReward100: avgReward100,
 
-            avgPolicyLoss10: avgPolicyLoss,
             avgPolicyLossLast: this.logger.getLast()?.policyLoss,
+            avgPolicyLoss10: avgPolicyLoss10,
+            avgPolicyLoss100: avgPolicyLoss100,
 
-            avgValueLoss10: avgValueLoss,
             avgValueLossLast: this.logger.getLast()?.valueLoss,
+            avgValueLoss10: avgValueLoss10,
+            avgValueLoss100: avgValueLoss100,
 
-            avgBatchSize10: avgBatchSize,
             avgBatchSizeLast: this.logger.getLast()?.avgBatchSize,
+            avgBatchSize10: avgBatchSize10,
+            avgBatchSize100: avgBatchSize100,
         };
     }
 

@@ -80,6 +80,7 @@ export function createRLDebug(manager: MasterManager) {
                   <th>Metric</th>
                   <th>Last</th>
                   <th>Avg (10)</th>
+                  <th>Avg (100)</th>
                 </tr>
               </thead>
               <tbody>
@@ -87,26 +88,31 @@ export function createRLDebug(manager: MasterManager) {
                   <td>KL</td>
                   <td>${ agentStats.avgKLLast?.toFixed(4) }</td>
                   <td>${ agentStats.avgKL10?.toFixed(4) }</td>
+                  <td>${ agentStats.avgKL100?.toFixed(4) }</td>
                 </tr>
                 <tr>
                   <td>Reward</td>
                   <td>${ agentStats.avgRewardLast?.toFixed(2) }</td>
                   <td>${ agentStats.avgReward10.toFixed(2) }</td>
+                  <td>${ agentStats.avgReward100.toFixed(2) }</td>
                 </tr>
                 <tr>
                   <td>Policy loss</td>
                   <td>${ agentStats.avgPolicyLossLast?.toFixed(4) }</td>
                   <td>${ agentStats.avgPolicyLoss10.toFixed(4) }</td>
+                  <td>${ agentStats.avgPolicyLoss100.toFixed(4) }</td>
                 </tr>
                 <tr>
                   <td>Value loss</td>
                   <td>${ agentStats.avgValueLossLast?.toFixed(4) }</td>
                   <td>${ agentStats.avgValueLoss10.toFixed(4) }</td>
+                  <td>${ agentStats.avgValueLoss100.toFixed(4) }</td>
                 </tr>
                 <tr>
                   <td>Batch size</td>
                   <td>${ agentStats.avgBatchSizeLast?.toFixed(0) }</td>
                   <td>${ agentStats.avgBatchSize10.toFixed(0) }</td>
+                  <td>${ agentStats.avgBatchSize100.toFixed(0) }</td>
                 </tr>
               </tbody>
             </table>

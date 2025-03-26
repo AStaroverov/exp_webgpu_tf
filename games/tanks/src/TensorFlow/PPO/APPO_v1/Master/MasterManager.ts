@@ -128,7 +128,7 @@ export class MasterManager {
         this.stopTrainingTimeout = macroTasks.addTimeout(async () => {
             try {
                 if (await this.agent.tryTrain()) {
-                    await this.save();
+                    void this.save();
                 }
 
                 this.trainingLoop();
