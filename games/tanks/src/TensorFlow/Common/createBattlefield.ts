@@ -1,16 +1,18 @@
 import { createGame } from '../../../createGame.ts';
-import { createTankRR } from '../../ECS/Components/Tank.ts';
+import { createTankRR, Tank } from '../../ECS/Components/Tank.ts';
 import { random, randomRangeFloat, randomSign } from '../../../../../lib/random.ts';
-import { DI } from '../../DI';
-import { getDrawState } from './utils.ts';
+import { GameDI } from '../../DI/GameDI.ts';
 import { TANK_RADIUS } from './consts.ts';
 import { TankController } from '../../ECS/Components/TankController.ts';
+import { query } from 'bitecs';
 
-export function createBattlefield(tanksCount: number) {
-    const game = createGame();
-    const width = DI.canvas.offsetWidth;
-    const height = DI.canvas.offsetHeight;
-    let tanks: number[] = [];
+const MAX_PADDING = 100;
+
+export async function createBattlefield(tanksCount: number, withRender = false, withPlayer = false) {
+    const game = await createGame({ width: 800, height: 800, withPlayer, withRender });
+    const width = GameDI.width;
+    const height = GameDI.height;
+    const padding = random() * MAX_PADDING;
 
     // Храним координаты танков в отдельном массиве
     let tankPositions: { x: number, y: number }[] = [];
@@ -33,30 +35,32 @@ export function createBattlefield(tanksCount: number) {
 
         // Пытаемся найти подходящую позицию
         do {
-            x = randomRangeFloat(TANK_RADIUS, width - TANK_RADIUS);
-            y = randomRangeFloat(TANK_RADIUS, height - TANK_RADIUS);
+            x = randomRangeFloat(TANK_RADIUS - padding, width - TANK_RADIUS + padding);
+            y = randomRangeFloat(TANK_RADIUS - padding, height - TANK_RADIUS + padding);
         } while (isTooClose(x, y));
 
         const eid = createTankRR({
-            x: x,
-            y: y,
+            x,
+            y,
             rotation: Math.PI * randomRangeFloat(0, 2), // Случайный поворот от 0 до 2π
-            color: [random(), random(), random(), 1],
+            color: [randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1],
         });
-        TankController.setTurretTarget$(
+        TankController.setTurretDir$(
             eid,
-            x + randomSign() * randomRangeFloat(100, 200),
-            y + randomSign() * randomRangeFloat(100, 200),
+            randomSign() * random(),
+            randomSign() * random(),
         );
 
-        // Сохраняем ID и координаты танка
-        tanks.push(eid);
         tankPositions.push({ x, y });
     }
 
     const gameTick = (delta: number) => {
-        game.gameTick(delta, getDrawState());
+        game.gameTick(delta);
     };
 
-    return { ...game, tanks, gameTick };
+    const getTanks = () => {
+        return [...query(GameDI.world, [Tank])];
+    };
+
+    return { ...game, gameTick, getTanks };
 }

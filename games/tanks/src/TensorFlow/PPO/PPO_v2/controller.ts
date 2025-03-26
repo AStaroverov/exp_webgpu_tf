@@ -1,10 +1,9 @@
-import { createInputVector } from '../Common/createInputVector';
-import { TankController } from '../../ECS/Components/TankController';
-import * as tf from '@tensorflow/tfjs';
+import { createInputVector } from '../../Common/createInputVector.ts';
+import { TankController } from '../../../ECS/Components/TankController.ts';
 import { disposeSharedAgent, getSharedAgent } from './agent.ts';
-import { getTankHealth } from '../../ECS/Components/Tank.ts';
-import { calculateReward } from '../Common/calculateReward.ts';
-import { Actions, readAction } from './utils.ts';
+import { getTankHealth } from '../../../ECS/Components/Tank.ts';
+import { calculateReward } from '../../Common/calculateReward.ts';
+import { Actions, readActions } from '../../Common/actions.ts';
 
 // Map to store previous actions
 const mapLastUpdateData = new Map<number, {
@@ -62,14 +61,14 @@ export function updateTankBehaviour(
     // Get action from agent
     const result = agent.act(inputVector);
     // Apply action to tank controller
-    applyActionToTank(tankEid, result.action, width, height);
-    mapLastUpdateData.set(tankEid, { action: result.action });
+    applyActionToTank(tankEid, result.actions);
+    mapLastUpdateData.set(tankEid, { action: result.actions });
 
     if (!isWarmup) {
         agent.rememberAction(
             tankEid,
-            tf.tensor1d(inputVector),
-            tf.tensor1d(result.action),
+            inputVector,
+            result.rawActions,
             result.logProb,
             result.value,
         );
@@ -86,12 +85,10 @@ export function memorizeTankBehaviour(
 ) {
     // Get shared agent
     const agent = getSharedAgent();
-    const { action } = mapLastUpdateData.get(tankEid)!;
 
     // Calculate reward
     const reward = calculateReward(
         tankEid,
-        action,
         width,
         height,
         episode,
@@ -118,16 +115,13 @@ export function tryTrain(useTail: boolean): boolean {
 /**
  * Apply the PPO agent's action to the tank controller
  */
-function applyActionToTank(tankEid: number, action: Actions, width: number, height: number) {
-    const { shoot, move, rotate, aim } = readAction(action);
+function applyActionToTank(tankEid: number, action: Actions) {
+    const { shoot, move, rotate, aimX, aimY } = readActions(action);
 
     TankController.setShooting$(tankEid, shoot);
     TankController.setMove$(tankEid, move);
     TankController.setRotate$(tankEid, rotate);
-
-    const turretTargetX = TankController.turretTarget.get(tankEid, 0) + aim[0] * width * 0.02;
-    const turretTargetY = TankController.turretTarget.get(tankEid, 1) + aim[1] * height * 0.02;
-    TankController.setTurretTarget$(tankEid, turretTargetX, turretTargetY);
+    TankController.setTurretDir$(tankEid, aimX, aimY);
 }
 
 

@@ -1,7 +1,6 @@
-import { ActiveEvents, ColliderDesc } from '@dimforge/rapier2d';
-import { DI } from '../DI';
+import { ActiveCollisionTypes, ActiveEvents, ColliderDesc } from '@dimforge/rapier2d';
+import { GameDI } from '../DI/GameDI.ts';
 import { BodyOptions, createBody } from './createBody.ts';
-import { ActiveCollisionTypes } from '@dimforge/rapier2d/src/geometry/collider.ts';
 import { RigidBodyRef } from '../ECS/Components/Physical.ts';
 
 export enum CollisionGroup {
@@ -53,7 +52,7 @@ export function createRigidRectangle(
         width: number,
         height: number,
     },
-    { physicalWorld } = DI,
+    { physicalWorld } = GameDI,
 ) {
     const body = createBody(o);
     const colliderDesc = prepareColliderDesc(ColliderDesc.cuboid(o.width / 2, o.height / 2), o);
@@ -66,7 +65,7 @@ export function createRigidCircle(
     o: CommonRigidOptions & {
         radius: number,
     },
-    { physicalWorld } = DI,
+    { physicalWorld } = GameDI,
 ) {
     const body = createBody(o);
     const colliderDesc = prepareColliderDesc(ColliderDesc.ball(o.radius / 2), o);
@@ -75,7 +74,7 @@ export function createRigidCircle(
     return body.handle;
 }
 
-export function removeRigidShape(eid: number, { physicalWorld } = DI) {
+export function removeRigidShape(eid: number, { physicalWorld } = GameDI) {
     const pid = RigidBodyRef.id[eid];
     const body = physicalWorld.getRigidBody(pid);
     body && physicalWorld.removeRigidBody(body);

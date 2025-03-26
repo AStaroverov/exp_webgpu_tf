@@ -3,9 +3,9 @@ import { shaderMeta } from './grass5.shader.ts';
 import { getTypeTypedArray } from '../../../../../../../src/Shader';
 import { sin } from '../../../../../../../lib/math.ts';
 import { random, randomSign } from '../../../../../../../lib/random.ts';
-import { DI } from '../../../../DI';
+import { RenderDI } from '../../../../DI/RenderDI.ts';
 
-export function createDrawGrassSystem(device: GPUDevice, { canvas } = DI) {
+export function createDrawGrassSystem({ canvas, device } = RenderDI) {
     const gpuShader = new GPUShader(shaderMeta);
     const pipeline = gpuShader.getRenderPipeline(device, 'vs_main', 'fs_main', { withDepth: true });
     const bindGroup = gpuShader.getBindGroup(device, 0);

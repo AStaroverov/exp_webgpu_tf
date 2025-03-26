@@ -1,5 +1,5 @@
 import { addComponent } from 'bitecs';
-import { DI } from '../../games/tanks/src/DI';
+import { GameDI } from '../../games/tanks/src/DI/GameDI.ts';
 
 const $CompRef = Symbol('CompRef');
 let indexCompRef = 0;
@@ -15,7 +15,7 @@ export function obs<T extends (eid: number, ...args: A) => void, A extends any[]
     const setData = { component: nextCompRef, data: null };
     return ((eid: number, ...args: A) => {
         const r = setter(eid, ...args);
-        addComponent(DI.world, eid, setData);
+        addComponent(GameDI.world, eid, setData);
         return r;
     }) as T;
 }

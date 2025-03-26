@@ -1,4 +1,4 @@
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import {
     getMatrixTranslationX,
     getMatrixTranslationY,
@@ -8,14 +8,13 @@ import { Not, query } from 'bitecs';
 import { Parent } from '../Components/Parent.ts';
 import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 
-export function createOutZoneDestroySystem({ world, canvas } = DI) {
+export function createOutZoneDestroySystem({ world, width, height } = GameDI) {
     return () => {
-        const { width, height } = canvas;
         const eids = query(world, [GlobalTransform, Not(Parent)]);
 
         for (let i = 0; i < eids.length; i++) {
             const eid = eids[i];
-            const globalTransform = GlobalTransform.matrix.getBatche(eid);
+            const globalTransform = GlobalTransform.matrix.getBatch(eid);
             const x = getMatrixTranslationX(globalTransform);
             const y = getMatrixTranslationY(globalTransform);
 

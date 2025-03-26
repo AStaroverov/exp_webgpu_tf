@@ -1,20 +1,20 @@
 import { PhysicalWorld } from '../index.ts';
 import { World } from '../../../../src/ECS/world.ts';
 
-export const DI: {
-    document: Document;
-    canvas: HTMLCanvasElement;
+export const GameDI: {
+    width: number;
+    height: number;
     world: World;
     physicalWorld: PhysicalWorld;
-    gameTick: (delta: number, withDraw?: boolean) => void;
-    destroy: () => void;
     shouldCollectTensor: boolean
+    gameTick: (delta: number) => void;
+    destroy: () => void;
 } = {
-    document: window.document,
-    canvas: null as any,
+    width: null as any,
+    height: null as any,
     world: null as any,
     physicalWorld: null as any,
+    shouldCollectTensor: false,
     gameTick: null as any,
     destroy: null as any,
-    shouldCollectTensor: false,
 };

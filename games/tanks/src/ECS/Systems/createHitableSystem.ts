@@ -1,4 +1,4 @@
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import { Hitable } from '../Components/Hitable.ts';
 import { resetTankPartJointComponent, TankPart } from '../Components/Tank.ts';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
@@ -9,10 +9,9 @@ import { removePhysicalJoint } from '../../Physical/joint.ts';
 import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 import { onSet, query } from 'bitecs';
 import { Bullet } from '../Components/Bullet.ts';
-import { Wall } from '../Components/Wall.ts';
 import { createChangeDetector } from '../../../../../src/ECS/Systems/ChangedDetectorSystem.ts';
 
-export function createHitableSystem({ world } = DI) {
+export function createHitableSystem({ world } = GameDI) {
     const hitableChanges = createChangeDetector(world, [onSet(Hitable)]);
 
     return () => {
@@ -43,14 +42,16 @@ export function createHitableSystem({ world } = DI) {
             }
         }
 
-        const wallsIds = query(world, [Wall, Hitable]);
-        for (let i = 0; i < wallsIds.length; i++) {
-            const wallId = wallsIds[i];
-            const damage = Hitable.damage[wallId];
+        // const wallsIds = query(world, [Wall, Hitable]);
+        // for (let i = 0; i < wallsIds.length; i++) {
+        //     const wallId = wallsIds[i];
+        //     const damage = Hitable.damage[wallId];
+        //
+        //     if (hitableChanges.has(wallId) && damage > 0) {
+        //         scheduleRemoveEntity(wallId);
+        //     }
+        // }
 
-            if (hitableChanges.has(wallId) && damage > 0) {
-                scheduleRemoveEntity(wallId);
-            }
-        }
+        hitableChanges.clear();
     };
 }

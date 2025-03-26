@@ -1,5 +1,5 @@
 import { addComponent } from 'bitecs';
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import { delegate } from '../../../../../src/delegate.ts';
 import { NestedArray } from '../../../../../src/utils.ts';
 
@@ -10,7 +10,7 @@ export const Children = ({
     entitiesIds: NestedArray.f64(MAX_CHILDREN, delegate.defaultSize),
 });
 
-export function addChildrenComponent(entity: number, count: number = 0, ids: number[] | Float64Array = [], { world } = DI) {
+export function addChildrenComponent(entity: number, count: number = 0, ids: number[] | Float64Array = [], { world } = GameDI) {
     addComponent(world, entity, Children);
     Children.entitiesCount[entity] = count;
     Children.entitiesIds.setBatch(entity, ids);
@@ -32,7 +32,7 @@ export function removeAllChildren(entity: number) {
 }
 
 export function removeChild(entity: number, child: number) {
-    const children = Children.entitiesIds.getBatche(entity);
+    const children = Children.entitiesIds.getBatch(entity);
     const length = Children.entitiesCount[entity];
     const index = children.subarray(0, length).indexOf(child);
 

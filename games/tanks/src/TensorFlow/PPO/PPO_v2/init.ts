@@ -1,29 +1,8 @@
 // Main entry point for the Shared Tank PPO system
-import { setExperiment } from './experiment-config';
-import * as tf from '@tensorflow/tfjs';
+import { setExperiment } from '../Common/config.ts';
 import '@tensorflow/tfjs-backend-wasm';
-import { setWasmPaths } from '@tensorflow/tfjs-backend-wasm';
 import { getRLGameManger } from './manager.ts';
-
-// Initialize TensorFlow.js with WASM backend
-async function initTensorFlow() {
-    try {
-        // Configure TensorFlow.js to use WASM backend
-        setWasmPaths('/node_modules/@tensorflow/tfjs-backend-wasm/dist/');
-        await tf.setBackend('wasm');
-        await tf.ready();
-        console.log('TensorFlow.js initialized with WASM backend');
-
-        // Log version info for debugging
-        console.log(`TensorFlow.js version: ${ tf.version.tfjs }`);
-        console.log(`Backend: ${ tf.getBackend() }`);
-
-        return true;
-    } catch (error) {
-        console.error('Failed to initialize TensorFlow.js:', error);
-        return false;
-    }
-}
+import { initTensorFlow } from '../../Common/initTensorFlow.ts';
 
 // Main initialization function
 async function initSharedPPOSystem(options: {

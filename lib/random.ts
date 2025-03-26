@@ -19,6 +19,10 @@ export function getRandomId(): string {
     return String(trunc(Date.now() * Math.random()));
 }
 
+export function getShortRandomId(): string {
+    return getRandomId().slice(-6);
+}
+
 const CHARACTERS = 'abcdefghijklmnopqrstuvwxyz';
 
 export function getRandomChar(): string {

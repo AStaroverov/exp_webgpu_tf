@@ -26,8 +26,8 @@ export function createDrawRopeSystem(world: World, device: GPUDevice) {
         for (let i = 0; i < entities.length; i++) {
             const id = entities[i];
 
-            pointsCollect.set(Rope.points.getBatche(id), i * ROPE_BUFFER_LENGTH);
-            transformCollect.set(GlobalTransform.matrix.getBatche(id), i * 16);
+            pointsCollect.set(Rope.points.getBatch(id), i * ROPE_BUFFER_LENGTH);
+            transformCollect.set(GlobalTransform.matrix.getBatch(id), i * 16);
 
             // f32
             thinnessCollect[i] = Thinness.value[id];

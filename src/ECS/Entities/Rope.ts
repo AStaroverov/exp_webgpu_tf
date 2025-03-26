@@ -13,7 +13,7 @@ export function createRope(world: World, { x, y, thinness, color, points }: {
     const id = addEntity(world);
 
     addTransformComponents(world, id);
-    applyMatrixTranslate(LocalTransform.matrix.getBatche(id), x, y, 0);
+    applyMatrixTranslate(LocalTransform.matrix.getBatch(id), x, y, 0);
 
     Rope.addComponent(world, id, points);
     Color.addComponent(world, id, color[0], color[1], color[2], color[3]);

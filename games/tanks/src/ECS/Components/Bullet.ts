@@ -1,5 +1,5 @@
 import { createCircleRR } from './RigidRender.ts';
-import { RigidBodyType } from '@dimforge/rapier2d/src/dynamics/rigid_body.ts';
+import { ActiveEvents, RigidBodyType } from '@dimforge/rapier2d';
 import {
     addTransformComponents,
     getMatrixRotationZ,
@@ -7,12 +7,11 @@ import {
     getMatrixTranslationY,
     GlobalTransform,
 } from '../../../../../src/ECS/Components/Transform.ts';
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import { addComponent } from 'bitecs';
 import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';
 import { mat4, vec2, vec3 } from 'gl-matrix';
 import { isNumber } from 'lodash-es';
-import { ActiveEvents } from '@dimforge/rapier2d';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { Hitable } from './Hitable.ts';
 import { addPlayerComponent, Player } from './Player.ts';
@@ -47,7 +46,7 @@ const defaultOptionsBulletRR = structuredClone(optionsBulletRR);
 
 const tmpSpeed = vec2.create();
 
-export function createBulletRR(options: Partial<Options> & { speed: number, playerId: number }, { world } = DI) {
+export function createBulletRR(options: Partial<Options> & { speed: number, playerId: number }, { world } = GameDI) {
     Object.assign(optionsBulletRR, defaultOptionsBulletRR);
     Object.assign(optionsBulletRR, options);
 
@@ -82,8 +81,8 @@ const tmpMatrix = mat4.create();
 const tmpPosition = vec3.create() as Float32Array;
 
 export function spawnBullet(tankId: number) {
-    const globalTransform = GlobalTransform.matrix.getBatche(Tank.turretEId[tankId]);
-    const bulletDelta = Tank.bulletStartPosition.getBatche(tankId);
+    const globalTransform = GlobalTransform.matrix.getBatch(Tank.turretEId[tankId]);
+    const bulletDelta = Tank.bulletStartPosition.getBatch(tankId);
 
     tmpPosition.set(bulletDelta);
     mat4.identity(tmpMatrix);

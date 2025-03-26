@@ -1,7 +1,7 @@
-import { DI } from '../DI';
-import { ImpulseJoint } from '@dimforge/rapier2d/src/dynamics';
+import { GameDI } from '../DI/GameDI.ts';
+import { ImpulseJoint } from '@dimforge/rapier2d';
 
-export function removePhysicalJoint(jointPid: number, { physicalWorld } = DI): null | ImpulseJoint {
+export function removePhysicalJoint(jointPid: number, { physicalWorld } = GameDI): null | ImpulseJoint {
     if (jointPid < 0) return null;
     const joint = physicalWorld.getImpulseJoint(jointPid);
     joint && physicalWorld.removeImpulseJoint(joint, true);

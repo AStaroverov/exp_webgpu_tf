@@ -1,4 +1,4 @@
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import { Tank } from '../Components/Tank.ts';
 import { TankController } from '../Components/TankController.ts';
 import { query } from 'bitecs';
@@ -6,7 +6,7 @@ import { Player } from '../Components/Player.ts';
 import { GlobalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 import { spawnBullet } from '../Components/Bullet.ts';
 
-export function createSpawnerBulletsSystem({ world } = DI) {
+export function createSpawnerBulletsSystem({ world } = GameDI) {
     return ((delta: number) => {
         const tankEids = query(world, [Player, GlobalTransform, Tank, TankController]);
 

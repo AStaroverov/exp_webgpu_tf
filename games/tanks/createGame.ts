@@ -4,7 +4,7 @@ import { createDrawShapeSystem } from '../../src/ECS/Systems/SDFSystem/createDra
 import { initPhysicalWorld } from './src';
 import { createApplyRigidBodyToTransformSystem } from './src/ECS/Systems/createApplyRigidBodyToTransformSystem.ts';
 import { EventQueue } from '@dimforge/rapier2d';
-import { DI } from './src/DI';
+import { GameDI } from './src/DI/GameDI.ts';
 import { createTransformSystem } from '../../src/ECS/Systems/TransformSystem.ts';
 import {
     createPlayerTankBulletSystem,
@@ -19,27 +19,47 @@ import { createHitableSystem } from './src/ECS/Systems/createHitableSystem.ts';
 import { createTankAliveSystem } from './src/ECS/Systems/createTankAliveSystem.ts';
 import { createTankPositionSystem, createTankTurretRotationSystem } from './src/ECS/Systems/tankControllerSystems.ts';
 import { createOutZoneDestroySystem } from './src/ECS/Systems/createOutZoneDestroySystem.ts';
-import { createTankInputTensorSystem } from './src/ECS/Systems/createTankInputTensorSystem.ts';
-import {
-    createChangeDetectorSystem,
-    destroyChangeDetectorSystem,
-} from '../../src/ECS/Systems/ChangedDetectorSystem.ts';
+import { createTankInputTensorSystem } from './src/ECS/Systems/RL/createTankInputTensorSystem.ts';
+import { destroyChangeDetectorSystem } from '../../src/ECS/Systems/ChangedDetectorSystem.ts';
 import { createDestroyByTimeoutSystem } from './src/ECS/Systems/createDestroyByTimeoutSystem.ts';
 import { createAimSystem } from './src/ECS/Systems/createAimSystem.ts';
 import { createPostEffect } from './src/ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
 import { createDrawGrassSystem } from './src/ECS/Systems/Render/Grass/createDrawGrassSystem.ts';
 import { createRigidBodyStateSystem } from './src/ECS/Systems/createRigidBodyStateSystem.ts';
 import { createDestroySystem } from './src/ECS/Systems/createDestroySystem.ts';
+import { RenderDI } from './src/DI/RenderDI.ts';
+import { noop } from 'lodash-es';
+import { PlayerEnvDI } from './src/DI/PlayerEnvDI.ts';
 
-const canvas = document.querySelector('canvas')!;
-const { device, context } = await initWebGPU(canvas);
+export async function createGame({ width, height, withRender, withPlayer }: {
+    width: number,
+    height: number,
+    withRender: boolean
+    withPlayer: boolean
+}) {
+    const world = createWorld();
+    const physicalWorld = initPhysicalWorld();
 
-DI.canvas = canvas;
+    GameDI.width = width;
+    GameDI.height = height;
+    GameDI.world = world;
+    GameDI.physicalWorld = physicalWorld;
 
-export function createGame() {
-    const world = DI.world = createWorld();
-    const physicalWorld = DI.physicalWorld = initPhysicalWorld();
-    const updateChangedDetector = createChangeDetectorSystem(world);
+    if (withRender && RenderDI.canvas == null) {
+        const canvas = document.querySelector('canvas')!;
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+        const { device, context } = await initWebGPU(canvas);
+        RenderDI.canvas = canvas;
+        RenderDI.device = device;
+        RenderDI.context = context;
+    }
+
+    if (withPlayer) {
+        PlayerEnvDI.container = RenderDI.canvas;
+        PlayerEnvDI.document = document;
+        PlayerEnvDI.window = window;
+    }
 
     // const updateMap = createMapSystem();
     const execTransformSystem = createTransformSystem(world);
@@ -47,21 +67,23 @@ export function createGame() {
     const updateTankPosition = createTankPositionSystem();
     const updateTankTurretRotation = createTankTurretRotationSystem();
 
-    const updatePlayerBullet = createPlayerTankBulletSystem();
-    const updatePlayerTankPosition = createPlayerTankPositionSystem();
-    const updatePlayerTankTurretRotation = createPlayerTankTurretRotationSystem();
-
     const syncRigidBodyState = createRigidBodyStateSystem();
     const applyRigidBodyDeltaToLocalTransform = createApplyRigidBodyToTransformSystem();
 
     const updateHitableSystem = createHitableSystem();
     const updateTankAliveSystem = createTankAliveSystem();
 
-    const inputFrame = () => {
-        updatePlayerBullet();
-        updatePlayerTankPosition();
-        updatePlayerTankTurretRotation();
-    };
+    const inputFrame = withPlayer ? (() => {
+        const updatePlayerBullet = createPlayerTankBulletSystem();
+        const updatePlayerTankPosition = createPlayerTankPositionSystem();
+        const updatePlayerTankTurretRotation = createPlayerTankTurretRotationSystem();
+
+        return () => {
+            updatePlayerBullet();
+            updatePlayerTankPosition();
+            updatePlayerTankTurretRotation();
+        };
+    })() : noop;
 
     const eventQueue = new EventQueue(true);
     const physicalFrame = (delta: number) => {
@@ -102,20 +124,30 @@ export function createGame() {
         updateTankAliveSystem();
     };
 
+    const renderFrame = withRender ? (() => {
+        const { canvas, device, context } = RenderDI;
+        const drawGrass = createDrawGrassSystem();
+        const drawShape = createDrawShapeSystem(world, device);
+        const { renderFrame, renderTexture } = createFrameTick({
+            canvas,
+            device,
+            context,
+            background: [173, 193, 120, 255].map(v => v / 255),
+            getPixelRatio: () => window.devicePixelRatio,
+        }, ({ passEncoder, delta }) => {
+            drawGrass(passEncoder, delta);
+            drawShape(passEncoder);
+        });
+        const postEffectFrame = createPostEffect(device, context, renderTexture);
 
-    const drawGrass = createDrawGrassSystem(device);
-    const drawShape = createDrawShapeSystem(world, device);
-    const { renderFrame, renderTexture } = createFrameTick({
-        canvas,
-        device,
-        context,
-        background: [173, 193, 120, 255].map(v => v / 255),
-        getPixelRatio: () => window.devicePixelRatio,
-    }, ({ passEncoder, delta }) => {
-        drawGrass(passEncoder, delta);
-        drawShape(passEncoder);
-    });
-    const postEffectFrame = createPostEffect(device, context, renderTexture);
+        return (delta: number) => {
+            const commandEncoder = device.createCommandEncoder();
+            renderFrame(commandEncoder, delta);
+            postEffectFrame(commandEncoder);
+            device.queue.submit([commandEncoder.finish()]);
+        };
+    })() : noop;
+
 
     const spawnBullets = createSpawnerBulletsSystem();
     const spawnFrame = (delta: number) => {
@@ -138,22 +170,21 @@ export function createGame() {
 
     const aimUpdate = createAimSystem();
 
+    GameDI.gameTick = (delta: number) => {
+        if (withRender) {
+            // GameDI.width = RenderDI.canvas.offsetWidth;
+            // GameDI.height = RenderDI.canvas.offsetHeight;
+        }
 
-    DI.gameTick = (delta: number, withDraw: boolean = true) => {
         spawnFrame(delta);
 
         physicalFrame(delta);
 
-        aimUpdate();
+        aimUpdate(delta);
         // updateMap();
 
         // stats.begin();
-        if (withDraw) {
-            const commandEncoder = device.createCommandEncoder();
-            renderFrame(commandEncoder, delta);
-            postEffectFrame(commandEncoder);
-            device.queue.submit([commandEncoder.finish()]);
-        }
+        renderFrame(delta);
         // stats.end();
         // stats.update();
         //
@@ -161,21 +192,27 @@ export function createGame() {
 
         statsFrame();
 
-        // inputFrame();
-        updateChangedDetector();
+        inputFrame();
     };
 
-    DI.destroy = () => {
+    GameDI.destroy = () => {
         physicalWorld.free();
         resetWorld(world);
         deleteWorld(world);
         destroyChangeDetectorSystem(world);
 
-        DI.world = null!;
-        DI.physicalWorld = null!;
-        DI.gameTick = null!;
-        DI.destroy = null!;
+        GameDI.width = null!;
+        GameDI.height = null!;
+        GameDI.world = null!;
+        GameDI.physicalWorld = null!;
+        GameDI.shouldCollectTensor = null!;
+        GameDI.gameTick = null!;
+        GameDI.destroy = null!;
+
+        PlayerEnvDI.window = null!;
+        PlayerEnvDI.document = null!;
+        PlayerEnvDI.container = null!;
     };
 
-    return DI;
+    return GameDI;
 }

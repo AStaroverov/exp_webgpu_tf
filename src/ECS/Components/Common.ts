@@ -47,6 +47,7 @@ export const Color = component({
         Color.b[eid] = b;
         Color.a[eid] = a;
     }),
+
 });
 
 export type TShadow = [fadeStart: number, fadeEnd: number] | Float32Array;

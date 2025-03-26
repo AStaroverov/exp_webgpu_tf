@@ -1,5 +1,5 @@
 import * as tf from '@tensorflow/tfjs';
-import { getCurrentExperiment } from './experiment-config';
+import { getCurrentConfig } from '../Common/config.ts';
 import { entityExists, hasComponent } from 'bitecs';
 import {
     cleanupAllRL,
@@ -15,19 +15,13 @@ import {
     tryTrain,
     updateTankBehaviour,
 } from './controller.ts';
-import { createBattlefield } from '../Common/createBattlefield.ts';
-import {
-    MAX_STEPS,
-    TANK_COUNT_SIMULATION_MAX,
-    TANK_COUNT_SIMULATION_MIN,
-    TICK_TIME_REAL,
-    TICK_TIME_SIMULATION,
-} from '../Common/consts.ts';
-import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
+import { createBattlefield } from '../../Common/createBattlefield.ts';
+import { TANK_COUNT_SIMULATION_MAX, TANK_COUNT_SIMULATION_MIN, TICK_TIME_REAL } from '../../Common/consts.ts';
+import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { RingBuffer } from 'ring-buffer-ts';
-import { Tank } from '../../ECS/Components/Tank.ts';
-import { DI } from '../../DI';
-import { randomRangeInt } from '../../../../../lib/random.ts';
+import { Tank } from '../../../ECS/Components/Tank.ts';
+import { GameDI } from '../../../DI/GameDI.ts';
+import { randomRangeInt } from '../../../../../../lib/random.ts';
 
 let sharedRLGameManager: SharedRLGameManager | null = null;
 
@@ -41,7 +35,7 @@ export function getRLGameManger(): SharedRLGameManager {
 
 // Main class to manage PPO reinforcement learning integration with the game
 export class SharedRLGameManager {
-    private battlefield!: ReturnType<typeof createBattlefield>;
+    private battlefield!: Awaited<ReturnType<typeof createBattlefield>>;
     private frameCount: number = 0;
     private episodeCount: number = 0;
     private isTraining: boolean = true;
@@ -60,7 +54,7 @@ export class SharedRLGameManager {
     constructor(isTraining: boolean = true) {
         this.isTraining = isTraining;
         console.log(`SharedRLGameManager initialized in ${ isTraining ? 'training' : 'evaluation' } mode`);
-        console.log(`Using experiment: ${ getCurrentExperiment().name }`);
+        console.log(`Using experiment: ${ getCurrentConfig().name }`);
     }
 
     getEpisodeCount() {
@@ -87,21 +81,21 @@ export class SharedRLGameManager {
         }
 
         // Initialize battlefield with tanks
-        this.resetEnvironment();
+        await this.resetEnvironment();
 
         return this;
     }
 
     // Reset environment for a new episode
-    resetEnvironment() {
+    async resetEnvironment() {
         resetController();
 
         // Create new battlefield
         this.battlefield?.destroy();
-        this.battlefield = createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX));
+        this.battlefield = await createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX), true);
 
         // Register each tank with the RL system
-        for (const tankEid of this.battlefield.tanks) {
+        for (const tankEid of this.battlefield.getTanks()) {
             registerTank(tankEid);
         }
 
@@ -110,7 +104,7 @@ export class SharedRLGameManager {
         // Increment episode counter
         this.episodeCount++;
 
-        console.log(`Environment reset for episode ${ this.episodeCount } with ${ this.battlefield.tanks.length } tanks`);
+        console.log(`Environment reset for episode ${ this.episodeCount }`);
 
         return this.battlefield;
     }
@@ -210,20 +204,20 @@ export class SharedRLGameManager {
                 // Update frame counter
                 this.frameCount++;
 
-                const width = this.battlefield.canvas.offsetWidth;
-                const height = this.battlefield.canvas.offsetHeight;
-                const shouldEvery = 6;
-                const isWarmup = this.frameCount < shouldEvery * 15;
+                const width = GameDI.width;
+                const height = GameDI.height;
+                const shouldEvery = 12;
+                const isWarmup = this.frameCount < shouldEvery * 8;
                 const shouldAction = this.frameCount % shouldEvery === 0;
                 const shouldMemorize =
-                    (this.frameCount - 2) % shouldEvery === 0
-                    || (this.frameCount - 3) % shouldEvery === 0
-                    || (this.frameCount - 4) % shouldEvery === 0;
-                const isLastMemorize = this.frameCount > 4 && (this.frameCount - 4) % shouldEvery === 0;
-                DI.shouldCollectTensor = this.frameCount > 0 && (this.frameCount + 1) % shouldEvery === 0;
+                    (this.frameCount - 4) % shouldEvery === 0
+                    || (this.frameCount - 7) % shouldEvery === 0
+                    || (this.frameCount - 10) % shouldEvery === 0;
+                const isLastMemorize = this.frameCount > 10 && (this.frameCount - 10) % shouldEvery === 0;
+                GameDI.shouldCollectTensor = this.frameCount > 0 && (this.frameCount + 1) % shouldEvery === 0;
 
                 if (shouldAction) {
-                    activeTanks = this.battlefield.tanks.filter(tankEid => {
+                    activeTanks = this.battlefield.getTanks().filter(tankEid => {
                         if (entityExists(this.battlefield.world, tankEid) && hasComponent(this.battlefield.world, tankEid, Tank)) {
                             return true;
                         } else if (isActiveTank(tankEid)) {
@@ -239,7 +233,7 @@ export class SharedRLGameManager {
                 }
 
                 // Execute game tick
-                this.battlefield.gameTick(TICK_TIME_SIMULATION);
+                this.battlefield.gameTick(16.666);
 
                 if (isWarmup) {
                     return;
@@ -254,7 +248,7 @@ export class SharedRLGameManager {
 
                 // Check if episode is done
                 const activeCount = getActiveTankCount();
-                const isEpisodeDone = activeCount <= 1 || this.frameCount >= MAX_STEPS;
+                const isEpisodeDone = activeCount <= 1 || this.frameCount >= 1500;
 
                 if (isEpisodeDone) {
                     this.stopFrameInterval?.();
@@ -279,13 +273,12 @@ export class SharedRLGameManager {
                     });
 
                     // Save model periodically
-                    if (this.episodeCount % getCurrentExperiment().saveModelEvery === 0) {
+                    if (this.episodeCount % getCurrentConfig().saveModelEvery === 0) {
                         this.logStats();
                         this.save();
                     }
 
-                    this.resetEnvironment();
-                    this.gameLoop();
+                    this.resetEnvironment().then(() => this.gameLoop());
                 }
             } catch (error) {
                 console.error('Error in game loop:', error);
@@ -305,7 +298,7 @@ export class SharedRLGameManager {
         const avgValueLoss = last10Episodes.reduce((sum, stat) => sum + (stat.valueLoss || 0), 0) / Math.max(1, last10Episodes.length);
 
         console.log('====== PPO TRAINING STATISTICS ======');
-        console.log(`Current experiment: ${ getCurrentExperiment().name }`);
+        console.log(`Current experiment: ${ getCurrentConfig().name }`);
         console.log(`Episodes completed: ${ this.episodeCount }`);
         console.log(`Average duration (last 10): ${ avgDuration.toFixed(1) } frames`);
         console.log(`Average reward (last 10): ${ avgReward.toFixed(2) }`);

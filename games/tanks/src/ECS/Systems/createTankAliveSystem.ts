@@ -1,4 +1,4 @@
-import { DI } from '../../DI';
+import { GameDI } from '../../DI/GameDI.ts';
 import {
     getTankHealth,
     removeTankComponentsWithoutParts,
@@ -12,7 +12,7 @@ import { resetCollisionsTo } from '../../Physical/collision.ts';
 import { removePhysicalJoint } from '../../Physical/joint.ts';
 import { query } from 'bitecs';
 
-export function createTankAliveSystem({ world } = DI) {
+export function createTankAliveSystem({ world } = GameDI) {
     return () => {
         const tankEids = query(world, [Tank, Children]);
 

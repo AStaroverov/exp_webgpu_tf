@@ -80,7 +80,7 @@ export class NestedArray<T extends ArrayLikeConstructor> {
         this.buffer.set(values, batchIndex * this.batchLength);
     }
 
-    public getBatche(batchStart: number): T['prototype'] {
+    public getBatch(batchStart: number): T['prototype'] {
         return this.buffer.subarray(batchStart * this.batchLength, (batchStart + 1) * this.batchLength);
     }
 }

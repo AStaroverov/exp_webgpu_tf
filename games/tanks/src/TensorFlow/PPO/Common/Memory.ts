@@ -1,18 +1,19 @@
 // Буфер опыта для PPO
-import * as tf from '@tensorflow/tfjs';
-import { shuffle } from '../../../../../lib/shuffle.ts';
-import { max, min } from '../../../../../lib/math.ts';
+import { shuffle } from '../../../../../../lib/shuffle.ts';
+import { abs, max, min } from '../../../../../../lib/math.ts';
+import { isDevtoolsOpen } from '../../Common/utils.ts';
 
 export type Batch = {
+    states: Float32Array[],
+    actions: Float32Array[],
+    logProbs: number[],
+    values: number[],
+    returns: number[],
+    advantages: number[],
+    // meta
     size: number,
-    states: tf.Tensor,
-    actions: tf.Tensor,
-    logProbs: tf.Tensor,
-    values: tf.Tensor,
-    rewards: tf.Tensor,
-    dones: tf.Tensor,
-    returns: tf.Tensor,
-    advantages: tf.Tensor,
+    dones: number[],
+    rewards: number[],
 }
 
 export class Memory {
@@ -31,7 +32,11 @@ export class Memory {
         return size;
     }
 
-    addFirstPart(id: number, state: tf.Tensor, action: tf.Tensor, logProb: tf.Tensor, value: tf.Tensor) {
+    toArray() {
+        return Array.from(this.map.values());
+    }
+
+    addFirstPart(id: number, state: Float32Array, action: Float32Array, logProb: number, value: number) {
         if (!this.map.has(id)) {
             this.map.set(id, new SubMemory());
         }
@@ -51,14 +56,14 @@ export class Memory {
 
         return {
             size: values.reduce((acc, batch) => acc + batch.size, 0),
-            states: tf.concat(values.map(batch => batch.states)),
-            actions: tf.concat(values.map(batch => batch.actions)),
-            logProbs: tf.concat(values.map(batch => batch.logProbs)),
-            values: tf.concat(values.map(batch => batch.values)),
-            rewards: tf.concat(values.map(batch => batch.rewards)),
-            dones: tf.concat(values.map(batch => batch.dones)),
-            returns: tf.concat(values.map(batch => batch.returns)),
-            advantages: tf.concat(values.map(batch => batch.advantages)),
+            states: (values.map(batch => batch.states)).flat(),
+            actions: (values.map(batch => batch.actions)).flat(),
+            logProbs: (values.map(batch => batch.logProbs)).flat(),
+            values: (values.map(batch => batch.values)).flat(),
+            rewards: (values.map(batch => batch.rewards)).flat(),
+            dones: (values.map(batch => batch.dones)).flat(),
+            returns: (values.map(batch => batch.returns)).flat(),
+            advantages: (values.map(batch => batch.advantages)).flat(),
         };
     }
 
@@ -80,18 +85,15 @@ export class Memory {
 }
 
 export class SubMemory {
-    private states: tf.Tensor[] = [];
-    private actions: tf.Tensor[] = [];
-    private logProbs: tf.Tensor[] = [];
-    private values: tf.Tensor[] = [];
+    private states: Float32Array[] = [];
+    private actions: Float32Array[] = [];
+    private logProbs: number[] = [];
+    private values: number[] = [];
     private rewards: number[] = [];
     private dones: boolean[] = [];
 
     private tmpRewards: number[] = [];
     private tmpDones: boolean[] = [];
-
-    private returns?: tf.Tensor;
-    private advantages?: tf.Tensor;
 
     constructor() {
     }
@@ -100,7 +102,7 @@ export class SubMemory {
         return this.states.length;
     }
 
-    addFirstPart(state: tf.Tensor, action: tf.Tensor, logProb: tf.Tensor, value: tf.Tensor) {
+    addFirstPart(state: Float32Array, action: Float32Array, logProb: number, value: number) {
         this.states.push(state);
         this.actions.push(action);
         this.logProbs.push(logProb);
@@ -135,19 +137,17 @@ export class SubMemory {
         }
 
         const { returns, advantages } = this.computeReturnsAndAdvantages(gamma, lam);
-        this.returns = returns;
-        this.advantages = advantages;
 
         return {
             size: this.states.length,
-            states: tf.stack(this.states),
-            actions: tf.stack(this.actions),
-            logProbs: tf.stack(this.logProbs),
-            values: tf.stack(this.values),
-            rewards: tf.tensor1d(this.rewards),
-            dones: tf.tensor1d(this.dones.map(done => done ? 1.0 : 0.0)),
-            advantages,
-            returns,
+            states: (this.states),
+            actions: (this.actions),
+            logProbs: (this.logProbs),
+            values: (this.values),
+            rewards: (this.rewards),
+            dones: (this.dones.map(done => done ? 1.0 : 0.0)),
+            returns: (returns),
+            advantages: (advantages),
         };
     }
 
@@ -156,8 +156,8 @@ export class SubMemory {
         const returns: number[] = new Array(n).fill(0);
         const advantages: number[] = new Array(n).fill(0);
 
-        // Скачаем values в CPU, чтоб проще считать
-        const valuesArr = tf.stack(this.values).dataSync(); // shape [n]
+        const rewards = this.rewards; //.map(r => signedLog(r, 10));
+        const values = this.values; // shape [n]
 
         let adv = 0;
         // bootstrap, если последний transition не done
@@ -170,15 +170,15 @@ export class SubMemory {
                 adv = 0;
                 lastVal = 0;
             }
-            const delta = this.rewards[i]
+            const delta = rewards[i]
                 + gamma * lastVal * (this.dones[i] ? 0 : 1)
-                - valuesArr[i];
+                - values[i];
             adv = delta + gamma * lam * adv * (this.dones[i] ? 0 : 1);
 
             advantages[i] = adv;
-            returns[i] = valuesArr[i] + adv;
+            returns[i] = values[i] + adv;
 
-            lastVal = valuesArr[i];
+            lastVal = values[i];
         }
 
         // Нормализация advantages
@@ -187,45 +187,40 @@ export class SubMemory {
             advantages.reduce((sum, val) => sum + Math.pow(val - advMean, 2), 0) / n,
         );
         const normalizedAdvantages = advantages.map(adv => (adv - advMean) / (advStd + 1e-8));
-        // const normalizedAdvantages = advantages.map(adv => signedLog(adv, 1));
-        // const normalizedAdvantages = linearScale(signedLogAdvantages, -3, 3);
 
-        const minRet = min(...returns);
-        const maxRet = max(...returns);
-        const orgMinAdv = min(...advantages);
-        const orgMaxAdv = max(...advantages);
-        const minAdv = min(...normalizedAdvantages);
-        const maxAdv = max(...normalizedAdvantages);
-        const negativeAdvSum = normalizedAdvantages.reduce((sum, val) => sum + Math.min(val, 0), 0);
-        const positiveAdvSum = normalizedAdvantages.reduce((sum, val) => sum + Math.max(val, 0), 0);
+        if (isDevtoolsOpen()) {
+            const minRew = min(...rewards);
+            const maxRew = max(...rewards);
+            const minVal = min(...values);
+            const maxVal = max(...values);
+            const minRet = min(...returns);
+            const maxRet = max(...returns);
+            const minAdv = min(...normalizedAdvantages);
+            const maxAdv = max(...normalizedAdvantages);
 
-        console.log('[Returns] Min/Max:', minRet.toFixed(2), maxRet.toFixed(2));
-        console.log('[Advantages]: Original Min/Max', orgMinAdv.toFixed(2), orgMaxAdv.toFixed(2));
-        console.log('[Advantages]: Normaliz Min/Max', minAdv.toFixed(2), maxAdv.toFixed(2));
-        console.log('[Advantages]: Negative/Positive Sum', negativeAdvSum.toFixed(2), positiveAdvSum.toFixed(2));
+            console.log('[R&A]'
+                , '  Rew:', strgify(minRew), strgify(maxRew)
+                , '| Val:', strgify(minVal), strgify(maxVal)
+                , '| Ret:', strgify(minRet), strgify(maxRet)
+                , '| Adv:', strgify(minAdv), strgify(maxAdv),
+            );
+        }
 
         return {
-            returns: tf.tensor1d(returns),
-            advantages: tf.tensor1d(normalizedAdvantages),  // Возвращаем нормализованные advantages
+            returns: returns,
+            advantages: normalizedAdvantages,  // Возвращаем нормализованные advantages
         };
     }
 
     dispose() {
-        // Освобождаем все тензоры
-        this.states.forEach(state => state.dispose());
-        this.actions.forEach(action => action.dispose());
-        this.logProbs.forEach(logProb => logProb.dispose());
-        this.values.forEach(value => value.dispose());
-        this.advantages?.dispose();
-        this.returns?.dispose();
-
-        // Сбрасываем массивы
         this.states = [];
         this.actions = [];
         this.logProbs = [];
         this.values = [];
         this.rewards = [];
         this.dones = [];
+        this.tmpRewards = [];
+        this.tmpDones = [];
     }
 
     private collapseTmpData() {
@@ -234,4 +229,8 @@ export class SubMemory {
         this.tmpRewards = [];
         this.tmpDones = [];
     }
+}
+
+function strgify(v: number): string {
+    return (v > 0 ? ' ' : '-') + abs(v).toFixed(2);
 }

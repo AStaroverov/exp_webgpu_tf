@@ -11,8 +11,8 @@ export function createTransformSystem(world: World) {
 
             for (let i = 0; i < entities.length; i++) {
                 const id = entities[i];
-                const local = LocalTransform.matrix.getBatche(id);
-                const global = GlobalTransform.matrix.getBatche(id);
+                const local = LocalTransform.matrix.getBatch(id);
+                const global = GlobalTransform.matrix.getBatch(id);
                 mat4.copy(global, local);
             }
         }
@@ -22,11 +22,11 @@ export function createTransformSystem(world: World) {
 
             for (let i = 0; i < entities.length; i++) {
                 const id = entities[i];
-                const globalParent = GlobalTransform.matrix.getBatche(id);
+                const globalParent = GlobalTransform.matrix.getBatch(id);
                 for (let j = 0; j < Children.entitiesCount[id]; j++) {
                     const childId = Children.entitiesIds.get(id, j);
-                    const localChild = LocalTransform.matrix.getBatche(childId);
-                    const globalChild = GlobalTransform.matrix.getBatche(childId);
+                    const localChild = LocalTransform.matrix.getBatch(childId);
+                    const globalChild = GlobalTransform.matrix.getBatch(childId);
                     mat4.multiply(globalChild, globalParent, localChild);
                 }
             }
