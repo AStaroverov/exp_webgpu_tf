@@ -235,9 +235,9 @@ export class MasterAgent {
 
             this.logger.add({
                 avgBatchSize: sumSize / batches.length,
-                avgRewards: this.batches
+                avgRewards: batches
                     .map((b) => b.rewards.reduce((acc, v) => acc + v, 0) / b.rewards.length)
-                    .reduce((acc, v) => acc + v, 0) / this.batches.length,
+                    .reduce((acc, v) => acc + v, 0) / batches.length,
                 policyLoss: policyLossSum / count,
                 valueLoss: valueLossSum / count,
                 avgKl: klSum / klList.length,
