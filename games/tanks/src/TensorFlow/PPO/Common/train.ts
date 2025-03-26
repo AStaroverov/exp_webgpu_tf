@@ -20,10 +20,8 @@ export function trainPolicyNetwork(
             const newLogProbs = computeLogProb(actions, mean, std);
             const oldLogProbs2D = oldLogProbs.reshape(newLogProbs.shape);
             const ratio = tf.exp(newLogProbs.sub(oldLogProbs2D));
-            // isDevtoolsOpen() && console.log('>> RATIO SUM ABS DELTA', (ratio.dataSync() as Float32Array).reduce((a, b) => a + abs(1 - b), 0));
-
-            const surr1 = ratio.mul(advantages);
             const clippedRatio = ratio.clipByValue(1 - config.clipRatioPolicy, 1 + config.clipRatioPolicy);
+            const surr1 = ratio.mul(advantages);
             const surr2 = clippedRatio.mul(advantages);
             const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
 
@@ -56,14 +54,14 @@ export function computeKullbackLeibler(
     policyNetwork: tf.LayersModel,
     states: tf.Tensor,
     actions: tf.Tensor,
-    logProb: tf.Tensor,
+    oldLogProb: tf.Tensor,
 ): number {
     return tf.tidy(() => {
         const predict = policyNetwork.predict(states) as tf.Tensor;
         const { mean, logStd } = parsePredict(predict);
         const std = logStd.exp();
         const newLogProbs = computeLogProb(actions, mean, std);
-        const diff = logProb.sub(newLogProbs);
+        const diff = oldLogProb.sub(newLogProbs);
         const kl = diff.mean();
         return kl.arraySync() as number;
     });
