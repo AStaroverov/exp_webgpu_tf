@@ -19,9 +19,8 @@ import { CONFIG } from '../../Common/config.ts';
 export class SlaveManager {
     private agent!: SlaveAgent;
 
-    private battlefield: Awaited<ReturnType<typeof createBattlefield>> | null = null;
     private stopTrainingLoop: VoidFunction | null = null;
-
+    private battlefield: Awaited<ReturnType<typeof createBattlefield>> | null = null;
     private tankRewards = new Map<number, number>();
 
     constructor() {
@@ -57,8 +56,7 @@ export class SlaveManager {
 
         let frameCount = 0;
 
-        this.stopTrainingLoop = macroTasks.addInterval(async () => {
-            await Promise.resolve();
+        this.stopTrainingLoop = macroTasks.addInterval(() => {
             // play
             frameCount++;
             const width = GameDI.width;
