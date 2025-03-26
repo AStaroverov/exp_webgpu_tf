@@ -156,7 +156,6 @@ export class MasterAgent {
         }
 
         const version = this.version;
-        logRewards(batches.map(b => b.rewards.reduce((acc, v) => acc + v, 0) / b.rewards.length).flat());
         Promise.all([
             Promise.all(policyLossPromises),
             Promise.all(valueLossPromises),
@@ -188,6 +187,8 @@ export class MasterAgent {
                     avgBatchSize: sumSize / batches.length,
                 });
             }
+
+            logRewards(batches.map(b => b.rewards.reduce((acc, v) => acc + v, 0) / b.rewards.length).flat());
         });
 
         macroTasks.addTimeout(() => {
