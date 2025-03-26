@@ -2,10 +2,8 @@ import { createBattlefield } from '../../../Common/createBattlefield.ts';
 import {
     TANK_COUNT_SIMULATION_MAX,
     TANK_COUNT_SIMULATION_MIN,
-    TICK_TIME_REAL,
     TICK_TIME_SIMULATION,
 } from '../../../Common/consts.ts';
-import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { GameDI } from '../../../../DI/GameDI.ts';
 import { randomRangeInt } from '../../../../../../../lib/random.ts';
 import { SlaveAgent } from './SlaveAgent.ts';
@@ -20,8 +18,6 @@ export class SlaveManager {
     private agent!: SlaveAgent;
 
     private battlefield: Awaited<ReturnType<typeof createBattlefield>> | null = null;
-    private stopTrainingLoop: VoidFunction | null = null;
-
     private tankRewards = new Map<number, number>();
 
     constructor() {
@@ -37,7 +33,6 @@ export class SlaveManager {
     }
 
     dispose() {
-        this.stopTrainingLoop?.();
         this.tankRewards.clear();
         this.battlefield?.destroy();
         this.agent.dispose();
@@ -57,7 +52,7 @@ export class SlaveManager {
 
         let frameCount = 0;
 
-        this.stopTrainingLoop = macroTasks.addInterval(async () => {
+        while (true) {
             // play
             frameCount++;
             const width = GameDI.width;
@@ -84,7 +79,7 @@ export class SlaveManager {
             this.battlefield!.gameTick(TICK_TIME_SIMULATION);
 
             if (isWarmup) {
-                return;
+                continue;
             }
 
             if (shouldMemorize) {
@@ -96,13 +91,13 @@ export class SlaveManager {
             const isEpisodeDone = activeTanks.length <= 1 || frameCount > CONFIG.maxFrames;
 
             if (isEpisodeDone) {
-                this.stopTrainingLoop?.();
-
-                this.exposeMemory();
-                this.dispose();
-                this.trainingLoop();
+                break;
             }
-        }, TICK_TIME_REAL);
+        }
+
+        this.exposeMemory();
+        this.dispose();
+        this.trainingLoop();
     }
 
     private updateTankBehaviour(

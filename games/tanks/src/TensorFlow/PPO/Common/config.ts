@@ -51,7 +51,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     miniBatchSize: 256,
     maxFrames: 800, // usually produce 250 samples
     // Workers
-    workerCount: 11,
+    workerCount: 12,
     // Training control
     saveModelEvery: 1,
     savePath: 'APPO_v1',
