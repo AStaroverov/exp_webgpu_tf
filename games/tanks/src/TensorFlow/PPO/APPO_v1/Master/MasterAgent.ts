@@ -2,7 +2,6 @@ import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { ACTION_DIM, INPUT_DIM } from '../../../Common/consts.ts';
 import { RingBuffer } from 'ring-buffer-ts';
-import { isDevtoolsOpen } from '../../../Common/utils.ts';
 import { abs, ceil } from '../../../../../../../lib/math.ts';
 import { createPolicyNetwork, createValueNetwork } from '../../../Common/models.ts';
 import { getStoreModelPath } from '../utils.ts';
@@ -135,8 +134,6 @@ export class MasterAgent {
             return false;
         }
 
-        const prevWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
-
         const sumSize = this.batches.reduce((acc, b) => acc + b.size, 0);
         const states = this.batches.map(b => b.states).flat();
         const actions = this.batches.map(b => b.actions).flat();
@@ -152,7 +149,7 @@ export class MasterAgent {
 
         console.log(`[Train]: Iteration ${ this.version }, Sum batch size: ${ sumSize }, Mini batch count: ${ miniBatchCount } by ${ CONFIG.miniBatchSize }`);
 
-        let policyLossSum = 0, valueLossSum = 0, klSum = 0, count = 0;
+        let policyLossSum = 0, valueLossSum = 0, klSum = 0, epoch = 0, count = 0;
         for (let i = 0; i < CONFIG.epochs; i++) {
             batchShuffle(
                 states,
@@ -184,7 +181,6 @@ export class MasterAgent {
                     tStates, tReturns, tValues,
                 );
 
-
                 policyLossSum += policyLoss;
                 valueLossSum += valueLoss;
                 count += 1;
@@ -196,6 +192,8 @@ export class MasterAgent {
                 tAdvantages.dispose();
                 tReturns.dispose();
             }
+
+            epoch += 1;
 
             const kl = computeKullbackLeibler(
                 this.policyNetwork,
@@ -213,16 +211,6 @@ export class MasterAgent {
             console.log(`[Train]: Epoch: ${ i + 1 }, KL: ${ kl }`);
         }
 
-        tAllStates.dispose();
-        tAllActions.dispose();
-        tAllLogProbs.dispose();
-
-        const newWeights = isDevtoolsOpen() ? this.policyNetwork.getWeights().map(w => w.dataSync()) as Float32Array[] : null;
-
-        isDevtoolsOpen() && console.log('>> WEIGHTS SUM ABS DELTA', newWeights!.reduce((acc, w, i) => {
-            return acc + abs(w.reduce((a, b, j) => a + abs(b - prevWeights![i][j]), 0));
-        }, 0));
-
         this.logger.add({
             avgBatchSize: sumSize / this.batches.length,
             avgRewards: this.batches
@@ -230,10 +218,13 @@ export class MasterAgent {
                 .reduce((acc, v) => acc + v, 0) / this.batches.length,
             policyLoss: policyLossSum / count,
             valueLoss: valueLossSum / count,
-            avgKl: klSum / CONFIG.epochs,
+            avgKl: klSum / epoch,
         });
 
         this.batches.length = 0;
+        tAllStates.dispose();
+        tAllActions.dispose();
+        tAllLogProbs.dispose();
 
         return true;
     }

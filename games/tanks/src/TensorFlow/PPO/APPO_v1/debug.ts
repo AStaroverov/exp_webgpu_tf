@@ -73,16 +73,57 @@ export function createRLDebug(manager: MasterManager) {
 
         return `
             <div>Trains: ${ agentStats.version }</div>
-            <div>Last KL: ${ agentStats.avgKLLast?.toFixed(4) }</div>
-            <div>10 Avg KL: ${ agentStats.avgKL10?.toFixed(4) }</div>
-            <div>Last Avg Reward: ${ agentStats.avgRewardLast?.toFixed(2) }</div>
-            <div>10 Avg Reward: ${ agentStats.avgReward10.toFixed(2) }</div>
-            <div>Last Avg policy loss ${ agentStats.avgPolicyLossLast?.toFixed(4) } </div>
-            <div>10 Avg policy loss ${ agentStats.avgPolicyLoss10.toFixed(4) } </div>
-            <div>Last Avg value loss ${ agentStats.avgValueLossLast?.toFixed(4) } </div>
-            <div>10 Avg value loss ${ agentStats.avgValueLoss10.toFixed(4) } </div>
-            <div>Last Avg batch size ${ agentStats.avgBatchSizeLast?.toFixed(0) } </div>
-            <div>10 Avg batch size ${ agentStats.avgBatchSize10.toFixed(0) } </div>
+            <br>
+            <table style="">
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>Last</th>
+                  <th>Avg (10)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>KL</td>
+                  <td>${ agentStats.avgKLLast?.toFixed(4) }</td>
+                  <td>${ agentStats.avgKL10?.toFixed(4) }</td>
+                </tr>
+                <tr>
+                  <td>Reward</td>
+                  <td>${ agentStats.avgRewardLast?.toFixed(2) }</td>
+                  <td>${ agentStats.avgReward10.toFixed(2) }</td>
+                </tr>
+                <tr>
+                  <td>Policy loss</td>
+                  <td>${ agentStats.avgPolicyLossLast?.toFixed(4) }</td>
+                  <td>${ agentStats.avgPolicyLoss10.toFixed(4) }</td>
+                </tr>
+                <tr>
+                  <td>Value loss</td>
+                  <td>${ agentStats.avgValueLossLast?.toFixed(4) }</td>
+                  <td>${ agentStats.avgValueLoss10.toFixed(4) }</td>
+                </tr>
+                <tr>
+                  <td>Batch size</td>
+                  <td>${ agentStats.avgBatchSizeLast?.toFixed(0) }</td>
+                  <td>${ agentStats.avgBatchSize10.toFixed(0) }</td>
+                </tr>
+              </tbody>
+            </table>
+            <style>
+              table {
+                width: 100%;
+                border-collapse: collapse;
+              }
+            
+              th, td {
+                border: 1px solid #ddd;
+                padding: 2px;
+                text-align: center;
+              }
+           
+            </style>
+
         `;
     };
 }
