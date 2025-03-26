@@ -138,7 +138,7 @@ export class MasterAgent {
 
         const batches = this.batches;
         this.batches = [];
-        const sumSize = this.batches.reduce((acc, b) => acc + b.size, 0);
+        const sumSize = batches.reduce((acc, b) => acc + b.size, 0);
         const states = batches.map(b => b.states).flat();
         const actions = batches.map(b => b.actions).flat();
         const logProbs = new Float32Array(batches.map(b => b.logProbs).flat());
