@@ -203,14 +203,14 @@ export class MasterAgent {
                 tAllActions,
                 tAllLogProbs,
             );
+            klSum += abs(kl);
 
             if (kl > CONFIG.maxKL) {
                 console.warn(`[Train]: KL divergence is too high: ${ kl }`);
+                break;
             }
 
             console.log(`[Train]: Epoch: ${ i + 1 }, KL: ${ kl }`);
-
-            klSum += kl;
         }
 
         tAllStates.dispose();
