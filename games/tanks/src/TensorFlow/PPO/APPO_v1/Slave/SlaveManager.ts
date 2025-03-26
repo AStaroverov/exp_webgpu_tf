@@ -53,6 +53,7 @@ export class SlaveManager {
         let frameCount = 0;
 
         while (true) {
+            await Promise.resolve();
             // play
             frameCount++;
             const width = GameDI.width;
