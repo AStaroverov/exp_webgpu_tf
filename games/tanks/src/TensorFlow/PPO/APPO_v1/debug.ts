@@ -35,8 +35,7 @@ export function createDebugVisualization(container: HTMLElement, manager: Master
     // Add the debug container to the provided container
     container.appendChild(debugContainer);
 
-    const getDebugInfo = createCommonDebug();
-    const getRLDebugInfo = createRLDebug(manager);
+    const getDebugInfo = createCommonDebug(manager);
     const getTanksDebug = createTanksDebug(manager);
 
     // Update function
@@ -45,7 +44,6 @@ export function createDebugVisualization(container: HTMLElement, manager: Master
 
         statsContainer.innerHTML = [
             getDebugInfo(),
-            getRLDebugInfo(),
             getTanksDebug(),
         ].join('<div>-------------</div>');
 
@@ -56,80 +54,14 @@ export function createDebugVisualization(container: HTMLElement, manager: Master
     return debugContainer;
 }
 
-export function createCommonDebug() {
+export function createCommonDebug(manager: MasterManager) {
     return () => {
         const memoryUsage = (performance as any).memory.usedJSHeapSize / (1024 * 1024);
 
         return `
             <div>Workers: ${ CONFIG.workerCount }</div>
             <div>Memory: ${ memoryUsage.toFixed(2) }MB</div>
-        `;
-    };
-}
-
-export function createRLDebug(manager: MasterManager) {
-    return () => {
-        const agentStats = manager.agent.getStats();
-
-        return `
-            <div>Trains: ${ agentStats.version }</div>
-            <br>
-            <table style="">
-              <thead>
-                <tr>
-                  <th>Metric</th>
-                  <th>Last</th>
-                  <th>Avg (10)</th>
-                  <th>Avg (100)</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>KL</td>
-                  <td>${ agentStats.avgKLLast?.toFixed(4) }</td>
-                  <td>${ agentStats.avgKL10?.toFixed(4) }</td>
-                  <td>${ agentStats.avgKL100?.toFixed(4) }</td>
-                </tr>
-                <tr>
-                  <td>Reward</td>
-                  <td>${ agentStats.avgRewardLast?.toFixed(2) }</td>
-                  <td>${ agentStats.avgReward10.toFixed(2) }</td>
-                  <td>${ agentStats.avgReward100.toFixed(2) }</td>
-                </tr>
-                <tr>
-                  <td>Policy loss</td>
-                  <td>${ agentStats.avgPolicyLossLast?.toFixed(4) }</td>
-                  <td>${ agentStats.avgPolicyLoss10.toFixed(4) }</td>
-                  <td>${ agentStats.avgPolicyLoss100.toFixed(4) }</td>
-                </tr>
-                <tr>
-                  <td>Value loss</td>
-                  <td>${ agentStats.avgValueLossLast?.toFixed(4) }</td>
-                  <td>${ agentStats.avgValueLoss10.toFixed(4) }</td>
-                  <td>${ agentStats.avgValueLoss100.toFixed(4) }</td>
-                </tr>
-                <tr>
-                  <td>Batch size</td>
-                  <td>${ agentStats.avgBatchSizeLast?.toFixed(0) }</td>
-                  <td>${ agentStats.avgBatchSize10.toFixed(0) }</td>
-                  <td>${ agentStats.avgBatchSize100.toFixed(0) }</td>
-                </tr>
-              </tbody>
-            </table>
-            <style>
-              table {
-                width: 100%;
-                border-collapse: collapse;
-              }
-            
-              th, td {
-                border: 1px solid #ddd;
-                padding: 2px;
-                text-align: center;
-              }
-           
-            </style>
-
+            <div>Version: ${ manager.agent.getVersion() } </div>
         `;
     };
 }

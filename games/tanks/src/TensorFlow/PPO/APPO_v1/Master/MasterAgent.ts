@@ -1,17 +1,17 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { ACTION_DIM, INPUT_DIM } from '../../../Common/consts.ts';
-import { RingBuffer } from 'ring-buffer-ts';
-import { abs, ceil } from '../../../../../../../lib/math.ts';
+import { ceil } from '../../../../../../../lib/math.ts';
 import { createPolicyNetwork, createValueNetwork } from '../../../Common/models.ts';
 import { getStoreModelPath } from '../utils.ts';
-import { extractMemoryBatchList, getAgentLog, getAgentState, setAgentLog, setAgentState } from '../Database.ts';
+import { extractMemoryBatchList, getAgentState, setAgentState } from '../Database.ts';
 import { Batch } from '../../Common/Memory.ts';
 import { computeKullbackLeibler, predict, trainPolicyNetwork, trainValueNetwork } from '../../Common/train.ts';
 import { CONFIG } from '../../Common/config.ts';
 import { batchShuffle } from '../../../../../../../lib/shuffle.ts';
 import { flatFloat32Array } from '../../../Common/flat.ts';
 import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.ts';
+import { logEpoch, logRewards } from '../../Common/Metrics.ts';
 
 export class MasterAgent {
     private version = 0;
@@ -20,14 +20,6 @@ export class MasterAgent {
     private policyNetwork!: tf.LayersModel;  // Сеть политики
     private policyOptimizer!: tf.Optimizer;        // Оптимизатор для policy network
     private valueOptimizer!: tf.Optimizer;         // Оптимизатор для value network
-
-    private logger = new RingBuffer<{
-        avgBatchSize: number;
-        avgRewards: number;
-        policyLoss: number;
-        valueLoss: number;
-        avgKl: number;
-    }>(100);
 
     constructor() {
         this.valueOptimizer = tf.train.adam(CONFIG.learningRateValue);
@@ -38,77 +30,8 @@ export class MasterAgent {
         return new MasterAgent().init();
     }
 
-    getStats() {
-        const last100Rewards = this.logger.getLastN(100).map(v => v.avgRewards);
-        const avgReward100 = last100Rewards.length > 0
-            ? last100Rewards.reduce((a, b) => a + b, 0) / last100Rewards.length
-            : 0;
-        const last10Rewards = last100Rewards.slice(-10);
-        const avgReward10 = last10Rewards.length > 0
-            ? last10Rewards.reduce((a, b) => a + b, 0) / last10Rewards.length
-            : 0;
-
-        const last100PolicyLoss = this.logger.getLastN(100).map(v => v.policyLoss);
-        const avgPolicyLoss100 = last100PolicyLoss.length > 0
-            ? last100PolicyLoss.reduce((a, b) => a + b, 0) / last100PolicyLoss.length
-            : 0;
-        const last10PolicyLoss = last100PolicyLoss.slice(-10);
-        const avgPolicyLoss10 = last10PolicyLoss.length > 0
-            ? last10PolicyLoss.reduce((a, b) => a + b, 0) / last10PolicyLoss.length
-            : 0;
-
-        const last100ValueLoss = this.logger.getLastN(100).map(v => v.valueLoss);
-        const avgValueLoss100 = last100ValueLoss.length > 0
-            ? last100ValueLoss.reduce((a, b) => a + b, 0) / last100ValueLoss.length
-            : 0;
-        const last10ValueLoss = last100ValueLoss.slice(-10);
-        const avgValueLoss10 = last10ValueLoss.length > 0
-            ? last10ValueLoss.reduce((a, b) => a + b, 0) / last10ValueLoss.length
-            : 0;
-
-        const last100BatchSize = this.logger.getLastN(100).map(v => v.avgBatchSize);
-        const avgBatchSize100 = last100BatchSize.length > 0
-            ? last100BatchSize.reduce((a, b) => a + b, 0) / last100BatchSize.length
-            : 0;
-        const last10BatchSize = last100BatchSize.slice(-10);
-        const avgBatchSize10 = last10BatchSize.length > 0
-            ? last10BatchSize.reduce((a, b) => a + b, 0) / last10BatchSize.length
-            : 0;
-
-
-        const last100Kl = this.logger.getLastN(100).map(v => v.avgKl);
-        const avgKl100 = last100Kl.length > 0
-            ? last100Kl.reduce((a, b) => a + b, 0) / last100Kl.length
-            : 0;
-        const last10Kl = last100Kl.slice(-10);
-        const avgKl10 = last10Kl.length > 0
-            ? last10Kl.reduce((a, b) => a + b, 0) / last10Kl.length
-            : 0;
-
-
-        return {
-            version: this.version,
-
-            avgKLLast: this.logger.getLast()?.avgKl,
-            avgKL10: avgKl10,
-            avgKL100: avgKl100,
-
-            avgRewardLast: this.logger.getLast()?.avgRewards,
-            avgReward10: avgReward10,
-            avgReward100: avgReward100,
-
-            avgPolicyLossLast: this.logger.getLast()?.policyLoss,
-            avgPolicyLoss10: avgPolicyLoss10,
-            avgPolicyLoss100: avgPolicyLoss100,
-
-            avgValueLossLast: this.logger.getLast()?.valueLoss,
-            avgValueLoss10: avgValueLoss10,
-            avgValueLoss100: avgValueLoss100,
-
-            avgBatchSizeLast: this.logger.getLast()?.avgBatchSize,
-            avgBatchSize10: avgBatchSize10,
-            avgBatchSize100: avgBatchSize100,
-        };
+    getVersion() {
+        return this.version;
     }
 
     // Сохранение модели
@@ -118,7 +41,6 @@ export class MasterAgent {
 
             await Promise.all([
                 setAgentState({ version: this.version }),
-                setAgentLog({ logger: this.logger.toArray() }),
                 this.valueNetwork.save(getStoreModelPath('value-model', CONFIG)),
                 this.policyNetwork.save(getStoreModelPath('policy-model', CONFIG)),
             ]);
@@ -233,12 +155,13 @@ export class MasterAgent {
             ));
         }
 
+        const version = this.version;
+        logRewards(batches.map(b => b.rewards.reduce((acc, v) => acc + v, 0) / b.rewards.length).flat());
         Promise.all([
             Promise.all(policyLossPromises),
             Promise.all(valueLossPromises),
             Promise.all(klPromises),
         ]).then(([policyLossList, valueLossList, klList]) => {
-            let policyLossSum = 0, valueLossSum = 0, klSum = 0, count = 0;
             for (let i = 0; i < klList.length; i++) {
                 const kl = klList[i];
 
@@ -246,29 +169,25 @@ export class MasterAgent {
                     console.warn(`[Train]: KL divergence was too high: ${ kl }, in epoch ${ i }`);
                 }
 
-                let epochPolicyLossSum = 0, epochValueLossSum = 0;
+                let policyLoss = 0, valueLoss = 0;
                 for (let j = 0; j < miniBatchCount; j++) {
-                    epochPolicyLossSum += policyLossList[i * miniBatchCount + j];
-                    epochValueLossSum += valueLossList[i * miniBatchCount + j];
-                    count += 1;
+                    policyLoss += policyLossList[i * miniBatchCount + j];
+                    valueLoss += valueLossList[i * miniBatchCount + j];
                 }
 
-                console.log('[Train]: Epoch', i, 'KL:', kl, 'Policy loss:', epochPolicyLossSum, 'Value loss:', epochValueLossSum);
+                policyLoss /= miniBatchCount;
+                valueLoss /= miniBatchCount;
 
-                policyLossSum += epochPolicyLossSum;
-                valueLossSum += epochValueLossSum;
-                klSum += abs(kl);
+                console.log('[Train]: Epoch', i, 'KL:', kl, 'Policy loss:', policyLoss, 'Value loss:', valueLoss);
+
+                logEpoch({
+                    version,
+                    kl,
+                    valueLoss,
+                    policyLoss,
+                    avgBatchSize: sumSize / batches.length,
+                });
             }
-
-            this.logger.add({
-                avgBatchSize: sumSize / batches.length,
-                avgRewards: batches
-                    .map((b) => b.rewards.reduce((acc, v) => acc + v, 0) / b.rewards.length)
-                    .reduce((acc, v) => acc + v, 0) / batches.length,
-                policyLoss: policyLossSum / count,
-                valueLoss: valueLossSum / count,
-                avgKl: klSum / klList.length,
-            });
         });
 
         macroTasks.addTimeout(() => {
@@ -291,9 +210,8 @@ export class MasterAgent {
 
     private async load() {
         try {
-            const [agentState, agentLog, valueNetwork, policyNetwork] = await Promise.all([
+            const [agentState, valueNetwork, policyNetwork] = await Promise.all([
                 getAgentState(),
-                getAgentLog(),
                 tf.loadLayersModel(getStoreModelPath('value-model', CONFIG)),
                 tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG)),
             ]);
@@ -303,7 +221,6 @@ export class MasterAgent {
             }
 
             this.version = agentState?.version ?? 0;
-            this.logger.fromArray(agentLog?.logger ?? [] as any);
             this.valueNetwork = valueNetwork;
             this.policyNetwork = policyNetwork;
             console.log('[MasterAgent] Models loaded successfully');

@@ -46,7 +46,8 @@ export function getAgentState(): Promise<undefined | AgentState> {
 }
 
 type AgentLog = {
-    logger: object,
+    epoch: object,
+    rewards: number[],
 }
 
 export function setAgentLog(state: Omit<AgentLog, 'id'>) {
