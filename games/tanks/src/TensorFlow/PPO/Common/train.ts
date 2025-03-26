@@ -11,9 +11,9 @@ export function trainPolicyNetwork(
     actions: tf.Tensor,      // [batchSize, actionDim]
     oldLogProbs: tf.Tensor,  // [batchSize]
     advantages: tf.Tensor,   // [batchSize]
-): number {
-    return tf.tidy(() => {
-        const totalLoss = policyOptimizer.minimize(() => {
+): Promise<number> {
+    const loss = tf.tidy(() => {
+        return policyOptimizer.minimize(() => {
             const predict = policyNetwork.predict(states) as tf.Tensor;
             const { mean, logStd } = parsePredict(predict);
             const std = logStd.exp();
@@ -31,15 +31,10 @@ export function trainPolicyNetwork(
             const totalLoss = policyLoss.sub(totalEntropy.mul(config.entropyCoeff));
 
             return totalLoss as tf.Scalar;
-        }, true);
-
-        if (totalLoss == null) {
-            throw new Error('Policy loss is null');
-        }
-
-        // Возвращаем число
-        return totalLoss!.dataSync()[0];
+        }, true) as tf.Scalar;
     });
+
+    return loss.data().then((v) => v[0]).finally(() => loss.dispose());
 }
 
 function parsePredict(predict: tf.Tensor) {
@@ -55,16 +50,18 @@ export function computeKullbackLeibler(
     states: tf.Tensor,
     actions: tf.Tensor,
     oldLogProb: tf.Tensor,
-): number {
-    return tf.tidy(() => {
+): Promise<number> {
+    const value = tf.tidy(() => {
         const predict = policyNetwork.predict(states) as tf.Tensor;
         const { mean, logStd } = parsePredict(predict);
         const std = logStd.exp();
         const newLogProbs = computeLogProb(actions, mean, std);
         const diff = oldLogProb.sub(newLogProbs);
         const kl = diff.mean();
-        return kl.arraySync() as number;
+        return kl;
     });
+
+    return value.data().then((v) => v[0]).finally(() => value.dispose());
 }
 
 // Обучение сети критика (оценка состояний)
@@ -75,9 +72,9 @@ export function trainValueNetwork(
     states: tf.Tensor,   // [batchSize, inputDim]
     returns: tf.Tensor,  // [batchSize], уже подсчитанные (GAE + V(s) или просто discountedReturns)
     oldValues: tf.Tensor, // [batchSize], для клиппинга
-): number {
-    return tf.tidy(() => {
-        const vfLoss = valueOptimizer.minimize(() => {
+): Promise<number> {
+    const loss = tf.tidy(() => {
+        return valueOptimizer.minimize(() => {
             // forward pass
             const predicted = valueNetwork.predict(states) as tf.Tensor;
             // shape [batchSize,1], приводим к [batchSize]
@@ -95,14 +92,10 @@ export function trainValueNetwork(
             const finalValueLoss = tf.maximum(vfLoss1, vfLoss2).mean().mul(0.5);
 
             return finalValueLoss as tf.Scalar;
-        }, true);
-
-        if (vfLoss == null) {
-            throw new Error('Value loss is null');
-        }
-
-        return vfLoss!.dataSync()[0];
+        }, true) as tf.Scalar;
     });
+
+    return loss.data().then((v) => v[0]).finally(() => loss.dispose());
 }
 
 export function act(

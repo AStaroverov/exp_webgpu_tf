@@ -11,6 +11,7 @@ import { computeKullbackLeibler, predict, trainPolicyNetwork, trainValueNetwork 
 import { CONFIG } from '../../Common/config.ts';
 import { batchShuffle } from '../../../../../../../lib/shuffle.ts';
 import { flatFloat32Array } from '../../../Common/flat.ts';
+import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.ts';
 
 export class MasterAgent {
     private version = 0;
@@ -134,13 +135,16 @@ export class MasterAgent {
             return false;
         }
 
-        const sumSize = this.batches.reduce((acc, b) => acc + b.size, 0);
-        const states = this.batches.map(b => b.states).flat();
-        const actions = this.batches.map(b => b.actions).flat();
-        const logProbs = new Float32Array(this.batches.map(b => b.logProbs).flat());
-        const values = new Float32Array(this.batches.map(b => b.values).flat());
-        const advantages = new Float32Array(this.batches.map(b => b.advantages).flat());
-        const returns = new Float32Array(this.batches.map(b => b.returns).flat());
+        const batches = this.batches;
+        this.batches = [];
+
+        const sumSize = batches.reduce((acc, b) => acc + b.size, 0);
+        const states = batches.map(b => b.states).flat();
+        const actions = batches.map(b => b.actions).flat();
+        const logProbs = new Float32Array(batches.map(b => b.logProbs).flat());
+        const values = new Float32Array(batches.map(b => b.values).flat());
+        const advantages = new Float32Array(batches.map(b => b.advantages).flat());
+        const returns = new Float32Array(batches.map(b => b.returns).flat());
         const miniBatchCount = ceil(states.length / CONFIG.miniBatchSize);
 
         const tAllStates = tf.tensor(flatFloat32Array(states), [sumSize, INPUT_DIM]);
@@ -149,7 +153,10 @@ export class MasterAgent {
 
         console.log(`[Train]: Iteration ${ this.version }, Sum batch size: ${ sumSize }, Mini batch count: ${ miniBatchCount } by ${ CONFIG.miniBatchSize }`);
 
-        let policyLossSum = 0, valueLossSum = 0, klSum = 0, epoch = 0, count = 0;
+        const policyLossPromises: Promise<number>[] = [];
+        const valueLossPromises: Promise<number>[] = [];
+        const klPromises: Promise<number>[] = [];
+
         for (let i = 0; i < CONFIG.epochs; i++) {
             batchShuffle(
                 states,
@@ -171,60 +178,77 @@ export class MasterAgent {
                 const tAdvantages = tf.tensor(advantages.subarray(start, end), [size]);
                 const tReturns = tf.tensor(returns.subarray(start, end), [size]);
 
-                const policyLoss = trainPolicyNetwork(
+                policyLossPromises.push(trainPolicyNetwork(
                     this.policyNetwork, this.policyOptimizer, CONFIG,
                     tStates, tActions, tLogProbs, tAdvantages,
-                );
+                ));
 
-                const valueLoss = trainValueNetwork(
+                valueLossPromises.push(trainValueNetwork(
                     this.valueNetwork, this.valueOptimizer, CONFIG,
                     tStates, tReturns, tValues,
-                );
+                ));
 
-                policyLossSum += policyLoss;
-                valueLossSum += valueLoss;
-                count += 1;
-
-                tStates.dispose();
-                tActions.dispose();
-                tLogProbs.dispose();
-                tValues.dispose();
-                tAdvantages.dispose();
-                tReturns.dispose();
+                macroTasks.addTimeout(() => {
+                    tStates.dispose();
+                    tActions.dispose();
+                    tLogProbs.dispose();
+                    tValues.dispose();
+                    tAdvantages.dispose();
+                    tReturns.dispose();
+                }, 1000);
             }
 
-            epoch += 1;
-
-            const kl = computeKullbackLeibler(
+            klPromises.push(computeKullbackLeibler(
                 this.policyNetwork,
                 tAllStates,
                 tAllActions,
                 tAllLogProbs,
-            );
-            klSum += abs(kl);
-
-            if (kl > CONFIG.maxKL) {
-                console.warn(`[Train]: KL divergence is too high: ${ kl }`);
-                break;
-            }
-
-            console.log(`[Train]: Epoch: ${ i + 1 }, KL: ${ kl }`);
+            ));
         }
 
-        this.logger.add({
-            avgBatchSize: sumSize / this.batches.length,
-            avgRewards: this.batches
-                .map((b) => b.rewards.reduce((acc, v) => acc + v, 0) / b.rewards.length)
-                .reduce((acc, v) => acc + v, 0) / this.batches.length,
-            policyLoss: policyLossSum / count,
-            valueLoss: valueLossSum / count,
-            avgKl: klSum / epoch,
+        Promise.all([
+            Promise.all(policyLossPromises),
+            Promise.all(valueLossPromises),
+            Promise.all(klPromises),
+        ]).then(([policyLossList, valueLossList, klList]) => {
+            let policyLossSum = 0, valueLossSum = 0, klSum = 0, count = 0;
+            for (let i = 0; i < klList.length; i++) {
+                const kl = klList[i];
+
+                if (kl > CONFIG.maxKL) {
+                    console.warn(`[Train]: KL divergence was too high: ${ kl }, in epoch ${ i }`);
+                }
+
+                let epochPolicyLossSum = 0, epochValueLossSum = 0;
+                for (let j = 0; j < miniBatchCount; j++) {
+                    epochPolicyLossSum += policyLossList[i * miniBatchCount + j];
+                    epochValueLossSum += valueLossList[i * miniBatchCount + j];
+                    count += 1;
+                }
+
+                console.log('[Train]: Epoch', i, 'KL:', kl, 'Policy loss:', epochPolicyLossSum, 'Value loss:', epochValueLossSum);
+
+                policyLossSum += epochPolicyLossSum;
+                valueLossSum += epochValueLossSum;
+                klSum += abs(kl);
+            }
+
+            this.logger.add({
+                avgBatchSize: sumSize / batches.length,
+                avgRewards: this.batches
+                    .map((b) => b.rewards.reduce((acc, v) => acc + v, 0) / b.rewards.length)
+                    .reduce((acc, v) => acc + v, 0) / this.batches.length,
+                policyLoss: policyLossSum / count,
+                valueLoss: valueLossSum / count,
+                avgKl: klSum / klList.length,
+            });
         });
 
-        this.batches.length = 0;
-        tAllStates.dispose();
-        tAllActions.dispose();
-        tAllLogProbs.dispose();
+        macroTasks.addTimeout(() => {
+            tAllStates.dispose();
+            tAllActions.dispose();
+            tAllLogProbs.dispose();
+        }, 1000);
 
         return true;
     }
