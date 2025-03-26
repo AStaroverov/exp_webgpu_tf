@@ -22,7 +22,8 @@ export type Config = {
 
     batchSize: number;              // Batch size for worker
     miniBatchSize: number,
-    maxFrames: number;              // Maximum number of frames to train on
+    warmupFrames: number;              // Maximum number of frames to train on
+    episodeFrames: number;              // Maximum number of frames to train on
     // Workers
     workerCount: number;                // Number of parallel workers
     // Training control
@@ -49,9 +50,10 @@ export const DEFAULT_EXPERIMENT: Config = {
 
     batchSize: 256, // useless for appo
     miniBatchSize: 256,
-    maxFrames: 800, // usually produce 250 samples
+    warmupFrames: 100,
+    episodeFrames: 900, // usually produce 250 samples
     // Workers
-    workerCount: 12,
+    workerCount: 4,
     // Training control
     saveModelEvery: 1,
     savePath: 'APPO_v1',

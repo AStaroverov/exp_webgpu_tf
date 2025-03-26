@@ -1,6 +1,11 @@
 import { MasterAgent } from './MasterAgent.ts';
 import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.ts';
-import { TANK_COUNT_SIMULATION_MAX, TANK_COUNT_SIMULATION_MIN, TICK_TRAIN_TIME } from '../../../Common/consts.ts';
+import {
+    TANK_COUNT_SIMULATION_MAX,
+    TANK_COUNT_SIMULATION_MIN,
+    TICK_TIME_SIMULATION,
+    TICK_TRAIN_TIME,
+} from '../../../Common/consts.ts';
 import { GameDI } from '../../../../DI/GameDI.ts';
 import { createBattlefield } from '../../../Common/createBattlefield.ts';
 import { createInputVector } from '../../../Common/createInputVector.ts';
@@ -55,6 +60,13 @@ export class MasterManager {
 
         this.battlefield?.destroy();
         this.battlefield = await createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX), true);
+
+        const shouldEvery = 12;
+        const maxWarmupFrames = CONFIG.warmupFrames - (CONFIG.warmupFrames % shouldEvery);
+        const maxEpisodeFrames = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
+        const width = GameDI.width;
+        const height = GameDI.height;
+
         let frameCount = 0;
         let activeTanks: number[] = [];
 
@@ -72,9 +84,7 @@ export class MasterManager {
                 return;
             }
 
-            const width = GameDI.width;
-            const height = GameDI.height;
-            const shouldEvery = 12;
+            const isWarmup = frameCount < maxWarmupFrames;
             const shouldAction = frameCount % shouldEvery === 0;
             const shouldReward = frameCount % shouldEvery === 10;
             GameDI.shouldCollectTensor = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
@@ -88,7 +98,7 @@ export class MasterManager {
                 }
             }
 
-            this.battlefield.gameTick(16.666);
+            this.battlefield.gameTick(TICK_TIME_SIMULATION * (isWarmup ? 2 : 1));
 
             if (shouldReward) {
                 for (const tankEid of activeTanks) {
@@ -100,7 +110,7 @@ export class MasterManager {
             }
 
 
-            const isEpisodeDone = activeTanks.length <= 1 || frameCount > CONFIG.maxFrames;
+            const isEpisodeDone = activeTanks.length <= 1 || frameCount > maxEpisodeFrames;
 
             if (isEpisodeDone) {
                 this.gameLoop();

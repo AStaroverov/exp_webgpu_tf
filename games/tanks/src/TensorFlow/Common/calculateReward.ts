@@ -137,7 +137,7 @@ export function calculateReward(
 
     // 1. Награда за выживание
     rewards.common.health = currentHealth * REWARD_WEIGHTS.COMMON.HEALTH;
-    rewards.common.survival = (step / CONFIG.maxFrames) * REWARD_WEIGHTS.COMMON.SURVIVAL;
+    rewards.common.survival = (step / CONFIG.episodeFrames) * REWARD_WEIGHTS.COMMON.SURVIVAL;
 
     // 2. Расчет награды за нахождение в пределах карты
     rewards.movement.mapAwareness = calculateTankMapAwarenessReward(

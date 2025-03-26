@@ -54,15 +54,18 @@ export class SlaveManager {
     private async trainingLoop() {
         await this.init();
 
+        const shouldEvery = 12;
+        const maxWarmupFrames = CONFIG.warmupFrames - (CONFIG.warmupFrames % shouldEvery);
+        const maxEpisodeFrames = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
+        const width = GameDI.width;
+        const height = GameDI.height;
         let frameCount = 0;
 
         this.stopTrainingLoop = macroTasks.addInterval(() => {
             // play
             frameCount++;
-            const width = GameDI.width;
-            const height = GameDI.height;
-            const shouldEvery = 12;
-            const isWarmup = frameCount < shouldEvery * 8;
+
+            const isWarmup = frameCount < maxWarmupFrames;
             const shouldAction = frameCount % shouldEvery === 0;
             const shouldMemorize =
                 (frameCount - 4) % shouldEvery === 0
@@ -80,7 +83,7 @@ export class SlaveManager {
             }
 
             // Execute game tick
-            this.battlefield!.gameTick(TICK_TIME_SIMULATION);
+            this.battlefield!.gameTick(TICK_TIME_SIMULATION * (isWarmup ? 2 : 1));
 
             if (isWarmup) {
                 return;
@@ -92,7 +95,7 @@ export class SlaveManager {
                 }
             }
 
-            const isEpisodeDone = activeTanks.length <= 1 || frameCount > CONFIG.maxFrames;
+            const isEpisodeDone = activeTanks.length <= 1 || frameCount > maxEpisodeFrames;
 
             if (isEpisodeDone) {
                 this.stopTrainingLoop?.();
