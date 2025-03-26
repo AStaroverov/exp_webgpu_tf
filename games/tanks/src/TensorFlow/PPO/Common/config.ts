@@ -48,10 +48,10 @@ export const DEFAULT_EXPERIMENT: Config = {
     maxKL: 0.05,
 
     batchSize: 256, // useless for appo
-    miniBatchSize: 256,
+    miniBatchSize: 128,
     maxFrames: 800, // usually produce 250 samples
     // Workers
-    workerCount: 12,
+    workerCount: 11,
     // Training control
     saveModelEvery: 1,
     savePath: 'APPO_v1',

@@ -122,8 +122,8 @@ export class MasterAgent {
             ...(await extractMemoryBatchList())
                 .filter(b => {
                     const delta = this.version - b.version;
-                    if (delta > 2) {
-                        console.log('[Train]: skipping batch with diff', delta);
+                    if (delta > 3) {
+                        console.warn('[Train]: skipping batch with diff', delta);
                         return false;
                     }
                     return true;
@@ -131,14 +131,15 @@ export class MasterAgent {
                 .map(b => b.memories),
         );
 
-        if (this.batches.length < CONFIG.workerCount) {
+        const sumSize = this.batches.reduce((acc, b) => acc + b.size, 0);
+
+        if (sumSize < CONFIG.miniBatchSize * 10) {
             return false;
         }
 
         const batches = this.batches;
         this.batches = [];
 
-        const sumSize = batches.reduce((acc, b) => acc + b.size, 0);
         const states = batches.map(b => b.states).flat();
         const actions = batches.map(b => b.actions).flat();
         const logProbs = new Float32Array(batches.map(b => b.logProbs).flat());
