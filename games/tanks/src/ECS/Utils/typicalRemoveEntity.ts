@@ -12,7 +12,7 @@ export function scheduleRemoveEntity(eid: number, recursive = true, { world } = 
 export function typicalRemoveEntity(eid: number, { world } = GameDI) {
     if (hasComponent(world, eid, RigidBodyRef)) {
         removeRigidShape(eid);
-        RigidBodyRef.reset(eid);
+        RigidBodyRef.clear(eid);
     }
 
     removeEntity(world, eid);

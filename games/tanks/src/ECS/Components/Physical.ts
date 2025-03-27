@@ -8,14 +8,22 @@ const mapPhysicalIdToEntityId = new Map<number, number>();
 export const RigidBodyRef = component({
     id: new Float64Array(delegate.defaultSize),
 
-    addComponent: (world: World, eid: number, pid = 0) => {
+    addComponent: (world: World, eid: number, pid: number) => {
         addComponent(world, eid, RigidBodyRef);
         RigidBodyRef.id[eid] = pid;
         mapPhysicalIdToEntityId.set(pid, eid);
     },
 
-    reset: (eid: number) => {
-        RigidBodyRef.id[eid] = 0;
+    clear: (eid: number) => {
+        const pid = RigidBodyRef.id[eid];
+        if (pid !== 0) {
+            RigidBodyRef.id[eid] = 0;
+            mapPhysicalIdToEntityId.delete(pid);
+        }
+    },
+
+    dispose: () => {
+        mapPhysicalIdToEntityId.clear();
     },
 });
 

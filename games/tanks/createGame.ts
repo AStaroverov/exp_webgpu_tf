@@ -12,7 +12,7 @@ import {
     createPlayerTankTurretRotationSystem,
 } from './src/ECS/Systems/playerTankControllerSystems.ts';
 import { createSpawnerBulletsSystem } from './src/ECS/Systems/createBulletSystem.ts';
-import { getEntityIdByPhysicalId } from './src/ECS/Components/Physical.ts';
+import { getEntityIdByPhysicalId, RigidBodyRef } from './src/ECS/Components/Physical.ts';
 import { createWorld, deleteWorld, hasComponent, resetWorld } from 'bitecs';
 import { Hitable } from './src/ECS/Components/Hitable.ts';
 import { createHitableSystem } from './src/ECS/Systems/createHitableSystem.ts';
@@ -197,6 +197,8 @@ export async function createGame({ width, height, withRender, withPlayer }: {
 
     GameDI.destroy = () => {
         physicalWorld.free();
+        RigidBodyRef.dispose();
+
         resetWorld(world);
         deleteWorld(world);
         destroyChangeDetectorSystem(world);
