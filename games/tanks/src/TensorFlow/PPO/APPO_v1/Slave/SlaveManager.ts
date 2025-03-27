@@ -14,9 +14,6 @@ import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.t
 export class SlaveManager {
     private agent!: SlaveAgent;
 
-    private battlefield: Awaited<ReturnType<typeof createBattlefield>> | null = null;
-    private tankRewards = new Map<number, number>();
-
     constructor() {
         this.agent = SlaveAgent.create();
     }
@@ -29,23 +26,22 @@ export class SlaveManager {
         this.trainingLoop();
     }
 
-    dispose() {
-        this.tankRewards.clear();
-        this.battlefield?.destroy();
-        this.agent.dispose();
-    }
-
-    // Initialize the game environment
-    async init() {
-        [this.battlefield] = await Promise.all([
+    private beforeTraining() {
+        return Promise.all([
             createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX)),
             this.agent.sync(),
         ]);
     }
 
+    private afterTraining(game: { destroy: () => void }) {
+        addMemoryBatch(this.agent.readMemory());
+        this.agent.dispose();
+        game.destroy();
+    }
+
     // Main game loop
     private async trainingLoop() {
-        await this.init();
+        const [game] = await this.beforeTraining();
 
         const shouldEvery = 12;
         const maxWarmupFrames = CONFIG.warmupFrames - (CONFIG.warmupFrames % shouldEvery);
@@ -54,7 +50,7 @@ export class SlaveManager {
         const height = GameDI.height;
         let frameCount = 0;
 
-        for (let i = 0; i < Infinity; i++) {
+        for (let i = 0; i <= maxEpisodeFrames; i++) {
             if (frameCount % 100 === 0) {
                 await new Promise(resolve => macroTasks.addTimeout(resolve, 0));
             }
@@ -70,7 +66,7 @@ export class SlaveManager {
             const isLastMemorize = frameCount > 10 && (frameCount - 10) % shouldEvery === 0;
             GameDI.shouldCollectTensor = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
 
-            const activeTanks = this.battlefield!.getTanks();
+            const activeTanks = game.getTanks();
 
             if (shouldAction) {
                 for (const tankEid of activeTanks) {
@@ -79,7 +75,7 @@ export class SlaveManager {
             }
 
             // Execute game tick
-            this.battlefield!.gameTick(TICK_TIME_SIMULATION * (isWarmup ? 2 : 1));
+            game.gameTick(TICK_TIME_SIMULATION * (isWarmup ? 2 : 1));
 
             if (isWarmup) {
                 continue;
@@ -91,17 +87,15 @@ export class SlaveManager {
                 }
             }
 
-            const isEpisodeDone = activeTanks.length <= 1 || frameCount > maxEpisodeFrames;
-
-            if (isEpisodeDone) {
-                this.exposeMemory();
-                this.dispose();
-                this.trainingLoop();
-
+            if (activeTanks.length <= 1) {
                 break;
             }
         }
+
+        this.afterTraining(game);
+        this.trainingLoop();
     }
+
 
     private updateTankBehaviour(
         tankEid: number,
@@ -145,9 +139,6 @@ export class SlaveManager {
         // Check if tank is "dead" based on health
         const isDone = getTankHealth(tankEid) <= 0;
 
-        // Accumulate reward for this tank
-        this.tankRewards.set(tankEid, (this.tankRewards.get(tankEid) || 0) + reward);
-
         // Store experience in agent's memory
         this.agent.rememberReward(
             tankEid,
@@ -155,9 +146,5 @@ export class SlaveManager {
             isDone,
             isLast,
         );
-    }
-
-    private async exposeMemory() {
-        return addMemoryBatch(this.agent.readMemory());
     }
 }

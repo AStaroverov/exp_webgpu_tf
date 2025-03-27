@@ -31,7 +31,6 @@ export type Config = {
     workerCount: number;                // Number of parallel workers
     reuseLimit: number;                 // Number of times a worker models can be reused without updating
     // Training control
-    saveModelEvery: number;         // Save model every N episodes
     savePath: string;
 };
 
@@ -63,7 +62,6 @@ export const DEFAULT_EXPERIMENT: Config = {
     workerCount: 10,
     reuseLimit: 1,
     // Training control
-    saveModelEvery: 1,
     savePath: 'APPO_v1',
 };
 
