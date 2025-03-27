@@ -11,7 +11,7 @@ import { CONFIG } from '../../Common/config.ts';
 import { batchShuffle } from '../../../../../../../lib/shuffle.ts';
 import { flatFloat32Array } from '../../../Common/flat.ts';
 import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.ts';
-import { logBatch, logEpoch, logRewards, logTrain, saveMetrics } from '../../Common/Metrics.ts';
+import { drawMetrics, logBatch, logEpoch, logRewards, logTrain, saveMetrics } from '../../Common/Metrics.ts';
 
 export class MasterAgent {
     private version = 0;
@@ -207,6 +207,7 @@ export class MasterAgent {
             logTrain({ trainTime: (endTime - startTime) / 1000, waitTime: waitTime / 1000 });
             logRewards(memories.map(b => b.rewards.reduce((acc, v) => acc + v, 0) / b.rewards.length).flat());
             saveMetrics();
+            drawMetrics();
         });
 
         macroTasks.addTimeout(() => {

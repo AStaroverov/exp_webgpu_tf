@@ -1,4 +1,3 @@
-import * as tf from '@tensorflow/tfjs';
 import * as tfvis from '@tensorflow/tfjs-vis';
 import { getAgentLog, setAgentLog } from '../APPO_v1/Database.ts';
 
@@ -117,16 +116,68 @@ getAgentLog().then((data) => {
         store.batchSize.fromJson(data.batchSize as CompressedBatch[]);
     }
 
+    drawMetrics();
+});
+
+export function drawMetrics() {
     drawRewards();
     drawBatch();
     drawEpoch();
     drawTrain();
-});
+}
+
+export function saveMetrics() {
+    setAgentLog({
+        version: 1,
+        rewards: store.rewards.toJson(),
+        kl: store.kl.toJson(),
+        valueLoss: store.valueLoss.toJson(),
+        policyLoss: store.policyLoss.toJson(),
+        trainTime: store.trainTime.toJson(),
+        waitTime: store.waitTime.toJson(),
+        versionDelta: store.versionDelta.toJson(),
+        batchSize: store.batchSize.toJson(),
+    });
+}
+
+export function logEpoch(data: {
+    kl: number;
+    valueLoss: number;
+    policyLoss: number;
+}) {
+    store.kl.add(data.kl);
+    store.valueLoss.add(data.valueLoss);
+    store.policyLoss.add(data.policyLoss);
+}
+
+export function logRewards(rewards: number[]) {
+    store.rewards.add(...rewards);
+}
+
+export function logBatch(data: { versionDelta: number, batchSize: number }) {
+    store.versionDelta.add(data.versionDelta);
+    store.batchSize.add(data.batchSize);
+}
+
+export function logTrain(data: { trainTime: number, waitTime: number }) {
+    store.trainTime.add(data.trainTime);
+    store.waitTime.add(data.waitTime);
+}
+
+function calculateMovingAverage(data: RenderPoint[], windowSize: number): RenderPoint[] {
+    const averaged: RenderPoint[] = [];
+    for (let i = 0; i < data.length; i++) {
+        const win = data.slice(Math.max(i - windowSize + 1, 0), i + 1);
+        const avg = win.reduce((sum, v) => sum + v.y, 0) / win.length;
+        averaged.push({ x: data[i].x, y: avg });
+    }
+    return averaged;
+}
 
 function drawEpoch() {
     tfvis.render.linechart({ name: 'KL', tab: 'Training' }, {
-        values: [store.kl.toArrayMin(), store.kl.toArrayMax(), store.kl.toArrayAvg()],
-        series: ['Min', 'Max', 'Avg'],
+        values: [store.kl.toArrayAvg()],
+        series: ['Avg'],
     }, {
         xLabel: 'Version',
         yLabel: 'KL',
@@ -151,13 +202,11 @@ function drawEpoch() {
         width: 500,
         height: 300,
     });
-
-    tf.nextFrame();
 }
 
 function drawRewards() {
     const avgRewards = store.rewards.toArrayAvg();
-    const avgRewardsMA = calculateMovingAverage(avgRewards, 10);
+    const avgRewardsMA = calculateMovingAverage(avgRewards, 100);
     tfvis.render.scatterplot({ name: 'Reward', tab: 'Training' }, {
         values: [store.rewards.toArrayMin(), store.rewards.toArrayMax(), avgRewards, avgRewardsMA],
         series: ['Min', 'Max', 'Avg', 'MA'],
@@ -167,12 +216,13 @@ function drawRewards() {
         width: 500,
         height: 300,
     });
-    tf.nextFrame();
 }
 
 function drawBatch() {
-    tfvis.render.linechart({ name: 'Batch Version Delta', tab: 'Training' }, {
-        values: [store.versionDelta.toArrayMin(), store.versionDelta.toArrayMax(), store.versionDelta.toArrayAvg()],
+    const avgVersionDelta = store.versionDelta.toArrayAvg();
+    const avgVersionDeltaMA = calculateMovingAverage(avgVersionDelta, 10);
+    tfvis.render.scatterplot({ name: 'Batch Version Delta', tab: 'Training' }, {
+        values: [avgVersionDelta, avgVersionDeltaMA],
         series: ['Avg', 'MA'],
     }, {
         xLabel: 'Batch',
@@ -189,8 +239,6 @@ function drawBatch() {
         width: 500,
         height: 300,
     });
-
-    tf.nextFrame();
 }
 
 function drawTrain() {
@@ -217,57 +265,4 @@ function drawTrain() {
         width: 500,
         height: 300,
     });
-    tf.nextFrame();
-}
-
-export function saveMetrics() {
-    setAgentLog({
-        version: 1,
-        rewards: store.rewards.toJson(),
-        kl: store.kl.toJson(),
-        valueLoss: store.valueLoss.toJson(),
-        policyLoss: store.policyLoss.toJson(),
-        trainTime: store.trainTime.toJson(),
-        waitTime: store.waitTime.toJson(),
-        versionDelta: store.versionDelta.toJson(),
-        batchSize: store.batchSize.toJson(),
-    });
-}
-
-export function logEpoch(data: {
-    kl: number;
-    valueLoss: number;
-    policyLoss: number;
-}) {
-    store.kl.add(data.kl);
-    store.valueLoss.add(data.valueLoss);
-    store.policyLoss.add(data.policyLoss);
-    drawEpoch();
-}
-
-export function logRewards(rewards: number[]) {
-    store.rewards.add(...rewards);
-    drawRewards();
-}
-
-export function logBatch(data: { versionDelta: number, batchSize: number }) {
-    store.versionDelta.add(data.versionDelta);
-    store.batchSize.add(data.batchSize);
-    drawBatch();
-}
-
-export function logTrain(data: { trainTime: number, waitTime: number }) {
-    store.trainTime.add(data.trainTime);
-    store.waitTime.add(data.waitTime);
-    drawTrain();
-}
-
-function calculateMovingAverage(data: RenderPoint[], windowSize: number): RenderPoint[] {
-    const averaged: RenderPoint[] = [];
-    for (let i = 0; i < data.length; i++) {
-        const win = data.slice(Math.max(i - windowSize + 1, 0), i + 1);
-        const avg = win.reduce((sum, v) => sum + v.y, 0) / win.length;
-        averaged.push({ x: data[i].x, y: avg });
-    }
-    return averaged;
 }
