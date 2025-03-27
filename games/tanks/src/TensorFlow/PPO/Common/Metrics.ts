@@ -220,7 +220,7 @@ function drawRewards() {
 
 function drawBatch() {
     const avgVersionDelta = store.versionDelta.toArrayAvg();
-    const avgVersionDeltaMA = calculateMovingAverage(avgVersionDelta, 10);
+    const avgVersionDeltaMA = calculateMovingAverage(avgVersionDelta, 100);
     tfvis.render.scatterplot({ name: 'Batch Version Delta', tab: 'Training' }, {
         values: [avgVersionDelta, avgVersionDeltaMA],
         series: ['Avg', 'MA'],
@@ -242,8 +242,8 @@ function drawBatch() {
 }
 
 function drawTrain() {
-    const avgTrainTime = store.waitTime.toArrayAvg();
-    const avgTrainTimeMA = calculateMovingAverage(avgTrainTime, 10);
+    const avgTrainTime = store.trainTime.toArrayAvg();
+    const avgTrainTimeMA = calculateMovingAverage(avgTrainTime, 100);
     tfvis.render.linechart({ name: 'Train Time', tab: 'Training' }, {
         values: [avgTrainTime, avgTrainTimeMA],
         series: ['Avg', 'MA'],
@@ -255,7 +255,7 @@ function drawTrain() {
     });
 
     const avgWaitTime = store.waitTime.toArrayAvg();
-    const avgWaitTimeMA = calculateMovingAverage(avgWaitTime, 10);
+    const avgWaitTimeMA = calculateMovingAverage(avgWaitTime, 100);
     tfvis.render.linechart({ name: 'Waiting Time', tab: 'Training' }, {
         values: [avgWaitTime, avgWaitTimeMA],
         series: ['Avg', 'MA'],
