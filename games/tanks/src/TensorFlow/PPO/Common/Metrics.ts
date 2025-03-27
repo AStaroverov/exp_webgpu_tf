@@ -206,7 +206,7 @@ function drawEpoch() {
 
 function drawRewards() {
     const avgRewards = store.rewards.toArrayAvg();
-    const avgRewardsMA = calculateMovingAverage(avgRewards, 100);
+    const avgRewardsMA = calculateMovingAverage(avgRewards, 1000);
     tfvis.render.scatterplot({ name: 'Reward', tab: 'Training' }, {
         values: [store.rewards.toArrayMin(), store.rewards.toArrayMax(), avgRewards, avgRewardsMA],
         series: ['Min', 'Max', 'Avg', 'MA'],

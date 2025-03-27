@@ -32,13 +32,13 @@ let REWARD_WEIGHTS = {
         TRACKING: 1.0,      // За активное отслеживание врага
         DISTANCE: 1.0,      // За расстояние до цели
         MAP_AWARENESS: 0.1, // За нахождение в пределах карты
-        NO_TARGET_PENALTY: -0.1, // За отсутствие целей
-        TRACKING_PENALTY: -0.2, // За активное отслеживание врага
-        DISTANCE_PENALTY: -0.2, // За расстояние до цели
+        NO_TARGET_PENALTY: -0.4, // За отсутствие целей
+        TRACKING_PENALTY: -0.4, // За активное отслеживание врага
+        DISTANCE_PENALTY: -0.4, // За расстояние до цели
         SHOOTING: 1.0,       // За стрельбу в цель
-        SHOOTING_PENALTY: -0.1, // За стрельбу в пустоту
+        SHOOTING_PENALTY: -0.2, // За стрельбу в пустоту
     },
-    AIM_MULTIPLIER: 1.0,
+    AIM_MULTIPLIER: 2.0,
 
     MAP_BORDER: {
         BASE: 0.2,          // За нахождение в пределах карты

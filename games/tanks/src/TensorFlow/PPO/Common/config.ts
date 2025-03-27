@@ -41,15 +41,15 @@ export const DEFAULT_EXPERIMENT: Config = {
     hiddenLayersPolicy: [['relu', 256], ['relu', 256], ['relu', 128], ['relu', 64]],
     hiddenLayersValue: [['relu', 128], ['relu', 64]],
     // Learning parameters
-    learningRatePolicy: 1e-4,
-    learningRateValue: 1e-4,
+    learningRatePolicy: 4e-4,
+    learningRateValue: 4e-4,
     gamma: 0.99,
     lam: 0.95,
     // PPO-specific parameters
     epochs: 6,
     clipRatioPolicy: 0.15,
     clipRatioValue: 0.20,
-    entropyCoeff: 0.01,
+    entropyCoeff: 0.02,
     maxKL: 0.05,
 
     trustCoeff: 0.2,
