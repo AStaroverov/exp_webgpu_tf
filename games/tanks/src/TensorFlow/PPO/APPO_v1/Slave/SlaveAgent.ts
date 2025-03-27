@@ -60,14 +60,19 @@ export class SlaveAgent {
 
     async sync() {
         try {
+            const canReuse = this.reuse < CONFIG.reuseLimit;
             let agentState: undefined | AgentState;
             let start = Date.now();
+            let isNewVersion = false;
             for (let i = 0; i < 1_000_000; i++) {
                 if (i > 0) await new Promise(resolve => setTimeout(resolve, i * 100));
                 agentState = await getAgentState();
-                const isNewVersion = (agentState?.version ?? -1) > this.version;
-                const canReuse = this.reuse < CONFIG.reuseLimit;
+                isNewVersion = (agentState?.version ?? -1) > this.version;
                 if (agentState && (isNewVersion || canReuse)) break;
+            }
+
+            if (!isNewVersion) {
+                await new Promise(resolve => setTimeout(resolve, 2_000));
             }
 
             const syncTime = Date.now() - start;
