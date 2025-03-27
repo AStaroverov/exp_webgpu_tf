@@ -62,15 +62,15 @@ class CompressedBuffer {
     }
 
     toArrayMin(): RenderPoint[] {
-        return this.buffer.flatMap(b => b.start === b.end ? [] : [{ x: (b.start + b.end) / 2, y: b.min }]);
+        return this.buffer.flatMap((b, i) => b.start === b.end ? [] : [{ x: i, y: b.min }]);
     }
 
     toArrayMax(): RenderPoint[] {
-        return this.buffer.flatMap(b => b.start === b.end ? [] : [{ x: (b.start + b.end) / 2, y: b.max }]);
+        return this.buffer.flatMap((b, i) => b.start === b.end ? [] : [{ x: i, y: b.max }]);
     }
 
     toArrayAvg(): RenderPoint[] {
-        return this.buffer.flatMap(b => [{ x: (b.start + b.end) / 2, y: b.avg }]);
+        return this.buffer.flatMap((b, i) => [{ x: i, y: b.avg }]);
     }
 
     toJson() {
