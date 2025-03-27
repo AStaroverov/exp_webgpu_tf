@@ -46,12 +46,7 @@ export function getAgentState(): Promise<undefined | AgentState> {
     return db.table<AgentState>('agent-state').get(0);
 }
 
-type AgentLog = {
-    train: object[],
-    batch: object[],
-    epoch: object[],
-    rewards: number[],
-}
+type AgentLog = object;
 
 export function setAgentLog(state: Omit<AgentLog, 'id'>) {
     return db.table('agent-log').put({ id: 0, ...state });
