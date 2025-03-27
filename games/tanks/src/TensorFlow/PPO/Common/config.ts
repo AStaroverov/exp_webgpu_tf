@@ -44,8 +44,8 @@ export const DEFAULT_EXPERIMENT: Config = {
     lam: 0.95,
     // PPO-specific parameters
     epochs: 6,
-    clipRatioPolicy: 0.2,
-    clipRatioValue: 0.25,
+    clipRatioPolicy: 0.15,
+    clipRatioValue: 0.20,
     entropyCoeff: 0.01,
     maxKL: 0.05,
 
