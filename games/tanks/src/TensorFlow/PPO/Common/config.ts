@@ -7,7 +7,8 @@ import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/
 export type Config = {
     name: string;
     // Network architecture
-    hiddenLayers: [ActivationIdentifier, number][];
+    hiddenLayersPolicy: [ActivationIdentifier, number][];
+    hiddenLayersValue: [ActivationIdentifier, number][];
     // Learning parameters
     learningRatePolicy: number;     // Learning rate for policy network
     learningRateValue: number;      // Learning rate for value network
@@ -38,7 +39,8 @@ export type Config = {
 export const DEFAULT_EXPERIMENT: Config = {
     name: 'ppo-default',
     // Network architecture
-    hiddenLayers: [['relu', 256], ['relu', 256], ['relu', 128], ['relu', 64]],
+    hiddenLayersPolicy: [['relu', 256], ['relu', 256], ['relu', 128], ['relu', 64]],
+    hiddenLayersValue: [['relu', 128], ['relu', 64]],
     // Learning parameters
     learningRatePolicy: 1e-4,
     learningRateValue: 1e-4,
@@ -58,7 +60,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     warmupFrames: 100,
     episodeFrames: 900, // usually produce 250 samples
     // Workers
-    workerCount: 12,
+    workerCount: 10,
     reuseLimit: 1,
     // Training control
     saveModelEvery: 1,
