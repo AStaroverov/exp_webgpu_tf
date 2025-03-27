@@ -1,11 +1,5 @@
 import { createBattlefield } from '../../../Common/createBattlefield.ts';
-import {
-    TANK_COUNT_SIMULATION_MAX,
-    TANK_COUNT_SIMULATION_MIN,
-    TICK_TIME_REAL,
-    TICK_TIME_SIMULATION,
-} from '../../../Common/consts.ts';
-import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.ts';
+import { TANK_COUNT_SIMULATION_MAX, TANK_COUNT_SIMULATION_MIN, TICK_TIME_SIMULATION } from '../../../Common/consts.ts';
 import { GameDI } from '../../../../DI/GameDI.ts';
 import { randomRangeInt } from '../../../../../../../lib/random.ts';
 import { SlaveAgent } from './SlaveAgent.ts';
@@ -61,8 +55,11 @@ export class SlaveManager {
         const height = GameDI.height;
         let frameCount = 0;
 
-        this.stopTrainingLoop = macroTasks.addInterval(() => {
-            // play
+        for (let i = 0; i < CONFIG.episodeFrames; i++) {
+            if (frameCount % 100 === 0) {
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+
             frameCount++;
 
             const isWarmup = frameCount < maxWarmupFrames;
@@ -76,6 +73,7 @@ export class SlaveManager {
 
             const activeTanks = this.battlefield!.getTanks();
 
+
             if (shouldAction) {
                 for (const tankEid of activeTanks) {
                     this.updateTankBehaviour(tankEid, width, height, isWarmup);
@@ -86,7 +84,7 @@ export class SlaveManager {
             this.battlefield!.gameTick(TICK_TIME_SIMULATION * (isWarmup ? 2 : 1));
 
             if (isWarmup) {
-                return;
+                continue;
             }
 
             if (shouldMemorize) {
@@ -98,13 +96,13 @@ export class SlaveManager {
             const isEpisodeDone = activeTanks.length <= 1 || frameCount > maxEpisodeFrames;
 
             if (isEpisodeDone) {
-                this.stopTrainingLoop?.();
-
                 this.exposeMemory();
                 this.dispose();
                 this.trainingLoop();
+
+                break;
             }
-        }, TICK_TIME_REAL);
+        }
     }
 
     private updateTankBehaviour(
