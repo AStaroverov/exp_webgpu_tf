@@ -20,6 +20,8 @@ export type Config = {
     entropyCoeff: number;           // Entropy coefficient for encouraging exploration
     maxKL: number;                  // Maximum KL divergence between old and new policy
 
+    trustCoeff: number;
+
     batchSize: number;              // Batch size for worker
     miniBatchSize: number,
     warmupFrames: number;              // Maximum number of frames to train on
@@ -48,6 +50,8 @@ export const DEFAULT_EXPERIMENT: Config = {
     clipRatioValue: 0.20,
     entropyCoeff: 0.01,
     maxKL: 0.05,
+
+    trustCoeff: 0.2,
 
     batchSize: 256, // useless for appo
     miniBatchSize: 256,
