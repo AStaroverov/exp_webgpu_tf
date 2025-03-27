@@ -11,11 +11,13 @@ import { CONFIG } from '../../Common/config.ts';
 import { batchShuffle } from '../../../../../../../lib/shuffle.ts';
 import { flatFloat32Array } from '../../../Common/flat.ts';
 import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.ts';
-import { logEpoch, logRewards } from '../../Common/Metrics.ts';
+import { logBatch, logEpoch, logRewards, logTrain, saveMetrics } from '../../Common/Metrics.ts';
 
 export class MasterAgent {
     private version = 0;
     private batches: { version: number, memories: Batch }[] = [];
+    private lastTrainTime = 0;
+
     private valueNetwork!: tf.LayersModel;   // Сеть критика
     private policyNetwork!: tf.LayersModel;  // Сеть политики
     private policyOptimizer!: tf.Optimizer;        // Оптимизатор для policy network
@@ -40,7 +42,7 @@ export class MasterAgent {
             this.version += 1;
 
             await Promise.all([
-                setAgentState({ version: this.version }),
+                setAgentState({ version: this.version, lastTrainTime: this.lastTrainTime }),
                 this.valueNetwork.save(getStoreModelPath('value-model', CONFIG)),
                 this.policyNetwork.save(getStoreModelPath('policy-model', CONFIG)),
             ]);
@@ -73,10 +75,15 @@ export class MasterAgent {
             return false;
         }
 
-        const batches = this.batches
+        const startTime = Date.now();
+        const waitTime = startTime - (this.lastTrainTime || startTime);
+        this.lastTrainTime = startTime;
+
+        const batches = this.batches;
+        const memories = batches
             .filter(b => {
                 const delta = this.version - b.version;
-                if (delta > 1) {
+                if (delta > 2) {
                     console.warn('[Train]: skipping batch with diff', delta);
                     return false;
                 }
@@ -85,13 +92,13 @@ export class MasterAgent {
             .map(b => b.memories);
 
         this.batches = [];
-        const sumSize = batches.reduce((acc, b) => acc + b.size, 0);
-        const states = batches.map(b => b.states).flat();
-        const actions = batches.map(b => b.actions).flat();
-        const logProbs = new Float32Array(batches.map(b => b.logProbs).flat());
-        const values = new Float32Array(batches.map(b => b.values).flat());
-        const advantages = new Float32Array(batches.map(b => b.advantages).flat());
-        const returns = new Float32Array(batches.map(b => b.returns).flat());
+        const sumSize = memories.reduce((acc, b) => acc + b.size, 0);
+        const states = memories.map(b => b.states).flat();
+        const actions = memories.map(b => b.actions).flat();
+        const logProbs = new Float32Array(memories.map(b => b.logProbs).flat());
+        const values = new Float32Array(memories.map(b => b.values).flat());
+        const advantages = new Float32Array(memories.map(b => b.advantages).flat());
+        const returns = new Float32Array(memories.map(b => b.returns).flat());
         const miniBatchCount = ceil(states.length / CONFIG.miniBatchSize);
 
         const tAllStates = tf.tensor(flatFloat32Array(states), [sumSize, INPUT_DIM]);
@@ -154,6 +161,7 @@ export class MasterAgent {
         }
 
         const version = this.version;
+        const endTime = Date.now();
         Promise.all([
             Promise.all(policyLossPromises),
             Promise.all(valueLossPromises),
@@ -178,15 +186,19 @@ export class MasterAgent {
                 console.log('[Train]: Epoch', i, 'KL:', kl, 'Policy loss:', policyLoss, 'Value loss:', valueLoss);
 
                 logEpoch({
-                    version,
                     kl,
                     valueLoss,
                     policyLoss,
-                    avgBatchSize: sumSize / batches.length,
                 });
             }
 
-            logRewards(batches.map(b => b.rewards.reduce((acc, v) => acc + v, 0) / b.rewards.length).flat());
+            for (const batch of batches) {
+                logBatch({ versionDelta: version - batch.version, batchSize: batch.memories.size });
+            }
+
+            logTrain({ trainTime: (endTime - startTime) / 1000, waitTime: waitTime / 1000 });
+            logRewards(memories.map(b => b.rewards.reduce((acc, v) => acc + v, 0) / b.rewards.length).flat());
+            saveMetrics();
         });
 
         macroTasks.addTimeout(() => {
@@ -194,6 +206,8 @@ export class MasterAgent {
             tAllActions.dispose();
             tAllLogProbs.dispose();
         }, 1000);
+
+        this.lastTrainTime = Date.now();
 
         return true;
     }

@@ -4,27 +4,29 @@ import { RingBuffer } from 'ring-buffer-ts';
 import { getAgentLog, setAgentLog } from '../APPO_v1/Database.ts';
 
 const rewardBuffer = new RingBuffer<number>(100_000);
+const trainBuffer = new RingBuffer<{ trainTime: number, waitTime: number }>(1_000);
+const batchBuffer = new RingBuffer<{ versionDelta: number, batchSize: number; }>(1_000);
 const epochBuffer = new RingBuffer<{
-    version: number;
     kl: number;
     valueLoss: number;
     policyLoss: number;
-    avgBatchSize: number;
 }>(10_000);
 
 getAgentLog().then((data) => {
     epochBuffer.fromArray(data?.epoch ?? [] as any);
     rewardBuffer.fromArray(data?.rewards ?? [] as any);
+    trainBuffer.fromArray(data?.train ?? [] as any);
+    batchBuffer.fromArray(data?.batch ?? [] as any);
     drawRewards(rewardBuffer.toArray());
     drawEpoch(epochBuffer.toArray());
+    drawBatch(batchBuffer.toArray());
+    drawTrain(trainBuffer.toArray());
 });
 
 function drawEpoch(data: {
-    version: number,
     kl: number
     valueLoss: number,
     policyLoss: number,
-    avgBatchSize: number,
 }[]) {
     const klList = data.map((d, i) => ({ x: i, y: d.kl }));
     tfvis.render.linechart({ name: 'KL', tab: 'Training' }, { values: klList }, {
@@ -50,13 +52,6 @@ function drawEpoch(data: {
         height: 300,
     });
 
-    const avgBatchSizeList = data.map((d, i) => ({ x: i, y: d.avgBatchSize }));
-    tfvis.render.linechart({ name: 'Batch Size', tab: 'Training' }, { values: avgBatchSizeList }, {
-        xLabel: 'Version',
-        yLabel: 'Batch Size',
-        width: 500,
-        height: 300,
-    });
     tf.nextFrame();
 }
 
@@ -85,37 +80,85 @@ function drawRewards(data: number[]) {
     tf.nextFrame();
 }
 
-function saveAgentLog() {
-    setAgentLog({ epoch: epochBuffer.getLastN(1_000), rewards: rewardBuffer.getLastN(10_000) });
+function drawBatch(data: { versionDelta: number, batchSize: number }[]) {
+    const versionDeltaList = data.map((v, i) => ({ x: i, y: v.versionDelta }));
+    const versionDeltaListMA = calculateMovingAverage(data.map(v => v.versionDelta), 100).map((v, i) => ({
+        x: i,
+        y: v,
+    }));
+    tfvis.render.scatterplot({ name: 'Batch Version Delta', tab: 'Training' }, {
+        values: [versionDeltaList, versionDeltaListMA],
+        series: ['Version Delta', 'Moving Average'],
+    }, {
+        xLabel: 'Batch',
+        yLabel: 'Version Delta',
+        width: 500,
+        height: 300,
+    });
+
+    tfvis.render.linechart({ name: 'Batch Size', tab: 'Training' }, {
+        values: data.map((d, i) => ({
+            x: i,
+            y: d.batchSize,
+        })),
+    }, {
+        xLabel: 'Version',
+        yLabel: 'Batch Size',
+        width: 500,
+        height: 300,
+    });
+
+    tf.nextFrame();
 }
 
-let dirtyIndex = 0;
+function drawTrain(data: { trainTime: number, waitTime: number }[]) {
+    const trainTimeList = data.map((v, i) => ({ x: i, y: v.trainTime }));
+    const waitingTimeList = data.map((v, i) => ({ x: i, y: v.waitTime }));
+    tfvis.render.linechart({ name: 'Train Time', tab: 'Training' }, { values: trainTimeList }, {
+        xLabel: 'Version',
+        yLabel: 'Train Time',
+        width: 500,
+        height: 300,
+    });
+    tfvis.render.linechart({ name: 'Waiting Time', tab: 'Training' }, { values: waitingTimeList }, {
+        xLabel: 'Version',
+        yLabel: 'Waiting Time',
+        width: 500,
+        height: 300,
+    });
+    tf.nextFrame();
+}
 
-function trySave() {
-    dirtyIndex++;
-    if (dirtyIndex > 1) {
-        dirtyIndex = 0;
-        saveAgentLog();
-    }
+export function saveMetrics() {
+    setAgentLog({
+        train: trainBuffer.getLastN(trainBuffer.getSize() / 10),
+        batch: batchBuffer.getLastN(batchBuffer.getSize() / 10),
+        epoch: epochBuffer.getLastN(epochBuffer.getSize() / 10),
+        rewards: rewardBuffer.getLastN(rewardBuffer.getSize() / 10),
+    });
 }
 
 export function logEpoch(data: {
-    version: number
     kl: number;
     valueLoss: number;
     policyLoss: number;
-    avgBatchSize: number;
 }) {
     epochBuffer.add(data);
     drawEpoch(epochBuffer.toArray());
-    trySave();
 }
 
 export function logRewards(rewards: number[]) {
     rewardBuffer.add(...rewards);
     drawRewards(rewardBuffer.toArray());
-    trySave();
 }
 
+export function logBatch(data: { versionDelta: number, batchSize: number }) {
+    batchBuffer.add(data);
+    drawBatch(batchBuffer.toArray());
+}
 
+export function logTrain(data: { trainTime: number, waitTime: number }) {
+    trainBuffer.add(data);
+    drawTrain(trainBuffer.toArray());
+}
 

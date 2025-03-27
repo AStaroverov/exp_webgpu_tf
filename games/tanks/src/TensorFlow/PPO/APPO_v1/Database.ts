@@ -35,6 +35,7 @@ export function extractMemoryBatchList() {
 
 export type AgentState = {
     version: number;
+    lastTrainTime: number;
 }
 
 export function setAgentState(state: Omit<AgentState, 'id'>) {
@@ -46,7 +47,9 @@ export function getAgentState(): Promise<undefined | AgentState> {
 }
 
 type AgentLog = {
-    epoch: object,
+    train: object[],
+    batch: object[],
+    epoch: object[],
     rewards: number[],
 }
 
