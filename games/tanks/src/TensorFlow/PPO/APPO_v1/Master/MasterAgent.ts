@@ -79,17 +79,16 @@ export class MasterAgent {
         const waitTime = startTime - (this.lastTrainTime || startTime);
         this.lastTrainTime = startTime;
 
-        const batches = this.batches;
-        const memories = batches
-            .filter(b => {
-                const delta = this.version - b.version;
-                if (delta > 2) {
-                    console.warn('[Train]: skipping batch with diff', delta);
-                    return false;
-                }
-                return true;
-            })
-            .map(b => b.memories);
+        const rawBatches = this.batches;
+        const batches = rawBatches.filter(b => {
+            const delta = this.version - b.version;
+            if (delta > 2) {
+                console.warn('[Train]: skipping batch with diff', delta);
+                return false;
+            }
+            return true;
+        });
+        const memories = batches.map(b => b.memories);
 
         this.batches = [];
         const sumSize = memories.reduce((acc, b) => acc + b.size, 0);
@@ -97,8 +96,17 @@ export class MasterAgent {
         const actions = memories.map(b => b.actions).flat();
         const logProbs = new Float32Array(memories.map(b => b.logProbs).flat());
         const values = new Float32Array(memories.map(b => b.values).flat());
-        const advantages = new Float32Array(memories.map(b => b.advantages).flat());
         const returns = new Float32Array(memories.map(b => b.returns).flat());
+        const advantages = new Float32Array(
+            memories
+                .map((b, i) => {
+                    const lag = this.version - batches[i].version;
+                    const trust = Math.max(0, 1 - CONFIG.trustCoeff * lag);
+                    return b.advantages.map(a => a * trust);
+                })
+                .flat(),
+        );
+
         const miniBatchCount = ceil(states.length / CONFIG.miniBatchSize);
 
         const tAllStates = tf.tensor(flatFloat32Array(states), [sumSize, INPUT_DIM]);
@@ -192,7 +200,7 @@ export class MasterAgent {
                 });
             }
 
-            for (const batch of batches) {
+            for (const batch of rawBatches) {
                 logBatch({ versionDelta: version - batch.version, batchSize: batch.memories.size });
             }
 
