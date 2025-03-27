@@ -15,7 +15,7 @@ import { logEpoch, logRewards } from '../../Common/Metrics.ts';
 
 export class MasterAgent {
     private version = 0;
-    private batches: Batch[] = [];
+    private batches: { version: number, memories: Batch }[] = [];
     private valueNetwork!: tf.LayersModel;   // Сеть критика
     private policyNetwork!: tf.LayersModel;  // Сеть политики
     private policyOptimizer!: tf.Optimizer;        // Оптимизатор для policy network
@@ -67,25 +67,23 @@ export class MasterAgent {
     }
 
     async tryTrain(): Promise<boolean> {
-        this.batches.push(
-            ...(await extractMemoryBatchList())
-                .filter(b => {
-                    const delta = this.version - b.version;
-                    if (delta > 2) {
-                        console.warn('[Train]: skipping batch with diff', delta);
-                        return false;
-                    }
-                    return true;
-                })
-                .map(b => b.memories),
-        );
-
+        this.batches.push(...await extractMemoryBatchList());
 
         if (this.batches.length < CONFIG.workerCount) {
             return false;
         }
 
-        const batches = this.batches;
+        const batches = this.batches
+            .filter(b => {
+                const delta = this.version - b.version;
+                if (delta > 1) {
+                    console.warn('[Train]: skipping batch with diff', delta);
+                    return false;
+                }
+                return true;
+            })
+            .map(b => b.memories);
+
         this.batches = [];
         const sumSize = batches.reduce((acc, b) => acc + b.size, 0);
         const states = batches.map(b => b.states).flat();

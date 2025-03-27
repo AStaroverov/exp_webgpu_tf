@@ -26,6 +26,7 @@ export type Config = {
     episodeFrames: number;              // Maximum number of frames to train on
     // Workers
     workerCount: number;                // Number of parallel workers
+    reuseLimit: number;                 // Number of times a worker models can be reused without updating
     // Training control
     saveModelEvery: number;         // Save model every N episodes
     savePath: string;
@@ -54,6 +55,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     episodeFrames: 900, // usually produce 250 samples
     // Workers
     workerCount: 12,
+    reuseLimit: 1,
     // Training control
     saveModelEvery: 1,
     savePath: 'APPO_v1',
