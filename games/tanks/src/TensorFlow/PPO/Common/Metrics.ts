@@ -41,9 +41,7 @@ class CompressedBuffer {
         const compressed: CompressedBatch[] = [];
         for (let i = 0; i < this.buffer.length; i += this.compressBatch) {
             const compressedBatch = this.buffer[i];
-            let min = this.buffer[i].min;
-            let max = this.buffer[i].max;
-            let start = Infinity, end = -Infinity;
+            let { min, max, start, end } = this.buffer[i];
             let allAvg: number[] = [];
             for (let j = i; j < i + this.compressBatch; j++) {
                 const batch = this.buffer[j];
@@ -89,13 +87,13 @@ type RenderPoint = { x: number, y: number };
 
 const store = {
     rewards: new CompressedBuffer(10_000, 100),
-    kl: new CompressedBuffer(1_000, 10),
+    kl: new CompressedBuffer(10_000, 10),
     valueLoss: new CompressedBuffer(1_000, 10),
     policyLoss: new CompressedBuffer(1_000, 10),
-    trainTime: new CompressedBuffer(100, 10),
-    waitTime: new CompressedBuffer(100, 10),
-    versionDelta: new CompressedBuffer(100, 10),
-    batchSize: new CompressedBuffer(100, 10),
+    trainTime: new CompressedBuffer(1_000, 10),
+    waitTime: new CompressedBuffer(1_000, 10),
+    versionDelta: new CompressedBuffer(1_000, 10),
+    batchSize: new CompressedBuffer(1_000, 10),
 };
 
 getAgentLog().then((data) => {
@@ -126,11 +124,9 @@ getAgentLog().then((data) => {
 });
 
 function drawEpoch() {
-    const avgKL = store.kl.toArrayAvg();
-    const avgKLMA = calculateMovingAverage(avgKL, 10);
-    tfvis.render.scatterplot({ name: 'KL', tab: 'Training' }, {
-        values: [store.kl.toArrayMin(), store.kl.toArrayMax(), avgKL, avgKLMA],
-        series: ['Min', 'Max', 'Avg', 'MA'],
+    tfvis.render.linechart({ name: 'KL', tab: 'Training' }, {
+        values: [store.kl.toArrayMin(), store.kl.toArrayMax(), store.kl.toArrayAvg()],
+        series: ['Min', 'Max', 'Avg'],
     }, {
         xLabel: 'Version',
         yLabel: 'KL',
@@ -138,11 +134,8 @@ function drawEpoch() {
         height: 300,
     });
 
-    const avgPolicyLoss = store.policyLoss.toArrayAvg();
-    const avgPolicyLossMA = calculateMovingAverage(avgPolicyLoss, 10);
-    tfvis.render.scatterplot({ name: 'Policy Loss', tab: 'Loss' }, {
-        values: [avgPolicyLoss, avgPolicyLossMA],
-        series: ['Avg', 'MA'],
+    tfvis.render.linechart({ name: 'Policy Loss', tab: 'Loss' }, {
+        values: [store.policyLoss.toArrayAvg()],
     }, {
         xLabel: 'Version',
         yLabel: 'Loss',
@@ -150,12 +143,8 @@ function drawEpoch() {
         height: 300,
     });
 
-
-    const avgValueLoss = store.valueLoss.toArrayAvg();
-    const avgValueLossMA = calculateMovingAverage(avgValueLoss, 10);
-    tfvis.render.scatterplot({ name: 'Value Loss', tab: 'Loss' }, {
-        values: [avgPolicyLoss, avgValueLossMA],
-        series: ['Avg', 'MA'],
+    tfvis.render.linechart({ name: 'Value Loss', tab: 'Loss' }, {
+        values: [store.valueLoss.toArrayAvg()],
     }, {
         xLabel: 'Version',
         yLabel: 'Loss',
@@ -182,10 +171,8 @@ function drawRewards() {
 }
 
 function drawBatch() {
-    const avgBatchDelta = store.versionDelta.toArrayAvg();
-    const avgBatchDeltaMA = calculateMovingAverage(avgBatchDelta, 10);
-    tfvis.render.scatterplot({ name: 'Batch Version Delta', tab: 'Training' }, {
-        values: [avgBatchDelta, avgBatchDeltaMA],
+    tfvis.render.linechart({ name: 'Batch Version Delta', tab: 'Training' }, {
+        values: [store.versionDelta.toArrayMin(), store.versionDelta.toArrayMax(), store.versionDelta.toArrayAvg()],
         series: ['Avg', 'MA'],
     }, {
         xLabel: 'Batch',
@@ -194,11 +181,8 @@ function drawBatch() {
         height: 300,
     });
 
-    const avgBatchSize = store.batchSize.toArrayAvg();
-    const avgBatchSizeMA = calculateMovingAverage(avgBatchSize, 10);
-    tfvis.render.scatterplot({ name: 'Batch Size', tab: 'Training' }, {
-        values: [avgBatchSize, avgBatchSizeMA],
-        series: ['Avg', 'MA'],
+    tfvis.render.linechart({ name: 'Batch Size', tab: 'Training' }, {
+        values: store.batchSize.toArrayAvg(),
     }, {
         xLabel: 'Version',
         yLabel: 'Batch Size',
@@ -212,7 +196,7 @@ function drawBatch() {
 function drawTrain() {
     const avgTrainTime = store.waitTime.toArrayAvg();
     const avgTrainTimeMA = calculateMovingAverage(avgTrainTime, 10);
-    tfvis.render.scatterplot({ name: 'Train Time', tab: 'Training' }, {
+    tfvis.render.linechart({ name: 'Train Time', tab: 'Training' }, {
         values: [avgTrainTime, avgTrainTimeMA],
         series: ['Avg', 'MA'],
     }, {
@@ -224,7 +208,7 @@ function drawTrain() {
 
     const avgWaitTime = store.waitTime.toArrayAvg();
     const avgWaitTimeMA = calculateMovingAverage(avgWaitTime, 10);
-    tfvis.render.scatterplot({ name: 'Waiting Time', tab: 'Training' }, {
+    tfvis.render.linechart({ name: 'Waiting Time', tab: 'Training' }, {
         values: [avgWaitTime, avgWaitTimeMA],
         series: ['Avg', 'MA'],
     }, {
