@@ -9,11 +9,11 @@ import { getTankHealth } from '../../../../ECS/Components/Tank.ts';
 import { applyActionToTank } from '../../../Common/applyActionToTank.ts';
 import { addMemoryBatch } from '../Database.ts';
 import { CONFIG } from '../../Common/config.ts';
+import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.ts';
 
 export class SlaveManager {
     private agent!: SlaveAgent;
 
-    private stopTrainingLoop: VoidFunction | null = null;
     private battlefield: Awaited<ReturnType<typeof createBattlefield>> | null = null;
     private tankRewards = new Map<number, number>();
 
@@ -30,7 +30,6 @@ export class SlaveManager {
     }
 
     dispose() {
-        this.stopTrainingLoop?.();
         this.tankRewards.clear();
         this.battlefield?.destroy();
         this.agent.dispose();
@@ -55,9 +54,9 @@ export class SlaveManager {
         const height = GameDI.height;
         let frameCount = 0;
 
-        for (let i = 0; i < CONFIG.episodeFrames; i++) {
+        for (let i = 0; i < Infinity; i++) {
             if (frameCount % 100 === 0) {
-                await new Promise(resolve => setTimeout(resolve, 0));
+                await new Promise(resolve => macroTasks.addTimeout(resolve, 0));
             }
 
             frameCount++;
@@ -72,7 +71,6 @@ export class SlaveManager {
             GameDI.shouldCollectTensor = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
 
             const activeTanks = this.battlefield!.getTanks();
-
 
             if (shouldAction) {
                 for (const tankEid of activeTanks) {
