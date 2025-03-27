@@ -35,7 +35,7 @@ export type Config = {
 export const DEFAULT_EXPERIMENT: Config = {
     name: 'ppo-default',
     // Network architecture
-    hiddenLayers: [['relu', 512], ['relu', 256]],
+    hiddenLayers: [['relu', 256], ['relu', 256], ['relu', 128], ['relu', 64]],
     // Learning parameters
     learningRatePolicy: 1e-4,
     learningRateValue: 1e-4,
@@ -53,7 +53,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     warmupFrames: 100,
     episodeFrames: 900, // usually produce 250 samples
     // Workers
-    workerCount: 4,
+    workerCount: 12,
     // Training control
     saveModelEvery: 1,
     savePath: 'APPO_v1',
