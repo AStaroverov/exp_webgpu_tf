@@ -88,6 +88,7 @@ export function prepareInputArrays(
 
         // presence
         enemiesFeatures[dstOffset + 0] = 1;
+        // остальные поля (X, Y, width, height, speedX, speedY...) — как в вашем коде
         enemiesFeatures[dstOffset + 1] = norm(enemiesBuffer[srcOffset + 1] - tankX, width);
         enemiesFeatures[dstOffset + 2] = norm(enemiesBuffer[srcOffset + 2] - tankY, height);
         enemiesFeatures[dstOffset + 3] = norm(enemiesBuffer[srcOffset + 3], width);
@@ -115,6 +116,7 @@ export function prepareInputArrays(
 
         // presence
         bulletsFeatures[dstOffset + 0] = 1;
+        // остальные поля — аналогично
         bulletsFeatures[dstOffset + 1] = norm(bulletsBuffer[srcOffset + 1] - tankX, width);
         bulletsFeatures[dstOffset + 2] = norm(bulletsBuffer[srcOffset + 2] - tankY, height);
         bulletsFeatures[dstOffset + 3] = norm(bulletsBuffer[srcOffset + 3], width);

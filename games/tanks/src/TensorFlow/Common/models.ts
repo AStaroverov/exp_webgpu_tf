@@ -7,7 +7,6 @@ import {
 } from '../../ECS/Components/TankState.ts';
 import { ACTION_DIM } from './consts.ts';
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
-import { SymbolicTensor } from '@tensorflow/tfjs-layers/dist/engine/topology';
 
 export const TANK_FEATURES_DIM = 7; // пример
 export const ENEMY_FEATURES_DIM = TANK_INPUT_TENSOR_ENEMY_BUFFER;   // 7
@@ -82,28 +81,23 @@ function createInputLayer() {
         shape: [TANK_FEATURES_DIM],
     });
     // Вход для врагов: 2D [ENEMY_SLOTS, ENEMY_FEATURES_DIM]
-    const enemiesInput = (tf.input({
+    const enemiesInput = tf.input({
         name: 'enemiesInput',
         shape: [ENEMY_SLOTS, ENEMY_FEATURES_DIM],
-    }));
+    });
     // Вход для пуль: 2D [BULLET_SLOTS, BULLET_FEATURES_DIM]
-    const bulletsInput = (tf.input({
+    const bulletsInput = tf.input({
         name: 'bulletsInput',
         shape: [BULLET_SLOTS, BULLET_FEATURES_DIM],
-    }));
+    });
+
+    // --- 2) При обычной Dense-сети (MLP) делаем Flatten врагов и пуль ---
+    const enemiesFlatten = tf.layers.flatten().apply(enemiesInput) as tf.SymbolicTensor;
+    const bulletsFlatten = tf.layers.flatten().apply(bulletsInput) as tf.SymbolicTensor;
 
     // --- 3) Склеиваем все три вектора вместе [tank + enemies + bullets] ---
     return {
         inputs: [tankInput, enemiesInput, bulletsInput],
-        merged: tf.layers
-            .concatenate()
-            .apply([tankInput, asDynamic(enemiesInput), asDynamic(bulletsInput)]) as tf.SymbolicTensor,
+        merged: tf.layers.concatenate().apply([tankInput, enemiesFlatten, bulletsFlatten]) as tf.SymbolicTensor,
     };
-}
-
-function asDynamic(layer: SymbolicTensor): tf.SymbolicTensor {
-    const masked = tf.layers.masking({ maskValue: 0 }).apply(layer);
-    const lstm = tf.layers.lstm({ units: 16, returnSequences: false }).apply(masked);
-
-    return lstm as tf.SymbolicTensor;
 }
