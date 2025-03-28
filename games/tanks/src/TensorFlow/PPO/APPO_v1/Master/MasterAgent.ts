@@ -230,8 +230,8 @@ export class MasterAgent {
 
     private async init() {
         if (!(await this.load())) {
-            this.policyNetwork = createPolicyNetwork(CONFIG.hiddenLayersPolicy);
-            this.valueNetwork = createValueNetwork(CONFIG.hiddenLayersValue);
+            this.policyNetwork = createPolicyNetwork();
+            this.valueNetwork = createValueNetwork();
         }
 
         return this;
