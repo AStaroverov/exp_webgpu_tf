@@ -42,7 +42,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     epochs: 6,
     clipRatioPolicy: 0.2,
     clipRatioValue: 0.2,
-    entropyCoeff: 0.001,
+    entropyCoeff: 0.005,
     maxKL: 0.05,
 
     trustCoeff: 0.2,
