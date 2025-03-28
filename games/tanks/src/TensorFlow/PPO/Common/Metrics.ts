@@ -141,7 +141,7 @@ class CompressedBuffer {
 type RenderPoint = { x: number, y: number };
 
 const store = {
-    rewards: new CompressedBuffer(10_000, 100),
+    rewards: new CompressedBuffer(10_000, 10),
     kl: new CompressedBuffer(10_000, 10),
     valueLoss: new CompressedBuffer(1_000, 10),
     policyLoss: new CompressedBuffer(1_000, 10),
