@@ -363,7 +363,9 @@ function computeAimQuality(
     const minRadius = TANK_RADIUS * 0.8;
     const maxRadius = TANK_RADIUS * 2;
     const distFromTurretToEnemy = hypot(turretX - enemyX, turretY - enemyY);
-    const directAimQuality = smoothstep(maxRadius, minRadius, distFromTurretToEnemy);
+    const directAimQuality =
+        lerp(0, 0.2, smoothstep(1000, maxRadius, distFromTurretToEnemy))
+        + lerp(0, 0.8, smoothstep(maxRadius, minRadius, distFromTurretToEnemy));
 
     return directAimQuality;
 }
@@ -393,6 +395,7 @@ function calculateTrackingReward(
 
     const trackingReward = improvementReward + deteriorationPenalty;
 
+    console.log('>>', trackingReward);
     return trackingReward;
 }
 
