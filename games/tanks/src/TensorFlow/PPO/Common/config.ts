@@ -34,8 +34,8 @@ export type Config = {
 export const DEFAULT_EXPERIMENT: Config = {
     name: 'ppo-default',
     // Learning parameters
-    learningRatePolicy: 2e-4,
-    learningRateValue: 2e-4,
+    learningRatePolicy: 1e-4,
+    learningRateValue: 1e-4,
     gamma: 0.99,
     lam: 0.95,
     // PPO-specific parameters
