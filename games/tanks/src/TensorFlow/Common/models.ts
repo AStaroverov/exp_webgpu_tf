@@ -14,8 +14,16 @@ export const ENEMY_SLOTS = TANK_INPUT_TENSOR_MAX_ENEMIES;
 export const BULLET_FEATURES_DIM = TANK_INPUT_TENSOR_BULLET_BUFFER;
 export const BULLET_SLOTS = TANK_INPUT_TENSOR_MAX_BULLETS;
 
-const denseLayerPolicyEnemies: [ActivationIdentifier, number][] = [['relu', ENEMY_SLOTS * ENEMY_FEATURES_DIM], ['relu', 2 * ENEMY_FEATURES_DIM]];
-const denseLayerPolicyBullets: [ActivationIdentifier, number][] = [['relu', BULLET_SLOTS * BULLET_FEATURES_DIM], ['relu', 2 * BULLET_FEATURES_DIM]];
+const denseLayerPolicyEnemies: [ActivationIdentifier, number][] = [
+    ['relu', 2 * ENEMY_SLOTS * ENEMY_FEATURES_DIM],
+    ['relu', 1 * ENEMY_SLOTS * ENEMY_FEATURES_DIM],
+    ['relu', 2 * ENEMY_FEATURES_DIM],
+];
+const denseLayerPolicyBullets: [ActivationIdentifier, number][] = [
+    ['relu', 2 * BULLET_SLOTS * BULLET_FEATURES_DIM],
+    ['relu', 1 * BULLET_SLOTS * BULLET_FEATURES_DIM],
+    ['relu', 2 * BULLET_FEATURES_DIM],
+];
 const denseLayersPolicy: [ActivationIdentifier, number][] = [['relu', 128], ['relu', 64], ['relu', 32]];
 const denseLayersValue: [ActivationIdentifier, number][] = [['relu', 64], ['relu', 32]];
 
