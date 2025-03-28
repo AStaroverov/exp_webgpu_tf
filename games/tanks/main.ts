@@ -27,13 +27,13 @@ const tanks = [
         rotation: Math.PI / 1.3,
         color: [1, 0, 0, 1],
     }),
-    //
-    // createTankRR({
-    //     x: 500,
-    //     y: 200,
-    //     rotation: Math.PI / 1.3,
-    //     color: [1, 0, 0, 1],
-    // }),
+
+    createTankRR({
+        x: 50,
+        y: 700,
+        rotation: Math.PI / 1.3,
+        color: [1, 0, 0, 1],
+    }),
 ];
 PLAYER_REFS.tankPid = tanks[0];
 
