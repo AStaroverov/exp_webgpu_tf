@@ -16,8 +16,9 @@ import { TANK_RADIUS } from './consts.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 import { getTankHealth, Tank } from '../../ECS/Components/Tank.ts';
 import { TankController } from '../../ECS/Components/TankController.ts';
-import { isVerboseLog } from './utils.ts';
 import { CONFIG } from '../PPO/Common/config.ts';
+import { isVerboseLog } from './utils.ts';
+import { clamp } from 'lodash-es';
 
 // Константы для калибровки вознаграждений
 let REWARD_WEIGHTS = {
@@ -28,7 +29,7 @@ let REWARD_WEIGHTS = {
     COMMON_MULTIPLIER: 0.0,
 
     AIM: {
-        QUALITY: 2.0,       // За точное прицеливание
+        QUALITY: 5.0,       // За точное прицеливание
         TRACKING: 1.0,      // За активное отслеживание врага
         DISTANCE: 0.5,      // За расстояние до цели
         MAP_AWARENESS: 0.1, // За нахождение в пределах карты
@@ -38,7 +39,7 @@ let REWARD_WEIGHTS = {
         SHOOTING: 1.0,       // За стрельбу в цель
         SHOOTING_PENALTY: -0.4, // За стрельбу в пустоту
     },
-    AIM_MULTIPLIER: 2.0,
+    AIM_MULTIPLIER: 1.0,
 
     MAP_BORDER: {
         BASE: 0.2,          // За нахождение в пределах карты
@@ -360,12 +361,11 @@ function computeAimQuality(
     enemyY: number,
 ): number {
     // Оценка точности прямого прицеливания
-    const minRadius = TANK_RADIUS * 0.8;
-    const maxRadius = TANK_RADIUS * 2;
     const distFromTurretToEnemy = hypot(turretX - enemyX, turretY - enemyY);
     const directAimQuality =
-        lerp(0, 0.2, smoothstep(1000, maxRadius, distFromTurretToEnemy))
-        + lerp(0, 0.8, smoothstep(maxRadius, minRadius, distFromTurretToEnemy));
+        lerp(0, 0.1, smoothstep(1000, 0, distFromTurretToEnemy))
+        + lerp(0, 0.1, smoothstep(TANK_RADIUS * 3, 0, distFromTurretToEnemy))
+        + lerp(0, 0.8, smoothstep(TANK_RADIUS * 1.2, 0, distFromTurretToEnemy));
 
     return directAimQuality;
 }
@@ -380,16 +380,19 @@ function calculateTrackingReward(
         return REWARD_WEIGHTS.AIM.TRACKING_PENALTY;
     }
 
+    if (aimingResult.bestAimQuality > 0.8) {
+        return REWARD_WEIGHTS.AIM.TRACKING;
+    }
+
     const { bestAimQuality, prevBestAimQuality } = aimingResult;
     // Вычисляем изменение комбинированного качества прицеливания
-    const deltaAimQuality = bestAimQuality - prevBestAimQuality;
+    const multipliedDelta = clamp((bestAimQuality - prevBestAimQuality) * 100, -1, 1);
+    const deltaAimQuality = abs(multipliedDelta) < 0.001 ? 0 : multipliedDelta;
 
     // Награда за улучшение качества прицеливания
     const improvementReward = deltaAimQuality > 0
         ? deltaAimQuality * REWARD_WEIGHTS.AIM.TRACKING
-        : deltaAimQuality === 0 && bestAimQuality > 0
-            ? 0.4 * REWARD_WEIGHTS.AIM.TRACKING
-            : 0;
+        : 0;
 
     // Небольшой штраф за ухудшение прицеливания, но не такой сильный как награда за улучшение
     const deteriorationPenalty = deltaAimQuality < 0
