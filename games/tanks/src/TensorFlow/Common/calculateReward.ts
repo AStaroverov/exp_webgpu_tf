@@ -198,7 +198,6 @@ export function calculateReward(
         aimingResult.closestEnemyDist,
     );
 
-
     rewards.movement.speed = movementRewardResult.speed;
     rewards.movement.enemiesPositioning = movementRewardResult.positioning;
 
@@ -362,7 +361,7 @@ function computeAimQuality(
 ): number {
     // Оценка точности прямого прицеливания
     const minRadius = TANK_RADIUS * 0.8;
-    const maxRadius = TANK_RADIUS * 5;
+    const maxRadius = TANK_RADIUS * 2;
     const distFromTurretToEnemy = hypot(turretX - enemyX, turretY - enemyY);
     const directAimQuality = smoothstep(maxRadius, minRadius, distFromTurretToEnemy);
 
