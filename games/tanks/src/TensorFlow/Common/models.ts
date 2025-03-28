@@ -8,16 +8,16 @@ import {
 import { ACTION_DIM } from './consts.ts';
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 
-export const TANK_FEATURES_DIM = 7; // пример
-export const ENEMY_FEATURES_DIM = TANK_INPUT_TENSOR_ENEMY_BUFFER;   // 7
-export const ENEMY_SLOTS = TANK_INPUT_TENSOR_MAX_ENEMIES;           // 4 (допустим)
-export const BULLET_FEATURES_DIM = TANK_INPUT_TENSOR_BULLET_BUFFER; // 5
-export const BULLET_SLOTS = TANK_INPUT_TENSOR_MAX_BULLETS;          // 4 (допустим)
+export const TANK_FEATURES_DIM = 7;
+export const ENEMY_FEATURES_DIM = TANK_INPUT_TENSOR_ENEMY_BUFFER;
+export const ENEMY_SLOTS = TANK_INPUT_TENSOR_MAX_ENEMIES;
+export const BULLET_FEATURES_DIM = TANK_INPUT_TENSOR_BULLET_BUFFER;
+export const BULLET_SLOTS = TANK_INPUT_TENSOR_MAX_BULLETS;
 
 const denseLayerPolicyEnemies: [ActivationIdentifier, number][] = [['relu', ENEMY_SLOTS * ENEMY_FEATURES_DIM], ['relu', 2 * ENEMY_FEATURES_DIM]];
 const denseLayerPolicyBullets: [ActivationIdentifier, number][] = [['relu', BULLET_SLOTS * BULLET_FEATURES_DIM], ['relu', 2 * BULLET_FEATURES_DIM]];
-const denseLayersPolicy: [ActivationIdentifier, number][] = [['relu', 256], ['relu', 128]];
-const denseLayersValue: [ActivationIdentifier, number][] = [['relu', 128], ['relu', 64]];
+const denseLayersPolicy: [ActivationIdentifier, number][] = [['relu', 128], ['relu', 64], ['relu', 32]];
+const denseLayersValue: [ActivationIdentifier, number][] = [['relu', 64], ['relu', 32]];
 
 export function createPolicyNetwork(): tf.LayersModel {
     const { inputs, merged } = createInputLayer();

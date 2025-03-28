@@ -2,13 +2,9 @@
 // This allows fine-tuning the RL model and experimenting with different hyperparameters
 
 // Define experiment configurations that can be easily switched
-import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 
 export type Config = {
     name: string;
-    // Network architecture
-    hiddenLayersPolicy: [ActivationIdentifier, number][];
-    hiddenLayersValue: [ActivationIdentifier, number][];
     // Learning parameters
     learningRatePolicy: number;     // Learning rate for policy network
     learningRateValue: number;      // Learning rate for value network
@@ -37,9 +33,6 @@ export type Config = {
 // Default experiment configuration for PPO
 export const DEFAULT_EXPERIMENT: Config = {
     name: 'ppo-default',
-    // Network architecture
-    hiddenLayersPolicy: [['relu', 256], ['relu', 256], ['relu', 128], ['relu', 64]],
-    hiddenLayersValue: [['relu', 128], ['relu', 64]],
     // Learning parameters
     learningRatePolicy: 2e-4,
     learningRateValue: 2e-4,
@@ -59,7 +52,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     warmupFrames: 100,
     episodeFrames: 900, // usually produce 250 samples
     // Workers
-    workerCount: 10,
+    workerCount: 4,
     reuseLimit: 1,
     // Training control
     savePath: 'APPO_v1',
