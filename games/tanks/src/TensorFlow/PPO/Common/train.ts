@@ -49,7 +49,7 @@ export function trainPolicyNetwork(
 function parsePredict(predict: tf.Tensor) {
     const outMean = predict.slice([0, 0], [-1, ACTION_DIM]);
     const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
-    const clippedLogStd = outLogStd.clipByValue(-2, 0.2);
+    const clippedLogStd = outLogStd.clipByValue(-5, 2);
 
     return { mean: outMean, logStd: clippedLogStd };
 }
@@ -122,7 +122,7 @@ export function act(
         const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
         const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
         const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
-        const clippedLogStd = outLogStd.clipByValue(-2, 0.2);
+        const clippedLogStd = outLogStd.clipByValue(-5, 2);
         const std = clippedLogStd.exp();
         const noise = tf.randomNormal([ACTION_DIM]).mul(std);
         const actions = outMean.add(noise);
