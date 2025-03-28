@@ -45,7 +45,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     entropyCoeff: 0.005,
     maxKL: 0.05,
 
-    trustCoeff: 0.2,
+    trustCoeff: 0.1,
 
     batchSize: 256, // useless for appo
     miniBatchSize: 256,
