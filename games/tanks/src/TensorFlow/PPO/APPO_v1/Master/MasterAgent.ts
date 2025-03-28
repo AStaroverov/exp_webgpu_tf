@@ -212,7 +212,7 @@ export class MasterAgent {
             }
 
             logTrain({ trainTime: (endTime - startTime) / 1000, waitTime: waitTime / 1000 });
-            logRewards(memories.map(b => b.rewards.reduce((acc, v) => acc + v, 0) / b.rewards.length).flat());
+            logRewards(memories.map(b => b.rewards).flat());
             saveMetrics();
             drawMetrics();
         });
