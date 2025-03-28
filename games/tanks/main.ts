@@ -21,12 +21,12 @@ const tanks = [
         rotation: 0,
         color: [1, 0, 0, 1],
     }),
-    // createTankRR({
-    //     x: 200,
-    //     y: 500,
-    //     rotation: Math.PI / 1.3,
-    //     color: [1, 0, 0, 1],
-    // }),
+    createTankRR({
+        x: 200,
+        y: 500,
+        rotation: Math.PI / 1.3,
+        color: [1, 0, 0, 1],
+    }),
     //
     // createTankRR({
     //     x: 500,

@@ -376,8 +376,11 @@ function computeAimQuality(
 function calculateTrackingReward(
     aimingResult: ReturnType<typeof analyzeAiming>,
 ): number {
-    const { bestAimQuality, prevBestAimQuality } = aimingResult;
+    if (aimingResult.bestAimTargetId !== aimingResult.prevBestAimTargetId) {
+        return REWARD_WEIGHTS.AIM.TRACKING_PENALTY;
+    }
 
+    const { bestAimQuality, prevBestAimQuality } = aimingResult;
     // Вычисляем изменение комбинированного качества прицеливания
     const deltaAimQuality = bestAimQuality - prevBestAimQuality;
 
@@ -395,7 +398,6 @@ function calculateTrackingReward(
 
     const trackingReward = improvementReward + deteriorationPenalty;
 
-    console.log('>>', trackingReward);
     return trackingReward;
 }
 
