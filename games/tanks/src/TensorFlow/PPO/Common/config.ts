@@ -41,8 +41,8 @@ export const DEFAULT_EXPERIMENT: Config = {
     hiddenLayersPolicy: [['relu', 256], ['relu', 256], ['relu', 128], ['relu', 64]],
     hiddenLayersValue: [['relu', 128], ['relu', 64]],
     // Learning parameters
-    learningRatePolicy: 4e-4,
-    learningRateValue: 4e-4,
+    learningRatePolicy: 2e-4,
+    learningRateValue: 2e-4,
     gamma: 0.99,
     lam: 0.95,
     // PPO-specific parameters
