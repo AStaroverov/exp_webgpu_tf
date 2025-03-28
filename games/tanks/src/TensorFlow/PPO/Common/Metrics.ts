@@ -37,8 +37,8 @@ class CompressedBuffer {
     }
 
     toArray(): RenderPoint[] {
-        return this.buffer.flatMap((b) => [{
-            x: b[0],
+        return this.buffer.flatMap((b, i) => [{
+            x: i,
             y: b[1],
         }]);
     }
