@@ -1,17 +1,24 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
-import { ACTION_DIM, INPUT_DIM } from '../../../Common/consts.ts';
+import { ACTION_DIM } from '../../../Common/consts.ts';
 import { ceil } from '../../../../../../../lib/math.ts';
 import { createPolicyNetwork, createValueNetwork } from '../../../Common/models.ts';
 import { getStoreModelPath } from '../utils.ts';
 import { extractMemoryBatchList, getAgentState, setAgentState } from '../Database.ts';
 import { Batch } from '../../Common/Memory.ts';
-import { computeKullbackLeibler, predict, trainPolicyNetwork, trainValueNetwork } from '../../Common/train.ts';
+import {
+    computeKullbackLeibler,
+    createInputTensors,
+    predict,
+    trainPolicyNetwork,
+    trainValueNetwork,
+} from '../../Common/train.ts';
 import { CONFIG } from '../../Common/config.ts';
-import { batchShuffle } from '../../../../../../../lib/shuffle.ts';
 import { flatFloat32Array } from '../../../Common/flat.ts';
 import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { drawMetrics, logBatch, logEpoch, logRewards, logTrain, saveMetrics } from '../../Common/Metrics.ts';
+import { InputArrays } from '../../../Common/prepareInputArrays.ts';
+import { batchShuffle } from '../../../../../../../lib/shuffle.ts';
 
 export class MasterAgent {
     private version = 0;
@@ -61,7 +68,7 @@ export class MasterAgent {
         ]);
     }
 
-    predict(state: Float32Array): { action: Float32Array } {
+    predict(state: InputArrays): { action: Float32Array } {
         return predict(
             this.policyNetwork,
             state,
@@ -109,7 +116,7 @@ export class MasterAgent {
 
         const miniBatchCount = ceil(states.length / CONFIG.miniBatchSize);
 
-        const tAllStates = tf.tensor(flatFloat32Array(states), [sumSize, INPUT_DIM]);
+        const tAllStates = createInputTensors(states);
         const tAllActions = tf.tensor(flatFloat32Array(actions), [sumSize, ACTION_DIM]);
         const tAllLogProbs = tf.tensor(logProbs);
 
@@ -133,8 +140,8 @@ export class MasterAgent {
                 const start = j * CONFIG.miniBatchSize;
                 const end = Math.min(start + CONFIG.miniBatchSize, states.length);
                 const size = end - start;
-                const tStates = tf.tensor(flatFloat32Array(states).subarray(start * INPUT_DIM, end * INPUT_DIM), [size, INPUT_DIM]);
-                const tActions = tf.tensor(flatFloat32Array(actions).subarray(start * ACTION_DIM, end * ACTION_DIM), [size, ACTION_DIM]);
+                const tStates = createInputTensors(states.slice(start, end));
+                const tActions = tf.tensor(flatFloat32Array(actions.slice(start, end)), [size, ACTION_DIM]);
                 const tLogProbs = tf.tensor(logProbs.subarray(start, end), [size]);
                 const tValues = tf.tensor(values.subarray(start, end), [size]);
                 const tAdvantages = tf.tensor(advantages.subarray(start, end), [size]);
@@ -151,7 +158,7 @@ export class MasterAgent {
                 ));
 
                 macroTasks.addTimeout(() => {
-                    tStates.dispose();
+                    tStates.forEach(t => t.dispose());
                     tActions.dispose();
                     tLogProbs.dispose();
                     tValues.dispose();
@@ -211,7 +218,7 @@ export class MasterAgent {
         });
 
         macroTasks.addTimeout(() => {
-            tAllStates.dispose();
+            tAllStates.forEach(t => t.dispose());
             tAllActions.dispose();
             tAllLogProbs.dispose();
         }, 1000);

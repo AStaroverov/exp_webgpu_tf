@@ -3,13 +3,13 @@ import { TANK_COUNT_SIMULATION_MAX, TANK_COUNT_SIMULATION_MIN, TICK_TIME_SIMULAT
 import { GameDI } from '../../../../DI/GameDI.ts';
 import { randomRangeInt } from '../../../../../../../lib/random.ts';
 import { SlaveAgent } from './SlaveAgent.ts';
-import { createInputVector } from '../../../Common/createInputVector.ts';
 import { calculateReward } from '../../../Common/calculateReward.ts';
 import { getTankHealth } from '../../../../ECS/Components/Tank.ts';
 import { applyActionToTank } from '../../../Common/applyActionToTank.ts';
 import { addMemoryBatch } from '../Database.ts';
 import { CONFIG } from '../../Common/config.ts';
 import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.ts';
+import { prepareInputArrays } from '../../../Common/prepareInputArrays.ts';
 
 export class SlaveManager {
     private agent!: SlaveAgent;
@@ -104,7 +104,7 @@ export class SlaveManager {
         isWarmup: boolean,
     ) {
         // Create input vector for the current state
-        const inputVector = createInputVector(tankEid, width, height);
+        const inputVector = prepareInputArrays(tankEid, width, height);
         // Get action from agent
         const result = this.agent.act(inputVector);
         // Apply action to tank controller

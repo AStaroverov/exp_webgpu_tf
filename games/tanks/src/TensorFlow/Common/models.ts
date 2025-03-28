@@ -1,15 +1,25 @@
 import * as tf from '@tensorflow/tfjs';
-import { ACTION_DIM, INPUT_DIM } from './consts.ts';
+import {
+    TANK_INPUT_TENSOR_BULLET_BUFFER,
+    TANK_INPUT_TENSOR_ENEMY_BUFFER,
+    TANK_INPUT_TENSOR_MAX_BULLETS,
+    TANK_INPUT_TENSOR_MAX_ENEMIES,
+} from '../../ECS/Components/TankState.ts';
+import { ACTION_DIM } from './consts.ts';
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 
-export function createPolicyNetwork(hiddenLayers: [ActivationIdentifier, number][]): tf.LayersModel {
-    // Входной тензор
-    const input = tf.layers.input({
-        name: 'policy/input',
-        shape: [INPUT_DIM],
-    });
+export const TANK_FEATURES_DIM = 7; // пример
+export const ENEMY_FEATURES_DIM = TANK_INPUT_TENSOR_ENEMY_BUFFER;   // 7
+export const ENEMY_SLOTS = TANK_INPUT_TENSOR_MAX_ENEMIES;           // 4 (допустим)
+export const BULLET_FEATURES_DIM = TANK_INPUT_TENSOR_BULLET_BUFFER; // 5
+export const BULLET_SLOTS = TANK_INPUT_TENSOR_MAX_BULLETS;          // 4 (допустим)
 
-    let x = input;
+export function createPolicyNetwork(
+    hiddenLayers: [ActivationIdentifier, number][],
+): tf.LayersModel {
+    const { inputs, merged } = createInputLayer();
+
+    let x = merged;
     let i = 0;
     for (const [activation, units] of hiddenLayers) {
         x = tf.layers.dense({
@@ -20,34 +30,27 @@ export function createPolicyNetwork(hiddenLayers: [ActivationIdentifier, number]
         }).apply(x) as tf.SymbolicTensor;
     }
 
-    // Выход: ACTION_DIM * 2 нейронов (ACTION_DIM для mean, ACTION_DIM для logStd).
-    // При использовании:
-    //   mean = tanh(первые ACTION_DIM),
-    //   std  = exp(последние ACTION_DIM).
+    // Выход: ACTION_DIM * 2 (пример: mean и logStd) ---
     const policyOutput = tf.layers.dense({
         name: 'policy/output',
         units: ACTION_DIM * 2,
-        activation: 'linear', // без ограничений, трансформации — вручную (tanh/exp)
+        activation: 'linear',
     }).apply(x) as tf.SymbolicTensor;
 
-    // Создаём модель
     return tf.model({
         name: 'policy',
-        inputs: input,
+        inputs: inputs,
         outputs: policyOutput,
     });
 }
 
-// Создание сети критика (оценки состояний)
-export function createValueNetwork(hiddenLayers: [ActivationIdentifier, number][]): tf.LayersModel {
-    // Входной слой
-    const input = tf.layers.input({
-        name: 'value/input',
-        shape: [INPUT_DIM],
-    });
+// Аналогично для Value-сети
+export function createValueNetwork(
+    hiddenLayers: [ActivationIdentifier, number][],
+): tf.LayersModel {
+    const { inputs, merged } = createInputLayer();
 
-    // Скрытые слои
-    let x = input;
+    let x = merged;
     let i = 0;
     for (const [activation, units] of hiddenLayers) {
         x = tf.layers.dense({
@@ -58,7 +61,6 @@ export function createValueNetwork(hiddenLayers: [ActivationIdentifier, number][
         }).apply(x) as tf.SymbolicTensor;
     }
 
-    // Выходной слой - скалярная оценка состояния
     const valueOutput = tf.layers.dense({
         name: 'value/output',
         units: 1,
@@ -67,7 +69,35 @@ export function createValueNetwork(hiddenLayers: [ActivationIdentifier, number][
 
     return tf.model({
         name: 'value',
-        inputs: input,
+        inputs: inputs,
         outputs: valueOutput,
     });
+}
+
+function createInputLayer() {
+    // --- 1) Создаём входы ---
+    const tankInput = tf.input({
+        name: 'tankInput',
+        shape: [TANK_FEATURES_DIM],
+    });
+    // Вход для врагов: 2D [ENEMY_SLOTS, ENEMY_FEATURES_DIM]
+    const enemiesInput = tf.input({
+        name: 'enemiesInput',
+        shape: [ENEMY_SLOTS, ENEMY_FEATURES_DIM],
+    });
+    // Вход для пуль: 2D [BULLET_SLOTS, BULLET_FEATURES_DIM]
+    const bulletsInput = tf.input({
+        name: 'bulletsInput',
+        shape: [BULLET_SLOTS, BULLET_FEATURES_DIM],
+    });
+
+    // --- 2) При обычной Dense-сети (MLP) делаем Flatten врагов и пуль ---
+    const enemiesFlatten = tf.layers.flatten().apply(enemiesInput) as tf.SymbolicTensor;
+    const bulletsFlatten = tf.layers.flatten().apply(bulletsInput) as tf.SymbolicTensor;
+
+    // --- 3) Склеиваем все три вектора вместе [tank + enemies + bullets] ---
+    return {
+        inputs: [tankInput, enemiesInput, bulletsInput],
+        merged: tf.layers.concatenate().apply([tankInput, enemiesFlatten, bulletsFlatten]) as tf.SymbolicTensor,
+    };
 }

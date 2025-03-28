@@ -2,12 +2,21 @@ import * as tf from '@tensorflow/tfjs';
 import { ACTION_DIM } from '../../Common/consts.ts';
 import { computeLogProb } from '../../Common/computeLogProb.ts';
 import { Config } from './config.ts';
+import { InputArrays } from '../../Common/prepareInputArrays.ts';
+import {
+    BULLET_FEATURES_DIM,
+    BULLET_SLOTS,
+    ENEMY_FEATURES_DIM,
+    ENEMY_SLOTS,
+    TANK_FEATURES_DIM,
+} from '../../Common/models.ts';
+import { flatFloat32Array } from '../../Common/flat.ts';
 
 export function trainPolicyNetwork(
     policyNetwork: tf.LayersModel,
     policyOptimizer: tf.Optimizer,
     config: Config,
-    states: tf.Tensor,       // [batchSize, inputDim]
+    states: tf.Tensor[],
     actions: tf.Tensor,      // [batchSize, actionDim]
     oldLogProbs: tf.Tensor,  // [batchSize]
     advantages: tf.Tensor,   // [batchSize]
@@ -47,7 +56,7 @@ function parsePredict(predict: tf.Tensor) {
 
 export function computeKullbackLeibler(
     policyNetwork: tf.LayersModel,
-    states: tf.Tensor,
+    states: tf.Tensor[],
     actions: tf.Tensor,
     oldLogProb: tf.Tensor,
 ): Promise<number> {
@@ -69,7 +78,7 @@ export function trainValueNetwork(
     valueNetwork: tf.LayersModel,
     valueOptimizer: tf.Optimizer,
     config: Config,
-    states: tf.Tensor,   // [batchSize, inputDim]
+    states: tf.Tensor[],
     returns: tf.Tensor,  // [batchSize], уже подсчитанные (GAE + V(s) или просто discountedReturns)
     oldValues: tf.Tensor, // [batchSize], для клиппинга
 ): Promise<number> {
@@ -101,15 +110,15 @@ export function trainValueNetwork(
 export function act(
     policyNetwork: tf.LayersModel,
     valueNetwork: tf.LayersModel,
-    state: Float32Array,
+    state: InputArrays,
 ): {
     actions: Float32Array,
     logProb: number,
     value: number
 } {
     return tf.tidy(() => {
-        const stateTensor = tf.tensor1d(state).expandDims(0);
-        const predict = policyNetwork.predict(stateTensor) as tf.Tensor;
+        const input = createInputTensors([state]);
+        const predict = policyNetwork.predict(input) as tf.Tensor;
         const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
         const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
         const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
@@ -118,7 +127,7 @@ export function act(
         const noise = tf.randomNormal([ACTION_DIM]).mul(std);
         const actions = outMean.add(noise);
         const logProb = computeLogProb(actions, outMean, std);
-        const value = valueNetwork.predict(stateTensor) as tf.Tensor;
+        const value = valueNetwork.predict(input) as tf.Tensor;
 
         return {
             actions: actions.dataSync() as Float32Array,
@@ -128,10 +137,9 @@ export function act(
     });
 }
 
-export function predict(policyNetwork: tf.LayersModel, state: Float32Array): { action: Float32Array } {
+export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { action: Float32Array } {
     return tf.tidy(() => {
-        const stateTensor = tf.tensor1d(state).expandDims(0);
-        const predict = policyNetwork.predict(stateTensor) as tf.Tensor;
+        const predict = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
         const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
         const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
 
@@ -139,4 +147,20 @@ export function predict(policyNetwork: tf.LayersModel, state: Float32Array): { a
             action: outMean.dataSync() as Float32Array,
         };
     });
+}
+
+export function createInputTensors(
+    state: InputArrays[],
+): tf.Tensor[] {
+    return [
+        tf.tensor2d(flatFloat32Array(state.map((s) => s.tankFeatures)), [state.length, TANK_FEATURES_DIM]),
+        tf.tensor3d(
+            flatFloat32Array(state.map((s) => s.enemiesFeatures)),
+            [state.length, ENEMY_SLOTS, ENEMY_FEATURES_DIM],
+        ),
+        tf.tensor3d(
+            flatFloat32Array(state.map((s) => s.bulletsFeatures)),
+            [state.length, BULLET_SLOTS, BULLET_FEATURES_DIM],
+        ),
+    ];
 }

@@ -8,7 +8,6 @@ import {
 } from '../../../Common/consts.ts';
 import { GameDI } from '../../../../DI/GameDI.ts';
 import { createBattlefield } from '../../../Common/createBattlefield.ts';
-import { createInputVector } from '../../../Common/createInputVector.ts';
 import { applyActionToTank } from '../../../Common/applyActionToTank.ts';
 import { randomRangeInt } from '../../../../../../../lib/random.ts';
 import { frameTasks } from '../../../../../../../lib/TasksScheduler/frameTasks.ts';
@@ -16,6 +15,7 @@ import { CONFIG } from '../../Common/config.ts';
 import { getDrawState } from '../../../Common/utils.ts';
 import { EntityId } from 'bitecs';
 import { calculateReward } from '../../../Common/calculateReward.ts';
+import { prepareInputArrays } from '../../../Common/prepareInputArrays.ts';
 
 export class MasterManager {
     public agent!: MasterAgent;
@@ -127,7 +127,7 @@ export class MasterManager {
         height: number,
     ) {
         // Create input vector for the current state
-        const inputVector = createInputVector(tankEid, width, height);
+        const inputVector = prepareInputArrays(tankEid, width, height);
         // Get action from agent
         const result = this.agent.predict(inputVector);
         // Apply action to tank controller

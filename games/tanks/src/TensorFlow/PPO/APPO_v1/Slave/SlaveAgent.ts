@@ -5,6 +5,7 @@ import { Memory } from '../../Common/Memory.ts';
 import { getStoreModelPath } from '../utils.ts';
 import { CONFIG } from '../../Common/config.ts';
 import { act } from '../../Common/train.ts';
+import { InputArrays } from '../../../Common/prepareInputArrays.ts';
 
 export class SlaveAgent {
     private reuse = -1;
@@ -27,7 +28,7 @@ export class SlaveAgent {
         this.disposeMemory();
     }
 
-    rememberAction(tankId: number, state: Float32Array, action: Float32Array, logProb: number, value: number) {
+    rememberAction(tankId: number, state: InputArrays, action: Float32Array, logProb: number, value: number) {
         this.memory.addFirstPart(tankId, state, action, logProb, value);
     }
 
@@ -46,7 +47,7 @@ export class SlaveAgent {
         this.memory.dispose();
     }
 
-    act(state: Float32Array): {
+    act(state: InputArrays): {
         actions: Float32Array,
         logProb: number,
         value: number

@@ -2,9 +2,10 @@
 import { shuffle } from '../../../../../../lib/shuffle.ts';
 import { abs, max, min } from '../../../../../../lib/math.ts';
 import { isDevtoolsOpen } from '../../Common/utils.ts';
+import { InputArrays } from '../../Common/prepareInputArrays.ts';
 
 export type Batch = {
-    states: Float32Array[],
+    states: InputArrays[],
     actions: Float32Array[],
     logProbs: number[],
     values: number[],
@@ -36,7 +37,7 @@ export class Memory {
         return Array.from(this.map.values());
     }
 
-    addFirstPart(id: number, state: Float32Array, action: Float32Array, logProb: number, value: number) {
+    addFirstPart(id: number, state: InputArrays, action: Float32Array, logProb: number, value: number) {
         if (!this.map.has(id)) {
             this.map.set(id, new SubMemory());
         }
@@ -85,7 +86,7 @@ export class Memory {
 }
 
 export class SubMemory {
-    private states: Float32Array[] = [];
+    private states: InputArrays[] = [];
     private actions: Float32Array[] = [];
     private logProbs: number[] = [];
     private values: number[] = [];
@@ -102,7 +103,7 @@ export class SubMemory {
         return this.states.length;
     }
 
-    addFirstPart(state: Float32Array, action: Float32Array, logProb: number, value: number) {
+    addFirstPart(state: InputArrays, action: Float32Array, logProb: number, value: number) {
         this.states.push(state);
         this.actions.push(action);
         this.logProbs.push(logProb);
