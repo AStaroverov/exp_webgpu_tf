@@ -7,7 +7,25 @@ type CompressedBatch = {
     min: number;
     max: number;
     avg: number;
+    compressed: boolean;
 };
+
+/**
+ * Преобразует значение x из диапазона [0,1] с использованием экспоненциального масштабирования.
+ * При b > 0 функция сжимает начальную часть и разжимает конец.
+ * Если b === 0, возвращается линейное отображение (то есть x).
+ *
+ * @param x - Число в диапазоне [0,1]
+ * @param b - Параметр, определяющий степень экспоненциального искажения
+ * @returns Преобразованное значение
+ */
+function transformExponential(x: number, b: number): number {
+    if (b === 0) {
+        return x;
+    }
+    return (Math.exp(b * x) - 1) / (Math.exp(b) - 1);
+}
+
 
 class CompressedBuffer {
     buffer: CompressedBatch[];
@@ -24,53 +42,52 @@ class CompressedBuffer {
             const item = data[i];
 
             if (this.buffer.length === 0) {
-                this.buffer.push({ start: 0, end: 0, min: item, max: item, avg: item });
+                this.buffer.push({ start: 0, end: 0, min: item, max: item, avg: item, compressed: false });
             } else {
                 const last = this.buffer[this.buffer.length - 1];
-                this.buffer.push({ start: last.end + 1, end: last.end + 1, min: item, max: item, avg: item });
+                this.buffer.push({
+                    start: last.end + 1,
+                    end: last.end + 1,
+                    min: item,
+                    max: item,
+                    avg: item,
+                    compressed: false,
+                });
             }
 
-            if (this.buffer.length === this.size) {
+            if (this.buffer.length >= this.size) {
                 this.compress();
             }
         }
     }
 
     compress() {
-        const compressed: CompressedBatch[] = [];
-        for (let i = 0; i < this.buffer.length; i += this.compressBatch) {
-            const compressedBatch = this.buffer[i];
-            let { min, max, start, end } = this.buffer[i];
-            let allAvg: number[] = [];
-            for (let j = i; j < i + this.compressBatch; j++) {
-                const batch = this.buffer[j];
-                start = Math.min(start, batch.start);
-                end = Math.max(end, batch.end);
-                min = Math.min(min, batch.min);
-                max = Math.max(min, batch.min);
-                allAvg.push(batch.avg);
-            }
-            compressedBatch.start = start;
-            compressedBatch.end = end;
-            compressedBatch.min = min;
-            compressedBatch.max = max;
-            compressedBatch.avg = allAvg.reduce((sum, v) => sum + v, 0) / allAvg.length;
-
-            compressed.push(compressedBatch);
-        }
-        this.buffer = compressed;
+        this.compressUncompressed();
+        this.compressCompressed();
     }
 
     toArrayMin(): RenderPoint[] {
-        return this.buffer.flatMap((b, i) => b.start === b.end ? [] : [{ x: i, y: b.min }]);
+        const last = this.buffer[this.buffer.length - 1].end;
+        return this.buffer.flatMap((b) => !b.compressed ? [] : [{
+            x: transformExponential(((b.start + b.end) / 2) / last, 20),
+            y: b.min,
+        }]);
     }
 
     toArrayMax(): RenderPoint[] {
-        return this.buffer.flatMap((b, i) => b.start === b.end ? [] : [{ x: i, y: b.max }]);
+        const last = this.buffer[this.buffer.length - 1].end;
+        return this.buffer.flatMap((b) => !b.compressed ? [] : [{
+            x: transformExponential(((b.start + b.end) / 2) / last, 20),
+            y: b.max,
+        }]);
     }
 
     toArrayAvg(): RenderPoint[] {
-        return this.buffer.flatMap((b, i) => [{ x: i, y: b.avg }]);
+        const last = this.buffer[this.buffer.length - 1].end;
+        return this.buffer.flatMap((b) => [{
+            x: transformExponential(((b.start + b.end) / 2) / last, 20),
+            y: b.avg,
+        }]);
     }
 
     toJson() {
@@ -79,6 +96,45 @@ class CompressedBuffer {
 
     fromJson(data: CompressedBatch[]) {
         this.buffer = data;
+    }
+
+    private compressUncompressed() {
+        const startIndex = this.buffer.findIndex((b) => !b.compressed);
+        this.compressing(startIndex, this.compressBatch);
+    }
+
+    private compressCompressed() {
+        this.compressing(0, 2);
+    }
+
+    private compressing(startIndex: number, batch: number) {
+        const compressed: CompressedBatch[] = [];
+        const buffer = this.buffer;
+        const length = buffer.length;
+
+        for (let i = startIndex; i < length; i = Math.min(i + batch, length)) {
+            const compressedBatch = buffer[i];
+            let { min, max, start, end, avg } = buffer[i];
+            let allAvg: number[] = [avg];
+            for (let j = i + 1; j < Math.min(i + batch, length); j++) {
+                const batch = buffer[j];
+                start = Math.min(start, batch.start);
+                end = Math.max(end, batch.end);
+                min = Math.min(min, batch.min);
+                max = Math.max(max, batch.max);
+                allAvg.push(batch.avg);
+            }
+            compressedBatch.start = start;
+            compressedBatch.end = end;
+            compressedBatch.min = min;
+            compressedBatch.max = max;
+            compressedBatch.avg = allAvg.reduce((sum, v) => sum + v, 0) / allAvg.length;
+            compressedBatch.compressed = true;
+
+            compressed.push(compressedBatch);
+        }
+
+        this.buffer = this.buffer.slice(0, startIndex).concat(compressed);
     }
 }
 
@@ -176,8 +232,8 @@ function calculateMovingAverage(data: RenderPoint[], windowSize: number): Render
 
 function drawEpoch() {
     tfvis.render.linechart({ name: 'KL', tab: 'Training' }, {
-        values: [store.kl.toArrayAvg()],
-        series: ['Avg'],
+        values: [store.kl.toArrayAvg(), calculateMovingAverage(store.kl.toArrayAvg(), 100)],
+        series: ['Avg', 'MA'],
     }, {
         xLabel: 'Version',
         yLabel: 'KL',
