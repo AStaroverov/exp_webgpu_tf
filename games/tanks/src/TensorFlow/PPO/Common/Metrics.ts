@@ -1,34 +1,9 @@
 import * as tfvis from '@tensorflow/tfjs-vis';
 import { getAgentLog, setAgentLog } from '../APPO_v1/Database.ts';
-
-type CompressedBatch = {
-    start: number;
-    end: number;
-    min: number;
-    max: number;
-    avg: number;
-    compressed: boolean;
-};
-
-/**
- * Преобразует значение x из диапазона [0,1] с использованием экспоненциального масштабирования.
- * При b > 0 функция сжимает начальную часть и разжимает конец.
- * Если b === 0, возвращается линейное отображение (то есть x).
- *
- * @param x - Число в диапазоне [0,1]
- * @param b - Параметр, определяющий степень экспоненциального искажения
- * @returns Преобразованное значение
- */
-function transformExponential(x: number, b: number): number {
-    if (b === 0) {
-        return x;
-    }
-    return (Math.exp(b * x) - 1) / (Math.exp(b) - 1);
-}
-
+import { downsample } from 'downsample-lttb-ts';
 
 class CompressedBuffer {
-    buffer: CompressedBatch[];
+    buffer: [x: number, y: number][];
 
     constructor(
         private size: number,
@@ -42,17 +17,10 @@ class CompressedBuffer {
             const item = data[i];
 
             if (this.buffer.length === 0) {
-                this.buffer.push({ start: 0, end: 0, min: item, max: item, avg: item, compressed: false });
+                this.buffer.push([1, item]);
             } else {
                 const last = this.buffer[this.buffer.length - 1];
-                this.buffer.push({
-                    start: last.end + 1,
-                    end: last.end + 1,
-                    min: item,
-                    max: item,
-                    avg: item,
-                    compressed: false,
-                });
+                this.buffer.push([last[0] + 1, item]);
             }
 
             if (this.buffer.length >= this.size) {
@@ -62,31 +30,16 @@ class CompressedBuffer {
     }
 
     compress() {
-        this.compressUncompressed();
-        this.compressCompressed();
+        this.buffer = downsample({
+            series: this.buffer,
+            threshold: this.size / this.compressBatch,
+        }) as [number, number][];
     }
 
-    toArrayMin(): RenderPoint[] {
-        const last = this.buffer[this.buffer.length - 1].end;
-        return this.buffer.flatMap((b) => !b.compressed ? [] : [{
-            x: transformExponential(((b.start + b.end) / 2) / last, 20),
-            y: b.min,
-        }]);
-    }
-
-    toArrayMax(): RenderPoint[] {
-        const last = this.buffer[this.buffer.length - 1].end;
-        return this.buffer.flatMap((b) => !b.compressed ? [] : [{
-            x: transformExponential(((b.start + b.end) / 2) / last, 20),
-            y: b.max,
-        }]);
-    }
-
-    toArrayAvg(): RenderPoint[] {
-        const last = this.buffer[this.buffer.length - 1].end;
+    toArray(): RenderPoint[] {
         return this.buffer.flatMap((b) => [{
-            x: transformExponential(((b.start + b.end) / 2) / last, 20),
-            y: b.avg,
+            x: b[0],
+            y: b[1],
         }]);
     }
 
@@ -94,47 +47,8 @@ class CompressedBuffer {
         return this.buffer;
     }
 
-    fromJson(data: CompressedBatch[]) {
+    fromJson(data: [number, number][]) {
         this.buffer = data;
-    }
-
-    private compressUncompressed() {
-        const startIndex = this.buffer.findIndex((b) => !b.compressed);
-        this.compressing(startIndex, this.compressBatch);
-    }
-
-    private compressCompressed() {
-        this.compressing(0, 2);
-    }
-
-    private compressing(startIndex: number, batch: number) {
-        const compressed: CompressedBatch[] = [];
-        const buffer = this.buffer;
-        const length = buffer.length;
-
-        for (let i = startIndex; i < length; i = Math.min(i + batch, length)) {
-            const compressedBatch = buffer[i];
-            let { min, max, start, end, avg } = buffer[i];
-            let allAvg: number[] = [avg];
-            for (let j = i + 1; j < Math.min(i + batch, length); j++) {
-                const batch = buffer[j];
-                start = Math.min(start, batch.start);
-                end = Math.max(end, batch.end);
-                min = Math.min(min, batch.min);
-                max = Math.max(max, batch.max);
-                allAvg.push(batch.avg);
-            }
-            compressedBatch.start = start;
-            compressedBatch.end = end;
-            compressedBatch.min = min;
-            compressedBatch.max = max;
-            compressedBatch.avg = allAvg.reduce((sum, v) => sum + v, 0) / allAvg.length;
-            compressedBatch.compressed = true;
-
-            compressed.push(compressedBatch);
-        }
-
-        this.buffer = this.buffer.slice(0, startIndex).concat(compressed);
     }
 }
 
@@ -232,7 +146,7 @@ function calculateMovingAverage(data: RenderPoint[], windowSize: number): Render
 
 function drawEpoch() {
     tfvis.render.linechart({ name: 'KL', tab: 'Training' }, {
-        values: [store.kl.toArrayAvg(), calculateMovingAverage(store.kl.toArrayAvg(), 100)],
+        values: [store.kl.toArray(), calculateMovingAverage(store.kl.toArray(), 100)],
         series: ['Avg', 'MA'],
     }, {
         xLabel: 'Version',
@@ -242,7 +156,7 @@ function drawEpoch() {
     });
 
     tfvis.render.linechart({ name: 'Policy Loss', tab: 'Loss' }, {
-        values: [store.policyLoss.toArrayAvg()],
+        values: [store.policyLoss.toArray()],
     }, {
         xLabel: 'Version',
         yLabel: 'Loss',
@@ -251,7 +165,7 @@ function drawEpoch() {
     });
 
     tfvis.render.linechart({ name: 'Value Loss', tab: 'Loss' }, {
-        values: [store.valueLoss.toArrayAvg()],
+        values: [store.valueLoss.toArray()],
     }, {
         xLabel: 'Version',
         yLabel: 'Loss',
@@ -261,11 +175,11 @@ function drawEpoch() {
 }
 
 function drawRewards() {
-    const avgRewards = store.rewards.toArrayAvg();
+    const avgRewards = store.rewards.toArray();
     const avgRewardsMA = calculateMovingAverage(avgRewards, 1000);
     tfvis.render.scatterplot({ name: 'Reward', tab: 'Training' }, {
-        values: [store.rewards.toArrayMin(), store.rewards.toArrayMax(), avgRewards, avgRewardsMA],
-        series: ['Min', 'Max', 'Avg', 'MA'],
+        values: [avgRewards, avgRewardsMA],
+        series: ['Avg', 'MA'],
     }, {
         xLabel: 'Version',
         yLabel: 'Reward',
@@ -275,7 +189,7 @@ function drawRewards() {
 }
 
 function drawBatch() {
-    const avgVersionDelta = store.versionDelta.toArrayAvg();
+    const avgVersionDelta = store.versionDelta.toArray();
     const avgVersionDeltaMA = calculateMovingAverage(avgVersionDelta, 100);
     tfvis.render.scatterplot({ name: 'Batch Version Delta', tab: 'Training' }, {
         values: [avgVersionDelta, avgVersionDeltaMA],
@@ -288,7 +202,7 @@ function drawBatch() {
     });
 
     tfvis.render.linechart({ name: 'Batch Size', tab: 'Training' }, {
-        values: store.batchSize.toArrayAvg(),
+        values: store.batchSize.toArray(),
     }, {
         xLabel: 'Version',
         yLabel: 'Batch Size',
@@ -298,7 +212,7 @@ function drawBatch() {
 }
 
 function drawTrain() {
-    const avgTrainTime = store.trainTime.toArrayAvg();
+    const avgTrainTime = store.trainTime.toArray();
     const avgTrainTimeMA = calculateMovingAverage(avgTrainTime, 100);
     tfvis.render.linechart({ name: 'Train Time', tab: 'Training' }, {
         values: [avgTrainTime, avgTrainTimeMA],
@@ -310,7 +224,7 @@ function drawTrain() {
         height: 300,
     });
 
-    const avgWaitTime = store.waitTime.toArrayAvg();
+    const avgWaitTime = store.waitTime.toArray();
     const avgWaitTimeMA = calculateMovingAverage(avgWaitTime, 100);
     tfvis.render.linechart({ name: 'Waiting Time', tab: 'Training' }, {
         values: [avgWaitTime, avgWaitTimeMA],
