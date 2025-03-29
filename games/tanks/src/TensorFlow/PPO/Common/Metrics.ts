@@ -11,13 +11,6 @@ type CompressedBatch = {
     compressed: boolean;
 };
 
-function transformExponential(x: number, b: number): number {
-    if (b === 0) {
-        return x;
-    }
-    return (Math.exp(b * x) - 1) / (Math.exp(b) - 1);
-}
-
 function getLastX(batch: CompressedBatch): number {
     return Math.max(batch.min.x, batch.max.x, batch.avg.x, batch.avgMin.x, batch.avgMax.x);
 }
@@ -70,25 +63,22 @@ class CompressedBuffer {
     }
 
     toArrayMin(): RenderPoint[] {
-        const maxX = this.buffer[this.buffer.length - 1].avg.x;
-        return this.buffer.flatMap((b) => !b.compressed ? [] : [b.min]).map((v) => {
-            return { x: transformExponential(v.x / maxX, 1), y: v.y };
+        return this.buffer.flatMap((b) => !b.compressed ? [] : [b.min]).map((v, i) => {
+            return { x: i, y: v.y };
         });
     }
 
     toArrayMax(): RenderPoint[] {
-        const maxX = this.buffer[this.buffer.length - 1].avg.x;
-        return this.buffer.flatMap((b) => !b.compressed ? [] : [b.max]).map((v) => {
-            return { x: transformExponential(v.x / maxX, 1), y: v.y };
+        return this.buffer.flatMap((b) => !b.compressed ? [] : [b.max]).map((v, i) => {
+            return { x: i, y: v.y };
         });
     }
 
     toArrayAvg(): RenderPoint[] {
-        const maxX = this.buffer[this.buffer.length - 1].avg.x;
         return this.buffer.flatMap((b) => {
-            return [b.avg, b.avgMin, b.avgMax].sort((a, b) => a.x - b.x);
-        }).map((v) => {
-            return { x: transformExponential(v.x / maxX, 1), y: v.y };
+            return b.compressed ? [b.avg, b.avgMin, b.avgMax].sort((a, b) => a.x - b.x) : [b.avg];
+        }).map((v, i) => {
+            return { x: i, y: v.y };
         });
     }
 
@@ -155,14 +145,14 @@ class CompressedBuffer {
 type RenderPoint = { x: number, y: number };
 
 const store = {
-    rewards: new CompressedBuffer(10_000, 10),
-    kl: new CompressedBuffer(10_000, 10),
-    valueLoss: new CompressedBuffer(1_000, 10),
-    policyLoss: new CompressedBuffer(1_000, 10),
-    trainTime: new CompressedBuffer(1_000, 10),
-    waitTime: new CompressedBuffer(1_000, 10),
-    versionDelta: new CompressedBuffer(1_000, 10),
-    batchSize: new CompressedBuffer(1_000, 10),
+    rewards: new CompressedBuffer(10_000, 5),
+    kl: new CompressedBuffer(10_000, 5),
+    valueLoss: new CompressedBuffer(1_000, 5),
+    policyLoss: new CompressedBuffer(1_000, 5),
+    trainTime: new CompressedBuffer(1_000, 5),
+    waitTime: new CompressedBuffer(1_000, 5),
+    versionDelta: new CompressedBuffer(1_000, 5),
+    batchSize: new CompressedBuffer(1_000, 5),
 };
 
 getAgentLog().then((data) => {
