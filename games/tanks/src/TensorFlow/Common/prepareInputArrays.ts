@@ -18,7 +18,7 @@ function normForRelu(v: number, size: number): number {
 }
 
 function norm(v: number, size: number): number {
-    return clamp(normForRelu(v, size) * 0.6 + 0.2, 0, 1);
+    return clamp(normForRelu(v, size) * 1 + 1, 0, 3);
 }
 
 // Для случайного распределения врагов/пуль
