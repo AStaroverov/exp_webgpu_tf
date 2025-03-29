@@ -1,24 +1,16 @@
 import * as tfvis from '@tensorflow/tfjs-vis';
 import { getAgentLog, setAgentLog } from '../APPO_v1/Database.ts';
 
+type Point = { x: number, y: number };
 type CompressedBatch = {
-    start: number;
-    end: number;
-    min: number;
-    max: number;
-    avg: number;
+    min: Point;
+    max: Point;
+    avg: Point;
+    avgMin: Point;
+    avgMax: Point;
     compressed: boolean;
 };
 
-/**
- * Преобразует значение x из диапазона [0,1] с использованием экспоненциального масштабирования.
- * При b > 0 функция сжимает начальную часть и разжимает конец.
- * Если b === 0, возвращается линейное отображение (то есть x).
- *
- * @param x - Число в диапазоне [0,1]
- * @param b - Параметр, определяющий степень экспоненциального искажения
- * @returns Преобразованное значение
- */
 function transformExponential(x: number, b: number): number {
     if (b === 0) {
         return x;
@@ -26,6 +18,9 @@ function transformExponential(x: number, b: number): number {
     return (Math.exp(b * x) - 1) / (Math.exp(b) - 1);
 }
 
+function getLastX(batch: CompressedBatch): number {
+    return Math.max(batch.min.x, batch.max.x, batch.avg.x, batch.avgMin.x, batch.avgMax.x);
+}
 
 class CompressedBuffer {
     buffer: CompressedBatch[];
@@ -42,22 +37,30 @@ class CompressedBuffer {
             const item = data[i];
 
             if (this.buffer.length === 0) {
-                this.buffer.push({ start: 0, end: 0, min: item, max: item, avg: item, compressed: false });
+                this.buffer.push({
+                    min: { x: 0, y: item },
+                    max: { x: 0, y: item },
+                    avg: { x: 0, y: item },
+                    avgMin: { x: 0, y: item },
+                    avgMax: { x: 0, y: item },
+                    compressed: false,
+                });
             } else {
                 const last = this.buffer[this.buffer.length - 1];
+                const lastY = getLastX(last);
                 this.buffer.push({
-                    start: last.end + 1,
-                    end: last.end + 1,
-                    min: item,
-                    max: item,
-                    avg: item,
+                    min: { x: lastY + 1, y: item },
+                    max: { x: lastY + 1, y: item },
+                    avg: { x: lastY + 1, y: item },
+                    avgMin: { x: lastY + 1, y: item },
+                    avgMax: { x: lastY + 1, y: item },
                     compressed: false,
                 });
             }
+        }
 
-            if (this.buffer.length >= this.size) {
-                this.compress();
-            }
+        if (this.buffer.length >= this.size) {
+            this.compress();
         }
     }
 
@@ -67,27 +70,26 @@ class CompressedBuffer {
     }
 
     toArrayMin(): RenderPoint[] {
-        const last = this.buffer[this.buffer.length - 1].end;
-        return this.buffer.flatMap((b) => !b.compressed ? [] : [{
-            x: transformExponential(((b.start + b.end) / 2) / last, 20),
-            y: b.min,
-        }]);
+        const maxX = this.buffer[this.buffer.length - 1].avg.x;
+        return this.buffer.flatMap((b) => !b.compressed ? [] : [b.min]).map((v) => {
+            return { x: transformExponential(v.x / maxX, 1), y: v.y };
+        });
     }
 
     toArrayMax(): RenderPoint[] {
-        const last = this.buffer[this.buffer.length - 1].end;
-        return this.buffer.flatMap((b) => !b.compressed ? [] : [{
-            x: transformExponential(((b.start + b.end) / 2) / last, 20),
-            y: b.max,
-        }]);
+        const maxX = this.buffer[this.buffer.length - 1].avg.x;
+        return this.buffer.flatMap((b) => !b.compressed ? [] : [b.max]).map((v) => {
+            return { x: transformExponential(v.x / maxX, 1), y: v.y };
+        });
     }
 
     toArrayAvg(): RenderPoint[] {
-        const last = this.buffer[this.buffer.length - 1].end;
-        return this.buffer.flatMap((b) => [{
-            x: transformExponential(((b.start + b.end) / 2) / last, 20),
-            y: b.avg,
-        }]);
+        const maxX = this.buffer[this.buffer.length - 1].avg.x;
+        return this.buffer.flatMap((b) => {
+            return [b.avg, b.avgMin, b.avgMax].sort((a, b) => a.x - b.x);
+        }).map((v) => {
+            return { x: transformExponential(v.x / maxX, 1), y: v.y };
+        });
     }
 
     toJson() {
@@ -113,25 +115,37 @@ class CompressedBuffer {
         const length = buffer.length;
 
         for (let i = startIndex; i < length; i = Math.min(i + batch, length)) {
-            const compressedBatch = buffer[i];
-            let { min, max, start, end, avg } = buffer[i];
-            let allAvg: number[] = [avg];
+            const reusedItem = buffer[i];
+            let { min, max, avg, avgMax, avgMin } = reusedItem;
+            let allAvg: Point[] = [avg];
+            reusedItem.compressed && allAvg.push(avgMin, avgMax);
             for (let j = i + 1; j < Math.min(i + batch, length); j++) {
-                const batch = buffer[j];
-                start = Math.min(start, batch.start);
-                end = Math.max(end, batch.end);
-                min = Math.min(min, batch.min);
-                max = Math.max(max, batch.max);
-                allAvg.push(batch.avg);
+                const item = buffer[j];
+                if (min.y > item.min.y) {
+                    min = item.min;
+                }
+                if (max.y < item.max.y) {
+                    max = item.max;
+                }
+                allAvg.push(item.avg);
+                item.compressed && allAvg.push(item.avgMin, item.avgMax);
             }
-            compressedBatch.start = start;
-            compressedBatch.end = end;
-            compressedBatch.min = min;
-            compressedBatch.max = max;
-            compressedBatch.avg = allAvg.reduce((sum, v) => sum + v, 0) / allAvg.length;
-            compressedBatch.compressed = true;
+            let tmpAvg = allAvg.reduce((sum, v) => {
+                sum.x += v.x;
+                sum.y += v.y;
+                return sum;
+            }, { x: 0, y: 0 });
+            tmpAvg.x /= allAvg.length;
+            tmpAvg.y /= allAvg.length;
 
-            compressed.push(compressedBatch);
+            reusedItem.min = min;
+            reusedItem.max = max;
+            reusedItem.avg = tmpAvg;
+            reusedItem.avgMin = reusedItem.compressed ? allAvg.reduce((min, v) => min.y < v.y ? min : v) : tmpAvg;
+            reusedItem.avgMax = reusedItem.compressed ? allAvg.reduce((max, v) => max.y > v.y ? max : v) : tmpAvg;
+            reusedItem.compressed = true;
+
+            compressed.push(reusedItem);
         }
 
         this.buffer = this.buffer.slice(0, startIndex).concat(compressed);
