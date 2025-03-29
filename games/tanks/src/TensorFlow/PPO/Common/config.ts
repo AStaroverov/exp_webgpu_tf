@@ -53,7 +53,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     episodeFrames: 900, // usually produce 250 samples
     // Workers
     workerCount: 8,
-    reuseLimit: 1,
+    reuseLimit: 0,
     // Training control
     savePath: 'APPO_v1',
 };

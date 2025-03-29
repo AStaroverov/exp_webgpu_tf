@@ -6,13 +6,11 @@ type CompressedBatch = {
     min: Point;
     max: Point;
     avg: Point;
-    avgMin: Point;
-    avgMax: Point;
     compressed: boolean;
 };
 
 function getLastX(batch: CompressedBatch): number {
-    return Math.max(batch.min.x, batch.max.x, batch.avg.x, batch.avgMin.x, batch.avgMax.x);
+    return Math.max(batch.min.x, batch.max.x, batch.avg.x);
 }
 
 class CompressedBuffer {
@@ -34,8 +32,7 @@ class CompressedBuffer {
                     min: { x: 0, y: item },
                     max: { x: 0, y: item },
                     avg: { x: 0, y: item },
-                    avgMin: { x: 0, y: item },
-                    avgMax: { x: 0, y: item },
+
                     compressed: false,
                 });
             } else {
@@ -45,8 +42,7 @@ class CompressedBuffer {
                     min: { x: lastY + 1, y: item },
                     max: { x: lastY + 1, y: item },
                     avg: { x: lastY + 1, y: item },
-                    avgMin: { x: lastY + 1, y: item },
-                    avgMax: { x: lastY + 1, y: item },
+
                     compressed: false,
                 });
             }
@@ -75,9 +71,7 @@ class CompressedBuffer {
     }
 
     toArrayAvg(): RenderPoint[] {
-        return this.buffer.flatMap((b) => {
-            return b.compressed ? [b.avg, b.avgMin, b.avgMax].sort((a, b) => a.x - b.x) : [b.avg];
-        }).map((v, i) => {
+        return this.buffer.flatMap((b) => [b.avg]).map((v, i) => {
             return { x: i, y: v.y };
         });
     }
@@ -106,9 +100,8 @@ class CompressedBuffer {
 
         for (let i = startIndex; i < length; i = Math.min(i + batch, length)) {
             const reusedItem = buffer[i];
-            let { min, max, avg, avgMax, avgMin } = reusedItem;
+            let { min, max, avg } = reusedItem;
             let allAvg: Point[] = [avg];
-            reusedItem.compressed && allAvg.push(avgMin, avgMax);
             for (let j = i + 1; j < Math.min(i + batch, length); j++) {
                 const item = buffer[j];
                 if (min.y > item.min.y) {
@@ -118,7 +111,6 @@ class CompressedBuffer {
                     max = item.max;
                 }
                 allAvg.push(item.avg);
-                item.compressed && allAvg.push(item.avgMin, item.avgMax);
             }
             let tmpAvg = allAvg.reduce((sum, v) => {
                 sum.x += v.x;
@@ -131,8 +123,6 @@ class CompressedBuffer {
             reusedItem.min = min;
             reusedItem.max = max;
             reusedItem.avg = tmpAvg;
-            reusedItem.avgMin = reusedItem.compressed ? allAvg.reduce((min, v) => min.y < v.y ? min : v) : tmpAvg;
-            reusedItem.avgMax = reusedItem.compressed ? allAvg.reduce((max, v) => max.y > v.y ? max : v) : tmpAvg;
             reusedItem.compressed = true;
 
             compressed.push(reusedItem);
