@@ -48,7 +48,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     trustCoeff: 0.2,
 
     batchSize: 256, // useless for appo
-    miniBatchSize: 256,
+    miniBatchSize: 128,
     warmupFrames: 100,
     episodeFrames: 900, // usually produce 250 samples
     // Workers
