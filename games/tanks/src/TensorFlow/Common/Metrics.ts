@@ -34,15 +34,15 @@ class CompressedBuffer {
     }
 
     toArrayMin(): RenderPoint[] {
-        return this.minBuffer;
+        return this.minBuffer.map((p, i) => ({ x: i, y: p.y }));
     }
 
     toArrayMax(): RenderPoint[] {
-        return this.maxBuffer;
+        return this.maxBuffer.map((p, i) => ({ x: i, y: p.y }));
     }
 
     toArray(): RenderPoint[] {
-        return this.avgBuffer.concat(this.buffer);
+        return this.avgBuffer.concat(this.buffer).map((p, i) => ({ x: i, y: p.y }));
     }
 
     toJson() {
