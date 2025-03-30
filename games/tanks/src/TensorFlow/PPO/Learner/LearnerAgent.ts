@@ -106,7 +106,7 @@ export class LearnerAgent {
 
         const policyLossPromises: Promise<number>[] = [];
         const valueLossPromises: Promise<number>[] = [];
-        const klPromises: Promise<number>[] = [];
+        const klList: number[] = [];
 
         for (let i = 0; i < CONFIG.epochs; i++) {
             batchShuffle(
@@ -149,12 +149,19 @@ export class LearnerAgent {
                 }, 1000);
             }
 
-            klPromises.push(computeKullbackLeibler(
+            const kl = await computeKullbackLeibler(
                 this.policyNetwork,
                 tAllStates,
                 tAllActions,
                 tAllLogProbs,
-            ));
+            );
+
+            klList.push(kl);
+
+            if (kl > CONFIG.maxKL) {
+                console.warn(`[Train]: KL divergence was too high: ${ kl }, in epoch ${ i }`);
+                break;
+            }
         }
 
         const endTime = Date.now();
@@ -162,14 +169,9 @@ export class LearnerAgent {
         Promise.all([
             Promise.all(policyLossPromises),
             Promise.all(valueLossPromises),
-            Promise.all(klPromises),
-        ]).then(([policyLossList, valueLossList, klList]) => {
+        ]).then(([policyLossList, valueLossList]) => {
             for (let i = 0; i < klList.length; i++) {
                 const kl = klList[i];
-
-                if (kl > CONFIG.maxKL) {
-                    console.warn(`[Train]: KL divergence was too high: ${ kl }, in epoch ${ i }`);
-                }
 
                 let policyLoss = 0, valueLoss = 0;
                 for (let j = 0; j < miniBatchCount; j++) {
