@@ -34,15 +34,15 @@ export type Config = {
 export const DEFAULT_EXPERIMENT: Config = {
     name: 'ppo-default',
     // Learning parameters
-    learningRatePolicy: 5e-4,
-    learningRateValue: 5e-4,
+    learningRatePolicy: 2e-5,
+    learningRateValue: 2e-5,
     gamma: 0.99,
     lam: 0.95,
     // PPO-specific parameters
-    epochs: 8,
+    epochs: 4,
     clipRatioPolicy: 0.2,
     clipRatioValue: 0.2,
-    entropyCoeff: 0.005,
+    entropyCoeff: 0.001,
     maxKL: 0.05,
 
     trustCoeff: 0.2,
@@ -53,7 +53,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     episodeFrames: 900, // usually produce 250 samples
     // Workers
     workerCount: 8,
-    reuseLimit: 0,
+    reuseLimit: 1,
     // Training control
     savePath: 'APPO_v1',
 };

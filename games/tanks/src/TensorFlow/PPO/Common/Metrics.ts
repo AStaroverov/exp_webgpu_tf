@@ -226,7 +226,7 @@ function calculateMovingAverage(data: RenderPoint[], windowSize: number): Render
 
 function drawEpoch() {
     tfvis.render.linechart({ name: 'KL', tab: 'Training' }, {
-        values: [store.kl.toArrayAvg(), calculateMovingAverage(store.kl.toArrayAvg(), 100)],
+        values: [store.kl.toArrayAvg(), calculateMovingAverage(store.kl.toArrayAvg(), 10)],
         series: ['Avg', 'MA'],
     }, {
         xLabel: 'Version',
