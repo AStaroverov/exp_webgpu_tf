@@ -10,7 +10,7 @@ import { computeKullbackLeibler, createInputTensors, trainPolicyNetwork, trainVa
 import { CONFIG } from '../Common/config.ts';
 import { flatFloat32Array } from '../../Common/flat.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
-import { logBatch, logEpoch, logRewards, logTrain, saveMetrics } from '../Metrics.ts';
+import { loadMetrics, logBatch, logEpoch, logRewards, logTrain, saveMetrics } from '../../Common/Metrics.ts';
 import { batchShuffle } from '../../../../../../lib/shuffle.ts';
 
 export class LearnerAgent {
@@ -212,6 +212,8 @@ export class LearnerAgent {
             this.policyNetwork = createPolicyNetwork();
             this.valueNetwork = createValueNetwork();
         }
+
+        loadMetrics();
 
         return this;
     }

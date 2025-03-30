@@ -1,6 +1,6 @@
 import '@tensorflow/tfjs-backend-wasm';
 import { initTensorFlow } from '../Common/initTensorFlow.ts';
-import { createDebugVisualization } from './debug.ts';
+import { createDebugVisualization } from '../Common/debug.ts';
 import { setConsolePrefix } from '../Common/console.ts';
 import '../Common/utils.ts';
 import { getCurrentConfig } from './Common/config.ts';

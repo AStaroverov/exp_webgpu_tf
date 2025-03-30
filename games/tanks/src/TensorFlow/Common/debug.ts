@@ -5,11 +5,11 @@ import { Tank } from '../../ECS/Components/Tank.ts';
 import { RigidBodyState } from '../../ECS/Components/Physical.ts';
 import { hypot } from '../../../../../lib/math.ts';
 import { Color } from '../../../../../src/ECS/Components/Common.ts';
-import { getDrawState } from '../Common/utils.ts';
+import { getDrawState } from './utils.ts';
 import { frameTasks } from '../../../../../lib/TasksScheduler/frameTasks.ts';
-import { CONFIG } from './Common/config.ts';
-import { PlayerManager } from './Player/PlayerManager.ts';
-import { drawMetrics } from './Metrics.ts';
+import { CONFIG } from '../PPO/Common/config.ts';
+import { PlayerManager } from '../PPO/Player/PlayerManager.ts';
+import { drawMetrics, loadMetrics } from './Metrics.ts';
 
 // Generate debug visualization using HTML and CSS
 export function createDebugVisualization(container: HTMLElement, manager: PlayerManager) {
@@ -49,11 +49,16 @@ export function createDebugVisualization(container: HTMLElement, manager: Player
         ].join('<div>-------------</div>');
     }
 
+    async function updateMetrics() {
+        await loadMetrics();
+        drawMetrics();
+    }
+
     frameTasks.addInterval(updateDebugInfo, 10);
-    frameTasks.addInterval(drawMetrics, 333);
+    frameTasks.addInterval(updateMetrics, 333);
 
     updateDebugInfo();
-    drawMetrics();
+    updateMetrics();
 
     return debugContainer;
 }
