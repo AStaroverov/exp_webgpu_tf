@@ -1,7 +1,5 @@
 import * as tfvis from '@tensorflow/tfjs-vis';
 import { getAgentLog, setAgentLog } from '../PPO/Database.ts';
-import { downsample } from '../../../../../lib/Types/downsampler.ts';
-import { floor } from '../../../../../lib/math.ts';
 import { isObject } from 'lodash-es';
 
 type Point = { x: number, y: number };
@@ -74,17 +72,13 @@ class CompressedBuffer {
     }
 
     private process() {
-        this.compress();
-        this.downsample();
+        this.avgBuffer = this.compressAvg(this.avgBuffer);
+        this.minBuffer = this.compressAvg(this.minBuffer);
+        this.maxBuffer = this.compressAvg(this.maxBuffer);
+        this.compressRawBuffer();
     }
 
-    private downsample() {
-        this.avgBuffer = downsample(this.avgBuffer, floor(this.size / 2), (p) => p.x, (p) => p.y);
-        this.minBuffer = downsample(this.minBuffer, floor(this.size / 2), (p) => p.x, (p) => p.y);
-        this.maxBuffer = downsample(this.maxBuffer, floor(this.size / 2), (p) => p.x, (p) => p.y);
-    }
-
-    private compress() {
+    private compressRawBuffer() {
         const buffer = this.buffer;
         const length = buffer.length;
         const batch = this.compressBatch;
@@ -113,6 +107,28 @@ class CompressedBuffer {
         }
         this.buffer = [];
     }
+
+    private compressAvg(buffer: Point[]) {
+        const compressed: Point[] = [];
+        const length = buffer.length;
+        const batch = this.compressBatch;
+
+        for (let i = 0; i < length; i += batch) {
+            const firstItem = buffer[i];
+            let lastItem = firstItem;
+            let sum = firstItem.y;
+            let count = 1;
+            for (let j = i + 1; j < Math.min(i + batch, length); j++) {
+                lastItem = buffer[j];
+                sum += lastItem.y;
+                count++;
+            }
+            compressed.push({ x: (lastItem.x + firstItem.x) / 2, y: sum / count });
+        }
+
+        return compressed;
+    }
+
 }
 
 type RenderPoint = { x: number, y: number };
