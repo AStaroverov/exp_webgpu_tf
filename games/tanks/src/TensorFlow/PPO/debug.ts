@@ -1,17 +1,18 @@
 // DebugInfo singleton to track statistics
-import { MasterManager } from './Master/MasterManager.ts';
 import { query } from 'bitecs';
-import { GameDI } from '../../../DI/GameDI.ts';
-import { Tank } from '../../../ECS/Components/Tank.ts';
-import { RigidBodyState } from '../../../ECS/Components/Physical.ts';
-import { hypot } from '../../../../../../lib/math.ts';
-import { Color } from '../../../../../../src/ECS/Components/Common.ts';
-import { getDrawState } from '../../Common/utils.ts';
-import { frameTasks } from '../../../../../../lib/TasksScheduler/frameTasks.ts';
-import { CONFIG } from '../Common/config.ts';
+import { GameDI } from '../../DI/GameDI.ts';
+import { Tank } from '../../ECS/Components/Tank.ts';
+import { RigidBodyState } from '../../ECS/Components/Physical.ts';
+import { hypot } from '../../../../../lib/math.ts';
+import { Color } from '../../../../../src/ECS/Components/Common.ts';
+import { getDrawState } from '../Common/utils.ts';
+import { frameTasks } from '../../../../../lib/TasksScheduler/frameTasks.ts';
+import { CONFIG } from './Common/config.ts';
+import { PlayerManager } from './Player/PlayerManager.ts';
+import { drawMetrics } from './Metrics.ts';
 
 // Generate debug visualization using HTML and CSS
-export function createDebugVisualization(container: HTMLElement, manager: MasterManager) {
+export function createDebugVisualization(container: HTMLElement, manager: PlayerManager) {
     // Create main container
     const debugContainer = document.createElement('div');
     debugContainer.className = 'debug-container';
@@ -49,23 +50,24 @@ export function createDebugVisualization(container: HTMLElement, manager: Master
     }
 
     frameTasks.addInterval(updateDebugInfo, 10);
+    frameTasks.addInterval(drawMetrics, 333);
+
+    updateDebugInfo();
+    drawMetrics();
 
     return debugContainer;
 }
 
-export function createCommonDebug(manager: MasterManager) {
+export function createCommonDebug(manager: PlayerManager) {
     return () => {
-        const memoryUsage = (performance as any).memory.usedJSHeapSize / (1024 * 1024);
-
         return `
             <div>Workers: ${ CONFIG.workerCount }</div>
-            <div>Memory: ${ memoryUsage.toFixed(2) }MB</div>
             <div>Version: ${ manager.agent.getVersion() } </div>
         `;
     };
 }
 
-export function createTanksDebug(manager: MasterManager) {
+export function createTanksDebug(manager: PlayerManager) {
     return () => {
         if (!getDrawState()) return '';
 

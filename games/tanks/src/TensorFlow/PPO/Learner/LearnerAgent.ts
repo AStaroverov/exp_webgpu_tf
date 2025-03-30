@@ -1,29 +1,22 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
-import { ACTION_DIM } from '../../../Common/consts.ts';
-import { ceil } from '../../../../../../../lib/math.ts';
-import { createPolicyNetwork, createValueNetwork } from '../../../Common/models.ts';
+import { ACTION_DIM } from '../../Common/consts.ts';
+import { ceil } from '../../../../../../lib/math.ts';
+import { createPolicyNetwork, createValueNetwork } from '../../Common/models.ts';
 import { getStoreModelPath } from '../utils.ts';
 import { extractMemoryBatchList, getAgentState, setAgentState } from '../Database.ts';
-import { Batch } from '../../Common/Memory.ts';
-import {
-    computeKullbackLeibler,
-    createInputTensors,
-    predict,
-    trainPolicyNetwork,
-    trainValueNetwork,
-} from '../../Common/train.ts';
-import { CONFIG } from '../../Common/config.ts';
-import { flatFloat32Array } from '../../../Common/flat.ts';
-import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.ts';
-import { drawMetrics, logBatch, logEpoch, logRewards, logTrain, saveMetrics } from '../../Common/Metrics.ts';
-import { InputArrays } from '../../../Common/prepareInputArrays.ts';
-import { batchShuffle } from '../../../../../../../lib/shuffle.ts';
+import { Batch } from '../Memory.ts';
+import { computeKullbackLeibler, createInputTensors, trainPolicyNetwork, trainValueNetwork } from '../Common/train.ts';
+import { CONFIG } from '../Common/config.ts';
+import { flatFloat32Array } from '../../Common/flat.ts';
+import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
+import { logBatch, logEpoch, logRewards, logTrain, saveMetrics } from '../Metrics.ts';
+import { batchShuffle } from '../../../../../../lib/shuffle.ts';
 
-export class MasterAgent {
+export class LearnerAgent {
     private version = 0;
     private batches: { version: number, memories: Batch }[] = [];
-    private lastTrainTime = 0;
+    private lastTrainTimeStart = 0;
 
     private valueNetwork!: tf.LayersModel;   // Сеть критика
     private policyNetwork!: tf.LayersModel;  // Сеть политики
@@ -36,11 +29,7 @@ export class MasterAgent {
     }
 
     public static create() {
-        return new MasterAgent().init();
-    }
-
-    getVersion() {
-        return this.version;
+        return new LearnerAgent().init();
     }
 
     // Сохранение модели
@@ -49,7 +38,7 @@ export class MasterAgent {
             this.version += 1;
 
             await Promise.all([
-                setAgentState({ version: this.version, lastTrainTime: this.lastTrainTime }),
+                setAgentState({ version: this.version }),
                 this.valueNetwork.save(getStoreModelPath('value-model', CONFIG)),
                 this.policyNetwork.save(getStoreModelPath('policy-model', CONFIG)),
             ]);
@@ -68,13 +57,6 @@ export class MasterAgent {
         ]);
     }
 
-    predict(state: InputArrays): { action: Float32Array } {
-        return predict(
-            this.policyNetwork,
-            state,
-        );
-    }
-
     async tryTrain(): Promise<boolean> {
         this.batches.push(...await extractMemoryBatchList());
 
@@ -83,8 +65,8 @@ export class MasterAgent {
         }
 
         const startTime = Date.now();
-        const waitTime = startTime - (this.lastTrainTime || startTime);
-        this.lastTrainTime = startTime;
+        const waitTime = startTime - (this.lastTrainTimeStart || startTime);
+        this.lastTrainTimeStart = startTime;
 
         const rawBatches = this.batches;
         const batches = rawBatches.filter(b => {
@@ -175,8 +157,8 @@ export class MasterAgent {
             ));
         }
 
-        const version = this.version;
         const endTime = Date.now();
+        const version = this.version;
         Promise.all([
             Promise.all(policyLossPromises),
             Promise.all(valueLossPromises),
@@ -214,7 +196,6 @@ export class MasterAgent {
             logTrain({ trainTime: (endTime - startTime) / 1000, waitTime: waitTime / 1000 });
             logRewards(memories.map(b => b.rewards).flat());
             saveMetrics();
-            drawMetrics();
         });
 
         macroTasks.addTimeout(() => {
@@ -222,8 +203,6 @@ export class MasterAgent {
             tAllActions.dispose();
             tAllLogProbs.dispose();
         }, 1000);
-
-        this.lastTrainTime = Date.now();
 
         return true;
     }
@@ -252,10 +231,10 @@ export class MasterAgent {
             this.version = agentState?.version ?? 0;
             this.valueNetwork = valueNetwork;
             this.policyNetwork = policyNetwork;
-            console.log('[MasterAgent] Models loaded successfully');
+            console.log('[LearnAgent] Models loaded successfully');
             return true;
         } catch (error) {
-            console.warn('[MasterAgent] Could not load models, starting with new ones:', error);
+            console.warn('[LearnAgent] Could not load models, starting with new ones:', error);
             return false;
         }
     }

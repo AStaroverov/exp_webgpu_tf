@@ -1,5 +1,5 @@
 import * as tfvis from '@tensorflow/tfjs-vis';
-import { getAgentLog, setAgentLog } from '../APPO_v1/Database.ts';
+import { getAgentLog, setAgentLog } from './Database.ts';
 
 type Point = { x: number, y: number };
 type CompressedBatch = {
@@ -143,30 +143,31 @@ const store = {
     waitTime: new CompressedBuffer(1_000, 5),
     versionDelta: new CompressedBuffer(1_000, 5),
     batchSize: new CompressedBuffer(1_000, 5),
+    memory: new CompressedBuffer(100, 5),
 };
 
 getAgentLog().then((data) => {
     // @ts-ignore
     if (data.version === 1) {
         // @ts-ignore
-        store.rewards.fromJson(data.rewards as CompressedBatch[]);
+        store.rewards.fromJson(data.rewards ?? []);
         // @ts-ignore
-        store.kl.fromJson(data.kl as CompressedBatch[]);
+        store.kl.fromJson(data.kl ?? []);
         // @ts-ignore
-        store.valueLoss.fromJson(data.valueLoss as CompressedBatch[]);
+        store.valueLoss.fromJson(data.valueLoss ?? []);
         // @ts-ignore
-        store.policyLoss.fromJson(data.policyLoss as CompressedBatch[]);
+        store.policyLoss.fromJson(data.policyLoss ?? []);
         // @ts-ignore
-        store.trainTime.fromJson(data.trainTime as CompressedBatch[]);
+        store.trainTime.fromJson(data.trainTime ?? []);
         // @ts-ignore
-        store.waitTime.fromJson(data.waitTime as CompressedBatch[]);
+        store.waitTime.fromJson(data.waitTime ?? []);
         // @ts-ignore
-        store.versionDelta.fromJson(data.versionDelta as CompressedBatch[]);
+        store.versionDelta.fromJson(data.versionDelta ?? []);
         // @ts-ignore
-        store.batchSize.fromJson(data.batchSize as CompressedBatch[]);
+        store.batchSize.fromJson(data.batchSize ?? []);
+        // @ts-ignore
+        store.memory.fromJson(data.memory ?? []);
     }
-
-    drawMetrics();
 });
 
 export function drawMetrics() {
@@ -187,6 +188,7 @@ export function saveMetrics() {
         waitTime: store.waitTime.toJson(),
         versionDelta: store.versionDelta.toJson(),
         batchSize: store.batchSize.toJson(),
+        memory: store.memory.toJson(),
     });
 }
 
@@ -212,6 +214,10 @@ export function logBatch(data: { versionDelta: number, batchSize: number }) {
 export function logTrain(data: { trainTime: number, waitTime: number }) {
     store.trainTime.add(data.trainTime);
     store.waitTime.add(data.waitTime);
+}
+
+export function logMemory(memoryUsage: number) {
+    store.memory.add(memoryUsage);
 }
 
 function calculateMovingAverage(data: RenderPoint[], windowSize: number): RenderPoint[] {

@@ -1,25 +1,25 @@
-import { createBattlefield } from '../../../Common/createBattlefield.ts';
-import { TANK_COUNT_SIMULATION_MAX, TANK_COUNT_SIMULATION_MIN, TICK_TIME_SIMULATION } from '../../../Common/consts.ts';
-import { GameDI } from '../../../../DI/GameDI.ts';
-import { randomRangeInt } from '../../../../../../../lib/random.ts';
-import { SlaveAgent } from './SlaveAgent.ts';
-import { calculateReward } from '../../../Common/calculateReward.ts';
-import { getTankHealth } from '../../../../ECS/Components/Tank.ts';
-import { applyActionToTank } from '../../../Common/applyActionToTank.ts';
+import { createBattlefield } from '../../Common/createBattlefield.ts';
+import { TANK_COUNT_SIMULATION_MAX, TANK_COUNT_SIMULATION_MIN, TICK_TIME_SIMULATION } from '../../Common/consts.ts';
+import { GameDI } from '../../../DI/GameDI.ts';
+import { randomRangeInt } from '../../../../../../lib/random.ts';
+import { ActorAgent } from './ActorAgent.ts';
+import { calculateReward } from '../../Common/calculateReward.ts';
+import { getTankHealth } from '../../../ECS/Components/Tank.ts';
+import { applyActionToTank } from '../../Common/applyActionToTank.ts';
 import { addMemoryBatch } from '../Database.ts';
-import { CONFIG } from '../../Common/config.ts';
-import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.ts';
-import { prepareInputArrays } from '../../../Common/prepareInputArrays.ts';
+import { CONFIG } from '../Common/config.ts';
+import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
+import { prepareInputArrays } from '../../Common/prepareInputArrays.ts';
 
-export class SlaveManager {
-    private agent!: SlaveAgent;
+export class ActorManager {
+    private agent!: ActorAgent;
 
     constructor() {
-        this.agent = SlaveAgent.create();
+        this.agent = ActorAgent.create();
     }
 
     public static create() {
-        return new SlaveManager();
+        return new ActorManager();
     }
 
     start() {

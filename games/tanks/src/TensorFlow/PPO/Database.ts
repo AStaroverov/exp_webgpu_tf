@@ -1,5 +1,5 @@
 import Dexie, { Transaction } from 'dexie';
-import { Batch } from '../Common/Memory.ts';
+import { Batch } from './Memory.ts';
 
 const db = new Dexie('tank-rl');
 
@@ -35,7 +35,6 @@ export function extractMemoryBatchList() {
 
 export type AgentState = {
     version: number;
-    lastTrainTime: number;
 }
 
 export function setAgentState(state: Omit<AgentState, 'id'>) {

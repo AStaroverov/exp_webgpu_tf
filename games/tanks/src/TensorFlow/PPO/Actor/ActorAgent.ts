@@ -1,13 +1,13 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { AgentState, getAgentState } from '../Database.ts';
-import { Memory } from '../../Common/Memory.ts';
+import { Memory } from '../Memory.ts';
 import { getStoreModelPath } from '../utils.ts';
-import { CONFIG } from '../../Common/config.ts';
-import { act } from '../../Common/train.ts';
-import { InputArrays } from '../../../Common/prepareInputArrays.ts';
+import { CONFIG } from '../Common/config.ts';
+import { act } from '../Common/train.ts';
+import { InputArrays } from '../../Common/prepareInputArrays.ts';
 
-export class SlaveAgent {
+export class ActorAgent {
     private reuse = -1;
     private version = -1;
     private memory: Memory;
@@ -19,7 +19,7 @@ export class SlaveAgent {
     }
 
     public static create() {
-        return new SlaveAgent();
+        return new ActorAgent();
     }
 
     dispose() {

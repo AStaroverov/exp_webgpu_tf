@@ -1,4 +1,4 @@
-import { Config } from '../Common/config.ts';
+import { Config } from './Common/config.ts';
 
 export function getStorePath(name: string, config: Config): string {
     return `${ config.savePath }-${ name }`;

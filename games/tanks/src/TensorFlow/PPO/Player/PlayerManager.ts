@@ -1,26 +1,18 @@
-import { MasterAgent } from './MasterAgent.ts';
-import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.ts';
-import {
-    TANK_COUNT_SIMULATION_MAX,
-    TANK_COUNT_SIMULATION_MIN,
-    TICK_TIME_SIMULATION,
-    TICK_TRAIN_TIME,
-} from '../../../Common/consts.ts';
-import { GameDI } from '../../../../DI/GameDI.ts';
-import { createBattlefield } from '../../../Common/createBattlefield.ts';
-import { applyActionToTank } from '../../../Common/applyActionToTank.ts';
-import { randomRangeInt } from '../../../../../../../lib/random.ts';
-import { frameTasks } from '../../../../../../../lib/TasksScheduler/frameTasks.ts';
-import { CONFIG } from '../../Common/config.ts';
-import { getDrawState } from '../../../Common/utils.ts';
+import { PlayerAgent } from './PlayerAgent.ts';
+import { TANK_COUNT_SIMULATION_MAX, TANK_COUNT_SIMULATION_MIN, TICK_TIME_SIMULATION } from '../../Common/consts.ts';
+import { GameDI } from '../../../DI/GameDI.ts';
+import { createBattlefield } from '../../Common/createBattlefield.ts';
+import { applyActionToTank } from '../../Common/applyActionToTank.ts';
+import { randomRangeInt } from '../../../../../../lib/random.ts';
+import { frameTasks } from '../../../../../../lib/TasksScheduler/frameTasks.ts';
+import { CONFIG } from '../Common/config.ts';
+import { getDrawState } from '../../Common/utils.ts';
 import { EntityId } from 'bitecs';
-import { calculateReward } from '../../../Common/calculateReward.ts';
-import { prepareInputArrays } from '../../../Common/prepareInputArrays.ts';
+import { calculateReward } from '../../Common/calculateReward.ts';
+import { prepareInputArrays } from '../../Common/prepareInputArrays.ts';
 
-export class MasterManager {
-    public agent!: MasterAgent;
-
-    private stopTrainingTimeout: VoidFunction | null = null;
+export class PlayerManager {
+    public agent!: PlayerAgent;
 
     private stopGameLoopInterval: VoidFunction | null = null;
     private battlefield!: Awaited<ReturnType<typeof createBattlefield>>;
@@ -31,26 +23,19 @@ export class MasterManager {
     }
 
     static create() {
-        return new MasterManager().init();
+        return new PlayerManager().init();
     }
 
     public start() {
         this.gameLoop();
-        this.trainingLoop();
     }
 
     public getReward(tankEid: EntityId) {
         return this.tankRewards.get(tankEid) || 0;
     }
 
-    // Save models
-    private async save() {
-        return this.agent.save();
-    }
-
     private async init() {
-        this.agent = await MasterAgent.create();
-        await this.agent.save();
+        this.agent = await PlayerAgent.create();
         return this;
     }
 
@@ -60,6 +45,7 @@ export class MasterManager {
 
         this.battlefield?.destroy();
         this.battlefield = await createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX), true);
+        await this.agent.sync();
 
         const shouldEvery = 12;
         const maxWarmupFrames = CONFIG.warmupFrames - (CONFIG.warmupFrames % shouldEvery);
@@ -109,7 +95,6 @@ export class MasterManager {
                 }
             }
 
-
             const isEpisodeDone = activeTanks.length <= 1 || frameCount > maxEpisodeFrames;
 
             if (isEpisodeDone) {
@@ -132,23 +117,5 @@ export class MasterManager {
         const result = this.agent.predict(inputVector);
         // Apply action to tank controller
         applyActionToTank(tankEid, result.action);
-    }
-
-    private trainingLoop() {
-        this.stopTrainingTimeout = macroTasks.addTimeout(async () => {
-            try {
-                if (await this.agent.tryTrain()) {
-                    void this.save();
-                }
-
-                this.trainingLoop();
-            } catch (error) {
-                this.stopTrainingTimeout?.();
-                this.stopTrainingTimeout = null;
-
-                console.error('Error during training:', error);
-                macroTasks.addTimeout(() => this.trainingLoop(), TICK_TRAIN_TIME * 100);
-            }
-        }, TICK_TRAIN_TIME);
     }
 }
