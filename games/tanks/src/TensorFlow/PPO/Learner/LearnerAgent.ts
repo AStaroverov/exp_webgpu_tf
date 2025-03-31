@@ -185,7 +185,7 @@ export class LearnerAgent {
                 const { newLR, newClip } = getConfigPatch(
                     mean(this.klHistory.toArray()), this.learningRate, this.clipRatio,
                 );
-                this.updateConfig(newLR, newClip);
+                await this.updateConfig(newLR, newClip);
             }
 
             logLR(this.learningRate);
@@ -246,7 +246,7 @@ export class LearnerAgent {
         if (!(await this.load())) {
             this.policyNetwork = createPolicyNetwork();
             this.valueNetwork = createValueNetwork();
-            this.updateConfig(
+            await this.updateConfig(
                 CONFIG.lrConfig.initial,
                 CONFIG.clipRatioConfig.initial,
             );
@@ -271,7 +271,7 @@ export class LearnerAgent {
 
             this.version = agentState?.version ?? 0;
             this.klHistory.fromArray(agentState?.klHistory ?? []);
-            this.updateConfig(
+            await this.updateConfig(
                 agentState?.learningRate ?? CONFIG.lrConfig.initial,
                 agentState?.clipRatio ?? CONFIG.clipRatioConfig.initial,
             );
@@ -285,18 +285,28 @@ export class LearnerAgent {
         }
     }
 
-    private updateConfig(newLR: number, newClip: number) {
-        this.learningRate = newLR;
-        this.clipRatio = newClip;
-        this.upsertOptimizers(newLR);
+    private updateConfig(lr: number, clip: number) {
+        this.learningRate = lr;
+        this.clipRatio = clip;
+        return this.upsertOptimizers(lr);
     }
 
-    private upsertOptimizers(lr: number) {
+    private async upsertOptimizers(lr: number) {
         if (getLR(this.policyOptimizer) !== lr || getLR(this.valueOptimizer) !== lr) {
-            this.policyOptimizer?.dispose();
-            this.valueOptimizer?.dispose();
-            this.policyOptimizer = tf.train.adam(lr);
-            this.valueOptimizer = tf.train.adam(lr);
+            const policyOptimizer = tf.train.adam(lr);
+            const valueOptimizer = tf.train.adam(lr);
+            if (this.policyOptimizer) {
+                const weights = await this.policyOptimizer.getWeights();
+                await policyOptimizer.setWeights(weights);
+                this.policyOptimizer.dispose();
+            }
+            if (this.valueOptimizer) {
+                const weights = await this.valueOptimizer.getWeights();
+                await valueOptimizer.setWeights(weights);
+                this.valueOptimizer.dispose();
+            }
+            this.policyOptimizer = policyOptimizer;
+            this.valueOptimizer = valueOptimizer;
         }
     }
 }
