@@ -114,6 +114,10 @@ export function prepareInputArrays(
             srcOffset = 0;
         }
 
+        if (bulletsBuffer[srcOffset] === 0) {
+            continue;
+        }
+
         // presence
         bulletsFeatures[dstOffset + 0] = 1;
         // остальные поля — аналогично
