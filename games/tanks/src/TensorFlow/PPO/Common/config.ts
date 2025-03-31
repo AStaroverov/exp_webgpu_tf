@@ -60,7 +60,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     klConfig: {
         target: 0.01,
         highCoef: 3.0,       // Если KL > 2 * 0.01 => 0.02
-        lowCoef: 1 / 3.0,    // Если KL < 0.5 * 0.01 => 0.005
+        lowCoef: 1 / 2.0,    // Если KL < 0.5 * 0.01 => 0.005
         max: 0.05,
     },
     lrConfig: {

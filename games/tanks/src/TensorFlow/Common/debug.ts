@@ -55,7 +55,7 @@ export function createDebugVisualization(container: HTMLElement, manager: Player
     }
 
     frameTasks.addInterval(updateDebugInfo, 10);
-    frameTasks.addInterval(updateMetrics, 333);
+    frameTasks.addInterval(updateMetrics, 100);
 
     updateDebugInfo();
     updateMetrics();

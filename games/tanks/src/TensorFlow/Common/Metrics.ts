@@ -29,7 +29,7 @@ class CompressedBuffer {
         }
 
         if (this.buffer.length >= this.size / 2) {
-            this.process();
+            this.compress();
         }
     }
 
@@ -71,17 +71,18 @@ class CompressedBuffer {
         }
     }
 
-    private process() {
-        this.avgBuffer = this.compressAvg(this.avgBuffer);
-        this.minBuffer = this.compressAvg(this.minBuffer);
-        this.maxBuffer = this.compressAvg(this.maxBuffer);
-        this.compressRawBuffer();
+    private compress() {
+        if (this.avgBuffer.length > this.size / 2) {
+            this.avgBuffer = this.compressAvg(this.avgBuffer, 2);
+            this.minBuffer = this.compressAvg(this.minBuffer, 2);
+            this.maxBuffer = this.compressAvg(this.maxBuffer, 2);
+        }
+        this.compressRawBuffer(this.compressBatch);
     }
 
-    private compressRawBuffer() {
+    private compressRawBuffer(batch: number) {
         const buffer = this.buffer;
         const length = buffer.length;
-        const batch = this.compressBatch;
 
         for (let i = 0; i < length; i += batch) {
             const firstItem = buffer[i];
@@ -108,10 +109,9 @@ class CompressedBuffer {
         this.buffer = [];
     }
 
-    private compressAvg(buffer: Point[]) {
+    private compressAvg(buffer: Point[], batch: number) {
         const compressed: Point[] = [];
         const length = buffer.length;
-        const batch = this.compressBatch;
 
         for (let i = 0; i < length; i += batch) {
             const firstItem = buffer[i];
