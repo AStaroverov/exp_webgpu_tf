@@ -137,14 +137,20 @@ export function act(
     });
 }
 
-export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { action: Float32Array } {
+export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { actions: Float32Array } {
     return tf.tidy(() => {
         const predict = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
         const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
         const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
 
+        // const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
+        // const clippedLogStd = outLogStd.clipByValue(-5, 0.2);
+        // const std = clippedLogStd.exp();
+        // const noise = tf.randomNormal([ACTION_DIM]).mul(std);
+        // const actions = outMean.add(noise);
+
         return {
-            action: outMean.dataSync() as Float32Array,
+            actions: outMean.dataSync() as Float32Array,
         };
     });
 }

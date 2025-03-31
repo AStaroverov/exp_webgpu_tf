@@ -53,14 +53,14 @@ export const DEFAULT_EXPERIMENT: Config = {
     gamma: 0.99,
     lam: 0.95,
     // PPO-specific parameters
-    epochs: 3,
-    entropyCoeff: 0.001,
+    epochs: 6,
+    entropyCoeff: 0.01,
 
     klConfig: {
-        target: 0.01,
-        highCoef: 3.0,       // Если KL > 2 * 0.01 => 0.02
+        target: 0.02,
+        highCoef: 2.0,       // Если KL > 2 * 0.01 => 0.02
         lowCoef: 1 / 2.0,    // Если KL < 0.5 * 0.01 => 0.005
-        max: 0.05,
+        max: 0.5,
     },
     lrConfig: {
         initial: 1e-4,
@@ -71,8 +71,8 @@ export const DEFAULT_EXPERIMENT: Config = {
     },
     clipRatioConfig: {
         initial: 0.2,
-        deltaHigh: 0.001,
-        deltaLow: 0.001,
+        deltaHigh: 0.005,
+        deltaLow: 0.005,
         min: 0.05,
         max: 0.2,
     },
@@ -85,7 +85,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     warmupFrames: 100,
     episodeFrames: 900, // usually produce 250 samples
     // Workers
-    workerCount: 4,
+    workerCount: 8,
     reuseLimit: 1,
     // Training control
     savePath: 'APPO_v1',

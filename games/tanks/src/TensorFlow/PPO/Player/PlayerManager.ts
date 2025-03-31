@@ -116,6 +116,6 @@ export class PlayerManager {
         // Get action from agent
         const result = this.agent.predict(inputVector);
         // Apply action to tank controller
-        applyActionToTank(tankEid, result.action);
+        applyActionToTank(tankEid, result.actions);
     }
 }

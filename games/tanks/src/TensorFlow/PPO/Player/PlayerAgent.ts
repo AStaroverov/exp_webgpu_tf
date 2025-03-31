@@ -22,7 +22,7 @@ export class PlayerAgent {
         return this.version;
     }
 
-    predict(state: InputArrays): { action: Float32Array } {
+    predict(state: InputArrays): { actions: Float32Array } {
         return predict(
             this.policyNetwork,
             state,
