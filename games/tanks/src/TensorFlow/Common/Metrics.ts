@@ -136,6 +136,8 @@ type RenderPoint = { x: number, y: number };
 const store = {
     rewards: new CompressedBuffer(10_000, 5),
     kl: new CompressedBuffer(10_000, 5),
+    lr: new CompressedBuffer(1_000, 5),
+    clip: new CompressedBuffer(1_000, 5),
     valueLoss: new CompressedBuffer(1_000, 5),
     policyLoss: new CompressedBuffer(1_000, 5),
     trainTime: new CompressedBuffer(1_000, 5),
@@ -153,6 +155,10 @@ export function loadMetrics() {
             store.rewards.fromJson(data.rewards);
             // @ts-ignore
             store.kl.fromJson(data.kl);
+            // @ts-ignore
+            store.lr.fromJson(data.lr);
+            // @ts-ignore
+            store.clip.fromJson(data.clip);
             // @ts-ignore
             store.valueLoss.fromJson(data.valueLoss);
             // @ts-ignore
@@ -172,10 +178,9 @@ export function loadMetrics() {
 }
 
 export function drawMetrics() {
-    drawRewards();
-    drawBatch();
-    drawEpoch();
-    drawTrain();
+    drawTab1();
+    drawTab2();
+    drawTab3();
 }
 
 export function saveMetrics() {
@@ -183,13 +188,14 @@ export function saveMetrics() {
         version: 1,
         rewards: store.rewards.toJson(),
         kl: store.kl.toJson(),
+        lr: store.lr.toJson(),
+        clip: store.clip.toJson(),
         valueLoss: store.valueLoss.toJson(),
         policyLoss: store.policyLoss.toJson(),
         trainTime: store.trainTime.toJson(),
         waitTime: store.waitTime.toJson(),
         versionDelta: store.versionDelta.toJson(),
         batchSize: store.batchSize.toJson(),
-        memory: store.memory.toJson(),
     });
 }
 
@@ -201,6 +207,14 @@ export function logEpoch(data: {
     store.kl.add(data.kl);
     store.valueLoss.add(data.valueLoss);
     store.policyLoss.add(data.policyLoss);
+}
+
+export function logLR(lr: number) {
+    store.lr.add(lr);
+}
+
+export function logClip(clip: number) {
+    store.clip.add(clip);
 }
 
 export function logRewards(rewards: number[]) {
@@ -217,22 +231,24 @@ export function logTrain(data: { trainTime: number, waitTime: number }) {
     store.waitTime.add(data.waitTime);
 }
 
-export function logMemory(memoryUsage: number) {
-    store.memory.add(memoryUsage);
-}
+function drawTab1() {
+    const avgRewards = store.rewards.toArray();
+    const avgRewardsMA = calculateMovingAverage(avgRewards, 1000);
+    const minRewards = store.rewards.toArrayMin();
+    const minRewardsMA = calculateMovingAverage(minRewards, 1000);
+    const maxRewards = store.rewards.toArrayMax();
+    const maxRewardsMA = calculateMovingAverage(maxRewards, 1000);
+    tfvis.render.linechart({ name: 'Reward', tab: 'Tab 1' }, {
+        values: [minRewards, maxRewards, avgRewards, minRewardsMA, maxRewardsMA, avgRewardsMA],
+        series: ['Min', 'Max', 'Avg', 'Min MA', 'Max MA', 'Avg MA'],
+    }, {
+        xLabel: 'Version',
+        yLabel: 'Reward',
+        width: 500,
+        height: 300,
+    });
 
-function calculateMovingAverage(data: RenderPoint[], windowSize: number): RenderPoint[] {
-    const averaged: RenderPoint[] = [];
-    for (let i = 0; i < data.length; i++) {
-        const win = data.slice(Math.max(i - windowSize + 1, 0), i + 1);
-        const avg = win.reduce((sum, v) => sum + v.y, 0) / win.length;
-        averaged.push({ x: data[i].x, y: avg });
-    }
-    return averaged;
-}
-
-function drawEpoch() {
-    tfvis.render.linechart({ name: 'KL', tab: 'Training' }, {
+    tfvis.render.linechart({ name: 'KL', tab: 'Tab 1' }, {
         values: [store.kl.toArray(), calculateMovingAverage(store.kl.toArray(), 10)],
         series: ['Avg', 'MA'],
     }, {
@@ -242,7 +258,27 @@ function drawEpoch() {
         height: 300,
     });
 
-    tfvis.render.linechart({ name: 'Policy Loss', tab: 'Loss' }, {
+    tfvis.render.linechart({ name: 'LR', tab: 'Tab 1' }, {
+        values: [store.lr.toArray()],
+    }, {
+        xLabel: 'Version',
+        yLabel: 'LR',
+        width: 500,
+        height: 300,
+    });
+
+    tfvis.render.linechart({ name: 'Clip', tab: 'Tab 1' }, {
+        values: [store.clip.toArray()],
+    }, {
+        xLabel: 'Version',
+        yLabel: 'Clip',
+        width: 500,
+        height: 300,
+    });
+}
+
+function drawTab2() {
+    tfvis.render.linechart({ name: 'Policy Loss', tab: 'Tab 2' }, {
         values: [store.policyLoss.toArray()],
     }, {
         xLabel: 'Version',
@@ -251,7 +287,7 @@ function drawEpoch() {
         height: 300,
     });
 
-    tfvis.render.linechart({ name: 'Value Loss', tab: 'Loss' }, {
+    tfvis.render.linechart({ name: 'Value Loss', tab: 'Tab 2' }, {
         values: [store.valueLoss.toArray()],
     }, {
         xLabel: 'Version',
@@ -261,51 +297,11 @@ function drawEpoch() {
     });
 }
 
-function drawRewards() {
-    const avgRewards = store.rewards.toArray();
-    const avgRewardsMA = calculateMovingAverage(avgRewards, 1000);
-    const minRewards = store.rewards.toArrayMin();
-    const minRewardsMA = calculateMovingAverage(minRewards, 1000);
-    const maxRewards = store.rewards.toArrayMax();
-    const maxRewardsMA = calculateMovingAverage(maxRewards, 1000);
-    tfvis.render.linechart({ name: 'Reward', tab: 'Training' }, {
-        values: [minRewards, maxRewards, avgRewards, minRewardsMA, maxRewardsMA, avgRewardsMA],
-        series: ['Min', 'Max', 'Avg', 'Min MA', 'Max MA', 'Avg MA'],
-    }, {
-        xLabel: 'Version',
-        yLabel: 'Reward',
-        width: 500,
-        height: 300,
-    });
-}
 
-function drawBatch() {
-    const avgVersionDelta = store.versionDelta.toArray();
-    const avgVersionDeltaMA = calculateMovingAverage(avgVersionDelta, 100);
-    tfvis.render.scatterplot({ name: 'Batch Version Delta', tab: 'Training' }, {
-        values: [avgVersionDelta, avgVersionDeltaMA],
-        series: ['Avg', 'MA'],
-    }, {
-        xLabel: 'Batch',
-        yLabel: 'Version Delta',
-        width: 500,
-        height: 300,
-    });
-
-    tfvis.render.linechart({ name: 'Batch Size', tab: 'Training' }, {
-        values: store.batchSize.toArray(),
-    }, {
-        xLabel: 'Version',
-        yLabel: 'Batch Size',
-        width: 500,
-        height: 300,
-    });
-}
-
-function drawTrain() {
+function drawTab3() {
     const avgTrainTime = store.trainTime.toArray();
     const avgTrainTimeMA = calculateMovingAverage(avgTrainTime, 100);
-    tfvis.render.linechart({ name: 'Train Time', tab: 'Training' }, {
+    tfvis.render.linechart({ name: 'Train Time', tab: 'Tab 3' }, {
         values: [avgTrainTime, avgTrainTimeMA],
         series: ['Avg', 'MA'],
     }, {
@@ -317,7 +313,7 @@ function drawTrain() {
 
     const avgWaitTime = store.waitTime.toArray();
     const avgWaitTimeMA = calculateMovingAverage(avgWaitTime, 100);
-    tfvis.render.linechart({ name: 'Waiting Time', tab: 'Training' }, {
+    tfvis.render.linechart({ name: 'Waiting Time', tab: 'Tab 3' }, {
         values: [avgWaitTime, avgWaitTimeMA],
         series: ['Avg', 'MA'],
     }, {
@@ -326,4 +322,34 @@ function drawTrain() {
         width: 500,
         height: 300,
     });
+    const avgVersionDelta = store.versionDelta.toArray();
+    const avgVersionDeltaMA = calculateMovingAverage(avgVersionDelta, 100);
+    tfvis.render.scatterplot({ name: 'Batch Version Delta', tab: 'Tab 3' }, {
+        values: [avgVersionDelta, avgVersionDeltaMA],
+        series: ['Avg', 'MA'],
+    }, {
+        xLabel: 'Batch',
+        yLabel: 'Version Delta',
+        width: 500,
+        height: 300,
+    });
+
+    tfvis.render.linechart({ name: 'Batch Size', tab: 'Tab 3' }, {
+        values: store.batchSize.toArray(),
+    }, {
+        xLabel: 'Version',
+        yLabel: 'Batch Size',
+        width: 500,
+        height: 300,
+    });
+}
+
+function calculateMovingAverage(data: RenderPoint[], windowSize: number): RenderPoint[] {
+    const averaged: RenderPoint[] = [];
+    for (let i = 0; i < data.length; i++) {
+        const win = data.slice(Math.max(i - windowSize + 1, 0), i + 1);
+        const avg = win.reduce((sum, v) => sum + v.y, 0) / win.length;
+        averaged.push({ x: data[i].x, y: avg });
+    }
+    return averaged;
 }

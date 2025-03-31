@@ -45,6 +45,10 @@ export function lerp(a: number, b: number, x: number): number {
     return a + (b - a) * x;
 }
 
+export function mean(args: number[]): number {
+    return args.reduce((acc, val) => acc + val, 0) / args.length;
+}
+
 /**
  * Функция, которая применяет логарифмическое преобразование с сохранением знака.
  * @param {number} x - исходное значение.

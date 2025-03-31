@@ -1,7 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { ACTION_DIM } from '../../Common/consts.ts';
-import { ceil } from '../../../../../../lib/math.ts';
+import { ceil, mean } from '../../../../../../lib/math.ts';
 import { createPolicyNetwork, createValueNetwork } from '../../Common/models.ts';
 import { getStoreModelPath } from '../utils.ts';
 import { extractMemoryBatchList, getAgentState, setAgentState } from '../Database.ts';
@@ -10,22 +10,36 @@ import { computeKullbackLeibler, createInputTensors, trainPolicyNetwork, trainVa
 import { CONFIG } from '../Common/config.ts';
 import { flatFloat32Array } from '../../Common/flat.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
-import { loadMetrics, logBatch, logEpoch, logRewards, logTrain, saveMetrics } from '../../Common/Metrics.ts';
+import {
+    loadMetrics,
+    logBatch,
+    logClip,
+    logEpoch,
+    logLR,
+    logRewards,
+    logTrain,
+    saveMetrics,
+} from '../../Common/Metrics.ts';
 import { batchShuffle } from '../../../../../../lib/shuffle.ts';
+import { RingBuffer } from 'ring-buffer-ts';
+import { getConfigPatch } from '../../Common/getConfigPatch.ts';
 
 export class LearnerAgent {
     private version = 0;
+    private klHistory = new RingBuffer<number>(30);
+    private clipRatio = CONFIG.clipRatioConfig.initial;
+    private learningRate = CONFIG.lrConfig.initial;
+
     private batches: { version: number, memories: Batch }[] = [];
     private lastTrainTimeStart = 0;
 
-    private valueNetwork!: tf.LayersModel;   // Сеть критика
-    private policyNetwork!: tf.LayersModel;  // Сеть политики
-    private policyOptimizer!: tf.Optimizer;        // Оптимизатор для policy network
-    private valueOptimizer!: tf.Optimizer;         // Оптимизатор для value network
+    private valueNetwork!: tf.LayersModel;
+    private policyNetwork!: tf.LayersModel;
+    private policyOptimizer!: tf.Optimizer;
+    private valueOptimizer!: tf.Optimizer;
 
     constructor() {
-        this.valueOptimizer = tf.train.adam(CONFIG.learningRateValue);
-        this.policyOptimizer = tf.train.adam(CONFIG.learningRatePolicy);
+
     }
 
     public static create() {
@@ -38,7 +52,12 @@ export class LearnerAgent {
             this.version += 1;
 
             await Promise.all([
-                setAgentState({ version: this.version }),
+                setAgentState({
+                    version: this.version,
+                    clipRatio: this.clipRatio,
+                    learningRate: this.learningRate,
+                    klHistory: this.klHistory.toArray(),
+                }),
                 this.valueNetwork.save(getStoreModelPath('value-model', CONFIG)),
                 this.policyNetwork.save(getStoreModelPath('policy-model', CONFIG)),
             ]);
@@ -130,13 +149,15 @@ export class LearnerAgent {
                 const tReturns = tf.tensor(returns.subarray(start, end), [size]);
 
                 policyLossPromises.push(trainPolicyNetwork(
-                    this.policyNetwork, this.policyOptimizer, CONFIG,
+                    this.policyNetwork, this.policyOptimizer,
                     tStates, tActions, tLogProbs, tAdvantages,
+                    this.clipRatio, CONFIG.entropyCoeff,
                 ));
 
                 valueLossPromises.push(trainValueNetwork(
-                    this.valueNetwork, this.valueOptimizer, CONFIG,
+                    this.valueNetwork, this.valueOptimizer,
                     tStates, tReturns, tValues,
+                    this.clipRatio,
                 ));
 
                 macroTasks.addTimeout(() => {
@@ -158,7 +179,19 @@ export class LearnerAgent {
 
             klList.push(kl);
 
-            if (kl > CONFIG.maxKL) {
+            // skip kl that too high
+            if (kl < CONFIG.klConfig.target * 100) {
+                this.klHistory.add(kl);
+                const { newLR, newClip } = getConfigPatch(
+                    mean(this.klHistory.toArray()), this.learningRate, this.clipRatio,
+                );
+                this.updateConfig(newLR, newClip);
+            }
+
+            logLR(this.learningRate);
+            logClip(this.clipRatio);
+
+            if (kl > CONFIG.klConfig.max) {
                 console.warn(`[Train]: KL divergence was too high: ${ kl }, in epoch ${ i }`);
                 break;
             }
@@ -213,6 +246,7 @@ export class LearnerAgent {
         if (!(await this.load())) {
             this.policyNetwork = createPolicyNetwork();
             this.valueNetwork = createValueNetwork();
+
         }
 
         loadMetrics();
@@ -233,6 +267,11 @@ export class LearnerAgent {
             }
 
             this.version = agentState?.version ?? 0;
+            this.klHistory.fromArray(agentState?.klHistory ?? []);
+            this.updateConfig(
+                agentState?.learningRate ?? CONFIG.lrConfig.initial,
+                agentState?.clipRatio ?? CONFIG.clipRatioConfig.initial,
+            );
             this.valueNetwork = valueNetwork;
             this.policyNetwork = policyNetwork;
             console.log('[LearnAgent] Models loaded successfully');
@@ -242,4 +281,24 @@ export class LearnerAgent {
             return false;
         }
     }
+
+    private updateConfig(newLR: number, newClip: number) {
+        this.learningRate = newLR;
+        this.clipRatio = newClip;
+        this.upsertOptimizers(newLR);
+    }
+
+    private upsertOptimizers(lr: number) {
+        if (getLR(this.policyOptimizer) !== lr || getLR(this.valueOptimizer) !== lr) {
+            this.policyOptimizer?.dispose();
+            this.valueOptimizer?.dispose();
+            this.policyOptimizer = tf.train.adam(lr);
+            this.valueOptimizer = tf.train.adam(lr);
+        }
+    }
+}
+
+function getLR(o?: tf.Optimizer) {
+    // @ts-ignore
+    return o?.learningRate as undefined | number;
 }

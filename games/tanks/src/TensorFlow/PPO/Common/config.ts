@@ -6,16 +6,33 @@
 export type Config = {
     name: string;
     // Learning parameters
-    learningRatePolicy: number;     // Learning rate for policy network
-    learningRateValue: number;      // Learning rate for value network
     gamma: number;                  // Discount factor
     lam: number;                    // GAE lambda
     // PPO-specific parameters
-    clipRatioPolicy: number;             // PPO clipping parameter
-    clipRatioValue: number;             // PPO clipping parameter
     epochs: number;                // Number of epochs to train on the same data
     entropyCoeff: number;           // Entropy coefficient for encouraging exploration
-    maxKL: number;                  // Maximum KL divergence between old and new policy
+
+    klConfig: {
+        target: number,
+        highCoef: number,
+        lowCoef: number,
+        max: number,
+    },
+    lrConfig: {
+        initial: number,
+        multHigh: number,
+        multLow: number,
+        min: number,
+        max: number,
+    },
+    clipRatioConfig: {
+        initial: number,
+        deltaHigh: number,
+        deltaLow: number,
+        min: number,
+        max: number,
+    }
+    clipRatioValue: number;             // PPO clipping parameter
 
     trustCoeff: number;
 
@@ -34,21 +51,39 @@ export type Config = {
 export const DEFAULT_EXPERIMENT: Config = {
     name: 'ppo-default',
     // Learning parameters
-    learningRatePolicy: 2e-5,
-    learningRateValue: 2e-5,
     gamma: 0.99,
     lam: 0.95,
     // PPO-specific parameters
-    epochs: 4,
-    clipRatioPolicy: 0.2,
-    clipRatioValue: 0.2,
+    epochs: 3,
     entropyCoeff: 0.001,
-    maxKL: 0.05,
 
-    trustCoeff: 0.2,
+    klConfig: {
+        target: 0.01,
+        highCoef: 2.0,       // Если KL > 2 * 0.01 => 0.02
+        lowCoef: 0.5,        // Если KL < 0.5 * 0.01 => 0.005
+        max: 0.05,
+    },
+    lrConfig: {
+        initial: 2e-5,
+        multHigh: 0.5,       // уменьшаем lr в 2 раза
+        multLow: 1.2,        // увеличиваем lr на 20%
+        min: 1e-6,
+        max: 1e-3,
+    },
+    clipRatioConfig: {
+        initial: 0.1,
+        deltaHigh: 0.01,
+        deltaLow: 0.01,
+        min: 0.01,
+        max: 0.2,
+    },
+    clipRatioValue: 0.1,
+
+    trustCoeff: 0.1,
 
     batchSize: 256, // useless for appo
-    miniBatchSize: 128,
+    miniBatchSize: 64,
+    // Training parameters
     warmupFrames: 100,
     episodeFrames: 900, // usually produce 250 samples
     // Workers

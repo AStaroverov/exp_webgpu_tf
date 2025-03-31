@@ -1,7 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { ACTION_DIM } from '../../Common/consts.ts';
 import { computeLogProb } from '../../Common/computeLogProb.ts';
-import { Config } from './config.ts';
 import { InputArrays } from '../../Common/prepareInputArrays.ts';
 import {
     BULLET_FEATURES_DIM,
@@ -15,11 +14,12 @@ import { flatFloat32Array } from '../../Common/flat.ts';
 export function trainPolicyNetwork(
     policyNetwork: tf.LayersModel,
     policyOptimizer: tf.Optimizer,
-    config: Config,
     states: tf.Tensor[],
     actions: tf.Tensor,      // [batchSize, actionDim]
     oldLogProbs: tf.Tensor,  // [batchSize]
     advantages: tf.Tensor,   // [batchSize]
+    clipRatio: number,
+    entropyCoeff: number,
 ): Promise<number> {
     const loss = tf.tidy(() => {
         return policyOptimizer.minimize(() => {
@@ -29,7 +29,7 @@ export function trainPolicyNetwork(
             const newLogProbs = computeLogProb(actions, mean, std);
             const oldLogProbs2D = oldLogProbs.reshape(newLogProbs.shape);
             const ratio = tf.exp(newLogProbs.sub(oldLogProbs2D));
-            const clippedRatio = ratio.clipByValue(1 - config.clipRatioPolicy, 1 + config.clipRatioPolicy);
+            const clippedRatio = ratio.clipByValue(1 - clipRatio, 1 + clipRatio);
             const surr1 = ratio.mul(advantages);
             const surr2 = clippedRatio.mul(advantages);
             const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
@@ -37,7 +37,7 @@ export function trainPolicyNetwork(
             const c = 0.5 * Math.log(2 * Math.PI * Math.E);
             const entropyEachDim = logStd.add(c); // [batchSize,ACTION_DIM]
             const totalEntropy = entropyEachDim.sum(1).mean();
-            const totalLoss = policyLoss.sub(totalEntropy.mul(config.entropyCoeff));
+            const totalLoss = policyLoss.sub(totalEntropy.mul(entropyCoeff));
 
             return totalLoss as tf.Scalar;
         }, true) as tf.Scalar;
@@ -77,10 +77,10 @@ export function computeKullbackLeibler(
 export function trainValueNetwork(
     valueNetwork: tf.LayersModel,
     valueOptimizer: tf.Optimizer,
-    config: Config,
     states: tf.Tensor[],
     returns: tf.Tensor,  // [batchSize], уже подсчитанные (GAE + V(s) или просто discountedReturns)
     oldValues: tf.Tensor, // [batchSize], для клиппинга
+    clipRatio: number,
 ): Promise<number> {
     const loss = tf.tidy(() => {
         return valueOptimizer.minimize(() => {
@@ -92,7 +92,7 @@ export function trainValueNetwork(
             // Клипаем (PPO2 style)
             const oldVal2D = oldValues.reshape(valuePred.shape);   // тоже [batchSize]
             const valuePredClipped = oldVal2D.add(
-                valuePred.sub(oldVal2D).clipByValue(-config.clipRatioValue, config.clipRatioValue),
+                valuePred.sub(oldVal2D).clipByValue(-clipRatio, clipRatio),
             );
             const returns2D = returns.reshape(valuePred.shape);
 

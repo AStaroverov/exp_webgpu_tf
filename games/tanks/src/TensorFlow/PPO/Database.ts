@@ -35,6 +35,9 @@ export function extractMemoryBatchList() {
 
 export type AgentState = {
     version: number;
+    clipRatio: number;
+    learningRate: number;
+    klHistory: number[];
 }
 
 export function setAgentState(state: Omit<AgentState, 'id'>) {
