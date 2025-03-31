@@ -59,22 +59,22 @@ export const DEFAULT_EXPERIMENT: Config = {
 
     klConfig: {
         target: 0.01,
-        highCoef: 2.0,       // Если KL > 2 * 0.01 => 0.02
-        lowCoef: 0.5,        // Если KL < 0.5 * 0.01 => 0.005
+        highCoef: 3.0,       // Если KL > 2 * 0.01 => 0.02
+        lowCoef: 1 / 3.0,    // Если KL < 0.5 * 0.01 => 0.005
         max: 0.05,
     },
     lrConfig: {
         initial: 2e-5,
-        multHigh: 0.5,       // уменьшаем lr в 2 раза
-        multLow: 1.2,        // увеличиваем lr на 20%
+        multHigh: 0.9,
+        multLow: 1.1,
         min: 1e-6,
         max: 1e-3,
     },
     clipRatioConfig: {
         initial: 0.1,
-        deltaHigh: 0.01,
-        deltaLow: 0.01,
-        min: 0.01,
+        deltaHigh: 0.001,
+        deltaLow: 0.001,
+        min: 0.05,
         max: 0.2,
     },
     clipRatioValue: 0.1,
