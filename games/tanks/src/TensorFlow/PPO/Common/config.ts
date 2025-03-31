@@ -53,7 +53,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     gamma: 0.99,
     lam: 0.95,
     // PPO-specific parameters
-    epochs: 6,
+    epochs: 8,
     entropyCoeff: 0.01,
 
     klConfig: {

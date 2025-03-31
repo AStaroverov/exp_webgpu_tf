@@ -150,6 +150,7 @@ export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { ac
         // const actions = outMean.add(noise);
 
         return {
+            // actions: actions.dataSync() as Float32Array,
             actions: outMean.dataSync() as Float32Array,
         };
     });
