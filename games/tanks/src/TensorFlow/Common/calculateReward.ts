@@ -363,9 +363,9 @@ function computeAimQuality(
     // Оценка точности прямого прицеливания
     const distFromTurretToEnemy = hypot(turretX - enemyX, turretY - enemyY);
     const directAimQuality =
-        lerp(0, 0.1, smoothstep(1000, 0, distFromTurretToEnemy))
-        + lerp(0, 0.1, smoothstep(TANK_RADIUS * 3, 0, distFromTurretToEnemy))
-        + lerp(0, 0.8, smoothstep(TANK_RADIUS * 1.2, 0, distFromTurretToEnemy));
+        lerp(0, 0.02, smoothstep(1000, 0, distFromTurretToEnemy))
+        + lerp(0, 0.02, smoothstep(TANK_RADIUS * 3, 0, distFromTurretToEnemy))
+        + lerp(0, 0.96, smoothstep(TANK_RADIUS * 1.2, 0, distFromTurretToEnemy));
 
     return directAimQuality;
 }
