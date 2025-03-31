@@ -4,9 +4,9 @@ import { NestedArray, TypedArray } from '../../../../../src/utils.ts';
 import { delegate } from '../../../../../src/delegate.ts';
 import { component } from '../../../../../src/ECS/utils.ts';
 
-export const TANK_INPUT_TENSOR_MAX_ENEMIES = 4;
+export const TANK_INPUT_TENSOR_MAX_ENEMIES = 3;
 export const TANK_INPUT_TENSOR_ENEMY_BUFFER = 7;
-export const TANK_INPUT_TENSOR_MAX_BULLETS = 10;
+export const TANK_INPUT_TENSOR_MAX_BULLETS = 20;
 export const TANK_INPUT_TENSOR_BULLET_BUFFER = 5;
 export const TankInputTensor = component({
     health: TypedArray.f64(delegate.defaultSize),

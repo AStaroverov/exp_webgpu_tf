@@ -338,9 +338,13 @@ function analyzeAiming(
     // Награда за дистанцию прицеливания
     const turretTargetDistance = hypot(turretTargetX - tankX, turretTargetY - tankY);
     const aimDistanceReward =
-        centerStep(TANK_RADIUS, 800, turretTargetDistance) * REWARD_WEIGHTS.AIM.DISTANCE
-        + smoothstep(TANK_RADIUS, 0, turretTargetDistance) * REWARD_WEIGHTS.AIM.DISTANCE_PENALTY
-        + smoothstep(800, 1000, turretTargetDistance) * REWARD_WEIGHTS.AIM.DISTANCE_PENALTY;
+        REWARD_WEIGHTS.AIM.DISTANCE * (
+            turretTargetDistance < 300
+                ? smoothstep(TANK_RADIUS, 300, turretTargetDistance)
+                : smoothstep(300, 800, turretTargetDistance)
+        )
+        + REWARD_WEIGHTS.AIM.DISTANCE_PENALTY * smoothstep(TANK_RADIUS, 0, turretTargetDistance)
+        + REWARD_WEIGHTS.AIM.DISTANCE_PENALTY * smoothstep(800, 1000, turretTargetDistance);
 
     return {
         bestAimQuality,

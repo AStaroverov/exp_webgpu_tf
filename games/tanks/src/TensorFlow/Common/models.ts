@@ -14,15 +14,7 @@ export const ENEMY_SLOTS = TANK_INPUT_TENSOR_MAX_ENEMIES;
 export const BULLET_FEATURES_DIM = TANK_INPUT_TENSOR_BULLET_BUFFER;
 export const BULLET_SLOTS = TANK_INPUT_TENSOR_MAX_BULLETS;
 
-const denseLayerPolicyEnemies: [ActivationIdentifier, number][] = [
-    ['relu', 64],// 2 * ENEMY_SLOTS * ENEMY_FEATURES_DIM],
-    ['relu', 32],//1 * ENEMY_SLOTS * ENEMY_FEATURES_DIM],
-];
-const denseLayerPolicyBullets: [ActivationIdentifier, number][] = [
-    ['relu', 64],//2 * BULLET_SLOTS * BULLET_FEATURES_DIM],
-    ['relu', 32],//1 * BULLET_SLOTS * BULLET_FEATURES_DIM],
-];
-const denseLayersPolicy: [ActivationIdentifier, number][] = [['relu', 128], ['relu', 64], ['relu', 32]];
+const denseLayersPolicy: [ActivationIdentifier, number][] = [['relu', 256], ['relu', 128], ['relu', 64]];
 const denseLayersValue: [ActivationIdentifier, number][] = [['relu', 64], ['relu', 32]];
 
 export function createPolicyNetwork(): tf.LayersModel {
@@ -71,20 +63,15 @@ function createInputLayer() {
             name: 'enemiesInput',
             shape: [ENEMY_SLOTS, ENEMY_FEATURES_DIM],
         });
-    const enemiesLayers = addDenseLayers(
-        tf.layers.flatten().apply(enemiesInput) as tf.SymbolicTensor,
-        denseLayerPolicyEnemies,
-    );
+    const enemiesLayers = tf.layers.flatten().apply(enemiesInput) as tf.SymbolicTensor;
+
     // Вход для пуль: 2D [BULLET_SLOTS, BULLET_FEATURES_DIM]
     const bulletsInput =
         tf.input({
             name: 'bulletsInput',
             shape: [BULLET_SLOTS, BULLET_FEATURES_DIM],
         });
-    const bulletsLayers = addDenseLayers(
-        tf.layers.flatten().apply(bulletsInput) as tf.SymbolicTensor,
-        denseLayerPolicyBullets,
-    );
+    const bulletsLayers = tf.layers.flatten().apply(bulletsInput) as tf.SymbolicTensor;
     // --- 2) Склеиваем все три вектора вместе [tank + enemies + bullets] ---
     return {
         inputs: [tankInput, enemiesInput, bulletsInput],

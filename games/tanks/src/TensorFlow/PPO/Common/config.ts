@@ -32,7 +32,6 @@ export type Config = {
         min: number,
         max: number,
     }
-    clipRatioValue: number;             // PPO clipping parameter
 
     trustCoeff: number;
 
@@ -64,20 +63,19 @@ export const DEFAULT_EXPERIMENT: Config = {
         max: 0.05,
     },
     lrConfig: {
-        initial: 2e-5,
+        initial: 1e-4,
         multHigh: 0.9,
         multLow: 1.1,
         min: 1e-6,
         max: 1e-3,
     },
     clipRatioConfig: {
-        initial: 0.1,
+        initial: 0.2,
         deltaHigh: 0.001,
         deltaLow: 0.001,
         min: 0.05,
         max: 0.2,
     },
-    clipRatioValue: 0.1,
 
     trustCoeff: 0.1,
 
@@ -87,7 +85,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     warmupFrames: 100,
     episodeFrames: 900, // usually produce 250 samples
     // Workers
-    workerCount: 8,
+    workerCount: 4,
     reuseLimit: 1,
     // Training control
     savePath: 'APPO_v1',

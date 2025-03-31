@@ -77,13 +77,13 @@ export function prepareInputArrays(
     shuffle(ENEMIES_INDEXES);
 
     for (let r = 0; r < TANK_INPUT_TENSOR_MAX_ENEMIES; r++) {
-        const w = ENEMIES_INDEXES[r]; // случайный слот, куда положим r-го врага из source
-        const srcOffset = r * TANK_INPUT_TENSOR_ENEMY_BUFFER;
+        const w = ENEMIES_INDEXES[r];
         const dstOffset = w * TANK_INPUT_TENSOR_ENEMY_BUFFER;
+        let srcOffset = r * TANK_INPUT_TENSOR_ENEMY_BUFFER;
 
         // если во входном буфере признак presence = 0, значит врага нет
         if (enemiesBuffer[srcOffset] === 0) {
-            continue;
+            srcOffset = 0;
         }
 
         // presence
@@ -107,11 +107,11 @@ export function prepareInputArrays(
 
     for (let r = 0; r < TANK_INPUT_TENSOR_MAX_BULLETS; r++) {
         const w = BULLETS_INDEXES[r];
-        const srcOffset = r * TANK_INPUT_TENSOR_BULLET_BUFFER;
         const dstOffset = w * TANK_INPUT_TENSOR_BULLET_BUFFER;
+        let srcOffset = r * TANK_INPUT_TENSOR_BULLET_BUFFER;
 
         if (bulletsBuffer[srcOffset] === 0) {
-            continue;
+            srcOffset = 0;
         }
 
         // presence

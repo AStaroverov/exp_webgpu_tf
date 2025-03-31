@@ -33,9 +33,9 @@ export class LearnerAgent {
     private batches: { version: number, memories: Batch }[] = [];
     private lastTrainTimeStart = 0;
 
-    private valueNetwork!: tf.LayersModel;
     private policyNetwork!: tf.LayersModel;
     private policyOptimizer!: tf.Optimizer;
+    private valueNetwork!: tf.LayersModel;
     private valueOptimizer!: tf.Optimizer;
 
     constructor() {
@@ -246,7 +246,10 @@ export class LearnerAgent {
         if (!(await this.load())) {
             this.policyNetwork = createPolicyNetwork();
             this.valueNetwork = createValueNetwork();
-
+            this.updateConfig(
+                CONFIG.lrConfig.initial,
+                CONFIG.clipRatioConfig.initial,
+            );
         }
 
         loadMetrics();
