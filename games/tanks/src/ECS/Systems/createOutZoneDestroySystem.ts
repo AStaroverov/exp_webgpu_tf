@@ -18,7 +18,7 @@ export function createOutZoneDestroySystem({ world, width, height } = GameDI) {
             const x = getMatrixTranslationX(globalTransform);
             const y = getMatrixTranslationY(globalTransform);
 
-            if (x < -1000 || x > width + 1000 || y < -1000 || y > height + 1000) {
+            if (x < -500 || x > width + 500 || y < -500 || y > height + 500) {
                 scheduleRemoveEntity(eid);
             }
         }

@@ -12,7 +12,6 @@ import { addComponent } from 'bitecs';
 import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';
 import { mat4, vec2, vec3 } from 'gl-matrix';
 import { isNumber } from 'lodash-es';
-import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { Hitable } from './Hitable.ts';
 import { addPlayerComponent, Player } from './Player.ts';
 import { Tank } from './Tank.ts';
@@ -39,8 +38,8 @@ const optionsBulletRR: Options = {
     angularDamping: 0.1,
     linearDamping: 0.1,
     collisionEvent: ActiveEvents.CONTACT_FORCE_EVENTS,
-    belongsCollisionGroup: CollisionGroup.BULLET,
-    interactsCollisionGroup: CollisionGroup.ALL & ~CollisionGroup.TANK_GUN_PARTS,
+    belongsCollisionGroup: 0,//CollisionGroup.BULLET,
+    interactsCollisionGroup: 0,//CollisionGroup.ALL & ~CollisionGroup.TANK_GUN_PARTS,
 };
 const defaultOptionsBulletRR = structuredClone(optionsBulletRR);
 
@@ -63,7 +62,7 @@ export function createBulletRR(options: Partial<Options> & { speed: number, play
     addTransformComponents(world, bulletId);
     addPlayerComponent(bulletId, options.playerId);
     Hitable.addComponent(bulletId);
-    DestroyByTimeout.addComponent(world, bulletId, 20_000);
+    DestroyByTimeout.addComponent(world, bulletId, 8_000);
 
     return bulletId;
 }
