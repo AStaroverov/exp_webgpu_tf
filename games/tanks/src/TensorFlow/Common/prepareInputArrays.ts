@@ -79,11 +79,11 @@ export function prepareInputArrays(
     for (let r = 0; r < TANK_INPUT_TENSOR_MAX_ENEMIES; r++) {
         const w = ENEMIES_INDEXES[r];
         const dstOffset = w * TANK_INPUT_TENSOR_ENEMY_BUFFER;
-        let srcOffset = r * TANK_INPUT_TENSOR_ENEMY_BUFFER;
+        const srcOffset = r * TANK_INPUT_TENSOR_ENEMY_BUFFER;
 
         // если во входном буфере признак presence = 0, значит врага нет
         if (enemiesBuffer[srcOffset] === 0) {
-            srcOffset = 0;
+            continue
         }
 
         // presence
@@ -108,11 +108,7 @@ export function prepareInputArrays(
     for (let r = 0; r < TANK_INPUT_TENSOR_MAX_BULLETS; r++) {
         const w = BULLETS_INDEXES[r];
         const dstOffset = w * TANK_INPUT_TENSOR_BULLET_BUFFER;
-        let srcOffset = r * TANK_INPUT_TENSOR_BULLET_BUFFER;
-
-        if (bulletsBuffer[srcOffset] === 0) {
-            srcOffset = 0;
-        }
+        const srcOffset = r * TANK_INPUT_TENSOR_BULLET_BUFFER;
 
         if (bulletsBuffer[srcOffset] === 0) {
             continue;
