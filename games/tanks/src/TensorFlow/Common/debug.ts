@@ -50,6 +50,7 @@ export function createDebugVisualization(container: HTMLElement, manager: Player
     }
 
     async function updateMetrics() {
+        if (getDrawState()) return;
         await loadMetrics();
         drawMetrics();
     }

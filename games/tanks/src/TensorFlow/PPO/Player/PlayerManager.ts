@@ -57,16 +57,13 @@ export class PlayerManager {
         let activeTanks: number[] = [];
 
         this.stopGameLoopInterval = frameTasks.addInterval(async () => {
-            if (!getDrawState()) return;
-
-            if (frameCount === -2) {
+            if (!getDrawState()) {
                 frameCount = -1;
-                activeTanks = [];
-
-                frameCount = 0;
+                return;
             }
 
-            if (frameCount < 0) {
+            if (frameCount === -1) {
+                this.gameLoop();
                 return;
             }
 
@@ -95,14 +92,13 @@ export class PlayerManager {
                 }
             }
 
+            frameCount++;
+
             const isEpisodeDone = activeTanks.length <= 1 || frameCount > maxEpisodeFrames;
 
             if (isEpisodeDone) {
-                this.gameLoop();
-                return;
+                frameCount = -1;
             }
-
-            frameCount++;
         }, 1);
     }
 
