@@ -183,7 +183,7 @@ export class LearnerAgent {
                 const { newLR, newClip } = getConfigPatch(
                     mean(this.klHistory.toArray()), this.learningRate, this.clipRatio,
                 );
-                await this.updateConfig(newLR, newClip);
+                this.updateConfig(newLR, newClip);
             }
 
             logLR(this.learningRate);
@@ -246,8 +246,7 @@ export class LearnerAgent {
             this.valueNetwork = createValueNetwork();
             this.policyNetwork.optimizer = tf.train.adam(0);
             this.valueNetwork.optimizer = tf.train.adam(0);
-
-            await this.updateConfig(
+            this.updateConfig(
                 CONFIG.lrConfig.initial,
                 CONFIG.clipRatioConfig.initial,
             );
@@ -281,7 +280,7 @@ export class LearnerAgent {
             this.policyNetwork = policyNetwork;
             this.policyNetwork.optimizer ??= tf.train.adam(0);
 
-            await this.updateConfig(
+            this.updateConfig(
                 agentState?.learningRate ?? CONFIG.lrConfig.initial,
                 agentState?.clipRatio ?? CONFIG.clipRatioConfig.initial,
             );
@@ -294,12 +293,12 @@ export class LearnerAgent {
     }
 
     private updateConfig(lr: number, clip: number) {
-        this.learningRate = lr;
         this.clipRatio = clip;
-        return this.upsertOptimizers(lr);
+        this.learningRate = lr;
+        this.upsertOptimizers(lr);
     }
 
-    private async upsertOptimizers(lr: number) {
+    private upsertOptimizers(lr: number) {
         if (getLR(this.policyNetwork.optimizer) !== lr || getLR(this.valueNetwork.optimizer) !== lr) {
             // @ts-ignore
             this.policyNetwork.optimizer.learningRate = lr;
