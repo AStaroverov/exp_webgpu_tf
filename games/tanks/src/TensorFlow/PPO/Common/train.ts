@@ -161,6 +161,10 @@ export function createInputTensors(
 ): tf.Tensor[] {
     return [
         tf.tensor2d(flatFloat32Array(state.map((s) => s.tankFeatures)), [state.length, TANK_FEATURES_DIM]),
+        tf.tensor2d(
+            flatFloat32Array(state.map((s) => s.enemiesMask)),
+            [state.length, ENEMY_SLOTS],
+        ),
         tf.tensor3d(
             flatFloat32Array(state.map((s) => s.enemiesFeatures)),
             [state.length, ENEMY_SLOTS, ENEMY_FEATURES_DIM],

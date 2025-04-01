@@ -1,13 +1,7 @@
 import { clamp } from 'lodash-es';
 import { shuffle } from '../../../../../lib/shuffle.ts';
-import {
-    TANK_INPUT_TENSOR_BULLET_BUFFER,
-    TANK_INPUT_TENSOR_ENEMY_BUFFER,
-    TANK_INPUT_TENSOR_MAX_BULLETS,
-    TANK_INPUT_TENSOR_MAX_ENEMIES,
-    TankInputTensor,
-} from '../../ECS/Components/TankState.ts';
-import { TANK_FEATURES_DIM } from './models.ts';
+import { TankInputTensor } from '../../ECS/Components/TankState.ts';
+import { BULLET_FEATURES_DIM, BULLET_SLOTS, ENEMY_FEATURES_DIM, ENEMY_SLOTS, TANK_FEATURES_DIM } from './models.ts';
 
 function normForTanh(v: number, size: number): number {
     return v / size;
@@ -22,22 +16,23 @@ function norm(v: number, size: number): number {
 }
 
 // Для случайного распределения врагов/пуль
-const ENEMIES_INDEXES = new Uint32Array(Array.from({ length: TANK_INPUT_TENSOR_MAX_ENEMIES }, (_, i) => i));
-const BULLETS_INDEXES = new Uint32Array(Array.from({ length: TANK_INPUT_TENSOR_MAX_BULLETS }, (_, i) => i));
+const ENEMIES_INDEXES = new Uint32Array(Array.from({ length: ENEMY_SLOTS }, (_, i) => i));
+const BULLETS_INDEXES = new Uint32Array(Array.from({ length: BULLET_SLOTS }, (_, i) => i));
 
 /**
  * Возвращает три массива:
  *  - tankFeatures: Float32Array длины 7 (примерно)
- *  - enemiesFeatures: Float32Array длины [TANK_INPUT_TENSOR_MAX_ENEMIES * TANK_INPUT_TENSOR_ENEMY_BUFFER]
- *  - bulletsFeatures: Float32Array длины [TANK_INPUT_TENSOR_MAX_BULLETS * TANK_INPUT_TENSOR_BULLET_BUFFER]
+ *  - enemiesFeatures: Float32Array длины [ENEMY_SLOTS * ENEMY_FEATURES_DIM]
+ *  - bulletsFeatures: Float32Array длины [BULLET_SLOTS * BULLET_FEATURES_DIM]
  *
  * Но семантически мы их будем интерпретировать как:
- *   enemiesFeatures -> 2D: [TANK_INPUT_TENSOR_MAX_ENEMIES, TANK_INPUT_TENSOR_ENEMY_BUFFER]
- *   bulletsFeatures -> 2D: [TANK_INPUT_TENSOR_MAX_BULLETS, TANK_INPUT_TENSOR_BULLET_BUFFER]
+ *   enemiesFeatures -> 2D: [ENEMY_SLOTS, ENEMY_FEATURES_DIM]
+ *   bulletsFeatures -> 2D: [BULLET_SLOTS, BULLET_FEATURES_DIM]
  */
 
 export type InputArrays = {
     tankFeatures: Float32Array,
+    enemiesMask: Float32Array,
     enemiesFeatures: Float32Array,
     bulletsFeatures: Float32Array
 }
@@ -67,48 +62,49 @@ export function prepareInputArrays(
     tankFeatures[k++] = norm(turretTargetY - tankY, height);             // [6]  норма. наводка башни Y
 
     // 2) Массив для врагов
-    //    Интерпретируем как матрицу [TANK_INPUT_TENSOR_MAX_ENEMIES, TANK_INPUT_TENSOR_ENEMY_BUFFER]
+    //    Интерпретируем как матрицу [ENEMY_SLOTS, ENEMY_FEATURES_DIM]
+    const enemiesMask = new Float32Array(ENEMY_SLOTS);
     const enemiesFeatures = new Float32Array(
-        TANK_INPUT_TENSOR_MAX_ENEMIES * TANK_INPUT_TENSOR_ENEMY_BUFFER,
+        ENEMY_SLOTS * ENEMY_FEATURES_DIM,
     );
     const enemiesBuffer = TankInputTensor.enemiesData.getBatch(tankEid);
 
     // Перемешиваем индексы, чтобы случайным образом «раскидать» врагов
     shuffle(ENEMIES_INDEXES);
 
-    for (let r = 0; r < TANK_INPUT_TENSOR_MAX_ENEMIES; r++) {
+    for (let r = 0; r < ENEMY_SLOTS; r++) {
         const w = ENEMIES_INDEXES[r];
-        const dstOffset = w * TANK_INPUT_TENSOR_ENEMY_BUFFER;
-        const srcOffset = r * TANK_INPUT_TENSOR_ENEMY_BUFFER;
+        const dstOffset = w * ENEMY_FEATURES_DIM;
+        const srcOffset = r * ENEMY_FEATURES_DIM;
 
         // если во входном буфере признак presence = 0, значит врага нет
         if (enemiesBuffer[srcOffset] === 0) {
-            continue
+            enemiesMask[w] = 0;
+            continue;
         }
 
-        // presence
-        enemiesFeatures[dstOffset + 0] = 1;
+        enemiesMask[w] = 1;
         // остальные поля (X, Y, width, height, speedX, speedY...) — как в вашем коде
-        enemiesFeatures[dstOffset + 1] = norm(enemiesBuffer[srcOffset + 1] - tankX, width);
-        enemiesFeatures[dstOffset + 2] = norm(enemiesBuffer[srcOffset + 2] - tankY, height);
-        enemiesFeatures[dstOffset + 3] = norm(enemiesBuffer[srcOffset + 3], width);
-        enemiesFeatures[dstOffset + 4] = norm(enemiesBuffer[srcOffset + 4], height);
-        enemiesFeatures[dstOffset + 5] = norm(enemiesBuffer[srcOffset + 5] - tankX, width);
-        enemiesFeatures[dstOffset + 6] = norm(enemiesBuffer[srcOffset + 6] - tankY, height);
+        enemiesFeatures[dstOffset + 0] = norm(enemiesBuffer[srcOffset + 1] - tankX, width);
+        enemiesFeatures[dstOffset + 1] = norm(enemiesBuffer[srcOffset + 2] - tankY, height);
+        enemiesFeatures[dstOffset + 2] = norm(enemiesBuffer[srcOffset + 3], width);
+        enemiesFeatures[dstOffset + 3] = norm(enemiesBuffer[srcOffset + 4], height);
+        enemiesFeatures[dstOffset + 4] = norm(enemiesBuffer[srcOffset + 5] - tankX, width);
+        enemiesFeatures[dstOffset + 5] = norm(enemiesBuffer[srcOffset + 6] - tankY, height);
     }
 
     // 3) Аналогично — массив для пуль
-    //    [TANK_INPUT_TENSOR_MAX_BULLETS, TANK_INPUT_TENSOR_BULLET_BUFFER]
+    //    [BULLET_SLOTS, BULLET_FEATURES_DIM]
     const bulletsFeatures = new Float32Array(
-        TANK_INPUT_TENSOR_MAX_BULLETS * TANK_INPUT_TENSOR_BULLET_BUFFER,
+        BULLET_SLOTS * BULLET_FEATURES_DIM,
     );
     const bulletsBuffer = TankInputTensor.bulletsData.getBatch(tankEid);
     shuffle(BULLETS_INDEXES);
 
-    for (let r = 0; r < TANK_INPUT_TENSOR_MAX_BULLETS; r++) {
+    for (let r = 0; r < BULLET_SLOTS; r++) {
         const w = BULLETS_INDEXES[r];
-        const dstOffset = w * TANK_INPUT_TENSOR_BULLET_BUFFER;
-        const srcOffset = r * TANK_INPUT_TENSOR_BULLET_BUFFER;
+        const dstOffset = w * BULLET_FEATURES_DIM;
+        const srcOffset = r * BULLET_FEATURES_DIM;
 
         if (bulletsBuffer[srcOffset] === 0) {
             continue;
@@ -125,6 +121,7 @@ export function prepareInputArrays(
 
     return {
         tankFeatures,
+        enemiesMask,
         enemiesFeatures,
         bulletsFeatures,
     };
