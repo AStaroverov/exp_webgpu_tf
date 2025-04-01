@@ -34,9 +34,7 @@ export class LearnerAgent {
     private lastTrainTimeStart = 0;
 
     private policyNetwork!: tf.LayersModel;
-    private policyOptimizer!: tf.Optimizer;
     private valueNetwork!: tf.LayersModel;
-    private valueOptimizer!: tf.Optimizer;
 
     constructor() {
 
@@ -58,8 +56,8 @@ export class LearnerAgent {
                     learningRate: this.learningRate,
                     klHistory: this.klHistory.toArray(),
                 }),
-                this.valueNetwork.save(getStoreModelPath('value-model', CONFIG)),
-                this.policyNetwork.save(getStoreModelPath('policy-model', CONFIG)),
+                this.valueNetwork.save(getStoreModelPath('value-model', CONFIG), { includeOptimizer: true }),
+                this.policyNetwork.save(getStoreModelPath('policy-model', CONFIG), { includeOptimizer: true }),
             ]);
 
             return true;
@@ -149,13 +147,13 @@ export class LearnerAgent {
                 const tReturns = tf.tensor(returns.subarray(start, end), [size]);
 
                 policyLossPromises.push(trainPolicyNetwork(
-                    this.policyNetwork, this.policyOptimizer,
+                    this.policyNetwork, this.policyNetwork.optimizer,
                     tStates, tActions, tLogProbs, tAdvantages,
                     this.clipRatio, CONFIG.entropyCoeff,
                 ));
 
                 valueLossPromises.push(trainValueNetwork(
-                    this.valueNetwork, this.valueOptimizer,
+                    this.valueNetwork, this.valueNetwork.optimizer,
                     tStates, tReturns, tValues,
                     this.clipRatio,
                 ));
@@ -246,11 +244,18 @@ export class LearnerAgent {
         if (!(await this.load())) {
             this.policyNetwork = createPolicyNetwork();
             this.valueNetwork = createValueNetwork();
+            this.policyNetwork.optimizer = tf.train.adam(0);
+            this.valueNetwork.optimizer = tf.train.adam(0);
+
             await this.updateConfig(
                 CONFIG.lrConfig.initial,
                 CONFIG.clipRatioConfig.initial,
             );
         }
+
+        // fake loss for save optimizer with model
+        this.valueNetwork.loss = 'meanSquaredError';
+        this.policyNetwork.loss = 'meanSquaredError';
 
         loadMetrics();
 
@@ -271,12 +276,15 @@ export class LearnerAgent {
 
             this.version = agentState?.version ?? 0;
             this.klHistory.fromArray(agentState?.klHistory ?? []);
+            this.valueNetwork = valueNetwork;
+            this.valueNetwork.optimizer ??= tf.train.adam(0);
+            this.policyNetwork = policyNetwork;
+            this.policyNetwork.optimizer ??= tf.train.adam(0);
+
             await this.updateConfig(
                 agentState?.learningRate ?? CONFIG.lrConfig.initial,
                 agentState?.clipRatio ?? CONFIG.clipRatioConfig.initial,
             );
-            this.valueNetwork = valueNetwork;
-            this.policyNetwork = policyNetwork;
             console.log('[LearnAgent] Models loaded successfully');
             return true;
         } catch (error) {
@@ -292,21 +300,11 @@ export class LearnerAgent {
     }
 
     private async upsertOptimizers(lr: number) {
-        if (getLR(this.policyOptimizer) !== lr || getLR(this.valueOptimizer) !== lr) {
-            const policyOptimizer = tf.train.adam(lr);
-            const valueOptimizer = tf.train.adam(lr);
-            if (this.policyOptimizer) {
-                const weights = await this.policyOptimizer.getWeights();
-                await policyOptimizer.setWeights(weights);
-                this.policyOptimizer.dispose();
-            }
-            if (this.valueOptimizer) {
-                const weights = await this.valueOptimizer.getWeights();
-                await valueOptimizer.setWeights(weights);
-                this.valueOptimizer.dispose();
-            }
-            this.policyOptimizer = policyOptimizer;
-            this.valueOptimizer = valueOptimizer;
+        if (getLR(this.policyNetwork.optimizer) !== lr || getLR(this.valueNetwork.optimizer) !== lr) {
+            // @ts-ignore
+            this.policyNetwork.optimizer.learningRate = lr;
+            // @ts-ignore
+            this.valueNetwork.optimizer.learningRate = lr;
         }
     }
 }
