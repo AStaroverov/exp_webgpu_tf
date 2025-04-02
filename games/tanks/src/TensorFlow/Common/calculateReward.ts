@@ -29,29 +29,29 @@ let REWARD_WEIGHTS = {
     COMMON_MULTIPLIER: 0.0,
 
     AIM: {
-        QUALITY: 5.0,       // За точное прицеливание
-        TRACKING: 1.0,      // За активное отслеживание врага
-        DISTANCE: 0.5,      // За расстояние до цели
-        MAP_AWARENESS: 0.1, // За нахождение в пределах карты
-        NO_TARGET_PENALTY: -0.4, // За отсутствие целей
-        TRACKING_PENALTY: -0.4, // За активное отслеживание врага
-        DISTANCE_PENALTY: -0.4, // За расстояние до цели
-        SHOOTING: 1.0,       // За стрельбу в цель
-        SHOOTING_PENALTY: -0.4, // За стрельбу в пустоту
+        QUALITY: 1.0,       // За точное прицеливание
+        TRACKING: 0.2,      // За активное отслеживание врага
+        DISTANCE: 0.1,      // За расстояние до цели
+        MAP_AWARENESS: 0.02, // За нахождение в пределах карты
+        NO_TARGET_PENALTY: -0.08, // За отсутствие целей
+        TRACKING_PENALTY: -0.08, // За активное отслеживание врага
+        DISTANCE_PENALTY: -0.08, // За расстояние до цели
+        SHOOTING: 0.2,       // За стрельбу в цель
+        SHOOTING_PENALTY: -0.08, // За стрельбу в пустоту
     },
-    AIM_MULTIPLIER: 1.0,
+    AIM_MULTIPLIER: 5.0,
 
     MAP_BORDER: {
-        BASE: 0.2,          // За нахождение в пределах карты
-        PENALTY: -0.2,      // За выход за границы
+        BASE: 1,          // За нахождение в пределах карты
+        PENALTY: -1,      // За выход за границы
     },
-    MAP_BORDER_MULTIPLIER: 0.0,
+    MAP_BORDER_MULTIPLIER: 3,
 
     DISTANCE_KEEPING: {
-        BASE: 1.0,          // За поддержание дистанции
-        PENALTY: -0.2,      // За слишком близкое приближение
+        BASE: 2.0,          // За поддержание дистанции
+        PENALTY: -1.0,      // За слишком близкое приближение
     },
-    DISTANCE_KEEPING_MULTIPLIER: 0.0,
+    DISTANCE_KEEPING_MULTIPLIER: 3,
 
     MOVEMENT: {
         BASE: 0.2,          // За базовое движение
