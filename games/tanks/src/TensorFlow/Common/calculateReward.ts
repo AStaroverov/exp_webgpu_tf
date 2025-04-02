@@ -54,10 +54,10 @@ let REWARD_WEIGHTS = {
     DISTANCE_KEEPING_MULTIPLIER: 3,
 
     MOVEMENT: {
-        BASE: 0.2,          // За базовое движение
-        STRATEGIC: 0.5,     // За стратегическое движение
+        BASE: 1,          // За базовое движение
+        STRATEGIC: 1,     // За стратегическое движение
     },
-    MOVEMENT_MULTIPLIER: 0.0,
+    MOVEMENT_MULTIPLIER: 1.0,
 
     BULLET_AVOIDANCE: {
         PENALTY: -0.1,
