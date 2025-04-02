@@ -86,7 +86,7 @@ function addDenseLayers(layer: tf.SymbolicTensor, hiddenLayers: [ActivationIdent
     return x;
 }
 
-function applyEnemyAttention(tankInput: tf.SymbolicTensor, enemiesInput: tf.SymbolicTensor, enemyMaskInput: tf.SymbolicTensor, dModel = 32): tf.SymbolicTensor {
+function applyEnemyAttention(tankInput: tf.SymbolicTensor, enemiesInput: tf.SymbolicTensor, enemiesMaskInput: tf.SymbolicTensor, dModel = 32): tf.SymbolicTensor {
     const denseQ = tf.layers.dense({ units: dModel, useBias: false });
     const denseK = tf.layers.dense({ units: dModel, useBias: false });
     const denseV = tf.layers.dense({ units: dModel, useBias: false });
@@ -99,7 +99,7 @@ function applyEnemyAttention(tankInput: tf.SymbolicTensor, enemiesInput: tf.Symb
 
     const scores = tf.layers.dot({ axes: -1 }).apply([Q_reshaped, K]) as tf.SymbolicTensor;
 
-    const maskedScores = new AttentionMaskLayer().apply([scores, enemyMaskInput]) as tf.SymbolicTensor;
+    const maskedScores = new AttentionMaskLayer().apply([scores, enemiesMaskInput]) as tf.SymbolicTensor;
 
     const attnWeights = tf.layers.activation({ activation: 'softmax' }).apply(maskedScores) as tf.SymbolicTensor;
 

@@ -48,8 +48,8 @@ let REWARD_WEIGHTS = {
     MAP_BORDER_MULTIPLIER: 3,
 
     DISTANCE_KEEPING: {
-        BASE: 2.0,          // За поддержание дистанции
-        PENALTY: -1.0,      // За слишком близкое приближение
+        BASE: 1.0,          // За поддержание дистанции
+        PENALTY: -0.3,      // За слишком близкое приближение
     },
     DISTANCE_KEEPING_MULTIPLIER: 3,
 
@@ -84,8 +84,8 @@ export interface ComponentRewards {
     };
 
     // Награды для головы движения
-    movement: {
-        speed: number;           // Скорость движения
+    positioning: {
+        movement: number;
         enemiesPositioning: number;     // Позиционирование относительно врагов
         bulletAvoidance: number;       // Избегание опасности
         mapAwareness: number;    // Нахождение в пределах карты
@@ -103,7 +103,7 @@ function initializeRewards(): ComponentRewards {
     return {
         common: { health: 0, survival: 0, total: 0 },
         aim: { accuracy: 0, tracking: 0, distance: 0, mapAwareness: 0, total: 0, shootDecision: 0 },
-        movement: { speed: 0, enemiesPositioning: 0, bulletAvoidance: 0, mapAwareness: 0, total: 0 },
+        positioning: { movement: 0, enemiesPositioning: 0, bulletAvoidance: 0, mapAwareness: 0, total: 0 },
         totalReward: 0,
     };
 }
@@ -141,7 +141,7 @@ export function calculateReward(
     rewards.common.survival = (step / CONFIG.episodeFrames) * REWARD_WEIGHTS.COMMON.SURVIVAL;
 
     // 2. Расчет награды за нахождение в пределах карты
-    rewards.movement.mapAwareness = calculateTankMapAwarenessReward(
+    rewards.positioning.mapAwareness = calculateTankMapAwarenessReward(
         currentTankX,
         currentTankY,
         width,
@@ -189,7 +189,7 @@ export function calculateReward(
         currentDangerBullets,
         beforePredictBulletsData,
     );
-    rewards.movement.bulletAvoidance = bulletAvoidanceResult.reward;
+    rewards.positioning.bulletAvoidance = bulletAvoidanceResult.reward;
 
     // 7. Награда за движение и позиционирование
     const movementRewardResult = calculateMovementReward(
@@ -199,24 +199,27 @@ export function calculateReward(
         aimingResult.closestEnemyDist,
     );
 
-    rewards.movement.speed = movementRewardResult.speed;
-    rewards.movement.enemiesPositioning = movementRewardResult.positioning;
+    rewards.positioning.movement = movementRewardResult.speed;
+    rewards.positioning.enemiesPositioning = movementRewardResult.positioning;
 
     // Рассчитываем итоговые значения
     rewards.common.total = REWARD_WEIGHTS.COMMON_MULTIPLIER
         * (rewards.common.health + rewards.common.survival);
     rewards.aim.total = REWARD_WEIGHTS.AIM_MULTIPLIER
         * (rewards.aim.accuracy + rewards.aim.tracking + rewards.aim.distance + rewards.aim.mapAwareness + rewards.aim.shootDecision);
-    rewards.movement.total = REWARD_WEIGHTS.MOVEMENT_MULTIPLIER
-        * (rewards.movement.speed + rewards.movement.enemiesPositioning + rewards.movement.bulletAvoidance + rewards.movement.mapAwareness);
+    rewards.positioning.total =
+        (rewards.positioning.movement * REWARD_WEIGHTS.MOVEMENT_MULTIPLIER
+            + rewards.positioning.enemiesPositioning * REWARD_WEIGHTS.DISTANCE_KEEPING_MULTIPLIER
+            + rewards.positioning.bulletAvoidance * REWARD_WEIGHTS.BULLET_AVOIDANCE_MULTIPLIER
+            + rewards.positioning.mapAwareness * REWARD_WEIGHTS.MAP_BORDER_MULTIPLIER);
 
     // Общая итоговая награда
-    rewards.totalReward = rewards.common.total + rewards.aim.total + rewards.movement.total;
+    rewards.totalReward = rewards.common.total + rewards.aim.total + rewards.positioning.total;
 
     isVerboseLog() &&
     console.log(`[Reward] Tank ${ tankEid }
     aim: ${ rewards.aim.total }
-    move: ${ rewards.movement.total }
+    move: ${ rewards.positioning.total }
     total: ${ rewards.totalReward }
     `);
 
