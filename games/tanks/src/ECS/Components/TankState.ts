@@ -25,7 +25,7 @@ export const TankInputTensor = component({
     enemiesData: NestedArray.f64(ENEMY_BUFFER * MAX_ENEMIES, delegate.defaultSize),
 
     // Allies [id, hp,x,y,vx,vy,ttx,tty]
-    alliesData: NestedArray.f64(ENEMY_BUFFER * MAX_ALLIES, delegate.defaultSize),
+    alliesData: NestedArray.f64(ALLY_BUFFER * MAX_ALLIES, delegate.defaultSize),
 
     // Bullets [id, x,y,vx,vy]
     bulletsData: NestedArray.f64(BULLET_BUFFER * MAX_BULLETS, delegate.defaultSize),

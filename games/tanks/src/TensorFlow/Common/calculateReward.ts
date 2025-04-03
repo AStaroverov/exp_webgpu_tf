@@ -294,7 +294,7 @@ function analyzeAiming(
     }
 
     // Анализируем всех видимых союзников для текущего состояния
-    for (let i = 0; i < beforePredictAlliesData.length; i += ENEMY_BUFFER) {
+    for (let i = 0; i < beforePredictAlliesData.length; i += ALLY_BUFFER) {
         const allyId = beforePredictAlliesData[i];
 
         if (allyId === 0) continue;

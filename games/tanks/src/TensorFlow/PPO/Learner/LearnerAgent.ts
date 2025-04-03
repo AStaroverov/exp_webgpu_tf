@@ -23,6 +23,7 @@ import {
 import { batchShuffle } from '../../../../../../lib/shuffle.ts';
 import { RingBuffer } from 'ring-buffer-ts';
 import { getConfigPatch } from '../../Common/getConfigPatch.ts';
+import { setModelState } from '../../Common/modelsCopy.ts';
 
 export class LearnerAgent {
     private version = 0;
@@ -33,8 +34,8 @@ export class LearnerAgent {
     private batches: { version: number, memories: Batch }[] = [];
     private lastTrainTimeStart = 0;
 
-    private policyNetwork!: tf.LayersModel;
-    private valueNetwork!: tf.LayersModel;
+    private policyNetwork: tf.LayersModel = createPolicyNetwork();
+    private valueNetwork: tf.LayersModel = createValueNetwork();
 
     constructor() {
 
@@ -244,8 +245,6 @@ export class LearnerAgent {
         if (!(await this.load())) {
             this.policyNetwork = createPolicyNetwork();
             this.valueNetwork = createValueNetwork();
-            this.policyNetwork.optimizer = tf.train.adam(0);
-            this.valueNetwork.optimizer = tf.train.adam(0);
             this.updateConfig(
                 CONFIG.lrConfig.initial,
                 CONFIG.clipRatioConfig.initial,
@@ -268,23 +267,22 @@ export class LearnerAgent {
                 tf.loadLayersModel(getStoreModelPath('value-model', CONFIG)),
                 tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG)),
             ]);
-
             if (!valueNetwork || !policyNetwork) {
                 return false;
             }
-
             this.version = agentState?.version ?? 0;
             this.klHistory.fromArray(agentState?.klHistory ?? []);
-            this.valueNetwork = valueNetwork;
-            this.valueNetwork.optimizer ??= tf.train.adam(0);
-            this.policyNetwork = policyNetwork;
-            this.policyNetwork.optimizer ??= tf.train.adam(0);
-
+            this.valueNetwork = await setModelState(this.valueNetwork, valueNetwork);
+            this.policyNetwork = await setModelState(this.policyNetwork, policyNetwork);
             this.updateConfig(
                 agentState?.learningRate ?? CONFIG.lrConfig.initial,
                 agentState?.clipRatio ?? CONFIG.clipRatioConfig.initial,
             );
             console.log('[LearnAgent] Models loaded successfully');
+
+            valueNetwork.dispose();
+            policyNetwork.dispose();
+
             return true;
         } catch (error) {
             console.warn('[LearnAgent] Could not load models, starting with new ones:', error);
