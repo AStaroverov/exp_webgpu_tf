@@ -3,8 +3,8 @@ import * as tf from '@tensorflow/tfjs';
 export async function initTensorFlow(type: 'wasm' | 'webgpu' = 'wasm') {
     try {
         if (type === 'wasm') {
-            const { setWasmPaths } = await import('@tensorflow/tfjs-backend-wasm');
-            setWasmPaths('/node_modules/@tensorflow/tfjs-backend-wasm/dist/');
+            const { setWasmPath } = await import('@tensorflow/tfjs-backend-wasm');
+            setWasmPath('/node_modules/@tensorflow/tfjs-backend-wasm/dist/tfjs-backend-wasm-simd.wasm');
             await tf.setBackend('wasm');
         }
         if (type === 'webgpu') {
