@@ -3,7 +3,7 @@ import { getTankHealth, Tank, TANK_APPROXIMATE_COLLISION_RADIUS } from '../../Co
 import { MAX_BULLETS, MAX_ENEMIES, TankInputTensor } from '../../Components/TankState.ts';
 import { getEntityIdByPhysicalId, RigidBodyState } from '../../Components/Physical.ts';
 import { hypot } from '../../../../../../lib/math.ts';
-import { Ball, Collider } from '@dimforge/rapier2d';
+import { Ball, Collider } from '@dimforge/rapier2d-simd';
 import { CollisionGroup, createCollisionGroups } from '../../../Physical/createRigid.ts';
 import { EntityId, query } from 'bitecs';
 import { Player } from '../../Components/Player.ts';

@@ -1,5 +1,5 @@
 import { createRectangleRR } from './RigidRender.ts';
-import { JointData, RigidBodyType, Vector2 } from '@dimforge/rapier2d';
+import { JointData, RigidBodyType, Vector2 } from '@dimforge/rapier2d-simd';
 import { addComponent } from 'bitecs';
 import { addTransformComponents } from '../../../../../src/ECS/Components/Transform.ts';
 import { GameDI } from '../../DI/GameDI.ts';

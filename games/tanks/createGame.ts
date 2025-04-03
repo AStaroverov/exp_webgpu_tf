@@ -3,7 +3,7 @@ import { createFrameTick } from '../../src/WGSL/createFrame.ts';
 import { createDrawShapeSystem } from '../../src/ECS/Systems/SDFSystem/createDrawShapeSystem.ts';
 import { initPhysicalWorld } from './src';
 import { createApplyRigidBodyToTransformSystem } from './src/ECS/Systems/createApplyRigidBodyToTransformSystem.ts';
-import { EventQueue } from '@dimforge/rapier2d';
+import { EventQueue } from '@dimforge/rapier2d-simd';
 import { GameDI } from './src/DI/GameDI.ts';
 import { createTransformSystem } from '../../src/ECS/Systems/TransformSystem.ts';
 import {

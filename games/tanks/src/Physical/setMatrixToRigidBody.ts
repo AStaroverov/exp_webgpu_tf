@@ -1,4 +1,4 @@
-import { RigidBody } from '@dimforge/rapier2d';
+import { RigidBody } from '@dimforge/rapier2d-simd';
 import { mat4 } from 'gl-matrix';
 
 const position = { x: 0, y: 0 };

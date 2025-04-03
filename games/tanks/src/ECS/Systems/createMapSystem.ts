@@ -3,7 +3,7 @@
 // import { Matrix } from '../../../../../lib/Matrix';
 // import { fillEnvironment } from '../../TilesMatrix/fillers/environment';
 // import { fillWalls } from '../../TilesMatrix/fillers/walls.ts';
-// import { Cuboid } from '@dimforge/rapier2d';
+// import { Cuboid } from '@dimforge/rapier2d-simd';
 // import { once } from 'lodash-es';
 //
 // export function createMapSystem({ physicalWorld } = GameDI) {
