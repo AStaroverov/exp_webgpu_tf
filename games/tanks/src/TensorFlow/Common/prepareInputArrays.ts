@@ -1,7 +1,8 @@
 import { clamp } from 'lodash-es';
 import { shuffle } from '../../../../../lib/shuffle.ts';
-import { BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../ECS/Components/TankState.ts';
+import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../ECS/Components/TankState.ts';
 import {
+    ALLY_FEATURES_DIM,
     ALLY_SLOTS,
     BATTLE_FEATURES_DIM,
     BULLET_FEATURES_DIM,
@@ -117,16 +118,16 @@ export function prepareInputArrays(
 
     // 2) Массив для союзников
     //    Интерпретируем как матрицу [ALLY_SLOTS, ALLY_FEATURES_DIM]
-    const alliesMask = new Float32Array(ENEMY_SLOTS);
-    const alliesFeatures = new Float32Array(ENEMY_SLOTS * ENEMY_FEATURES_DIM);
+    const alliesMask = new Float32Array(ALLY_SLOTS);
+    const alliesFeatures = new Float32Array(ALLY_SLOTS * ALLY_FEATURES_DIM);
     const alliesBuffer = TankInputTensor.alliesData.getBatch(tankEid);
 
     shuffle(ALLIES_INDEXES);
 
     for (let r = 0; r < ALLY_SLOTS; r++) {
         const w = ALLIES_INDEXES[r];
-        const dstOffset = w * ENEMY_FEATURES_DIM;
-        const srcOffset = r * ENEMY_BUFFER;
+        const dstOffset = w * ALLY_FEATURES_DIM;
+        const srcOffset = r * ALLY_BUFFER;
 
         if (alliesBuffer[srcOffset] === 0) {
             continue;
@@ -160,7 +161,6 @@ export function prepareInputArrays(
         }
 
         bulletsMask[w] = 1;
-        // остальные поля — аналогично
         bulletsFeatures[dstOffset + 0] = norm(bulletsBuffer[srcOffset + 1] - tankX, width);
         bulletsFeatures[dstOffset + 1] = norm(bulletsBuffer[srcOffset + 2] - tankY, height);
         bulletsFeatures[dstOffset + 2] = norm(bulletsBuffer[srcOffset + 3], width);
@@ -170,11 +170,11 @@ export function prepareInputArrays(
     return {
         battleFeatures,
         tankFeatures,
-        enemiesMask,
         enemiesFeatures,
-        alliesMask,
+        enemiesMask,
         alliesFeatures,
-        bulletsMask,
+        alliesMask,
         bulletsFeatures,
+        bulletsMask,
     };
 }

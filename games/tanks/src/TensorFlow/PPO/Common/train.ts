@@ -162,6 +162,7 @@ export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { ac
 export function createInputTensors(
     state: InputArrays[],
 ): tf.Tensor[] {
+    //[battleInput, tankInput, enemiesInput, enemiesMaskInput, alliesInput, alliesMaskInput, bulletsInput, bulletsMaskInput],
     return [
         // battle
         tf.tensor2d(flatFloat32Array(state.map((s) => s.battleFeatures)), [state.length, BATTLE_FEATURES_DIM]),
