@@ -3,13 +3,13 @@ import { query } from 'bitecs';
 import { GameDI } from '../../DI/GameDI.ts';
 import { Tank } from '../../ECS/Components/Tank.ts';
 import { RigidBodyState } from '../../ECS/Components/Physical.ts';
-import { hypot } from '../../../../../lib/math.ts';
 import { Color } from '../../../../../src/ECS/Components/Common.ts';
 import { getDrawState } from './utils.ts';
 import { frameTasks } from '../../../../../lib/TasksScheduler/frameTasks.ts';
 import { CONFIG } from '../PPO/Common/config.ts';
 import { PlayerManager } from '../PPO/Player/PlayerManager.ts';
 import { drawMetrics, loadMetrics } from './Metrics.ts';
+import { Team } from '../../ECS/Components/Team.ts';
 
 // Generate debug visualization using HTML and CSS
 export function createDebugVisualization(container: HTMLElement, manager: PlayerManager) {
@@ -79,20 +79,19 @@ export function createTanksDebug(manager: PlayerManager) {
 
         let result = '';
         const tanksEids = query(GameDI.world, [Tank, RigidBodyState]);
-
+        
         for (let i = 0; i < tanksEids.length; i++) {
+
             const tankEid = tanksEids[i];
-            const position = Array.from(RigidBodyState.position.getBatch(tankEid)).map(v => v.toFixed(2)).join(', ');
-            const speed = hypot(RigidBodyState.linvel.get(tankEid, 0), RigidBodyState.linvel.get(tankEid, 1)).toFixed(2);
             const aim = Tank.aimEid[tankEid];
+            const teamId = Team.id[tankEid];
             const color = `rgba(${ Color.r[aim] * 255 }, ${ Color.g[aim] * 255 }, ${ Color.b[aim] * 255 }, ${ Color.a[aim] })`;
 
             result += `
                 <div style="background: ${ color }; padding: 4px;">
                     <div>Tank ${ tankEid }</div>
+                    <div>Team: ${ teamId }</div>
                     <div>Reward: ${ manager.getReward(tankEid).toFixed(2) }</div>
-                    <div>Position: ${ position }</div>
-                    <div>Speed: ${ speed }</div>
                 </div>
                 <br>
             `;

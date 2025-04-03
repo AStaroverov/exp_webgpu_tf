@@ -172,11 +172,6 @@ export async function createGame({ width, height, withRender, withPlayer }: {
     const aimUpdate = createAimSystem();
 
     GameDI.gameTick = (delta: number) => {
-        if (withRender) {
-            // GameDI.width = RenderDI.canvas.offsetWidth;
-            // GameDI.height = RenderDI.canvas.offsetHeight;
-        }
-
         spawnFrame(delta);
 
         physicalFrame(delta);

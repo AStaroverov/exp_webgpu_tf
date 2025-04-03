@@ -49,7 +49,6 @@ export class PlayerManager {
         await this.agent.sync();
 
         const shouldEvery = 12;
-        const maxWarmupFrames = CONFIG.warmupFrames - (CONFIG.warmupFrames % shouldEvery);
         const maxEpisodeFrames = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
         const width = GameDI.width;
         const height = GameDI.height;
@@ -68,9 +67,8 @@ export class PlayerManager {
                 return;
             }
 
-            const isWarmup = frameCount < maxWarmupFrames;
-            const shouldAction = frameCount % shouldEvery === 0;
-            const shouldReward = frameCount % shouldEvery === 10;
+            const shouldAction = frameCount > 0 && frameCount % shouldEvery === 0;
+            const shouldReward = frameCount > 0 && frameCount % shouldEvery === 10;
             TenserFlowDI.shouldCollectState = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
 
             if (shouldAction) {
@@ -82,7 +80,7 @@ export class PlayerManager {
                 }
             }
 
-            this.battlefield.gameTick(TICK_TIME_SIMULATION * (isWarmup ? 2 : 1));
+            this.battlefield.gameTick(TICK_TIME_SIMULATION);
 
             if (shouldReward) {
                 for (const tankEid of activeTanks) {
@@ -95,7 +93,7 @@ export class PlayerManager {
 
             frameCount++;
 
-            const isEpisodeDone = activeTanks.length <= 1 || frameCount > maxEpisodeFrames;
+            const isEpisodeDone = frameCount > shouldEvery && (activeTanks.length <= 1 || frameCount > maxEpisodeFrames);
 
             if (isEpisodeDone) {
                 frameCount = -1;

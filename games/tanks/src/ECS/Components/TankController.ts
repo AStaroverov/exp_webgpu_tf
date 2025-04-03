@@ -1,7 +1,6 @@
 import { NestedArray, TypedArray } from '../../../../../src/utils.ts';
 import { delegate } from '../../../../../src/delegate.ts';
-import { addComponent } from 'bitecs';
-import { GameDI } from '../../DI/GameDI.ts';
+import { addComponent, World } from 'bitecs';
 import { component, obs } from '../../../../../src/ECS/utils.ts';
 
 export const TankController = component(({
@@ -15,8 +14,8 @@ export const TankController = component(({
     turretDir: NestedArray.f64(2, delegate.defaultSize),
 
     // Methods
-    addComponent(eid: number) {
-        addComponent(GameDI.world, eid, TankController);
+    addComponent(world: World, eid: number) {
+        addComponent(world, eid, TankController);
     },
     shouldShoot(eid: number): boolean {
         return TankController.shoot[eid] > 0 && TankController.shootCooldown[eid] <= 0;

@@ -193,7 +193,7 @@ export function createTankRR(options: {
     Tank.initialPartsCount[tankEid] = PARTS_COUNT;
     addChildrenComponent(tankEid);
     addTransformComponents(world, tankEid);
-    TankController.addComponent(tankEid);
+    TankController.addComponent(world, tankEid);
     Player.addComponent(world, tankEid, mutatedOptions.playerId);
     Team.addComponent(world, tankEid, options.teamId);
 

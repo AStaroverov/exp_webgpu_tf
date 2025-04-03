@@ -63,7 +63,7 @@ export function prepareInputArrays(
     const battleFeatures = new Float32Array(BATTLE_FEATURES_DIM);
     let bi = 0;
 
-    const maxCount = max(TankInputTensor.alliesCount[tankEid], TankInputTensor.enemiesCount[tankEid]);
+    const maxCount = max(1, TankInputTensor.alliesCount[tankEid], TankInputTensor.enemiesCount[tankEid]);
     battleFeatures[bi++] = TankInputTensor.alliesCount[tankEid] / maxCount;
     battleFeatures[bi++] = TankInputTensor.alliesTotalHealth[tankEid] / TankInputTensor.alliesCount[tankEid];
     battleFeatures[bi++] = TankInputTensor.enemiesCount[tankEid] / maxCount;
