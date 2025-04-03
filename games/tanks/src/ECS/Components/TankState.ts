@@ -20,14 +20,14 @@ export const TankInputTensor = component({
 
     // Methods
     setEnemiesData(eid: number, index: number, enemyEid: EntityId, coord: Float64Array, speed: Float64Array, turretTarget: Float32Array) {
-        const b = ENEMY_BUFFER;
-        TankInputTensor.enemiesData.set(eid, b * index, enemyEid);
-        TankInputTensor.enemiesData.set(eid, b * index + 1, coord[0]);
-        TankInputTensor.enemiesData.set(eid, b * index + 2, coord[1]);
-        TankInputTensor.enemiesData.set(eid, b * index + 3, speed[0]);
-        TankInputTensor.enemiesData.set(eid, b * index + 4, speed[1]);
-        TankInputTensor.enemiesData.set(eid, b * index + 5, turretTarget[0]);
-        TankInputTensor.enemiesData.set(eid, b * index + 6, turretTarget[1]);
+        const s = ENEMY_BUFFER;
+        TankInputTensor.enemiesData.set(eid, s * index, enemyEid);
+        TankInputTensor.enemiesData.set(eid, s * index + 1, coord[0]);
+        TankInputTensor.enemiesData.set(eid, s * index + 2, coord[1]);
+        TankInputTensor.enemiesData.set(eid, s * index + 3, speed[0]);
+        TankInputTensor.enemiesData.set(eid, s * index + 4, speed[1]);
+        TankInputTensor.enemiesData.set(eid, s * index + 5, turretTarget[0]);
+        TankInputTensor.enemiesData.set(eid, s * index + 6, turretTarget[1]);
     },
     setTankData(
         eid: number,
@@ -46,12 +46,12 @@ export const TankInputTensor = component({
         TankInputTensor.enemiesData.fill(0);
     },
     setBulletsData(eid: number, index: number, bulletEId: EntityId, coord: Float64Array, speed: Float64Array) {
-        const b = BULLET_BUFFER;
-        TankInputTensor.bulletsData.set(eid, b * index, bulletEId);
-        TankInputTensor.bulletsData.set(eid, b * index + 1, coord[0]);
-        TankInputTensor.bulletsData.set(eid, b * index + 2, coord[1]);
-        TankInputTensor.bulletsData.set(eid, b * index + 3, speed[0]);
-        TankInputTensor.bulletsData.set(eid, b * index + 4, speed[1]);
+        const s = BULLET_BUFFER;
+        TankInputTensor.bulletsData.set(eid, s * index, bulletEId);
+        TankInputTensor.bulletsData.set(eid, s * index + 1, coord[0]);
+        TankInputTensor.bulletsData.set(eid, s * index + 2, coord[1]);
+        TankInputTensor.bulletsData.set(eid, s * index + 3, speed[0]);
+        TankInputTensor.bulletsData.set(eid, s * index + 4, speed[1]);
     },
     resetBulletsCoords() {
         TankInputTensor.bulletsData.fill(0);

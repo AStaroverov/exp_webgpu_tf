@@ -104,16 +104,16 @@ export class ActorManager {
         isWarmup: boolean,
     ) {
         // Create input vector for the current state
-        const inputVector = prepareInputArrays(tankEid, width, height);
+        const input = prepareInputArrays(tankEid, width, height);
         // Get action from agent
-        const result = this.agent.act(inputVector);
+        const result = this.agent.act(input);
         // Apply action to tank controller
         applyActionToTank(tankEid, result.actions);
 
         if (!isWarmup) {
             this.agent.rememberAction(
                 tankEid,
-                inputVector,
+                input,
                 result.actions,
                 result.logProb,
                 result.value,

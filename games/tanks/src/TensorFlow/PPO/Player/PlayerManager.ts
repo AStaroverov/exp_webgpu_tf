@@ -108,9 +108,9 @@ export class PlayerManager {
         height: number,
     ) {
         // Create input vector for the current state
-        const inputVector = prepareInputArrays(tankEid, width, height);
+        const input = prepareInputArrays(tankEid, width, height);
         // Get action from agent
-        const result = this.agent.predict(inputVector);
+        const result = this.agent.predict(input);
         // Apply action to tank controller
         applyActionToTank(tankEid, result.actions);
     }

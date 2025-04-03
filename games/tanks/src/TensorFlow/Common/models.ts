@@ -9,7 +9,7 @@ export const TANK_FEATURES_DIM = 7;
 export const ENEMY_SLOTS = MAX_ENEMIES;
 export const ENEMY_FEATURES_DIM = ENEMY_BUFFER - 1; // -1 потому что id не считаем
 export const BULLET_SLOTS = MAX_BULLETS;
-export const BULLET_FEATURES_DIM = BULLET_BUFFER;
+export const BULLET_FEATURES_DIM = BULLET_BUFFER - 1; // -1 потому что id не считаем
 
 const denseLayersPolicy: [ActivationIdentifier, number][] = [['relu', 256], ['relu', 128], ['relu', 64]];
 const denseLayersValue: [ActivationIdentifier, number][] = [['relu', 64], ['relu', 32]];
@@ -50,18 +50,18 @@ export function createValueNetwork(): tf.LayersModel {
 
 function createInputLayer() {
     const tankInput = tf.input({ name: 'tankInput', shape: [TANK_FEATURES_DIM] });
-    const enemiesMask = tf.input({ name: 'enemyMaskInput', shape: [ENEMY_SLOTS] });
     const enemiesInput = tf.input({ name: 'enemiesInput', shape: [ENEMY_SLOTS, ENEMY_FEATURES_DIM] });
+    const enemiesMaskInput = tf.input({ name: 'enemyMaskInput', shape: [ENEMY_SLOTS] });
     const bulletsInput = tf.input({ name: 'bulletsInput', shape: [BULLET_SLOTS, BULLET_FEATURES_DIM] });
+    const bulletsMaskInput = tf.input({ name: 'bulletsMaskInput', shape: [BULLET_SLOTS] });
 
-    const enemiesAttentionContext = applyEnemyAttention(tankInput, enemiesInput, enemiesMask);
+    const enemiesAttentionContext = applyEnemyAttention(tankInput, enemiesInput, enemiesMaskInput);
+    const bulletsAttentionContext = applyEnemyAttention(tankInput, bulletsInput, bulletsMaskInput);
 
-    const bulletsFlat = tf.layers.flatten().apply(bulletsInput) as tf.SymbolicTensor;
-
-    const merged = tf.layers.concatenate().apply([tankInput, enemiesAttentionContext, bulletsFlat]) as tf.SymbolicTensor;
+    const merged = tf.layers.concatenate().apply([tankInput, enemiesAttentionContext, bulletsAttentionContext]) as tf.SymbolicTensor;
 
     return {
-        inputs: [tankInput, enemiesMask, enemiesInput, bulletsInput],
+        inputs: [tankInput, enemiesInput, enemiesMaskInput, bulletsInput, bulletsMaskInput],
         merged,
     };
 }
