@@ -205,11 +205,6 @@ export function calculateReward(
     // Общая итоговая награда
     rewards.totalReward = rewards.common.total + rewards.aim.total + rewards.positioning.total;
 
-    console.log('>>-------');
-    console.log(rewards.aim.accuracy);
-    console.log(rewards.aim.distance);
-    console.log(rewards.aim.shootDecision);
-
     isVerboseLog() &&
     console.log(`[Reward] Tank ${ tankEid }
     aim: ${ rewards.aim.total }
