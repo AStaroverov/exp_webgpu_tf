@@ -10,6 +10,7 @@ import { getDrawState } from '../../Common/utils.ts';
 import { EntityId } from 'bitecs';
 import { calculateReward } from '../../Common/calculateReward.ts';
 import { prepareInputArrays } from '../../Common/prepareInputArrays.ts';
+import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
 
 export class PlayerManager {
     public agent!: PlayerAgent;
@@ -70,7 +71,7 @@ export class PlayerManager {
             const isWarmup = frameCount < maxWarmupFrames;
             const shouldAction = frameCount % shouldEvery === 0;
             const shouldReward = frameCount % shouldEvery === 10;
-            GameDI.shouldCollectTensor = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
+            TenserFlowDI.shouldCollectState = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
 
             if (shouldAction) {
                 activeTanks = this.battlefield.getTanks();

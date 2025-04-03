@@ -1,7 +1,7 @@
 import { TANK_APPROXIMATE_COLLISION_RADIUS } from '../../ECS/Components/Tank.ts';
 
 export const TANK_COUNT_SIMULATION_MIN = 2;
-export const TANK_COUNT_SIMULATION_MAX = 4;
+export const TANK_COUNT_SIMULATION_MAX = 6;
 export const TANK_RADIUS = TANK_APPROXIMATE_COLLISION_RADIUS;
 
 export const TICK_TIME_REAL = 1;

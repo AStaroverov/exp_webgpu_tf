@@ -1,6 +1,6 @@
 import { GameDI } from '../../../DI/GameDI.ts';
 import { getTankHealth, Tank, TANK_APPROXIMATE_COLLISION_RADIUS } from '../../Components/Tank.ts';
-import { MAX_BULLETS, MAX_ENEMIES, TankInputTensor } from '../../Components/TankState.ts';
+import { MAX_ALLIES, MAX_BULLETS, MAX_ENEMIES, TankInputTensor } from '../../Components/TankState.ts';
 import { getEntityIdByPhysicalId, RigidBodyState } from '../../Components/Physical.ts';
 import { hypot } from '../../../../../../lib/math.ts';
 import { Ball, Collider } from '@dimforge/rapier2d-simd';
@@ -10,20 +10,38 @@ import { Player } from '../../Components/Player.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../../src/ECS/Components/Transform.ts';
 import { hasIntersectionVectorAndCircle } from '../../../Utils/intersections.ts';
 import { shuffle } from '../../../../../../lib/shuffle.ts';
+import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
+import { Team } from '../../Components/Team.ts';
 
-export function createTankInputTensorSystem(options = GameDI) {
-    const { world } = options;
-
+export function createTankInputTensorSystem({ world } = GameDI) {
     return () => {
-        if (!options.shouldCollectTensor) return;
+        if (!TenserFlowDI.enabled || !TenserFlowDI.shouldCollectState) return;
 
         const tankEids = query(world, [Tank, TankInputTensor, RigidBodyState]);
 
         TankInputTensor.resetEnemiesCoords();
+        TankInputTensor.resetAlliesCoords();
         TankInputTensor.resetBulletsCoords();
 
         for (let i = 0; i < tankEids.length; i++) {
             const tankEid = tankEids[i];
+            const tankTeamId = Team.id[tankEid];
+
+            // Set battlefield data
+            const allEnemiesEids = tankEids.filter((eid) => Team.id[eid] !== tankTeamId);
+            const allEnemiesHealth = allEnemiesEids.reduce((acc, eid) => acc + getTankHealth(eid), 0);
+            const allAlliesEids = tankEids.filter((eid) => Team.id[eid] === tankTeamId);
+            const allAlliesHealth = allAlliesEids.reduce((acc, eid) => acc + getTankHealth(eid), 0);
+
+            TankInputTensor.setBattlefieldData(
+                tankEid,
+                allEnemiesEids.length,
+                allEnemiesHealth,
+                allAlliesEids.length,
+                allAlliesHealth,
+            );
+
+            // Set tank data
             const health = getTankHealth(tankEid);
             const linvel = RigidBodyState.linvel.getBatch(tankEid);
             const position = RigidBodyState.position.getBatch(tankEid);
@@ -37,7 +55,7 @@ export function createTankInputTensorSystem(options = GameDI) {
                 getMatrixTranslation(aimLocal),
             );
 
-            // Find enemies
+            // Find closest enemies
             const enemiesEids = findTankEnemies(tankEid);
 
             for (let j = 0; j < enemiesEids.length; j++) {
@@ -47,12 +65,31 @@ export function createTankInputTensorSystem(options = GameDI) {
                     tankEid,
                     j,
                     enemyEid,
+                    getTankHealth(enemyEid),
                     RigidBodyState.position.getBatch(enemyEid),
                     RigidBodyState.linvel.getBatch(enemyEid),
                     getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[enemyEid])),
                 );
             }
 
+            // Find closest allies
+            const alliesEids = findTankAllies(tankEid);
+
+            for (let j = 0; j < alliesEids.length; j++) {
+                const allyEid = alliesEids[j];
+
+                TankInputTensor.setAlliesData(
+                    tankEid,
+                    j,
+                    allyEid,
+                    getTankHealth(allyEid),
+                    RigidBodyState.position.getBatch(allyEid),
+                    RigidBodyState.linvel.getBatch(allyEid),
+                    getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[allyEid])),
+                );
+            }
+
+            // Find closest bullets
             const bulletsEids = findTankDangerBullets(tankEid);
 
             for (let j = 0; j < bulletsEids.length; j++) {
@@ -70,7 +107,17 @@ export function createTankInputTensorSystem(options = GameDI) {
     };
 }
 
-export function findTankEnemies(tankEid: number, { physicalWorld } = GameDI) {
+export function findTankEnemies(tankEid: EntityId) {
+    const tankTeamId = Team.id[tankEid];
+    return findTankNeighbours(tankEid, MAX_ENEMIES, (eid: EntityId) => tankTeamId !== Team.id[eid]);
+}
+
+export function findTankAllies(tankEid: EntityId) {
+    const tankTeamId = Team.id[tankEid];
+    return findTankNeighbours(tankEid, MAX_ALLIES, (eid: EntityId) => tankTeamId === Team.id[eid]);
+}
+
+export function findTankNeighbours(tankEid: EntityId, limit: number, select: (eid: EntityId) => boolean, { physicalWorld } = GameDI) {
     // Find enemies
     const position = {
         x: RigidBodyState.position.get(tankEid, 0),
@@ -91,20 +138,24 @@ export function findTankEnemies(tankEid: number, { physicalWorld } = GameDI) {
                 if (tested.has(eid) || eid === 0 || tankEid === eid) return true;
 
                 tested.add(eid);
+
+                if (!select(eid)) return true;
+
                 result.push(eid);
 
-                return result.length < MAX_ENEMIES;
+                return result.length < limit;
             },
             undefined,
             createCollisionGroups(CollisionGroup.TANK_BASE, CollisionGroup.TANK_BASE),
         );
-        if (result.length >= MAX_ENEMIES) {
+        if (result.length >= limit) {
             break;
         }
     }
 
     return result;
 }
+
 
 export const BULLET_DANGER_SPEED = 100;
 

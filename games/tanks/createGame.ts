@@ -30,6 +30,7 @@ import { createDestroySystem } from './src/ECS/Systems/createDestroySystem.ts';
 import { RenderDI } from './src/DI/RenderDI.ts';
 import { noop } from 'lodash-es';
 import { PlayerEnvDI } from './src/DI/PlayerEnvDI.ts';
+import { TenserFlowDI } from './src/DI/TenserFlowDI.ts';
 
 export async function createGame({ width, height, withRender, withPlayer }: {
     width: number,
@@ -207,13 +208,15 @@ export async function createGame({ width, height, withRender, withPlayer }: {
         GameDI.height = null!;
         GameDI.world = null!;
         GameDI.physicalWorld = null!;
-        GameDI.shouldCollectTensor = null!;
         GameDI.gameTick = null!;
         GameDI.destroy = null!;
 
         PlayerEnvDI.window = null!;
         PlayerEnvDI.document = null!;
         PlayerEnvDI.container = null!;
+
+        TenserFlowDI.enabled = false;
+        TenserFlowDI.shouldCollectState = false;
     };
 
     return GameDI;

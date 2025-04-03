@@ -1,13 +1,23 @@
 import * as tf from '@tensorflow/tfjs';
 import { Tensor } from '@tensorflow/tfjs';
-import { BULLET_BUFFER, ENEMY_BUFFER, MAX_BULLETS, MAX_ENEMIES } from '../../ECS/Components/TankState.ts';
+import {
+    ALLY_BUFFER,
+    BULLET_BUFFER,
+    ENEMY_BUFFER,
+    MAX_ALLIES,
+    MAX_BULLETS,
+    MAX_ENEMIES,
+} from '../../ECS/Components/TankState.ts';
 import { ACTION_DIM } from './consts.ts';
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 import { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
 
+export const BATTLE_FEATURES_DIM = 4;
 export const TANK_FEATURES_DIM = 7;
 export const ENEMY_SLOTS = MAX_ENEMIES;
 export const ENEMY_FEATURES_DIM = ENEMY_BUFFER - 1; // -1 потому что id не считаем
+export const ALLY_SLOTS = MAX_ALLIES;
+export const ALLY_FEATURES_DIM = ALLY_BUFFER - 1; // -1 потому что id не считаем
 export const BULLET_SLOTS = MAX_BULLETS;
 export const BULLET_FEATURES_DIM = BULLET_BUFFER - 1; // -1 потому что id не считаем
 
@@ -49,19 +59,29 @@ export function createValueNetwork(): tf.LayersModel {
 }
 
 function createInputLayer() {
+    const battleInput = tf.input({ name: 'battlefieldInput', shape: [BATTLE_FEATURES_DIM] });
     const tankInput = tf.input({ name: 'tankInput', shape: [TANK_FEATURES_DIM] });
     const enemiesInput = tf.input({ name: 'enemiesInput', shape: [ENEMY_SLOTS, ENEMY_FEATURES_DIM] });
     const enemiesMaskInput = tf.input({ name: 'enemyMaskInput', shape: [ENEMY_SLOTS] });
+    const alliesInput = tf.input({ name: 'alliesInput', shape: [ALLY_SLOTS, ALLY_FEATURES_DIM] });
+    const alliesMaskInput = tf.input({ name: 'allyMaskInput', shape: [ALLY_SLOTS] });
     const bulletsInput = tf.input({ name: 'bulletsInput', shape: [BULLET_SLOTS, BULLET_FEATURES_DIM] });
     const bulletsMaskInput = tf.input({ name: 'bulletsMaskInput', shape: [BULLET_SLOTS] });
 
     const enemiesAttentionContext = applyEnemyAttention(tankInput, enemiesInput, enemiesMaskInput);
+    const alliesAttentionContext = applyEnemyAttention(tankInput, alliesInput, alliesMaskInput);
     const bulletsAttentionContext = applyEnemyAttention(tankInput, bulletsInput, bulletsMaskInput);
 
-    const merged = tf.layers.concatenate().apply([tankInput, enemiesAttentionContext, bulletsAttentionContext]) as tf.SymbolicTensor;
+    const merged = tf.layers.concatenate().apply([
+        battleInput,
+        tankInput,
+        enemiesAttentionContext,
+        alliesAttentionContext,
+        bulletsAttentionContext,
+    ]) as tf.SymbolicTensor;
 
     return {
-        inputs: [tankInput, enemiesInput, enemiesMaskInput, bulletsInput, bulletsMaskInput],
+        inputs: [battleInput, tankInput, enemiesInput, enemiesMaskInput, alliesInput, alliesMaskInput, bulletsInput, bulletsMaskInput],
         merged,
     };
 }
@@ -81,20 +101,20 @@ function addDenseLayers(layer: tf.SymbolicTensor, hiddenLayers: [ActivationIdent
     return x;
 }
 
-function applyEnemyAttention(tankInput: tf.SymbolicTensor, enemiesInput: tf.SymbolicTensor, enemiesMaskInput: tf.SymbolicTensor, dModel = 32): tf.SymbolicTensor {
+function applyEnemyAttention(qInput: tf.SymbolicTensor, kvInput: tf.SymbolicTensor, kvMaskInput: tf.SymbolicTensor, dModel = 32): tf.SymbolicTensor {
     const denseQ = tf.layers.dense({ units: dModel, useBias: false });
     const denseK = tf.layers.dense({ units: dModel, useBias: false });
     const denseV = tf.layers.dense({ units: dModel, useBias: false });
 
-    const Q = denseQ.apply(tankInput) as tf.SymbolicTensor;                        // [batch, d_model]
-    const K = denseK.apply(enemiesInput) as tf.SymbolicTensor;                    // [batch, ENEMY_SLOTS, d_model]
-    const V = denseV.apply(enemiesInput) as tf.SymbolicTensor;
+    const Q = denseQ.apply(qInput) as tf.SymbolicTensor;                        // [batch, d_model]
+    const K = denseK.apply(kvInput) as tf.SymbolicTensor;                    // [batch, ENEMY_SLOTS, d_model]
+    const V = denseV.apply(kvInput) as tf.SymbolicTensor;
 
     const Q_reshaped = tf.layers.reshape({ targetShape: [1, dModel] }).apply(Q) as tf.SymbolicTensor; // [batch, 1, d_model]
 
     const scores = tf.layers.dot({ axes: -1 }).apply([Q_reshaped, K]) as tf.SymbolicTensor;
 
-    const maskedScores = new AttentionMaskLayer().apply([scores, enemiesMaskInput]) as tf.SymbolicTensor;
+    const maskedScores = new AttentionMaskLayer().apply([scores, kvMaskInput]) as tf.SymbolicTensor;
 
     const attnWeights = tf.layers.activation({ activation: 'softmax' }).apply(maskedScores) as tf.SymbolicTensor;
 

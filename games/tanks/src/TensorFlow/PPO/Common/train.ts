@@ -3,6 +3,9 @@ import { ACTION_DIM } from '../../Common/consts.ts';
 import { computeLogProb } from '../../Common/computeLogProb.ts';
 import { InputArrays } from '../../Common/prepareInputArrays.ts';
 import {
+    ALLY_FEATURES_DIM,
+    ALLY_SLOTS,
+    BATTLE_FEATURES_DIM,
     BULLET_FEATURES_DIM,
     BULLET_SLOTS,
     ENEMY_FEATURES_DIM,
@@ -160,6 +163,9 @@ export function createInputTensors(
     state: InputArrays[],
 ): tf.Tensor[] {
     return [
+        // battle
+        tf.tensor2d(flatFloat32Array(state.map((s) => s.battleFeatures)), [state.length, BATTLE_FEATURES_DIM]),
+        // tank
         tf.tensor2d(flatFloat32Array(state.map((s) => s.tankFeatures)), [state.length, TANK_FEATURES_DIM]),
         // enemies + mask
         tf.tensor3d(
@@ -169,6 +175,15 @@ export function createInputTensors(
         tf.tensor2d(
             flatFloat32Array(state.map((s) => s.enemiesMask)),
             [state.length, ENEMY_SLOTS],
+        ),
+        // allies + mask
+        tf.tensor3d(
+            flatFloat32Array(state.map((s) => s.alliesFeatures)),
+            [state.length, ALLY_SLOTS, ALLY_FEATURES_DIM],
+        ),
+        tf.tensor2d(
+            flatFloat32Array(state.map((s) => s.alliesMask)),
+            [state.length, ALLY_SLOTS],
         ),
         // bullets + mask
         tf.tensor3d(

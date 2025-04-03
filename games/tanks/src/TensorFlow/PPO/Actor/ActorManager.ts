@@ -10,6 +10,7 @@ import { addMemoryBatch } from '../Database.ts';
 import { CONFIG } from '../Common/config.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { prepareInputArrays } from '../../Common/prepareInputArrays.ts';
+import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
 
 export class ActorManager {
     private agent!: ActorAgent;
@@ -64,7 +65,7 @@ export class ActorManager {
                 || (frameCount - 7) % shouldEvery === 0
                 || (frameCount - 10) % shouldEvery === 0;
             const isLastMemorize = frameCount > 10 && (frameCount - 10) % shouldEvery === 0;
-            GameDI.shouldCollectTensor = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
+            TenserFlowDI.shouldCollectState = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
 
             const activeTanks = game.getTanks();
 

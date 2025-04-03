@@ -6,7 +6,6 @@ export const GameDI: {
     height: number;
     world: World;
     physicalWorld: PhysicalWorld;
-    shouldCollectTensor: boolean
     gameTick: (delta: number) => void;
     destroy: () => void;
 } = {
@@ -14,7 +13,6 @@ export const GameDI: {
     height: null as any,
     world: null as any,
     physicalWorld: null as any,
-    shouldCollectTensor: false,
     gameTick: null as any,
     destroy: null as any,
 };

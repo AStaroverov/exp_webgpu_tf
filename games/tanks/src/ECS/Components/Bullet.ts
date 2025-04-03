@@ -13,7 +13,7 @@ import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';
 import { mat4, vec2, vec3 } from 'gl-matrix';
 import { isNumber } from 'lodash-es';
 import { Hitable } from './Hitable.ts';
-import { addPlayerComponent, Player } from './Player.ts';
+import { Player } from './Player.ts';
 import { Tank } from './Tank.ts';
 import { random } from '../../../../../lib/random.ts';
 import { ZIndex } from '../../consts.ts';
@@ -61,8 +61,8 @@ export function createBulletRR(options: Partial<Options> & { speed: number, play
     const [bulletId] = createCircleRR(optionsBulletRR);
     addComponent(world, bulletId, Bullet);
     addTransformComponents(world, bulletId);
-    addPlayerComponent(bulletId, options.playerId);
-    Hitable.addComponent(bulletId);
+    Player.addComponent(world, bulletId, options.playerId);
+    Hitable.addComponent(world, bulletId);
     DestroyByTimeout.addComponent(world, bulletId, 8_000);
 
     return bulletId;
