@@ -49,7 +49,7 @@ export async function createBattlefield(tanksCount: number, withRender = false, 
             x,
             y,
             rotation: Math.PI * randomRangeFloat(0, 2), // Случайный поворот от 0 до 2π
-            color: [randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1],
+            color: [teamId, randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1],
         });
         TankController.setTurretDir$(
             eid,

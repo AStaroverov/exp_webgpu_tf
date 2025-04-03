@@ -33,25 +33,25 @@ let REWARD_WEIGHTS = {
         BASE: 1,          // За нахождение в пределах карты
         PENALTY: -1,      // За выход за границы
     },
-    MAP_BORDER_MULTIPLIER: 3,
+    MAP_BORDER_MULTIPLIER: 0.3,
 
     DISTANCE_KEEPING: {
         BASE: 1.0,          // За поддержание дистанции
         PENALTY: -0.3,      // За слишком близкое приближение
     },
-    DISTANCE_KEEPING_MULTIPLIER: 2, // может быть несколько врагов
+    DISTANCE_KEEPING_MULTIPLIER: 0.3, // может быть несколько врагов
 
     MOVEMENT: {
         BASE: 1,          // За базовое движение
         STRATEGIC: 1,     // За стратегическое движение
     },
-    MOVEMENT_MULTIPLIER: 3.0,
+    MOVEMENT_MULTIPLIER: 0.3,
 
     BULLET_AVOIDANCE: {
         PENALTY: -0.3,
         AVOID_QUALITY: 0.3,
     },
-    BULLET_AVOIDANCE_MULTIPLIER: 3.0,
+    BULLET_AVOIDANCE_MULTIPLIER: 0.3,
 };
 
 // Структура для хранения многокомпонентных наград
