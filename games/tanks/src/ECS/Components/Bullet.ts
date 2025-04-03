@@ -18,6 +18,7 @@ import { Tank } from './Tank.ts';
 import { random } from '../../../../../lib/random.ts';
 import { ZIndex } from '../../consts.ts';
 import { DestroyByTimeout } from './Destroy.ts';
+import { CollisionGroup } from '../../Physical/createRigid.ts';
 
 export const Bullet = {};
 
@@ -38,8 +39,8 @@ const optionsBulletRR: Options = {
     angularDamping: 0.1,
     linearDamping: 0.1,
     collisionEvent: ActiveEvents.CONTACT_FORCE_EVENTS,
-    belongsCollisionGroup: 0,//CollisionGroup.BULLET,
-    interactsCollisionGroup: 0,//CollisionGroup.ALL & ~CollisionGroup.TANK_GUN_PARTS,
+    belongsCollisionGroup: CollisionGroup.BULLET,
+    interactsCollisionGroup: CollisionGroup.ALL & ~CollisionGroup.TANK_GUN_PARTS,
 };
 const defaultOptionsBulletRR = structuredClone(optionsBulletRR);
 

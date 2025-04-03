@@ -1,20 +1,15 @@
 import * as tf from '@tensorflow/tfjs';
 import { Tensor } from '@tensorflow/tfjs';
-import {
-    TANK_INPUT_TENSOR_BULLET_BUFFER,
-    TANK_INPUT_TENSOR_ENEMY_BUFFER,
-    TANK_INPUT_TENSOR_MAX_BULLETS,
-    TANK_INPUT_TENSOR_MAX_ENEMIES,
-} from '../../ECS/Components/TankState.ts';
+import { BULLET_BUFFER, ENEMY_BUFFER, MAX_BULLETS, MAX_ENEMIES } from '../../ECS/Components/TankState.ts';
 import { ACTION_DIM } from './consts.ts';
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 import { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
 
 export const TANK_FEATURES_DIM = 7;
-export const ENEMY_SLOTS = TANK_INPUT_TENSOR_MAX_ENEMIES;
-export const ENEMY_FEATURES_DIM = TANK_INPUT_TENSOR_ENEMY_BUFFER - 1; // -1 потому что id не считаем
-export const BULLET_SLOTS = TANK_INPUT_TENSOR_MAX_BULLETS;
-export const BULLET_FEATURES_DIM = TANK_INPUT_TENSOR_BULLET_BUFFER;
+export const ENEMY_SLOTS = MAX_ENEMIES;
+export const ENEMY_FEATURES_DIM = ENEMY_BUFFER - 1; // -1 потому что id не считаем
+export const BULLET_SLOTS = MAX_BULLETS;
+export const BULLET_FEATURES_DIM = BULLET_BUFFER;
 
 const denseLayersPolicy: [ActivationIdentifier, number][] = [['relu', 256], ['relu', 128], ['relu', 64]];
 const denseLayersValue: [ActivationIdentifier, number][] = [['relu', 64], ['relu', 32]];
