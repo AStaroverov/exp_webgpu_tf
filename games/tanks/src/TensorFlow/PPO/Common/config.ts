@@ -46,12 +46,12 @@ export const DEFAULT_EXPERIMENT: Config = {
     gamma: 0.99,
     lam: 0.95,
     // PPO-specific parameters
-    epochs: 6,
+    epochs: 5,
     clipRatio: 0.2,
     entropyCoeff: 0.01,
 
     klConfig: {
-        target: 0.02,
+        target: 0.015,
         highCoef: 2.0,       // Если KL > 2 * 0.01 => 0.02
         lowCoef: 1 / 2.0,    // Если KL < 0.5 * 0.01 => 0.005
         max: 0.5,
@@ -66,7 +66,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     trustCoeff: 0.1,
 
     batchSize: 256, // useless for appo
-    miniBatchSize: 128,
+    miniBatchSize: 64,
     // Training parameters
     warmupFrames: 100,
     episodeFrames: 900, // usually produce 250 samples

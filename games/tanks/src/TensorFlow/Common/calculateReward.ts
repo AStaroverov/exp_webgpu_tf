@@ -22,9 +22,9 @@ let REWARD_WEIGHTS = {
         DISTANCE: 0.1,      // За расстояние до прицела
         NO_TARGET_PENALTY: -0.1, // За отсутствие целей
         DISTANCE_PENALTY: -0.1, // За расстояние до цели
-        SHOOTING: 0.2,       // За стрельбу в цель
+        SHOOTING: 1.0,       // За стрельбу в цель
         SHOOTING_PENALTY: -0.1, // За стрельбу в пустоту
-        SHOOTING_ALLIES_PENALTY: -2, // За стрельбу в союзников
+        SHOOTING_ALLIES_PENALTY: -2.0, // За стрельбу в союзников
     },
     AIM_MULTIPLIER: 5.0,
 
