@@ -36,20 +36,8 @@ export class PolicyLearnerAgent {
     }
 
     async save() {
-        try {
-            await Promise.all([
-                policyAgentState.set({
-                    version: this.version,
-                    klHistory: this.klHistory.toArray(),
-                    learningRate: getLR(this.policyNetwork),
-                }),
-                this.policyNetwork.save(getStoreModelPath('policy-model', CONFIG), { includeOptimizer: true }),
-            ]);
-
-            return true;
-        } catch (error) {
-            console.error('Error saving models:', error);
-            return false;
+        while (!(await this.upload())) {
+            await new Promise(resolve => setTimeout(resolve, 100));
         }
     }
 
@@ -198,6 +186,24 @@ export class PolicyLearnerAgent {
         this.version += 1;
 
         return true;
+    }
+
+    private async upload() {
+        try {
+            await Promise.all([
+                policyAgentState.set({
+                    version: this.version,
+                    klHistory: this.klHistory.toArray(),
+                    learningRate: getLR(this.policyNetwork),
+                }),
+                this.policyNetwork.save(getStoreModelPath('policy-model', CONFIG), { includeOptimizer: true }),
+            ]);
+
+            return true;
+        } catch (error) {
+            console.error('Error saving models:', error);
+            return false;
+        }
     }
 
     private async load() {
