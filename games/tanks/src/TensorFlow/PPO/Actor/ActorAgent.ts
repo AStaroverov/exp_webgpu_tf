@@ -6,13 +6,15 @@ import { getStoreModelPath } from '../utils.ts';
 import { CONFIG } from '../Common/config.ts';
 import { act } from '../Common/train.ts';
 import { InputArrays } from '../../Common/prepareInputArrays.ts';
+import {createPolicyNetwork, createValueNetwork} from "../../Common/models.ts";
+import {setModelState} from "../../Common/modelsCopy.ts";
 
 export class ActorAgent {
     private reuse = -1;
     private version = -1;
     private memory: Memory;
-    private policyNetwork!: tf.LayersModel;
-    private valueNetwork!: tf.LayersModel;
+    private policyNetwork: tf.LayersModel = createPolicyNetwork();
+    private valueNetwork: tf.LayersModel = createValueNetwork();
 
     constructor() {
         this.memory = new Memory();
@@ -23,8 +25,8 @@ export class ActorAgent {
     }
 
     dispose() {
-        this.policyNetwork?.dispose();
-        this.valueNetwork?.dispose();
+        // this.policyNetwork?.dispose();
+        // this.valueNetwork?.dispose();
         this.disposeMemory();
     }
 
@@ -86,8 +88,10 @@ export class ActorAgent {
                 // we decay version to avoid reusing the same model more than N times
                 this.reuse = this.version === agentState.version ? this.reuse + 1 : 0;
                 this.version = agentState.version;
-                this.valueNetwork = valueNetwork;
-                this.policyNetwork = policyNetwork;
+                this.valueNetwork = await setModelState(this.valueNetwork, valueNetwork);
+                this.policyNetwork = await setModelState(this.policyNetwork, policyNetwork);
+                valueNetwork.dispose();
+                policyNetwork.dispose();
                 return true;
             }
 
