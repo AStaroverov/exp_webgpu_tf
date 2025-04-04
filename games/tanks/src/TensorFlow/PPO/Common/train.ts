@@ -197,3 +197,25 @@ export function createInputTensors(
         ),
     ];
 }
+
+export function sliceInputTensors(tensors: tf.Tensor[], start: number, size: number): tf.Tensor[] {
+    if (tensors.length !== 8) {
+        throw new Error('Invalid input tensors length');
+    }
+
+    return [
+        // battlefield
+        tensors[0].slice([start, 0], [size, -1]),
+        // tank
+        tensors[1].slice([start, 0], [size, -1]),
+        // enemies + mask
+        tensors[2].slice([start, 0, 0], [size, -1, -1]),
+        tensors[3].slice([start, 0], [size, -1]),
+        // allies + mask
+        tensors[4].slice([start, 0, 0], [size, -1, -1]),
+        tensors[5].slice([start, 0], [size, -1]),
+        // bullets + mask
+        tensors[6].slice([start, 0, 0], [size, -1, -1]),
+        tensors[7].slice([start, 0], [size, -1]),
+    ];
+}

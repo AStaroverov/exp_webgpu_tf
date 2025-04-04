@@ -6,12 +6,17 @@ import { createPolicyNetwork, createValueNetwork } from '../../Common/models.ts'
 import { getStoreModelPath } from '../utils.ts';
 import { extractMemoryBatchList, getAgentState, setAgentState } from '../Database.ts';
 import { Batch } from '../Memory.ts';
-import { computeKullbackLeibler, createInputTensors, trainPolicyNetwork, trainValueNetwork } from '../Common/train.ts';
+import {
+    computeKullbackLeibler,
+    createInputTensors,
+    sliceInputTensors,
+    trainPolicyNetwork,
+    trainValueNetwork,
+} from '../Common/train.ts';
 import { CONFIG } from '../Common/config.ts';
 import { flatFloat32Array } from '../../Common/flat.ts';
-import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { loadMetrics, logBatch, logEpoch, logLR, logRewards, logTrain, saveMetrics } from '../../Common/Metrics.ts';
-import { batchShuffle } from '../../../../../../lib/shuffle.ts';
+import { batchShuffle, shuffle } from '../../../../../../lib/shuffle.ts';
 import { RingBuffer } from 'ring-buffer-ts';
 import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
@@ -103,36 +108,42 @@ export class LearnerAgent {
 
         const miniBatchCount = ceil(states.length / CONFIG.miniBatchSize);
 
+        batchShuffle(
+            states,
+            actions,
+            logProbs,
+            values,
+            advantages,
+            returns,
+        );
+
         const tAllStates = createInputTensors(states);
-        const tAllActions = tf.tensor(flatFloat32Array(actions), [sumSize, ACTION_DIM]);
-        const tAllLogProbs = tf.tensor(logProbs);
+        const tAllActions = tf.tensor2d(flatFloat32Array(actions), [actions.length, ACTION_DIM]);
+        const tAllLogProbs = tf.tensor1d(logProbs);
+        const tAllValues = tf.tensor1d(values);
+        const tAllAdvantages = tf.tensor1d(advantages);
+        const tAllReturns = tf.tensor1d(returns);
 
         console.log(`[Train]: Iteration ${ this.version }, Sum batch size: ${ sumSize }, Mini batch count: ${ miniBatchCount } by ${ CONFIG.miniBatchSize }`);
 
         const policyLossPromises: Promise<number>[] = [];
         const valueLossPromises: Promise<number>[] = [];
         const klList: number[] = [];
+        const miniBatchIndexes = Array.from({ length: miniBatchCount }, (_, i) => i);
 
         for (let i = 0; i < CONFIG.epochs; i++) {
-            batchShuffle(
-                states,
-                actions,
-                logProbs,
-                values,
-                advantages,
-                returns,
-            );
-
-            for (let j = 0; j < miniBatchCount; j++) {
-                const start = j * CONFIG.miniBatchSize;
+            shuffle(miniBatchIndexes);
+            for (let j = 0; j < miniBatchIndexes.length; j++) {
+                const index = miniBatchIndexes[j];
+                const start = index * CONFIG.miniBatchSize;
                 const end = Math.min(start + CONFIG.miniBatchSize, states.length);
                 const size = end - start;
-                const tStates = createInputTensors(states.slice(start, end));
-                const tActions = tf.tensor(flatFloat32Array(actions.slice(start, end)), [size, ACTION_DIM]);
-                const tLogProbs = tf.tensor(logProbs.subarray(start, end), [size]);
-                const tValues = tf.tensor(values.subarray(start, end), [size]);
-                const tAdvantages = tf.tensor(advantages.subarray(start, end), [size]);
-                const tReturns = tf.tensor(returns.subarray(start, end), [size]);
+                const tStates = sliceInputTensors(tAllStates, start, size);
+                const tActions = tAllActions.slice([start, 0], [size, -1]);
+                const tLogProbs = tAllLogProbs.slice([start], [size]);
+                const tValues = tAllValues.slice([start], [size]);
+                const tAdvantages = tAllAdvantages.slice([start], [size]);
+                const tReturns = tAllReturns.slice([start], [size]);
 
                 policyLossPromises.push(trainPolicyNetwork(
                     this.policyNetwork, this.policyNetwork.optimizer,
@@ -146,14 +157,12 @@ export class LearnerAgent {
                     CONFIG.clipRatio,
                 ));
 
-                macroTasks.addTimeout(() => {
-                    tStates.forEach(t => t.dispose());
-                    tActions.dispose();
-                    tLogProbs.dispose();
-                    tValues.dispose();
-                    tAdvantages.dispose();
-                    tReturns.dispose();
-                }, 1000);
+                tStates.forEach(t => t.dispose());
+                tActions.dispose();
+                tLogProbs.dispose();
+                tValues.dispose();
+                tAdvantages.dispose();
+                tReturns.dispose();
             }
 
             const kl = await computeKullbackLeibler(
@@ -219,12 +228,12 @@ export class LearnerAgent {
             saveMetrics();
         });
 
-        macroTasks.addTimeout(() => {
-            tAllStates.forEach(t => t.dispose());
-            tAllActions.dispose();
-            tAllLogProbs.dispose();
-        }, 1000);
-
+        tAllStates.forEach(t => t.dispose());
+        tAllActions.dispose();
+        tAllLogProbs.dispose();
+        tAllValues.dispose();
+        tAllAdvantages.dispose();
+        tAllReturns.dispose();
         return true;
     }
 
