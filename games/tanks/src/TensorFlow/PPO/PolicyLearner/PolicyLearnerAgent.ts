@@ -173,6 +173,7 @@ export class PolicyLearnerAgent {
                 metricsChannels.batchSize.postMessage(batch.memories.size);
             }
 
+            metricsChannels.advantages.postMessage(advantages);
             metricsChannels.trainTime.postMessage((endTime - startTime) / 1000);
             metricsChannels.waitTime.postMessage(waitTime / 1000);
             metricsChannels.rewards.postMessage(memories.map(b => b.rewards).flat());

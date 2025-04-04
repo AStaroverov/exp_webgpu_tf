@@ -119,6 +119,8 @@ export class ValueLearnerAgent {
                 metricsChannels.valueLoss.postMessage(valueLoss);
             }
 
+            metricsChannels.values.postMessage(values);
+            metricsChannels.returns.postMessage(returns);
             metricsChannels.trainTime.postMessage((endTime - startTime) / 1000);
             metricsChannels.waitTime.postMessage(waitTime / 1000);
         });
