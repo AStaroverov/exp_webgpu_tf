@@ -11,6 +11,7 @@ import {
 import { ACTION_DIM } from './consts.ts';
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 import { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
+import { CONFIG } from '../PPO/Common/config.ts';
 
 export const BATTLE_FEATURES_DIM = 4;
 export const TANK_FEATURES_DIM = 7;
@@ -38,7 +39,7 @@ export function createPolicyNetwork(): tf.LayersModel {
         inputs: inputs,
         outputs: policyOutput,
     });
-    model.optimizer = tf.train.adam(0);
+    model.optimizer = tf.train.adam(CONFIG.lrConfig.initial);
 
     return model;
 }
@@ -57,7 +58,7 @@ export function createValueNetwork(): tf.LayersModel {
         inputs: inputs,
         outputs: valueOutput,
     });
-    model.optimizer = tf.train.adam(0);
+    model.optimizer = tf.train.adam(CONFIG.lrConfig.initial);
 
     return model;
 }

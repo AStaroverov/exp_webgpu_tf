@@ -137,7 +137,6 @@ const store = {
     rewards: new CompressedBuffer(10_000, 5),
     kl: new CompressedBuffer(10_000, 5),
     lr: new CompressedBuffer(1_000, 5),
-    clip: new CompressedBuffer(1_000, 5),
     valueLoss: new CompressedBuffer(1_000, 5),
     policyLoss: new CompressedBuffer(1_000, 5),
     trainTime: new CompressedBuffer(1_000, 5),
@@ -157,8 +156,6 @@ export function loadMetrics() {
             store.kl.fromJson(data.kl);
             // @ts-ignore
             store.lr.fromJson(data.lr);
-            // @ts-ignore
-            store.clip.fromJson(data.clip);
             // @ts-ignore
             store.valueLoss.fromJson(data.valueLoss);
             // @ts-ignore
@@ -189,7 +186,6 @@ export function saveMetrics() {
         rewards: store.rewards.toJson(),
         kl: store.kl.toJson(),
         lr: store.lr.toJson(),
-        clip: store.clip.toJson(),
         valueLoss: store.valueLoss.toJson(),
         policyLoss: store.policyLoss.toJson(),
         trainTime: store.trainTime.toJson(),
@@ -211,10 +207,6 @@ export function logEpoch(data: {
 
 export function logLR(lr: number) {
     store.lr.add(lr);
-}
-
-export function logClip(clip: number) {
-    store.clip.add(clip);
 }
 
 export function logRewards(rewards: number[]) {
@@ -263,15 +255,6 @@ function drawTab1() {
     }, {
         xLabel: 'Version',
         yLabel: 'LR',
-        width: 500,
-        height: 300,
-    });
-
-    tfvis.render.linechart({ name: 'Clip', tab: 'Tab 1' }, {
-        values: [store.clip.toArray()],
-    }, {
-        xLabel: 'Version',
-        yLabel: 'Clip',
         width: 500,
         height: 300,
     });

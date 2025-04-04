@@ -10,26 +10,15 @@ import { computeKullbackLeibler, createInputTensors, trainPolicyNetwork, trainVa
 import { CONFIG } from '../Common/config.ts';
 import { flatFloat32Array } from '../../Common/flat.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
-import {
-    loadMetrics,
-    logBatch,
-    logClip,
-    logEpoch,
-    logLR,
-    logRewards,
-    logTrain,
-    saveMetrics,
-} from '../../Common/Metrics.ts';
+import { loadMetrics, logBatch, logEpoch, logLR, logRewards, logTrain, saveMetrics } from '../../Common/Metrics.ts';
 import { batchShuffle } from '../../../../../../lib/shuffle.ts';
 import { RingBuffer } from 'ring-buffer-ts';
-import { getConfigPatch } from '../../Common/getConfigPatch.ts';
+import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
 
 export class LearnerAgent {
     private version = 0;
     private klHistory = new RingBuffer<number>(30);
-    private clipRatio = CONFIG.clipRatioConfig.initial;
-    private learningRate = CONFIG.lrConfig.initial;
 
     private batches: { version: number, memories: Batch }[] = [];
     private lastTrainTimeStart = 0;
@@ -53,8 +42,6 @@ export class LearnerAgent {
             await Promise.all([
                 setAgentState({
                     version: this.version,
-                    clipRatio: this.clipRatio,
-                    learningRate: this.learningRate,
                     klHistory: this.klHistory.toArray(),
                 }),
                 this.valueNetwork.save(getStoreModelPath('value-model', CONFIG), { includeOptimizer: true }),
@@ -150,13 +137,13 @@ export class LearnerAgent {
                 policyLossPromises.push(trainPolicyNetwork(
                     this.policyNetwork, this.policyNetwork.optimizer,
                     tStates, tActions, tLogProbs, tAdvantages,
-                    this.clipRatio, CONFIG.entropyCoeff,
+                    CONFIG.clipRatio, CONFIG.entropyCoeff,
                 ));
 
                 valueLossPromises.push(trainValueNetwork(
                     this.valueNetwork, this.valueNetwork.optimizer,
                     tStates, tReturns, tValues,
-                    this.clipRatio,
+                    CONFIG.clipRatio,
                 ));
 
                 macroTasks.addTimeout(() => {
@@ -181,14 +168,14 @@ export class LearnerAgent {
             // skip kl that too high
             if (kl < CONFIG.klConfig.target * 100) {
                 this.klHistory.add(kl);
-                const { newLR, newClip } = getConfigPatch(
-                    mean(this.klHistory.toArray()), this.learningRate, this.clipRatio,
+                const lr = getDynamicLearningRate(
+                    mean(this.klHistory.toArray()),
+                    getLR(this.policyNetwork),
                 );
-                this.updateConfig(newLR, newClip);
+                this.updateOptimizersLR(lr);
             }
 
-            logLR(this.learningRate);
-            logClip(this.clipRatio);
+            logLR(getLR(this.policyNetwork));
 
             if (kl > CONFIG.klConfig.max) {
                 console.warn(`[Train]: KL divergence was too high: ${ kl }, in epoch ${ i }`);
@@ -245,10 +232,6 @@ export class LearnerAgent {
         if (!(await this.load())) {
             this.policyNetwork = createPolicyNetwork();
             this.valueNetwork = createValueNetwork();
-            this.updateConfig(
-                CONFIG.lrConfig.initial,
-                CONFIG.clipRatioConfig.initial,
-            );
         }
 
         // fake loss for save optimizer with model
@@ -274,10 +257,6 @@ export class LearnerAgent {
             this.klHistory.fromArray(agentState?.klHistory ?? []);
             this.valueNetwork = await setModelState(this.valueNetwork, valueNetwork);
             this.policyNetwork = await setModelState(this.policyNetwork, policyNetwork);
-            this.updateConfig(
-                agentState?.learningRate ?? CONFIG.lrConfig.initial,
-                agentState?.clipRatio ?? CONFIG.clipRatioConfig.initial,
-            );
             console.log('[LearnAgent] Models loaded successfully');
 
             valueNetwork.dispose();
@@ -290,23 +269,18 @@ export class LearnerAgent {
         }
     }
 
-    private updateConfig(lr: number, clip: number) {
-        this.clipRatio = clip;
-        this.learningRate = lr;
-        this.upsertOptimizers(lr);
-    }
-
-    private upsertOptimizers(lr: number) {
-        if (getLR(this.policyNetwork.optimizer) !== lr || getLR(this.valueNetwork.optimizer) !== lr) {
-            // @ts-ignore
-            this.policyNetwork.optimizer.learningRate = lr;
-            // @ts-ignore
-            this.valueNetwork.optimizer.learningRate = lr;
-        }
+    private updateOptimizersLR(lr: number) {
+        setLR(this.policyNetwork, lr);
+        setLR(this.valueNetwork, lr);
     }
 }
 
-function getLR(o?: tf.Optimizer) {
-    // @ts-ignore
-    return o?.learningRate as undefined | number;
+function getLR(o: tf.LayersModel): number {
+    // @ts-expect-error
+    return o.optimizer.learningRate;
+}
+
+function setLR(o: tf.LayersModel, lr: number) {
+    // @ts-expect-error
+    o.optimizer.learningRate = lr;
 }
