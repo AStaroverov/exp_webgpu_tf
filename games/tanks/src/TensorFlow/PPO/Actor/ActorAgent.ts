@@ -42,7 +42,8 @@ export class ActorAgent {
 
     readMemory() {
         return {
-            version: this.policyVersion,
+            policyVersion: this.policyVersion,
+            valueVersion: this.valueVersion,
             memories: this.memory.getBatch(CONFIG.gamma, CONFIG.lam),
         };
     }
