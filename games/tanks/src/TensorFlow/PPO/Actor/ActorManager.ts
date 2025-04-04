@@ -38,11 +38,11 @@ export class ActorManager {
     private afterTraining(game: { destroy: () => void }) {
         const memory = this.agent.readMemory();
         policyMemory.addMemoryBatch({
-            version: memory.version,
+            version: memory.policyVersion,
             memories: omit(memory.memories, 'values', 'returns'),
         });
         valueMemory.addMemoryBatch({
-            version: memory.version,
+            version: memory.valueVersion,
             memories: pick(memory.memories, 'size', 'states', 'values', 'returns'),
         });
         this.agent.dispose();
