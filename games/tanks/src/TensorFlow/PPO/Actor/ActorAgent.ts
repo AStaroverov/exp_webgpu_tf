@@ -6,8 +6,9 @@ import { getStoreModelPath } from '../utils.ts';
 import { CONFIG } from '../Common/config.ts';
 import { act } from '../Common/train.ts';
 import { InputArrays } from '../../Common/prepareInputArrays.ts';
-import {createPolicyNetwork, createValueNetwork} from "../../Common/models.ts";
-import {setModelState} from "../../Common/modelsCopy.ts";
+import { createPolicyNetwork, createValueNetwork } from '../../Common/models.ts';
+import { setModelState } from '../../Common/modelsCopy.ts';
+import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 
 export class ActorAgent {
     private reuse = -1;
@@ -62,13 +63,19 @@ export class ActorAgent {
     }
 
     async sync() {
+        while (!(await this.load())) {
+            await new Promise((resolve) => macroTasks.addTimeout(resolve, 1000));
+        }
+    }
+
+    private async load() {
         try {
             const start = Date.now();
             const canReuse = this.reuse < CONFIG.reuseLimit;
             let agentState: undefined | AgentState;
             let isNewVersion = false;
             for (let i = 0; i < 1_000_000; i++) {
-                if (i > 0) await new Promise(resolve => setTimeout(resolve, i * 100));
+                if (i > 0) await new Promise(resolve => macroTasks.addTimeout(resolve, i * 100));
                 agentState = await getAgentState();
                 isNewVersion = (agentState?.version ?? -1) > this.version;
                 if (agentState && (isNewVersion || canReuse)) break;

@@ -6,10 +6,12 @@ import { getAgentState } from '../Database.ts';
 import { predict } from '../Common/train.ts';
 import { CONFIG } from '../Common/config.ts';
 import { InputArrays } from '../../Common/prepareInputArrays.ts';
+import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
+import { setModelState } from '../../Common/modelsCopy.ts';
 
 export class PlayerAgent {
     private version = 0;
-    private policyNetwork!: tf.LayersModel;  // Сеть политики
+    private policyNetwork: tf.LayersModel = createPolicyNetwork();
 
     constructor() {
     }
@@ -30,8 +32,8 @@ export class PlayerAgent {
     }
 
     async sync() {
-        if (!(await this.load())) {
-            this.policyNetwork = createPolicyNetwork();
+        while (!(await this.load())) {
+            await new Promise((resolve) => macroTasks.addTimeout(resolve, 1000));
         }
 
         return this;
@@ -49,7 +51,8 @@ export class PlayerAgent {
             }
 
             this.version = agentState?.version ?? 0;
-            this.policyNetwork = policyNetwork;
+            this.policyNetwork = await setModelState(this.policyNetwork, policyNetwork);
+            policyNetwork.dispose();
             console.log('[PlayerAgent] Models loaded successfully');
             return true;
         } catch (error) {

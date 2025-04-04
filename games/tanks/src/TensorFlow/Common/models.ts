@@ -87,7 +87,16 @@ function createInputLayer() {
     ]) as tf.SymbolicTensor;
 
     return {
-        inputs: [battleInput, tankInput, enemiesInput, enemiesMaskInput, alliesInput, alliesMaskInput, bulletsInput, bulletsMaskInput],
+        inputs: [
+            battleInput,
+            tankInput,
+            enemiesInput,
+            enemiesMaskInput,
+            alliesInput,
+            alliesMaskInput,
+            bulletsInput,
+            bulletsMaskInput,
+        ],
         merged,
     };
 }
