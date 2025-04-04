@@ -74,8 +74,9 @@ class CompressedBuffer {
 
     private compress() {
         if (this.avgBuffer.length > this.size / 2) {
-            [this.avgBuffer, this.minBuffer, this.maxBuffer] =
-                this.compressAvgMinMax(this.avgBuffer, 2);
+            this.avgBuffer = this.compressAvg(this.avgBuffer, 2);
+            this.minBuffer = this.compressMin(this.minBuffer, 2);
+            this.maxBuffer = this.compressMax(this.maxBuffer, 2);
         }
         this.compressRawBuffer(this.compressBatch);
     }
@@ -109,10 +110,8 @@ class CompressedBuffer {
         this.buffer = [];
     }
 
-    private compressAvgMinMax(buffer: Point[], batch: number) {
+    private compressAvg(buffer: Point[], batch: number) {
         const compressedAvg: Point[] = [];
-        const compressedMin: Point[] = [];
-        const compressedMax: Point[] = [];
         const length = buffer.length;
 
         for (let i = 0; i < length; i += batch) {
@@ -120,25 +119,49 @@ class CompressedBuffer {
             let lastItem = firstItem;
             let sum = firstItem.y;
             let count = 1;
-            let min = firstItem;
-            let max = firstItem;
             for (let j = i + 1; j < Math.min(i + batch, length); j++) {
                 lastItem = buffer[j];
                 sum += lastItem.y;
                 count++;
-                if (min.y > lastItem.y) {
-                    min = lastItem;
-                }
-                if (max.y < lastItem.y) {
-                    max = lastItem;
-                }
             }
             compressedAvg.push({ x: (lastItem.x + firstItem.x) / 2, y: sum / count });
+        }
+
+        return compressedAvg;
+    }
+
+    private compressMin(buffer: Point[], batch: number) {
+        const compressedMin: Point[] = [];
+        const length = buffer.length;
+
+        for (let i = 0; i < length; i += batch) {
+            let min = buffer[i];
+            for (let j = i + 1; j < Math.min(i + batch, length); j++) {
+                if (min.y > buffer[j].y) {
+                    min = buffer[j];
+                }
+            }
             compressedMin.push(min);
+        }
+
+        return compressedMin;
+    }
+
+    private compressMax(buffer: Point[], batch: number) {
+        const compressedMax: Point[] = [];
+        const length = buffer.length;
+
+        for (let i = 0; i < length; i += batch) {
+            let max = buffer[i];
+            for (let j = i + 1; j < Math.min(i + batch, length); j++) {
+                if (max.y < buffer[j].y) {
+                    max = buffer[j];
+                }
+            }
             compressedMax.push(max);
         }
 
-        return [compressedAvg, compressedMin, compressedMax];
+        return compressedMax;
     }
 }
 
