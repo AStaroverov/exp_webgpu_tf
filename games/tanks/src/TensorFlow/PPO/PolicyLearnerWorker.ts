@@ -1,10 +1,11 @@
 import '@tensorflow/tfjs-backend-wasm';
 import { initTensorFlow } from '../Common/initTensorFlow.ts';
 import { setConsolePrefix } from '../Common/console.ts';
-import '../Common/utils.ts';
-import { LearnerManager } from './Learner/LearnerManager.ts';
+import '../Common/uiUtils.ts';
+import { LearnerManager } from './LearnerManager.ts';
+import { PolicyLearnerAgent } from './PolicyLearner/PolicyLearnerAgent.ts';
 
-setConsolePrefix(`[LEARNER]`);
+setConsolePrefix(`[POLICY_LEARNER]`);
 
 // Main initialization function
 async function initSystem() {
@@ -14,7 +15,7 @@ async function initSystem() {
         throw new Error('Failed to initialize TensorFlow.js');
     }
 
-    const manager = await LearnerManager.create();
+    const manager = await LearnerManager.create(new PolicyLearnerAgent());
     manager.start();
 
     return { manager };

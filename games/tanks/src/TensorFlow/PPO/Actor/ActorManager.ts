@@ -6,11 +6,12 @@ import { ActorAgent } from './ActorAgent.ts';
 import { calculateReward } from '../../Common/calculateReward.ts';
 import { getTankHealth } from '../../../ECS/Components/Tank.ts';
 import { applyActionToTank } from '../../Common/applyActionToTank.ts';
-import { addMemoryBatch } from '../Database.ts';
-import { CONFIG } from '../Common/config.ts';
+import { CONFIG } from '../config.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { prepareInputArrays } from '../../Common/prepareInputArrays.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
+import { policyMemory, valueMemory } from '../../Common/Database.ts';
+import { omit, pick } from 'lodash-es';
 
 export class ActorManager {
     private agent!: ActorAgent;
@@ -35,7 +36,15 @@ export class ActorManager {
     }
 
     private afterTraining(game: { destroy: () => void }) {
-        addMemoryBatch(this.agent.readMemory());
+        const memory = this.agent.readMemory();
+        policyMemory.addMemoryBatch({
+            version: memory.version,
+            memories: omit(memory.memories, 'values', 'returns'),
+        });
+        valueMemory.addMemoryBatch({
+            version: memory.version,
+            memories: pick(memory.memories, 'size', 'states', 'values', 'returns'),
+        });
         this.agent.dispose();
         game.destroy();
     }
