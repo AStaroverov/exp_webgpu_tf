@@ -1,7 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
-import { ACTION_DIM } from '../../Common/consts.ts';
-import { computeLogProb } from '../../Common/computeLogProb.ts';
-import { InputArrays } from '../../Common/prepareInputArrays.ts';
+import { ACTION_DIM } from '../Common/consts.ts';
+import { computeLogProb } from '../Common/computeLogProb.ts';
+import { InputArrays } from '../Common/prepareInputArrays.ts';
 import {
     ALLY_FEATURES_DIM,
     ALLY_SLOTS,
@@ -11,8 +11,8 @@ import {
     ENEMY_FEATURES_DIM,
     ENEMY_SLOTS,
     TANK_FEATURES_DIM,
-} from '../../Common/models.ts';
-import { flatFloat32Array } from '../../Common/flat.ts';
+} from '../Common/models.ts';
+import { flatFloat32Array } from '../Common/flat.ts';
 
 export function trainPolicyNetwork(
     policyNetwork: tf.LayersModel,

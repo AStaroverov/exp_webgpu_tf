@@ -1,20 +1,19 @@
-import { LearnerAgent } from './LearnerAgent.ts';
-import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
-import { TICK_TRAIN_TIME } from '../../Common/consts.ts';
+import { PolicyLearnerAgent } from './PolicyLearner/PolicyLearnerAgent.ts';
+import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
+import { TICK_TRAIN_TIME } from '../Common/consts.ts';
 import { EntityId } from 'bitecs';
+import { ValueLearnerAgent } from './ValueLearner/ValueLearnerAgent.ts';
 
 export class LearnerManager {
-    public agent!: LearnerAgent;
-
     private stopTrainingTimeout: VoidFunction | null = null;
     private tankRewards = new Map<EntityId, number>();
 
-    constructor() {
+    constructor(public agent: PolicyLearnerAgent | ValueLearnerAgent) {
 
     }
 
-    static create() {
-        return new LearnerManager().init();
+    static create(agent: PolicyLearnerAgent | ValueLearnerAgent) {
+        return new LearnerManager(agent).init();
     }
 
     public start() {
@@ -31,7 +30,7 @@ export class LearnerManager {
     }
 
     private async init() {
-        this.agent = await LearnerAgent.create();
+        await this.agent.init();
         await this.agent.save();
         return this;
     }

@@ -1,4 +1,4 @@
-import { CONFIG } from '../PPO/Common/config.ts';
+import { CONFIG } from '../PPO/config.ts';
 
 export function getDynamicLearningRate(kl: number, lr: number): number {
     const {

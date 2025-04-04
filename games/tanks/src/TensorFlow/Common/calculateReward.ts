@@ -5,8 +5,8 @@ import { TANK_RADIUS } from './consts.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 import { getTankHealth, Tank } from '../../ECS/Components/Tank.ts';
 import { TankController } from '../../ECS/Components/TankController.ts';
-import { CONFIG } from '../PPO/Common/config.ts';
-import { isVerboseLog } from './utils.ts';
+import { CONFIG } from '../PPO/config.ts';
+import { isVerboseLog } from './uiUtils.ts';
 import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../ECS/Components/TankState.ts';
 
 // Константы для калибровки вознаграждений

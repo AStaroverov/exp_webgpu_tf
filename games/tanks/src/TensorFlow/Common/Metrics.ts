@@ -1,6 +1,7 @@
 import * as tfvis from '@tensorflow/tfjs-vis';
-import { getAgentLog, setAgentLog } from '../PPO/Database.ts';
-import { isObject } from 'lodash-es';
+import { getAgentLog, setAgentLog } from './Database.ts';
+import { isObject, throttle } from 'lodash-es';
+import { metricsChannels } from './channels.ts';
 
 type Point = { x: number, y: number };
 
@@ -143,36 +144,34 @@ const store = {
     waitTime: new CompressedBuffer(1_000, 5),
     versionDelta: new CompressedBuffer(1_000, 5),
     batchSize: new CompressedBuffer(1_000, 5),
-    memory: new CompressedBuffer(100, 5),
 };
 
-export function loadMetrics() {
-    return getAgentLog().then((data) => {
+
+getAgentLog().then((data) => {
+    // @ts-ignore
+    if (isObject(data) && data.version === 1) {
         // @ts-ignore
-        if (isObject(data) && data.version === 1) {
-            // @ts-ignore
-            store.rewards.fromJson(data.rewards);
-            // @ts-ignore
-            store.kl.fromJson(data.kl);
-            // @ts-ignore
-            store.lr.fromJson(data.lr);
-            // @ts-ignore
-            store.valueLoss.fromJson(data.valueLoss);
-            // @ts-ignore
-            store.policyLoss.fromJson(data.policyLoss);
-            // @ts-ignore
-            store.trainTime.fromJson(data.trainTime);
-            // @ts-ignore
-            store.waitTime.fromJson(data.waitTime);
-            // @ts-ignore
-            store.versionDelta.fromJson(data.versionDelta);
-            // @ts-ignore
-            store.batchSize.fromJson(data.batchSize);
-            // @ts-ignore
-            store.memory.fromJson(data.memory);
-        }
-    });
-}
+        store.rewards.fromJson(data.rewards);
+        // @ts-ignore
+        store.kl.fromJson(data.kl);
+        // @ts-ignore
+        store.lr.fromJson(data.lr);
+        // @ts-ignore
+        store.valueLoss.fromJson(data.valueLoss);
+        // @ts-ignore
+        store.policyLoss.fromJson(data.policyLoss);
+        // @ts-ignore
+        store.trainTime.fromJson(data.trainTime);
+        // @ts-ignore
+        store.waitTime.fromJson(data.waitTime);
+        // @ts-ignore
+        store.versionDelta.fromJson(data.versionDelta);
+        // @ts-ignore
+        store.batchSize.fromJson(data.batchSize);
+    }
+
+    subscribeOnMetrics();
+});
 
 export function drawMetrics() {
     drawTab1();
@@ -180,7 +179,7 @@ export function drawMetrics() {
     drawTab3();
 }
 
-export function saveMetrics() {
+export const saveMetrics = throttle(() => {
     setAgentLog({
         version: 1,
         rewards: store.rewards.toJson(),
@@ -193,35 +192,26 @@ export function saveMetrics() {
         versionDelta: store.versionDelta.toJson(),
         batchSize: store.batchSize.toJson(),
     });
+}, 1000);
+
+export function subscribeOnMetrics() {
+    const w = (callback: (event: MessageEvent) => void) => {
+        return (event: MessageEvent) => {
+            callback(event);
+            saveMetrics();
+        };
+    };
+    metricsChannels.kl.onmessage = w((event) => store.kl.add(event.data));
+    metricsChannels.valueLoss.onmessage = w((event) => store.valueLoss.add(event.data));
+    metricsChannels.policyLoss.onmessage = w((event) => store.policyLoss.add(event.data));
+    metricsChannels.lr.onmessage = w((event) => store.lr.add(event.data));
+    metricsChannels.rewards.onmessage = w((event) => store.rewards.add(...event.data));
+    metricsChannels.versionDelta.onmessage = w((event) => store.versionDelta.add(event.data));
+    metricsChannels.batchSize.onmessage = w((event) => store.batchSize.add(event.data));
+    metricsChannels.trainTime.onmessage = w((event) => store.trainTime.add(event.data));
+    metricsChannels.waitTime.onmessage = w((event) => store.waitTime.add(event.data));
 }
 
-export function logEpoch(data: {
-    kl: number;
-    valueLoss: number;
-    policyLoss: number;
-}) {
-    store.kl.add(data.kl);
-    store.valueLoss.add(data.valueLoss);
-    store.policyLoss.add(data.policyLoss);
-}
-
-export function logLR(lr: number) {
-    store.lr.add(lr);
-}
-
-export function logRewards(rewards: number[]) {
-    store.rewards.add(...rewards);
-}
-
-export function logBatch(data: { versionDelta: number, batchSize: number }) {
-    store.versionDelta.add(data.versionDelta);
-    store.batchSize.add(data.batchSize);
-}
-
-export function logTrain(data: { trainTime: number, waitTime: number }) {
-    store.trainTime.add(data.trainTime);
-    store.waitTime.add(data.waitTime);
-}
 
 function drawTab1() {
     const avgRewards = store.rewards.toArray();

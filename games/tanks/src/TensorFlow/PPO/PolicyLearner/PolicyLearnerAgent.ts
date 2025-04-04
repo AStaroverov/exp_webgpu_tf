@@ -2,54 +2,47 @@ import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { ACTION_DIM } from '../../Common/consts.ts';
 import { ceil, mean } from '../../../../../../lib/math.ts';
-import { createPolicyNetwork, createValueNetwork } from '../../Common/models.ts';
-import { getStoreModelPath } from '../utils.ts';
-import { extractMemoryBatchList, getAgentState, setAgentState } from '../Database.ts';
-import { Batch } from '../Memory.ts';
-import {
-    computeKullbackLeibler,
-    createInputTensors,
-    sliceInputTensors,
-    trainPolicyNetwork,
-    trainValueNetwork,
-} from '../Common/train.ts';
-import { CONFIG } from '../Common/config.ts';
+import { createPolicyNetwork } from '../../Common/models.ts';
+import { getStoreModelPath } from '../../Common/tfUtils.ts';
+import { computeKullbackLeibler, createInputTensors, sliceInputTensors, trainPolicyNetwork } from '../train.ts';
+import { CONFIG } from '../config.ts';
 import { flatFloat32Array } from '../../Common/flat.ts';
-import { loadMetrics, logBatch, logEpoch, logLR, logRewards, logTrain, saveMetrics } from '../../Common/Metrics.ts';
 import { batchShuffle, shuffle } from '../../../../../../lib/shuffle.ts';
 import { RingBuffer } from 'ring-buffer-ts';
 import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
+import { policyAgentState, policyMemory, PolicyMemoryBatch } from '../../Common/Database.ts';
+import { learningRateChannel, metricsChannels } from '../../Common/channels.ts';
 
-export class LearnerAgent {
+export class PolicyLearnerAgent {
     private version = 0;
     private klHistory = new RingBuffer<number>(30);
 
-    private batches: { version: number, memories: Batch }[] = [];
+    private batches: { version: number, memories: PolicyMemoryBatch }[] = [];
     private lastTrainTimeStart = 0;
 
     private policyNetwork: tf.LayersModel = createPolicyNetwork();
-    private valueNetwork: tf.LayersModel = createValueNetwork();
 
     constructor() {
 
     }
 
-    public static create() {
-        return new LearnerAgent().init();
+    public async init() {
+        if (!(await this.load())) {
+            this.policyNetwork = createPolicyNetwork();
+        }
+
+        return this;
     }
 
-    // Сохранение модели
     async save() {
         try {
-            this.version += 1;
-
             await Promise.all([
-                setAgentState({
+                policyAgentState.set({
                     version: this.version,
                     klHistory: this.klHistory.toArray(),
+                    learningRate: getLR(this.policyNetwork),
                 }),
-                this.valueNetwork.save(getStoreModelPath('value-model', CONFIG), { includeOptimizer: true }),
                 this.policyNetwork.save(getStoreModelPath('policy-model', CONFIG), { includeOptimizer: true }),
             ]);
 
@@ -60,15 +53,8 @@ export class LearnerAgent {
         }
     }
 
-    async download() {
-        return Promise.all([
-            this.valueNetwork.save(getStoreModelPath('value-model', CONFIG)),
-            this.policyNetwork.save(getStoreModelPath('policy-model', CONFIG)),
-        ]);
-    }
-
     async tryTrain(): Promise<boolean> {
-        this.batches.push(...await extractMemoryBatchList());
+        this.batches.push(...await policyMemory.extractMemoryBatchList());
 
         if (this.batches.length < CONFIG.workerCount) {
             return false;
@@ -94,8 +80,6 @@ export class LearnerAgent {
         const states = memories.map(b => b.states).flat();
         const actions = memories.map(b => b.actions).flat();
         const logProbs = new Float32Array(memories.map(b => b.logProbs).flat());
-        const values = new Float32Array(memories.map(b => b.values).flat());
-        const returns = new Float32Array(memories.map(b => b.returns).flat());
         const advantages = new Float32Array(
             memories
                 .map((b, i) => {
@@ -112,22 +96,17 @@ export class LearnerAgent {
             states,
             actions,
             logProbs,
-            values,
             advantages,
-            returns,
         );
 
         const tAllStates = createInputTensors(states);
         const tAllActions = tf.tensor2d(flatFloat32Array(actions), [actions.length, ACTION_DIM]);
         const tAllLogProbs = tf.tensor1d(logProbs);
-        const tAllValues = tf.tensor1d(values);
         const tAllAdvantages = tf.tensor1d(advantages);
-        const tAllReturns = tf.tensor1d(returns);
 
         console.log(`[Train]: Iteration ${ this.version }, Sum batch size: ${ sumSize }, Mini batch count: ${ miniBatchCount } by ${ CONFIG.miniBatchSize }`);
 
         const policyLossPromises: Promise<number>[] = [];
-        const valueLossPromises: Promise<number>[] = [];
         const klList: number[] = [];
         const miniBatchIndexes = Array.from({ length: miniBatchCount }, (_, i) => i);
 
@@ -141,9 +120,7 @@ export class LearnerAgent {
                 const tStates = sliceInputTensors(tAllStates, start, size);
                 const tActions = tAllActions.slice([start, 0], [size, -1]);
                 const tLogProbs = tAllLogProbs.slice([start], [size]);
-                const tValues = tAllValues.slice([start], [size]);
                 const tAdvantages = tAllAdvantages.slice([start], [size]);
-                const tReturns = tAllReturns.slice([start], [size]);
 
                 policyLossPromises.push(trainPolicyNetwork(
                     this.policyNetwork, this.policyNetwork.optimizer,
@@ -151,18 +128,10 @@ export class LearnerAgent {
                     CONFIG.clipRatio, CONFIG.entropyCoeff,
                 ));
 
-                valueLossPromises.push(trainValueNetwork(
-                    this.valueNetwork, this.valueNetwork.optimizer,
-                    tStates, tReturns, tValues,
-                    CONFIG.clipRatio,
-                ));
-
                 tStates.forEach(t => t.dispose());
                 tActions.dispose();
                 tLogProbs.dispose();
-                tValues.dispose();
                 tAdvantages.dispose();
-                tReturns.dispose();
             }
 
             const kl = await computeKullbackLeibler(
@@ -184,7 +153,7 @@ export class LearnerAgent {
                 this.updateOptimizersLR(lr);
             }
 
-            logLR(getLR(this.policyNetwork));
+            metricsChannels.lr.postMessage(getLR(this.policyNetwork));
 
             if (kl > CONFIG.klConfig.max) {
                 console.warn(`[Train]: KL divergence was too high: ${ kl }, in epoch ${ i }`);
@@ -194,93 +163,69 @@ export class LearnerAgent {
 
         const endTime = Date.now();
         const version = this.version;
-        Promise.all([
-            Promise.all(policyLossPromises),
-            Promise.all(valueLossPromises),
-        ]).then(([policyLossList, valueLossList]) => {
+        Promise.all(policyLossPromises).then((policyLossList) => {
             for (let i = 0; i < klList.length; i++) {
                 const kl = klList[i];
 
-                let policyLoss = 0, valueLoss = 0;
+                let policyLoss = 0;
                 for (let j = 0; j < miniBatchCount; j++) {
                     policyLoss += policyLossList[i * miniBatchCount + j];
-                    valueLoss += valueLossList[i * miniBatchCount + j];
                 }
 
                 policyLoss /= miniBatchCount;
-                valueLoss /= miniBatchCount;
 
-                console.log('[Train]: Epoch', i, 'KL:', kl, 'Policy loss:', policyLoss, 'Value loss:', valueLoss);
+                console.log('[Train]: Epoch', i, 'KL:', kl, 'Policy loss:', policyLoss);
 
-                logEpoch({
-                    kl,
-                    valueLoss,
-                    policyLoss,
-                });
+                metricsChannels.kl.postMessage(kl);
+                metricsChannels.policyLoss.postMessage(kl);
             }
 
             for (const batch of rawBatches) {
-                logBatch({ versionDelta: version - batch.version, batchSize: batch.memories.size });
+                metricsChannels.versionDelta.postMessage(version - batch.version);
+                metricsChannels.batchSize.postMessage(batch.memories.size);
             }
 
-            logTrain({ trainTime: (endTime - startTime) / 1000, waitTime: waitTime / 1000 });
-            logRewards(memories.map(b => b.rewards).flat());
-            saveMetrics();
+            metricsChannels.trainTime.postMessage((endTime - startTime) / 1000);
+            metricsChannels.waitTime.postMessage(waitTime / 1000);
+            metricsChannels.rewards.postMessage(memories.map(b => b.rewards).flat());
         });
 
         tAllStates.forEach(t => t.dispose());
         tAllActions.dispose();
         tAllLogProbs.dispose();
-        tAllValues.dispose();
         tAllAdvantages.dispose();
-        tAllReturns.dispose();
+
+        this.version += 1;
+
         return true;
-    }
-
-    private async init() {
-        if (!(await this.load())) {
-            this.policyNetwork = createPolicyNetwork();
-            this.valueNetwork = createValueNetwork();
-        }
-
-        // fake loss for save optimizer with model
-        this.valueNetwork.loss = 'meanSquaredError';
-        this.policyNetwork.loss = 'meanSquaredError';
-
-        loadMetrics();
-
-        return this;
     }
 
     private async load() {
         try {
-            const [agentState, valueNetwork, policyNetwork] = await Promise.all([
-                getAgentState(),
-                tf.loadLayersModel(getStoreModelPath('value-model', CONFIG)),
+            const [agentState, policyNetwork] = await Promise.all([
+                policyAgentState.get(),
                 tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG)),
             ]);
-            if (!valueNetwork || !policyNetwork) {
+            if (!policyNetwork) {
                 return false;
             }
             this.version = agentState?.version ?? 0;
             this.klHistory.fromArray(agentState?.klHistory ?? []);
-            this.valueNetwork = await setModelState(this.valueNetwork, valueNetwork);
             this.policyNetwork = await setModelState(this.policyNetwork, policyNetwork);
-            console.log('[LearnAgent] Models loaded successfully');
+            console.log('Models loaded successfully');
 
-            valueNetwork.dispose();
             policyNetwork.dispose();
 
             return true;
         } catch (error) {
-            console.warn('[LearnAgent] Could not load models, starting with new ones:', error);
+            console.warn('Could not load models, starting with new ones:', error);
             return false;
         }
     }
 
     private updateOptimizersLR(lr: number) {
         setLR(this.policyNetwork, lr);
-        setLR(this.valueNetwork, lr);
+        learningRateChannel.postMessage(lr);
     }
 }
 

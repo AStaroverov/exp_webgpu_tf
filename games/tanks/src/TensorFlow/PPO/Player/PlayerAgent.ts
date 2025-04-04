@@ -1,13 +1,13 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { createPolicyNetwork } from '../../Common/models.ts';
-import { getStoreModelPath } from '../utils.ts';
-import { getAgentState } from '../Database.ts';
-import { predict } from '../Common/train.ts';
-import { CONFIG } from '../Common/config.ts';
+import { getStoreModelPath } from '../../Common/tfUtils.ts';
+import { predict } from '../train.ts';
+import { CONFIG } from '../config.ts';
 import { InputArrays } from '../../Common/prepareInputArrays.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
+import { policyAgentState } from '../../Common/Database.ts';
 
 export class PlayerAgent {
     private version = 0;
@@ -42,7 +42,7 @@ export class PlayerAgent {
     private async load() {
         try {
             const [agentState, policyNetwork] = await Promise.all([
-                getAgentState(),
+                policyAgentState.get(),
                 tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG)),
             ]);
 

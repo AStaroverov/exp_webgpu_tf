@@ -1,8 +1,8 @@
 // Буфер опыта для PPO
 import { shuffle } from '../../../../../lib/shuffle.ts';
 import { abs, max, min } from '../../../../../lib/math.ts';
-import { isDevtoolsOpen } from '../Common/utils.ts';
-import { InputArrays } from '../Common/prepareInputArrays.ts';
+import { isDevtoolsOpen } from './uiUtils.ts';
+import { InputArrays } from './prepareInputArrays.ts';
 
 export type Batch = {
     states: InputArrays[],

@@ -1,18 +1,19 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
-import { AgentState, getAgentState } from '../Database.ts';
-import { Memory } from '../Memory.ts';
-import { getStoreModelPath } from '../utils.ts';
-import { CONFIG } from '../Common/config.ts';
-import { act } from '../Common/train.ts';
+import { Memory } from '../../Common/Memory.ts';
+import { getStoreModelPath } from '../../Common/tfUtils.ts';
+import { CONFIG } from '../config.ts';
+import { act } from '../train.ts';
 import { InputArrays } from '../../Common/prepareInputArrays.ts';
 import { createPolicyNetwork, createValueNetwork } from '../../Common/models.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
+import { policyAgentState, valueAgentState } from '../../Common/Database.ts';
 
 export class ActorAgent {
-    private reuse = -1;
-    private version = -1;
+    private reuse = Infinity; // cannot reuse on init
+    private policyVersion = -1;
+    private valueVersion = -1;
     private memory: Memory;
     private policyNetwork: tf.LayersModel = createPolicyNetwork();
     private valueNetwork: tf.LayersModel = createValueNetwork();
@@ -41,7 +42,7 @@ export class ActorAgent {
 
     readMemory() {
         return {
-            version: this.version,
+            version: this.policyVersion,
             memories: this.memory.getBatch(CONFIG.gamma, CONFIG.lam),
         };
     }
@@ -72,39 +73,53 @@ export class ActorAgent {
         try {
             const start = Date.now();
             const canReuse = this.reuse < CONFIG.reuseLimit;
-            let agentState: undefined | AgentState;
+            let valueVersion = -1;
+            let policyVersion = -1;
             let isNewVersion = false;
+
             for (let i = 0; i < 1_000_000; i++) {
                 if (i > 0) await new Promise(resolve => macroTasks.addTimeout(resolve, i * 100));
-                agentState = await getAgentState();
-                isNewVersion = (agentState?.version ?? -1) > this.version;
-                if (agentState && (isNewVersion || canReuse)) break;
+                const agentStates = await Promise.all([policyAgentState.get(), valueAgentState.get()]);
+                valueVersion = agentStates[1]?.version ?? -1;
+                policyVersion = agentStates[0]?.version ?? -1;
+                isNewVersion = policyVersion > this.policyVersion && valueVersion > this.valueVersion;
+                if (isNewVersion || canReuse) break;
             }
 
             const syncTime = Date.now() - start;
             if (syncTime > 1_000) {
-                console.info('[SlaveAgent] Sync time:', syncTime);
+                console.info('Sync time:', syncTime);
             }
 
-            const [valueNetwork, policyNetwork] = await Promise.all([
-                tf.loadLayersModel(getStoreModelPath('value-model', CONFIG)),
-                tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG)),
-            ]);
+            if (isNewVersion) {
+                const [valueNetwork, policyNetwork] = await Promise.all([
+                    tf.loadLayersModel(getStoreModelPath('value-model', CONFIG)),
+                    tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG)),
+                ]);
 
-            if (agentState && valueNetwork && policyNetwork) {
-                // we decay version to avoid reusing the same model more than N times
-                this.reuse = this.version === agentState.version ? this.reuse + 1 : 0;
-                this.version = agentState.version;
+                if (!valueNetwork || !policyNetwork) {
+                    console.warn('Could not load models');
+                    return false;
+                }
+
+                this.reuse = 0;
+                this.policyVersion = policyVersion;
+                this.valueVersion = valueVersion;
                 this.valueNetwork = await setModelState(this.valueNetwork, valueNetwork);
                 this.policyNetwork = await setModelState(this.policyNetwork, policyNetwork);
                 valueNetwork.dispose();
                 policyNetwork.dispose();
+                console.log('Models updated successfully');
+                return true;
+            } else if (canReuse) {
+                this.reuse = this.reuse + 1;
+                console.log('Models reused successfully');
                 return true;
             }
 
             return false;
         } catch (error) {
-            console.warn('[SlaveAgent] Could not sync models:', error);
+            console.warn('Could not sync models:', error);
             return false;
         }
     }

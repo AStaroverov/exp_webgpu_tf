@@ -4,11 +4,11 @@ import { GameDI } from '../../DI/GameDI.ts';
 import { Tank } from '../../ECS/Components/Tank.ts';
 import { RigidBodyState } from '../../ECS/Components/Physical.ts';
 import { Color } from '../../../../../src/ECS/Components/Common.ts';
-import { getDrawState } from './utils.ts';
+import { getDrawState } from './uiUtils.ts';
 import { frameTasks } from '../../../../../lib/TasksScheduler/frameTasks.ts';
-import { CONFIG } from '../PPO/Common/config.ts';
+import { CONFIG } from '../PPO/config.ts';
 import { PlayerManager } from '../PPO/Player/PlayerManager.ts';
-import { drawMetrics, loadMetrics } from './Metrics.ts';
+import { drawMetrics } from './Metrics.ts';
 import { Team } from '../../ECS/Components/Team.ts';
 
 // Generate debug visualization using HTML and CSS
@@ -51,12 +51,11 @@ export function createDebugVisualization(container: HTMLElement, manager: Player
 
     async function updateMetrics() {
         if (getDrawState()) return;
-        await loadMetrics();
         drawMetrics();
     }
 
     frameTasks.addInterval(updateDebugInfo, 10);
-    frameTasks.addInterval(updateMetrics, 100);
+    frameTasks.addInterval(updateMetrics, 300);
 
     updateDebugInfo();
     updateMetrics();
@@ -79,7 +78,7 @@ export function createTanksDebug(manager: PlayerManager) {
 
         let result = '';
         const tanksEids = query(GameDI.world, [Tank, RigidBodyState]);
-        
+
         for (let i = 0; i < tanksEids.length; i++) {
 
             const tankEid = tanksEids[i];
