@@ -19,13 +19,12 @@ let REWARD_WEIGHTS = {
 
     AIM: {
         QUALITY: 1.0,       // За точное прицеливание
-        ALLIES_PENALTY: -1.0, // За прицеливание в союзников
         DISTANCE: 0.1,      // За расстояние до прицела
         NO_TARGET_PENALTY: -0.1, // За отсутствие целей
         DISTANCE_PENALTY: -0.1, // За расстояние до цели
         SHOOTING: 0.2,       // За стрельбу в цель
         SHOOTING_PENALTY: -0.1, // За стрельбу в пустоту
-        SHOOTING_ALLIES_PENALTY: -1, // За стрельбу в союзников
+        SHOOTING_ALLIES_PENALTY: -2, // За стрельбу в союзников
     },
     AIM_MULTIPLIER: 5.0,
 
@@ -319,8 +318,7 @@ function analyzeAiming(
     // Награда за качество прицеливания и дистанцию до цели
     const aimQualityReward =
         (bestEnemyAimQuality * REWARD_WEIGHTS.AIM.QUALITY)
-        + (bestEnemyAimTargetId === 0 ? REWARD_WEIGHTS.AIM.NO_TARGET_PENALTY : 0)
-        + (sumAlliesAimQuality * REWARD_WEIGHTS.AIM.ALLIES_PENALTY);
+        + (bestEnemyAimTargetId === 0 ? REWARD_WEIGHTS.AIM.NO_TARGET_PENALTY : 0);
 
     // Награда за дистанцию прицеливания
     const turretTargetDistance = hypot(turretTargetX - tankX, turretTargetY - tankY);
@@ -332,8 +330,6 @@ function analyzeAiming(
         )
         + REWARD_WEIGHTS.AIM.DISTANCE_PENALTY * smoothstep(TANK_RADIUS, 0, turretTargetDistance)
         + REWARD_WEIGHTS.AIM.DISTANCE_PENALTY * smoothstep(800, 1000, turretTargetDistance);
-
-    // console.log('>>', bestEnemyAimQuality, sumAlliesAimQuality);
 
     return {
         bestEnemyAimQuality,
