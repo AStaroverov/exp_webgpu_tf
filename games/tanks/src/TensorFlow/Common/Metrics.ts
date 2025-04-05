@@ -264,12 +264,10 @@ function drawTab1() {
     const avgRewards = store.rewards.toArray();
     const avgRewardsMA = calculateMovingAverage(avgRewards, 1000);
     const minRewards = store.rewards.toArrayMin();
-    const minRewardsMA = calculateMovingAverage(minRewards, 1000);
     const maxRewards = store.rewards.toArrayMax();
-    const maxRewardsMA = calculateMovingAverage(maxRewards, 1000);
     tfvis.render.linechart({ name: 'Reward', tab }, {
-        values: [minRewards, maxRewards, avgRewards, minRewardsMA, maxRewardsMA, avgRewardsMA],
-        series: ['Min', 'Max', 'Avg', 'Min MA', 'Max MA', 'Avg MA'],
+        values: [minRewards, maxRewards, avgRewards, avgRewardsMA],
+        series: ['Min', 'Max', 'Avg', 'Avg MA'],
     }, {
         xLabel: 'Version',
         yLabel: 'Reward',
