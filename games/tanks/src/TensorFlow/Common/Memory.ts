@@ -2,7 +2,7 @@
 import { shuffle } from '../../../../../lib/shuffle.ts';
 import { abs, max, min } from '../../../../../lib/math.ts';
 import { isDevtoolsOpen } from './uiUtils.ts';
-import { InputArrays } from './prepareInputArrays.ts';
+import { InputArrays } from './InputArrays.ts';
 
 export type Batch = {
     states: InputArrays[],

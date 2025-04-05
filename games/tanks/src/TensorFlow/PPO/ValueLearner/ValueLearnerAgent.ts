@@ -4,11 +4,12 @@ import { ceil } from '../../../../../../lib/math.ts';
 import { createValueNetwork } from '../../Common/models.ts';
 import { getStoreModelPath } from '../../Common/tfUtils.ts';
 import { policyAgentState, valueAgentState, valueMemory, ValueMemoryBatch } from '../../Common/Database.ts';
-import { createInputTensors, sliceInputTensors, trainValueNetwork } from '../train.ts';
+import { trainValueNetwork } from '../train.ts';
 import { CONFIG } from '../config.ts';
 import { batchShuffle, shuffle } from '../../../../../../lib/shuffle.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
 import { learningRateChannel, metricsChannels } from '../../Common/channels.ts';
+import { createInputTensors, sliceInputTensors } from '../../Common/InputTensors.ts';
 
 export class ValueLearnerAgent {
     private version = 0;
@@ -93,7 +94,7 @@ export class ValueLearnerAgent {
                 const tReturns = tAllReturns.slice([start], [size]);
 
                 valueLossPromises.push(trainValueNetwork(
-                    this.valueNetwork, this.valueNetwork.optimizer,
+                    this.valueNetwork,
                     tStates, tReturns, tValues,
                     CONFIG.clipRatio,
                 ));

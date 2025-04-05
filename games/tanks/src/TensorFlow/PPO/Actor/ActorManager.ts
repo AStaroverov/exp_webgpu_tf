@@ -8,7 +8,7 @@ import { getTankHealth } from '../../../ECS/Components/Tank.ts';
 import { applyActionToTank } from '../../Common/applyActionToTank.ts';
 import { CONFIG } from '../config.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
-import { prepareInputArrays } from '../../Common/prepareInputArrays.ts';
+import { prepareInputArrays } from '../../Common/InputArrays.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
 import { policyMemory, valueMemory } from '../../Common/Database.ts';
 import { omit, pick } from 'lodash-es';

@@ -4,7 +4,7 @@ import { Memory } from '../../Common/Memory.ts';
 import { getStoreModelPath } from '../../Common/tfUtils.ts';
 import { CONFIG } from '../config.ts';
 import { act } from '../train.ts';
-import { InputArrays } from '../../Common/prepareInputArrays.ts';
+import { InputArrays } from '../../Common/InputArrays.ts';
 import { createPolicyNetwork, createValueNetwork } from '../../Common/models.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';

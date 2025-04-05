@@ -4,7 +4,7 @@ import { ACTION_DIM } from '../../Common/consts.ts';
 import { ceil, mean } from '../../../../../../lib/math.ts';
 import { createPolicyNetwork } from '../../Common/models.ts';
 import { getStoreModelPath } from '../../Common/tfUtils.ts';
-import { computeKullbackLeibler, createInputTensors, sliceInputTensors, trainPolicyNetwork } from '../train.ts';
+import { computeKullbackLeibler, trainPolicyNetwork } from '../train.ts';
 import { CONFIG } from '../config.ts';
 import { flatFloat32Array } from '../../Common/flat.ts';
 import { batchShuffle, shuffle } from '../../../../../../lib/shuffle.ts';
@@ -13,6 +13,7 @@ import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
 import { policyAgentState, policyMemory, PolicyMemoryBatch } from '../../Common/Database.ts';
 import { learningRateChannel, metricsChannels } from '../../Common/channels.ts';
+import { createInputTensors, sliceInputTensors } from '../../Common/InputTensors.ts';
 
 export class PolicyLearnerAgent {
     private version = 0;
@@ -111,7 +112,7 @@ export class PolicyLearnerAgent {
                 const tAdvantages = tAllAdvantages.slice([start], [size]);
 
                 policyLossPromises.push(trainPolicyNetwork(
-                    this.policyNetwork, this.policyNetwork.optimizer,
+                    this.policyNetwork,
                     tStates, tActions, tLogProbs, tAdvantages,
                     CONFIG.clipRatio, CONFIG.entropyCoeff,
                 ));
@@ -129,24 +130,21 @@ export class PolicyLearnerAgent {
                 tAllLogProbs,
             );
 
-            klList.push(kl);
-
-            // skip kl that too high
-            if (kl < CONFIG.klConfig.target * 100) {
-                this.klHistory.add(kl);
-                const lr = getDynamicLearningRate(
-                    mean(this.klHistory.toArray()),
-                    getLR(this.policyNetwork),
-                );
-                this.updateOptimizersLR(lr);
-            }
-
-            metricsChannels.lr.postMessage(getLR(this.policyNetwork));
-
             if (kl > CONFIG.klConfig.max) {
                 console.warn(`[Train]: KL divergence was too high: ${ kl }, in epoch ${ i }`);
+                window.location.reload();
                 break;
             }
+
+            klList.push(kl);
+            this.klHistory.add(kl);
+
+            const lr = getDynamicLearningRate(
+                mean(this.klHistory.toArray()),
+                getLR(this.policyNetwork),
+            );
+            this.updateOptimizersLR(lr);
+            metricsChannels.lr.postMessage(getLR(this.policyNetwork));
         }
 
         const endTime = Date.now();

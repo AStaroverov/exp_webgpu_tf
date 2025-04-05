@@ -9,7 +9,7 @@ import { CONFIG } from '../config.ts';
 import { getDrawState } from '../../Common/uiUtils.ts';
 import { EntityId } from 'bitecs';
 import { calculateReward } from '../../Common/calculateReward.ts';
-import { prepareInputArrays } from '../../Common/prepareInputArrays.ts';
+import { prepareInputArrays } from '../../Common/InputArrays.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
 
 export class PlayerManager {

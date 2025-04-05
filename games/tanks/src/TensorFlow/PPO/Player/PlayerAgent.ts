@@ -4,7 +4,7 @@ import { createPolicyNetwork } from '../../Common/models.ts';
 import { getStoreModelPath } from '../../Common/tfUtils.ts';
 import { predict } from '../train.ts';
 import { CONFIG } from '../config.ts';
-import { InputArrays } from '../../Common/prepareInputArrays.ts';
+import { InputArrays } from '../../Common/InputArrays.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
 import { policyAgentState } from '../../Common/Database.ts';

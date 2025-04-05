@@ -1,22 +1,12 @@
 import * as tf from '@tensorflow/tfjs';
 import { ACTION_DIM } from '../Common/consts.ts';
 import { computeLogProb } from '../Common/computeLogProb.ts';
-import { InputArrays } from '../Common/prepareInputArrays.ts';
-import {
-    ALLY_FEATURES_DIM,
-    ALLY_SLOTS,
-    BATTLE_FEATURES_DIM,
-    BULLET_FEATURES_DIM,
-    BULLET_SLOTS,
-    ENEMY_FEATURES_DIM,
-    ENEMY_SLOTS,
-    TANK_FEATURES_DIM,
-} from '../Common/models.ts';
-import { flatFloat32Array } from '../Common/flat.ts';
+import { InputArrays } from '../Common/InputArrays.ts';
+import { createInputTensors } from '../Common/InputTensors.ts';
+import { Scalar } from '@tensorflow/tfjs-core/dist/tensor';
 
 export function trainPolicyNetwork(
-    policyNetwork: tf.LayersModel,
-    policyOptimizer: tf.Optimizer,
+    network: tf.LayersModel,
     states: tf.Tensor[],
     actions: tf.Tensor,      // [batchSize, actionDim]
     oldLogProbs: tf.Tensor,  // [batchSize]
@@ -25,8 +15,8 @@ export function trainPolicyNetwork(
     entropyCoeff: number,
 ): Promise<number> {
     const loss = tf.tidy(() => {
-        return policyOptimizer.minimize(() => {
-            const predict = policyNetwork.predict(states) as tf.Tensor;
+        return optimize(network.optimizer, () => {
+            const predict = network.predict(states) as tf.Tensor;
             const { mean, logStd } = parsePredict(predict);
             const std = logStd.exp();
             const newLogProbs = computeLogProb(actions, mean, std);
@@ -43,7 +33,7 @@ export function trainPolicyNetwork(
             const totalLoss = policyLoss.sub(totalEntropy.mul(entropyCoeff));
 
             return totalLoss as tf.Scalar;
-        }, true) as tf.Scalar;
+        });
     });
 
     return loss.data().then((v) => v[0]).finally(() => loss.dispose());
@@ -78,17 +68,16 @@ export function computeKullbackLeibler(
 
 // Обучение сети критика (оценка состояний)
 export function trainValueNetwork(
-    valueNetwork: tf.LayersModel,
-    valueOptimizer: tf.Optimizer,
+    network: tf.LayersModel,
     states: tf.Tensor[],
     returns: tf.Tensor,  // [batchSize], уже подсчитанные (GAE + V(s) или просто discountedReturns)
     oldValues: tf.Tensor, // [batchSize], для клиппинга
     clipRatio: number,
 ): Promise<number> {
     const loss = tf.tidy(() => {
-        return valueOptimizer.minimize(() => {
+        return optimize(network.optimizer, () => {
             // forward pass
-            const predicted = valueNetwork.predict(states) as tf.Tensor;
+            const predicted = network.predict(states) as tf.Tensor;
             // shape [batchSize,1], приводим к [batchSize]
             const valuePred = predicted.squeeze(); // [batchSize]
 
@@ -104,7 +93,7 @@ export function trainValueNetwork(
             const finalValueLoss = tf.maximum(vfLoss1, vfLoss2).mean().mul(0.5);
 
             return finalValueLoss as tf.Scalar;
-        }, true) as tf.Scalar;
+        }) as tf.Scalar;
     });
 
     return loss.data().then((v) => v[0]).finally(() => loss.dispose());
@@ -159,63 +148,37 @@ export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { ac
     });
 }
 
-export function createInputTensors(
-    state: InputArrays[],
-): tf.Tensor[] {
-    //[battleInput, tankInput, enemiesInput, enemiesMaskInput, alliesInput, alliesMaskInput, bulletsInput, bulletsMaskInput],
-    return [
-        // battle
-        tf.tensor2d(flatFloat32Array(state.map((s) => s.battleFeatures)), [state.length, BATTLE_FEATURES_DIM]),
-        // tank
-        tf.tensor2d(flatFloat32Array(state.map((s) => s.tankFeatures)), [state.length, TANK_FEATURES_DIM]),
-        // enemies + mask
-        tf.tensor3d(
-            flatFloat32Array(state.map((s) => s.enemiesFeatures)),
-            [state.length, ENEMY_SLOTS, ENEMY_FEATURES_DIM],
-        ),
-        tf.tensor2d(
-            flatFloat32Array(state.map((s) => s.enemiesMask)),
-            [state.length, ENEMY_SLOTS],
-        ),
-        // allies + mask
-        tf.tensor3d(
-            flatFloat32Array(state.map((s) => s.alliesFeatures)),
-            [state.length, ALLY_SLOTS, ALLY_FEATURES_DIM],
-        ),
-        tf.tensor2d(
-            flatFloat32Array(state.map((s) => s.alliesMask)),
-            [state.length, ALLY_SLOTS],
-        ),
-        // bullets + mask
-        tf.tensor3d(
-            flatFloat32Array(state.map((s) => s.bulletsFeatures)),
-            [state.length, BULLET_SLOTS, BULLET_FEATURES_DIM],
-        ),
-        tf.tensor2d(
-            flatFloat32Array(state.map((s) => s.bulletsMask)),
-            [state.length, BULLET_SLOTS],
-        ),
-    ];
+function optimize(
+    optimizer: tf.Optimizer,
+    predict: () => Scalar,
+    options?: { clipNorm?: number },
+): tf.Scalar {
+    const clipNorm = options?.clipNorm ?? 1;
+
+    return tf.tidy(() => {
+        const { grads, value } = tf.variableGrads(predict);
+
+        // считаем общую норму градиентов
+        const gradsArray = Object.values(grads).map(g => g.square().sum());
+        const sumSquares = gradsArray.reduce((acc, t) => acc.add(t), tf.scalar(0));
+        const globalNorm = sumSquares.sqrt();
+        // вычисляем множитель для клиппинга
+        const eps = 1e-8;
+        const safeGlobalNorm = tf.maximum(globalNorm, tf.scalar(eps));
+        const clipCoef = tf.minimum(tf.scalar(1), tf.div(clipNorm, safeGlobalNorm));
+
+        // применяем клиппинг к каждому градиенту
+        const clippedGrads: Record<string, tf.Tensor> = {};
+        for (const [varName, grad] of Object.entries(grads)) {
+            clippedGrads[varName] = tf.mul(grad, clipCoef);
+        }
+
+        // применяем обрезанные градиенты
+        optimizer.applyGradients(clippedGrads);
+
+        tf.dispose(grads);
+
+        return value;
+    });
 }
 
-export function sliceInputTensors(tensors: tf.Tensor[], start: number, size: number): tf.Tensor[] {
-    if (tensors.length !== 8) {
-        throw new Error('Invalid input tensors length');
-    }
-
-    return [
-        // battlefield
-        tensors[0].slice([start, 0], [size, -1]),
-        // tank
-        tensors[1].slice([start, 0], [size, -1]),
-        // enemies + mask
-        tensors[2].slice([start, 0, 0], [size, -1, -1]),
-        tensors[3].slice([start, 0], [size, -1]),
-        // allies + mask
-        tensors[4].slice([start, 0, 0], [size, -1, -1]),
-        tensors[5].slice([start, 0], [size, -1]),
-        // bullets + mask
-        tensors[6].slice([start, 0, 0], [size, -1, -1]),
-        tensors[7].slice([start, 0], [size, -1]),
-    ];
-}
