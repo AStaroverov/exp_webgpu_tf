@@ -1,11 +1,11 @@
 import { createRectangleRR } from './RigidRender.ts';
-import { JointData, RigidBodyType, Vector2 } from '@dimforge/rapier2d';
+import { JointData, RigidBodyType, Vector2 } from '@dimforge/rapier2d-simd';
 import { addComponent } from 'bitecs';
 import { addTransformComponents } from '../../../../../src/ECS/Components/Transform.ts';
 import { GameDI } from '../../DI/GameDI.ts';
 import { addChildren, addChildrenComponent, Children, removeChild } from './Children.ts';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
-import { addPlayerComponent, getNewPlayerId } from './Player.ts';
+import { getNewPlayerId, Player } from './Player.ts';
 import { Hitable } from './Hitable.ts';
 import { addParentComponent, Parent } from './Parent.ts';
 import { RigidBodyRef } from './Physical.ts';
@@ -13,13 +13,15 @@ import { TColor } from '../../../../../src/ECS/Components/Common.ts';
 import { createRectangleRigidGroup } from './RigidGroup.ts';
 import { TankController } from './TankController.ts';
 import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
-import { addTankInputTensorComponent } from './TankState.ts';
+import { TankInputTensor } from './TankState.ts';
 import { delegate } from '../../../../../src/delegate.ts';
 import { NestedArray, TypedArray } from '../../../../../src/utils.ts';
 import { ZIndex } from '../../consts.ts';
 import { min, smoothstep } from '../../../../../lib/math.ts';
 import { component } from '../../../../../src/ECS/utils.ts';
 import { createCircle } from '../../../../../src/ECS/Entities/Shapes.ts';
+import { Team } from './Team.ts';
+import { TenserFlowDI } from '../../DI/TenserFlowDI.ts';
 
 export const TANK_APPROXIMATE_COLLISION_RADIUS = 80;
 
@@ -151,8 +153,8 @@ const createRectanglesRR = (
             true,
         );
 
-        addPlayerComponent(eid, options.playerId);
-        Hitable.addComponent(eid);
+        Player.addComponent(world, eid, options.playerId);
+        Hitable.addComponent(world, eid);
         addParentComponent(eid, parentEId);
         addChildren(parentEId, eid);
 
@@ -167,6 +169,7 @@ const createRectanglesRR = (
 const DENSITY = 300;
 
 export function createTankRR(options: {
+    teamId: number,
     x: number,
     y: number,
     rotation: number,
@@ -190,9 +193,13 @@ export function createTankRR(options: {
     Tank.initialPartsCount[tankEid] = PARTS_COUNT;
     addChildrenComponent(tankEid);
     addTransformComponents(world, tankEid);
-    TankController.addComponent(tankEid);
-    addPlayerComponent(tankEid, mutatedOptions.playerId);
-    addTankInputTensorComponent(tankEid);
+    TankController.addComponent(world, tankEid);
+    Player.addComponent(world, tankEid, mutatedOptions.playerId);
+    Team.addComponent(world, tankEid, options.teamId);
+
+    if (TenserFlowDI.enabled) {
+        TankInputTensor.addComponent(world, tankEid);
+    }
 
     mutatedOptions.radius = 16;
     const aimEid = createCircle(GameDI.world, mutatedOptions);

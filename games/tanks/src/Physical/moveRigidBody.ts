@@ -1,5 +1,5 @@
 import { vec2 } from 'gl-matrix';
-import { RigidBody } from '@dimforge/rapier2d';
+import { RigidBody } from '@dimforge/rapier2d-simd';
 
 const direction = vec2.create();
 const translation = { x: 0, y: 0 };

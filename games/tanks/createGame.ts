@@ -3,7 +3,7 @@ import { createFrameTick } from '../../src/WGSL/createFrame.ts';
 import { createDrawShapeSystem } from '../../src/ECS/Systems/SDFSystem/createDrawShapeSystem.ts';
 import { initPhysicalWorld } from './src';
 import { createApplyRigidBodyToTransformSystem } from './src/ECS/Systems/createApplyRigidBodyToTransformSystem.ts';
-import { EventQueue } from '@dimforge/rapier2d';
+import { EventQueue } from '@dimforge/rapier2d-simd';
 import { GameDI } from './src/DI/GameDI.ts';
 import { createTransformSystem } from '../../src/ECS/Systems/TransformSystem.ts';
 import {
@@ -30,6 +30,7 @@ import { createDestroySystem } from './src/ECS/Systems/createDestroySystem.ts';
 import { RenderDI } from './src/DI/RenderDI.ts';
 import { noop } from 'lodash-es';
 import { PlayerEnvDI } from './src/DI/PlayerEnvDI.ts';
+import { TenserFlowDI } from './src/DI/TenserFlowDI.ts';
 
 export async function createGame({ width, height, withRender, withPlayer }: {
     width: number,
@@ -171,11 +172,6 @@ export async function createGame({ width, height, withRender, withPlayer }: {
     const aimUpdate = createAimSystem();
 
     GameDI.gameTick = (delta: number) => {
-        if (withRender) {
-            // GameDI.width = RenderDI.canvas.offsetWidth;
-            // GameDI.height = RenderDI.canvas.offsetHeight;
-        }
-
         spawnFrame(delta);
 
         physicalFrame(delta);
@@ -207,13 +203,15 @@ export async function createGame({ width, height, withRender, withPlayer }: {
         GameDI.height = null!;
         GameDI.world = null!;
         GameDI.physicalWorld = null!;
-        GameDI.shouldCollectTensor = null!;
         GameDI.gameTick = null!;
         GameDI.destroy = null!;
 
         PlayerEnvDI.window = null!;
         PlayerEnvDI.document = null!;
         PlayerEnvDI.container = null!;
+
+        TenserFlowDI.enabled = false;
+        TenserFlowDI.shouldCollectState = false;
     };
 
     return GameDI;

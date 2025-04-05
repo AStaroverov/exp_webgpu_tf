@@ -6,10 +6,12 @@ import { ActorAgent } from './ActorAgent.ts';
 import { calculateReward } from '../../Common/calculateReward.ts';
 import { getTankHealth } from '../../../ECS/Components/Tank.ts';
 import { applyActionToTank } from '../../Common/applyActionToTank.ts';
-import { addMemoryBatch } from '../Database.ts';
-import { CONFIG } from '../Common/config.ts';
+import { CONFIG } from '../config.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
-import { prepareInputArrays } from '../../Common/prepareInputArrays.ts';
+import { prepareInputArrays } from '../../Common/InputArrays.ts';
+import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
+import { policyMemory, valueMemory } from '../../Common/Database.ts';
+import { omit, pick } from 'lodash-es';
 
 export class ActorManager {
     private agent!: ActorAgent;
@@ -34,7 +36,15 @@ export class ActorManager {
     }
 
     private afterTraining(game: { destroy: () => void }) {
-        addMemoryBatch(this.agent.readMemory());
+        const memory = this.agent.readMemory();
+        policyMemory.addMemoryBatch({
+            version: memory.policyVersion,
+            memories: omit(memory.memories, 'values', 'returns'),
+        });
+        valueMemory.addMemoryBatch({
+            version: memory.valueVersion,
+            memories: pick(memory.memories, 'size', 'states', 'values', 'returns'),
+        });
         this.agent.dispose();
         game.destroy();
     }
@@ -64,7 +74,7 @@ export class ActorManager {
                 || (frameCount - 7) % shouldEvery === 0
                 || (frameCount - 10) % shouldEvery === 0;
             const isLastMemorize = frameCount > 10 && (frameCount - 10) % shouldEvery === 0;
-            GameDI.shouldCollectTensor = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
+            TenserFlowDI.shouldCollectState = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
 
             const activeTanks = game.getTanks();
 
@@ -104,16 +114,16 @@ export class ActorManager {
         isWarmup: boolean,
     ) {
         // Create input vector for the current state
-        const inputVector = prepareInputArrays(tankEid, width, height);
+        const input = prepareInputArrays(tankEid, width, height);
         // Get action from agent
-        const result = this.agent.act(inputVector);
+        const result = this.agent.act(input);
         // Apply action to tank controller
         applyActionToTank(tankEid, result.actions);
 
         if (!isWarmup) {
             this.agent.rememberAction(
                 tankEid,
-                inputVector,
+                input,
                 result.actions,
                 result.logProb,
                 result.value,

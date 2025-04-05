@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@dimforge/rapier2d": "^0.14.0",
+    "@dimforge/rapier2d-simd": "^0.15.0",
     "@tensorflow/tfjs": "^4.22.0",
     "@tensorflow/tfjs-backend-wasm": "^4.22.0",
     "@tensorflow/tfjs-backend-webgpu": "^4.22.0",

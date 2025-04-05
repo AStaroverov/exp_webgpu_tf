@@ -5,11 +5,12 @@ import { createBattlefield } from '../../Common/createBattlefield.ts';
 import { applyActionToTank } from '../../Common/applyActionToTank.ts';
 import { randomRangeInt } from '../../../../../../lib/random.ts';
 import { frameTasks } from '../../../../../../lib/TasksScheduler/frameTasks.ts';
-import { CONFIG } from '../Common/config.ts';
-import { getDrawState } from '../../Common/utils.ts';
+import { CONFIG } from '../config.ts';
+import { getDrawState } from '../../Common/uiUtils.ts';
 import { EntityId } from 'bitecs';
 import { calculateReward } from '../../Common/calculateReward.ts';
-import { prepareInputArrays } from '../../Common/prepareInputArrays.ts';
+import { prepareInputArrays } from '../../Common/InputArrays.ts';
+import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
 
 export class PlayerManager {
     public agent!: PlayerAgent;
@@ -48,7 +49,6 @@ export class PlayerManager {
         await this.agent.sync();
 
         const shouldEvery = 12;
-        const maxWarmupFrames = CONFIG.warmupFrames - (CONFIG.warmupFrames % shouldEvery);
         const maxEpisodeFrames = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
         const width = GameDI.width;
         const height = GameDI.height;
@@ -67,10 +67,9 @@ export class PlayerManager {
                 return;
             }
 
-            const isWarmup = frameCount < maxWarmupFrames;
-            const shouldAction = frameCount % shouldEvery === 0;
-            const shouldReward = frameCount % shouldEvery === 10;
-            GameDI.shouldCollectTensor = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
+            const shouldAction = frameCount > 0 && frameCount % shouldEvery === 0;
+            const shouldReward = frameCount > 0 && frameCount % shouldEvery === 10;
+            TenserFlowDI.shouldCollectState = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
 
             if (shouldAction) {
                 activeTanks = this.battlefield.getTanks();
@@ -81,7 +80,7 @@ export class PlayerManager {
                 }
             }
 
-            this.battlefield.gameTick(TICK_TIME_SIMULATION * (isWarmup ? 2 : 1));
+            this.battlefield.gameTick(TICK_TIME_SIMULATION);
 
             if (shouldReward) {
                 for (const tankEid of activeTanks) {
@@ -94,7 +93,7 @@ export class PlayerManager {
 
             frameCount++;
 
-            const isEpisodeDone = activeTanks.length <= 1 || frameCount > maxEpisodeFrames;
+            const isEpisodeDone = frameCount > shouldEvery && (activeTanks.length <= 1 || frameCount > maxEpisodeFrames);
 
             if (isEpisodeDone) {
                 frameCount = -1;
@@ -108,9 +107,9 @@ export class PlayerManager {
         height: number,
     ) {
         // Create input vector for the current state
-        const inputVector = prepareInputArrays(tankEid, width, height);
+        const input = prepareInputArrays(tankEid, width, height);
         // Get action from agent
-        const result = this.agent.predict(inputVector);
+        const result = this.agent.predict(input);
         // Apply action to tank controller
         applyActionToTank(tankEid, result.actions);
     }

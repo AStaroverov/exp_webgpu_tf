@@ -1,8 +1,8 @@
 // Буфер опыта для PPO
 import { shuffle } from '../../../../../lib/shuffle.ts';
 import { abs, max, min } from '../../../../../lib/math.ts';
-import { isDevtoolsOpen } from '../Common/utils.ts';
-import { InputArrays } from '../Common/prepareInputArrays.ts';
+import { isDevtoolsOpen } from './uiUtils.ts';
+import { InputArrays } from './InputArrays.ts';
 
 export type Batch = {
     states: InputArrays[],
@@ -54,8 +54,7 @@ export class Memory {
     getBatch(gamma: number, lam: number): Batch {
         const batches = this.getBatches(gamma, lam);
         const values = shuffle(Array.from(batches.values()));
-
-        return {
+        const batch = {
             size: values.reduce((acc, batch) => acc + batch.size, 0),
             states: (values.map(batch => batch.states)).flat(),
             actions: (values.map(batch => batch.actions)).flat(),
@@ -66,6 +65,27 @@ export class Memory {
             returns: (values.map(batch => batch.returns)).flat(),
             advantages: (values.map(batch => batch.advantages)).flat(),
         };
+
+        if (!batch.actions.every(a => a.every(isFinite))) {
+            console.error('Actions are not finite', batch.actions);
+        }
+        if (!batch.logProbs.every(isFinite)) {
+            console.error('LogProbs are not finite', batch.logProbs);
+        }
+        if (!batch.values.every(isFinite)) {
+            console.error('Values are not finite', batch.values);
+        }
+        if (!batch.rewards.every(isFinite)) {
+            console.error('Rewards are not finite', batch.rewards);
+        }
+        if (!batch.returns.every(isFinite)) {
+            console.error('Returns are not finite', batch.returns);
+        }
+        if (!batch.advantages.every(isFinite)) {
+            console.error('Advantages are not finite', batch.advantages);
+        }
+
+        return batch;
     }
 
     // Метод для получения батча для обучения

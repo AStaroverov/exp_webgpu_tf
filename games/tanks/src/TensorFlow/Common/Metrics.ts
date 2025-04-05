@@ -1,6 +1,7 @@
 import * as tfvis from '@tensorflow/tfjs-vis';
-import { getAgentLog, setAgentLog } from '../PPO/Database.ts';
-import { isObject } from 'lodash-es';
+import { getAgentLog, setAgentLog } from './Database.ts';
+import { isObject, throttle } from 'lodash-es';
+import { metricsChannels } from './channels.ts';
 
 type Point = { x: number, y: number };
 
@@ -74,8 +75,8 @@ class CompressedBuffer {
     private compress() {
         if (this.avgBuffer.length > this.size / 2) {
             this.avgBuffer = this.compressAvg(this.avgBuffer, 2);
-            this.minBuffer = this.compressAvg(this.minBuffer, 2);
-            this.maxBuffer = this.compressAvg(this.maxBuffer, 2);
+            this.minBuffer = this.compressMin(this.minBuffer, 2);
+            this.maxBuffer = this.compressMax(this.maxBuffer, 2);
         }
         this.compressRawBuffer(this.compressBatch);
     }
@@ -110,7 +111,7 @@ class CompressedBuffer {
     }
 
     private compressAvg(buffer: Point[], batch: number) {
-        const compressed: Point[] = [];
+        const compressedAvg: Point[] = [];
         const length = buffer.length;
 
         for (let i = 0; i < length; i += batch) {
@@ -123,59 +124,95 @@ class CompressedBuffer {
                 sum += lastItem.y;
                 count++;
             }
-            compressed.push({ x: (lastItem.x + firstItem.x) / 2, y: sum / count });
+            compressedAvg.push({ x: (lastItem.x + firstItem.x) / 2, y: sum / count });
         }
 
-        return compressed;
+        return compressedAvg;
     }
 
+    private compressMin(buffer: Point[], batch: number) {
+        const compressedMin: Point[] = [];
+        const length = buffer.length;
+
+        for (let i = 0; i < length; i += batch) {
+            let min = buffer[i];
+            for (let j = i + 1; j < Math.min(i + batch, length); j++) {
+                if (min.y > buffer[j].y) {
+                    min = buffer[j];
+                }
+            }
+            compressedMin.push(min);
+        }
+
+        return compressedMin;
+    }
+
+    private compressMax(buffer: Point[], batch: number) {
+        const compressedMax: Point[] = [];
+        const length = buffer.length;
+
+        for (let i = 0; i < length; i += batch) {
+            let max = buffer[i];
+            for (let j = i + 1; j < Math.min(i + batch, length); j++) {
+                if (max.y < buffer[j].y) {
+                    max = buffer[j];
+                }
+            }
+            compressedMax.push(max);
+        }
+
+        return compressedMax;
+    }
 }
 
 type RenderPoint = { x: number, y: number };
 
 const store = {
     rewards: new CompressedBuffer(10_000, 5),
+    values: new CompressedBuffer(10_000, 5),
+    returns: new CompressedBuffer(10_000, 5),
+    advantages: new CompressedBuffer(10_000, 5),
     kl: new CompressedBuffer(10_000, 5),
     lr: new CompressedBuffer(1_000, 5),
-    clip: new CompressedBuffer(1_000, 5),
     valueLoss: new CompressedBuffer(1_000, 5),
     policyLoss: new CompressedBuffer(1_000, 5),
     trainTime: new CompressedBuffer(1_000, 5),
     waitTime: new CompressedBuffer(1_000, 5),
     versionDelta: new CompressedBuffer(1_000, 5),
     batchSize: new CompressedBuffer(1_000, 5),
-    memory: new CompressedBuffer(100, 5),
 };
 
-export function loadMetrics() {
-    return getAgentLog().then((data) => {
+getAgentLog().then((data) => {
+    // @ts-ignore
+    if (isObject(data) && data.version === 1) {
         // @ts-ignore
-        if (isObject(data) && data.version === 1) {
-            // @ts-ignore
-            store.rewards.fromJson(data.rewards);
-            // @ts-ignore
-            store.kl.fromJson(data.kl);
-            // @ts-ignore
-            store.lr.fromJson(data.lr);
-            // @ts-ignore
-            store.clip.fromJson(data.clip);
-            // @ts-ignore
-            store.valueLoss.fromJson(data.valueLoss);
-            // @ts-ignore
-            store.policyLoss.fromJson(data.policyLoss);
-            // @ts-ignore
-            store.trainTime.fromJson(data.trainTime);
-            // @ts-ignore
-            store.waitTime.fromJson(data.waitTime);
-            // @ts-ignore
-            store.versionDelta.fromJson(data.versionDelta);
-            // @ts-ignore
-            store.batchSize.fromJson(data.batchSize);
-            // @ts-ignore
-            store.memory.fromJson(data.memory);
-        }
-    });
-}
+        store.rewards.fromJson(data.rewards);
+        // @ts-ignore
+        store.values.fromJson(data.values);
+        // @ts-ignore
+        store.returns.fromJson(data.returns);
+        // @ts-ignore
+        store.advantages.fromJson(data.advantages);
+        // @ts-ignore
+        store.kl.fromJson(data.kl);
+        // @ts-ignore
+        store.lr.fromJson(data.lr);
+        // @ts-ignore
+        store.valueLoss.fromJson(data.valueLoss);
+        // @ts-ignore
+        store.policyLoss.fromJson(data.policyLoss);
+        // @ts-ignore
+        store.trainTime.fromJson(data.trainTime);
+        // @ts-ignore
+        store.waitTime.fromJson(data.waitTime);
+        // @ts-ignore
+        store.versionDelta.fromJson(data.versionDelta);
+        // @ts-ignore
+        store.batchSize.fromJson(data.batchSize);
+    }
+
+    subscribeOnMetrics();
+});
 
 export function drawMetrics() {
     drawTab1();
@@ -183,13 +220,15 @@ export function drawMetrics() {
     drawTab3();
 }
 
-export function saveMetrics() {
+export const saveMetrics = throttle(() => {
     setAgentLog({
         version: 1,
-        rewards: store.rewards.toJson(),
         kl: store.kl.toJson(),
         lr: store.lr.toJson(),
-        clip: store.clip.toJson(),
+        rewards: store.rewards.toJson(),
+        values: store.values.toJson(),
+        returns: store.returns.toJson(),
+        advantages: store.advantages.toJson(),
         valueLoss: store.valueLoss.toJson(),
         policyLoss: store.policyLoss.toJson(),
         trainTime: store.trainTime.toJson(),
@@ -197,50 +236,38 @@ export function saveMetrics() {
         versionDelta: store.versionDelta.toJson(),
         batchSize: store.batchSize.toJson(),
     });
-}
+}, 10_000);
 
-export function logEpoch(data: {
-    kl: number;
-    valueLoss: number;
-    policyLoss: number;
-}) {
-    store.kl.add(data.kl);
-    store.valueLoss.add(data.valueLoss);
-    store.policyLoss.add(data.policyLoss);
-}
-
-export function logLR(lr: number) {
-    store.lr.add(lr);
-}
-
-export function logClip(clip: number) {
-    store.clip.add(clip);
-}
-
-export function logRewards(rewards: number[]) {
-    store.rewards.add(...rewards);
-}
-
-export function logBatch(data: { versionDelta: number, batchSize: number }) {
-    store.versionDelta.add(data.versionDelta);
-    store.batchSize.add(data.batchSize);
-}
-
-export function logTrain(data: { trainTime: number, waitTime: number }) {
-    store.trainTime.add(data.trainTime);
-    store.waitTime.add(data.waitTime);
+export function subscribeOnMetrics() {
+    const w = (callback: (event: MessageEvent) => void) => {
+        return (event: MessageEvent) => {
+            callback(event);
+            saveMetrics();
+        };
+    };
+    metricsChannels.rewards.onmessage = w((event) => store.rewards.add(...event.data));
+    metricsChannels.values.onmessage = w((event) => store.values.add(...event.data));
+    metricsChannels.returns.onmessage = w((event) => store.returns.add(...event.data));
+    metricsChannels.advantages.onmessage = w((event) => store.advantages.add(...event.data));
+    metricsChannels.kl.onmessage = w((event) => store.kl.add(event.data));
+    metricsChannels.valueLoss.onmessage = w((event) => store.valueLoss.add(event.data));
+    metricsChannels.policyLoss.onmessage = w((event) => store.policyLoss.add(event.data));
+    metricsChannels.lr.onmessage = w((event) => store.lr.add(event.data));
+    metricsChannels.versionDelta.onmessage = w((event) => store.versionDelta.add(event.data));
+    metricsChannels.batchSize.onmessage = w((event) => store.batchSize.add(event.data));
+    metricsChannels.trainTime.onmessage = w((event) => store.trainTime.add(event.data));
+    metricsChannels.waitTime.onmessage = w((event) => store.waitTime.add(event.data));
 }
 
 function drawTab1() {
+    const tab = 'Tab 1';
     const avgRewards = store.rewards.toArray();
     const avgRewardsMA = calculateMovingAverage(avgRewards, 1000);
     const minRewards = store.rewards.toArrayMin();
-    const minRewardsMA = calculateMovingAverage(minRewards, 1000);
     const maxRewards = store.rewards.toArrayMax();
-    const maxRewardsMA = calculateMovingAverage(maxRewards, 1000);
-    tfvis.render.linechart({ name: 'Reward', tab: 'Tab 1' }, {
-        values: [minRewards, maxRewards, avgRewards, minRewardsMA, maxRewardsMA, avgRewardsMA],
-        series: ['Min', 'Max', 'Avg', 'Min MA', 'Max MA', 'Avg MA'],
+    tfvis.render.linechart({ name: 'Reward', tab }, {
+        values: [minRewards, maxRewards, avgRewards, avgRewardsMA],
+        series: ['Min', 'Max', 'Avg', 'Avg MA'],
     }, {
         xLabel: 'Version',
         yLabel: 'Reward',
@@ -248,8 +275,8 @@ function drawTab1() {
         height: 300,
     });
 
-    tfvis.render.linechart({ name: 'KL', tab: 'Tab 1' }, {
-        values: [store.kl.toArray(), calculateMovingAverage(store.kl.toArray(), 10)],
+    tfvis.render.linechart({ name: 'KL', tab }, {
+        values: [store.kl.toArray(), calculateMovingAverage(store.kl.toArray(), 30)],
         series: ['Avg', 'MA'],
     }, {
         xLabel: 'Version',
@@ -258,7 +285,7 @@ function drawTab1() {
         height: 300,
     });
 
-    tfvis.render.linechart({ name: 'LR', tab: 'Tab 1' }, {
+    tfvis.render.linechart({ name: 'LR', tab }, {
         values: [store.lr.toArray()],
     }, {
         xLabel: 'Version',
@@ -267,11 +294,27 @@ function drawTab1() {
         height: 300,
     });
 
-    tfvis.render.linechart({ name: 'Clip', tab: 'Tab 1' }, {
-        values: [store.clip.toArray()],
+    tfvis.render.scatterplot({ name: 'Advantage', tab }, {
+        values: [store.advantages.toArrayMin(), store.advantages.toArrayMax()],
     }, {
         xLabel: 'Version',
-        yLabel: 'Clip',
+        yLabel: 'Advantage',
+        width: 500,
+        height: 300,
+    });
+    tfvis.render.scatterplot({ name: 'Value', tab }, {
+        values: [store.values.toArrayMin(), store.values.toArrayMax()],
+    }, {
+        xLabel: 'Version',
+        yLabel: 'Value',
+        width: 500,
+        height: 300,
+    });
+    tfvis.render.scatterplot({ name: 'Return', tab }, {
+        values: [store.returns.toArrayMin(), store.returns.toArrayMax()],
+    }, {
+        xLabel: 'Version',
+        yLabel: 'Return',
         width: 500,
         height: 300,
     });

@@ -10,6 +10,7 @@ export type Config = {
     lam: number;                    // GAE lambda
     // PPO-specific parameters
     epochs: number;                // Number of epochs to train on the same data
+    clipRatio: number;             // Clipping ratio for PPO
     entropyCoeff: number;           // Entropy coefficient for encouraging exploration
 
     klConfig: {
@@ -25,14 +26,6 @@ export type Config = {
         min: number,
         max: number,
     },
-    clipRatioConfig: {
-        initial: number,
-        deltaHigh: number,
-        deltaLow: number,
-        min: number,
-        max: number,
-    }
-
     trustCoeff: number;
 
     batchSize: number;              // Batch size for worker
@@ -53,11 +46,12 @@ export const DEFAULT_EXPERIMENT: Config = {
     gamma: 0.99,
     lam: 0.95,
     // PPO-specific parameters
-    epochs: 8,
+    epochs: 5,
+    clipRatio: 0.2,
     entropyCoeff: 0.01,
 
     klConfig: {
-        target: 0.02,
+        target: 0.01,
         highCoef: 2.0,       // Если KL > 2 * 0.01 => 0.02
         lowCoef: 1 / 2.0,    // Если KL < 0.5 * 0.01 => 0.005
         max: 0.5,
@@ -67,16 +61,8 @@ export const DEFAULT_EXPERIMENT: Config = {
         multHigh: 0.9,
         multLow: 1.1,
         min: 1e-6,
-        max: 1e-3,
+        max: 5e-3,
     },
-    clipRatioConfig: {
-        initial: 0.2,
-        deltaHigh: 0.005,
-        deltaLow: 0.005,
-        min: 0.05,
-        max: 0.2,
-    },
-
     trustCoeff: 0.1,
 
     batchSize: 256, // useless for appo

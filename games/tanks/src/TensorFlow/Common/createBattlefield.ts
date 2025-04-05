@@ -5,11 +5,14 @@ import { GameDI } from '../../DI/GameDI.ts';
 import { TANK_RADIUS } from './consts.ts';
 import { TankController } from '../../ECS/Components/TankController.ts';
 import { query } from 'bitecs';
+import { TenserFlowDI } from '../../DI/TenserFlowDI.ts';
 
 const MAX_PADDING = 100;
 
 export async function createBattlefield(tanksCount: number, withRender = false, withPlayer = false) {
-    const game = await createGame({ width: 800, height: 800, withPlayer, withRender });
+    TenserFlowDI.enabled = true;
+
+    const game = await createGame({ width: 1000, height: 1000, withPlayer, withRender });
     const width = GameDI.width;
     const height = GameDI.height;
     const padding = random() * MAX_PADDING;
@@ -30,6 +33,7 @@ export async function createBattlefield(tanksCount: number, withRender = false, 
     };
 
     // Создаем танки с проверкой минимального расстояния
+    let teamZeroCount = Math.floor(tanksCount / 2);
     for (let i = 0; i < tanksCount; i++) {
         let x: number, y: number;
 
@@ -39,11 +43,13 @@ export async function createBattlefield(tanksCount: number, withRender = false, 
             y = randomRangeFloat(TANK_RADIUS - padding, height - TANK_RADIUS + padding);
         } while (isTooClose(x, y));
 
+        const teamId = teamZeroCount-- > 0 ? 0 : 1;
         const eid = createTankRR({
+            teamId,
             x,
             y,
             rotation: Math.PI * randomRangeFloat(0, 2), // Случайный поворот от 0 до 2π
-            color: [randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1],
+            color: [teamId, randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1],
         });
         TankController.setTurretDir$(
             eid,

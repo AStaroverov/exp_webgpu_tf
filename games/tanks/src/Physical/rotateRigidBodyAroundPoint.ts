@@ -1,5 +1,5 @@
 import { mat2d, vec2 } from 'gl-matrix';
-import { RigidBody } from '@dimforge/rapier2d';
+import { RigidBody } from '@dimforge/rapier2d-simd';
 
 const pivot = vec2.create();
 const rotationMatrix = mat2d.create();
