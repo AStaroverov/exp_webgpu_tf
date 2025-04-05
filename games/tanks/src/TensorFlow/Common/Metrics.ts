@@ -276,7 +276,7 @@ function drawTab1() {
     });
 
     tfvis.render.linechart({ name: 'KL', tab }, {
-        values: [store.kl.toArray(), calculateMovingAverage(store.kl.toArray(), 10)],
+        values: [store.kl.toArray(), calculateMovingAverage(store.kl.toArray(), 30)],
         series: ['Avg', 'MA'],
     }, {
         xLabel: 'Version',
