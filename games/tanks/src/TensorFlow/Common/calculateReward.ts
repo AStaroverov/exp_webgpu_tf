@@ -24,7 +24,7 @@ let REWARD_WEIGHTS = {
         DISTANCE_PENALTY: -0.1, // За расстояние до цели
         SHOOTING: 1.0,       // За стрельбу в цель
         SHOOTING_PENALTY: -0.1, // За стрельбу в пустоту
-        SHOOTING_ALLIES_PENALTY: -2.0, // За стрельбу в союзников
+        SHOOTING_ALLIES_PENALTY: -1.0, // За стрельбу в союзников
     },
     AIM_MULTIPLIER: 5.0,
 
@@ -32,25 +32,25 @@ let REWARD_WEIGHTS = {
         BASE: 1,          // За нахождение в пределах карты
         PENALTY: -1,      // За выход за границы
     },
-    MAP_BORDER_MULTIPLIER: 0.3,
+    MAP_BORDER_MULTIPLIER: 1,
 
     DISTANCE_KEEPING: {
         BASE: 1.0,          // За поддержание дистанции
         PENALTY: -0.3,      // За слишком близкое приближение
     },
-    DISTANCE_KEEPING_MULTIPLIER: 0.3, // может быть несколько врагов
+    DISTANCE_KEEPING_MULTIPLIER: 1, // может быть несколько врагов
 
     MOVEMENT: {
         BASE: 1,          // За базовое движение
         STRATEGIC: 1,     // За стратегическое движение
     },
-    MOVEMENT_MULTIPLIER: 0.3,
+    MOVEMENT_MULTIPLIER: 1,
 
     BULLET_AVOIDANCE: {
         PENALTY: -0.3,
         AVOID_QUALITY: 0.3,
     },
-    BULLET_AVOIDANCE_MULTIPLIER: 0.3,
+    BULLET_AVOIDANCE_MULTIPLIER: 1,
 };
 
 // Структура для хранения многокомпонентных наград
