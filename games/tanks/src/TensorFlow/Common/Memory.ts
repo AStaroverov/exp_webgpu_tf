@@ -66,25 +66,6 @@ export class Memory {
             advantages: (values.map(batch => batch.advantages)).flat(),
         };
 
-        if (!batch.actions.every(a => a.every(isFinite))) {
-            console.error('Actions are not finite', batch.actions);
-        }
-        if (!batch.logProbs.every(isFinite)) {
-            console.error('LogProbs are not finite', batch.logProbs);
-        }
-        if (!batch.values.every(isFinite)) {
-            console.error('Values are not finite', batch.values);
-        }
-        if (!batch.rewards.every(isFinite)) {
-            console.error('Rewards are not finite', batch.rewards);
-        }
-        if (!batch.returns.every(isFinite)) {
-            console.error('Returns are not finite', batch.returns);
-        }
-        if (!batch.advantages.every(isFinite)) {
-            console.error('Advantages are not finite', batch.advantages);
-        }
-
         return batch;
     }
 
