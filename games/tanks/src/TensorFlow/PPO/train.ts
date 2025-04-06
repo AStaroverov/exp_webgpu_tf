@@ -1,4 +1,5 @@
 import * as tf from '@tensorflow/tfjs';
+import { dispose } from '@tensorflow/tfjs';
 import { ACTION_DIM } from '../Common/consts.ts';
 import { computeLogProb } from '../Common/computeLogProb.ts';
 import { InputArrays, prepareRandomInputArrays } from '../Common/InputArrays.ts';
@@ -183,12 +184,19 @@ function optimize(
     });
 }
 
-let randomInputTensors;
+let randomInputTensors: tf.Tensor[];
+
+function getRandomInputTensors() {
+    randomInputTensors = randomInputTensors == null || random() > 0.9
+        ? (dispose(randomInputTensors), createInputTensors([prepareRandomInputArrays()]))
+        : randomInputTensors;
+
+    return randomInputTensors;
+}
 
 export async function healthCheck(network: tf.LayersModel): Promise<boolean> {
-    randomInputTensors ??= createInputTensors([prepareRandomInputArrays()]);
-    randomInputTensors = random() > 0.1 ? randomInputTensors : createInputTensors([prepareRandomInputArrays()]);
-    const predict = (network.predict(randomInputTensors) as tf.Tensor).squeeze();
+
+    const predict = (network.predict(getRandomInputTensors()) as tf.Tensor).squeeze();
     const data = await predict.data();
 
     if (!data.every(Number.isFinite)) {
