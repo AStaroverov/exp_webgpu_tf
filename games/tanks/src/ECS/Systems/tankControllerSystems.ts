@@ -1,6 +1,6 @@
 import { GameDI } from '../../DI/GameDI.ts';
 import { TankController } from '../Components/TankController.ts';
-import { RevoluteImpulseJoint, Vector2 } from '@dimforge/rapier2d-simd';
+import { RevoluteImpulseJoint, Vector2 } from '@dimforge/rapier2d-simd/rapier';
 import { Tank, TankPart } from '../Components/Tank.ts';
 import { RigidBodyRef } from '../Components/Physical.ts';
 import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';

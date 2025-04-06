@@ -1,9 +1,8 @@
 import { initWebGPU } from '../../src/gpu.ts';
 import { createFrameTick } from '../../src/WGSL/createFrame.ts';
-import { createDrawShapeSystem } from '../../src/ECS/Systems/SDFSystem/createDrawShapeSystem.ts';
 import { initPhysicalWorld } from './src';
 import { createApplyRigidBodyToTransformSystem } from './src/ECS/Systems/createApplyRigidBodyToTransformSystem.ts';
-import { EventQueue } from '@dimforge/rapier2d-simd';
+import { EventQueue } from '@dimforge/rapier2d-simd/rapier';
 import { GameDI } from './src/DI/GameDI.ts';
 import { createTransformSystem } from '../../src/ECS/Systems/TransformSystem.ts';
 import {
@@ -19,12 +18,9 @@ import { createHitableSystem } from './src/ECS/Systems/createHitableSystem.ts';
 import { createTankAliveSystem } from './src/ECS/Systems/createTankAliveSystem.ts';
 import { createTankPositionSystem, createTankTurretRotationSystem } from './src/ECS/Systems/tankControllerSystems.ts';
 import { createOutZoneDestroySystem } from './src/ECS/Systems/createOutZoneDestroySystem.ts';
-import { createTankInputTensorSystem } from './src/ECS/Systems/RL/createTankInputTensorSystem.ts';
 import { destroyChangeDetectorSystem } from '../../src/ECS/Systems/ChangedDetectorSystem.ts';
 import { createDestroyByTimeoutSystem } from './src/ECS/Systems/createDestroyByTimeoutSystem.ts';
 import { createAimSystem } from './src/ECS/Systems/createAimSystem.ts';
-import { createPostEffect } from './src/ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
-import { createDrawGrassSystem } from './src/ECS/Systems/Render/Grass/createDrawGrassSystem.ts';
 import { createRigidBodyStateSystem } from './src/ECS/Systems/createRigidBodyStateSystem.ts';
 import { createDestroySystem } from './src/ECS/Systems/createDestroySystem.ts';
 import { RenderDI } from './src/DI/RenderDI.ts';
@@ -125,29 +121,38 @@ export async function createGame({ width, height, withRender, withPlayer }: {
         updateTankAliveSystem();
     };
 
-    const renderFrame = withRender ? (() => {
-        const { canvas, device, context } = RenderDI;
-        const drawGrass = createDrawGrassSystem();
-        const drawShape = createDrawShapeSystem(world, device);
-        const { renderFrame, renderTexture } = createFrameTick({
-            canvas,
-            device,
-            context,
-            background: [173, 193, 120, 255].map(v => v / 255),
-            getPixelRatio: () => window.devicePixelRatio,
-        }, ({ passEncoder, delta }) => {
-            drawGrass(passEncoder, delta);
-            drawShape(passEncoder);
-        });
-        const postEffectFrame = createPostEffect(device, context, renderTexture);
+    const renderFrame = withRender
+        ? createFrameFromPromise(
+            Promise.all([
+                import('../../src/ECS/Systems/SDFSystem/createDrawShapeSystem.ts').then(m => m.createDrawShapeSystem),
+                import('./src/ECS/Systems/Render/Grass/createDrawGrassSystem.ts').then(m => m.createDrawGrassSystem),
+                import('./src/ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts').then(m => m.createPostEffect),
+            ]).then(([createDrawShapeSystem, createDrawGrassSystem, createPostEffect]) => {
+                const { canvas, device, context } = RenderDI;
+                const drawGrass = createDrawGrassSystem();
+                const drawShape = createDrawShapeSystem(world, device);
+                const { renderFrame, renderTexture } = createFrameTick({
+                    canvas,
+                    device,
+                    context,
+                    background: [173, 193, 120, 255].map(v => v / 255),
+                    getPixelRatio: () => window.devicePixelRatio,
+                }, ({ passEncoder, delta }) => {
+                    drawGrass(passEncoder, delta);
+                    drawShape(passEncoder);
+                });
 
-        return (delta: number) => {
-            const commandEncoder = device.createCommandEncoder();
-            renderFrame(commandEncoder, delta);
-            postEffectFrame(commandEncoder);
-            device.queue.submit([commandEncoder.finish()]);
-        };
-    })() : noop;
+                const postEffectFrame = createPostEffect(device, context, renderTexture);
+
+                return (delta: number) => {
+                    const commandEncoder = device.createCommandEncoder();
+                    renderFrame(commandEncoder, delta);
+                    postEffectFrame(commandEncoder);
+                    device.queue.submit([commandEncoder.finish()]);
+                };
+            }),
+        )
+        : noop;
 
 
     const spawnBullets = createSpawnerBulletsSystem();
@@ -164,7 +169,11 @@ export async function createGame({ width, height, withRender, withPlayer }: {
         destroy();
     };
 
-    const updateTankInputTensor = createTankInputTensorSystem();
+    const updateTankInputTensor = TenserFlowDI.enabled
+        ? createFrameFromPromise(
+            import('./src/ECS/Systems/RL/createTankInputTensorSystem.ts').then(m => m.createTankInputTensorSystem),
+        )
+        : noop;
     const statsFrame = () => {
         updateTankInputTensor();
     };
@@ -215,4 +224,17 @@ export async function createGame({ width, height, withRender, withPlayer }: {
     };
 
     return GameDI;
+}
+
+function createFrameFromPromise<T extends (...args: any[]) => any>(promise: Promise<T>) {
+    let innerTick: T = noop as T;
+    const tick = (...args: Parameters<T>) => {
+        innerTick(...args);
+    };
+
+    promise.then(fn => {
+        innerTick = fn;
+    });
+
+    return tick;
 }

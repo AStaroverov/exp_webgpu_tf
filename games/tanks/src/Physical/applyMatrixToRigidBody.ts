@@ -1,4 +1,4 @@
-import { RigidBody } from '@dimforge/rapier2d-simd';
+import { RigidBody } from '@dimforge/rapier2d-simd/rapier';
 import { mat4, vec2 } from 'gl-matrix';
 
 export function applyMatrixToRigidBody(body: RigidBody, matrix: mat4): void {

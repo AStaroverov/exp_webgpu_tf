@@ -8,7 +8,8 @@
     "ml": "vite --config config.ml.ts",
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "node": "tsx --experimental-wasm-modules games/tanks/src/TensorFlow/PPO/index.ts"
   },
   "devDependencies": {
     "typescript": "^5.0.2",
@@ -20,6 +21,7 @@
     "@tensorflow/tfjs": "^4.22.0",
     "@tensorflow/tfjs-backend-wasm": "^4.22.0",
     "@tensorflow/tfjs-backend-webgpu": "^4.22.0",
+    "@tensorflow/tfjs-node": "^4.22.0",
     "@tensorflow/tfjs-vis": "^1.5.1",
     "@types/lodash": "^4.17.15",
     "@types/lodash-es": "^4.17.12",
@@ -34,6 +36,7 @@
     "ring-buffer-ts": "^1.2.0",
     "stats-gl": "^3.6.0",
     "vite-plugin-top-level-await": "^1.4.4",
-    "vite-plugin-wasm": "^3.4.1"
+    "vite-plugin-wasm": "^3.4.1",
+    "webgpu": "^0.2.11"
   }
 }

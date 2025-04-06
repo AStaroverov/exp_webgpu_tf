@@ -1,4 +1,4 @@
-import { ActiveCollisionTypes, ActiveEvents, ColliderDesc } from '@dimforge/rapier2d-simd';
+import { ActiveCollisionTypes, ActiveEvents, ColliderDesc } from '@dimforge/rapier2d-simd/rapier';
 import { GameDI } from '../DI/GameDI.ts';
 import { BodyOptions, createBody } from './createBody.ts';
 import { RigidBodyRef } from '../ECS/Components/Physical.ts';

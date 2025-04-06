@@ -2,13 +2,15 @@ import { TasksManager } from './TasksManager';
 
 class FrameTasks extends TasksManager {
     constructor() {
+        const request = globalThis.requestAnimationFrame ?? global.setTimeout;
+        const cancel = globalThis.cancelAnimationFrame ?? global.clearTimeout;
         super((fn) => {
-            let id = requestAnimationFrame(function ticker() {
+            let id = request(function ticker() {
                 fn();
-                id = requestAnimationFrame(ticker);
+                id = request(ticker);
             });
 
-            return () => cancelAnimationFrame(id);
+            return () => cancel(id);
         });
     }
 

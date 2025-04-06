@@ -1,4 +1,4 @@
-import { Vector2 } from '@dimforge/rapier2d-simd';
+import { Vector2 } from '@dimforge/rapier2d-simd/rapier';
 import { vec2 } from 'gl-matrix';
 
 const result = vec2.create();

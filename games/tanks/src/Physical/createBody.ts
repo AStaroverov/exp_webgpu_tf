@@ -1,4 +1,4 @@
-import { RigidBody, RigidBodyDesc, RigidBodyType } from '@dimforge/rapier2d-simd';
+import { RigidBody, RigidBodyDesc, RigidBodyType } from '@dimforge/rapier2d-simd/rapier';
 import { GameDI } from '../DI/GameDI.ts';
 
 export type BodyOptions = {

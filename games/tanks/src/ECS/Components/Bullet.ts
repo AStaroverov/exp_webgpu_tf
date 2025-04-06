@@ -1,5 +1,5 @@
 import { createCircleRR } from './RigidRender.ts';
-import { ActiveEvents, RigidBodyType } from '@dimforge/rapier2d-simd';
+import { ActiveEvents, RigidBodyType } from '@dimforge/rapier2d-simd/rapier';
 import {
     addTransformComponents,
     getMatrixRotationZ,
