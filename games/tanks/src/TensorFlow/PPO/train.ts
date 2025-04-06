@@ -38,7 +38,9 @@ export function trainPolicyNetwork(
         });
     });
 
-    return loss.data().then((v) => v[0]).finally(() => loss.dispose());
+    return loss.data()
+        .then((v) => v[0])
+        .finally(() => loss.dispose());
 }
 
 function parsePredict(predict: tf.Tensor) {
@@ -65,11 +67,13 @@ export function computeKullbackLeibler(
         return kl;
     });
 
-    return value.data().then((v) => v[0]).finally(() => value.dispose());
+    return value.data()
+        .then((v) => v[0])
+        .finally(() => value.dispose());
 }
 
 // Обучение сети критика (оценка состояний)
-export function trainValueNetwork(
+export async function trainValueNetwork(
     network: tf.LayersModel,
     states: tf.Tensor[],
     returns: tf.Tensor,  // [batchSize], уже подсчитанные (GAE + V(s) или просто discountedReturns)
@@ -98,7 +102,10 @@ export function trainValueNetwork(
         }) as tf.Scalar;
     });
 
-    return loss.data().then((v) => v[0]).finally(() => loss.dispose());
+
+    return loss.data()
+        .then((v) => v[0])
+        .finally(() => loss.dispose());
 }
 
 export function act(
@@ -110,7 +117,7 @@ export function act(
     logProb: number,
     value: number
 } {
-    return tf.tidy(() => {
+    const result = tf.tidy(() => {
         const input = createInputTensors([state]);
         const predict = policyNetwork.predict(input) as tf.Tensor;
         const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
@@ -129,10 +136,22 @@ export function act(
             value: value.squeeze().dataSync()[0],
         };
     });
+
+    if (!arrayHealthCheck(result.actions)) {
+        throw new Error('Invalid actions data');
+    }
+    if (Number.isNaN(result.logProb)) {
+        throw new Error('Invalid logProb data');
+    }
+    if (Number.isNaN(result.value)) {
+        throw new Error('Invalid value data');
+    }
+
+    return result;
 }
 
 export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { actions: Float32Array } {
-    return tf.tidy(() => {
+    const result = tf.tidy(() => {
         const predict = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
         const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
         const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
@@ -148,6 +167,12 @@ export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { ac
             actions: outMean.dataSync() as Float32Array,
         };
     });
+
+    if (!arrayHealthCheck(result.actions)) {
+        throw new Error('Invalid actions data');
+    }
+
+    return result;
 }
 
 function optimize(
@@ -194,15 +219,14 @@ function getRandomInputTensors() {
     return randomInputTensors;
 }
 
-export async function healthCheck(network: tf.LayersModel): Promise<boolean> {
+export async function networkHealthCheck(network: tf.LayersModel): Promise<boolean> {
+    const data = tf.tidy(() => {
+        return (network.predict(getRandomInputTensors()) as tf.Tensor).squeeze().dataSync();
+    }) as Float32Array;
 
-    const predict = (network.predict(getRandomInputTensors()) as tf.Tensor).squeeze();
-    const data = await predict.data();
+    return arrayHealthCheck(data);
+}
 
-    if (!data.every(Number.isFinite)) {
-        console.error('Invalid predict data:', data);
-        return false;
-    }
-
-    return true;
+export function arrayHealthCheck(array: Float32Array): boolean {
+    return array.every(Number.isFinite);
 }

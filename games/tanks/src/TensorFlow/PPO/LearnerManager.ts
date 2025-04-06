@@ -1,6 +1,5 @@
 import { PolicyLearnerAgent } from './PolicyLearner/PolicyLearnerAgent.ts';
 import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
-import { TICK_TRAIN_TIME } from '../Common/consts.ts';
 import { EntityId } from 'bitecs';
 import { ValueLearnerAgent } from './ValueLearner/ValueLearnerAgent.ts';
 
@@ -34,12 +33,17 @@ export class LearnerManager {
         return this;
     }
 
-    private trainingLoop() {
-        macroTasks.addTimeout(async () => {
-            try {
-                const trained = await this.agent.tryTrain();
+    private async trainingLoop() {
+        while (true) {
+            await new Promise(resolve => macroTasks.addTimeout(resolve, 333));
 
-                if (!trained) return;
+            try {
+                await this.agent.collectBatches();
+
+                if (!this.agent.hasEnoughBatches()) continue;
+
+                await this.agent.train();
+                this.agent.finishTrain();
 
                 const health = await this.agent.healthCheck();
 
@@ -50,9 +54,7 @@ export class LearnerManager {
                 }
             } catch (error) {
                 console.error('Error during training loop:', error);
-            } finally {
-                this.trainingLoop();
             }
-        }, TICK_TRAIN_TIME);
+        }
     }
 }

@@ -4,7 +4,7 @@ import { ACTION_DIM } from '../../Common/consts.ts';
 import { ceil, mean } from '../../../../../../lib/math.ts';
 import { createPolicyNetwork } from '../../Common/models.ts';
 import { getStoreModelPath } from '../../Common/tfUtils.ts';
-import { computeKullbackLeibler, healthCheck, trainPolicyNetwork } from '../train.ts';
+import { computeKullbackLeibler, trainPolicyNetwork } from '../train.ts';
 import { CONFIG } from '../config.ts';
 import { flatFloat32Array } from '../../Common/flat.ts';
 import { batchShuffle, shuffle } from '../../../../../../lib/shuffle.ts';
@@ -14,57 +14,26 @@ import { setModelState } from '../../Common/modelsCopy.ts';
 import { policyAgentState, policyMemory, PolicyMemoryBatch } from '../../Common/Database.ts';
 import { learningRateChannel, metricsChannels } from '../../Common/channels.ts';
 import { createInputTensors, sliceInputTensors } from '../../Common/InputTensors.ts';
+import { LearnerAgent } from '../LearnerAgent.ts';
 
-export class PolicyLearnerAgent {
-    private version = 0;
+export class PolicyLearnerAgent extends LearnerAgent<{ version: number, memories: PolicyMemoryBatch }> {
     private klHistory = new RingBuffer<number>(30);
-
-    private batches: { version: number, memories: PolicyMemoryBatch }[] = [];
     private lastTrainTimeStart = 0;
 
-    private policyNetwork: tf.LayersModel = createPolicyNetwork();
-
     constructor() {
-
+        super(createPolicyNetwork);
     }
 
-    public async init() {
-        if (!(await this.load())) {
-            this.policyNetwork = createPolicyNetwork();
-        }
-
-        return this;
-    }
-
-    async save() {
-        while (!(await this.upload())) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-    }
-
-    async tryTrain(): Promise<boolean> {
+    async collectBatches() {
         this.batches.push(...await policyMemory.extractMemoryBatchList());
+    }
 
-        if (this.batches.length < CONFIG.workerCount) {
-            return false;
-        }
-
+    async train(batches = this.extractBatches()) {
         const startTime = Date.now();
         const waitTime = startTime - (this.lastTrainTimeStart || startTime);
         this.lastTrainTimeStart = startTime;
 
-        const rawBatches = this.batches;
-        const batches = rawBatches.filter(b => {
-            const delta = this.version - b.version;
-            if (delta > 2) {
-                console.warn('[Train]: skipping batch with diff', delta);
-                return false;
-            }
-            return true;
-        });
         const memories = batches.map(b => b.memories);
-
-        this.batches = [];
         const sumSize = memories.reduce((acc, b) => acc + b.size, 0);
         const states = memories.map(b => b.states).flat();
         const actions = memories.map(b => b.actions).flat();
@@ -112,7 +81,7 @@ export class PolicyLearnerAgent {
                 const tAdvantages = tAllAdvantages.slice([start], [size]);
 
                 policyLossPromises.push(trainPolicyNetwork(
-                    this.policyNetwork,
+                    this.network,
                     tStates, tActions, tLogProbs, tAdvantages,
                     CONFIG.clipRatio, CONFIG.entropyCoeff,
                 ));
@@ -124,7 +93,7 @@ export class PolicyLearnerAgent {
             }
 
             const kl = await computeKullbackLeibler(
-                this.policyNetwork,
+                this.network,
                 tAllStates,
                 tAllActions,
                 tAllLogProbs,
@@ -141,10 +110,10 @@ export class PolicyLearnerAgent {
 
             const lr = getDynamicLearningRate(
                 mean(this.klHistory.toArray()),
-                getLR(this.policyNetwork),
+                getLR(this.network),
             );
             this.updateOptimizersLR(lr);
-            metricsChannels.lr.postMessage(getLR(this.policyNetwork));
+            metricsChannels.lr.postMessage(getLR(this.network));
         }
 
         const endTime = Date.now();
@@ -166,7 +135,7 @@ export class PolicyLearnerAgent {
                 metricsChannels.policyLoss.postMessage(kl);
             }
 
-            for (const batch of rawBatches) {
+            for (const batch of batches) {
                 metricsChannels.versionDelta.postMessage(version - batch.version);
                 metricsChannels.batchSize.postMessage(batch.memories.size);
             }
@@ -181,31 +150,23 @@ export class PolicyLearnerAgent {
         tAllActions.dispose();
         tAllLogProbs.dispose();
         tAllAdvantages.dispose();
-
-        this.version += 1;
-
-        return true;
-    }
-
-    public healthCheck() {
-        return healthCheck(this.policyNetwork);
     }
 
     public async load() {
         try {
-            const [agentState, policyNetwork] = await Promise.all([
+            const [agentState, network] = await Promise.all([
                 policyAgentState.get(),
                 tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG)),
             ]);
-            if (!policyNetwork) {
+            if (!network) {
                 return false;
             }
             this.version = agentState?.version ?? 0;
             this.klHistory.fromArray(agentState?.klHistory ?? []);
-            this.policyNetwork = await setModelState(this.policyNetwork, policyNetwork);
+            this.network = await setModelState(this.network, network);
             console.log('Models loaded successfully');
 
-            policyNetwork.dispose();
+            network.dispose();
 
             return true;
         } catch (error) {
@@ -220,9 +181,9 @@ export class PolicyLearnerAgent {
                 policyAgentState.set({
                     version: this.version,
                     klHistory: this.klHistory.toArray(),
-                    learningRate: getLR(this.policyNetwork),
+                    learningRate: getLR(this.network),
                 }),
-                this.policyNetwork.save(getStoreModelPath('policy-model', CONFIG), { includeOptimizer: true }),
+                this.network.save(getStoreModelPath('policy-model', CONFIG), { includeOptimizer: true }),
             ]);
 
             return true;
@@ -232,8 +193,8 @@ export class PolicyLearnerAgent {
         }
     }
 
-    private updateOptimizersLR(lr: number) {
-        setLR(this.policyNetwork, lr);
+    protected updateOptimizersLR(lr: number) {
+        super.updateOptimizersLR(lr);
         learningRateChannel.postMessage(lr);
     }
 }
@@ -241,9 +202,4 @@ export class PolicyLearnerAgent {
 function getLR(o: tf.LayersModel): number {
     // @ts-expect-error
     return o.optimizer.learningRate;
-}
-
-function setLR(o: tf.LayersModel, lr: number) {
-    // @ts-expect-error
-    o.optimizer.learningRate = lr;
 }

@@ -13,6 +13,8 @@ import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
 import { policyMemory, valueMemory } from '../../Common/Database.ts';
 import { omit, pick } from 'lodash-es';
 
+type Game = Awaited<ReturnType<typeof createBattlefield>>;
+
 export class ActorManager {
     private agent!: ActorAgent;
 
@@ -24,18 +26,26 @@ export class ActorManager {
         return new ActorManager();
     }
 
-    start() {
-        this.trainingLoop();
+    async start() {
+        while (true) {
+            try {
+                await this.runEpisode();
+            } catch (error) {
+                console.error('Error during episode:', error);
+                await new Promise(resolve => macroTasks.addTimeout(resolve, 1000));
+            }
+        }
     }
 
-    private beforeTraining() {
+    private beforeEpisode() {
         return Promise.all([
             createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX)),
+            memoryBackpressure(),
             this.agent.sync(),
         ]);
     }
 
-    private afterTraining(game: { destroy: () => void }) {
+    private afterEpisode() {
         const memory = this.agent.readMemory();
         policyMemory.addMemoryBatch({
             version: memory.policyVersion,
@@ -45,14 +55,27 @@ export class ActorManager {
             version: memory.valueVersion,
             memories: pick(memory.memories, 'size', 'states', 'values', 'returns'),
         });
+    }
+
+    private cleanupEpisode(game: Game) {
         this.agent.dispose();
         game.destroy();
     }
 
-    // Main game loop
-    private async trainingLoop() {
-        const [game] = await this.beforeTraining();
+    private async runEpisode() {
+        const [game] = await this.beforeEpisode();
 
+        try {
+            await this.runGameLoop(game);
+            this.afterEpisode();
+            this.cleanupEpisode(game);
+        } catch (error) {
+            this.cleanupEpisode(game);
+            throw error;
+        }
+    }
+
+    private async runGameLoop(game: Game) {
         const shouldEvery = 12;
         const maxWarmupFrames = CONFIG.warmupFrames - (CONFIG.warmupFrames % shouldEvery);
         const maxEpisodeFrames = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
@@ -101,9 +124,6 @@ export class ActorManager {
                 break;
             }
         }
-
-        this.afterTraining(game);
-        this.trainingLoop();
     }
 
 
@@ -156,5 +176,15 @@ export class ActorManager {
             isDone,
             isLast,
         );
+    }
+}
+
+async function memoryBackpressure() {
+    while (
+        await policyMemory.getMemoryBatchCount() > CONFIG.workerCount
+        || await valueMemory.getMemoryBatchCount() > CONFIG.workerCount
+        ) {
+        console.log('>>', 'Backpressure', 'Waiting for memory batch count to decrease');
+        await new Promise(resolve => macroTasks.addTimeout(resolve, 1000));
     }
 }
