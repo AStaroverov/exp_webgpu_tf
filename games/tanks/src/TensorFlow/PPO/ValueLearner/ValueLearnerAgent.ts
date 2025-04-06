@@ -4,7 +4,7 @@ import { ceil } from '../../../../../../lib/math.ts';
 import { createValueNetwork } from '../../Common/models.ts';
 import { getStoreModelPath } from '../../Common/tfUtils.ts';
 import { policyAgentState, valueAgentState, valueMemory, ValueMemoryBatch } from '../../Common/Database.ts';
-import { trainValueNetwork } from '../train.ts';
+import { healthCheck, trainValueNetwork } from '../train.ts';
 import { CONFIG } from '../config.ts';
 import { batchShuffle, shuffle } from '../../../../../../lib/shuffle.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
@@ -135,7 +135,11 @@ export class ValueLearnerAgent {
         return true;
     }
 
-    private async upload() {
+    public healthCheck() {
+        return healthCheck(this.valueNetwork);
+    }
+
+    public async upload() {
         try {
             await Promise.all([
                 valueAgentState.set({ version: this.version }),
@@ -149,7 +153,7 @@ export class ValueLearnerAgent {
         }
     }
 
-    private async load() {
+    public async load() {
         try {
             let [agentState, valueNetwork] = await Promise.all([
                 valueAgentState.get(),

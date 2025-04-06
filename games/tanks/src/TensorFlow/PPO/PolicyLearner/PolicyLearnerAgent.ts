@@ -4,7 +4,7 @@ import { ACTION_DIM } from '../../Common/consts.ts';
 import { ceil, mean } from '../../../../../../lib/math.ts';
 import { createPolicyNetwork } from '../../Common/models.ts';
 import { getStoreModelPath } from '../../Common/tfUtils.ts';
-import { computeKullbackLeibler, trainPolicyNetwork } from '../train.ts';
+import { computeKullbackLeibler, healthCheck, trainPolicyNetwork } from '../train.ts';
 import { CONFIG } from '../config.ts';
 import { flatFloat32Array } from '../../Common/flat.ts';
 import { batchShuffle, shuffle } from '../../../../../../lib/shuffle.ts';
@@ -187,25 +187,11 @@ export class PolicyLearnerAgent {
         return true;
     }
 
-    private async upload() {
-        try {
-            await Promise.all([
-                policyAgentState.set({
-                    version: this.version,
-                    klHistory: this.klHistory.toArray(),
-                    learningRate: getLR(this.policyNetwork),
-                }),
-                this.policyNetwork.save(getStoreModelPath('policy-model', CONFIG), { includeOptimizer: true }),
-            ]);
-
-            return true;
-        } catch (error) {
-            console.error('Error saving models:', error);
-            return false;
-        }
+    public healthCheck() {
+        return healthCheck(this.policyNetwork);
     }
 
-    private async load() {
+    public async load() {
         try {
             const [agentState, policyNetwork] = await Promise.all([
                 policyAgentState.get(),
@@ -224,6 +210,24 @@ export class PolicyLearnerAgent {
             return true;
         } catch (error) {
             console.warn('Could not load models, starting with new ones:', error);
+            return false;
+        }
+    }
+
+    public async upload() {
+        try {
+            await Promise.all([
+                policyAgentState.set({
+                    version: this.version,
+                    klHistory: this.klHistory.toArray(),
+                    learningRate: getLR(this.policyNetwork),
+                }),
+                this.policyNetwork.save(getStoreModelPath('policy-model', CONFIG), { includeOptimizer: true }),
+            ]);
+
+            return true;
+        } catch (error) {
+            console.error('Error saving models:', error);
             return false;
         }
     }

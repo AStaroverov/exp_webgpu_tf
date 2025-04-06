@@ -5,18 +5,18 @@ import { getStoreModelPath } from '../../Common/tfUtils.ts';
 import { CONFIG } from '../config.ts';
 import { act } from '../train.ts';
 import { InputArrays } from '../../Common/InputArrays.ts';
-import { createPolicyNetwork, createValueNetwork } from '../../Common/models.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { policyAgentState, valueAgentState } from '../../Common/Database.ts';
+import { createPolicyNetwork, createValueNetwork } from '../../Common/models.ts';
 
 export class ActorAgent {
-    private reuse = Infinity; // cannot reuse on init
+    private reuse = 0;
     private policyVersion = -1;
     private valueVersion = -1;
     private memory: Memory;
-    private policyNetwork: tf.LayersModel = createPolicyNetwork();
-    private valueNetwork: tf.LayersModel = createValueNetwork();
+    private policyNetwork?: tf.LayersModel;
+    private valueNetwork?: tf.LayersModel;
 
     constructor() {
         this.memory = new Memory();
@@ -57,6 +57,10 @@ export class ActorAgent {
         logProb: number,
         value: number
     } {
+        if (this.policyNetwork == null || this.valueNetwork == null) {
+            throw new Error('Models not loaded');
+        }
+
         return act(
             this.policyNetwork,
             this.valueNetwork,
@@ -72,27 +76,14 @@ export class ActorAgent {
 
     private async load() {
         try {
-            const start = Date.now();
-            const canReuse = this.reuse < CONFIG.reuseLimit;
-            let valueVersion = -1;
-            let policyVersion = -1;
-            let isNewVersion = false;
+            await new Promise(resolve => macroTasks.addTimeout(resolve, this.reuse * 1_000));
 
-            for (let i = 0; i < 1_000_000; i++) {
-                if (i > 0) await new Promise(resolve => macroTasks.addTimeout(resolve, i * 100));
-                const agentStates = await Promise.all([policyAgentState.get(), valueAgentState.get()]);
-                valueVersion = agentStates[1]?.version ?? -1;
-                policyVersion = agentStates[0]?.version ?? -1;
-                isNewVersion = policyVersion > this.policyVersion && valueVersion > this.valueVersion;
-                if (isNewVersion || canReuse) break;
-            }
+            const agentStates = await Promise.all([policyAgentState.get(), valueAgentState.get()]);
+            const policyVersion = agentStates[0]?.version ?? -1;
+            const valueVersion = agentStates[1]?.version ?? -1;
+            const isNewVersion = policyVersion > this.policyVersion && valueVersion > this.valueVersion;
 
-            const syncTime = Date.now() - start;
-            if (syncTime > 1_000) {
-                console.info('Sync time:', syncTime);
-            }
-
-            if (isNewVersion) {
+            if (isNewVersion || this.policyNetwork == null || this.valueNetwork == null) {
                 const [valueNetwork, policyNetwork] = await Promise.all([
                     tf.loadLayersModel(getStoreModelPath('value-model', CONFIG)),
                     tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG)),
@@ -106,14 +97,14 @@ export class ActorAgent {
                 this.reuse = 0;
                 this.policyVersion = policyVersion;
                 this.valueVersion = valueVersion;
-                this.valueNetwork = await setModelState(this.valueNetwork, valueNetwork);
-                this.policyNetwork = await setModelState(this.policyNetwork, policyNetwork);
+                this.valueNetwork = await setModelState(this.valueNetwork ?? createValueNetwork(), valueNetwork);
+                this.policyNetwork = await setModelState(this.policyNetwork ?? createPolicyNetwork(), policyNetwork);
                 valueNetwork.dispose();
                 policyNetwork.dispose();
                 console.log('Models updated successfully');
                 return true;
-            } else if (canReuse) {
-                this.reuse = this.reuse + 1;
+            } else if (this.reuse >= 0) {
+                this.reuse += 1;
                 console.log('Models reused successfully');
                 return true;
             }

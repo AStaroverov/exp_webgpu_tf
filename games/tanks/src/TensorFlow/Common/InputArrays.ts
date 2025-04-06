@@ -12,6 +12,7 @@ import {
     TANK_FEATURES_DIM,
 } from './models.ts';
 import { max } from '../../../../../lib/math.ts';
+import { random, randomRangeInt } from '../../../../../lib/random.ts';
 
 function normForTanh(v: number, size: number): number {
     return v / size;
@@ -166,6 +167,28 @@ export function prepareInputArrays(
         bulletsFeatures[dstOffset + 2] = norm(bulletsBuffer[srcOffset + 3], width);
         bulletsFeatures[dstOffset + 3] = norm(bulletsBuffer[srcOffset + 4], height);
     }
+
+    return {
+        battleFeatures,
+        tankFeatures,
+        enemiesFeatures,
+        enemiesMask,
+        alliesFeatures,
+        alliesMask,
+        bulletsFeatures,
+        bulletsMask,
+    };
+}
+
+export function prepareRandomInputArrays(): InputArrays {
+    const battleFeatures = new Float32Array(BATTLE_FEATURES_DIM).map(() => random());
+    const tankFeatures = new Float32Array(TANK_FEATURES_DIM).map(() => random());
+    const enemiesMask = new Float32Array(ENEMY_SLOTS).map(() => randomRangeInt(0, 1));
+    const enemiesFeatures = new Float32Array(ENEMY_SLOTS * ENEMY_FEATURES_DIM).map(() => random());
+    const alliesMask = new Float32Array(ALLY_SLOTS).map(() => randomRangeInt(0, 1));
+    const alliesFeatures = new Float32Array(ALLY_SLOTS * ALLY_FEATURES_DIM).map(() => random());
+    const bulletsMask = new Float32Array(BULLET_SLOTS).map(() => randomRangeInt(0, 1));
+    const bulletsFeatures = new Float32Array(BULLET_SLOTS * BULLET_FEATURES_DIM).map(() => random());
 
     return {
         battleFeatures,

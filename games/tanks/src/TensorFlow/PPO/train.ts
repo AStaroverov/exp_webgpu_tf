@@ -1,7 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
 import { ACTION_DIM } from '../Common/consts.ts';
 import { computeLogProb } from '../Common/computeLogProb.ts';
-import { InputArrays } from '../Common/InputArrays.ts';
+import { InputArrays, prepareRandomInputArrays } from '../Common/InputArrays.ts';
 import { createInputTensors } from '../Common/InputTensors.ts';
 import { Scalar } from '@tensorflow/tfjs-core/dist/tensor';
 
@@ -182,3 +182,16 @@ function optimize(
     });
 }
 
+const randomInputTensors = createInputTensors([prepareRandomInputArrays()]);
+
+export async function healthCheck(network: tf.LayersModel): Promise<boolean> {
+    const predict = (network.predict(randomInputTensors) as tf.Tensor).squeeze();
+    const data = await predict.data();
+
+    if (!data.every(Number.isFinite)) {
+        console.error('Invalid predict data:', data);
+        return false;
+    }
+
+    return true;
+}

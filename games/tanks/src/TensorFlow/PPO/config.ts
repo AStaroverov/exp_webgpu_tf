@@ -34,7 +34,6 @@ export type Config = {
     episodeFrames: number;              // Maximum number of frames to train on
     // Workers
     workerCount: number;                // Number of parallel workers
-    reuseLimit: number;                 // Number of times a worker models can be reused without updating
     // Training control
     savePath: string;
 };

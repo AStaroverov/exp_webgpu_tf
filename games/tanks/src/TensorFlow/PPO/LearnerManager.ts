@@ -5,7 +5,6 @@ import { EntityId } from 'bitecs';
 import { ValueLearnerAgent } from './ValueLearner/ValueLearnerAgent.ts';
 
 export class LearnerManager {
-    private stopTrainingTimeout: VoidFunction | null = null;
     private tankRewards = new Map<EntityId, number>();
 
     constructor(public agent: PolicyLearnerAgent | ValueLearnerAgent) {
@@ -36,19 +35,23 @@ export class LearnerManager {
     }
 
     private trainingLoop() {
-        this.stopTrainingTimeout = macroTasks.addTimeout(async () => {
+        macroTasks.addTimeout(async () => {
             try {
-                if (await this.agent.tryTrain()) {
-                    void this.save();
+                const trained = await this.agent.tryTrain();
+
+                if (!trained) return;
+
+                const health = await this.agent.healthCheck();
+
+                if (health) {
+                    await this.save();
+                } else {
+                    await this.agent.load();
                 }
-
-                this.trainingLoop();
             } catch (error) {
-                this.stopTrainingTimeout?.();
-                this.stopTrainingTimeout = null;
-
-                console.error('Error during training:', error);
-                macroTasks.addTimeout(() => this.trainingLoop(), TICK_TRAIN_TIME * 100);
+                console.error('Error during training loop:', error);
+            } finally {
+                this.trainingLoop();
             }
         }, TICK_TRAIN_TIME);
     }
