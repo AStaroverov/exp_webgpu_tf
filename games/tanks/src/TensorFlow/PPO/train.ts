@@ -4,6 +4,7 @@ import { computeLogProb } from '../Common/computeLogProb.ts';
 import { InputArrays, prepareRandomInputArrays } from '../Common/InputArrays.ts';
 import { createInputTensors } from '../Common/InputTensors.ts';
 import { Scalar } from '@tensorflow/tfjs-core/dist/tensor';
+import { random } from '../../../../../lib/random.ts';
 
 export function trainPolicyNetwork(
     network: tf.LayersModel,
@@ -182,9 +183,11 @@ function optimize(
     });
 }
 
-const randomInputTensors = createInputTensors([prepareRandomInputArrays()]);
+let randomInputTensors;
 
 export async function healthCheck(network: tf.LayersModel): Promise<boolean> {
+    randomInputTensors ??= createInputTensors([prepareRandomInputArrays()]);
+    randomInputTensors = random() > 0.1 ? randomInputTensors : createInputTensors([prepareRandomInputArrays()]);
     const predict = (network.predict(randomInputTensors) as tf.Tensor).squeeze();
     const data = await predict.data();
 
