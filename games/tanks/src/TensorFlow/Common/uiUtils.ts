@@ -1,5 +1,6 @@
 import Dexie from 'dexie';
 import devtoolsDetect from 'devtools-detect';
+import { reloadChannel } from './channels.ts';
 
 // Инициализируем базу Dexie с таблицей settings
 const db = new Dexie('ui-tank-rl');
@@ -43,7 +44,7 @@ if (globalThis && globalThis.document) {
             dbs.forEach((db) => {
                 db.name && indexedDB.deleteDatabase(db.name);
             });
-            window.location.reload();
+            reloadChannel.postMessage(null);
         });
     });
 

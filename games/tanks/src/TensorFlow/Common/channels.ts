@@ -1,3 +1,12 @@
+export const reloadChannel = new BroadcastChannel('reload');
+
+if (globalThis.document != null) {
+    // we cannot listen reloadChannel, because don't send message at the same thread
+    new BroadcastChannel('reload').onmessage = () => {
+        globalThis.location.reload();
+    };
+}
+
 export const learningRateChannel = new BroadcastChannel('learningRate');
 
 export const metricsChannels = {
