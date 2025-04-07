@@ -1,7 +1,5 @@
 // Буфер опыта для PPO
 import { shuffle } from '../../../../../lib/shuffle.ts';
-import { abs, max, min } from '../../../../../lib/math.ts';
-import { isDevtoolsOpen } from './uiUtils.ts';
 import { InputArrays } from './InputArrays.ts';
 
 export type Batch = {
@@ -190,24 +188,6 @@ export class SubMemory {
         );
         const normalizedAdvantages = advantages.map(adv => (adv - advMean) / (advStd + 1e-8));
 
-        if (isDevtoolsOpen()) {
-            const minRew = min(...rewards);
-            const maxRew = max(...rewards);
-            const minVal = min(...values);
-            const maxVal = max(...values);
-            const minRet = min(...returns);
-            const maxRet = max(...returns);
-            const minAdv = min(...normalizedAdvantages);
-            const maxAdv = max(...normalizedAdvantages);
-
-            console.log('[R&A]'
-                , '  Rew:', strgify(minRew), strgify(maxRew)
-                , '| Val:', strgify(minVal), strgify(maxVal)
-                , '| Ret:', strgify(minRet), strgify(maxRet)
-                , '| Adv:', strgify(minAdv), strgify(maxAdv),
-            );
-        }
-
         return {
             returns: returns,
             advantages: normalizedAdvantages,  // Возвращаем нормализованные advantages
@@ -231,8 +211,4 @@ export class SubMemory {
         this.tmpRewards = [];
         this.tmpDones = [];
     }
-}
-
-function strgify(v: number): string {
-    return (v > 0 ? ' ' : '-') + abs(v).toFixed(2);
 }
