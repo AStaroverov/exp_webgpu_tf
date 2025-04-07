@@ -1,52 +1,53 @@
+import Dexie from 'dexie';
 import devtoolsDetect from 'devtools-detect';
 
-// Кэш для хранения значений настроек
+// Инициализируем базу Dexie с таблицей settings
+const db = new Dexie('ui-tank-rl');
+db.version(1).stores({ settings: 'key' });
+
+// Кэш для хранения значений настроек (аналог localStorage)
 let isVerbose = false;
 let shouldDraw = false;
 
-// Ключи в localStorage
-const VERBOSE_KEY = 'verbose';
-const DRAW_KEY = 'shouldDraw';
-const AGENT_STATE_KEY = 'tank-rl-agent-state';
-const MANAGER_STATE_KEY = 'tank-rl-manager-state';
+// Загружаем настройки из базы (если они там уже сохранены)
+async function initSettings() {
+    const verboseSetting = await db.table('settings').get('verbose');
+    const drawSetting = await db.table('settings').get('shouldDraw');
 
-// Инициализация настроек из localStorage
-function initSettings() {
-    const verboseSetting = localStorage.getItem(VERBOSE_KEY);
-    const drawSetting = localStorage.getItem(DRAW_KEY);
-
-    isVerbose = verboseSetting === 'true';
-    shouldDraw = drawSetting === 'true';
+    isVerbose = verboseSetting ? verboseSetting.value === 'true' : false;
+    shouldDraw = drawSetting ? drawSetting.value === 'true' : false;
 }
 
 initSettings();
 
 if (globalThis && globalThis.document) {
-    globalThis.document.getElementById('toggleRender')?.addEventListener('click', () => {
+    document.getElementById('toggleRender')?.addEventListener('click', async () => {
+        // Переключаем состояние отрисовки
         shouldDraw = !shouldDraw;
-        localStorage.setItem(DRAW_KEY, shouldDraw.toString());
+        await db.table('settings').put({ key: 'shouldDraw', value: shouldDraw.toString() });
     });
 
-    globalThis.document.getElementById('toggleVerbose')?.addEventListener('click', () => {
+    document.getElementById('toggleVerbose')?.addEventListener('click', async () => {
+        // Переключаем режим подробного логирования
         isVerbose = !isVerbose;
-        localStorage.setItem(VERBOSE_KEY, isVerbose.toString());
+        await db.table('settings').put({ key: 'verbose', value: isVerbose.toString() });
     });
 
-    globalThis.document.getElementById('resetState')?.addEventListener('click', async () => {
-        localStorage.removeItem(AGENT_STATE_KEY);
-        localStorage.removeItem(MANAGER_STATE_KEY);
-        localStorage.removeItem(VERBOSE_KEY);
-        localStorage.removeItem(DRAW_KEY);
-
-        const dbs = await indexedDB.databases();
-        dbs.forEach((db) => {
-            db.name && indexedDB.deleteDatabase(db.name);
+    document.getElementById('resetState')?.addEventListener('click', async () => {
+        // Удаляем сохранённые состояния агента и менеджера из базы настроек
+        await db.table('settings').delete('tank-rl-agent-state');
+        await db.table('settings').delete('tank-rl-manager-state');
+        // Удаляем базу данных tensorflowjs
+        localStorage.clear();
+        indexedDB.databases().then((dbs) => {
+            dbs.forEach((db) => {
+                db.name && indexedDB.deleteDatabase(db.name);
+            });
+            window.location.reload();
         });
-
-        window.location.reload();
     });
 
-    globalThis.document.getElementById('downloadModel')?.addEventListener('click', () => {
+    document.getElementById('downloadModel')?.addEventListener('click', () => {
         throw new Error('Not implemented');
     });
 }

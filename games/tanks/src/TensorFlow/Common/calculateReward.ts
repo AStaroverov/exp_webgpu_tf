@@ -6,6 +6,7 @@ import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Com
 import { getTankHealth, Tank } from '../../ECS/Components/Tank.ts';
 import { TankController } from '../../ECS/Components/TankController.ts';
 import { CONFIG } from '../PPO/config.ts';
+import { isVerboseLog } from './uiUtils.ts';
 import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../ECS/Components/TankState.ts';
 
 // Константы для калибровки вознаграждений
@@ -203,11 +204,12 @@ export function calculateReward(
     // Общая итоговая награда
     rewards.totalReward = rewards.common.total + rewards.aim.total + rewards.positioning.total;
 
-    // console.log(`[Reward] Tank ${ tankEid }
-    // aim: ${ rewards.aim.total }
-    // move: ${ rewards.positioning.total }
-    // total: ${ rewards.totalReward }
-    // `);
+    isVerboseLog() &&
+    console.log(`[Reward] Tank ${ tankEid }
+    aim: ${ rewards.aim.total }
+    move: ${ rewards.positioning.total }
+    total: ${ rewards.totalReward }
+    `);
 
     return rewards;
 }

@@ -1,79 +1,70 @@
-import PouchDB from 'pouchdb';
+import Dexie, { Transaction } from 'dexie';
 import { Batch } from './Memory.ts';
 
-// Создание баз данных
-const policyMemoryDB = new PouchDB('policy-memory');
-const valueMemoryDB = new PouchDB('value-memory');
-const policyAgentStateDB = new PouchDB('policy-agent-state');
-const valueAgentStateDB = new PouchDB('value-agent-state');
-const agentLogDB = new PouchDB('agent-log');
+const db = new Dexie('tank-rl');
 
-// Типы
+db.version(1).stores({
+    'policy-memory': '++id',      // автоинкрементное поле id
+    'policy-agent-state': '&id',    // фиксированный первичный ключ (уникальный)
+
+    'value-memory': '++id',      // автоинкрементное поле id
+    'value-agent-state': '&id',    // фиксированный первичный ключ (уникальный)
+
+    'agent-log': '&id',    // фиксированный первичный ключ (уникальный)
+});
+
 export type PolicyMemoryBatch = Omit<Batch, 'values' | 'returns'>;
+export const policyMemory = createMemoryInterface<PolicyMemoryBatch>('policy-memory');
 export type ValueMemoryBatch = Pick<Batch, 'size' | 'states' | 'values' | 'returns'>;
-
-export const policyMemory = createMemoryInterface<PolicyMemoryBatch>(policyMemoryDB);
-export const valueMemory = createMemoryInterface<ValueMemoryBatch>(valueMemoryDB);
+export const valueMemory = createMemoryInterface<ValueMemoryBatch>('value-memory');
 
 export type PolicyAgentState = {
     version: number;
     klHistory: number[];
     learningRate: number;
-};
-export const policyAgentState = createAgentState<PolicyAgentState>(policyAgentStateDB);
+}
+export const policyAgentState = createAgentState<PolicyAgentState>('policy-agent-state');
 
 export type ValueAgentState = {
     version: number;
-};
-export const valueAgentState = createAgentState<ValueAgentState>(valueAgentStateDB);
+}
+export const valueAgentState = createAgentState<ValueAgentState>('value-agent-state');
 
-// Agent log
 type AgentLog = object;
 
-export async function setAgentLog(state: Omit<AgentLog, '_id'>) {
-    return upsert(agentLogDB, '0', state);
+export function setAgentLog(state: Omit<AgentLog, 'id'>) {
+    return db.table('agent-log').put({ id: 0, ...state });
 }
 
-export async function getAgentLog(): Promise<AgentLog | undefined> {
-    try {
-        return await agentLogDB.get('0');
-    } catch (error) {
-        console.warn('Could not get agent log:', error);
-        return undefined;
-    }
+export function getAgentLog(): Promise<undefined | AgentLog> {
+    return db.table<AgentLog>('agent-log').get(0);
 }
 
-// Утилиты
-function createMemoryInterface<Batch>(db: PouchDB.Database) {
-    async function addMemoryBatch(batch: { version: number; memories: Batch }) {
-        const id = Date.now().toString();
-        return db.put({ _id: id, ...batch });
+function createMemoryInterface<Batch>(name: string) {
+    function addMemoryBatch(batch: { version: number, memories: Batch }) {
+        return db.table(name).add(batch);
     }
 
-    async function getMemoryBatchCount() {
-        const result = await db.allDocs();
-        return result.total_rows;
+    function getMemoryBatchCount() {
+        return db.table(name).count();
     }
 
-    async function getMemoryBatchList() {
-        const result = await db.allDocs({ include_docs: true });
-        return result.rows.map(r => r.doc as unknown as { _id: string; version: number; memories: Batch });
+    function getMemoryBatchList(tx: Transaction | typeof db = db) {
+        return (tx as Transaction).table<({ id: number, version: number, memories: Batch })>(name).toArray();
     }
 
-    async function clearMemoryBatchList() {
-        const docs = await db.allDocs({ include_docs: true });
-        const deletions = docs.rows.map(row => ({
-            ...row.doc,
-            _deleted: true,
-        }));
-        return db.bulkDocs(deletions);
+    function clearMemoryBatchList(tx: Transaction | typeof db = db) {
+        return (tx as Transaction).table(name).clear();
     }
 
-    async function extractMemoryBatchList() {
-        const list = await getMemoryBatchList();
-        await clearMemoryBatchList();
-        return list;
+    function extractMemoryBatchList() {
+        return db.transaction('rw', db.table(name), async (tx) => {
+            const list = await getMemoryBatchList(tx);
+            await clearMemoryBatchList(tx);
+            return list;
+        });
     }
+
 
     return {
         getMemoryBatchCount,
@@ -84,35 +75,17 @@ function createMemoryInterface<Batch>(db: PouchDB.Database) {
     };
 }
 
-function createAgentState<State>(db: PouchDB.Database) {
-    async function set(state: Omit<State, '_id'>) {
-        return upsert(db, '0', state);
+function createAgentState<State>(name: string) {
+    function set(state: Omit<State, 'id'>) {
+        return db.table(name).put({ id: 0, ...state });
     }
 
-    async function get(): Promise<State | undefined> {
-        try {
-            return await db.get('0');
-        } catch (error) {
-            console.warn('Could not get agent state:', error);
-            return undefined;
-        }
+    function get(): Promise<undefined | State> {
+        return db.table<State>(name).get(0);
     }
 
     return {
         set,
         get,
     };
-}
-
-async function upsert<T extends {}>(db: PouchDB.Database<T>, id: string, data: Partial<T>) {
-    try {
-        const existing = await db.get(id);
-        return db.put({ ...(existing as any), ...data, _id: id, _rev: existing._rev });
-    } catch (err: any) {
-        if (err.status === 404) {
-            return db.put({ ...(data as any), _id: id });
-        } else {
-            throw err;
-        }
-    }
 }
