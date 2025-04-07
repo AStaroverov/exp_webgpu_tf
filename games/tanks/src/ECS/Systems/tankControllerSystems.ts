@@ -2,7 +2,7 @@ import { GameDI } from '../../DI/GameDI.ts';
 import { TankController } from '../Components/TankController.ts';
 import { RevoluteImpulseJoint, Vector2 } from '@dimforge/rapier2d-simd';
 import { Tank, TankPart } from '../Components/Tank.ts';
-import { RigidBodyRef } from '../Components/Physical.ts';
+import { RigidBodyRef, RigidBodyState } from '../Components/Physical.ts';
 import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';
 import { sqrt } from '../../../../../lib/math.ts';
 import { query } from 'bitecs';
@@ -23,14 +23,13 @@ export function createTankPositionSystem({ world, physicalWorld } = GameDI) {
 
             if (moveDirection === 0 && rotationDirection === 0) continue;
 
-            const rb = physicalWorld.getRigidBody(RigidBodyRef.id[tankId]);
-            const rotation = rb.rotation();
-
+            const rotation = RigidBodyState.rotation[tankId];
             // Задаем направление движения
             nextLinvel.x = 0;
             nextLinvel.y = -moveDirection * impulseFactor * delta / 1000;
             applyRotationToVector(nextLinvel, nextLinvel, rotation);
 
+            const rb = physicalWorld.getRigidBody(RigidBodyRef.id[tankId]);
             // Применяем импульс для движения
             rb.applyImpulse(nextLinvel, true);
             // Применяем крутящий момент для поворота
@@ -60,20 +59,17 @@ function rotateByMotor(delta: number, tankEid: number, { physicalWorld } = GameD
     const turretJoint = physicalWorld.getImpulseJoint(jointPid) as RevoluteImpulseJoint;
     if (!turretJoint) return;
 
-    const tankRB = physicalWorld.getRigidBody(RigidBodyRef.id[tankEid]);
-    const turretRB = physicalWorld.getRigidBody(RigidBodyRef.id[turretEid]);
-
-    const tankRot = tankRB.rotation();
-    const turretRot = turretRB.rotation();
-    const turretPos = turretRB.translation();
+    const tankRot = RigidBodyState.rotation[tankEid];
+    const turretRot = RigidBodyState.rotation[turretEid];
+    const turretPos = RigidBodyState.position.getBatch(turretEid);
     const targetPos = getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[tankEid]));
     // Глобальный угол от дула к позиции цели
-    const targetRot = Math.atan2(targetPos[1] - turretPos.y, targetPos[0] - turretPos.x) + Math.PI / 2;
+    const targetRot = Math.atan2(targetPos[1] - turretPos[1], targetPos[0] - turretPos[0]) + Math.PI / 2;
     const relTurretRot = normalizeAngle(turretRot - tankRot);
     const relTargetTurretRot = normalizeAngle(targetRot - tankRot);
     const deltaRot = normalizeAngle(relTargetTurretRot - relTurretRot);
     // Расстояние от мыши до дула
-    const distance = sqrt((targetPos[0] - turretPos.x) ** 2 + (targetPos[1] - turretPos.y) ** 2);
+    const distance = sqrt((targetPos[0] - turretPos[0]) ** 2 + (targetPos[1] - turretPos[1]) ** 2);
     // Плавно интерполируем влияние мыши от 0 до 1
     const influence = smoothStep(10, 100, distance);
     // Ограничиваем изменение угла с учётом влияния мыши

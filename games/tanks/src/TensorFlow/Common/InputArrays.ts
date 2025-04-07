@@ -66,9 +66,9 @@ export function prepareInputArrays(
 
     const maxCount = max(1, TankInputTensor.alliesCount[tankEid], TankInputTensor.enemiesCount[tankEid]);
     battleFeatures[bi++] = TankInputTensor.alliesCount[tankEid] / maxCount;
-    battleFeatures[bi++] = TankInputTensor.alliesTotalHealth[tankEid] / TankInputTensor.alliesCount[tankEid];
+    battleFeatures[bi++] = TankInputTensor.alliesTotalHealth[tankEid] / max(1, TankInputTensor.alliesCount[tankEid]);
     battleFeatures[bi++] = TankInputTensor.enemiesCount[tankEid] / maxCount;
-    battleFeatures[bi++] = TankInputTensor.enemiesTotalHealth[tankEid] / TankInputTensor.enemiesCount[tankEid];
+    battleFeatures[bi++] = TankInputTensor.enemiesTotalHealth[tankEid] / max(1, TankInputTensor.enemiesCount[tankEid]);
 
     // 1) Готовим массив для танка
     const tankFeatures = new Float32Array(TANK_FEATURES_DIM);
