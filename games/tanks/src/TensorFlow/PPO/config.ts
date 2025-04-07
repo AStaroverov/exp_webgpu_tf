@@ -50,7 +50,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     entropyCoeff: 0.01,
 
     klConfig: {
-        target: 0.01,
+        target: 0.02,
         highCoef: 2.0,       // Если KL > 2 * 0.01 => 0.02
         lowCoef: 1 / 2.0,    // Если KL < 0.5 * 0.01 => 0.005
         max: 0.5,

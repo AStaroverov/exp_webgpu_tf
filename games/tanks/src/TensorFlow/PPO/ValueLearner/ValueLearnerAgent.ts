@@ -70,7 +70,7 @@ export class ValueLearnerAgent extends LearnerAgent<{ version: number, memories:
                 valueLossPromises.push(trainValueNetwork(
                     this.network,
                     tStates, tReturns, tValues,
-                    CONFIG.clipRatio,
+                    CONFIG.clipRatio * 2,
                 ));
 
                 tStates.forEach(t => t.dispose());
