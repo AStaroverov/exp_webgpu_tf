@@ -1,14 +1,14 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { Memory } from '../../Common/Memory.ts';
-import { getStoreModelPath } from '../../Common/tfUtils.ts';
 import { CONFIG } from '../config.ts';
 import { act } from '../train.ts';
 import { InputArrays } from '../../Common/InputArrays.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { policyAgentState, valueAgentState } from '../../Common/Database.ts';
-import { createPolicyNetwork, createValueNetwork } from '../../Common/models.ts';
+import { createPolicyNetwork, createValueNetwork } from '../../Models/Create.ts';
+import { loadNetwork, Model } from '../../Models/Transfer.ts';
 
 export class ActorAgent {
     private reuse = 0;
@@ -85,8 +85,8 @@ export class ActorAgent {
 
             if (isNewVersion || this.policyNetwork == null || this.valueNetwork == null) {
                 const [valueNetwork, policyNetwork] = await Promise.all([
-                    tf.loadLayersModel(getStoreModelPath('value-model', CONFIG)),
-                    tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG)),
+                    loadNetwork(Model.Value),
+                    loadNetwork(Model.Policy),
                 ]);
 
                 if (!valueNetwork || !policyNetwork) {

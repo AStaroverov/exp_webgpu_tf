@@ -2,8 +2,7 @@ import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { ACTION_DIM } from '../../Common/consts.ts';
 import { ceil, mean } from '../../../../../../lib/math.ts';
-import { createPolicyNetwork } from '../../Common/models.ts';
-import { getStoreModelPath } from '../../Common/tfUtils.ts';
+import { createPolicyNetwork } from '../../Models/Create.ts';
 import { computeKullbackLeibler, trainPolicyNetwork } from '../train.ts';
 import { CONFIG } from '../config.ts';
 import { flatFloat32Array } from '../../Common/flat.ts';
@@ -15,6 +14,7 @@ import { policyAgentState, policyMemory, PolicyMemoryBatch } from '../../Common/
 import { learningRateChannel, metricsChannels, reloadChannel } from '../../Common/channels.ts';
 import { createInputTensors, sliceInputTensors } from '../../Common/InputTensors.ts';
 import { LearnerAgent } from '../LearnerAgent.ts';
+import { loadNetwork, Model, saveNetwork } from '../../Models/Transfer.ts';
 
 export class PolicyLearnerAgent extends LearnerAgent<{ version: number, memories: PolicyMemoryBatch }> {
     private klHistory = new RingBuffer<number>(30);
@@ -156,7 +156,7 @@ export class PolicyLearnerAgent extends LearnerAgent<{ version: number, memories
         try {
             const [agentState, network] = await Promise.all([
                 policyAgentState.get(),
-                tf.loadLayersModel(getStoreModelPath('policy-model', CONFIG)),
+                loadNetwork(Model.Policy),
             ]);
             if (!network) {
                 return false;
@@ -183,7 +183,7 @@ export class PolicyLearnerAgent extends LearnerAgent<{ version: number, memories
                     klHistory: this.klHistory.toArray(),
                     learningRate: getLR(this.network),
                 }),
-                this.network.save(getStoreModelPath('policy-model', CONFIG), { includeOptimizer: true }),
+                saveNetwork(this.network, Model.Policy),
             ]);
 
             return true;

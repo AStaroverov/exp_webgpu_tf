@@ -184,7 +184,7 @@ async function memoryBackpressure() {
         await policyMemory.getMemoryBatchCount() > CONFIG.workerCount
         || await valueMemory.getMemoryBatchCount() > CONFIG.workerCount
         ) {
-        console.log('>>', 'Backpressure', 'Waiting for memory batch count to decrease');
+        console.log('[Backpressure] Waiting for memory batch count to decrease');
         await new Promise(resolve => macroTasks.addTimeout(resolve, 1000));
     }
 }

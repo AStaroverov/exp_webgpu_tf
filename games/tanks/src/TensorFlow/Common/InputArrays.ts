@@ -10,7 +10,7 @@ import {
     ENEMY_FEATURES_DIM,
     ENEMY_SLOTS,
     TANK_FEATURES_DIM,
-} from './models.ts';
+} from '../Models/Create.ts';
 import { max } from '../../../../../lib/math.ts';
 import { random, randomRangeInt } from '../../../../../lib/random.ts';
 

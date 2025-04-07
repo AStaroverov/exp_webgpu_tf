@@ -1,8 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { ceil } from '../../../../../../lib/math.ts';
-import { createValueNetwork } from '../../Common/models.ts';
-import { getStoreModelPath } from '../../Common/tfUtils.ts';
+import { createValueNetwork } from '../../Models/Create.ts';
 import { policyAgentState, valueAgentState, valueMemory, ValueMemoryBatch } from '../../Common/Database.ts';
 import { trainValueNetwork } from '../train.ts';
 import { CONFIG } from '../config.ts';
@@ -11,6 +10,7 @@ import { setModelState } from '../../Common/modelsCopy.ts';
 import { learningRateChannel, metricsChannels } from '../../Common/channels.ts';
 import { createInputTensors, sliceInputTensors } from '../../Common/InputTensors.ts';
 import { LearnerAgent } from '../LearnerAgent.ts';
+import { loadNetwork, Model, saveNetwork } from '../../Models/Transfer.ts';
 
 export class ValueLearnerAgent extends LearnerAgent<{ version: number, memories: ValueMemoryBatch }> {
     lastTrainTimeStart: number | null = null;
@@ -109,7 +109,7 @@ export class ValueLearnerAgent extends LearnerAgent<{ version: number, memories:
         try {
             await Promise.all([
                 valueAgentState.set({ version: this.version }),
-                this.network.save(getStoreModelPath('value-model', CONFIG), { includeOptimizer: true }),
+                saveNetwork(this.network, Model.Value),
             ]);
 
             return true;
@@ -123,7 +123,7 @@ export class ValueLearnerAgent extends LearnerAgent<{ version: number, memories:
         try {
             let [agentState, valueNetwork] = await Promise.all([
                 valueAgentState.get(),
-                tf.loadLayersModel(getStoreModelPath('value-model', CONFIG)),
+                loadNetwork(Model.Value),
             ]);
 
             // after change to new 2 threads we won't have valueAgentState

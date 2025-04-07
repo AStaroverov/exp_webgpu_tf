@@ -1,6 +1,7 @@
 import Dexie from 'dexie';
 import devtoolsDetect from 'devtools-detect';
 import { reloadChannel } from './channels.ts';
+import { downloadNetwork, Model } from '../Models/Transfer.ts';
 
 // Инициализируем базу Dexie с таблицей settings
 const db = new Dexie('ui-tank-rl');
@@ -49,7 +50,10 @@ if (globalThis && globalThis.document) {
     });
 
     document.getElementById('downloadModel')?.addEventListener('click', () => {
-        throw new Error('Not implemented');
+        Promise.all([
+            downloadNetwork(Model.Policy),
+            downloadNetwork(Model.Value),
+        ]);
     });
 }
 
