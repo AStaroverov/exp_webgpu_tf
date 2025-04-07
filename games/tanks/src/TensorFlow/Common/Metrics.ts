@@ -302,16 +302,29 @@ function drawTab1() {
         width: 500,
         height: 300,
     });
+
+    const avgValues = store.values.toArray();
     tfvis.render.scatterplot({ name: 'Value', tab }, {
-        values: [store.values.toArrayMin(), store.values.toArrayMax()],
+        values: [
+            store.values.toArrayMin(),
+            store.values.toArrayMax(),
+            avgValues,
+            calculateMovingAverage(avgValues, 1000),
+        ],
     }, {
         xLabel: 'Version',
         yLabel: 'Value',
         width: 500,
         height: 300,
     });
+    const avgReturns = store.returns.toArray();
     tfvis.render.scatterplot({ name: 'Return', tab }, {
-        values: [store.returns.toArrayMin(), store.returns.toArrayMax()],
+        values: [
+            store.returns.toArrayMin(),
+            store.returns.toArrayMax(),
+            avgReturns,
+            calculateMovingAverage(avgReturns, 1000),
+        ],
     }, {
         xLabel: 'Version',
         yLabel: 'Return',
