@@ -83,7 +83,7 @@ export class PolicyLearnerAgent extends LearnerAgent<{ version: number, memories
                 policyLossPromises.push(trainPolicyNetwork(
                     this.network,
                     tStates, tActions, tLogProbs, tAdvantages,
-                    CONFIG.clipRatio, CONFIG.entropyCoeff,
+                    CONFIG.clipRatio, CONFIG.entropyCoeff, CONFIG.clipNorm,
                 ));
 
                 tStates.forEach(t => t.dispose());

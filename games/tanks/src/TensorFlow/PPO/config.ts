@@ -6,6 +6,7 @@
 export type Config = {
     name: string;
     // Learning parameters
+    clipNorm: number;
     gamma: number;                  // Discount factor
     lam: number;                    // GAE lambda
     // PPO-specific parameters
@@ -42,6 +43,7 @@ export type Config = {
 export const DEFAULT_EXPERIMENT: Config = {
     name: 'ppo-default',
     // Learning parameters
+    clipNorm: 5,
     gamma: 0.99,
     lam: 0.95,
     // PPO-specific parameters

@@ -15,6 +15,7 @@ export function trainPolicyNetwork(
     advantages: tf.Tensor,   // [batchSize]
     clipRatio: number,
     entropyCoeff: number,
+    clipNorm: number,
 ): Promise<number> {
     const loss = tf.tidy(() => {
         return optimize(network.optimizer, () => {
@@ -35,13 +36,51 @@ export function trainPolicyNetwork(
             const totalLoss = policyLoss.sub(totalEntropy.mul(entropyCoeff));
 
             return totalLoss as tf.Scalar;
-        });
+        }, { clipNorm });
     });
 
     return loss.data()
         .then((v) => v[0])
         .finally(() => loss.dispose());
 }
+
+// Обучение сети критика (оценка состояний)
+export async function trainValueNetwork(
+    network: tf.LayersModel,
+    states: tf.Tensor[],
+    returns: tf.Tensor,  // [batchSize], уже подсчитанные (GAE + V(s) или просто discountedReturns)
+    oldValues: tf.Tensor, // [batchSize], для клиппинга
+    clipRatio: number,
+    clipNorm: number,
+): Promise<number> {
+    const loss = tf.tidy(() => {
+        return optimize(network.optimizer, () => {
+            // forward pass
+            const predicted = network.predict(states) as tf.Tensor;
+            // shape [batchSize,1], приводим к [batchSize]
+            const valuePred = predicted.squeeze(); // [batchSize]
+
+            // Клипаем (PPO2 style)
+            const oldVal2D = oldValues.reshape(valuePred.shape);   // тоже [batchSize]
+            const valuePredClipped = oldVal2D.add(
+                valuePred.sub(oldVal2D).clipByValue(-clipRatio, clipRatio),
+            );
+            const returns2D = returns.reshape(valuePred.shape);
+
+            const vfLoss1 = returns2D.sub(valuePred).square();
+            const vfLoss2 = returns2D.sub(valuePredClipped).square();
+            const finalValueLoss = tf.maximum(vfLoss1, vfLoss2).mean().mul(0.5);
+
+            return finalValueLoss as tf.Scalar;
+        }, { clipNorm });
+    });
+
+
+    return loss.data()
+        .then((v) => v[0])
+        .finally(() => loss.dispose());
+}
+
 
 function parsePredict(predict: tf.Tensor) {
     const outMean = predict.slice([0, 0], [-1, ACTION_DIM]);
@@ -70,42 +109,6 @@ export function computeKullbackLeibler(
     return value.data()
         .then((v) => v[0])
         .finally(() => value.dispose());
-}
-
-// Обучение сети критика (оценка состояний)
-export async function trainValueNetwork(
-    network: tf.LayersModel,
-    states: tf.Tensor[],
-    returns: tf.Tensor,  // [batchSize], уже подсчитанные (GAE + V(s) или просто discountedReturns)
-    oldValues: tf.Tensor, // [batchSize], для клиппинга
-    clipRatio: number,
-): Promise<number> {
-    const loss = tf.tidy(() => {
-        return optimize(network.optimizer, () => {
-            // forward pass
-            const predicted = network.predict(states) as tf.Tensor;
-            // shape [batchSize,1], приводим к [batchSize]
-            const valuePred = predicted.squeeze(); // [batchSize]
-
-            // Клипаем (PPO2 style)
-            const oldVal2D = oldValues.reshape(valuePred.shape);   // тоже [batchSize]
-            const valuePredClipped = oldVal2D.add(
-                valuePred.sub(oldVal2D).clipByValue(-clipRatio, clipRatio),
-            );
-            const returns2D = returns.reshape(valuePred.shape);
-
-            const vfLoss1 = returns2D.sub(valuePred).square();
-            const vfLoss2 = returns2D.sub(valuePredClipped).square();
-            const finalValueLoss = tf.maximum(vfLoss1, vfLoss2).mean().mul(0.5);
-
-            return finalValueLoss as tf.Scalar;
-        }) as tf.Scalar;
-    });
-
-
-    return loss.data()
-        .then((v) => v[0])
-        .finally(() => loss.dispose());
 }
 
 export function act(
