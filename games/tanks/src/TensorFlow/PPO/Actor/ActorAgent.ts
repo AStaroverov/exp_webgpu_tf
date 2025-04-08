@@ -11,7 +11,6 @@ import { createPolicyNetwork, createValueNetwork } from '../../Models/Create.ts'
 import { loadNetwork, Model } from '../../Models/Transfer.ts';
 
 export class ActorAgent {
-    private reuse = 0;
     private policyVersion = -1;
     private valueVersion = -1;
     private memory: Memory;
@@ -76,8 +75,6 @@ export class ActorAgent {
 
     private async load() {
         try {
-            await new Promise(resolve => macroTasks.addTimeout(resolve, this.reuse * 1_000));
-
             const agentStates = await Promise.all([policyAgentState.get(), valueAgentState.get()]);
             const policyVersion = agentStates[0]?.version ?? -1;
             const valueVersion = agentStates[1]?.version ?? -1;
@@ -94,7 +91,6 @@ export class ActorAgent {
                     return false;
                 }
 
-                this.reuse = 0;
                 this.policyVersion = policyVersion;
                 this.valueVersion = valueVersion;
                 this.valueNetwork = await setModelState(this.valueNetwork ?? createValueNetwork(), valueNetwork);
@@ -103,13 +99,10 @@ export class ActorAgent {
                 policyNetwork.dispose();
                 console.log('Models updated successfully');
                 return true;
-            } else if (this.reuse >= 0) {
-                this.reuse += 1;
+            } else {
                 console.log('Models reused successfully');
                 return true;
             }
-
-            return false;
         } catch (error) {
             console.warn('Could not sync models:', error);
             return false;
