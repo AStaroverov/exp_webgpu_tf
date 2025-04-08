@@ -38,11 +38,10 @@ export class ActorManager {
     }
 
     private beforeEpisode() {
-        return Promise.all([
+        return memoryBatchBackpressure().then(() => Promise.all([
             createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX)),
-            memoryBackpressure(),
             this.agent.sync(),
-        ]);
+        ]));
     }
 
     private afterEpisode() {
@@ -82,6 +81,7 @@ export class ActorManager {
         const width = GameDI.width;
         const height = GameDI.height;
         let frameCount = 0;
+        let activeTanks: number[] = [];
 
         for (let i = 0; i <= maxEpisodeFrames; i++) {
             if (frameCount % 100 === 0) {
@@ -99,9 +99,9 @@ export class ActorManager {
             const isLastMemorize = frameCount > 10 && (frameCount - 10) % shouldEvery === 0;
             TenserFlowDI.shouldCollectState = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
 
-            const activeTanks = game.getTanks();
-
             if (shouldAction) {
+                activeTanks = game.getTanks();
+
                 for (const tankEid of activeTanks) {
                     this.updateTankBehaviour(tankEid, width, height, isWarmup);
                 }
@@ -125,7 +125,6 @@ export class ActorManager {
             }
         }
     }
-
 
     private updateTankBehaviour(
         tankEid: number,
@@ -179,7 +178,7 @@ export class ActorManager {
     }
 }
 
-async function memoryBackpressure() {
+async function memoryBatchBackpressure() {
     while (
         await policyMemory.getMemoryBatchCount() > CONFIG.workerCount
         || await valueMemory.getMemoryBatchCount() > CONFIG.workerCount
