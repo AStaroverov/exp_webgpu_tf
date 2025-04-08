@@ -9,6 +9,7 @@ import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { policyAgentState, valueAgentState } from '../../Common/Database.ts';
 import { createPolicyNetwork, createValueNetwork } from '../../Models/Create.ts';
 import { loadNetwork, Model } from '../../Models/Transfer.ts';
+import { disposeNetwork } from '../../Models/Utils.ts';
 
 export class ActorAgent {
     private policyVersion = -1;
@@ -92,11 +93,13 @@ export class ActorAgent {
                 }
 
                 this.policyVersion = policyVersion;
+                this.policyNetwork = await setModelState(this.policyNetwork ?? createPolicyNetwork(), policyNetwork);
                 this.valueVersion = valueVersion;
                 this.valueNetwork = await setModelState(this.valueNetwork ?? createValueNetwork(), valueNetwork);
-                this.policyNetwork = await setModelState(this.policyNetwork ?? createPolicyNetwork(), policyNetwork);
-                valueNetwork.dispose();
-                policyNetwork.dispose();
+
+                disposeNetwork(policyNetwork);
+                disposeNetwork(valueNetwork);
+
                 console.log('Models updated successfully');
                 return true;
             } else {

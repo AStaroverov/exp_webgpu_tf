@@ -1,5 +1,4 @@
 import * as tf from '@tensorflow/tfjs';
-import { dispose } from '@tensorflow/tfjs';
 import { ACTION_DIM } from '../Common/consts.ts';
 import { computeLogProb } from '../Common/computeLogProb.ts';
 import { InputArrays, prepareRandomInputArrays } from '../Common/InputArrays.ts';
@@ -216,7 +215,7 @@ let randomInputTensors: tf.Tensor[];
 
 function getRandomInputTensors() {
     randomInputTensors = randomInputTensors == null || random() > 0.9
-        ? (dispose(randomInputTensors), createInputTensors([prepareRandomInputArrays()]))
+        ? (tf.dispose(randomInputTensors), createInputTensors([prepareRandomInputArrays()]))
         : randomInputTensors;
 
     return randomInputTensors;

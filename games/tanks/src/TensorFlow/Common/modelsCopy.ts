@@ -14,12 +14,16 @@ export async function setModelState(targetModel: tf.LayersModel, sourceModel: tf
     }
 
     targetModel.setWeights(sourceWeights);
-    // 2. Копируем оптимайзер
+
     const sourceOptimizer = sourceModel.optimizer as undefined | AdamOptimizer;
     const targetOptimizer = targetModel.optimizer as undefined | AdamOptimizer;
 
     if (sourceOptimizer && targetOptimizer) {
-        await targetOptimizer.setWeights(await sourceOptimizer.getWeights());
+        const targetWeights = await targetOptimizer.getWeights();
+        const sourceWeights = await sourceOptimizer.getWeights();
+        await targetOptimizer.setWeights(sourceWeights);
+        tf.dispose(targetWeights.map(nt => nt.tensor));
+        tf.dispose(sourceWeights.map(nt => nt.tensor));
         // @ts-ignore
         targetOptimizer.learningRate = sourceOptimizer.learningRate;
         // @ts-ignore
