@@ -107,14 +107,14 @@ export class PolicyLearnerAgent extends LearnerAgent<{ version: number, memories
 
             klList.push(kl);
             this.klHistory.add(kl);
-
-            const lr = getDynamicLearningRate(
-                mean(this.klHistory.toArray()),
-                getLR(this.network),
-            );
-            this.updateOptimizersLR(lr);
-            metricsChannels.lr.postMessage(getLR(this.network));
         }
+
+        const lr = getDynamicLearningRate(
+            mean(this.klHistory.toArray()),
+            getLR(this.network),
+        );
+        this.updateOptimizersLR(lr);
+        metricsChannels.lr.postMessage(lr);
 
         const endTime = Date.now();
         const version = this.version;
