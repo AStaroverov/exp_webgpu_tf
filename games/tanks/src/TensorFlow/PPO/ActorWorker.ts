@@ -9,7 +9,7 @@ setConsolePrefix(`[ACTOR|${ getShortRandomId() }]`);
 // Main initialization function
 async function initSystem() {
     // Initialize TensorFlow.js
-    const tfInitialized = await initTensorFlow();
+    const tfInitialized = await initTensorFlow('wasm');
     if (!tfInitialized) {
         console.error('Failed to initialize TensorFlow.js, aborting');
         return null;
