@@ -70,7 +70,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     miniBatchSize: 64,
     // Training parameters
     warmupFrames: 100,
-    episodeFrames: 900, // usually produce 250 samples
+    episodeFrames: 1200, // usually produce 250 samples
     // Workers
     workerCount: 8,
     reuseLimit: 1,
