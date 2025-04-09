@@ -78,31 +78,6 @@ export const DEFAULT_EXPERIMENT: Config = {
     savePath: 'APPO_v1',
 };
 
-// Map of available experiments
-export const EXPERIMENTS: { [key: string]: Config } = {
-    default: DEFAULT_EXPERIMENT,
-};
-
-// Function to get experiment config by name
-export function getExperimentConfig(name: string): Config {
-    return EXPERIMENTS[name] || DEFAULT_EXPERIMENT;
-}
 
 // Current active experiment
 export let CONFIG: Config = DEFAULT_EXPERIMENT;
-
-// Set current experiment
-export function setExperiment(nameOrConfig: string | Config): Config {
-    if (typeof nameOrConfig === 'string') {
-        CONFIG = getExperimentConfig(nameOrConfig);
-    } else {
-        CONFIG = nameOrConfig;
-    }
-    console.log(`Activated experiment: ${ CONFIG.name }`);
-    return CONFIG;
-}
-
-// Get current experiment
-export function getCurrentConfig(): Config {
-    return CONFIG;
-}
