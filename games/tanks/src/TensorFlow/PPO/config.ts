@@ -76,7 +76,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     workerCount: 1,
     // Training control
     savePath: 'APPO_v1',
-    fsModelPath: 'v1',
+    fsModelPath: 'v6',
 };
 
 
