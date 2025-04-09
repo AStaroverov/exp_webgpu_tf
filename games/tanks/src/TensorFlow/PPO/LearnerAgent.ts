@@ -26,8 +26,17 @@ export class LearnerAgent<B extends { version: number }> {
         }
     }
 
-    public collectBatches(): Promise<unknown> {
-        throw new Error('Not implemented');
+    public collectBatches(batches: B[]) {
+        if (batches.length === 0) return;
+
+        this.batches.push(...batches.filter(b => {
+            const delta = this.version - b.version;
+            if (delta > 3_000) {
+                console.warn('[Train]: skipping batch with diff', delta);
+                return false;
+            }
+            return true;
+        }));
     }
 
     public hasEnoughBatches(): boolean {
@@ -35,14 +44,7 @@ export class LearnerAgent<B extends { version: number }> {
     }
 
     public extractBatches(): B[] {
-        const batches = this.batches.filter(b => {
-            const delta = this.version - b.version;
-            if (delta > 2) {
-                console.warn('[Train]: skipping batch with diff', delta);
-                return false;
-            }
-            return true;
-        });
+        const batches = this.batches;
         this.batches = [];
         return batches;
     }
@@ -52,7 +54,7 @@ export class LearnerAgent<B extends { version: number }> {
     }
 
     public finishTrain() {
-        this.version += 1;
+        this.version = this.network.optimizer.iterations;
     }
 
     public async healthCheck(): Promise<boolean> {

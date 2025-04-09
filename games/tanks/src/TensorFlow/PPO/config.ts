@@ -37,6 +37,7 @@ export type Config = {
     workerCount: number;                // Number of parallel workers
     // Training control
     savePath: string;
+    fsModelPath?: string;
 };
 
 // Default experiment configuration for PPO
@@ -75,6 +76,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     workerCount: 1,
     // Training control
     savePath: 'APPO_v1',
+    fsModelPath: 'v1',
 };
 
 

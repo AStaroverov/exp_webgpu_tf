@@ -10,7 +10,7 @@ import { setModelState } from '../../Common/modelsCopy.ts';
 import { learningRateChannel, metricsChannels } from '../../Common/channels.ts';
 import { createInputTensors, sliceInputTensors } from '../../Common/InputTensors.ts';
 import { LearnerAgent } from '../LearnerAgent.ts';
-import { loadNetwork, Model, saveNetwork } from '../../Models/Transfer.ts';
+import { loadNetworkFromDB, Model, saveNetworkToDB } from '../../Models/Transfer.ts';
 
 export class ValueLearnerAgent extends LearnerAgent<{ version: number, memories: ValueMemoryBatch }> {
     lastTrainTimeStart: number | null = null;
@@ -25,11 +25,11 @@ export class ValueLearnerAgent extends LearnerAgent<{ version: number, memories:
         return this;
     }
 
-    async collectBatches() {
-        this.batches.push(...await valueMemory.extractMemoryBatchList());
+    public async collectBatches() {
+        super.collectBatches(await valueMemory.extractMemoryBatchList());
     }
 
-    async train(batches = this.extractBatches()) {
+    public async train(batches = this.extractBatches()) {
         const startTime = Date.now();
         const waitTime = startTime - (this.lastTrainTimeStart || startTime);
         this.lastTrainTimeStart = startTime;
@@ -109,7 +109,7 @@ export class ValueLearnerAgent extends LearnerAgent<{ version: number, memories:
         try {
             await Promise.all([
                 valueAgentState.set({ version: this.version }),
-                saveNetwork(this.network, Model.Value),
+                saveNetworkToDB(this.network, Model.Value),
             ]);
 
             return true;
@@ -123,7 +123,7 @@ export class ValueLearnerAgent extends LearnerAgent<{ version: number, memories:
         try {
             let [agentState, valueNetwork] = await Promise.all([
                 valueAgentState.get(),
-                loadNetwork(Model.Value),
+                loadNetworkFromDB(Model.Value),
             ]);
 
             // after change to new 2 threads we won't have valueAgentState

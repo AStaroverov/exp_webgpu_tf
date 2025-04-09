@@ -14,7 +14,7 @@ import { policyAgentState, policyMemory, PolicyMemoryBatch } from '../../DB';
 import { forceExitChannel, learningRateChannel, metricsChannels } from '../../Common/channels.ts';
 import { createInputTensors, sliceInputTensors } from '../../Common/InputTensors.ts';
 import { LearnerAgent } from '../LearnerAgent.ts';
-import { loadNetwork, Model, saveNetwork } from '../../Models/Transfer.ts';
+import { loadNetworkFromDB, Model, saveNetworkToDB } from '../../Models/Transfer.ts';
 
 export class PolicyLearnerAgent extends LearnerAgent<{ version: number, memories: PolicyMemoryBatch }> {
     private klHistory = new RingBuffer<number>(30);
@@ -25,7 +25,7 @@ export class PolicyLearnerAgent extends LearnerAgent<{ version: number, memories
     }
 
     async collectBatches() {
-        this.batches.push(...await policyMemory.extractMemoryBatchList());
+        super.collectBatches(await policyMemory.extractMemoryBatchList());
     }
 
     async train(batches = this.extractBatches()) {
@@ -156,7 +156,7 @@ export class PolicyLearnerAgent extends LearnerAgent<{ version: number, memories
         try {
             const [agentState, network] = await Promise.all([
                 policyAgentState.get(),
-                loadNetwork(Model.Policy),
+                loadNetworkFromDB(Model.Policy),
             ]);
             if (!network) {
                 return false;
@@ -183,7 +183,7 @@ export class PolicyLearnerAgent extends LearnerAgent<{ version: number, memories
                     klHistory: this.klHistory.toArray(),
                     learningRate: getLR(this.network),
                 }),
-                saveNetwork(this.network, Model.Policy),
+                saveNetworkToDB(this.network, Model.Policy),
             ]);
 
             return true;

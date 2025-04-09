@@ -29,6 +29,7 @@
     "devtools-detect": "^4.0.2",
     "dexie": "^4.0.11",
     "downsample-lttb-ts": "^0.0.6",
+    "events": "^3.3.0",
     "gl-matrix": "^3.4.3",
     "lodash": "^4.17.21",
     "lodash-es": "^4.17.21",

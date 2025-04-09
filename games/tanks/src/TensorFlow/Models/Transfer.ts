@@ -1,20 +1,40 @@
-import { getStoreModelPath } from './Utils.ts';
+import { getIndexedDBModelPath } from './Utils.ts';
 import { CONFIG } from '../PPO/config.ts';
 import * as tf from '@tensorflow/tfjs';
+import { isBrowser } from '../../../../../lib/detect.ts';
 
 export enum Model {
     Policy = 'policy-model',
     Value = 'value-model',
 }
 
-export function saveNetwork(network: tf.LayersModel, name: Model) {
-    return network.save(getStoreModelPath(name, CONFIG), { includeOptimizer: true });
+export function saveNetworkToDB(network: tf.LayersModel, name: Model) {
+    if (isBrowser) {
+        return network.save(getIndexedDBModelPath(name, CONFIG), { includeOptimizer: true });
+    }
+
+    throw new Error('Unsupported environment for saving model');
 }
 
-export function loadNetwork(name: Model) {
-    return tf.loadLayersModel(getStoreModelPath(name, CONFIG));
+export function loadNetworkFromDB(name: Model) {
+    if (isBrowser) {
+        return tf.loadLayersModel(getIndexedDBModelPath(name, CONFIG));
+    }
+
+    throw new Error('Unsupported environment for loading model');
+}
+
+export async function loadNetworkFromFS(path: string, name: Model) {
+    if (isBrowser) {
+        const modelPath = `src/TensorFlow/Models/Trained/${ path }/${ name }.json`;
+        const model = await tf.loadLayersModel(modelPath);
+
+        return model;
+    }
+
+    throw new Error('Unsupported environment for loading model');
 }
 
 export function downloadNetwork(name: Model) {
-    return loadNetwork(name).then((network) => network.save(`downloads://${ name }`, { includeOptimizer: true }));
+    return loadNetworkFromDB(name).then((network) => network.save(`downloads://${ name }`, { includeOptimizer: true }));
 }

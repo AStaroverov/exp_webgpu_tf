@@ -6,7 +6,7 @@ import { InputArrays } from '../../Common/InputArrays.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
 import { policyAgentState } from '../../DB';
-import { loadNetwork, Model } from '../../Models/Transfer.ts';
+import { loadNetworkFromDB, Model } from '../../Models/Transfer.ts';
 
 export class PlayerAgent {
     private version = 0;
@@ -42,7 +42,7 @@ export class PlayerAgent {
         try {
             const [agentState, policyNetwork] = await Promise.all([
                 policyAgentState.get(),
-                loadNetwork(Model.Policy),
+                loadNetworkFromDB(Model.Policy),
             ]);
 
             if (!policyNetwork) {

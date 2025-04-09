@@ -8,7 +8,7 @@ import { setModelState } from '../../Common/modelsCopy.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { policyAgentState, valueAgentState } from '../../DB';
 import { createPolicyNetwork, createValueNetwork } from '../../Models/Create.ts';
-import { loadNetwork, Model } from '../../Models/Transfer.ts';
+import { loadNetworkFromDB, Model } from '../../Models/Transfer.ts';
 import { disposeNetwork } from '../../Models/Utils.ts';
 
 export class ActorAgent {
@@ -83,8 +83,8 @@ export class ActorAgent {
 
             if (isNewVersion || this.policyNetwork == null || this.valueNetwork == null) {
                 const [valueNetwork, policyNetwork] = await Promise.all([
-                    loadNetwork(Model.Value),
-                    loadNetwork(Model.Policy),
+                    loadNetworkFromDB(Model.Value),
+                    loadNetworkFromDB(Model.Policy),
                 ]);
 
                 if (!valueNetwork || !policyNetwork) {
