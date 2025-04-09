@@ -1,5 +1,4 @@
 import Dexie from 'dexie';
-import devtoolsDetect from 'devtools-detect';
 import { forceExitChannel } from './channels.ts';
 import { downloadNetwork, Model } from '../Models/Transfer.ts';
 
@@ -65,8 +64,4 @@ export function getDrawState(): boolean {
 
 export function isVerboseLog(): boolean {
     return isVerbose;
-}
-
-export function isDevtoolsOpen(): boolean {
-    return devtoolsDetect.isOpen;
 }
