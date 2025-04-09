@@ -2,7 +2,7 @@ import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { ceil } from '../../../../../../lib/math.ts';
 import { createValueNetwork } from '../../Models/Create.ts';
-import { policyAgentState, valueAgentState, valueMemory, ValueMemoryBatch } from '../../Common/Database.ts';
+import { policyAgentState, valueAgentState, valueMemory, ValueMemoryBatch } from '../../DB';
 import { trainValueNetwork } from '../train.ts';
 import { CONFIG } from '../config.ts';
 import { batchShuffle, shuffle } from '../../../../../../lib/shuffle.ts';

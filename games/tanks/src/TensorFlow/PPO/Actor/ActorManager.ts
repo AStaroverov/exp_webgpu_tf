@@ -10,7 +10,7 @@ import { CONFIG } from '../config.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { prepareInputArrays } from '../../Common/InputArrays.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
-import { policyMemory, valueMemory } from '../../Common/Database.ts';
+import { policyMemory, valueMemory } from '../../DB';
 import { omit, pick } from 'lodash-es';
 
 type Game = Awaited<ReturnType<typeof createBattlefield>>;

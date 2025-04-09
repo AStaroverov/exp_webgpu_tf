@@ -10,7 +10,7 @@ import { batchShuffle, shuffle } from '../../../../../../lib/shuffle.ts';
 import { RingBuffer } from 'ring-buffer-ts';
 import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
-import { policyAgentState, policyMemory, PolicyMemoryBatch } from '../../Common/Database.ts';
+import { policyAgentState, policyMemory, PolicyMemoryBatch } from '../../DB';
 import { forceExitChannel, learningRateChannel, metricsChannels } from '../../Common/channels.ts';
 import { createInputTensors, sliceInputTensors } from '../../Common/InputTensors.ts';
 import { LearnerAgent } from '../LearnerAgent.ts';

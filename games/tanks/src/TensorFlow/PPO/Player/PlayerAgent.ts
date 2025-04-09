@@ -5,7 +5,7 @@ import { predict } from '../train.ts';
 import { InputArrays } from '../../Common/InputArrays.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
-import { policyAgentState } from '../../Common/Database.ts';
+import { policyAgentState } from '../../DB';
 import { loadNetwork, Model } from '../../Models/Transfer.ts';
 
 export class PlayerAgent {

@@ -6,7 +6,7 @@ import { act } from '../train.ts';
 import { InputArrays } from '../../Common/InputArrays.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
-import { policyAgentState, valueAgentState } from '../../Common/Database.ts';
+import { policyAgentState, valueAgentState } from '../../DB';
 import { createPolicyNetwork, createValueNetwork } from '../../Models/Create.ts';
 import { loadNetwork, Model } from '../../Models/Transfer.ts';
 import { disposeNetwork } from '../../Models/Utils.ts';
