@@ -11,7 +11,7 @@ import { RingBuffer } from 'ring-buffer-ts';
 import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
 import { policyAgentState, policyMemory, PolicyMemoryBatch } from '../../Common/Database.ts';
-import { learningRateChannel, metricsChannels, reloadChannel } from '../../Common/channels.ts';
+import { forceExitChannel, learningRateChannel, metricsChannels } from '../../Common/channels.ts';
 import { createInputTensors, sliceInputTensors } from '../../Common/InputTensors.ts';
 import { LearnerAgent } from '../LearnerAgent.ts';
 import { loadNetwork, Model, saveNetwork } from '../../Models/Transfer.ts';
@@ -101,7 +101,7 @@ export class PolicyLearnerAgent extends LearnerAgent<{ version: number, memories
 
             if (kl > CONFIG.klConfig.max) {
                 console.warn(`[Train]: KL divergence was too high: ${ kl }, in epoch ${ i }`);
-                reloadChannel.postMessage(null);
+                forceExitChannel.postMessage(null);
                 break;
             }
 

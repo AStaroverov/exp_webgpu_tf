@@ -1,8 +1,8 @@
-export const reloadChannel = new BroadcastChannel('reload');
+export const forceExitChannel = new BroadcastChannel('exit');
 
 if (globalThis.document != null) {
-    // we cannot listen reloadChannel, because don't send message at the same thread
-    new BroadcastChannel('reload').onmessage = () => {
+    // we cannot listen forceExitChannel, because don't send message at the same thread
+    new BroadcastChannel('exit').onmessage = () => {
         globalThis.location.reload();
     };
 }

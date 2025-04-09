@@ -1,6 +1,6 @@
 import Dexie from 'dexie';
 import devtoolsDetect from 'devtools-detect';
-import { reloadChannel } from './channels.ts';
+import { forceExitChannel } from './channels.ts';
 import { downloadNetwork, Model } from '../Models/Transfer.ts';
 
 // Инициализируем базу Dexie с таблицей settings
@@ -45,7 +45,7 @@ if (globalThis && globalThis.document) {
             dbs.forEach((db) => {
                 db.name && indexedDB.deleteDatabase(db.name);
             });
-            reloadChannel.postMessage(null);
+            forceExitChannel.postMessage(null);
         });
     });
 

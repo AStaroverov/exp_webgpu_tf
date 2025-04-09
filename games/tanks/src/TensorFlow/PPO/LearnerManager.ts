@@ -2,6 +2,7 @@ import { PolicyLearnerAgent } from './PolicyLearner/PolicyLearnerAgent.ts';
 import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
 import { EntityId } from 'bitecs';
 import { ValueLearnerAgent } from './ValueLearner/ValueLearnerAgent.ts';
+import { forceExitChannel } from '../Common/channels.ts';
 
 export class LearnerManager {
     private tankRewards = new Map<EntityId, number>();
@@ -15,7 +16,7 @@ export class LearnerManager {
     }
 
     public start() {
-        this.trainingLoop();
+        this.trainLoop();
     }
 
     public getReward(tankEid: EntityId) {
@@ -33,28 +34,42 @@ export class LearnerManager {
         return this;
     }
 
-    private async trainingLoop() {
+    private async trainLoop() {
+        let errorCount = 0;
+
         while (true) {
-            await new Promise(resolve => macroTasks.addTimeout(resolve, 333));
+            await new Promise(resolve => macroTasks.addTimeout(resolve, 100));
 
-            try {
-                await this.agent.collectBatches();
+            await this.agent.collectBatches();
+            if (!this.agent.hasEnoughBatches()) continue;
 
-                if (!this.agent.hasEnoughBatches()) continue;
+            errorCount = await this.train() ? 0 : errorCount + 1;
 
-                await this.agent.train();
-                this.agent.finishTrain();
-
-                const health = await this.agent.healthCheck();
-
-                if (health) {
-                    await this.save();
-                } else {
-                    await this.agent.load();
-                }
-            } catch (error) {
-                console.error('Error during training loop:', error);
+            if (errorCount > 5) {
+                console.error('Error count exceeded');
+                forceExitChannel.postMessage(null);
+                break;
             }
+        }
+    }
+
+    private async train() {
+        try {
+            await this.agent.train();
+            this.agent.finishTrain();
+
+            const health = await this.agent.healthCheck();
+
+            if (health) {
+                await this.save();
+                return true;
+            } else {
+                await this.agent.load();
+                return false;
+            }
+        } catch (error) {
+            console.error('Error during training loop:', error);
+            return false;
         }
     }
 }
