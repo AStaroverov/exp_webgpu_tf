@@ -4,10 +4,9 @@ import { createValueNetwork } from '../../Models/Create.ts';
 import { trainValueNetwork } from '../train.ts';
 import { CONFIG } from '../config.ts';
 import { shuffle } from '../../../../../../lib/shuffle.ts';
-import { setModelState } from '../../Common/modelsCopy.ts';
 import { sliceInputTensors } from '../../Common/InputTensors.ts';
 import { BaseLearnerAgent } from './BaseLearnerAgent.ts';
-import { loadNetworkFromDB, Model, saveNetworkToDB } from '../../Models/Transfer.ts';
+import { Model } from '../../Models/Transfer.ts';
 
 export class ValueLearnerAgent extends BaseLearnerAgent {
     constructor() {
@@ -51,33 +50,5 @@ export class ValueLearnerAgent extends BaseLearnerAgent {
                 valueLossList,
             };
         });
-    }
-
-    public async upload() {
-        try {
-            await saveNetworkToDB(this.network, Model.Value);
-            return true;
-        } catch (error) {
-            console.error('Error saving models:', error);
-            return false;
-        }
-    }
-
-    public async load() {
-        try {
-            let valueNetwork = await loadNetworkFromDB(Model.Value);
-
-            if (!valueNetwork) return false;
-
-            this.network = await setModelState(this.network, valueNetwork);
-
-            valueNetwork.dispose();
-
-            console.log('Models loaded successfully');
-            return true;
-        } catch (error) {
-            console.warn('Could not load models, starting with new ones:', error);
-            return false;
-        }
     }
 }

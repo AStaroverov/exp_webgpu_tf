@@ -2,7 +2,8 @@ import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { networkHealthCheck } from '../train.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
-import { Model } from '../../Models/Transfer.ts';
+import { loadNetworkFromDB, Model, saveNetworkToDB } from '../../Models/Transfer.ts';
+import { setModelState } from '../../Common/modelsCopy.ts';
 
 export class BaseLearnerAgent {
     public network: tf.LayersModel;
@@ -15,27 +16,13 @@ export class BaseLearnerAgent {
         await this.load();
     }
 
-    public async save() {
-        while (!(await this.upload())) {
-            await new Promise(resolve => macroTasks.addTimeout(resolve, 100));
-        }
-    }
-
     public async healthCheck(): Promise<boolean> {
         try {
-            return await networkHealthCheck(this.network);
+            return networkHealthCheck(this.network);
         } catch (error) {
             await new Promise(resolve => macroTasks.addTimeout(resolve, 100));
             return this.healthCheck();
         }
-    }
-
-    public async upload(): Promise<boolean> {
-        throw new Error('Not implemented');
-    }
-
-    public async load(): Promise<boolean> {
-        throw new Error('Not implemented');
     }
 
     public getVersion() {
@@ -44,6 +31,34 @@ export class BaseLearnerAgent {
 
     public updateLR(lr: number) {
         setLR(this.network, lr);
+    }
+
+    public async load() {
+        try {
+            const network = await loadNetworkFromDB(this.modelName);
+
+            if (!network) return false;
+
+            this.network = await setModelState(this.network, network);
+
+            network.dispose();
+
+            console.log('Models loaded successfully');
+            return true;
+        } catch (error) {
+            console.warn('Could not load models, starting with new ones:', error);
+            return false;
+        }
+    }
+
+    public async upload() {
+        try {
+            await saveNetworkToDB(this.network, this.modelName);
+            return true;
+        } catch (error) {
+            console.error('Error saving models:', error);
+            return false;
+        }
     }
 }
 

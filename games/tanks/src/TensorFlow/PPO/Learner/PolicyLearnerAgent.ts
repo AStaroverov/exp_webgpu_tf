@@ -7,11 +7,10 @@ import { CONFIG } from '../config.ts';
 import { shuffle } from '../../../../../../lib/shuffle.ts';
 import { RingBuffer } from 'ring-buffer-ts';
 import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
-import { setModelState } from '../../Common/modelsCopy.ts';
 import { forceExitChannel } from '../../Common/channels.ts';
 import { sliceInputTensors } from '../../Common/InputTensors.ts';
 import { BaseLearnerAgent } from './BaseLearnerAgent.ts';
-import { loadNetworkFromDB, Model, saveNetworkToDB } from '../../Models/Transfer.ts';
+import { Model } from '../../Models/Transfer.ts';
 import { randomRangeInt } from '../../../../../../lib/random.ts';
 
 export class PolicyLearnerAgent extends BaseLearnerAgent {
@@ -88,34 +87,6 @@ export class PolicyLearnerAgent extends BaseLearnerAgent {
                 policyLossList: policyLossList,
             };
         });
-    }
-
-    public async load() {
-        try {
-            const network = await loadNetworkFromDB(Model.Policy);
-
-            if (!network) return false;
-
-            this.network = await setModelState(this.network, network);
-
-            network.dispose();
-
-            console.log('Models loaded successfully');
-            return true;
-        } catch (error) {
-            console.warn('Could not load models, starting with new ones:', error);
-            return false;
-        }
-    }
-
-    public async upload() {
-        try {
-            await saveNetworkToDB(this.network, Model.Policy);
-            return true;
-        } catch (error) {
-            console.error('Error saving models:', error);
-            return false;
-        }
     }
 }
 

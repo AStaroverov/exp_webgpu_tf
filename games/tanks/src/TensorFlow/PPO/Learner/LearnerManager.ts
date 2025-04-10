@@ -58,7 +58,7 @@ export class LearnerManager {
                 training: true,
             });
 
-            await this.agent.train();
+            this.agent.train();
 
             const health = await this.agent.healthCheck();
 

@@ -144,9 +144,6 @@ export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { ac
     const result = tf.tidy(() => {
         const { mean } = getMeanAndStd(policyNetwork, 1, createInputTensors([state]));
 
-        // const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
-        // const clippedLogStd = outLogStd.clipByValue(-5, 0.2);
-        // const std = clippedLogStd.exp();
         // const noise = tf.randomNormal([ACTION_DIM]).mul(std);
         // const actions = outMean.add(noise);
 
@@ -213,15 +210,6 @@ function getMeanAndStd(
     return { mean, std };
 }
 
-
-function computeRho(
-    logProbBehavior: tf.Tensor,
-    logProbCurrent: tf.Tensor,
-): tf.Tensor {
-    const logRho = logProbCurrent.sub(logProbBehavior);
-    return logRho.exp(); // ρ_t = π_current / π_behavior
-}
-
 export function computeVTraceTargets(
     policyNetwork: tf.LayersModel,
     valueNetwork: tf.LayersModel,
@@ -262,9 +250,17 @@ export function computeVTraceTargets(
         return {
             advantages: normalize(advantages),
             returns: returns,
-            values: values, // просто удобство - чтобы не терять их
+            values: values,
         };
     });
+}
+
+function computeRho(
+    logProbBehavior: tf.Tensor,
+    logProbCurrent: tf.Tensor,
+): tf.Tensor {
+    const logRho = logProbCurrent.sub(logProbBehavior);
+    return logRho.exp(); // ρ_t = π_current / π_behavior
 }
 
 function computeVTrace(
@@ -345,7 +341,7 @@ function getRandomInputTensors() {
     return randomInputTensors;
 }
 
-export async function networkHealthCheck(network: tf.LayersModel): Promise<boolean> {
+export function networkHealthCheck(network: tf.LayersModel): boolean {
     const data = tf.tidy(() => {
         return (network.predict(getRandomInputTensors()) as tf.Tensor).squeeze().dataSync();
     }) as Float32Array;
