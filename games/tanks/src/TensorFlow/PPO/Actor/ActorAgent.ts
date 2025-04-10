@@ -10,6 +10,7 @@ import { loadNetworkFromDB, Model } from '../../Models/Transfer.ts';
 import { disposeNetwork } from '../../Models/Utils.ts';
 import { learnerStateChannel } from '../../DB';
 import {
+    distinctUntilChanged,
     filter,
     firstValueFrom,
     forkJoin,
@@ -20,8 +21,10 @@ import {
     retry,
     scan,
     shareReplay,
+    switchMap,
     take,
     tap,
+    timer,
 } from 'rxjs';
 
 export class ActorAgent {
@@ -35,31 +38,28 @@ export class ActorAgent {
 
     private agentsState$: Observable<Record<Model, { version: number, training: boolean }>>;
     private hasNewNetworks$: Observable<boolean>;
-    private shouldWaitLearnerTraining$: Observable<boolean>;
+    private backpressure$: Observable<boolean>;
 
     constructor() {
         this.memory = new Memory();
 
         this.agentsState$ = learnerStateChannel.obs.pipe(
             scan((acc, { model, version, training }) => {
-
                 acc[model] = { version, training };
                 return acc;
             }, {} as Record<Model, { version: number, training: boolean }>),
-            filter((states) => {
-
-                return states[Model.Policy] != null && states[Model.Value] != null;
-            }),
+            filter((states) => states[Model.Policy] != null && states[Model.Value] != null),
             shareReplay(1),
         );
-        this.shouldWaitLearnerTraining$ = this.agentsState$.pipe(
-            map((states) => {
-
-                return states[Model.Policy].training || states[Model.Value].training;
-            }),
+        this.backpressure$ = this.agentsState$.pipe(
+            map((states) => states[Model.Policy].training || states[Model.Value].training),
+            switchMap((shouldWait) => shouldWait ? timer(3_000).pipe(map(() => true)) : of(false)),
+            distinctUntilChanged(),
+            shareReplay(1),
         );
         this.hasNewNetworks$ = this.agentsState$.pipe(
             map((states) => states[Model.Policy].version > this.policyVersion && states[Model.Value].version > this.valueVersion),
+            shareReplay(1),
         );
     }
 
@@ -110,7 +110,7 @@ export class ActorAgent {
     }
 
     public sync() {
-        return firstValueFrom(this.shouldWaitLearnerTraining$.pipe(
+        return firstValueFrom(this.backpressure$.pipe(
             filter((shouldWait) => !shouldWait),
             mergeMap(() => this.hasNewNetworks$),
             mergeMap((hasNew) => {
