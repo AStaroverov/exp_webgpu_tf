@@ -3,6 +3,7 @@ import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
 import { EntityId } from 'bitecs';
 import { ValueLearnerAgent } from './ValueLearner/ValueLearnerAgent.ts';
 import { forceExitChannel } from '../Common/channels.ts';
+import { agentStateChannel } from '../DB';
 
 export class LearnerManager {
     private tankRewards = new Map<EntityId, number>();
@@ -31,6 +32,13 @@ export class LearnerManager {
     private async init() {
         await this.agent.init();
         await this.agent.save();
+
+        agentStateChannel.emit({
+            model: this.agent.modelName,
+            version: this.agent.getVersion(),
+            training: false,
+        });
+
         return this;
     }
 
@@ -40,13 +48,13 @@ export class LearnerManager {
         while (true) {
             await new Promise(resolve => macroTasks.addTimeout(resolve, 100));
 
-            await this.agent.collectBatches();
             if (!this.agent.hasEnoughBatches()) continue;
 
             errorCount = await this.train() ? 0 : errorCount + 1;
 
             if (errorCount > 5) {
                 console.error('Error count exceeded');
+                debugger
                 forceExitChannel.postMessage(null);
                 break;
             }
@@ -55,21 +63,32 @@ export class LearnerManager {
 
     private async train() {
         try {
+            agentStateChannel.emit({
+                model: this.agent.modelName,
+                version: this.agent.getVersion(),
+                training: true,
+            });
+
             await this.agent.train();
-            this.agent.finishTrain();
 
             const health = await this.agent.healthCheck();
 
-            if (health) {
-                await this.save();
-                return true;
-            } else {
-                await this.agent.load();
-                return false;
+            if (!health) {
+                throw new Error('Health check failed');
             }
+
+            await this.save();
+            return true;
         } catch (error) {
             console.error('Error during training loop:', error);
+            await this.agent.load();
             return false;
+        } finally {
+            agentStateChannel.emit({
+                model: this.agent.modelName,
+                version: this.agent.getVersion(),
+                training: false,
+            });
         }
     }
 }

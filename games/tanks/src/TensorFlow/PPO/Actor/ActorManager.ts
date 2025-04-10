@@ -10,8 +10,7 @@ import { CONFIG } from '../config.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { prepareInputArrays } from '../../Common/InputArrays.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
-import { policyMemory, valueMemory } from '../../DB';
-import { omit, pick } from 'lodash-es';
+import { memoryChannel } from '../../DB';
 
 type Game = Awaited<ReturnType<typeof createBattlefield>>;
 
@@ -38,22 +37,14 @@ export class ActorManager {
     }
 
     private beforeEpisode() {
-        return memoryBatchBackpressure().then(() => Promise.all([
+        return this.agent.sync().then(() => Promise.all([
             createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX)),
-            this.agent.sync(),
         ]));
     }
 
     private afterEpisode() {
         const memory = this.agent.readMemory();
-        policyMemory.addMemoryBatch({
-            version: memory.policyVersion,
-            memories: omit(memory.memories, 'values', 'returns'),
-        });
-        valueMemory.addMemoryBatch({
-            version: memory.valueVersion,
-            memories: pick(memory.memories, 'size', 'states', 'values', 'returns'),
-        });
+        memoryChannel.emit(memory);
     }
 
     private cleanupEpisode(game: Game) {
@@ -175,15 +166,5 @@ export class ActorManager {
             isDone,
             isLast,
         );
-    }
-}
-
-async function memoryBatchBackpressure() {
-    while (
-        await policyMemory.getMemoryBatchCount() > CONFIG.workerCount
-        || await valueMemory.getMemoryBatchCount() > CONFIG.workerCount
-        ) {
-        console.log('[Backpressure] Waiting for memory batch count to decrease');
-        await new Promise(resolve => macroTasks.addTimeout(resolve, 1000));
     }
 }

@@ -5,7 +5,6 @@ import { predict } from '../train.ts';
 import { InputArrays } from '../../Common/InputArrays.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
-import { policyAgentState } from '../../DB';
 import { loadNetworkFromDB, Model } from '../../Models/Transfer.ts';
 
 export class PlayerAgent {
@@ -40,18 +39,14 @@ export class PlayerAgent {
 
     private async load() {
         try {
-            const [agentState, policyNetwork] = await Promise.all([
-                policyAgentState.get(),
-                loadNetworkFromDB(Model.Policy),
-            ]);
+            const policyNetwork = await loadNetworkFromDB(Model.Policy);
 
-            if (!policyNetwork) {
-                return false;
-            }
+            if (!policyNetwork) return false;
 
-            this.version = agentState?.version ?? 0;
             this.policyNetwork = await setModelState(this.policyNetwork, policyNetwork);
+
             policyNetwork.dispose();
+
             console.log('[PlayerAgent] Models loaded successfully');
             return true;
         } catch (error) {

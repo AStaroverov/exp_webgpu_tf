@@ -10,43 +10,36 @@ import { batchShuffle, shuffle } from '../../../../../../lib/shuffle.ts';
 import { RingBuffer } from 'ring-buffer-ts';
 import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
-import { policyAgentState, policyMemory, PolicyMemoryBatch } from '../../DB';
-import { forceExitChannel, learningRateChannel, metricsChannels } from '../../Common/channels.ts';
+import {
+    forceExitChannel,
+    learningRateChannel,
+    metricsChannels,
+    newPolicyVersionChannel,
+} from '../../Common/channels.ts';
 import { createInputTensors, sliceInputTensors } from '../../Common/InputTensors.ts';
 import { LearnerAgent } from '../LearnerAgent.ts';
 import { loadNetworkFromDB, Model, saveNetworkToDB } from '../../Models/Transfer.ts';
 
-export class PolicyLearnerAgent extends LearnerAgent<{ version: number, memories: PolicyMemoryBatch }> {
-    private klHistory = new RingBuffer<number>(30);
+export class PolicyLearnerAgent extends LearnerAgent {
+    private klHistory = new RingBuffer<number>(50);
     private lastTrainTimeStart = 0;
 
     constructor() {
-        super(createPolicyNetwork);
+        super(createPolicyNetwork, Model.Policy);
     }
 
-    async collectBatches() {
-        super.collectBatches(await policyMemory.extractMemoryBatchList());
-    }
-
-    async train(batches = this.extractBatches()) {
+    async train(batches = this.useBatches()) {
         const startTime = Date.now();
         const waitTime = startTime - (this.lastTrainTimeStart || startTime);
         this.lastTrainTimeStart = startTime;
 
+        const version = this.getVersion();
         const memories = batches.map(b => b.memories);
         const sumSize = memories.reduce((acc, b) => acc + b.size, 0);
         const states = memories.map(b => b.states).flat();
         const actions = memories.map(b => b.actions).flat();
         const logProbs = new Float32Array(memories.map(b => b.logProbs).flat());
-        const advantages = new Float32Array(
-            memories
-                .map((b, i) => {
-                    const lag = this.version - batches[i].version;
-                    const trust = Math.max(0, 1 - CONFIG.trustCoeff * lag);
-                    return b.advantages.map(a => a * trust);
-                })
-                .flat(),
-        );
+        const advantages = new Float32Array(memories.map(b => b.advantages).flat());
 
         const miniBatchCount = ceil(states.length / CONFIG.miniBatchSize);
 
@@ -62,7 +55,7 @@ export class PolicyLearnerAgent extends LearnerAgent<{ version: number, memories
         const tAllLogProbs = tf.tensor1d(logProbs);
         const tAllAdvantages = tf.tensor1d(advantages);
 
-        console.log(`[Train]: Iteration ${ this.version }, Sum batch size: ${ sumSize }, Mini batch count: ${ miniBatchCount } by ${ CONFIG.miniBatchSize }`);
+        console.log(`[Train]: Iteration ${ version }, Sum batch size: ${ sumSize }, Mini batch count: ${ miniBatchCount } by ${ CONFIG.miniBatchSize }`);
 
         const policyLossPromises: Promise<number>[] = [];
         const klList: number[] = [];
@@ -105,8 +98,8 @@ export class PolicyLearnerAgent extends LearnerAgent<{ version: number, memories
                 break;
             }
 
-            klList.push(kl);
             this.klHistory.add(kl);
+            klList.push(kl);
         }
 
         const lr = getDynamicLearningRate(
@@ -117,7 +110,6 @@ export class PolicyLearnerAgent extends LearnerAgent<{ version: number, memories
         metricsChannels.lr.postMessage(lr);
 
         const endTime = Date.now();
-        const version = this.version;
         Promise.all(policyLossPromises).then((policyLossList) => {
             for (let i = 0; i < klList.length; i++) {
                 const kl = klList[i];
@@ -136,7 +128,7 @@ export class PolicyLearnerAgent extends LearnerAgent<{ version: number, memories
             }
 
             for (const batch of batches) {
-                metricsChannels.versionDelta.postMessage(version - batch.version);
+                metricsChannels.versionDelta.postMessage(version - batch.version[this.modelName]);
                 metricsChannels.batchSize.postMessage(batch.memories.size);
             }
 
@@ -154,20 +146,15 @@ export class PolicyLearnerAgent extends LearnerAgent<{ version: number, memories
 
     public async load() {
         try {
-            const [agentState, network] = await Promise.all([
-                policyAgentState.get(),
-                loadNetworkFromDB(Model.Policy),
-            ]);
-            if (!network) {
-                return false;
-            }
-            this.version = agentState?.version ?? 0;
-            this.klHistory.fromArray(agentState?.klHistory ?? []);
+            const network = await loadNetworkFromDB(Model.Policy);
+
+            if (!network) return false;
+
             this.network = await setModelState(this.network, network);
-            console.log('Models loaded successfully');
 
             network.dispose();
 
+            console.log('Models loaded successfully');
             return true;
         } catch (error) {
             console.warn('Could not load models, starting with new ones:', error);
@@ -177,14 +164,8 @@ export class PolicyLearnerAgent extends LearnerAgent<{ version: number, memories
 
     public async upload() {
         try {
-            await Promise.all([
-                policyAgentState.set({
-                    version: this.version,
-                    klHistory: this.klHistory.toArray(),
-                    learningRate: getLR(this.network),
-                }),
-                saveNetworkToDB(this.network, Model.Policy),
-            ]);
+            await saveNetworkToDB(this.network, Model.Policy);
+            newPolicyVersionChannel.postMessage(this.getVersion());
 
             return true;
         } catch (error) {

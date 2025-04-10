@@ -29,10 +29,11 @@ export function createChannel<Req, Res = unknown>(name: string) {
     );
 
     return {
-        post: (data: Req) => {
+        emit: (data: Req) => {
             request.next(data);
             crossRequest.postMessage(data);
         },
+        obs: request$,
         request: (data: Req) => {
             request.next(data);
             crossRequest.postMessage(data);

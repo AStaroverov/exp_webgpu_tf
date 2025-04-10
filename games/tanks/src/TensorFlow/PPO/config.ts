@@ -27,7 +27,6 @@ export type Config = {
         min: number,
         max: number,
     },
-    trustCoeff: number;
 
     batchSize: number;              // Batch size for worker
     miniBatchSize: number,
@@ -65,7 +64,6 @@ export const DEFAULT_EXPERIMENT: Config = {
         min: 1e-6,
         max: 5e-3,
     },
-    trustCoeff: 0.1,
 
     batchSize: 256, // useless for appo
     miniBatchSize: 64,
