@@ -45,7 +45,7 @@ export class ActorAgent {
         );
         this.backpressure$ = this.learnerState$.pipe(
             map((state) => state.training),
-            switchMap((shouldWait) => shouldWait ? timer(3_000).pipe(map(() => true)) : of(false)),
+            switchMap((shouldWait) => shouldWait ? timer(5_000).pipe(map(() => true)) : of(false)),
             distinctUntilChanged(),
             shareReplay(1),
         );
