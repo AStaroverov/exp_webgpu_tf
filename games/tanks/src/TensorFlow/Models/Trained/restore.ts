@@ -1,6 +1,6 @@
 import { loadNetworkFromDB, loadNetworkFromFS, Model, saveNetworkToDB } from '../Transfer.ts';
 
-export async function restoreModels(path: string) {
+export function restoreModels(path: string) {
     return Promise.all([
         loadNetworkFromDB(Model.Policy),
         loadNetworkFromDB(Model.Value),
