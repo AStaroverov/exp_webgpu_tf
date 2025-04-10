@@ -5,11 +5,9 @@ import { predict } from '../train.ts';
 import { InputArrays } from '../../Common/InputArrays.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
-import { policyAgentState } from '../../Common/Database.ts';
-import { loadNetwork, Model } from '../../Models/Transfer.ts';
+import { loadNetworkFromDB, Model } from '../../Models/Transfer.ts';
 
 export class PlayerAgent {
-    private version = 0;
     private policyNetwork: tf.LayersModel = createPolicyNetwork();
 
     constructor() {
@@ -20,7 +18,7 @@ export class PlayerAgent {
     }
 
     getVersion() {
-        return this.version;
+        return this.policyNetwork.optimizer.iterations;
     }
 
     predict(state: InputArrays): { actions: Float32Array } {
@@ -40,18 +38,14 @@ export class PlayerAgent {
 
     private async load() {
         try {
-            const [agentState, policyNetwork] = await Promise.all([
-                policyAgentState.get(),
-                loadNetwork(Model.Policy),
-            ]);
+            const policyNetwork = await loadNetworkFromDB(Model.Policy);
 
-            if (!policyNetwork) {
-                return false;
-            }
+            if (!policyNetwork) return false;
 
-            this.version = agentState?.version ?? 0;
             this.policyNetwork = await setModelState(this.policyNetwork, policyNetwork);
+
             policyNetwork.dispose();
+
             console.log('[PlayerAgent] Models loaded successfully');
             return true;
         } catch (error) {

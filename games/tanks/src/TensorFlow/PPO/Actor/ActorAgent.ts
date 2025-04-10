@@ -5,21 +5,62 @@ import { CONFIG } from '../config.ts';
 import { act } from '../train.ts';
 import { InputArrays } from '../../Common/InputArrays.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
-import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
-import { policyAgentState, valueAgentState } from '../../Common/Database.ts';
 import { createPolicyNetwork, createValueNetwork } from '../../Models/Create.ts';
-import { loadNetwork, Model } from '../../Models/Transfer.ts';
+import { loadNetworkFromDB, Model } from '../../Models/Transfer.ts';
 import { disposeNetwork } from '../../Models/Utils.ts';
+import { learnerStateChannel } from '../../DB';
+import {
+    distinctUntilChanged,
+    filter,
+    firstValueFrom,
+    forkJoin,
+    map,
+    mergeMap,
+    Observable,
+    of,
+    retry,
+    scan,
+    shareReplay,
+    switchMap,
+    take,
+    tap,
+    timer,
+} from 'rxjs';
 
 export class ActorAgent {
+    private memory: Memory;
+
     private policyVersion = -1;
     private valueVersion = -1;
-    private memory: Memory;
+
     private policyNetwork?: tf.LayersModel;
     private valueNetwork?: tf.LayersModel;
 
+    private agentsState$: Observable<Record<Model, { version: number, training: boolean }>>;
+    private hasNewNetworks$: Observable<boolean>;
+    private backpressure$: Observable<boolean>;
+
     constructor() {
         this.memory = new Memory();
+
+        this.agentsState$ = learnerStateChannel.obs.pipe(
+            scan((acc, { model, version, training }) => {
+                acc[model] = { version, training };
+                return acc;
+            }, {} as Record<Model, { version: number, training: boolean }>),
+            filter((states) => states[Model.Policy] != null && states[Model.Value] != null),
+            shareReplay(1),
+        );
+        this.backpressure$ = this.agentsState$.pipe(
+            map((states) => states[Model.Policy].training || states[Model.Value].training),
+            switchMap((shouldWait) => shouldWait ? timer(3_000).pipe(map(() => true)) : of(false)),
+            distinctUntilChanged(),
+            shareReplay(1),
+        );
+        this.hasNewNetworks$ = this.agentsState$.pipe(
+            map((states) => states[Model.Policy].version > this.policyVersion && states[Model.Value].version > this.valueVersion),
+            shareReplay(1),
+        );
     }
 
     public static create() {
@@ -27,8 +68,6 @@ export class ActorAgent {
     }
 
     dispose() {
-        // this.policyNetwork?.dispose();
-        // this.valueNetwork?.dispose();
         this.disposeMemory();
     }
 
@@ -42,8 +81,10 @@ export class ActorAgent {
 
     readMemory() {
         return {
-            policyVersion: this.policyVersion,
-            valueVersion: this.valueVersion,
+            version: {
+                [Model.Policy]: this.policyVersion,
+                [Model.Value]: this.valueVersion,
+            },
             memories: this.memory.getBatch(CONFIG.gamma, CONFIG.lam),
         };
     }
@@ -68,47 +109,64 @@ export class ActorAgent {
         );
     }
 
-    async sync() {
-        while (!(await this.load())) {
-            await new Promise((resolve) => macroTasks.addTimeout(resolve, 1000));
-        }
+    public sync() {
+        return firstValueFrom(this.backpressure$.pipe(
+            filter((shouldWait) => !shouldWait),
+            mergeMap(() => this.hasNewNetworks$),
+            mergeMap((hasNew) => {
+                if (!hasNew) return of(this.shouldInitNetworks());
+                return this.load().pipe(map(() => false));
+            }),
+            filter((shouldWait) => !shouldWait),
+            retry({ delay: 1000 }),
+            take(1),
+        ));
     }
 
-    private async load() {
-        try {
-            const agentStates = await Promise.all([policyAgentState.get(), valueAgentState.get()]);
-            const policyVersion = agentStates[0]?.version ?? -1;
-            const valueVersion = agentStates[1]?.version ?? -1;
-            const isNewVersion = policyVersion > this.policyVersion && valueVersion > this.valueVersion;
+    private shouldInitNetworks() {
+        return this.policyNetwork == null || this.valueNetwork == null;
+    }
 
-            if (isNewVersion || this.policyNetwork == null || this.valueNetwork == null) {
-                const [valueNetwork, policyNetwork] = await Promise.all([
-                    loadNetwork(Model.Value),
-                    loadNetwork(Model.Policy),
-                ]);
-
+    private load() {
+        return forkJoin([loadNetworkFromDB(Model.Value), loadNetworkFromDB(Model.Policy)]).pipe(
+            mergeMap(([valueNetwork, policyNetwork]) => {
                 if (!valueNetwork || !policyNetwork) {
-                    console.warn('Could not load models');
-                    return false;
+                    throw new Error('Models not loaded');
                 }
 
-                this.policyVersion = policyVersion;
-                this.policyNetwork = await setModelState(this.policyNetwork ?? createPolicyNetwork(), policyNetwork);
-                this.valueVersion = valueVersion;
-                this.valueNetwork = await setModelState(this.valueNetwork ?? createValueNetwork(), valueNetwork);
+                return forkJoin([
+                    this.agentsState$.pipe(take(1)),
+                    setModelState(this.policyNetwork ?? createPolicyNetwork(), policyNetwork),
+                    setModelState(this.valueNetwork ?? createValueNetwork(), valueNetwork),
+                ]).pipe(
+                    tap({
+                        error: () => {
 
-                disposeNetwork(policyNetwork);
-                disposeNetwork(valueNetwork);
+                            this.resetNetworks();
+                        },
+                        finalize: () => {
+                            disposeNetwork(policyNetwork);
+                            disposeNetwork(valueNetwork);
+                        },
+                    }),
+                );
+            }),
+            tap(([agentsStates, policyNetwork, valueNetwork]) => {
+                this.policyVersion = agentsStates[Model.Policy].version;
+                this.policyNetwork = policyNetwork;
 
-                console.log('Models updated successfully');
-                return true;
-            } else {
-                console.log('Models reused successfully');
-                return true;
-            }
-        } catch (error) {
-            console.warn('Could not sync models:', error);
-            return false;
-        }
+                this.valueVersion = agentsStates[Model.Value].version;
+                this.valueNetwork = valueNetwork;
+            }),
+        );
+    }
+
+    private resetNetworks() {
+        this.policyNetwork?.dispose();
+        this.valueNetwork?.dispose();
+        this.policyNetwork = undefined;
+        this.valueNetwork = undefined;
+        this.policyVersion = -1;
+        this.valueVersion = -1;
     }
 }

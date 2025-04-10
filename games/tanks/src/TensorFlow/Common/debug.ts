@@ -8,7 +8,7 @@ import { getDrawState } from './uiUtils.ts';
 import { frameTasks } from '../../../../../lib/TasksScheduler/frameTasks.ts';
 import { CONFIG } from '../PPO/config.ts';
 import { PlayerManager } from '../PPO/Player/PlayerManager.ts';
-import { drawMetrics } from './Metrics.ts';
+import { drawMetrics } from '../Metrics/Browser';
 import { Team } from '../../ECS/Components/Team.ts';
 
 // Generate debug visualization using HTML and CSS

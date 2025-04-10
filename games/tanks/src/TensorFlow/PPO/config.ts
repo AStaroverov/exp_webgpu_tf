@@ -27,7 +27,6 @@ export type Config = {
         min: number,
         max: number,
     },
-    trustCoeff: number;
 
     batchSize: number;              // Batch size for worker
     miniBatchSize: number,
@@ -37,6 +36,7 @@ export type Config = {
     workerCount: number;                // Number of parallel workers
     // Training control
     savePath: string;
+    fsModelPath?: string;
 };
 
 // Default experiment configuration for PPO
@@ -64,7 +64,6 @@ export const DEFAULT_EXPERIMENT: Config = {
         min: 1e-6,
         max: 5e-3,
     },
-    trustCoeff: 0.1,
 
     batchSize: 256, // useless for appo
     miniBatchSize: 64,
@@ -73,9 +72,9 @@ export const DEFAULT_EXPERIMENT: Config = {
     episodeFrames: 1200, // usually produce 250 samples
     // Workers
     workerCount: 8,
-    reuseLimit: 1,
     // Training control
     savePath: 'APPO_v1',
+    fsModelPath: 'v6',
 };
 
 

@@ -1,7 +1,7 @@
 import * as tfvis from '@tensorflow/tfjs-vis';
-import { getAgentLog, setAgentLog } from './Database.ts';
 import { isObject, throttle } from 'lodash-es';
-import { metricsChannels } from './channels.ts';
+import { metricsChannels } from '../../Common/channels.ts';
+import { getAgentLog, setAgentLog } from './store.ts';
 
 type Point = { x: number, y: number };
 
@@ -276,7 +276,7 @@ function drawTab1() {
     });
 
     tfvis.render.linechart({ name: 'KL', tab }, {
-        values: [store.kl.toArray(), calculateMovingAverage(store.kl.toArray(), 30)],
+        values: [store.kl.toArray(), calculateMovingAverage(store.kl.toArray(), 50)],
         series: ['Avg', 'MA'],
     }, {
         xLabel: 'Version',

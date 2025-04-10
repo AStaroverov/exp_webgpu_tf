@@ -2,21 +2,20 @@ import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { ceil } from '../../../../../../lib/math.ts';
 import { createValueNetwork } from '../../Models/Create.ts';
-import { policyAgentState, valueAgentState, valueMemory, ValueMemoryBatch } from '../../Common/Database.ts';
 import { trainValueNetwork } from '../train.ts';
 import { CONFIG } from '../config.ts';
 import { batchShuffle, shuffle } from '../../../../../../lib/shuffle.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
-import { learningRateChannel, metricsChannels } from '../../Common/channels.ts';
+import { learningRateChannel, metricsChannels, newValueVersionChannel } from '../../Common/channels.ts';
 import { createInputTensors, sliceInputTensors } from '../../Common/InputTensors.ts';
 import { LearnerAgent } from '../LearnerAgent.ts';
-import { loadNetwork, Model, saveNetwork } from '../../Models/Transfer.ts';
+import { loadNetworkFromDB, Model, saveNetworkToDB } from '../../Models/Transfer.ts';
 
-export class ValueLearnerAgent extends LearnerAgent<{ version: number, memories: ValueMemoryBatch }> {
+export class ValueLearnerAgent extends LearnerAgent {
     lastTrainTimeStart: number | null = null;
 
     constructor() {
-        super(createValueNetwork);
+        super(createValueNetwork, Model.Value);
     }
 
     public async init() {
@@ -25,15 +24,12 @@ export class ValueLearnerAgent extends LearnerAgent<{ version: number, memories:
         return this;
     }
 
-    async collectBatches() {
-        this.batches.push(...await valueMemory.extractMemoryBatchList());
-    }
-
-    async train(batches = this.extractBatches()) {
+    public async train(batches = this.useBatches()) {
         const startTime = Date.now();
         const waitTime = startTime - (this.lastTrainTimeStart || startTime);
         this.lastTrainTimeStart = startTime;
 
+        const version = this.getVersion();
         const memories = batches.map(b => b.memories);
         const sumSize = memories.reduce((acc, b) => acc + b.size, 0);
         const states = memories.map(b => b.states).flat();
@@ -41,7 +37,7 @@ export class ValueLearnerAgent extends LearnerAgent<{ version: number, memories:
         const returns = new Float32Array(memories.map(b => b.returns).flat());
 
         const miniBatchCount = ceil(states.length / CONFIG.miniBatchSize);
-        console.log(`[Train]: Iteration ${ this.version }, Sum batch size: ${ sumSize }, Mini batch count: ${ miniBatchCount } by ${ CONFIG.miniBatchSize }`);
+        console.log(`[Train]: Iteration ${ version }, Sum batch size: ${ sumSize }, Mini batch count: ${ miniBatchCount } by ${ CONFIG.miniBatchSize }`);
 
         batchShuffle(
             states,
@@ -107,10 +103,8 @@ export class ValueLearnerAgent extends LearnerAgent<{ version: number, memories:
 
     public async upload() {
         try {
-            await Promise.all([
-                valueAgentState.set({ version: this.version }),
-                saveNetwork(this.network, Model.Value),
-            ]);
+            await saveNetworkToDB(this.network, Model.Value);
+            newValueVersionChannel.postMessage(this.getVersion());
 
             return true;
         } catch (error) {
@@ -121,25 +115,15 @@ export class ValueLearnerAgent extends LearnerAgent<{ version: number, memories:
 
     public async load() {
         try {
-            let [agentState, valueNetwork] = await Promise.all([
-                valueAgentState.get(),
-                loadNetwork(Model.Value),
-            ]);
+            let valueNetwork = await loadNetworkFromDB(Model.Value);
 
-            // after change to new 2 threads we won't have valueAgentState
-            if (valueNetwork != null && agentState == null) {
-                agentState = await policyAgentState.get();
-            }
+            if (!valueNetwork) return false;
 
-            if (!valueNetwork) {
-                return false;
-            }
-            this.version = agentState?.version ?? 0;
             this.network = await setModelState(this.network, valueNetwork);
-            console.log('Models loaded successfully');
 
             valueNetwork.dispose();
 
+            console.log('Models loaded successfully');
             return true;
         } catch (error) {
             console.warn('Could not load models, starting with new ones:', error);
@@ -148,13 +132,9 @@ export class ValueLearnerAgent extends LearnerAgent<{ version: number, memories:
     }
 
     private async startSyncLR() {
-        const policyState = await policyAgentState.get();
-        if (policyState) {
-            this.updateOptimizersLR(policyState.learningRate);
-        }
-        learningRateChannel.onmessage = (event) => {
+        learningRateChannel.addEventListener('message', (event) => {
             const lr = Number(event.data);
             isFinite(lr) && this.updateOptimizersLR(lr);
-        };
+        });
     }
 }
