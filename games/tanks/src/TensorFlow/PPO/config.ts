@@ -71,7 +71,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     warmupFrames: 100,
     episodeFrames: 1200, // usually produce 250 samples
     // Workers
-    workerCount: 1,
+    workerCount: 8,
     // Training control
     savePath: 'APPO_v1',
     fsModelPath: 'v6',
