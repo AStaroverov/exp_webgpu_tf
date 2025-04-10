@@ -12,7 +12,7 @@ import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { PolicyLearnerAgent } from './PolicyLearnerAgent.ts';
 import { ValueLearnerAgent } from './ValueLearnerAgent.ts';
 import { computeVTraceTargets } from '../train.ts';
-import { combineLatest, distinctUntilChanged, first, map, mergeMap, of, shareReplay } from 'rxjs';
+import { distinctUntilChanged, first, map, mergeMap, of, shareReplay, withLatestFrom } from 'rxjs';
 import { metricsChannels } from '../../Common/channels.ts';
 
 type ExtendedBatch = (Batch & {
@@ -36,11 +36,9 @@ export class LearnerAgent {
             shareReplay(1),
         );
 
-        combineLatest({
-            isTraining: isTraining$,
-            batch: memoryChannel.obs,
-        }).pipe(
-            mergeMap(({ isTraining, batch }) => {
+        memoryChannel.obs.pipe(
+            withLatestFrom(isTraining$),
+            mergeMap(([batch, isTraining]) => {
                 return isTraining ? of(batch) : isTraining$.pipe(first((v) => !v), map(() => batch));
             }),
         ).subscribe((batch) => {
@@ -58,7 +56,7 @@ export class LearnerAgent {
         });
     }
 
-    async train() {
+    public train() {
         const startTime = Date.now();
         const waitTime = startTime - (this.lastTrainTimeStart || startTime);
         this.lastTrainTimeStart = startTime;
@@ -74,6 +72,7 @@ export class LearnerAgent {
         const values = flatFloat32Array(batches.map(b => b.values));
         const returns = flatFloat32Array(batches.map(b => b.returns));
         const advantages = flatFloat32Array(batches.map(b => b.advantages));
+        debugger
 
         const miniBatchCount = ceil(states.length / CONFIG.miniBatchSize);
         const miniBatchIndexes = Array.from({ length: miniBatchCount }, (_, i) => i);
@@ -172,7 +171,7 @@ export class LearnerAgent {
         return this.batches.length >= CONFIG.workerCount / 2;
     }
 
-    public async healthCheck(): Promise<boolean> {
+    public healthCheck(): Promise<boolean> {
         return Promise.all([
             this.policyLA.healthCheck(),
             this.valueLA.healthCheck(),
