@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
-import { floor, mean } from '../../../../../../lib/math.ts';
+import { floor, max, mean, min } from '../../../../../../lib/math.ts';
 import { createPolicyNetwork } from '../../Models/Create.ts';
 import { computeKullbackLeibler, trainPolicyNetwork } from '../train.ts';
 import { CONFIG } from '../config.ts';
@@ -57,7 +57,7 @@ export class PolicyLearnerAgent extends BaseLearnerAgent {
                 tAdvantages.dispose();
             }
 
-            const klSize = floor(batchSize / 3);
+            const klSize = max(min(CONFIG.miniBatchSize, batchSize), floor(batchSize / 3));
             const klStart = randomRangeInt(0, batchSize - klSize);
             const kl = computeKullbackLeibler(
                 this.network,

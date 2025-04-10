@@ -66,7 +66,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     },
 
     batchSize: 256, // useless for appo
-    miniBatchSize: 64,
+    miniBatchSize: 128,
     // Training parameters
     warmupFrames: 100,
     episodeFrames: 1200, // usually produce 250 samples
