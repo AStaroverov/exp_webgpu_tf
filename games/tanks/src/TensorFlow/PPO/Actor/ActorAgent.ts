@@ -8,7 +8,7 @@ import { setModelState } from '../../Common/modelsCopy.ts';
 import { createPolicyNetwork, createValueNetwork } from '../../Models/Create.ts';
 import { loadNetworkFromDB, Model } from '../../Models/Transfer.ts';
 import { disposeNetwork } from '../../Models/Utils.ts';
-import { agentStateChannel } from '../../DB';
+import { learnerStateChannel } from '../../DB';
 import {
     filter,
     firstValueFrom,
@@ -40,7 +40,7 @@ export class ActorAgent {
     constructor() {
         this.memory = new Memory();
 
-        this.agentsState$ = agentStateChannel.obs.pipe(
+        this.agentsState$ = learnerStateChannel.obs.pipe(
             scan((acc, { model, version, training }) => {
 
                 acc[model] = { version, training };

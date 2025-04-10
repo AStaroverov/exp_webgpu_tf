@@ -3,7 +3,7 @@ import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
 import { EntityId } from 'bitecs';
 import { ValueLearnerAgent } from './ValueLearner/ValueLearnerAgent.ts';
 import { forceExitChannel } from '../Common/channels.ts';
-import { agentStateChannel } from '../DB';
+import { learnerStateChannel } from '../DB';
 
 export class LearnerManager {
     private tankRewards = new Map<EntityId, number>();
@@ -33,7 +33,7 @@ export class LearnerManager {
         await this.agent.init();
         await this.agent.save();
 
-        agentStateChannel.emit({
+        learnerStateChannel.emit({
             model: this.agent.modelName,
             version: this.agent.getVersion(),
             training: false,
@@ -63,7 +63,7 @@ export class LearnerManager {
 
     private async train() {
         try {
-            agentStateChannel.emit({
+            learnerStateChannel.emit({
                 model: this.agent.modelName,
                 version: this.agent.getVersion(),
                 training: true,
@@ -84,7 +84,7 @@ export class LearnerManager {
             await this.agent.load();
             return false;
         } finally {
-            agentStateChannel.emit({
+            learnerStateChannel.emit({
                 model: this.agent.modelName,
                 version: this.agent.getVersion(),
                 training: false,

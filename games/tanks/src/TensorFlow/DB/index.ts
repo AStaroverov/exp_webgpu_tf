@@ -4,8 +4,8 @@ import { Model } from '../Models/Transfer.ts';
 
 export const memoryChannel = createChannel<{ memories: Batch, version: Record<Model, number> }>('memory-channel');
 
-export const agentStateChannel = createChannel<{
+export const learnerStateChannel = createChannel<{
     model: Model,
     version: number,
     training: boolean,
-}>('agent-state-channel');
+}>('learner-state-channel');

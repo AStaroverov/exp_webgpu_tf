@@ -8,7 +8,6 @@ import { setModelState } from '../../Common/modelsCopy.ts';
 import { loadNetworkFromDB, Model } from '../../Models/Transfer.ts';
 
 export class PlayerAgent {
-    private version = 0;
     private policyNetwork: tf.LayersModel = createPolicyNetwork();
 
     constructor() {
@@ -19,7 +18,7 @@ export class PlayerAgent {
     }
 
     getVersion() {
-        return this.version;
+        return this.policyNetwork.optimizer.iterations;
     }
 
     predict(state: InputArrays): { actions: Float32Array } {
