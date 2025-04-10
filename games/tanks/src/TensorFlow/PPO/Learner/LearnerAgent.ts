@@ -72,7 +72,6 @@ export class LearnerAgent {
         const values = flatFloat32Array(batches.map(b => b.values));
         const returns = flatFloat32Array(batches.map(b => b.returns));
         const advantages = flatFloat32Array(batches.map(b => b.advantages));
-        debugger
 
         const miniBatchCount = ceil(states.length / CONFIG.miniBatchSize);
         const miniBatchIndexes = Array.from({ length: miniBatchCount }, (_, i) => i);
