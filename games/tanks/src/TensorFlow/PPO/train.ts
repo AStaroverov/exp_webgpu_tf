@@ -5,6 +5,10 @@ import { InputArrays, prepareRandomInputArrays } from '../Common/InputArrays.ts'
 import { createInputTensors } from '../Common/InputTensors.ts';
 import { Scalar } from '@tensorflow/tfjs-core/dist/tensor';
 import { random } from '../../../../../lib/random.ts';
+import { flatFloat32Array } from '../Common/flat.ts';
+import { normalize } from '../../../../../lib/math.ts';
+import { Batch } from '../Common/Memory.ts';
+import { CONFIG } from './config.ts';
 
 export function trainPolicyNetwork(
     network: tf.LayersModel,
@@ -94,48 +98,35 @@ export function computeKullbackLeibler(
     states: tf.Tensor[],
     actions: tf.Tensor,
     oldLogProb: tf.Tensor,
-): Promise<number> {
-    const value = tf.tidy(() => {
+): number {
+    return tf.tidy(() => {
         const predict = policyNetwork.predict(states) as tf.Tensor;
         const { mean, logStd } = parsePredict(predict);
         const std = logStd.exp();
         const newLogProbs = computeLogProb(actions, mean, std);
         const diff = oldLogProb.sub(newLogProbs);
         const kl = diff.mean();
-        return kl;
+        return kl.dataSync()[0];
     });
-
-    return value.data()
-        .then((v) => v[0])
-        .finally(() => value.dispose());
 }
 
 export function act(
     policyNetwork: tf.LayersModel,
-    valueNetwork: tf.LayersModel,
     state: InputArrays,
 ): {
     actions: Float32Array,
     logProb: number,
-    value: number
 } {
     const result = tf.tidy(() => {
-        const input = createInputTensors([state]);
-        const predict = policyNetwork.predict(input) as tf.Tensor;
-        const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
-        const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
-        const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
-        const clippedLogStd = outLogStd.clipByValue(-5, 0.2);
-        const std = clippedLogStd.exp();
+        const { mean, std } = getMeanAndStd(policyNetwork, 1, createInputTensors([state]));
+
         const noise = tf.randomNormal([ACTION_DIM]).mul(std);
-        const actions = outMean.add(noise);
-        const logProb = computeLogProb(actions, outMean, std);
-        const value = valueNetwork.predict(input) as tf.Tensor;
+        const actions = mean.add(noise);
+        const logProb = computeLogProb(actions, mean, std);
 
         return {
             actions: actions.dataSync() as Float32Array,
             logProb: logProb.dataSync()[0],
-            value: value.squeeze().dataSync()[0],
         };
     });
 
@@ -145,18 +136,13 @@ export function act(
     if (Number.isNaN(result.logProb)) {
         throw new Error('Invalid logProb data');
     }
-    if (Number.isNaN(result.value)) {
-        throw new Error('Invalid value data');
-    }
 
     return result;
 }
 
 export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { actions: Float32Array } {
     const result = tf.tidy(() => {
-        const predict = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
-        const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
-        const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
+        const { mean } = getMeanAndStd(policyNetwork, 1, createInputTensors([state]));
 
         // const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
         // const clippedLogStd = outLogStd.clipByValue(-5, 0.2);
@@ -166,7 +152,7 @@ export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { ac
 
         return {
             // actions: actions.dataSync() as Float32Array,
-            actions: outMean.dataSync() as Float32Array,
+            actions: mean.dataSync() as Float32Array,
         };
     });
 
@@ -209,6 +195,144 @@ function optimize(
 
         return value;
     });
+}
+
+function getMeanAndStd(
+    policyNetwork: tf.LayersModel,
+    batchSize: number,
+    input: tf.Tensor[],
+): {
+    mean: tf.Tensor,
+    std: tf.Tensor,
+} {
+    const raw = policyNetwork.predict(input) as tf.Tensor;
+    const mean = raw.slice([0, 0], [batchSize, ACTION_DIM]);   // ACTION_DIM штук
+    const outLogStd = raw.slice([0, ACTION_DIM], [batchSize, ACTION_DIM]);
+    const clippedLogStd = outLogStd.clipByValue(-5, 0.2);
+    const std = clippedLogStd.exp();
+    return { mean, std };
+}
+
+
+function computeRho(
+    logProbBehavior: tf.Tensor,
+    logProbCurrent: tf.Tensor,
+): tf.Tensor {
+    const logRho = logProbCurrent.sub(logProbBehavior);
+    return logRho.exp(); // ρ_t = π_current / π_behavior
+}
+
+export function computeVTraceTargets(
+    policyNetwork: tf.LayersModel,
+    valueNetwork: tf.LayersModel,
+    batch: Batch,
+    gamma: number = CONFIG.gamma,
+    clipRho: number = 1.0,
+    clipC: number = 1.0,
+): {
+    advantages: Float32Array,
+    returns: Float32Array,
+    values: Float32Array,
+} {
+    return tf.tidy(() => {
+        const input = createInputTensors(batch.states);
+        const { mean: meanCurrent, std: stdCurrent } = getMeanAndStd(policyNetwork, batch.size, input);
+        const actions = tf.tensor2d(flatFloat32Array(batch.actions), [batch.size, ACTION_DIM]);
+
+        const logProbCurrentTensor = computeLogProb(actions, meanCurrent, stdCurrent);
+        const logProbBehaviorTensor = tf.tensor1d(batch.logProbs);
+        const rhosTensor = computeRho(logProbBehaviorTensor, logProbCurrentTensor);
+        const valuesTensor = (valueNetwork.predict(input) as tf.Tensor).squeeze();
+
+        const values = (valuesTensor.dataSync()) as Float32Array;
+        const rhos = (rhosTensor.dataSync()) as Float32Array;
+
+        const returns = computeVTrace(
+            batch.rewards,
+            batch.dones,
+            values,
+            rhos,
+            gamma,
+            clipRho,
+            clipC,
+        );
+        // 8) Считаем advantages = vs[t] - values[t]
+        const advantages = returns.map((v, i) => v - values[i]);
+
+        return {
+            advantages: normalize(advantages),
+            returns: returns,
+            values: values, // просто удобство - чтобы не терять их
+        };
+    });
+}
+
+function computeVTrace(
+    rewards: number[],
+    dones: number[],
+    values: Float32Array,
+    rhos: Float32Array,
+    gamma: number,
+    clipRho: number,
+    clipC: number,
+): Float32Array {
+    const batchSize = values.length;
+    // Соберём nextValuesArr:
+    const nextValues = createNextValues(values, dones);
+    // 7) Делаем цикл V-trace
+    const vs = new Float32Array(batchSize);
+
+    // Инициализируем последний элемент
+    vs[batchSize - 1] = values[batchSize - 1];
+
+    for (let t = batchSize - 2; t >= 0; t--) {
+        // Если done[t], сбрасываем V-trace именно на valuesArr[t]
+        // (т.е. "начинаем" новый эпизод с самого себя)
+        if (dones[t] === 1) {
+            vs[t] = values[t];
+            continue;
+        }
+
+        // c_t = min(rho_t, clipC)
+        const c_t = Math.min(rhos[t], clipC);
+        // rho_t = min(rho_t, clipRho)
+        const rho_t = Math.min(rhos[t], clipRho);
+
+        // Если done[t], то discount=0, иначе gamma
+        const discount = dones[t] === 1 ? 0 : gamma;
+
+        // delta_t
+        const delta_t = rho_t * (
+            rewards[t]
+            + discount * nextValues[t]
+            - values[t]
+        );
+
+        // vs[t]
+        vs[t] = values[t]
+            + delta_t
+            + discount * c_t * (vs[t + 1] - nextValues[t]);
+    }
+
+    return vs;
+}
+
+function createNextValues(values: Float32Array, dones: number[]): Float32Array {
+    // Для nextValues, обычно делаем сдвиг на 1, но нужно аккуратно учесть done.
+    // Самый простой путь:
+    //   values[i+1] -> nextValue для шага i
+    //   Если done[i], то nextValue = 0
+
+    const batchSize = values.length;
+    const nextValues = new Float32Array(batchSize);
+    for (let i = 0; i < batchSize - 1; i++) {
+        // Если done на шаге i, то следующий state – терминальный => nextValue=0
+        nextValues[i] = dones[i] === 1 ? 0 : values[i + 1];
+    }
+    // Для последнего шага
+    nextValues[batchSize - 1] = dones[batchSize - 1] === 1 ? 0 : values[batchSize - 1];
+
+    return nextValues;
 }
 
 let randomInputTensors: tf.Tensor[];

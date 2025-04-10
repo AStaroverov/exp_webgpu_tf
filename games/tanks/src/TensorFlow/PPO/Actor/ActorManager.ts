@@ -107,7 +107,7 @@ export class ActorManager {
 
             if (shouldMemorize) {
                 for (const tankEid of activeTanks) {
-                    this.memorizeTankBehaviour(tankEid, width, height, frameCount, isLastMemorize ? 0.5 : 0.25, isLastMemorize);
+                    this.memorizeTankBehaviour(tankEid, width, height, frameCount, isLastMemorize ? 0.5 : 0.25);
                 }
             }
 
@@ -136,7 +136,6 @@ export class ActorManager {
                 input,
                 result.actions,
                 result.logProb,
-                result.value,
             );
         }
     }
@@ -147,7 +146,6 @@ export class ActorManager {
         height: number,
         step: number,
         rewardMultiplier: number,
-        isLast: boolean,
     ) {
         // Calculate reward
         const reward = calculateReward(
@@ -164,7 +162,6 @@ export class ActorManager {
             tankEid,
             reward * rewardMultiplier,
             isDone,
-            isLast,
         );
     }
 }

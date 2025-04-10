@@ -19,8 +19,7 @@ async function initSystem() {
 
     CONFIG.fsModelPath && await restoreModels(CONFIG.fsModelPath);
 
-    new Worker(new URL('./PolicyLearnerWorker.ts', import.meta.url), { type: 'module' });
-    new Worker(new URL('./ValueLearnerWorker.ts', import.meta.url), { type: 'module' });
+    new Worker(new URL('./LearnerWorker.ts', import.meta.url), { type: 'module' });
     Array.from(
         { length: CONFIG.workerCount },
         () => new Worker(new URL('./ActorWorker.ts', import.meta.url), { type: 'module' }),

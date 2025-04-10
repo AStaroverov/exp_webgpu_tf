@@ -6,9 +6,6 @@ export type Batch = {
     states: InputArrays[],
     actions: Float32Array[],
     logProbs: number[],
-    values: number[],
-    returns: number[],
-    advantages: number[],
     // meta
     size: number,
     dones: number[],
@@ -35,44 +32,41 @@ export class Memory {
         return Array.from(this.map.values());
     }
 
-    addFirstPart(id: number, state: InputArrays, action: Float32Array, logProb: number, value: number) {
+    addFirstPart(id: number, state: InputArrays, action: Float32Array, logProb: number) {
         if (!this.map.has(id)) {
             this.map.set(id, new SubMemory());
         }
-        this.map.get(id)!.addFirstPart(state, action, logProb, value);
+        this.map.get(id)!.addFirstPart(state, action, logProb);
     }
 
-    updateSecondPart(id: number, reward: number, done: boolean, isLast = false) {
+    updateSecondPart(id: number, reward: number, done: boolean) {
         if (!this.map.has(id)) {
             throw new Error('SubMemory not found');
         }
-        this.map.get(id)!.updateSecondPart(reward, done, isLast);
+        this.map.get(id)!.updateSecondPart(reward, done);
     }
 
-    getBatch(gamma: number, lam: number): Batch {
-        const batches = this.getBatches(gamma, lam);
+    getBatch(): Batch {
+        const batches = this.getBatches();
         const values = shuffle(Array.from(batches.values()));
         const batch = {
             size: values.reduce((acc, batch) => acc + batch.size, 0),
             states: (values.map(batch => batch.states)).flat(),
             actions: (values.map(batch => batch.actions)).flat(),
             logProbs: (values.map(batch => batch.logProbs)).flat(),
-            values: (values.map(batch => batch.values)).flat(),
             rewards: (values.map(batch => batch.rewards)).flat(),
             dones: (values.map(batch => batch.dones)).flat(),
-            returns: (values.map(batch => batch.returns)).flat(),
-            advantages: (values.map(batch => batch.advantages)).flat(),
         };
 
         return batch;
     }
 
     // Метод для получения батча для обучения
-    getBatches(gamma: number, lam: number) {
+    getBatches() {
         const batches = new Map<number, Batch>();
 
         this.map.forEach((subMemory, id) => {
-            batches.set(id, subMemory.getBatch(gamma, lam));
+            batches.set(id, subMemory.getBatch());
         });
 
         return batches;
@@ -88,7 +82,6 @@ export class SubMemory {
     private states: InputArrays[] = [];
     private actions: Float32Array[] = [];
     private logProbs: number[] = [];
-    private values: number[] = [];
     private rewards: number[] = [];
     private dones: boolean[] = [];
 
@@ -102,24 +95,20 @@ export class SubMemory {
         return this.states.length;
     }
 
-    addFirstPart(state: InputArrays, action: Float32Array, logProb: number, value: number) {
+    addFirstPart(state: InputArrays, action: Float32Array, logProb: number) {
+        this.collapseTmpData();
+
         this.states.push(state);
         this.actions.push(action);
         this.logProbs.push(logProb);
-        this.values.push(value);
     }
 
-    updateSecondPart(reward: number, done: boolean, isLast = false) {
+    updateSecondPart(reward: number, done: boolean) {
         this.tmpRewards.push(reward);
         this.tmpDones.push(done);
-
-        if (isLast) {
-            this.collapseTmpData();
-        }
     }
 
-    // Метод для получения батча для обучения
-    getBatch(gamma: number, lam: number): Batch {
+    getBatch(): Batch {
         if (this.states.length === 0) {
             throw new Error('Memory is empty');
         }
@@ -131,66 +120,20 @@ export class SubMemory {
             this.states.length = minLen;
             this.actions.length = minLen;
             this.logProbs.length = minLen;
-            this.values.length = minLen;
             this.rewards.length = minLen;
             this.dones.length = minLen;
         }
 
-        const { returns, advantages } = this.computeReturnsAndAdvantages(gamma, lam);
+        const dones = (this.dones.map(done => done ? 1.0 : 0.0));
+        dones[dones.length - 1] = 1.0;
 
         return {
             size: this.states.length,
             states: (this.states),
             actions: (this.actions),
             logProbs: (this.logProbs),
-            values: (this.values),
             rewards: (this.rewards),
             dones: (this.dones.map(done => done ? 1.0 : 0.0)),
-            returns: (returns),
-            advantages: (advantages),
-        };
-    }
-
-    computeReturnsAndAdvantages(gamma: number, lam: number, lastValue: number = 0) {
-        const n = this.states.length;
-        const returns: number[] = new Array(n).fill(0);
-        const advantages: number[] = new Array(n).fill(0);
-
-        const rewards = this.rewards;// .map(r => r * 0.25);
-        const values = this.values; // shape [n]
-
-        let adv = 0;
-        // bootstrap, если последний transition не done
-        let lastVal = lastValue; // Если done в конце, возьмём 0
-
-        // Идём с конца вперёд
-        for (let i = n - 1; i >= 0; i--) {
-            if (this.dones[i]) {
-                // если done, то обнуляем хвост
-                adv = 0;
-                lastVal = 0;
-            }
-            const delta = rewards[i]
-                + gamma * lastVal * (this.dones[i] ? 0 : 1)
-                - values[i];
-            adv = delta + gamma * lam * adv * (this.dones[i] ? 0 : 1);
-
-            advantages[i] = adv;
-            returns[i] = values[i] + adv;
-
-            lastVal = values[i];
-        }
-
-        // Нормализация advantages
-        const advMean = advantages.reduce((sum, val) => sum + val, 0) / n;
-        const advStd = Math.sqrt(
-            advantages.reduce((sum, val) => sum + Math.pow(val - advMean, 2), 0) / n,
-        );
-        const normalizedAdvantages = advantages.map(adv => (adv - advMean) / (advStd + 1e-8));
-
-        return {
-            returns: returns,
-            advantages: normalizedAdvantages,  // Возвращаем нормализованные advantages
         };
     }
 
@@ -198,7 +141,6 @@ export class SubMemory {
         this.states = [];
         this.actions = [];
         this.logProbs = [];
-        this.values = [];
         this.rewards = [];
         this.dones = [];
         this.tmpRewards = [];

@@ -7,10 +7,7 @@ if (globalThis.document != null) {
     };
 }
 
-export const learningRateChannel = new BroadcastChannel('learningRate');
-
-export const newPolicyVersionChannel = new BroadcastChannel('newPolicyVersion');
-export const newValueVersionChannel = new BroadcastChannel('newValueVersion');
+export const newModelVersionChannel = new BroadcastChannel('newVersion');
 
 export const metricsChannels = {
     rewards: new BroadcastChannel('rewards'),
