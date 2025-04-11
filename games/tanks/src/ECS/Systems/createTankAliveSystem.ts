@@ -38,6 +38,9 @@ export function createTankAliveSystem({ world } = GameDI) {
 function breakPartFromTank(eid: number, index: number) {
     const tankPartEid = Children.entitiesIds.get(eid, index);
     const jointPid = TankPart.jointPid[tankPartEid];
+
+    if (jointPid === 0) return;
+
     // remove joints
     removePhysicalJoint(jointPid);
     resetTankPartJointComponent(tankPartEid);
