@@ -9,7 +9,6 @@ import { loadNetworkFromDB, Model } from '../../Models/Transfer.ts';
 import { disposeNetwork } from '../../Models/Utils.ts';
 import { learnerStateChannel } from '../../DB';
 import {
-    distinctUntilChanged,
     filter,
     firstValueFrom,
     forkJoin,
@@ -19,8 +18,6 @@ import {
     of,
     retry,
     shareReplay,
-    startWith,
-    switchMap,
     take,
     tap,
     timer,
@@ -34,7 +31,7 @@ export class ActorAgent {
     private policyNetwork?: tf.LayersModel;
 
     private learnerState$: Observable<{ version: number, training: boolean }>;
-    private backpressure$: Observable<boolean>;
+    private backpressure$: Observable<unknown>;
     private hasNewNetworks$: Observable<boolean>;
 
     constructor() {
@@ -43,20 +40,13 @@ export class ActorAgent {
         this.learnerState$ = learnerStateChannel.obs.pipe(
             shareReplay(1),
         );
-        this.backpressure$ = this.learnerState$.pipe(
-            map((state) => state.training),
-            switchMap((shouldWait) => shouldWait ? timer(3_000).pipe(map(() => true)) : of(false)),
-            distinctUntilChanged(),
-            startWith(false),
-            shareReplay(1),
-        );
         this.hasNewNetworks$ = this.learnerState$.pipe(
             map((states) => states.version > this.version),
         );
+        this.backpressure$ = timer(1000);
 
         // hot observable
         this.learnerState$.subscribe();
-        this.backpressure$.subscribe();
     }
 
     public static create() {
@@ -102,7 +92,6 @@ export class ActorAgent {
 
     public sync() {
         return firstValueFrom(this.backpressure$.pipe(
-            filter((shouldWait) => !shouldWait),
             mergeMap(() => this.hasNewNetworks$),
             mergeMap((hasNew) => {
                 if (!hasNew) return of(this.shouldInitNetworks());
