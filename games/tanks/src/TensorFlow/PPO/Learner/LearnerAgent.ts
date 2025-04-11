@@ -167,7 +167,7 @@ export class LearnerAgent {
     }
 
     public hasEnoughBatches(): boolean {
-        return this.batches.length >= CONFIG.workerCount / 2;
+        return this.batches.reduce((acc, b) => acc + b.size, 0) >= CONFIG.batchSize;
     }
 
     public healthCheck(): Promise<boolean> {
@@ -228,7 +228,7 @@ export class LearnerAgent {
                 metricsChannels.policyLoss.postMessage(kl);
             }
 
-            for (let i = 0; i < CONFIG.epochs; i++) {
+            for (let i = 0; i < CONFIG.policyEpochs; i++) {
                 let valueLoss = 0;
                 for (let j = 0; j < miniBatchCount; j++) {
                     valueLoss += valueLossList[i * miniBatchCount + j];

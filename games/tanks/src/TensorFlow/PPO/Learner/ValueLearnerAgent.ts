@@ -7,6 +7,7 @@ import { shuffle } from '../../../../../../lib/shuffle.ts';
 import { sliceInputTensors } from '../../Common/InputTensors.ts';
 import { BaseLearnerAgent } from './BaseLearnerAgent.ts';
 import { Model } from '../../Models/Transfer.ts';
+import { floor } from '../../../../../../lib/math.ts';
 
 export class ValueLearnerAgent extends BaseLearnerAgent {
     constructor() {
@@ -22,9 +23,9 @@ export class ValueLearnerAgent extends BaseLearnerAgent {
     ) {
         const valueLossPromises: Promise<number>[] = [];
 
-        for (let i = 0; i < CONFIG.epochs; i++) {
+        for (let i = 0; i < CONFIG.valueEpochs; i++) {
             shuffle(miniBatchIndexes);
-            for (let j = 0; j < miniBatchIndexes.length; j++) {
+            for (let j = 0; j < floor(miniBatchIndexes.length / 2); j++) {
                 const index = miniBatchIndexes[j];
                 const start = index * CONFIG.miniBatchSize;
                 const end = Math.min(start + CONFIG.miniBatchSize, batchSize);

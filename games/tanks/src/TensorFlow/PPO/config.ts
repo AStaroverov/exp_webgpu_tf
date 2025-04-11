@@ -10,7 +10,8 @@ export type Config = {
     gamma: number;                  // Discount factor
     lam: number;                    // GAE lambda
     // PPO-specific parameters
-    epochs: number;                // Number of epochs to train on the same data
+    policyEpochs: number;                // Number of epochs to train on policy network
+    valueEpochs: number;                  // Number of epochs to train the value network
     clipRatio: number;             // Clipping ratio for PPO
     entropyCoeff: number;           // Entropy coefficient for encouraging exploration
 
@@ -47,7 +48,8 @@ export const DEFAULT_EXPERIMENT: Config = {
     gamma: 0.99,
     lam: 0.95,
     // PPO-specific parameters
-    epochs: 5,
+    policyEpochs: 4,
+    valueEpochs: 2,
     clipRatio: 0.2,
     entropyCoeff: 0.01,
 
@@ -65,13 +67,14 @@ export const DEFAULT_EXPERIMENT: Config = {
         max: 5e-3,
     },
 
-    batchSize: 256, // useless for appo
+    batchSize: 2048,
     miniBatchSize: 128,
+
     // Training parameters
     warmupFrames: 100,
     episodeFrames: 1200, // usually produce 250 samples
     // Workers
-    workerCount: 8,
+    workerCount: 6,
     // Training control
     savePath: 'APPO_v1',
     fsModelPath: 'v6',

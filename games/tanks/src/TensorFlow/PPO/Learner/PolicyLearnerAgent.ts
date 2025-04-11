@@ -32,7 +32,7 @@ export class PolicyLearnerAgent extends BaseLearnerAgent {
         const klList: number[] = [];
         const policyLossPromiseList: Promise<number>[] = [];
 
-        for (let i = 0; i < CONFIG.epochs; i++) {
+        for (let i = 0; i < CONFIG.policyEpochs; i++) {
             shuffle(miniBatchIndexes);
             for (let j = 0; j < miniBatchIndexes.length; j++) {
                 const index = miniBatchIndexes[j];
