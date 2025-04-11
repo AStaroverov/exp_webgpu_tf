@@ -19,6 +19,7 @@ import {
     of,
     retry,
     shareReplay,
+    startWith,
     switchMap,
     take,
     tap,
@@ -46,6 +47,8 @@ export class ActorAgent {
             map((state) => state.training),
             switchMap((shouldWait) => shouldWait ? timer(3_000).pipe(map(() => true)) : of(false)),
             distinctUntilChanged(),
+            startWith(false),
+            shareReplay(1),
         );
         this.hasNewNetworks$ = this.learnerState$.pipe(
             map((states) => states.version > this.version),
@@ -53,6 +56,7 @@ export class ActorAgent {
 
         // hot observable
         this.learnerState$.subscribe();
+        this.backpressure$.subscribe();
     }
 
     public static create() {
