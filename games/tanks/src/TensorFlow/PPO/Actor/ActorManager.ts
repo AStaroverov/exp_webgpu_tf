@@ -79,7 +79,7 @@ export class ActorManager {
                     frameCount++;
 
                     const currentTanks = game.getTanks();
-                    const isEpisodeDone = currentTanks.length <= 1 || frameCount > maxFramesCount;
+                    const isEpisodeDone = currentTanks.length <= 1 || game.getTeamsCount() <= 1 || frameCount > maxFramesCount;
 
                     const isWarmup = frameCount < warmupFramesCount;
                     const shouldAction = frameCount % shouldEvery === 0;
