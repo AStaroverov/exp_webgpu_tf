@@ -26,7 +26,7 @@ let REWARD_WEIGHTS = {
         SHOOTING_PENALTY: -0.1, // За стрельбу в пустоту
         SHOOTING_ALLIES_PENALTY: -1.0, // За стрельбу в союзников
     },
-    AIM_MULTIPLIER: 4.5,
+    AIM_MULTIPLIER: 4,
 
     MAP_BORDER: {
         BASE: 1,          // За нахождение в пределах карты
