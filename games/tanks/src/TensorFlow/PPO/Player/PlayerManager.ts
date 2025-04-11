@@ -92,7 +92,7 @@ export class PlayerManager {
                 frameCount++;
 
                 const currentTanks = game.getTanks();
-                const isEpisodeDone = currentTanks.length <= 1 || frameCount > maxFramesCount;
+                const isEpisodeDone = currentTanks.length <= 1 || game.getTeamsCount() <= 1 || frameCount > maxFramesCount;
 
                 const shouldAction = frameCount > 0 && frameCount % shouldEvery === 0;
                 const shouldReward = isEpisodeDone || (frameCount > 0 && frameCount % shouldEvery === 10);

@@ -6,6 +6,7 @@ import { TANK_RADIUS } from './consts.ts';
 import { TankController } from '../../ECS/Components/TankController.ts';
 import { query } from 'bitecs';
 import { TenserFlowDI } from '../../DI/TenserFlowDI.ts';
+import { Team } from '../../ECS/Components/Team.ts';
 
 const MAX_PADDING = 100;
 
@@ -68,5 +69,11 @@ export async function createBattlefield(tanksCount: number, withRender = false, 
         return [...query(GameDI.world, [Tank])];
     };
 
-    return { ...game, gameTick, getTanks };
+    const getTeamsCount = () => {
+        const tanks = getTanks();
+        const teamsCount = new Set(tanks.map(tankId => Team.id[tankId]));
+        return teamsCount.size;
+    };
+
+    return { ...game, gameTick, getTanks, getTeamsCount };
 }
