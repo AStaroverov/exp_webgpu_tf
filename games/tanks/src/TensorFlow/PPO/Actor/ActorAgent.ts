@@ -46,11 +46,9 @@ export class ActorAgent {
             map((state) => state.training),
             switchMap((shouldWait) => shouldWait ? timer(3_000).pipe(map(() => true)) : of(false)),
             distinctUntilChanged(),
-            shareReplay(1),
         );
         this.hasNewNetworks$ = this.learnerState$.pipe(
             map((states) => states.version > this.version),
-            shareReplay(1),
         );
 
         // hot observable
@@ -128,14 +126,15 @@ export class ActorAgent {
                     setModelState(this.policyNetwork ?? createPolicyNetwork(), policyNetwork),
                 ]).pipe(
                     tap({
+                        next: ([state, policyNetwork]) => {
+                            this.version = state.version;
+                            this.policyNetwork = policyNetwork;
+                            console.log('Models loaded successfully');
+                        },
                         error: () => this.resetNetworks(),
                         finalize: () => disposeNetwork(policyNetwork),
                     }),
                 );
-            }),
-            tap(([state, policyNetwork]) => {
-                this.version = state.version;
-                this.policyNetwork = policyNetwork;
             }),
         );
     }
