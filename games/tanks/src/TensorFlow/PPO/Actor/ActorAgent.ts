@@ -4,7 +4,7 @@ import { Memory } from '../../Common/Memory.ts';
 import { act } from '../train.ts';
 import { InputArrays } from '../../Common/InputArrays.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
-import { createPolicyNetwork, createValueNetwork } from '../../Models/Create.ts';
+import { createPolicyNetwork } from '../../Models/Create.ts';
 import { loadNetworkFromDB, Model } from '../../Models/Transfer.ts';
 import { disposeNetwork } from '../../Models/Utils.ts';
 import { learnerStateChannel } from '../../DB';
@@ -24,14 +24,13 @@ import {
     tap,
     timer,
 } from 'rxjs';
+import { fromPromise } from 'rxjs/internal/observable/innerFrom';
 
 export class ActorAgent {
     private memory: Memory;
 
     private version = -1;
-
     private policyNetwork?: tf.LayersModel;
-    private valueNetwork?: tf.LayersModel;
 
     private learnerState$: Observable<{ version: number, training: boolean }>;
     private backpressure$: Observable<boolean>;
@@ -86,7 +85,7 @@ export class ActorAgent {
         actions: Float32Array,
         logProb: number,
     } {
-        if (this.policyNetwork == null || this.valueNetwork == null) {
+        if (this.policyNetwork == null) {
             throw new Error('Models not loaded');
         }
 
@@ -111,46 +110,36 @@ export class ActorAgent {
     }
 
     private shouldInitNetworks() {
-        return this.policyNetwork == null || this.valueNetwork == null;
+        return this.policyNetwork == null;
     }
 
     private load() {
-        return forkJoin([loadNetworkFromDB(Model.Value), loadNetworkFromDB(Model.Policy)]).pipe(
-            mergeMap(([valueNetwork, policyNetwork]) => {
-                if (!valueNetwork || !policyNetwork) {
+        return fromPromise(loadNetworkFromDB(Model.Policy)).pipe(
+            mergeMap((policyNetwork) => {
+                if (!policyNetwork) {
                     throw new Error('Models not loaded');
                 }
 
                 return forkJoin([
                     this.learnerState$.pipe(take(1)),
                     setModelState(this.policyNetwork ?? createPolicyNetwork(), policyNetwork),
-                    setModelState(this.valueNetwork ?? createValueNetwork(), valueNetwork),
                 ]).pipe(
                     tap({
-                        error: () => {
-
-                            this.resetNetworks();
-                        },
-                        finalize: () => {
-                            disposeNetwork(policyNetwork);
-                            disposeNetwork(valueNetwork);
-                        },
+                        error: () => this.resetNetworks(),
+                        finalize: () => disposeNetwork(policyNetwork),
                     }),
                 );
             }),
-            tap(([state, policyNetwork, valueNetwork]) => {
+            tap(([state, policyNetwork]) => {
                 this.version = state.version;
                 this.policyNetwork = policyNetwork;
-                this.valueNetwork = valueNetwork;
             }),
         );
     }
 
     private resetNetworks() {
         this.policyNetwork?.dispose();
-        this.valueNetwork?.dispose();
         this.policyNetwork = undefined;
-        this.valueNetwork = undefined;
         this.version = -1;
     }
 }
