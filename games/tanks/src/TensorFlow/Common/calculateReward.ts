@@ -14,13 +14,13 @@ let REWARD_WEIGHTS = {
         HEALTH: 5, // за разницу в здоровье, может быть отрицательной
         KILLS: 5, // за разницу в количестве убитых врагов, может быть отрицательной
     },
-    TEAM_MULTIPLIER: 0.3,
+    TEAM_MULTIPLIER: 0.5,
 
     COMMON: {
         HEALTH: 1, // За хороший показатель здоровья
         SURVIVAL: 1, // За выживание в бою
     },
-    COMMON_MULTIPLIER: 0.3,
+    COMMON_MULTIPLIER: 0.5,
 
     AIM: {
         QUALITY: 1.0,       // За точное прицеливание
@@ -31,7 +31,7 @@ let REWARD_WEIGHTS = {
         SHOOTING_PENALTY: -0.1, // За стрельбу в пустоту
         SHOOTING_ALLIES_PENALTY: -1.0, // За стрельбу в союзников
     },
-    AIM_MULTIPLIER: 4,
+    AIM_MULTIPLIER: 3.5,
 
     MAP_BORDER: {
         BASE: 1,          // За нахождение в пределах карты
