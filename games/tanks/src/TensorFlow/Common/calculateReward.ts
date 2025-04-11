@@ -36,7 +36,7 @@ let REWARD_WEIGHTS = {
 
     DISTANCE_KEEPING: {
         BASE: 1.0,          // За поддержание дистанции
-        PENALTY: -0.3,      // За слишком близкое приближение
+        PENALTY: -0.8,      // За слишком близкое приближение
     },
     DISTANCE_KEEPING_MULTIPLIER: 1, // может быть несколько врагов
 
@@ -47,8 +47,8 @@ let REWARD_WEIGHTS = {
     MOVEMENT_MULTIPLIER: 1,
 
     BULLET_AVOIDANCE: {
-        PENALTY: -0.3,
-        AVOID_QUALITY: 0.3,
+        PENALTY: -0.4,
+        AVOID_QUALITY: 0.4,
     },
     BULLET_AVOIDANCE_MULTIPLIER: 1,
 };
