@@ -233,9 +233,9 @@ export function calculateReward(
 
 function calculateTeamHealth(prevBattleState: BattleState, currentBattleState: BattleState): number {
     const alliesDelta = (currentBattleState.alliesTotalHealth - prevBattleState.alliesTotalHealth)
-        / max(currentBattleState.alliesCount, prevBattleState.alliesCount);
+        / max(1, currentBattleState.alliesCount, prevBattleState.alliesCount);
     const enemiesDelta = (currentBattleState.enemiesTotalHealth - prevBattleState.enemiesTotalHealth)
-        / max(currentBattleState.enemiesCount, prevBattleState.enemiesCount);
+        / max(1, currentBattleState.enemiesCount, prevBattleState.enemiesCount);
     return alliesDelta - enemiesDelta;
 }
 
