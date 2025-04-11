@@ -22,6 +22,7 @@ export class PolicyLearnerAgent extends BaseLearnerAgent {
 
     public train(
         batchSize: number,
+        miniBatchCount: number,
         miniBatchIndexes: number[],
         tAllStates: tf.Tensor[],
         tAllActions: tf.Tensor2D,
@@ -34,7 +35,7 @@ export class PolicyLearnerAgent extends BaseLearnerAgent {
 
         for (let i = 0; i < CONFIG.policyEpochs; i++) {
             shuffle(miniBatchIndexes);
-            for (let j = 0; j < miniBatchIndexes.length; j++) {
+            for (let j = 0; j < miniBatchCount; j++) {
                 const index = miniBatchIndexes[j];
                 const start = index * CONFIG.miniBatchSize;
                 const end = Math.min(start + CONFIG.miniBatchSize, batchSize);

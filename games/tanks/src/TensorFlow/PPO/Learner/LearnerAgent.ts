@@ -1,7 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { ACTION_DIM } from '../../Common/consts.ts';
-import { ceil, max } from '../../../../../../lib/math.ts';
+import { ceil, floor, max } from '../../../../../../lib/math.ts';
 import { CONFIG } from '../config.ts';
 import { flatFloat32Array } from '../../Common/flat.ts';
 import { batchShuffle } from '../../../../../../lib/shuffle.ts';
@@ -73,8 +73,9 @@ export class LearnerAgent {
         const returns = flatFloat32Array(batches.map(b => b.returns));
         const advantages = flatFloat32Array(batches.map(b => b.advantages));
 
-        const miniBatchCount = ceil(states.length / CONFIG.miniBatchSize);
-        const miniBatchIndexes = Array.from({ length: miniBatchCount }, (_, i) => i);
+        const policyMiniBatchCount = ceil(states.length / CONFIG.miniBatchSize);
+        const valueMiniBatchCount = floor(policyMiniBatchCount / 2);
+        const miniBatchIndexes = Array.from({ length: policyMiniBatchCount }, (_, i) => i);
 
         batchShuffle(
             states,
@@ -92,10 +93,11 @@ export class LearnerAgent {
         const tAllReturns = tf.tensor1d(returns);
         const tAllAdvantages = tf.tensor1d(advantages);
 
-        console.log(`[Train]: Iteration ${ version }, Sum batch size: ${ batchSize }, Mini batch count: ${ miniBatchCount } by ${ CONFIG.miniBatchSize }`);
+        console.log(`[Train]: Iteration ${ version }, Sum batch size: ${ batchSize }, Mini batch count: ${ policyMiniBatchCount } by ${ CONFIG.miniBatchSize }`);
 
         const policyTrainMetrics = this.policyLA.train(
             batchSize,
+            policyMiniBatchCount,
             miniBatchIndexes,
             tAllStates,
             tAllActions,
@@ -109,6 +111,7 @@ export class LearnerAgent {
         );
         const valueTrainMetrics = this.valueLA.train(
             batchSize,
+            valueMiniBatchCount,
             miniBatchIndexes,
             tAllStates,
             tAllValues,
@@ -119,7 +122,8 @@ export class LearnerAgent {
             policyTrainMetrics,
             valueTrainMetrics,
             version,
-            miniBatchCount,
+            policyMiniBatchCount,
+            valueMiniBatchCount,
             batches,
             values,
             returns,
@@ -189,7 +193,8 @@ export class LearnerAgent {
             policyTrainMetrics,
             valueTrainMetrics,
             version,
-            miniBatchCount,
+            policyMiniBatchCount,
+            valueMiniBatchCount,
             batches,
             values,
             returns,
@@ -201,7 +206,8 @@ export class LearnerAgent {
             policyTrainMetrics: Promise<{ klList: number[], policyLossList: number[] }>,
             valueTrainMetrics: Promise<{ valueLossList: number[] }>,
             version: number,
-            miniBatchCount: number,
+            policyMiniBatchCount: number,
+            valueMiniBatchCount: number,
             batches: ExtendedBatch[],
             values: Float32Array,
             returns: Float32Array,
@@ -216,11 +222,11 @@ export class LearnerAgent {
                 const kl = klList[i];
 
                 let policyLoss = 0;
-                for (let j = 0; j < miniBatchCount; j++) {
-                    policyLoss += policyLossList[i * miniBatchCount + j];
+                for (let j = 0; j < policyMiniBatchCount; j++) {
+                    policyLoss += policyLossList[i * policyMiniBatchCount + j];
                 }
 
-                policyLoss /= miniBatchCount;
+                policyLoss /= policyMiniBatchCount;
 
                 console.log('[Train]: Epoch', i, 'KL:', kl, 'Policy loss:', policyLoss);
 
@@ -228,13 +234,13 @@ export class LearnerAgent {
                 metricsChannels.policyLoss.postMessage(kl);
             }
 
-            for (let i = 0; i < CONFIG.policyEpochs; i++) {
+            for (let i = 0; i < CONFIG.valueEpochs; i++) {
                 let valueLoss = 0;
-                for (let j = 0; j < miniBatchCount; j++) {
-                    valueLoss += valueLossList[i * miniBatchCount + j];
+                for (let j = 0; j < valueMiniBatchCount; j++) {
+                    valueLoss += valueLossList[i * valueMiniBatchCount + j];
                 }
 
-                valueLoss /= miniBatchCount;
+                valueLoss /= valueMiniBatchCount;
 
                 console.log('[Train]: Epoch', i, 'Value loss:', valueLoss);
 
