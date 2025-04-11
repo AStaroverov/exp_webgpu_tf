@@ -133,7 +133,7 @@ export class SubMemory {
             actions: (this.actions),
             logProbs: (this.logProbs),
             rewards: (this.rewards),
-            dones: (this.dones.map(done => done ? 1.0 : 0.0)),
+            dones,
         };
     }
 
