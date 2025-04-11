@@ -148,9 +148,11 @@ export class SubMemory {
     }
 
     private collapseTmpData() {
-        this.rewards.push(this.tmpRewards.reduce((acc, val) => acc + val, 0));
-        this.dones.push(this.tmpDones.reduce((acc, val) => acc && val, true));
-        this.tmpRewards = [];
-        this.tmpDones = [];
+        if (this.states.length > this.rewards.length) {
+            this.rewards.push(this.tmpRewards.reduce((acc, r) => acc + r, 0));
+            this.dones.push(this.tmpDones.reduce((acc, d) => acc || d, false));
+            this.tmpRewards = [];
+            this.tmpDones = [];
+        }
     }
 }
