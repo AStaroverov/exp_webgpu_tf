@@ -1,21 +1,26 @@
 import { RigidBodyState } from '../../ECS/Components/Physical.ts';
-import { BULLET_DANGER_SPEED } from '../../ECS/Systems/RL/createTankInputTensorSystem.ts';
+import { BattleState, BULLET_DANGER_SPEED, getBattleState } from '../../ECS/Systems/RL/createTankInputTensorSystem.ts';
 import { abs, centerStep, hypot, lerp, max, min, smoothstep } from '../../../../../lib/math.ts';
 import { TANK_RADIUS } from './consts.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 import { getTankHealth, Tank } from '../../ECS/Components/Tank.ts';
 import { TankController } from '../../ECS/Components/TankController.ts';
 import { CONFIG } from '../PPO/config.ts';
-import { isVerboseLog } from './uiUtils.ts';
 import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../ECS/Components/TankState.ts';
 
 // Константы для калибровки вознаграждений
 let REWARD_WEIGHTS = {
-    COMMON: {
-        HEALTH: 0.3, // За выживание
-        SURVIVAL: 1.0, // За выживание
+    TEAM: {
+        HEALTH: 5, // за разницу в здоровье, может быть отрицательной
+        KILLS: 5, // за разницу в количестве убитых врагов, может быть отрицательной
     },
-    COMMON_MULTIPLIER: 0.0,
+    TEAM_MULTIPLIER: 0.3,
+
+    COMMON: {
+        HEALTH: 1, // За хороший показатель здоровья
+        SURVIVAL: 1, // За выживание в бою
+    },
+    COMMON_MULTIPLIER: 0.3,
 
     AIM: {
         QUALITY: 1.0,       // За точное прицеливание
@@ -55,6 +60,12 @@ let REWARD_WEIGHTS = {
 
 // Структура для хранения многокомпонентных наград
 export interface ComponentRewards {
+    team: {
+        health: number;
+        kills: number;
+        total: number;
+    };
+
     common: {
         health: number;
         survival: number;
@@ -88,6 +99,7 @@ export interface ComponentRewards {
 function initializeRewards(): ComponentRewards {
     return {
         common: { health: 0, survival: 0, total: 0 },
+        team: { health: 0, kills: 0, total: 0 },
         aim: { accuracy: 0, distance: 0, total: 0, shootDecision: 0 },
         positioning: {
             movement: 0,
@@ -117,6 +129,12 @@ export function calculateReward(
     const beforePredictEnemiesData = TankInputTensor.enemiesData.getBatch(tankEid);
     const beforePredictAlliesData = TankInputTensor.alliesData.getBatch(tankEid);
     const beforePredictBulletsData = TankInputTensor.bulletsData.getBatch(tankEid);
+    const beforePredictBattleState: BattleState = {
+        alliesCount: TankInputTensor.alliesCount[tankEid],
+        alliesTotalHealth: TankInputTensor.alliesTotalHealth[tankEid],
+        enemiesCount: TankInputTensor.enemiesCount[tankEid],
+        enemiesTotalHealth: TankInputTensor.enemiesTotalHealth[tankEid],
+    };
 
     // -- current state --
     const moveDir = TankController.move[tankEid];
@@ -128,13 +146,18 @@ export function calculateReward(
     // const currentShootings = TankController.shoot[tankEid] > 0;
     // const currentEnemies = findTankEnemies(tankEid);
     // const currentDangerBullets = findTankDangerBullets(tankEid);
+    const currentBattleState = getBattleState(tankEid);
 
     // Инициализируем пустую структуру наград
     const rewards = initializeRewards();
 
+    // 0. Награда за здоровье команды
+    rewards.team.health = REWARD_WEIGHTS.TEAM.HEALTH * calculateTeamHealth(beforePredictBattleState, currentBattleState);
+    rewards.team.kills = REWARD_WEIGHTS.TEAM.KILLS * calculateTeamKills(beforePredictBattleState, currentBattleState);
+
     // 1. Награда за выживание
-    rewards.common.health = currentHealth * REWARD_WEIGHTS.COMMON.HEALTH;
-    rewards.common.survival = (step / CONFIG.episodeFrames) * REWARD_WEIGHTS.COMMON.SURVIVAL;
+    rewards.common.health = REWARD_WEIGHTS.COMMON.HEALTH * currentHealth;
+    rewards.common.survival = REWARD_WEIGHTS.COMMON.SURVIVAL * (step / CONFIG.episodeFrames);
 
     // 2. Расчет награды за нахождение в пределах карты
     rewards.positioning.mapAwareness = calculateTankMapAwarenessReward(
@@ -190,6 +213,7 @@ export function calculateReward(
     );
 
     // Рассчитываем итоговые значения
+    rewards.team.total = REWARD_WEIGHTS.TEAM_MULTIPLIER * (rewards.team.health + rewards.team.kills);
     rewards.common.total = REWARD_WEIGHTS.COMMON_MULTIPLIER
         * (rewards.common.health + rewards.common.survival);
     rewards.aim.total = REWARD_WEIGHTS.AIM_MULTIPLIER
@@ -202,16 +226,23 @@ export function calculateReward(
             + rewards.positioning.mapAwareness * REWARD_WEIGHTS.MAP_BORDER_MULTIPLIER);
 
     // Общая итоговая награда
-    rewards.totalReward = rewards.common.total + rewards.aim.total + rewards.positioning.total;
-
-    isVerboseLog() &&
-    console.log(`[Reward] Tank ${ tankEid }
-    aim: ${ rewards.aim.total }
-    move: ${ rewards.positioning.total }
-    total: ${ rewards.totalReward }
-    `);
+    rewards.totalReward = rewards.team.total + rewards.common.total + rewards.aim.total + rewards.positioning.total;
 
     return rewards;
+}
+
+function calculateTeamHealth(prevBattleState: BattleState, currentBattleState: BattleState): number {
+    const alliesDelta = (currentBattleState.alliesTotalHealth - prevBattleState.alliesTotalHealth)
+        / max(currentBattleState.alliesCount, prevBattleState.alliesCount);
+    const enemiesDelta = (currentBattleState.enemiesTotalHealth - prevBattleState.enemiesTotalHealth)
+        / max(currentBattleState.enemiesCount, prevBattleState.enemiesCount);
+    return alliesDelta - enemiesDelta;
+}
+
+function calculateTeamKills(prevBattleState: BattleState, currentBattleState: BattleState): number {
+    const alliesDelta = (currentBattleState.alliesCount - prevBattleState.alliesCount);
+    const enemiesDelta = (currentBattleState.enemiesCount - prevBattleState.enemiesCount);
+    return alliesDelta - enemiesDelta;
 }
 
 /**

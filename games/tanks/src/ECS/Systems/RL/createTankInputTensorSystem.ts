@@ -25,20 +25,20 @@ export function createTankInputTensorSystem({ world } = GameDI) {
 
         for (let i = 0; i < tankEids.length; i++) {
             const tankEid = tankEids[i];
-            const tankTeamId = Team.id[tankEid];
 
-            // Set battlefield data
-            const allEnemiesEids = tankEids.filter((eid) => Team.id[eid] !== tankTeamId);
-            const allEnemiesHealth = allEnemiesEids.reduce((acc, eid) => acc + getTankHealth(eid), 0);
-            const allAlliesEids = tankEids.filter((eid) => Team.id[eid] === tankTeamId);
-            const allAlliesHealth = allAlliesEids.reduce((acc, eid) => acc + getTankHealth(eid), 0);
+            const {
+                enemiesCount,
+                enemiesTotalHealth,
+                alliesCount,
+                alliesTotalHealth,
+            } = getBattleState(tankEid, tankEids);
 
             TankInputTensor.setBattlefieldData(
                 tankEid,
-                allEnemiesEids.length,
-                allEnemiesHealth,
-                allAlliesEids.length,
-                allAlliesHealth,
+                enemiesCount,
+                enemiesTotalHealth,
+                alliesCount,
+                alliesTotalHealth,
             );
 
             // Set tank data
@@ -104,6 +104,29 @@ export function createTankInputTensorSystem({ world } = GameDI) {
                 );
             }
         }
+    };
+}
+
+
+export type BattleState = {
+    enemiesCount: number,
+    enemiesTotalHealth: number,
+    alliesCount: number,
+    alliesTotalHealth: number,
+};
+
+export function getBattleState(tankEid: EntityId, tankEids = query(GameDI.world, [Tank, TankInputTensor, RigidBodyState])): BattleState {
+    const tankTeamId = Team.id[tankEid];
+    const allEnemiesEids = tankEids.filter((eid) => Team.id[eid] !== tankTeamId);
+    const allEnemiesHealth = allEnemiesEids.reduce((acc, eid) => acc + getTankHealth(eid), 0);
+    const allAlliesEids = tankEids.filter((eid) => Team.id[eid] === tankTeamId);
+    const allAlliesHealth = allAlliesEids.reduce((acc, eid) => acc + getTankHealth(eid), 0);
+
+    return {
+        enemiesCount: allEnemiesEids.length,
+        enemiesTotalHealth: allEnemiesHealth,
+        alliesCount: allAlliesEids.length,
+        alliesTotalHealth: allAlliesHealth,
     };
 }
 
