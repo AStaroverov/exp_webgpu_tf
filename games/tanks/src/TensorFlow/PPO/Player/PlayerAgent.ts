@@ -6,6 +6,7 @@ import { InputArrays } from '../../Common/InputArrays.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
 import { loadNetworkFromDB, Model } from '../../Models/Transfer.ts';
+import { disposeNetwork } from '../../Models/Utils.ts';
 
 export class PlayerAgent {
     private policyNetwork: tf.LayersModel = createPolicyNetwork();
@@ -32,8 +33,6 @@ export class PlayerAgent {
         while (!(await this.load())) {
             await new Promise((resolve) => macroTasks.addTimeout(resolve, 1000));
         }
-
-        return this;
     }
 
     private async load() {
@@ -44,7 +43,7 @@ export class PlayerAgent {
 
             this.policyNetwork = await setModelState(this.policyNetwork, policyNetwork);
 
-            policyNetwork.dispose();
+            disposeNetwork(policyNetwork);
 
             console.log('[PlayerAgent] Models loaded successfully');
             return true;

@@ -74,7 +74,7 @@ export function createCommonDebug(manager: PlayerManager) {
 
 export function createTanksDebug(manager: PlayerManager) {
     return () => {
-        if (!getDrawState()) return '';
+        if (!getDrawState() || !GameDI.world) return '';
 
         let result = '';
         const tanksEids = query(GameDI.world, [Tank, RigidBodyState]);
