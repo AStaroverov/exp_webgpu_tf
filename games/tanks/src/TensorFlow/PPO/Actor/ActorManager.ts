@@ -67,7 +67,8 @@ export class ActorManager {
     private runGameLoop(game: Game) {
         return new Promise(resolve => {
             const shouldEvery = 12;
-            const warmupFrames = CONFIG.warmupFrames - (CONFIG.warmupFrames % shouldEvery);
+            const warmupFramesCount = CONFIG.warmupFrames - (CONFIG.warmupFrames % shouldEvery);
+            const maxFramesCount = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
             const width = GameDI.width;
             const height = GameDI.height;
             let frameCount = 0;
@@ -77,7 +78,7 @@ export class ActorManager {
                 for (let i = 0; i < 100; i++) {
                     frameCount++;
 
-                    const isWarmup = frameCount < warmupFrames;
+                    const isWarmup = frameCount < warmupFramesCount;
                     const shouldAction = frameCount % shouldEvery === 0;
                     const shouldMemorize =
                         (frameCount - 4) % shouldEvery === 0
@@ -107,7 +108,9 @@ export class ActorManager {
                         }
                     }
 
-                    if (activeTanks.length <= 1) {
+                    const isEpisodeDone = activeTanks.length <= 1 || frameCount > maxFramesCount;
+
+                    if (isEpisodeDone) {
                         stop();
                         resolve(null);
                         break;
