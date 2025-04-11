@@ -52,6 +52,9 @@ export class ActorAgent {
             map((states) => states.version > this.version),
             shareReplay(1),
         );
+
+        // hot observable
+        this.learnerState$.subscribe();
     }
 
     public static create() {

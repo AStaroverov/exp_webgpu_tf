@@ -28,10 +28,10 @@ export class ActorManager {
     async start() {
         while (true) {
             try {
+                await new Promise(resolve => macroTasks.addTimeout(resolve, 100));
                 await this.runEpisode();
             } catch (error) {
                 console.error('Error during episode:', error);
-                await new Promise(resolve => macroTasks.addTimeout(resolve, 1000));
             }
         }
     }
@@ -56,16 +56,16 @@ export class ActorManager {
         const [game] = await this.beforeEpisode();
 
         try {
-            await this.runGameLoop(game);
+            this.runGameLoop(game);
             this.afterEpisode();
-            this.cleanupEpisode(game);
         } catch (error) {
-            this.cleanupEpisode(game);
             throw error;
+        } finally {
+            this.cleanupEpisode(game);
         }
     }
 
-    private async runGameLoop(game: Game) {
+    private runGameLoop(game: Game) {
         const shouldEvery = 12;
         const maxWarmupFrames = CONFIG.warmupFrames - (CONFIG.warmupFrames % shouldEvery);
         const maxEpisodeFrames = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
@@ -75,10 +75,6 @@ export class ActorManager {
         let activeTanks: number[] = [];
 
         for (let i = 0; i <= maxEpisodeFrames; i++) {
-            if (frameCount % 100 === 0) {
-                await new Promise(resolve => macroTasks.addTimeout(resolve, 0));
-            }
-
             frameCount++;
 
             const isWarmup = frameCount < maxWarmupFrames;
