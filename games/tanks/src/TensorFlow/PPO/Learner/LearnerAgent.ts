@@ -12,8 +12,8 @@ import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { PolicyLearnerAgent } from './PolicyLearnerAgent.ts';
 import { ValueLearnerAgent } from './ValueLearnerAgent.ts';
 import { computeVTraceTargets } from '../train.ts';
-import { distinctUntilChanged, first, map, mergeMap, of, shareReplay, withLatestFrom } from 'rxjs';
-import { metricsChannels } from '../../Common/channels.ts';
+import { distinctUntilChanged, filter, first, map, mergeMap, of, shareReplay, withLatestFrom } from 'rxjs';
+import { forceExitChannel, metricsChannels } from '../../Common/channels.ts';
 
 type ExtendedBatch = (Batch & {
     version: number,
@@ -41,18 +41,29 @@ export class LearnerAgent {
             mergeMap(([batch, isTraining]) => {
                 return isTraining ? of(batch) : isTraining$.pipe(first((v) => !v), map(() => batch));
             }),
-        ).subscribe((batch) => {
-            const delta = this.getVersion() - batch.version;
+            map((batch): null | ExtendedBatch => {
+                const delta = this.getVersion() - batch.version;
 
-            if (delta > 3_000) {
-                console.warn('[Train]: skipping batch with diff', delta);
-            } else {
-                this.batches.push({
-                    version: batch.version,
-                    ...batch.memories,
-                    ...computeVTraceTargets(this.policyLA.network, this.valueLA.network, batch.memories),
-                });
-            }
+                if (delta > 3_000) {
+                    console.warn('[Train]: skipping batch with diff', delta);
+                    return null;
+                } else {
+                    return {
+                        version: batch.version,
+                        ...batch.memories,
+                        ...computeVTraceTargets(this.policyLA.network, this.valueLA.network, batch.memories),
+                    };
+                }
+            }),
+            filter((batch): batch is ExtendedBatch => batch !== null),
+        ).subscribe({
+            next: (batch) => {
+                this.batches.push(batch);
+            },
+            error: (error) => {
+                console.error('Batch processing:', error);
+                forceExitChannel.postMessage(null);
+            },
         });
     }
 
