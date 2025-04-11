@@ -28,7 +28,6 @@ export class ActorManager {
     async start() {
         while (true) {
             try {
-                await new Promise(resolve => macroTasks.addTimeout(resolve, 100));
                 await this.runEpisode();
             } catch (error) {
                 console.error('Error during episode:', error);
@@ -56,7 +55,7 @@ export class ActorManager {
         const [game] = await this.beforeEpisode();
 
         try {
-            this.runGameLoop(game);
+            await this.runGameLoop(game);
             this.afterEpisode();
         } catch (error) {
             throw error;
@@ -66,51 +65,57 @@ export class ActorManager {
     }
 
     private runGameLoop(game: Game) {
-        const shouldEvery = 12;
-        const maxWarmupFrames = CONFIG.warmupFrames - (CONFIG.warmupFrames % shouldEvery);
-        const maxEpisodeFrames = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
-        const width = GameDI.width;
-        const height = GameDI.height;
-        let frameCount = 0;
-        let activeTanks: number[] = [];
+        return new Promise(resolve => {
+            const shouldEvery = 12;
+            const warmupFrames = CONFIG.warmupFrames - (CONFIG.warmupFrames % shouldEvery);
+            const width = GameDI.width;
+            const height = GameDI.height;
+            let frameCount = 0;
+            let activeTanks: number[] = [];
 
-        for (let i = 0; i <= maxEpisodeFrames; i++) {
-            frameCount++;
+            const stop = macroTasks.addInterval(() => {
+                for (let i = 0; i < 100; i++) {
+                    frameCount++;
 
-            const isWarmup = frameCount < maxWarmupFrames;
-            const shouldAction = frameCount % shouldEvery === 0;
-            const shouldMemorize =
-                (frameCount - 4) % shouldEvery === 0
-                || (frameCount - 7) % shouldEvery === 0
-                || (frameCount - 10) % shouldEvery === 0;
-            const isLastMemorize = frameCount > 10 && (frameCount - 10) % shouldEvery === 0;
-            TenserFlowDI.shouldCollectState = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
+                    const isWarmup = frameCount < warmupFrames;
+                    const shouldAction = frameCount % shouldEvery === 0;
+                    const shouldMemorize =
+                        (frameCount - 4) % shouldEvery === 0
+                        || (frameCount - 7) % shouldEvery === 0
+                        || (frameCount - 10) % shouldEvery === 0;
+                    const isLastMemorize = frameCount > 10 && (frameCount - 10) % shouldEvery === 0;
+                    TenserFlowDI.shouldCollectState = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
 
-            if (shouldAction) {
-                activeTanks = game.getTanks();
+                    if (shouldAction) {
+                        activeTanks = game.getTanks();
 
-                for (const tankEid of activeTanks) {
-                    this.updateTankBehaviour(tankEid, width, height, isWarmup);
+                        for (const tankEid of activeTanks) {
+                            this.updateTankBehaviour(tankEid, width, height, isWarmup);
+                        }
+                    }
+
+                    // Execute game tick
+                    game.gameTick(TICK_TIME_SIMULATION * (isWarmup ? 2 : 1));
+
+                    if (isWarmup) {
+                        continue;
+                    }
+
+                    if (shouldMemorize) {
+                        for (const tankEid of activeTanks) {
+                            this.memorizeTankBehaviour(tankEid, width, height, frameCount, isLastMemorize ? 0.5 : 0.25);
+                        }
+                    }
+
+                    if (activeTanks.length <= 1) {
+                        stop();
+                        resolve(null);
+                        break;
+                    }
                 }
-            }
+            }, 1);
+        });
 
-            // Execute game tick
-            game.gameTick(TICK_TIME_SIMULATION * (isWarmup ? 2 : 1));
-
-            if (isWarmup) {
-                continue;
-            }
-
-            if (shouldMemorize) {
-                for (const tankEid of activeTanks) {
-                    this.memorizeTankBehaviour(tankEid, width, height, frameCount, isLastMemorize ? 0.5 : 0.25);
-                }
-            }
-
-            if (activeTanks.length <= 1) {
-                break;
-            }
-        }
     }
 
     private updateTankBehaviour(
