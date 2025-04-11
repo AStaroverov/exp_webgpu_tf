@@ -187,7 +187,7 @@ export function createTankRR(options: {
     // const [tankEid, tankPid] = createRectangleRR(mutatedOptions);
     const [tankEid, tankPid] = createRectangleRigidGroup(mutatedOptions);
     addComponent(world, tankEid, Tank);
-    Tank.bulletSpeed[tankEid] = 300;
+    Tank.bulletSpeed[tankEid] = 400;
     Tank.bulletStartPosition.set(tankEid, 0, 0);
     Tank.bulletStartPosition.set(tankEid, 1, -PADDING * 9);
     Tank.initialPartsCount[tankEid] = PARTS_COUNT;

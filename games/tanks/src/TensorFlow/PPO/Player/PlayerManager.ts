@@ -82,24 +82,27 @@ export class PlayerManager {
     private async runGameLoop(game: Game) {
         return new Promise(resolve => {
             const shouldEvery = 12;
-            const maxEpisodeFrames = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
+            const maxFramesCount = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
             const width = GameDI.width;
             const height = GameDI.height;
             let frameCount = 0;
-            let activeTanks: number[] = [];
+            let regardedTanks: number[] = [];
 
             const stop = frameTasks.addInterval(() => {
                 frameCount++;
 
+                const currentTanks = game.getTanks();
+                const isEpisodeDone = currentTanks.length <= 1 || frameCount > maxFramesCount;
+
                 const shouldAction = frameCount > 0 && frameCount % shouldEvery === 0;
-                const shouldReward = frameCount > 0 && frameCount % shouldEvery === 10;
+                const shouldReward = isEpisodeDone || (frameCount > 0 && frameCount % shouldEvery === 10);
                 TenserFlowDI.shouldCollectState = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
 
                 if (shouldAction) {
-                    activeTanks = game.getTanks();
+                    regardedTanks = currentTanks;
 
                     // Update each tank's RL controller
-                    for (const tankEid of activeTanks) {
+                    for (const tankEid of regardedTanks) {
                         this.updateTankBehaviour(tankEid, width, height);
                     }
                 }
@@ -107,15 +110,13 @@ export class PlayerManager {
                 game.gameTick(TICK_TIME_SIMULATION);
 
                 if (shouldReward) {
-                    for (const tankEid of activeTanks) {
+                    for (const tankEid of regardedTanks) {
                         this.tankRewards.set(
                             tankEid,
                             calculateReward(tankEid, GameDI.width, GameDI.height, frameCount).totalReward,
                         );
                     }
                 }
-
-                const isEpisodeDone = frameCount > shouldEvery && (activeTanks.length <= 1 || frameCount > maxEpisodeFrames);
 
                 if (isEpisodeDone || !getDrawState()) {
                     stop();

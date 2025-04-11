@@ -72,25 +72,29 @@ export class ActorManager {
             const width = GameDI.width;
             const height = GameDI.height;
             let frameCount = 0;
-            let activeTanks: number[] = [];
+            let regardedTanks: number[] = [];
 
             const stop = macroTasks.addInterval(() => {
                 for (let i = 0; i < 100; i++) {
                     frameCount++;
 
+                    const currentTanks = game.getTanks();
+                    const isEpisodeDone = currentTanks.length <= 1 || frameCount > maxFramesCount;
+
                     const isWarmup = frameCount < warmupFramesCount;
                     const shouldAction = frameCount % shouldEvery === 0;
-                    const shouldMemorize =
-                        (frameCount - 4) % shouldEvery === 0
-                        || (frameCount - 7) % shouldEvery === 0
-                        || (frameCount - 10) % shouldEvery === 0;
-                    const isLastMemorize = frameCount > 10 && (frameCount - 10) % shouldEvery === 0;
+                    const shouldMemorize = isEpisodeDone
+                        || ((frameCount - 4) % shouldEvery === 0
+                            || (frameCount - 7) % shouldEvery === 0
+                            || (frameCount - 10) % shouldEvery === 0);
+                    const isLastMemorize = isEpisodeDone
+                        || (frameCount > 10 && (frameCount - 10) % shouldEvery === 0);
                     TenserFlowDI.shouldCollectState = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
 
                     if (shouldAction) {
-                        activeTanks = game.getTanks();
+                        regardedTanks = currentTanks;
 
-                        for (const tankEid of activeTanks) {
+                        for (const tankEid of regardedTanks) {
                             this.updateTankBehaviour(tankEid, width, height, isWarmup);
                         }
                     }
@@ -103,12 +107,10 @@ export class ActorManager {
                     }
 
                     if (shouldMemorize) {
-                        for (const tankEid of activeTanks) {
+                        for (const tankEid of regardedTanks) {
                             this.memorizeTankBehaviour(tankEid, width, height, frameCount, isLastMemorize ? 0.5 : 0.25);
                         }
                     }
-
-                    const isEpisodeDone = activeTanks.length <= 1 || frameCount > maxFramesCount;
 
                     if (isEpisodeDone) {
                         stop();
