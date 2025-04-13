@@ -1,17 +1,17 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
-import { floor, max, mean, min } from '../../../../../../lib/math.ts';
+import { floor, mean } from '../../../../../../lib/math.ts';
 import { createPolicyNetwork } from '../../Models/Create.ts';
 import { computeKullbackLeibler, trainPolicyNetwork } from '../train.ts';
 import { CONFIG } from '../config.ts';
-import { shuffle } from '../../../../../../lib/shuffle.ts';
 import { RingBuffer } from 'ring-buffer-ts';
 import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
 import { forceExitChannel } from '../../Common/channels.ts';
-import { sliceInputTensors } from '../../Common/InputTensors.ts';
+import { createInputTensors } from '../../Common/InputTensors.ts';
 import { BaseLearnerAgent } from './BaseLearnerAgent.ts';
 import { Model } from '../../Models/Transfer.ts';
-import { randomRangeInt } from '../../../../../../lib/random.ts';
+import { InputArrays } from '../../Common/InputArrays.ts';
+import { flatTypedArray } from '../../Common/flat.ts';
 
 export class PolicyLearnerAgent extends BaseLearnerAgent {
     private klHistory = new RingBuffer<number>(50);
@@ -21,49 +21,51 @@ export class PolicyLearnerAgent extends BaseLearnerAgent {
     }
 
     public train(
-        batchSize: number,
-        miniBatchCount: number,
-        miniBatchIndexes: number[],
-        tAllStates: tf.Tensor[],
-        tAllActions: tf.Tensor2D,
-        tAllLogProbs: tf.Tensor1D,
-        tAllAdvantages: tf.Tensor1D,
+        batchCount: number,
+        getLearnBatch: (batchSize: number) => {
+            states: InputArrays[],
+            actions: Float32Array[],
+            logProbs: number[],
+            advantages: number[],
+            // IS for prioritized replay
+            weights: number[],
+        },
+        getKlBatch: (batchSize: number) => {
+            states: InputArrays[],
+            actions: Float32Array[],
+            logProbs: number[],
+        },
         onUpdateLR: (lr: number) => void,
-    ) {
+    ): {
+        klList: number[],
+        policyLossList: number[],
+    } {
+        const klSize = floor(CONFIG.miniBatchSize / 3);
         const klList: number[] = [];
-        const policyLossPromiseList: Promise<number>[] = [];
+        const policyLossList: number[] = [];
 
         for (let i = 0; i < CONFIG.policyEpochs; i++) {
-            shuffle(miniBatchIndexes);
-            for (let j = 0; j < miniBatchCount; j++) {
-                const index = miniBatchIndexes[j];
-                const start = index * CONFIG.miniBatchSize;
-                const end = Math.min(start + CONFIG.miniBatchSize, batchSize);
-                const size = end - start;
-                const tStates = sliceInputTensors(tAllStates, start, size);
-                const tActions = tAllActions.slice([start, 0], [size, -1]);
-                const tLogProbs = tAllLogProbs.slice([start], [size]);
-                const tAdvantages = tAllAdvantages.slice([start], [size]);
+            for (let j = 0; j < batchCount; j++) {
+                const mBatch = getLearnBatch(CONFIG.miniBatchSize);
 
-                policyLossPromiseList.push(trainPolicyNetwork(
-                    this.network,
-                    tStates, tActions, tLogProbs, tAdvantages,
-                    CONFIG.clipRatio, CONFIG.entropyCoeff, CONFIG.clipNorm,
-                ));
-
-                tStates.forEach(t => t.dispose());
-                tActions.dispose();
-                tLogProbs.dispose();
-                tAdvantages.dispose();
+                policyLossList.push(
+                    tf.tidy(() => trainPolicyNetwork(
+                        this.network,
+                        createInputTensors(mBatch.states),
+                        tf.tensor2d(flatTypedArray(mBatch.actions), [mBatch.actions.length, mBatch.actions[0].length]),
+                        tf.tensor1d(mBatch.logProbs),
+                        tf.tensor1d(mBatch.advantages),
+                        tf.tensor1d(mBatch.weights),
+                        CONFIG.clipRatio, CONFIG.entropyCoeff, CONFIG.clipNorm,
+                    )));
             }
 
-            const klSize = max(min(CONFIG.miniBatchSize, batchSize), floor(batchSize / 3));
-            const klStart = randomRangeInt(0, batchSize - klSize);
+            const lkBatch = getKlBatch(klSize);
             const kl = computeKullbackLeibler(
                 this.network,
-                sliceInputTensors(tAllStates, klStart, klSize),
-                tAllActions.slice([klStart, 0], [klSize, -1]),
-                tAllLogProbs.slice([klStart], [klSize]),
+                createInputTensors(lkBatch.states),
+                tf.tensor2d(flatTypedArray(lkBatch.actions), [lkBatch.actions.length, lkBatch.actions[0].length]),
+                tf.tensor1d(lkBatch.logProbs),
             );
 
             if (kl > CONFIG.klConfig.max) {
@@ -82,12 +84,10 @@ export class PolicyLearnerAgent extends BaseLearnerAgent {
         );
         onUpdateLR(lr);
 
-        return Promise.all(policyLossPromiseList).then((policyLossList) => {
-            return {
-                klList: klList,
-                policyLossList: policyLossList,
-            };
-        });
+        return {
+            klList: klList,
+            policyLossList: policyLossList,
+        };
     }
 }
 

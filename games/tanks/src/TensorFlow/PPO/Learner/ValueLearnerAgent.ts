@@ -3,10 +3,10 @@ import '@tensorflow/tfjs-backend-wasm';
 import { createValueNetwork } from '../../Models/Create.ts';
 import { trainValueNetwork } from '../train.ts';
 import { CONFIG } from '../config.ts';
-import { shuffle } from '../../../../../../lib/shuffle.ts';
-import { sliceInputTensors } from '../../Common/InputTensors.ts';
+import { createInputTensors } from '../../Common/InputTensors.ts';
 import { BaseLearnerAgent } from './BaseLearnerAgent.ts';
 import { Model } from '../../Models/Transfer.ts';
+import { InputArrays } from '../../Common/InputArrays.ts';
 
 export class ValueLearnerAgent extends BaseLearnerAgent {
     constructor() {
@@ -14,42 +14,38 @@ export class ValueLearnerAgent extends BaseLearnerAgent {
     }
 
     public train(
-        batchSize: number,
-        miniBatchCount: number,
-        miniBatchIndexes: number[],
-        tAllStates: tf.Tensor[],
-        tAllValues: tf.Tensor1D,
-        tAllReturns: tf.Tensor1D,
-    ) {
-        const valueLossPromises: Promise<number>[] = [];
+        batchCount: number,
+        getRandomBatch: (batchSize: number) => {
+            states: InputArrays[],
+            values: number[],
+            returns: number[],
+        },
+    ): {
+        valueLossList: number[],
+    } {
+
+        const valueLossList: number[] = [];
 
         for (let i = 0; i < CONFIG.valueEpochs; i++) {
-            shuffle(miniBatchIndexes);
-            for (let j = 0; j < miniBatchCount; j++) {
-                const index = miniBatchIndexes[j];
-                const start = index * CONFIG.miniBatchSize;
-                const end = Math.min(start + CONFIG.miniBatchSize, batchSize);
-                const size = end - start;
-                const tStates = sliceInputTensors(tAllStates, start, size);
-                const tValues = tAllValues.slice([start], [size]);
-                const tReturns = tAllReturns.slice([start], [size]);
+            for (let j = 0; j < batchCount; j++) {
+                const rmBatch = getRandomBatch(CONFIG.miniBatchSize);
 
-                valueLossPromises.push(trainValueNetwork(
-                    this.network,
-                    tStates, tReturns, tValues,
-                    CONFIG.clipRatio * 2, CONFIG.clipNorm,
-                ));
-
-                tStates.forEach(t => t.dispose());
-                tValues.dispose();
-                tReturns.dispose();
+                valueLossList.push(
+                    tf.tidy(() =>
+                        trainValueNetwork(
+                            this.network,
+                            createInputTensors(rmBatch.states),
+                            tf.tensor1d(rmBatch.returns),
+                            tf.tensor1d(rmBatch.values),
+                            CONFIG.clipRatio * 2, CONFIG.clipNorm,
+                        ),
+                    ),
+                );
             }
         }
 
-        return Promise.all(valueLossPromises).then((valueLossList) => {
-            return {
-                valueLossList,
-            };
-        });
+        return {
+            valueLossList: valueLossList,
+        };
     }
 }

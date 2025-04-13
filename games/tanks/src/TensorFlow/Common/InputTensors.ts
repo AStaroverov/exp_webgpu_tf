@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { InputArrays } from './InputArrays.ts';
-import { flatFloat32Array } from './flat.ts';
+import { flatTypedArray } from './flat.ts';
 import {
     ALLY_FEATURES_DIM,
     ALLY_SLOTS,
@@ -18,34 +18,34 @@ export function createInputTensors(
     //[battleInput, tankInput, enemiesInput, enemiesMaskInput, alliesInput, alliesMaskInput, bulletsInput, bulletsMaskInput],
     return [
         // battle
-        tf.tensor2d(flatFloat32Array(state.map((s) => s.battleFeatures)), [state.length, BATTLE_FEATURES_DIM]),
+        tf.tensor2d(flatTypedArray(state.map((s) => s.battleFeatures)), [state.length, BATTLE_FEATURES_DIM]),
         // tank
-        tf.tensor2d(flatFloat32Array(state.map((s) => s.tankFeatures)), [state.length, TANK_FEATURES_DIM]),
+        tf.tensor2d(flatTypedArray(state.map((s) => s.tankFeatures)), [state.length, TANK_FEATURES_DIM]),
         // enemies + mask
         tf.tensor3d(
-            flatFloat32Array(state.map((s) => s.enemiesFeatures)),
+            flatTypedArray(state.map((s) => s.enemiesFeatures)),
             [state.length, ENEMY_SLOTS, ENEMY_FEATURES_DIM],
         ),
         tf.tensor2d(
-            flatFloat32Array(state.map((s) => s.enemiesMask)),
+            flatTypedArray(state.map((s) => s.enemiesMask)),
             [state.length, ENEMY_SLOTS],
         ),
         // allies + mask
         tf.tensor3d(
-            flatFloat32Array(state.map((s) => s.alliesFeatures)),
+            flatTypedArray(state.map((s) => s.alliesFeatures)),
             [state.length, ALLY_SLOTS, ALLY_FEATURES_DIM],
         ),
         tf.tensor2d(
-            flatFloat32Array(state.map((s) => s.alliesMask)),
+            flatTypedArray(state.map((s) => s.alliesMask)),
             [state.length, ALLY_SLOTS],
         ),
         // bullets + mask
         tf.tensor3d(
-            flatFloat32Array(state.map((s) => s.bulletsFeatures)),
+            flatTypedArray(state.map((s) => s.bulletsFeatures)),
             [state.length, BULLET_SLOTS, BULLET_FEATURES_DIM],
         ),
         tf.tensor2d(
-            flatFloat32Array(state.map((s) => s.bulletsMask)),
+            flatTypedArray(state.map((s) => s.bulletsMask)),
             [state.length, BULLET_SLOTS],
         ),
     ];

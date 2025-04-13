@@ -1,11 +1,7 @@
-import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
-import { ACTION_DIM } from '../../Common/consts.ts';
 import { ceil, floor, max } from '../../../../../../lib/math.ts';
 import { CONFIG } from '../config.ts';
-import { flatFloat32Array } from '../../Common/flat.ts';
-import { batchShuffle } from '../../../../../../lib/shuffle.ts';
-import { createInputTensors } from '../../Common/InputTensors.ts';
+import { flatTypedArray } from '../../Common/flat.ts';
 import { learnerStateChannel, memoryChannel } from '../../DB';
 import { Batch } from '../../Common/Memory.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
@@ -14,13 +10,18 @@ import { ValueLearnerAgent } from './ValueLearnerAgent.ts';
 import { computeVTraceTargets } from '../train.ts';
 import { distinctUntilChanged, filter, first, map, mergeMap, of, shareReplay, withLatestFrom } from 'rxjs';
 import { forceExitChannel, metricsChannels } from '../../Common/channels.ts';
+import { PrioritizedReplayBuffer } from '../../Common/PrioritizedReplayBuffer.ts';
+import { shuffle } from '../../../../../../lib/shuffle.ts';
 
 type ExtendedBatch = (Batch & {
     version: number,
     values: Float32Array,
     returns: Float32Array,
+    tdErrors: Float32Array,
     advantages: Float32Array
 });
+
+const getIndexes = (length: number) => Array.from({ length }, (_, i) => i);
 
 export class LearnerAgent {
     private policyLA = new PolicyLearnerAgent();
@@ -74,82 +75,61 @@ export class LearnerAgent {
 
         const version = this.getVersion();
         const batches = this.batches;
+        const batch = getFinalBatch(batches);
         this.batches = [];
 
-        const batchSize = batches.reduce((acc, b) => acc + b.size, 0);
-        const states = batches.map(b => b.states).flat();
-        const actions = batches.map(b => b.actions).flat();
-        const logProbs = new Float32Array(batches.map(b => b.logProbs).flat());
-        const values = flatFloat32Array(batches.map(b => b.values));
-        const returns = flatFloat32Array(batches.map(b => b.returns));
-        const advantages = flatFloat32Array(batches.map(b => b.advantages));
-
-        const policyMiniBatchCount = ceil(states.length / CONFIG.miniBatchSize);
+        const prb = new PrioritizedReplayBuffer(batch.tdErrors);
+        const policyMiniBatchCount = ceil(batch.size / CONFIG.miniBatchSize);
         const valueMiniBatchCount = floor(policyMiniBatchCount / 2);
-        const miniBatchIndexes = Array.from({ length: policyMiniBatchCount }, (_, i) => i);
 
-        batchShuffle(
-            states,
-            actions,
-            logProbs,
-            values,
-            returns,
-            advantages,
-        );
+        console.log(`[Train]: Iteration ${ version },
+         Sum batch size: ${ batch.size },
+         Mini batch count: ${ policyMiniBatchCount }/${ valueMiniBatchCount } by ${ CONFIG.miniBatchSize }`);
 
-        const tAllStates = createInputTensors(states);
-        const tAllActions = tf.tensor2d(flatFloat32Array(actions), [actions.length, ACTION_DIM]);
-        const tAllLogProbs = tf.tensor1d(logProbs);
-        const tAllValues = tf.tensor1d(values);
-        const tAllReturns = tf.tensor1d(returns);
-        const tAllAdvantages = tf.tensor1d(advantages);
-
-        console.log(`[Train]: Iteration ${ version }, Sum batch size: ${ batchSize }, Mini batch count: ${ policyMiniBatchCount } by ${ CONFIG.miniBatchSize }`);
-
+        // policy
+        const getPriorPolicyBatch = (batchSize: number) => {
+            const { indices, weights } = prb.sample(batchSize);
+            return Object.assign(createPolicyBatch(batch, indices), { weights });
+        };
+        const getRandomKLBatch = (batchSize: number) => {
+            return createKlBatch(batch, shuffle(getIndexes(batchSize)));
+        };
         const policyTrainMetrics = this.policyLA.train(
-            batchSize,
             policyMiniBatchCount,
-            miniBatchIndexes,
-            tAllStates,
-            tAllActions,
-            tAllLogProbs,
-            tAllAdvantages,
+            getPriorPolicyBatch,
+            getRandomKLBatch,
             (lr) => {
                 this.policyLA.updateLR(lr);
                 this.valueLA.updateLR(lr);
                 metricsChannels.lr.postMessage(lr);
             },
         );
+
+        // value
+        const getValueRandomBatch = (batchSize: number) => {
+            return createValueBatch(batch, shuffle(getIndexes(batchSize)));
+        };
         const valueTrainMetrics = this.valueLA.train(
-            batchSize,
             valueMiniBatchCount,
-            miniBatchIndexes,
-            tAllStates,
-            tAllValues,
-            tAllReturns,
+            getValueRandomBatch,
         );
 
-        this.logMetrics({
-            policyTrainMetrics,
-            valueTrainMetrics,
-            version,
-            policyMiniBatchCount,
-            valueMiniBatchCount,
-            batches,
-            values,
-            returns,
-            advantages,
-            waitTime,
-            startTime,
-            endTime: Date.now(),
-        });
+        const endTime = Date.now();
 
-        tAllStates.forEach(t => t.dispose());
-        tAllActions.dispose();
-        tAllLogProbs.dispose();
-        tAllAdvantages.dispose();
-        tAllValues.dispose();
-        tAllReturns.dispose();
+        macroTasks.addTimeout(() => {
+            this.logMetrics({
+                klList: policyTrainMetrics.klList,
+                policyLossList: policyTrainMetrics.policyLossList,
+                valueLossList: valueTrainMetrics.valueLossList,
+                version,
+                policyMiniBatchCount,
+                valueMiniBatchCount,
+                batches,
+                waitTime,
+                startTime,
+                endTime,
+            });
+        }, 0);
     }
 
     public async init() {
@@ -201,75 +181,123 @@ export class LearnerAgent {
 
     private logMetrics(
         {
-            policyTrainMetrics,
-            valueTrainMetrics,
+            klList,
+            policyLossList,
+            valueLossList,
             version,
             policyMiniBatchCount,
             valueMiniBatchCount,
             batches,
-            values,
-            returns,
-            advantages,
             waitTime,
             startTime,
             endTime,
         }: {
-            policyTrainMetrics: Promise<{ klList: number[], policyLossList: number[] }>,
-            valueTrainMetrics: Promise<{ valueLossList: number[] }>,
+            klList: number[],
+            policyLossList: number[],
+            valueLossList: number[],
             version: number,
             policyMiniBatchCount: number,
             valueMiniBatchCount: number,
             batches: ExtendedBatch[],
-            values: Float32Array,
-            returns: Float32Array,
-            advantages: Float32Array,
             waitTime: number,
             startTime: number,
             endTime: number,
         },
     ) {
-        Promise.all([policyTrainMetrics, valueTrainMetrics]).then(([{ klList, policyLossList }, { valueLossList }]) => {
-            for (let i = 0; i < klList.length; i++) {
-                const kl = klList[i];
 
-                let policyLoss = 0;
-                for (let j = 0; j < policyMiniBatchCount; j++) {
-                    policyLoss += policyLossList[i * policyMiniBatchCount + j];
-                }
+        for (let i = 0; i < klList.length; i++) {
+            const kl = klList[i];
 
-                policyLoss /= policyMiniBatchCount;
-
-                console.log('[Train]: Epoch', i, 'KL:', kl, 'Policy loss:', policyLoss);
-
-                metricsChannels.kl.postMessage(kl);
-                metricsChannels.policyLoss.postMessage(kl);
+            let policyLoss = 0;
+            for (let j = 0; j < policyMiniBatchCount; j++) {
+                policyLoss += policyLossList[i * policyMiniBatchCount + j];
             }
 
-            for (let i = 0; i < CONFIG.valueEpochs; i++) {
-                let valueLoss = 0;
-                for (let j = 0; j < valueMiniBatchCount; j++) {
-                    valueLoss += valueLossList[i * valueMiniBatchCount + j];
-                }
+            policyLoss /= policyMiniBatchCount;
 
-                valueLoss /= valueMiniBatchCount;
+            console.log('[Train]: Epoch', i, 'KL:', kl, 'Policy loss:', policyLoss);
 
-                console.log('[Train]: Epoch', i, 'Value loss:', valueLoss);
+            metricsChannels.kl.postMessage(kl);
+            metricsChannels.policyLoss.postMessage(kl);
+        }
 
-                metricsChannels.valueLoss.postMessage(valueLoss);
+        for (let i = 0; i < CONFIG.valueEpochs; i++) {
+            let valueLoss = 0;
+            for (let j = 0; j < valueMiniBatchCount; j++) {
+                valueLoss += valueLossList[i * valueMiniBatchCount + j];
             }
 
-            for (const batch of batches) {
-                metricsChannels.versionDelta.postMessage(version - batch.version);
-                metricsChannels.batchSize.postMessage(batch.size);
-            }
+            valueLoss /= valueMiniBatchCount;
 
-            metricsChannels.rewards.postMessage(batches.map(b => b.rewards).flat());
-            metricsChannels.values.postMessage(values);
-            metricsChannels.returns.postMessage(returns);
-            metricsChannels.advantages.postMessage(advantages);
-            metricsChannels.waitTime.postMessage(waitTime / 1000);
-            metricsChannels.trainTime.postMessage((endTime - startTime) / 1000);
-        });
+            console.log('[Train]: Epoch', i, 'Value loss:', valueLoss);
 
+            metricsChannels.valueLoss.postMessage(valueLoss);
+        }
+        
+        for (const batch of batches) {
+            metricsChannels.versionDelta.postMessage(version - batch.version);
+            metricsChannels.batchSize.postMessage(batch.size);
+            metricsChannels.values.postMessage(batch.values);
+            metricsChannels.returns.postMessage(batch.returns);
+            metricsChannels.advantages.postMessage(batch.advantages);
+        }
+
+        metricsChannels.rewards.postMessage(batches.map(b => b.rewards).flat());
+        metricsChannels.waitTime.postMessage(waitTime / 1000);
+        metricsChannels.trainTime.postMessage((endTime - startTime) / 1000);
     }
 }
+
+type FinalBatch = Omit<ExtendedBatch, 'version' | 'dones' | 'rewards'>;
+
+function getFinalBatch(batches: ExtendedBatch[]): FinalBatch {
+    return {
+        size: batches.reduce((acc, b) => acc + b.size, 0),
+        states: batches.map(b => b.states).flat(),
+        actions: batches.map(b => b.actions).flat(),
+        logProbs: flatTypedArray(batches.map(b => b.logProbs)),
+        values: flatTypedArray(batches.map(b => b.values)),
+        returns: flatTypedArray(batches.map(b => b.returns)),
+        tdErrors: flatTypedArray(batches.map(b => b.tdErrors)),
+        advantages: flatTypedArray(batches.map(b => b.advantages)),
+    };
+}
+
+function createPolicyBatch(batch: FinalBatch, indices: number[]) {
+    const states = indices.map(i => batch.states[i]);
+    const actions = indices.map(i => batch.actions[i]);
+    const logProbs = indices.map(i => batch.logProbs[i]);
+    const advantages = indices.map(i => batch.advantages[i]);
+
+    return {
+        states: states,
+        actions: actions,
+        logProbs: (logProbs),
+        advantages: (advantages),
+    };
+}
+
+function createKlBatch(batch: FinalBatch, indices: number[]) {
+    const states = indices.map(i => batch.states[i]);
+    const actions = indices.map(i => batch.actions[i]);
+    const logProbs = indices.map(i => batch.logProbs[i]);
+
+    return {
+        states: states,
+        actions: actions,
+        logProbs: (logProbs),
+    };
+}
+
+function createValueBatch(batch: FinalBatch, indices: number[]) {
+    const states = indices.map(i => batch.states[i]);
+    const values = indices.map(i => batch.values[i]);
+    const returns = indices.map(i => batch.returns[i]);
+
+    return {
+        states: states,
+        values: (values),
+        returns: (returns),
+    };
+}
+

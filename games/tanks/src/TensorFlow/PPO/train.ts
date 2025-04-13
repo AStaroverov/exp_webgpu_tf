@@ -5,7 +5,7 @@ import { InputArrays, prepareRandomInputArrays } from '../Common/InputArrays.ts'
 import { createInputTensors } from '../Common/InputTensors.ts';
 import { Scalar } from '@tensorflow/tfjs-core/dist/tensor';
 import { random } from '../../../../../lib/random.ts';
-import { flatFloat32Array } from '../Common/flat.ts';
+import { flatTypedArray } from '../Common/flat.ts';
 import { normalize } from '../../../../../lib/math.ts';
 import { Batch } from '../Common/Memory.ts';
 import { CONFIG } from './config.ts';
@@ -16,11 +16,12 @@ export function trainPolicyNetwork(
     actions: tf.Tensor,      // [batchSize, actionDim]
     oldLogProbs: tf.Tensor,  // [batchSize]
     advantages: tf.Tensor,   // [batchSize]
+    weights: tf.Tensor,      // [batchSize], IS weights
     clipRatio: number,
     entropyCoeff: number,
     clipNorm: number,
-): Promise<number> {
-    const loss = tf.tidy(() => {
+): number {
+    const tLoss = tf.tidy(() => {
         return optimize(network.optimizer, () => {
             const predict = network.predict(states) as tf.Tensor;
             const { mean, logStd } = parsePredict(predict);
@@ -31,7 +32,8 @@ export function trainPolicyNetwork(
             const clippedRatio = ratio.clipByValue(1 - clipRatio, 1 + clipRatio);
             const surr1 = ratio.mul(advantages);
             const surr2 = clippedRatio.mul(advantages);
-            const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
+            const weightedMin = tf.minimum(surr1, surr2).mul(weights);
+            const policyLoss = weightedMin.sum().div(weights.sum()).mul(-1);
 
             const c = 0.5 * Math.log(2 * Math.PI * Math.E);
             const entropyEachDim = logStd.add(c); // [batchSize,ACTION_DIM]
@@ -42,21 +44,18 @@ export function trainPolicyNetwork(
         }, { clipNorm });
     });
 
-    return loss.data()
-        .then((v) => v[0])
-        .finally(() => loss.dispose());
+    return unwrapTensor(tLoss)[0];
 }
 
-// Обучение сети критика (оценка состояний)
-export async function trainValueNetwork(
+export function trainValueNetwork(
     network: tf.LayersModel,
     states: tf.Tensor[],
     returns: tf.Tensor,  // [batchSize], уже подсчитанные (GAE + V(s) или просто discountedReturns)
     oldValues: tf.Tensor, // [batchSize], для клиппинга
     clipRatio: number,
     clipNorm: number,
-): Promise<number> {
-    const loss = tf.tidy(() => {
+): number {
+    const tLoss = tf.tidy(() => {
         return optimize(network.optimizer, () => {
             // forward pass
             const predicted = network.predict(states) as tf.Tensor;
@@ -78,10 +77,7 @@ export async function trainValueNetwork(
         }, { clipNorm });
     });
 
-
-    return loss.data()
-        .then((v) => v[0])
-        .finally(() => loss.dispose());
+    return unwrapTensor(tLoss)[0];
 }
 
 
@@ -219,13 +215,14 @@ export function computeVTraceTargets(
     clipC: number = 1.0,
 ): {
     advantages: Float32Array,
+    tdErrors: Float32Array,
     returns: Float32Array,
     values: Float32Array,
 } {
     return tf.tidy(() => {
         const input = createInputTensors(batch.states);
         const { mean: meanCurrent, std: stdCurrent } = getMeanAndStd(policyNetwork, batch.size, input);
-        const actions = tf.tensor2d(flatFloat32Array(batch.actions), [batch.size, ACTION_DIM]);
+        const actions = tf.tensor2d(flatTypedArray(batch.actions), [batch.size, ACTION_DIM]);
 
         const logProbCurrentTensor = computeLogProb(actions, meanCurrent, stdCurrent);
         const logProbBehaviorTensor = tf.tensor1d(batch.logProbs);
@@ -235,7 +232,7 @@ export function computeVTraceTargets(
         const values = (valuesTensor.dataSync()) as Float32Array;
         const rhos = (rhosTensor.dataSync()) as Float32Array;
 
-        const returns = computeVTrace(
+        const { vTraces: returns, tdErrors } = computeVTrace(
             batch.rewards,
             batch.dones,
             values,
@@ -249,6 +246,7 @@ export function computeVTraceTargets(
 
         return {
             advantages: normalize(advantages),
+            tdErrors: tdErrors,
             returns: returns,
             values: values,
         };
@@ -264,28 +262,29 @@ function computeRho(
 }
 
 function computeVTrace(
-    rewards: number[],
-    dones: number[],
+    rewards: Float32Array,
+    dones: Float32Array,
     values: Float32Array,
     rhos: Float32Array,
     gamma: number,
     clipRho: number,
     clipC: number,
-): Float32Array {
+): { vTraces: Float32Array, tdErrors: Float32Array } {
     const batchSize = values.length;
     // Соберём nextValuesArr:
     const nextValues = createNextValues(values, dones);
     // 7) Делаем цикл V-trace
-    const vs = new Float32Array(batchSize);
+    const vTraces = new Float32Array(batchSize);
+    const tdErrors = new Float32Array(batchSize);
 
     // Инициализируем последний элемент
-    vs[batchSize - 1] = values[batchSize - 1];
+    vTraces[batchSize - 1] = values[batchSize - 1];
 
     for (let t = batchSize - 2; t >= 0; t--) {
         // Если done[t], сбрасываем V-trace именно на valuesArr[t]
         // (т.е. "начинаем" новый эпизод с самого себя)
         if (dones[t] === 1) {
-            vs[t] = values[t];
+            vTraces[t] = values[t];
             continue;
         }
 
@@ -297,23 +296,25 @@ function computeVTrace(
         // Если done[t], то discount=0, иначе gamma
         const discount = dones[t] === 1 ? 0 : gamma;
 
-        // delta_t
-        const delta_t = rho_t * (
+        const tdError = (
             rewards[t]
             + discount * nextValues[t]
             - values[t]
         );
+        // delta_t
+        const delta_t = rho_t * tdError;
 
         // vs[t]
-        vs[t] = values[t]
+        vTraces[t] = values[t]
             + delta_t
-            + discount * c_t * (vs[t + 1] - nextValues[t]);
+            + discount * c_t * (vTraces[t + 1] - nextValues[t]);
+        tdErrors[t] = tdError;
     }
 
-    return vs;
+    return { vTraces, tdErrors };
 }
 
-function createNextValues(values: Float32Array, dones: number[]): Float32Array {
+function createNextValues(values: Float32Array, dones: Float32Array): Float32Array {
     // Для nextValues, обычно делаем сдвиг на 1, но нужно аккуратно учесть done.
     // Самый простой путь:
     //   values[i+1] -> nextValue для шага i
@@ -349,6 +350,18 @@ export function networkHealthCheck(network: tf.LayersModel): boolean {
     return arrayHealthCheck(data);
 }
 
-export function arrayHealthCheck(array: Float32Array): boolean {
+export function arrayHealthCheck(array: Float32Array | Uint8Array | Int32Array): boolean {
     return array.every(Number.isFinite);
+}
+
+export function unwrapTensor<T extends Float32Array | Uint8Array | Int32Array>(tensor: tf.Tensor): T {
+    try {
+        const value = tensor.dataSync() as T;
+        if (!arrayHealthCheck(value)) {
+            throw new Error('Invalid loss value');
+        }
+        return value;
+    } finally {
+        tensor.dispose();
+    }
 }

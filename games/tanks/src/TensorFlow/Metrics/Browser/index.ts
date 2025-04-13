@@ -401,11 +401,24 @@ function drawTab3() {
 }
 
 function calculateMovingAverage(data: RenderPoint[], windowSize: number): RenderPoint[] {
+    if (data.length === 0) return [];
+    if (windowSize <= 0) throw new Error('Window size must be positive');
+
     const averaged: RenderPoint[] = [];
-    for (let i = 0; i < data.length; i++) {
-        const win = data.slice(Math.max(i - windowSize + 1, 0), i + 1);
-        const avg = win.reduce((sum, v) => sum + v.y, 0) / win.length;
-        averaged.push({ x: data[i].x, y: avg });
+    let sum = 0;
+
+    // Первое окно - рассчитываем сумму первых элементов
+    const initialWindow = Math.min(windowSize, data.length);
+    for (let i = 0; i < initialWindow; i++) {
+        sum += data[i].y;
+        averaged.push({ x: data[i].x, y: sum / (i + 1) });
     }
+
+    // Используем скользящее окно для остальных элементов
+    for (let i = initialWindow; i < data.length; i++) {
+        sum += data[i].y - (i >= windowSize ? data[i - windowSize].y : 0);
+        averaged.push({ x: data[i].x, y: sum / windowSize });
+    }
+
     return averaged;
 }

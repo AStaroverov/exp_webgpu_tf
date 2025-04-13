@@ -1,15 +1,16 @@
 // Буфер опыта для PPO
 import { shuffle } from '../../../../../lib/shuffle.ts';
 import { InputArrays } from './InputArrays.ts';
+import { flatTypedArray } from './flat.ts';
 
 export type Batch = {
     states: InputArrays[],
     actions: Float32Array[],
-    logProbs: number[],
+    logProbs: Float32Array,
     // meta
     size: number,
-    dones: number[],
-    rewards: number[],
+    dones: Float32Array,
+    rewards: Float32Array,
 }
 
 export class Memory {
@@ -49,19 +50,17 @@ export class Memory {
     getBatch(): Batch {
         const batches = this.getBatches();
         const values = shuffle(Array.from(batches.values()));
-        const batch = {
+
+        return {
             size: values.reduce((acc, batch) => acc + batch.size, 0),
             states: (values.map(batch => batch.states)).flat(),
             actions: (values.map(batch => batch.actions)).flat(),
-            logProbs: (values.map(batch => batch.logProbs)).flat(),
-            rewards: (values.map(batch => batch.rewards)).flat(),
-            dones: (values.map(batch => batch.dones)).flat(),
+            logProbs: flatTypedArray(values.map(batch => batch.logProbs)),
+            rewards: flatTypedArray(values.map(batch => batch.rewards)),
+            dones: flatTypedArray(values.map(batch => batch.dones)),
         };
-
-        return batch;
     }
 
-    // Метод для получения батча для обучения
     getBatches() {
         const batches = new Map<number, Batch>();
 
@@ -124,15 +123,15 @@ export class SubMemory {
             this.dones.length = minLen;
         }
 
-        const dones = (this.dones.map(done => done ? 1.0 : 0.0));
+        const dones = new Float32Array(this.dones.map(done => done ? 1.0 : 0.0));
         dones[dones.length - 1] = 1.0;
 
         return {
             size: this.states.length,
             states: (this.states),
             actions: (this.actions),
-            logProbs: (this.logProbs),
-            rewards: (this.rewards),
+            logProbs: new Float32Array(this.logProbs),
+            rewards: new Float32Array(this.rewards),
             dones,
         };
     }
