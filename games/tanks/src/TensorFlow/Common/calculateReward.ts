@@ -35,6 +35,7 @@ let REWARD_WEIGHTS = {
 
     MAP_BORDER: {
         BASE: 1,          // За нахождение в пределах карты
+        RETURN: 1,        // За возвращение в пределы карты
         PENALTY: -2,      // За выход за границы
     },
     MAP_BORDER_MULTIPLIER: 1,
@@ -123,7 +124,7 @@ export function calculateReward(
 ): ComponentRewards {
     // -- before predict --
     // const beforePredictHealth = TankInputTensor.health[tankEid];
-    // const [beforePredictTankX, beforePredictTankY] = TankInputTensor.position.getBatch(tankEid);
+    const [beforePredictTankX, beforePredictTankY] = TankInputTensor.position.getBatch(tankEid);
     // const [beforePredictTankSpeedX, beforePredictTankSpeedY] = TankInputTensor.speed.getBatche(tankEid);
     // const [beforePredictTurretTargetX, beforePredictTurretTargetY] = TankInputTensor.turretTarget.getBatch(tankEid);
     const beforePredictEnemiesData = TankInputTensor.enemiesData.getBatch(tankEid);
@@ -161,10 +162,12 @@ export function calculateReward(
 
     // 2. Расчет награды за нахождение в пределах карты
     rewards.positioning.mapAwareness = calculateTankMapAwarenessReward(
-        currentTankX,
-        currentTankY,
         width,
         height,
+        currentTankX,
+        currentTankY,
+        beforePredictTankX,
+        beforePredictTankY,
     );
 
     // 3. Анализ целей и вычисление награды за прицеливание
@@ -245,36 +248,99 @@ function calculateTeamKills(prevBattleState: BattleState, currentBattleState: Ba
     return alliesDelta - enemiesDelta;
 }
 
-/**
- * Расчет награды за нахождение в пределах карты
- */
 function calculateTankMapAwarenessReward(
-    x: number,
-    y: number,
     width: number,
     height: number,
+    x: number,
+    y: number,
+    prevX: number,
+    prevY: number,
 ): number {
-    if (x >= 0 && x <= width && y >= 0 && y <= height) {
-        const borderDistance = min(
-            x,
-            y,
-            width - x,
-            height - y,
-        );
+    const isInBounds = x >= 0 && x <= width && y >= 0 && y <= height;
+    const borderDistance = min(
+        x,
+        y,
+        width - x,
+        height - y,
+    );
 
-        // Базовая награда за нахождение в пределах карты
-        return REWARD_WEIGHTS.MAP_BORDER.BASE
-            // Штраф за приближение к границе
-            + REWARD_WEIGHTS.MAP_BORDER.PENALTY * (1 - smoothstep(0, 50, borderDistance));
+    if (isInBounds) {
+        return REWARD_WEIGHTS.MAP_BORDER.BASE;
     } else {
-        // Вышел за границы карты
-        return REWARD_WEIGHTS.MAP_BORDER.PENALTY;
+        let reward = REWARD_WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, -100, borderDistance);
+
+        // Вычисляем вектор движения танка
+        const dx = x - prevX;
+        const dy = y - prevY;
+
+        // Длина вектора движения (для нормализации)
+        const moveLength = Math.sqrt(dx * dx + dy * dy);
+
+        // Если танк не двигался, просто возвращаем штраф
+        if (moveLength < 0.1) {
+            return reward;
+        }
+
+        // Определяем ближайшую точку границы карты для возврата
+        let targetX = 0;
+        let targetY = 0;
+
+        // Корректируем целевую точку к ближайшей границе
+        if (x < 0) targetX = 0;
+        else if (x > width) targetX = width;
+        else targetX = x;
+
+        if (y < 0) targetY = 0;
+        else if (y > height) targetY = height;
+        else targetY = y;
+
+        // Вектор направления к ближайшей точке карты
+        const toMapX = targetX - prevX;
+        const toMapY = targetY - prevY;
+
+        // Длина вектора к карте
+        const toMapLength = hypot(toMapX, toMapY);
+
+        // Нормализуем векторы
+        const normalizedDx = dx / moveLength;
+        const normalizedDy = dy / moveLength;
+        const normalizedToMapX = toMapX / toMapLength;
+        const normalizedToMapY = toMapY / toMapLength;
+
+        // Скалярное произведение векторов для определения косинуса угла между ними
+        // Значение от -1 (противоположные направления) до 1 (совпадающие направления)
+        const dotProduct = normalizedDx * normalizedToMapX + normalizedDy * normalizedToMapY;
+
+        // Преобразуем в диапазон [0, 1], где 1 означает движение прямо к карте
+        const directionAlignment = (dotProduct + 1) / 2;
+
+        // Дополнительно учитываем, приближаемся ли мы к карте или удаляемся от неё
+        const distanceToBorderBefore = distanceToMap(width, height, prevX, prevY);
+        const distanceToBorderAfter = distanceToMap(width, height, x, y);
+
+        // Если мы приближаемся к карте, даём дополнительный бонус
+        if (distanceToBorderAfter < distanceToBorderBefore) {
+            const directionBonus = REWARD_WEIGHTS.MAP_BORDER.RETURN * directionAlignment;
+            reward += directionBonus;
+        }
+
+        return reward;
     }
 }
 
-/**
- * Анализ прицеливания и видимых врагов
- */
+function distanceToMap(width: number, height: number, x: number, y: number): number {
+    if (x >= 0 && x <= width && y >= 0 && y <= height) {
+        return 0;
+    }
+
+    const closestX = max(0, min(width, x));
+    const closestY = max(0, min(height, y));
+    const dx = x - closestX;
+    const dy = y - closestY;
+
+    return hypot(dx, dy);
+}
+
 function analyzeAiming(
     tankX: number,
     tankY: number,
