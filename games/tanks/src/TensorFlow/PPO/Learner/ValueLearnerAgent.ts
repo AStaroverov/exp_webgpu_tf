@@ -30,17 +30,18 @@ export class ValueLearnerAgent extends BaseLearnerAgent {
             for (let j = 0; j < batchCount; j++) {
                 const rmBatch = getRandomBatch(CONFIG.miniBatchSize);
 
-                valueLossList.push(
-                    tf.tidy(() =>
-                        trainValueNetwork(
-                            this.network,
-                            createInputTensors(rmBatch.states),
-                            tf.tensor1d(rmBatch.returns),
-                            tf.tensor1d(rmBatch.values),
-                            CONFIG.clipRatio * 2, CONFIG.clipNorm,
-                        ),
-                    ),
-                );
+                tf.tidy(() => {
+                    const loss = trainValueNetwork(
+                        this.network,
+                        createInputTensors(rmBatch.states),
+                        tf.tensor1d(rmBatch.returns),
+                        tf.tensor1d(rmBatch.values),
+                        CONFIG.clipRatio * 2, CONFIG.clipNorm,
+                        j === batchCount - 1,
+                    );
+
+                    loss && valueLossList.push(loss);
+                });
             }
         }
 

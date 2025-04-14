@@ -49,8 +49,8 @@ export class PolicyLearnerAgent extends BaseLearnerAgent {
             for (let j = 0; j < batchCount; j++) {
                 const mBatch = getLearnBatch(CONFIG.miniBatchSize);
 
-                policyLossList.push(
-                    tf.tidy(() => trainPolicyNetwork(
+                tf.tidy(() => {
+                    const policyLoss = trainPolicyNetwork(
                         this.network,
                         createInputTensors(mBatch.states),
                         tf.tensor2d(flatTypedArray(mBatch.actions), [mBatch.actions.length, mBatch.actions[0].length]),
@@ -58,7 +58,10 @@ export class PolicyLearnerAgent extends BaseLearnerAgent {
                         tf.tensor1d(mBatch.advantages),
                         tf.tensor1d(mBatch.weights),
                         CONFIG.clipRatio, CONFIG.entropyCoeff, CONFIG.clipNorm,
-                    )));
+                        j === batchCount - 1,
+                    );
+                    policyLoss && policyLossList.push(policyLoss);
+                });
             }
 
             const lkBatch = getKlBatch(klSize);

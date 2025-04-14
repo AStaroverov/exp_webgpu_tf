@@ -9,6 +9,7 @@ import { flatTypedArray } from '../Common/flat.ts';
 import { normalize } from '../../../../../lib/math.ts';
 import { Batch } from '../Common/Memory.ts';
 import { CONFIG } from './config.ts';
+import { syncUnwrapTensor } from '../Common/Tensor.ts';
 
 export function trainPolicyNetwork(
     network: tf.LayersModel,
@@ -20,7 +21,8 @@ export function trainPolicyNetwork(
     clipRatio: number,
     entropyCoeff: number,
     clipNorm: number,
-): number {
+    returnCost: boolean,
+): undefined | number {
     const tLoss = tf.tidy(() => {
         return optimize(network.optimizer, () => {
             const predicted = network.predict(states) as tf.Tensor;
@@ -41,10 +43,10 @@ export function trainPolicyNetwork(
             const totalLoss = policyLoss.sub(totalEntropy.mul(entropyCoeff));
 
             return totalLoss as tf.Scalar;
-        }, { clipNorm });
+        }, { clipNorm, returnCost });
     });
 
-    return unwrapTensor(tLoss)[0];
+    return tLoss ? syncUnwrapTensor(tLoss)[0] : undefined;
 }
 
 export function trainValueNetwork(
@@ -54,7 +56,8 @@ export function trainValueNetwork(
     oldValues: tf.Tensor, // [batchSize], для клиппинга
     clipRatio: number,
     clipNorm: number,
-): number {
+    returnCost: boolean,
+): undefined | number {
     const tLoss = tf.tidy(() => {
         return optimize(network.optimizer, () => {
             // forward pass
@@ -74,10 +77,10 @@ export function trainValueNetwork(
             const finalValueLoss = tf.maximum(vfLoss1, vfLoss2).mean().mul(0.5);
 
             return finalValueLoss as tf.Scalar;
-        }, { clipNorm });
+        }, { clipNorm, returnCost });
     });
 
-    return unwrapTensor(tLoss)[0];
+    return tLoss ? syncUnwrapTensor(tLoss)[0] : undefined;
 }
 
 export function computeKullbackLeiblerAprox(
@@ -187,9 +190,10 @@ export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { ac
 function optimize(
     optimizer: tf.Optimizer,
     predict: () => Scalar,
-    options?: { clipNorm?: number },
-): tf.Scalar {
+    options?: { returnCost?: boolean, clipNorm?: number },
+): undefined | tf.Scalar {
     const clipNorm = options?.clipNorm ?? 1;
+    const returnCost = options?.returnCost ?? false;
 
     return tf.tidy(() => {
         const { grads, value } = tf.variableGrads(predict);
@@ -214,7 +218,7 @@ function optimize(
 
         tf.dispose(grads);
 
-        return value;
+        return returnCost ? value : undefined;
     });
 }
 
@@ -373,17 +377,5 @@ export function networkHealthCheck(network: tf.LayersModel): boolean {
 
 export function arrayHealthCheck(array: Float32Array | Uint8Array | Int32Array): boolean {
     return array.every(Number.isFinite);
-}
-
-export function unwrapTensor<T extends Float32Array | Uint8Array | Int32Array>(tensor: tf.Tensor): T {
-    try {
-        const value = tensor.dataSync() as T;
-        if (!arrayHealthCheck(value)) {
-            throw new Error('Invalid loss value');
-        }
-        return value;
-    } finally {
-        tensor.dispose();
-    }
 }
 
