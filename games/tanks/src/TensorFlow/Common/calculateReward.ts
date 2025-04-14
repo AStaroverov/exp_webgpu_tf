@@ -31,7 +31,7 @@ let REWARD_WEIGHTS = {
         SHOOTING_PENALTY: -0.1, // За стрельбу в пустоту
         SHOOTING_ALLIES_PENALTY: -1.0, // За стрельбу в союзников
     },
-    AIM_MULTIPLIER: 3.5,
+    AIM_MULTIPLIER: 3,
 
     MAP_BORDER: {
         BASE: 1,          // За нахождение в пределах карты
@@ -41,7 +41,7 @@ let REWARD_WEIGHTS = {
 
     DISTANCE_KEEPING: {
         BASE: 1.0,          // За поддержание дистанции
-        PENALTY: -0.8,      // За слишком близкое приближение
+        PENALTY: -1.0,      // За слишком близкое приближение
     },
     DISTANCE_KEEPING_MULTIPLIER: 1, // может быть несколько врагов
 
