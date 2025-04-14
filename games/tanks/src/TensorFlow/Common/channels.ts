@@ -7,8 +7,6 @@ if (globalThis.document != null) {
     };
 }
 
-export const newModelVersionChannel = new BroadcastChannel('newVersion');
-
 export const metricsChannels = {
     rewards: new BroadcastChannel('rewards'),
     values: new BroadcastChannel('value'),
