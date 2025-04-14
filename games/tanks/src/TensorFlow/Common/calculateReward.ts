@@ -3,10 +3,11 @@ import { BattleState, BULLET_DANGER_SPEED, getBattleState } from '../../ECS/Syst
 import { abs, centerStep, hypot, lerp, max, min, smoothstep } from '../../../../../lib/math.ts';
 import { TANK_RADIUS } from './consts.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
-import { getTankHealth, Tank } from '../../ECS/Components/Tank.ts';
+import { Tank } from '../../ECS/Components/Tank/Tank.ts';
 import { TankController } from '../../ECS/Components/TankController.ts';
 import { CONFIG } from '../PPO/config.ts';
 import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../ECS/Components/TankState.ts';
+import { getTankHealth } from '../../ECS/Components/Tank/TankHealth.ts';
 
 // Константы для калибровки вознаграждений
 let REWARD_WEIGHTS = {

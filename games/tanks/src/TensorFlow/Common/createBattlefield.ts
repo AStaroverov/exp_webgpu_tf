@@ -1,5 +1,5 @@
 import { createGame } from '../../../createGame.ts';
-import { createTankRR, Tank } from '../../ECS/Components/Tank.ts';
+import { Tank } from '../../ECS/Components/Tank/Tank.ts';
 import { random, randomRangeFloat, randomSign } from '../../../../../lib/random.ts';
 import { GameDI } from '../../DI/GameDI.ts';
 import { TANK_RADIUS } from './consts.ts';
@@ -7,6 +7,8 @@ import { TankController } from '../../ECS/Components/TankController.ts';
 import { query } from 'bitecs';
 import { TenserFlowDI } from '../../DI/TenserFlowDI.ts';
 import { Team } from '../../ECS/Components/Team.ts';
+import { createTank } from '../../ECS/Components/Tank/CreateTank.ts';
+import { getNewPlayerId } from '../../ECS/Components/Player.ts';
 
 const MAX_PADDING = 100;
 
@@ -45,7 +47,8 @@ export async function createBattlefield(tanksCount: number, withRender = false, 
         } while (isTooClose(x, y));
 
         const teamId = teamZeroCount-- > 0 ? 0 : 1;
-        const eid = createTankRR({
+        const eid = createTank({
+            playerId: getNewPlayerId(),
             teamId,
             x,
             y,

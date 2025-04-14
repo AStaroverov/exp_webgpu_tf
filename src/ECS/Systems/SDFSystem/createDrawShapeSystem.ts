@@ -1,4 +1,4 @@
-import { hasComponent, onAdd, onSet, query, World } from 'bitecs';
+import { onAdd, onSet, query, World } from 'bitecs';
 import { shaderMeta } from './sdf.shader.ts';
 import { GPUShader } from '../../../WGSL/GPUShader.ts';
 import { getTypeTypedArray } from '../../../Shader';
@@ -38,36 +38,22 @@ export function createDrawShapeSystem(world: World, device: GPUDevice) {
             transformCollect.set(GlobalTransform.matrix.getBatch(id), i * 16);
 
             // ui8
-            if (shapeChanges.has(id)) {
-                kindCollect[i] = Shape.kind[id];
-                // vec4<f32> width, height, ..., ...
-                valuesCollect.set(Shape.values.getBatch(id), i * 6);
-            }
+            kindCollect[i] = Shape.kind[id];
+            // vec4<f32> width, height, ..., ...
+            valuesCollect.set(Shape.values.getBatch(id), i * 6);
 
-            if (colorChanges.has(id)) {
-                // [f32, 4]
-                colorCollect[i * 4 + 0] = Color.r[id];
-                colorCollect[i * 4 + 1] = Color.g[id];
-                colorCollect[i * 4 + 2] = Color.b[id];
-                colorCollect[i * 4 + 3] = Color.a[id];
-            }
+            // [f32, 4]
+            colorCollect[i * 4 + 0] = Color.r[id];
+            colorCollect[i * 4 + 1] = Color.g[id];
+            colorCollect[i * 4 + 2] = Color.b[id];
+            colorCollect[i * 4 + 3] = Color.a[id];
 
-            if (shadowChanges.has(id)) {
-                // [f32, 2]
-                shadowCollect[i * 2 + 0] = Shadow.fadeStart[id];
-                shadowCollect[i * 2 + 1] = Shadow.fadeEnd[id];
-            }
+            // f32
+            roundnessCollect[i] = Roundness.value[id];
 
-            if (hasComponent(world, id, Roundness) && roundnessChanges.has(id)) {
-                // f32
-                roundnessCollect[i] = Roundness.value[id];
-            }
-
-            if (hasComponent(world, id, Shadow) && shadowChanges.has(id)) {
-                // [f32, 2]
-                shadowCollect[i * 2 + 0] = Shadow.fadeStart[id];
-                shadowCollect[i * 2 + 1] = Shadow.fadeEnd[id];
-            }
+            // [f32, 2]
+            shadowCollect[i * 2 + 0] = Shadow.fadeStart[id];
+            shadowCollect[i * 2 + 1] = Shadow.fadeEnd[id];
         }
 
         device.queue.writeBuffer(gpuShader.uniforms.projection.getGPUBuffer(device), 0, projectionMatrix as Float32Array);

@@ -4,13 +4,13 @@ import { GameDI } from '../../../DI/GameDI.ts';
 import { randomRangeInt } from '../../../../../../lib/random.ts';
 import { ActorAgent } from './ActorAgent.ts';
 import { calculateReward } from '../../Common/calculateReward.ts';
-import { getTankHealth } from '../../../ECS/Components/Tank.ts';
 import { applyActionToTank } from '../../Common/applyActionToTank.ts';
 import { CONFIG } from '../config.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { prepareInputArrays } from '../../Common/InputArrays.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
 import { memoryChannel } from '../../DB';
+import { getTankHealth } from '../../../ECS/Components/Tank/TankHealth.ts';
 
 type Game = Awaited<ReturnType<typeof createBattlefield>>;
 

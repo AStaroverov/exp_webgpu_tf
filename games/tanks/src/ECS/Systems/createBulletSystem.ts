@@ -1,5 +1,5 @@
 import { GameDI } from '../../DI/GameDI.ts';
-import { Tank } from '../Components/Tank.ts';
+import { Tank } from '../Components/Tank/Tank.ts';
 import { TankController } from '../Components/TankController.ts';
 import { query } from 'bitecs';
 import { Player } from '../Components/Player.ts';

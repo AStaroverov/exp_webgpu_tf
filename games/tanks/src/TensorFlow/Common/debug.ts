@@ -1,7 +1,7 @@
 // DebugInfo singleton to track statistics
 import { query } from 'bitecs';
 import { GameDI } from '../../DI/GameDI.ts';
-import { Tank } from '../../ECS/Components/Tank.ts';
+import { Tank } from '../../ECS/Components/Tank/Tank.ts';
 import { RigidBodyState } from '../../ECS/Components/Physical.ts';
 import { Color } from '../../../../../src/ECS/Components/Common.ts';
 import { getDrawState } from './uiUtils.ts';

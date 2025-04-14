@@ -1,16 +1,13 @@
 import { GameDI } from '../../DI/GameDI.ts';
-import {
-    getTankHealth,
-    removeTankComponentsWithoutParts,
-    resetTankPartJointComponent,
-    Tank,
-    TankPart,
-} from '../Components/Tank.ts';
+import { Tank } from '../Components/Tank/Tank.ts';
 import { Children } from '../Components/Children.ts';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { resetCollisionsTo } from '../../Physical/collision.ts';
 import { removePhysicalJoint } from '../../Physical/joint.ts';
 import { query } from 'bitecs';
+import { TankPart } from '../Components/TankPart.ts';
+import { getTankHealth } from '../Components/Tank/TankHealth.ts';
+import { removeTankComponentsWithoutParts, resetTankPartJointComponent } from '../Components/Tank/TankUtils.ts';
 
 export function createTankAliveSystem({ world } = GameDI) {
     return () => {

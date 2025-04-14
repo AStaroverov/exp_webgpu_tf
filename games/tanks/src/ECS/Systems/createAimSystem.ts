@@ -1,6 +1,6 @@
 import { GameDI } from '../../DI/GameDI.ts';
 import { query } from 'bitecs';
-import { Tank } from '../Components/Tank.ts';
+import { Tank } from '../Components/Tank/Tank.ts';
 import { TankController } from '../Components/TankController.ts';
 import {
     getMatrixTranslationX,

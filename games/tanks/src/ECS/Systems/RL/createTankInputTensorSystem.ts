@@ -1,5 +1,5 @@
 import { GameDI } from '../../../DI/GameDI.ts';
-import { getTankHealth, Tank, TANK_APPROXIMATE_COLLISION_RADIUS } from '../../Components/Tank.ts';
+import { Tank, TANK_APPROXIMATE_COLLISION_RADIUS } from '../../Components/Tank/Tank.ts';
 import { MAX_ALLIES, MAX_BULLETS, MAX_ENEMIES, TankInputTensor } from '../../Components/TankState.ts';
 import { getEntityIdByPhysicalId, RigidBodyState } from '../../Components/Physical.ts';
 import { hypot } from '../../../../../../lib/math.ts';
@@ -12,6 +12,7 @@ import { hasIntersectionVectorAndCircle } from '../../../Utils/intersections.ts'
 import { shuffle } from '../../../../../../lib/shuffle.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
 import { Team } from '../../Components/Team.ts';
+import { getTankHealth } from '../../Components/Tank/TankHealth.ts';
 
 export function createTankInputTensorSystem({ world } = GameDI) {
     return () => {

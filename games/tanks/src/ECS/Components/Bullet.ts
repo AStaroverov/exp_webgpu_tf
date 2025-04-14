@@ -1,7 +1,6 @@
 import { createCircleRR } from './RigidRender.ts';
 import { ActiveEvents, RigidBodyType } from '@dimforge/rapier2d-simd';
 import {
-    addTransformComponents,
     getMatrixRotationZ,
     getMatrixTranslationX,
     getMatrixTranslationY,
@@ -14,7 +13,7 @@ import { mat4, vec2, vec3 } from 'gl-matrix';
 import { isNumber } from 'lodash-es';
 import { Hitable } from './Hitable.ts';
 import { Player } from './Player.ts';
-import { Tank } from './Tank.ts';
+import { Tank } from './Tank/Tank.ts';
 import { random } from '../../../../../lib/random.ts';
 import { ZIndex } from '../../consts.ts';
 import { DestroyByTimeout } from './Destroy.ts';
@@ -35,7 +34,7 @@ const optionsBulletRR: Options = {
     color: new Float32Array([1, 0, 0, 1]),
     shadow: new Float32Array([0, 2]),
     bodyType: RigidBodyType.Dynamic,
-    density: 10,
+    density: 10_000,
     angularDamping: 0.1,
     linearDamping: 0.1,
     collisionEvent: ActiveEvents.CONTACT_FORCE_EVENTS,
@@ -60,14 +59,12 @@ export function createBulletRR(options: Partial<Options> & { speed: number, play
 
     const [bulletId] = createCircleRR(optionsBulletRR);
     addComponent(world, bulletId, Bullet);
-    addTransformComponents(world, bulletId);
     Player.addComponent(world, bulletId, options.playerId);
     Hitable.addComponent(world, bulletId);
     DestroyByTimeout.addComponent(world, bulletId, 8_000);
 
     return bulletId;
 }
-
 
 const optionsSpawnBullet = {
     x: 0,
