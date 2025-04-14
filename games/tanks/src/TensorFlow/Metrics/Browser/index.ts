@@ -176,6 +176,8 @@ const store = {
     lr: new CompressedBuffer(1_000, 5),
     valueLoss: new CompressedBuffer(1_000, 5),
     policyLoss: new CompressedBuffer(1_000, 5),
+    prbAlpha: new CompressedBuffer(100, 5),
+    prbBeta: new CompressedBuffer(100, 5),
     trainTime: new CompressedBuffer(1_000, 5),
     waitTime: new CompressedBuffer(1_000, 5),
     versionDelta: new CompressedBuffer(1_000, 5),
@@ -201,6 +203,10 @@ getAgentLog().then((data) => {
         store.valueLoss.fromJson(data.valueLoss);
         // @ts-ignore
         store.policyLoss.fromJson(data.policyLoss);
+        // @ts-ignore
+        store.prbAlpha.fromJson(data.prbAlpha);
+        // @ts-ignore
+        store.prbBeta.fromJson(data.prbBeta);
         // @ts-ignore
         store.trainTime.fromJson(data.trainTime);
         // @ts-ignore
@@ -252,6 +258,8 @@ export function subscribeOnMetrics() {
     metricsChannels.kl.onmessage = w((event) => store.kl.add(...event.data));
     metricsChannels.policyLoss.onmessage = w((event) => store.policyLoss.add(...event.data));
     metricsChannels.valueLoss.onmessage = w((event) => store.valueLoss.add(...event.data));
+    metricsChannels.prbAlpha.onmessage = w((event) => store.prbAlpha.add(event.data));
+    metricsChannels.prbBeta.onmessage = w((event) => store.prbBeta.add(event.data));
     metricsChannels.lr.onmessage = w((event) => store.lr.add(event.data));
     metricsChannels.versionDelta.onmessage = w((event) => store.versionDelta.add(event.data));
     metricsChannels.batchSize.onmessage = w((event) => store.batchSize.add(event.data));
@@ -335,6 +343,15 @@ function drawTab1() {
 }
 
 function drawTab2() {
+    tfvis.render.linechart({ name: 'PRB', tab: 'Tab 2' }, {
+        values: [store.prbAlpha.toArray(), store.prbBeta.toArray()],
+    }, {
+        xLabel: 'Iteration',
+        yLabel: 'Value',
+        width: 500,
+        height: 300,
+    });
+
     tfvis.render.linechart({ name: 'Policy Loss', tab: 'Tab 2' }, {
         values: [store.policyLoss.toArray()],
     }, {
