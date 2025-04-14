@@ -249,9 +249,9 @@ export function subscribeOnMetrics() {
     metricsChannels.values.onmessage = w((event) => store.values.add(...event.data));
     metricsChannels.returns.onmessage = w((event) => store.returns.add(...event.data));
     metricsChannels.advantages.onmessage = w((event) => store.advantages.add(...event.data));
-    metricsChannels.kl.onmessage = w((event) => store.kl.add(event.data));
-    metricsChannels.valueLoss.onmessage = w((event) => store.valueLoss.add(event.data));
-    metricsChannels.policyLoss.onmessage = w((event) => store.policyLoss.add(event.data));
+    metricsChannels.kl.onmessage = w((event) => store.kl.add(...event.data));
+    metricsChannels.policyLoss.onmessage = w((event) => store.policyLoss.add(...event.data));
+    metricsChannels.valueLoss.onmessage = w((event) => store.valueLoss.add(...event.data));
     metricsChannels.lr.onmessage = w((event) => store.lr.add(event.data));
     metricsChannels.versionDelta.onmessage = w((event) => store.versionDelta.add(event.data));
     metricsChannels.batchSize.onmessage = w((event) => store.batchSize.add(event.data));

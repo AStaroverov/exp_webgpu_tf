@@ -122,8 +122,6 @@ export class LearnerAgent {
                 policyLossList: policyTrainMetrics.policyLossList,
                 valueLossList: valueTrainMetrics.valueLossList,
                 version,
-                policyMiniBatchCount,
-                valueMiniBatchCount,
                 batches,
                 waitTime,
                 startTime,
@@ -185,8 +183,6 @@ export class LearnerAgent {
             policyLossList,
             valueLossList,
             version,
-            policyMiniBatchCount,
-            valueMiniBatchCount,
             batches,
             waitTime,
             startTime,
@@ -196,43 +192,18 @@ export class LearnerAgent {
             policyLossList: number[],
             valueLossList: number[],
             version: number,
-            policyMiniBatchCount: number,
-            valueMiniBatchCount: number,
             batches: ExtendedBatch[],
             waitTime: number,
             startTime: number,
             endTime: number,
         },
     ) {
-
-        for (let i = 0; i < klList.length; i++) {
-            const kl = klList[i];
-
-            let policyLoss = 0;
-            for (let j = 0; j < policyMiniBatchCount; j++) {
-                policyLoss += policyLossList[i * policyMiniBatchCount + j];
-            }
-
-            policyLoss /= policyMiniBatchCount;
-
-            console.log('[Train]: Epoch', i, 'KL:', kl, 'Policy loss:', policyLoss);
-
-            metricsChannels.kl.postMessage(kl);
-            metricsChannels.policyLoss.postMessage(kl);
-        }
-
-        for (let i = 0; i < CONFIG.valueEpochs; i++) {
-            let valueLoss = 0;
-            for (let j = 0; j < valueMiniBatchCount; j++) {
-                valueLoss += valueLossList[i * valueMiniBatchCount + j];
-            }
-
-            valueLoss /= valueMiniBatchCount;
-
-            console.log('[Train]: Epoch', i, 'Value loss:', valueLoss);
-
-            metricsChannels.valueLoss.postMessage(valueLoss);
-        }
+        console.log('[Metrics] KL', klList);
+        metricsChannels.kl.postMessage(klList);
+        console.log('[Metrics] Policy loss', policyLossList);
+        metricsChannels.policyLoss.postMessage(policyLossList);
+        console.log('[Metrics] Value loss', valueLossList);
+        metricsChannels.valueLoss.postMessage(valueLossList);
 
         for (const batch of batches) {
             metricsChannels.versionDelta.postMessage(version - batch.version);
