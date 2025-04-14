@@ -237,6 +237,8 @@ export const saveMetrics = throttle(() => {
         advantages: store.advantages.toJson(),
         valueLoss: store.valueLoss.toJson(),
         policyLoss: store.policyLoss.toJson(),
+        prbAlpha: store.prbAlpha.toJson(),
+        prbBeta: store.prbBeta.toJson(),
         trainTime: store.trainTime.toJson(),
         waitTime: store.waitTime.toJson(),
         versionDelta: store.versionDelta.toJson(),
