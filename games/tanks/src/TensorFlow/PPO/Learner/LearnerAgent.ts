@@ -198,11 +198,11 @@ export class LearnerAgent {
             endTime: number,
         },
     ) {
-        console.log('[Metrics] KL', klList);
+        console.log('[Metrics] KL', klList.map(v => v.toFixed(4)));
         metricsChannels.kl.postMessage(klList);
-        console.log('[Metrics] Policy loss', policyLossList);
+        console.log('[Metrics] Policy loss', policyLossList.map(v => v.toFixed(4)));
         metricsChannels.policyLoss.postMessage(policyLossList);
-        console.log('[Metrics] Value loss', valueLossList);
+        console.log('[Metrics] Value loss', valueLossList.map(v => v.toFixed(4)));
         metricsChannels.valueLoss.postMessage(valueLossList);
 
         for (const batch of batches) {
