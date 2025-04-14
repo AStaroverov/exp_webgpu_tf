@@ -47,8 +47,8 @@ let REWARD_WEIGHTS = {
     DISTANCE_KEEPING_MULTIPLIER: 1, // может быть несколько врагов
 
     MOVEMENT: {
-        BASE: 1,          // За базовое движение
-        STRATEGIC: 1,     // За стратегическое движение
+        BASE: 0.2,          // За базовое движение
+        STRATEGIC: 0.4,     // За стратегическое движение
     },
     MOVEMENT_MULTIPLIER: 1,
 
