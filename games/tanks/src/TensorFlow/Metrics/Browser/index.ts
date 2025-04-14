@@ -275,8 +275,9 @@ function drawTab1() {
         height: 300,
     });
 
-    tfvis.render.linechart({ name: 'KL', tab }, {
-        values: [store.kl.toArray(), calculateMovingAverage(store.kl.toArray(), 50)],
+    const avgKL = store.kl.toArray();
+    tfvis.render.scatterplot({ name: 'KL', tab }, {
+        values: [avgKL, calculateMovingAverage(avgKL, 50)],
         series: ['Avg', 'MA'],
     }, {
         xLabel: 'Version',
@@ -410,13 +411,17 @@ function calculateMovingAverage(data: RenderPoint[], windowSize: number): Render
     // Первое окно - рассчитываем сумму первых элементов
     const initialWindow = Math.min(windowSize, data.length);
     for (let i = 0; i < initialWindow; i++) {
-        sum += data[i].y;
+        const val = data[i].y;
+        if (!isFinite(val)) continue;
+        sum += val;
         averaged.push({ x: data[i].x, y: sum / (i + 1) });
     }
 
     // Используем скользящее окно для остальных элементов
     for (let i = initialWindow; i < data.length; i++) {
-        sum += data[i].y - (i >= windowSize ? data[i - windowSize].y : 0);
+        const val = data[i].y - (i >= windowSize ? data[i - windowSize].y : 0);
+        if (!isFinite(val)) continue;
+        sum += val;
         averaged.push({ x: data[i].x, y: sum / windowSize });
     }
 

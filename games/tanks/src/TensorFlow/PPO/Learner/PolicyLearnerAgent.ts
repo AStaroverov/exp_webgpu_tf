@@ -2,7 +2,7 @@ import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { floor, mean } from '../../../../../../lib/math.ts';
 import { createPolicyNetwork } from '../../Models/Create.ts';
-import { computeKullbackLeibler, trainPolicyNetwork } from '../train.ts';
+import { computeKullbackLeiblerExact, trainPolicyNetwork } from '../train.ts';
 import { CONFIG } from '../config.ts';
 import { RingBuffer } from 'ring-buffer-ts';
 import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
@@ -33,7 +33,8 @@ export class PolicyLearnerAgent extends BaseLearnerAgent {
         getKlBatch: (batchSize: number) => {
             states: InputArrays[],
             actions: Float32Array[],
-            logProbs: number[],
+            mean: Float32Array[],
+            logStd: Float32Array[],
         },
         onUpdateLR: (lr: number) => void,
     ): {
@@ -61,11 +62,11 @@ export class PolicyLearnerAgent extends BaseLearnerAgent {
             }
 
             const lkBatch = getKlBatch(klSize);
-            const kl = computeKullbackLeibler(
+            const kl = computeKullbackLeiblerExact(
                 this.network,
                 createInputTensors(lkBatch.states),
-                tf.tensor2d(flatTypedArray(lkBatch.actions), [lkBatch.actions.length, lkBatch.actions[0].length]),
-                tf.tensor1d(lkBatch.logProbs),
+                tf.tensor2d(flatTypedArray(lkBatch.mean), [lkBatch.mean.length, lkBatch.mean[0].length]),
+                tf.tensor2d(flatTypedArray(lkBatch.logStd), [lkBatch.logStd.length, lkBatch.logStd[0].length]),
             );
 
             if (kl > CONFIG.klConfig.max) {

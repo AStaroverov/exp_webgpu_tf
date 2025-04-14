@@ -233,16 +233,16 @@ export class LearnerAgent {
 
             metricsChannels.valueLoss.postMessage(valueLoss);
         }
-        
+
         for (const batch of batches) {
             metricsChannels.versionDelta.postMessage(version - batch.version);
             metricsChannels.batchSize.postMessage(batch.size);
             metricsChannels.values.postMessage(batch.values);
             metricsChannels.returns.postMessage(batch.returns);
             metricsChannels.advantages.postMessage(batch.advantages);
+            metricsChannels.rewards.postMessage(batch.rewards);
         }
 
-        metricsChannels.rewards.postMessage(batches.map(b => b.rewards).flat());
         metricsChannels.waitTime.postMessage(waitTime / 1000);
         metricsChannels.trainTime.postMessage((endTime - startTime) / 1000);
     }
@@ -255,6 +255,8 @@ function getFinalBatch(batches: ExtendedBatch[]): FinalBatch {
         size: batches.reduce((acc, b) => acc + b.size, 0),
         states: batches.map(b => b.states).flat(),
         actions: batches.map(b => b.actions).flat(),
+        mean: batches.map(b => b.mean).flat(),
+        logStd: batches.map(b => b.logStd).flat(),
         logProbs: flatTypedArray(batches.map(b => b.logProbs)),
         values: flatTypedArray(batches.map(b => b.values)),
         returns: flatTypedArray(batches.map(b => b.returns)),
@@ -280,12 +282,14 @@ function createPolicyBatch(batch: FinalBatch, indices: number[]) {
 function createKlBatch(batch: FinalBatch, indices: number[]) {
     const states = indices.map(i => batch.states[i]);
     const actions = indices.map(i => batch.actions[i]);
-    const logProbs = indices.map(i => batch.logProbs[i]);
+    const mean = indices.map(i => batch.mean[i]);
+    const logStd = indices.map(i => batch.logStd[i]);
 
     return {
         states: states,
         actions: actions,
-        logProbs: (logProbs),
+        mean: (mean),
+        logStd: (logStd),
     };
 }
 

@@ -141,6 +141,8 @@ export class ActorManager {
                 tankEid,
                 input,
                 result.actions,
+                result.mean,
+                result.logStd,
                 result.logProb,
             );
         }

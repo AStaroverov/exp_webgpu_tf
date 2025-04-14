@@ -67,14 +67,14 @@ export const DEFAULT_EXPERIMENT: Config = {
         max: 5e-3,
     },
 
-    batchSize: 2048,
+    batchSize: 300,
     miniBatchSize: 128,
 
     // Training parameters
     warmupFrames: 100,
     episodeFrames: 1200, // usually produce 250 samples
     // Workers
-    workerCount: 10,
+    workerCount: 4,
     // Training control
     savePath: 'APPO_v1',
     fsModelPath: 'v11-wo-vtrace',

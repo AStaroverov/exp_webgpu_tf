@@ -6,6 +6,8 @@ import { flatTypedArray } from './flat.ts';
 export type Batch = {
     states: InputArrays[],
     actions: Float32Array[],
+    mean: Float32Array[],
+    logStd: Float32Array[],
     logProbs: Float32Array,
     // meta
     size: number,
@@ -33,11 +35,11 @@ export class Memory {
         return Array.from(this.map.values());
     }
 
-    addFirstPart(id: number, state: InputArrays, action: Float32Array, logProb: number) {
+    addFirstPart(id: number, state: InputArrays, action: Float32Array, mean: Float32Array, logStd: Float32Array, logProb: number) {
         if (!this.map.has(id)) {
             this.map.set(id, new SubMemory());
         }
-        this.map.get(id)!.addFirstPart(state, action, logProb);
+        this.map.get(id)!.addFirstPart(state, action, mean, logStd, logProb);
     }
 
     updateSecondPart(id: number, reward: number, done: boolean) {
@@ -55,6 +57,8 @@ export class Memory {
             size: values.reduce((acc, batch) => acc + batch.size, 0),
             states: (values.map(batch => batch.states)).flat(),
             actions: (values.map(batch => batch.actions)).flat(),
+            mean: (values.map(batch => batch.mean)).flat(),
+            logStd: (values.map(batch => batch.logStd)).flat(),
             logProbs: flatTypedArray(values.map(batch => batch.logProbs)),
             rewards: flatTypedArray(values.map(batch => batch.rewards)),
             dones: flatTypedArray(values.map(batch => batch.dones)),
@@ -80,6 +84,8 @@ export class Memory {
 export class SubMemory {
     private states: InputArrays[] = [];
     private actions: Float32Array[] = [];
+    private mean: Float32Array[] = [];
+    private logStd: Float32Array[] = [];
     private logProbs: number[] = [];
     private rewards: number[] = [];
     private dones: boolean[] = [];
@@ -94,11 +100,13 @@ export class SubMemory {
         return this.states.length;
     }
 
-    addFirstPart(state: InputArrays, action: Float32Array, logProb: number) {
+    addFirstPart(state: InputArrays, action: Float32Array, mean: Float32Array, logStd: Float32Array, logProb: number) {
         this.collapseTmpData();
 
         this.states.push(state);
         this.actions.push(action);
+        this.mean.push(mean);
+        this.logStd.push(logStd);
         this.logProbs.push(logProb);
     }
 
@@ -118,6 +126,8 @@ export class SubMemory {
             const minLen = Math.min(this.states.length, this.rewards.length, this.dones.length);
             this.states.length = minLen;
             this.actions.length = minLen;
+            this.mean.length = minLen;
+            this.logStd.length = minLen;
             this.logProbs.length = minLen;
             this.rewards.length = minLen;
             this.dones.length = minLen;
@@ -130,6 +140,8 @@ export class SubMemory {
             size: this.states.length,
             states: (this.states),
             actions: (this.actions),
+            mean: (this.mean),
+            logStd: (this.logStd),
             logProbs: new Float32Array(this.logProbs),
             rewards: new Float32Array(this.rewards),
             dones,

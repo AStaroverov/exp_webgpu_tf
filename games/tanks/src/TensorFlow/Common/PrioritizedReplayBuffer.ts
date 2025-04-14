@@ -1,5 +1,4 @@
 import { random } from '../../../../../lib/random.ts';
-import { binarySearch } from '../../../../../lib/binarySearch.ts';
 
 export class PrioritizedReplayBuffer {
     private cdf: Float32Array;
@@ -18,7 +17,7 @@ export class PrioritizedReplayBuffer {
 
         while (result.length < batchSize) {
             const rand = random() * cdf[cdf.length - 1];
-            const index = binarySearch(0, cdf.length - 1, i => cdf[i] - rand);
+            const index = binarySearchCDF(cdf, rand);
             result.push(index);
         }
 
@@ -41,4 +40,20 @@ function createCDF(probs: Float32Array) {
     }
     cdf[cdf.length - 1] = 1;
     return cdf;
+}
+
+function binarySearchCDF(cdf: Float32Array, r: number): number {
+    let left = 0;
+    let right = cdf.length - 1;
+
+    while (left < right) {
+        const mid = Math.floor((left + right) / 2);
+        if (r <= cdf[mid]) {
+            right = mid; // сдвигаемся влево
+        } else {
+            left = mid + 1; // сдвигаемся вправо
+        }
+    }
+
+    return left; // минимальный i, где cdf[i] ≥ r
 }
