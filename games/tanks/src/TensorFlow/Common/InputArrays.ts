@@ -1,6 +1,6 @@
 import { clamp } from 'lodash-es';
 import { shuffle } from '../../../../../lib/shuffle.ts';
-import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../ECS/Components/TankState.ts';
+import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../ECS/Components/Tank/TankState.ts';
 import {
     ALLY_FEATURES_DIM,
     ALLY_SLOTS,

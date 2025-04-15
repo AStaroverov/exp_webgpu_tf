@@ -1,6 +1,6 @@
 import { GameDI } from '../../../DI/GameDI.ts';
 import { Tank, TANK_APPROXIMATE_COLLISION_RADIUS } from '../../Components/Tank/Tank.ts';
-import { MAX_ALLIES, MAX_BULLETS, MAX_ENEMIES, TankInputTensor } from '../../Components/TankState.ts';
+import { MAX_ALLIES, MAX_BULLETS, MAX_ENEMIES, TankInputTensor } from '../../Components/Tank/TankState.ts';
 import { getEntityIdByPhysicalId, RigidBodyState } from '../../Components/Physical.ts';
 import { hypot } from '../../../../../../lib/math.ts';
 import { Ball, Collider } from '@dimforge/rapier2d-simd';

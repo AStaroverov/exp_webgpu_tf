@@ -4,14 +4,14 @@ import { GameDI } from '../../../DI/GameDI.ts';
 import { Player } from '../Player.ts';
 import { Parent } from '../Parent.ts';
 import { Children } from '../Children.ts';
-import { TankPart } from '../TankPart.ts';
+import { TankPart } from './TankPart.ts';
 import { CollisionGroup } from '../../../Physical/createRigid.ts';
 import { createRectangleRigidGroup } from '../RigidGroup.ts';
 import { addTransformComponents } from '../../../../../../src/ECS/Components/Transform.ts';
-import { TankController } from '../TankController.ts';
+import { TankController } from './TankController.ts';
 import { Team } from '../Team.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
-import { TankInputTensor } from '../TankState.ts';
+import { TankInputTensor } from './TankState.ts';
 import { createCircle } from '../../../../../../src/ECS/Entities/Shapes.ts';
 import { Tank } from './Tank.ts';
 import {
@@ -158,10 +158,10 @@ function createTankTurret(options: Options, tankEid: number, tankPid: number, {
         physicalWorld.getRigidBody(turretPid),
         true,
     );
+    TankPart.addComponent(world, turretEid, joint.handle, parentVector, childVector);
 
     // Добавление компонентов турели
     addTransformComponents(world, turretEid);
-    TankPart.addComponent(world, turretEid, joint.handle);
     Parent.addComponent(world, turretEid, tankEid);
     Children.addComponent(world, turretEid);
 

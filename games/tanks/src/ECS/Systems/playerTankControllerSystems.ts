@@ -1,5 +1,5 @@
 import { PLAYER_REFS } from '../../consts.ts';
-import { TankController } from '../Components/TankController.ts';
+import { TankController } from '../Components/Tank/TankController.ts';
 import { isNil } from 'lodash-es';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 import { Tank } from '../Components/Tank/Tank.ts';

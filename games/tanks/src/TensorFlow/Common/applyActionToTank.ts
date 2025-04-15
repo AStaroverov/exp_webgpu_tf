@@ -1,4 +1,4 @@
-import { TankController } from '../../ECS/Components/TankController.ts';
+import { TankController } from '../../ECS/Components/Tank/TankController.ts';
 import { Actions, readActions } from './actions.ts';
 import { clamp } from 'lodash-es';
 

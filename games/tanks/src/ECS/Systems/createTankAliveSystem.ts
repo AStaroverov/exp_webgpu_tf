@@ -5,7 +5,7 @@ import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { resetCollisionsTo } from '../../Physical/collision.ts';
 import { removePhysicalJoint } from '../../Physical/joint.ts';
 import { query } from 'bitecs';
-import { TankPart } from '../Components/TankPart.ts';
+import { TankPart } from '../Components/Tank/TankPart.ts';
 import { getTankHealth } from '../Components/Tank/TankHealth.ts';
 import { removeTankComponentsWithoutParts, resetTankPartJointComponent } from '../Components/Tank/TankUtils.ts';
 

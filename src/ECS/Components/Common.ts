@@ -48,6 +48,12 @@ export const Color = component({
         Color.a[eid] = a;
     }),
 
+    applyColorToArray: (eid: number, color: TColor) => {
+        color[0] = Color.r[eid];
+        color[1] = Color.g[eid];
+        color[2] = Color.b[eid];
+        color[3] = Color.a[eid];
+    },
 });
 
 export type TShadow = [fadeStart: number, fadeEnd: number] | Float32Array;

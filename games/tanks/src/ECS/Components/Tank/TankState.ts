@@ -1,7 +1,7 @@
 import { addComponent, EntityId, World } from 'bitecs';
-import { NestedArray, TypedArray } from '../../../../../src/utils.ts';
-import { delegate } from '../../../../../src/delegate.ts';
-import { component } from '../../../../../src/ECS/utils.ts';
+import { NestedArray, TypedArray } from '../../../../../../src/utils.ts';
+import { delegate } from '../../../../../../src/delegate.ts';
+import { component } from '../../../../../../src/ECS/utils.ts';
 
 export const MAX_ENEMIES = 3;
 export const ENEMY_BUFFER = 8;

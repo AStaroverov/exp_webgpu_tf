@@ -2,10 +2,9 @@ import { GPUShader } from '../../../../../../../../src/WGSL/GPUShader.ts';
 import { shaderMeta } from './shader.ts';
 
 export function createPostEffect(device: GPUDevice, context: GPUCanvasContext, sourceTexture: GPUTexture) {
-    // Создание сэмплера
     const sampler = device.createSampler({
-        magFilter: 'nearest',  // Для сохранения чётких пикселей
-        minFilter: 'nearest',  // Также "nearest" для согласованности
+        magFilter: 'nearest',
+        minFilter: 'nearest',
         addressModeU: 'clamp-to-edge',
         addressModeV: 'clamp-to-edge',
     });

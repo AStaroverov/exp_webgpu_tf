@@ -23,7 +23,6 @@ import { createTankInputTensorSystem } from './src/ECS/Systems/RL/createTankInpu
 import { destroyChangeDetectorSystem } from '../../src/ECS/Systems/ChangedDetectorSystem.ts';
 import { createDestroyByTimeoutSystem } from './src/ECS/Systems/createDestroyByTimeoutSystem.ts';
 import { createAimSystem } from './src/ECS/Systems/createAimSystem.ts';
-import { createPostEffect } from './src/ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
 import { createDrawGrassSystem } from './src/ECS/Systems/Render/Grass/createDrawGrassSystem.ts';
 import { createRigidBodyStateSystem } from './src/ECS/Systems/createRigidBodyStateSystem.ts';
 import { createDestroySystem } from './src/ECS/Systems/createDestroySystem.ts';
@@ -31,6 +30,8 @@ import { RenderDI } from './src/DI/RenderDI.ts';
 import { noop } from 'lodash-es';
 import { PlayerEnvDI } from './src/DI/PlayerEnvDI.ts';
 import { TenserFlowDI } from './src/DI/TenserFlowDI.ts';
+import { createVisualizationTracksSystem } from './src/ECS/Systems/Tank/createVisualizationTracksSystem.ts';
+import { createPostEffect } from './src/ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
 
 export async function createGame({ width, height, withRender, withPlayer }: {
     width: number,
@@ -170,6 +171,7 @@ export async function createGame({ width, height, withRender, withPlayer }: {
     };
 
     const aimUpdate = createAimSystem();
+    const visTracksUpdate = createVisualizationTracksSystem();
 
     GameDI.gameTick = (delta: number) => {
         spawnFrame(delta);
@@ -177,6 +179,7 @@ export async function createGame({ width, height, withRender, withPlayer }: {
         physicalFrame(delta);
 
         aimUpdate(delta);
+        visTracksUpdate(delta);
         // updateMap();
 
         // stats.begin();

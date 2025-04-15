@@ -13,14 +13,14 @@ export function createRigidBodyStateSystem({ world, physicalWorld } = GameDI) {
             const translation = rb.translation();
             const rotation = rb.rotation();
             const linvel = rb.linvel();
-            // const angvel = rb.angvel();
+            const angvel = rb.angvel();
 
             RigidBodyState.update(
                 eid,
                 translation,
                 rotation,
                 linvel,
-                // angvel,
+                angvel,
             );
         }
     };

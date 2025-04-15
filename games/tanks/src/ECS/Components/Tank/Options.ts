@@ -51,6 +51,7 @@ export const resetOptions = (target: Options, source: Parameters<typeof createTa
     target.teamId = source?.teamId ?? defaultOptions.teamId;
     target.playerId = source?.playerId ?? defaultOptions.playerId;
 };
+
 export const updateColorOptions = (target: Options, color: TColor) => {
     (target.color as Float32Array).set(color, 0);
 };

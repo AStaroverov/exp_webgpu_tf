@@ -6,7 +6,7 @@ import {
     MAX_ALLIES,
     MAX_BULLETS,
     MAX_ENEMIES,
-} from '../../ECS/Components/TankState.ts';
+} from '../../ECS/Components/Tank/TankState.ts';
 import { ACTION_DIM } from '../Common/consts.ts';
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 import { CONFIG } from '../PPO/config.ts';

@@ -3,7 +3,7 @@ import { Tank } from '../../ECS/Components/Tank/Tank.ts';
 import { random, randomRangeFloat, randomSign } from '../../../../../lib/random.ts';
 import { GameDI } from '../../DI/GameDI.ts';
 import { TANK_RADIUS } from './consts.ts';
-import { TankController } from '../../ECS/Components/TankController.ts';
+import { TankController } from '../../ECS/Components/Tank/TankController.ts';
 import { query } from 'bitecs';
 import { TenserFlowDI } from '../../DI/TenserFlowDI.ts';
 import { Team } from '../../ECS/Components/Team.ts';
