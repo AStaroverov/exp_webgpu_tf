@@ -37,13 +37,13 @@ let REWARD_WEIGHTS = {
     MAP_BORDER: {
         BASE: 1,          // За нахождение в пределах карты
         RETURN: 1,        // За возвращение в пределы карты
-        PENALTY: -2,      // За выход за границы
+        PENALTY: -2.5,    // За выход за границы
     },
     MAP_BORDER_MULTIPLIER: 1,
 
     DISTANCE_KEEPING: {
         BASE: 1.0,          // За поддержание дистанции
-        PENALTY: -2.0,      // За слишком близкое приближение
+        PENALTY: -2.5,      // За слишком близкое приближение
     },
     DISTANCE_KEEPING_MULTIPLIER: 1, // может быть несколько врагов
 
@@ -54,8 +54,8 @@ let REWARD_WEIGHTS = {
     MOVEMENT_MULTIPLIER: 1,
 
     BULLET_AVOIDANCE: {
-        PENALTY: -0.4,
-        AVOID_QUALITY: 0.4,
+        PENALTY: -0.8,
+        AVOID_QUALITY: 0.8,
     },
     BULLET_AVOIDANCE_MULTIPLIER: 1,
 };
