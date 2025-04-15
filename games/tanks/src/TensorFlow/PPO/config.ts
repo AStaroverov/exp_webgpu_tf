@@ -3,6 +3,8 @@
 
 // Define experiment configurations that can be easily switched
 
+import { isMac } from '../../../../../lib/detect.ts';
+
 export type Config = {
     name: string;
     // Learning parameters
@@ -67,14 +69,14 @@ export const DEFAULT_EXPERIMENT: Config = {
         max: 5e-3,
     },
 
-    batchSize: 2048,
+    batchSize: isMac ? 500 : 2000,
     miniBatchSize: 128,
 
     // Training parameters
     warmupFrames: 100,
     episodeFrames: 1200, // usually produce 250 samples
     // Workers
-    workerCount: 10,
+    workerCount: isMac ? 4 : 10,
     // Training control
     savePath: 'APPO_v1',
     fsModelPath: 'v11-wo-vtrace',
