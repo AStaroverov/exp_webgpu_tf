@@ -15,7 +15,7 @@ export class ValueLearnerAgent extends BaseLearnerAgent {
 
     public train(
         batchCount: number,
-        getRandomBatch: (batchSize: number) => {
+        getBatch: (batchSize: number, index: number) => {
             states: InputArrays[],
             values: number[],
             returns: number[],
@@ -28,14 +28,14 @@ export class ValueLearnerAgent extends BaseLearnerAgent {
 
         for (let i = 0; i < CONFIG.valueEpochs; i++) {
             for (let j = 0; j < batchCount; j++) {
-                const rmBatch = getRandomBatch(CONFIG.miniBatchSize);
+                const mBatch = getBatch(CONFIG.miniBatchSize, j);
 
                 tf.tidy(() => {
                     const loss = trainValueNetwork(
                         this.network,
-                        createInputTensors(rmBatch.states),
-                        tf.tensor1d(rmBatch.returns),
-                        tf.tensor1d(rmBatch.values),
+                        createInputTensors(mBatch.states),
+                        tf.tensor1d(mBatch.returns),
+                        tf.tensor1d(mBatch.values),
                         CONFIG.clipRatio * 2, CONFIG.clipNorm,
                         j === batchCount - 1,
                     );

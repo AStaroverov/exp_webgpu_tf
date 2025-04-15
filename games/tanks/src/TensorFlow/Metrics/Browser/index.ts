@@ -168,11 +168,12 @@ class CompressedBuffer {
 type RenderPoint = { x: number, y: number };
 
 const store = {
-    rewards: new CompressedBuffer(10_000, 5),
+    rewards: new CompressedBuffer(10_000, 10),
     values: new CompressedBuffer(10_000, 5),
     returns: new CompressedBuffer(10_000, 5),
+    tdErrors: new CompressedBuffer(10_000, 5),
     advantages: new CompressedBuffer(10_000, 5),
-    kl: new CompressedBuffer(10_000, 5),
+    kl: new CompressedBuffer(1_000, 5),
     lr: new CompressedBuffer(1_000, 5),
     valueLoss: new CompressedBuffer(1_000, 5),
     policyLoss: new CompressedBuffer(1_000, 5),
@@ -193,6 +194,8 @@ getAgentLog().then((data) => {
         store.values.fromJson(data.values);
         // @ts-ignore
         store.returns.fromJson(data.returns);
+        // @ts-ignore
+        store.tdErrors.fromJson(data.tdErrors);
         // @ts-ignore
         store.advantages.fromJson(data.advantages);
         // @ts-ignore
@@ -234,6 +237,7 @@ export const saveMetrics = throttle(() => {
         rewards: store.rewards.toJson(),
         values: store.values.toJson(),
         returns: store.returns.toJson(),
+        tdErrors: store.tdErrors.toJson(),
         advantages: store.advantages.toJson(),
         valueLoss: store.valueLoss.toJson(),
         policyLoss: store.policyLoss.toJson(),
@@ -256,6 +260,7 @@ export function subscribeOnMetrics() {
     metricsChannels.rewards.onmessage = w((event) => store.rewards.add(...event.data));
     metricsChannels.values.onmessage = w((event) => store.values.add(...event.data));
     metricsChannels.returns.onmessage = w((event) => store.returns.add(...event.data));
+    metricsChannels.tdErrors.onmessage = w((event) => store.tdErrors.add(...event.data));
     metricsChannels.advantages.onmessage = w((event) => store.advantages.add(...event.data));
     metricsChannels.kl.onmessage = w((event) => store.kl.add(...event.data));
     metricsChannels.policyLoss.onmessage = w((event) => store.policyLoss.add(...event.data));
@@ -305,15 +310,6 @@ function drawTab1() {
         height: 300,
     });
 
-    tfvis.render.scatterplot({ name: 'Advantage', tab }, {
-        values: [store.advantages.toArrayMin(), store.advantages.toArrayMax()],
-    }, {
-        xLabel: 'Version',
-        yLabel: 'Advantage',
-        width: 500,
-        height: 300,
-    });
-
     const avgValues = store.values.toArray();
     tfvis.render.scatterplot({ name: 'Value', tab }, {
         values: [
@@ -328,6 +324,7 @@ function drawTab1() {
         width: 500,
         height: 300,
     });
+
     const avgReturns = store.returns.toArray();
     tfvis.render.scatterplot({ name: 'Return', tab }, {
         values: [
@@ -342,6 +339,30 @@ function drawTab1() {
         width: 500,
         height: 300,
     });
+
+    const avgTdErrors = store.tdErrors.toArray();
+    tfvis.render.scatterplot({ name: 'TD Error', tab }, {
+        values: [
+            avgTdErrors,
+            calculateMovingAverage(avgTdErrors, 1000),
+        ],
+    }, {
+        xLabel: 'Version',
+        yLabel: 'TD Error',
+        width: 500,
+        height: 300,
+    });
+
+    tfvis.render.scatterplot({ name: 'Advantage', tab }, {
+        values: [store.advantages.toArrayMin(), store.advantages.toArrayMax()],
+    }, {
+        xLabel: 'Version',
+        yLabel: 'Advantage',
+        width: 500,
+        height: 300,
+    });
+
+
 }
 
 function drawTab2() {

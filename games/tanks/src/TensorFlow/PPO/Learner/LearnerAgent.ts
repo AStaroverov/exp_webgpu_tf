@@ -1,5 +1,5 @@
 import '@tensorflow/tfjs-backend-wasm';
-import { ceil, floor, max } from '../../../../../../lib/math.ts';
+import { ceil, max } from '../../../../../../lib/math.ts';
 import { CONFIG } from '../config.ts';
 import { flatTypedArray } from '../../Common/flat.ts';
 import { learnerStateChannel, memoryChannel } from '../../DB';
@@ -11,7 +11,6 @@ import { computeVTraceTargets } from '../train.ts';
 import { distinctUntilChanged, filter, first, map, mergeMap, of, shareReplay, withLatestFrom } from 'rxjs';
 import { forceExitChannel, metricsChannels } from '../../Common/channels.ts';
 import { PrioritizedReplayBuffer } from '../../Common/PrioritizedReplayBuffer.ts';
-import { shuffle } from '../../../../../../lib/shuffle.ts';
 
 type ExtendedBatch = (Batch & {
     version: number,
@@ -20,8 +19,6 @@ type ExtendedBatch = (Batch & {
     tdErrors: Float32Array,
     advantages: Float32Array
 });
-
-const getIndexes = (length: number) => Array.from({ length }, (_, i) => i);
 
 export class LearnerAgent {
     private policyLA = new PolicyLearnerAgent();
@@ -79,25 +76,24 @@ export class LearnerAgent {
         this.batches = [];
 
         const prb = new PrioritizedReplayBuffer(batch.tdErrors);
-        const policyMiniBatchCount = ceil(batch.size / CONFIG.miniBatchSize);
-        const valueMiniBatchCount = floor(policyMiniBatchCount / 1);
+        const miniBatchCount = ceil(batch.size / CONFIG.miniBatchSize);
 
         console.log(`[Train]: Iteration ${ version },
          Sum batch size: ${ batch.size },
-         Mini batch count: ${ policyMiniBatchCount }/${ valueMiniBatchCount } by ${ CONFIG.miniBatchSize }`);
+         Mini batch count: ${ miniBatchCount } by ${ CONFIG.miniBatchSize }`);
 
         // policy
-        const getPriorPolicyBatch = (batchSize: number) => {
-            const { indices, weights } = prb.sample(batchSize);
+        const getPolicyBatch = (batchSize: number, index: number) => {
+            const { indices, weights } = prb.getSampleWithTop(batchSize, index * batchSize, (index + 1) * batchSize);
             return Object.assign(createPolicyBatch(batch, indices), { weights });
         };
-        const getRandomKLBatch = (size: number) => {
-            return createKlBatch(batch, shuffle(getIndexes(batch.size).slice(0, size)));
+        const getKLBatch = (size: number) => {
+            return createKlBatch(batch, prb.getSample(batch.size).slice(0, size));
         };
         const policyTrainMetrics = this.policyLA.train(
-            policyMiniBatchCount,
-            getPriorPolicyBatch,
-            getRandomKLBatch,
+            miniBatchCount,
+            getPolicyBatch,
+            getKLBatch,
             (lr) => {
                 this.policyLA.updateLR(lr);
                 this.valueLA.updateLR(lr);
@@ -106,12 +102,12 @@ export class LearnerAgent {
         );
 
         // value
-        const getValueRandomBatch = (size: number) => {
-            return createValueBatch(batch, shuffle(getIndexes(batch.size).slice(0, size)));
+        const getValueBatch = (batchSize: number, index: number) => {
+            return createValueBatch(batch, prb.getSample(batchSize, index * batchSize, (index + 1) * batchSize));
         };
         const valueTrainMetrics = this.valueLA.train(
-            valueMiniBatchCount,
-            getValueRandomBatch,
+            miniBatchCount,
+            getValueBatch,
         );
 
         const endTime = Date.now();
@@ -217,10 +213,11 @@ export class LearnerAgent {
         for (const batch of batches) {
             metricsChannels.versionDelta.postMessage(version - batch.version);
             metricsChannels.batchSize.postMessage(batch.size);
+            metricsChannels.rewards.postMessage(batch.rewards);
             metricsChannels.values.postMessage(batch.values);
             metricsChannels.returns.postMessage(batch.returns);
+            metricsChannels.tdErrors.postMessage(batch.tdErrors);
             metricsChannels.advantages.postMessage(batch.advantages);
-            metricsChannels.rewards.postMessage(batch.rewards);
         }
 
         metricsChannels.waitTime.postMessage(waitTime / 1000);

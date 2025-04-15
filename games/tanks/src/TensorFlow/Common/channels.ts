@@ -11,6 +11,7 @@ export const metricsChannels = {
     rewards: new BroadcastChannel('rewards'),
     values: new BroadcastChannel('value'),
     returns: new BroadcastChannel('returns'),
+    tdErrors: new BroadcastChannel('tdErrors'),
     advantages: new BroadcastChannel('advantages'),
     kl: new BroadcastChannel('kl'),
     lr: new BroadcastChannel('lr'),

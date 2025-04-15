@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
-import { floor, mean } from '../../../../../../lib/math.ts';
+import { ceil, floor, mean } from '../../../../../../lib/math.ts';
 import { createPolicyNetwork } from '../../Models/Create.ts';
 import { computeKullbackLeiblerExact, trainPolicyNetwork } from '../train.ts';
 import { CONFIG } from '../config.ts';
@@ -22,7 +22,7 @@ export class PolicyLearnerAgent extends BaseLearnerAgent {
 
     public train(
         batchCount: number,
-        getLearnBatch: (batchSize: number) => {
+        getLearnBatch: (batchSize: number, index: number) => {
             states: InputArrays[],
             actions: Float32Array[],
             logProbs: number[],
@@ -41,13 +41,13 @@ export class PolicyLearnerAgent extends BaseLearnerAgent {
         klList: number[],
         policyLossList: number[],
     } {
-        const klSize = floor(CONFIG.miniBatchSize / 3);
+        const klSize = floor(CONFIG.miniBatchSize * ceil(batchCount / 3));
         const klList: number[] = [];
         const policyLossList: number[] = [];
 
         for (let i = 0; i < CONFIG.policyEpochs; i++) {
             for (let j = 0; j < batchCount; j++) {
-                const mBatch = getLearnBatch(CONFIG.miniBatchSize);
+                const mBatch = getLearnBatch(CONFIG.miniBatchSize, j);
 
                 tf.tidy(() => {
                     const policyLoss = trainPolicyNetwork(
