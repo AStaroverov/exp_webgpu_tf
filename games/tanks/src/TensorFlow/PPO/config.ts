@@ -1,8 +1,3 @@
-// Experiment configuration for tank reinforcement learning with PPO
-// This allows fine-tuning the RL model and experimenting with different hyperparameters
-
-// Define experiment configurations that can be easily switched
-
 import { isMac } from '../../../../../lib/detect.ts';
 
 export type Config = {
