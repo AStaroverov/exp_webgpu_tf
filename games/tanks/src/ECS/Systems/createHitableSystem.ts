@@ -9,7 +9,7 @@ import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 import { onSet, query } from 'bitecs';
 import { Bullet } from '../Components/Bullet.ts';
 import { createChangeDetector } from '../../../../../src/ECS/Systems/ChangedDetectorSystem.ts';
-import { TankPart } from '../Components/TankPart.ts';
+import { TankPart } from '../Components/Tank/TankPart.ts';
 import { resetTankPartJointComponent } from '../Components/Tank/TankUtils.ts';
 
 export function createHitableSystem({ world } = GameDI) {

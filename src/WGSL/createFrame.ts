@@ -39,6 +39,7 @@ export function createFrameTick(
         const passEncoder = commandEncoder.beginRenderPass({
             colorAttachments: [
                 {
+                    // view: context.getCurrentTexture().createView(),
                     view: textureView,
                     clearValue: background,
                     loadOp: 'clear',

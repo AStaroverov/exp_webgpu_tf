@@ -8,6 +8,7 @@ export const TANK_APPROXIMATE_COLLISION_RADIUS = 80;
 export const Tank = component({
     aimEid: TypedArray.f64(delegate.defaultSize),
     turretEId: TypedArray.f64(delegate.defaultSize),
+
     bulletSpeed: TypedArray.f64(delegate.defaultSize),
     bulletStartPosition: NestedArray.f64(2, delegate.defaultSize),
     initialPartsCount: TypedArray.f64(delegate.defaultSize),

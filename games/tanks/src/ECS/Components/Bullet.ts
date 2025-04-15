@@ -14,10 +14,10 @@ import { isNumber } from 'lodash-es';
 import { Hitable } from './Hitable.ts';
 import { Player } from './Player.ts';
 import { Tank } from './Tank/Tank.ts';
-import { random } from '../../../../../lib/random.ts';
 import { ZIndex } from '../../consts.ts';
 import { DestroyByTimeout } from './Destroy.ts';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
+import { Color } from '../../../../../src/ECS/Components/Common.ts';
 
 export const Bullet = {};
 
@@ -77,23 +77,22 @@ const optionsSpawnBullet = {
 const tmpMatrix = mat4.create();
 const tmpPosition = vec3.create() as Float32Array;
 
-export function spawnBullet(tankId: number) {
-    const globalTransform = GlobalTransform.matrix.getBatch(Tank.turretEId[tankId]);
-    const bulletDelta = Tank.bulletStartPosition.getBatch(tankId);
+export function spawnBullet(tankEid: number) {
+    const globalTransform = GlobalTransform.matrix.getBatch(Tank.turretEId[tankEid]);
+    const bulletDelta = Tank.bulletStartPosition.getBatch(tankEid);
+    const aimEid = Tank.aimEid[tankEid];
 
     tmpPosition.set(bulletDelta);
     mat4.identity(tmpMatrix);
     mat4.translate(tmpMatrix, tmpMatrix, tmpPosition);
     mat4.multiply(tmpMatrix, globalTransform, tmpMatrix);
 
-    optionsSpawnBullet.color[0] = random();
-    optionsSpawnBullet.color[1] = random();
-    optionsSpawnBullet.color[2] = random();
+    Color.applyColorToArray(aimEid, optionsSpawnBullet.color);
     optionsSpawnBullet.x = getMatrixTranslationX(tmpMatrix);
     optionsSpawnBullet.y = getMatrixTranslationY(tmpMatrix);
     optionsSpawnBullet.rotation = getMatrixRotationZ(tmpMatrix);
-    optionsSpawnBullet.speed = Tank.bulletSpeed[tankId];
-    optionsSpawnBullet.playerId = Player.id[tankId];
+    optionsSpawnBullet.speed = Tank.bulletSpeed[tankEid];
+    optionsSpawnBullet.playerId = Player.id[tankEid];
 
     createBulletRR(optionsSpawnBullet);
 }

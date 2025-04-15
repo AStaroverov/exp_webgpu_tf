@@ -4,9 +4,9 @@ import { abs, centerStep, hypot, lerp, max, min, smoothstep } from '../../../../
 import { TANK_RADIUS } from './consts.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 import { Tank } from '../../ECS/Components/Tank/Tank.ts';
-import { TankController } from '../../ECS/Components/TankController.ts';
+import { TankController } from '../../ECS/Components/Tank/TankController.ts';
 import { CONFIG } from '../PPO/config.ts';
-import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../ECS/Components/TankState.ts';
+import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../ECS/Components/Tank/TankState.ts';
 import { getTankHealth } from '../../ECS/Components/Tank/TankHealth.ts';
 
 // Константы для калибровки вознаграждений

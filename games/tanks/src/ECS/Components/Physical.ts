@@ -36,7 +36,7 @@ export const RigidBodyState = component({
     position: NestedArray.f64(2, delegate.defaultSize),
     rotation: TypedArray.f64(delegate.defaultSize),
     linvel: NestedArray.f64(2, delegate.defaultSize),
-    // angvel: TypedArray.f64(delegate.defaultSize),
+    angvel: TypedArray.f64(delegate.defaultSize),
     // mass: new Float64Array(delegate.defaultSize),
     // force: new Float64Array(delegate.defaultSize),
     // torque: new Float64Array(delegate.defaultSize),
@@ -58,13 +58,13 @@ export const RigidBodyState = component({
         translation: { x: number, y: number },
         rotation: number,
         linvel: { x: number, y: number },
-        // angvel: number,
+        angvel: number,
     ) => {
         RigidBodyState.position.set(eid, 0, translation.x);
         RigidBodyState.position.set(eid, 1, translation.y);
         RigidBodyState.rotation[eid] = rotation;
         RigidBodyState.linvel.set(eid, 0, linvel.x);
         RigidBodyState.linvel.set(eid, 1, linvel.y);
-        // RigidBodyState.angvel[eid] = angvel;
+        RigidBodyState.angvel[eid] = angvel;
     },
 });
