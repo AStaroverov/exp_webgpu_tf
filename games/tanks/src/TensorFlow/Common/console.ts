@@ -33,9 +33,9 @@ export function setConsolePrefix(prefix: string): void {
             const stackLines = stack.stack?.split('\n') || [];
             const callerInfo = stackLines.length > 2 ? ' ' + stackLines[2].trim() : '';
 
-            // if (method === 'error' || method === 'warn' || devtools.isOpen || isMac) {
+            if (method === 'error' || method === 'warn' || devtools.isOpen || isMac) {
                 originalConsole[method].apply(console, [prefix, ...args, callerInfo]);
-            // }
+            }
         };
     });
 }
