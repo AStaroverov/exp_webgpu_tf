@@ -29,6 +29,7 @@ export function createVisualizationTracksSystem({ world, physicalWorld } = GameD
 
             for (let i = 0; i < childrenCount; i++) {
                 const childEid = childrenEids[i];
+
                 if (!hasComponent(world, childEid, TankPartTrack)) continue;
 
                 const jointPid = TankPart.jointPid[childEid];
@@ -40,6 +41,9 @@ export function createVisualizationTracksSystem({ world, physicalWorld } = GameD
                 const angFactor = anchor1[0] > 0 ? -0.8 : 0.8;
                 let delta = (speed / 100 + (angvel * angFactor));
                 delta -= delta % 0.01;
+
+                if (delta === 0) continue;
+
                 anchor1[1] -= delta;
                 anchor1[1] -= anchor1[1] % 0.01;
 
