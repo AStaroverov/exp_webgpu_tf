@@ -340,12 +340,8 @@ function drawTab1() {
         height: 300,
     });
 
-    const avgTdErrors = store.tdErrors.toArray();
     tfvis.render.scatterplot({ name: 'TD Error', tab }, {
-        values: [
-            avgTdErrors,
-            calculateMovingAverage(avgTdErrors, 1000),
-        ],
+        values: [store.tdErrors.toArrayMin(), store.tdErrors.toArrayMax()],
     }, {
         xLabel: 'Version',
         yLabel: 'TD Error',
