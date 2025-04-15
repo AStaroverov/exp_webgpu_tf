@@ -15,7 +15,7 @@ const MAX_PADDING = 100;
 export async function createBattlefield(tanksCount: number, withRender = false, withPlayer = false) {
     TenserFlowDI.enabled = true;
 
-    const game = await createGame({ width: 1000, height: 1000, withPlayer, withRender });
+    const game = await createGame({ width: 1400, height: 1200, withPlayer, withRender });
     const width = GameDI.width;
     const height = GameDI.height;
     const padding = random() * MAX_PADDING;

@@ -37,7 +37,7 @@ let REWARD_WEIGHTS = {
     MAP_BORDER: {
         BASE: 1,          // За нахождение в пределах карты
         RETURN: 1,        // За возвращение в пределы карты
-        PENALTY: -2.5,    // За выход за границы
+        PENALTY: -4,    // За выход за границы
     },
     MAP_BORDER_MULTIPLIER: 1,
 
