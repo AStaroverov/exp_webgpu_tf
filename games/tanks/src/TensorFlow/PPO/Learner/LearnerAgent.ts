@@ -80,7 +80,7 @@ export class LearnerAgent {
 
         const prb = new PrioritizedReplayBuffer(batch.tdErrors);
         const policyMiniBatchCount = ceil(batch.size / CONFIG.miniBatchSize);
-        const valueMiniBatchCount = floor(policyMiniBatchCount / 2);
+        const valueMiniBatchCount = floor(policyMiniBatchCount / 1);
 
         console.log(`[Train]: Iteration ${ version },
          Sum batch size: ${ batch.size },
@@ -91,8 +91,8 @@ export class LearnerAgent {
             const { indices, weights } = prb.sample(batchSize);
             return Object.assign(createPolicyBatch(batch, indices), { weights });
         };
-        const getRandomKLBatch = (batchSize: number) => {
-            return createKlBatch(batch, shuffle(getIndexes(batchSize)));
+        const getRandomKLBatch = (size: number) => {
+            return createKlBatch(batch, shuffle(getIndexes(batch.size).slice(0, size)));
         };
         const policyTrainMetrics = this.policyLA.train(
             policyMiniBatchCount,
@@ -106,8 +106,8 @@ export class LearnerAgent {
         );
 
         // value
-        const getValueRandomBatch = (batchSize: number) => {
-            return createValueBatch(batch, shuffle(getIndexes(batchSize)));
+        const getValueRandomBatch = (size: number) => {
+            return createValueBatch(batch, shuffle(getIndexes(batch.size).slice(0, size)));
         };
         const valueTrainMetrics = this.valueLA.train(
             valueMiniBatchCount,

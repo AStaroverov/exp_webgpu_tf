@@ -51,7 +51,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     policyEpochs: 4,
     valueEpochs: 2,
     clipRatio: 0.2,
-    entropyCoeff: 0.01,
+    entropyCoeff: 0.005,
 
     klConfig: {
         target: 0.02,
@@ -67,14 +67,14 @@ export const DEFAULT_EXPERIMENT: Config = {
         max: 5e-3,
     },
 
-    batchSize: 300,
+    batchSize: 2048,
     miniBatchSize: 128,
 
     // Training parameters
     warmupFrames: 100,
     episodeFrames: 1200, // usually produce 250 samples
     // Workers
-    workerCount: 4,
+    workerCount: 10,
     // Training control
     savePath: 'APPO_v1',
     fsModelPath: 'v11-wo-vtrace',
