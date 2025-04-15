@@ -6,11 +6,11 @@ export function applyActionToTank(tankEid: number, action: Actions) {
     const { shoot, move, rotate, aimX, aimY } = readActions(action);
 
     TankController.setShooting$(tankEid, shoot);
-    TankController.setMove$(tankEid, clamp(TankController.move[tankEid] + move * 0.3, -0.6, 0.6));
-    TankController.setRotate$(tankEid, clamp(TankController.rotation[tankEid] + rotate * 0.3, -0.6, 0.6));
+    TankController.setMove$(tankEid, clamp(TankController.move[tankEid] + move * 0.3, -0.7, 0.7));
+    TankController.setRotate$(tankEid, clamp(TankController.rotation[tankEid] + rotate * 0.3, -0.7, 0.7));
     TankController.setTurretDir$(
         tankEid,
-        clamp(TankController.turretDir.get(tankEid, 0) + aimX * 0.3, -0.7, 0.7),
-        clamp(TankController.turretDir.get(tankEid, 1) + aimY * 0.3, -0.7, 0.7),
+        clamp(TankController.turretDir.get(tankEid, 0) + aimX * 0.3, -0.9, 0.9),
+        clamp(TankController.turretDir.get(tankEid, 1) + aimY * 0.3, -0.9, 0.9),
     );
 }
