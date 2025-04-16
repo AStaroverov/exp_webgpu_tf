@@ -48,7 +48,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     policyEpochs: 4,
     valueEpochs: 2,
     clipRatio: 0.2,
-    entropyCoeff: 0.005,
+    entropyCoeff: 0.001,
 
     klConfig: {
         target: 0.03,

@@ -292,7 +292,7 @@ function drawTab1() {
 
     const avgKL = store.kl.toArray();
     tfvis.render.scatterplot({ name: 'KL', tab }, {
-        values: [avgKL, calculateMovingAverage(avgKL, 50)],
+        values: [avgKL, calculateMovingAverage(avgKL, 25)],
         series: ['Avg', 'MA'],
     }, {
         xLabel: 'Version',

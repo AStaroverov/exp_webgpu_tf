@@ -14,7 +14,7 @@ import { InputArrays } from '../../Common/InputArrays.ts';
 import { flatTypedArray } from '../../Common/flat.ts';
 
 export class PolicyLearnerAgent extends BaseLearnerAgent {
-    private klHistory = new RingBuffer<number>(50);
+    private klHistory = new RingBuffer<number>(25);
 
     constructor() {
         super(createPolicyNetwork, Model.Policy);

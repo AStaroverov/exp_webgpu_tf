@@ -43,7 +43,7 @@ let REWARD_WEIGHTS = {
 
     DISTANCE_KEEPING: {
         BASE: 1.0,          // За поддержание дистанции
-        PENALTY: -2.5,      // За слишком близкое приближение
+        PENALTY: -2.0,      // За неудачную дистанцию
     },
     DISTANCE_KEEPING_MULTIPLIER: 1, // может быть несколько врагов
 
@@ -567,18 +567,20 @@ function calculateEnemyDistanceReward(
         const enemyY = RigidBodyState.position.get(enemyId, 1);
 
         const distToEnemy = hypot(tankX - enemyX, tankY - enemyY);
+        const minDist = TANK_RADIUS*3;
+        const maxDist = 600;
 
-        if (distToEnemy < TANK_RADIUS * 3) {
+        if (distToEnemy < minDist) {
             // Штраф за слишком близкое расстояние
-            const tooClosePenalty = 1 - smoothstep(0, TANK_RADIUS * 3, distToEnemy);
+            const tooClosePenalty = 1 - smoothstep(0, minDist, distToEnemy);
             positioningReward += tooClosePenalty * REWARD_WEIGHTS.DISTANCE_KEEPING.PENALTY;
-        } else if (distToEnemy <= 800) {
+        } else if (distToEnemy <= maxDist) {
             // Награда за оптимальную дистанцию
-            const optimalDistanceReward = lerp(0.3, 1, centerStep(TANK_RADIUS * 3, 800, distToEnemy));
+            const optimalDistanceReward = lerp(0.3, 1, centerStep(minDist, maxDist, distToEnemy));
             positioningReward += optimalDistanceReward * REWARD_WEIGHTS.DISTANCE_KEEPING.BASE;
         } else {
             // Мягкий штраф за слишком большую дистанцию
-            const tooFarPenalty = smoothstep(800, 1200, distToEnemy) * REWARD_WEIGHTS.DISTANCE_KEEPING.PENALTY / 5;
+            const tooFarPenalty = smoothstep(maxDist, maxDist * 1.5, distToEnemy) * REWARD_WEIGHTS.DISTANCE_KEEPING.PENALTY;
             positioningReward += tooFarPenalty;
         }
     }
