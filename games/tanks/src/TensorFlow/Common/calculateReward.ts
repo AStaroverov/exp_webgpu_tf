@@ -12,16 +12,16 @@ import { getTankHealth } from '../../ECS/Components/Tank/TankHealth.ts';
 // Константы для калибровки вознаграждений
 let REWARD_WEIGHTS = {
     TEAM: {
-        HEALTH: 5, // за разницу в здоровье, может быть отрицательной
+        HEALTH: 0.5, // за разницу в здоровье, может быть отрицательной
         KILLS: 5, // за разницу в количестве убитых врагов, может быть отрицательной
     },
-    TEAM_MULTIPLIER: 0.5,
+    TEAM_MULTIPLIER: 1,
 
     COMMON: {
-        HEALTH: 1, // За хороший показатель здоровья
-        SURVIVAL: 1, // За выживание в бою
+        HEALTH: 0.5, // За разницу в здоровье
+        SURVIVAL: 0.5, // За выживание в бою
     },
-    COMMON_MULTIPLIER: 0.5,
+    COMMON_MULTIPLIER: 1,
 
     AIM: {
         QUALITY: 1.0,       // За точное прицеливание
@@ -124,7 +124,7 @@ export function calculateReward(
     step: number,
 ): ComponentRewards {
     // -- before predict --
-    // const beforePredictHealth = TankInputTensor.health[tankEid];
+    const beforePredictHealth = TankInputTensor.health[tankEid];
     const [beforePredictTankX, beforePredictTankY] = TankInputTensor.position.getBatch(tankEid);
     // const [beforePredictTankSpeedX, beforePredictTankSpeedY] = TankInputTensor.speed.getBatche(tankEid);
     // const [beforePredictTurretTargetX, beforePredictTurretTargetY] = TankInputTensor.turretTarget.getBatch(tankEid);
@@ -158,7 +158,7 @@ export function calculateReward(
     rewards.team.kills = REWARD_WEIGHTS.TEAM.KILLS * calculateTeamKills(beforePredictBattleState, currentBattleState);
 
     // 1. Награда за выживание
-    rewards.common.health = REWARD_WEIGHTS.COMMON.HEALTH * currentHealth;
+    rewards.common.health = REWARD_WEIGHTS.COMMON.HEALTH * (currentHealth - beforePredictHealth);
     rewards.common.survival = REWARD_WEIGHTS.COMMON.SURVIVAL * (step / CONFIG.episodeFrames);
 
     // 2. Расчет награды за нахождение в пределах карты
