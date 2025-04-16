@@ -28,7 +28,7 @@ export class PolicyLearnerAgent extends BaseLearnerAgent {
             logProbs: number[],
             advantages: number[],
             // IS for prioritized replay
-            weights: number[],
+            // weights: number[],
         },
         getKlBatch: (batchSize: number) => {
             states: InputArrays[],

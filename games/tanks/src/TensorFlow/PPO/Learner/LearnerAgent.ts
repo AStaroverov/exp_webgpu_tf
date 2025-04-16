@@ -84,8 +84,8 @@ export class LearnerAgent {
 
         // policy
         const getPolicyBatch = (batchSize: number, index: number) => {
-            const { indices, weights } = prb.getSampleWithTop(batchSize, index * batchSize, (index + 1) * batchSize);
-            return Object.assign(createPolicyBatch(batch, indices), { weights });
+            const indices = prb.getSampleWithTop(batchSize, index * batchSize, (index + 1) * batchSize);
+            return createPolicyBatch(batch, indices);
         };
         const getKLBatch = (size: number) => {
             return createKlBatch(batch, prb.getSample(batch.size).slice(0, size));
@@ -122,8 +122,8 @@ export class LearnerAgent {
                 waitTime,
                 startTime,
                 endTime,
-                prbAlpha: prb.alpha,
-                prbBeta: prb.beta,
+                // prbAlpha: prb.alpha,
+                // prbBeta: prb.beta,
             });
         }, 0);
     }
@@ -185,8 +185,8 @@ export class LearnerAgent {
             waitTime,
             startTime,
             endTime,
-            prbAlpha,
-            prbBeta,
+            // prbAlpha,
+            // prbBeta,
         }: {
             klList: number[],
             policyLossList: number[],
@@ -196,8 +196,8 @@ export class LearnerAgent {
             waitTime: number,
             startTime: number,
             endTime: number,
-            prbAlpha: number,
-            prbBeta: number,
+            // prbAlpha: number,
+            // prbBeta: number,
         },
     ) {
         console.log('[Metrics] KL', klList.map(v => v.toFixed(4)));
@@ -207,8 +207,8 @@ export class LearnerAgent {
         console.log('[Metrics] Value loss', valueLossList.map(v => v.toFixed(4)));
         metricsChannels.valueLoss.postMessage(valueLossList);
 
-        metricsChannels.prbAlpha.postMessage(prbAlpha);
-        metricsChannels.prbBeta.postMessage(prbBeta);
+        // metricsChannels.prbAlpha.postMessage(prbAlpha);
+        // metricsChannels.prbBeta.postMessage(prbBeta);
 
         for (const batch of batches) {
             metricsChannels.versionDelta.postMessage(version - batch.version);

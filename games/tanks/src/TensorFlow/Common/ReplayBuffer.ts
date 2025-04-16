@@ -4,9 +4,11 @@ import { shuffle } from '../../../../../lib/shuffle.ts';
 
 export class ReplayBuffer {
     protected indices: number[];
+    protected shuffledIndices: number[];
 
     constructor(length: number) {
-        this.indices = shuffle(Array.from({ length }, (_, i) => i));
+        this.indices = Array.from({ length }, (_, i) => i);
+        this.shuffledIndices = shuffle(this.indices.slice());
     }
 
     getSample(
@@ -15,14 +17,14 @@ export class ReplayBuffer {
         limit: number = Infinity,
     ) {
         offset = max(offset, 0);
-        limit = min(limit, this.indices.length);
+        limit = min(limit, this.shuffledIndices.length);
         const diff = limit - offset;
         const start = offset + floor(random() * diff);
         const result = [];
         let w = 0;
         let r = start;
         while (result.length < batchSize) {
-            result[w++] = this.indices[r++];
+            result[w++] = this.shuffledIndices[r++];
             r = r >= limit ? offset : r;
         }
 
