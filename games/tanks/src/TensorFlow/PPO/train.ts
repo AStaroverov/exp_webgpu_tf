@@ -17,7 +17,7 @@ export function trainPolicyNetwork(
     actions: tf.Tensor,      // [batchSize, actionDim]
     oldLogProbs: tf.Tensor,  // [batchSize]
     advantages: tf.Tensor,   // [batchSize]
-    weights: tf.Tensor,      // [batchSize], IS weights
+    // weights: tf.Tensor,      // [batchSize], IS weights
     clipRatio: number,
     entropyCoeff: number,
     clipNorm: number,
@@ -34,8 +34,9 @@ export function trainPolicyNetwork(
             const clippedRatio = ratio.clipByValue(1 - clipRatio, 1 + clipRatio);
             const surr1 = ratio.mul(advantages);
             const surr2 = clippedRatio.mul(advantages);
-            const weightedMin = tf.minimum(surr1, surr2).mul(weights);
-            const policyLoss = weightedMin.sum().div(weights.sum()).mul(-1);
+            // const weightedMin = tf.minimum(surr1, surr2).mul(weights);
+            // const policyLoss = weightedMin.sum().div(weights.sum()).mul(-1);
+            const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
 
             const c = 0.5 * Math.log(2 * Math.PI * Math.E);
             const entropyEachDim = logStd.add(c); // [batchSize,ACTION_DIM]

@@ -14,8 +14,8 @@ export type Config = {
 
     klConfig: {
         target: number,
-        highCoef: number,
-        lowCoef: number,
+        high: number,
+        low: number,
         max: number,
     },
     lrConfig: {
@@ -51,9 +51,9 @@ export const DEFAULT_EXPERIMENT: Config = {
     entropyCoeff: 0.005,
 
     klConfig: {
-        target: 0.02,
-        highCoef: 1.5,       // Если KL > 2 * 0.01 => 0.02
-        lowCoef: 0.5,    // Если KL < 0.5 * 0.01 => 0.005
+        target: 0.03,
+        high: 0.04,
+        low: 0.02,
         max: 0.5,
     },
     lrConfig: {

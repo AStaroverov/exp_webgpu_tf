@@ -2,16 +2,15 @@ import { CONFIG } from '../PPO/config.ts';
 
 export function getDynamicLearningRate(kl: number, lr: number): number {
     const {
-        klConfig: { target: klTarget, highCoef: klHighCoef, lowCoef: klLowCoef },
+        klConfig: { high: klHigh, low: klLow },
         lrConfig: { multHigh: lrMultHigh, multLow: lrMultLow, min: minLR, max: maxLR },
     } = CONFIG;
 
-    // Если KL слишком большая (в X раз больше, чем target)
-    if (kl > klHighCoef * klTarget) {
+    if (kl > klHigh) {
         lr = Math.max(lr * lrMultHigh, minLR);
     }
     // Если KL слишком маленькая
-    else if (kl < klLowCoef * klTarget) {
+    else if (kl < klLow) {
         lr = Math.min(lr * lrMultLow, maxLR);
     }
 
