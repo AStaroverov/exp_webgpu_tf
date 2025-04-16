@@ -133,7 +133,8 @@ export class SubMemory {
             this.dones.length = minLen;
         }
 
-        const dones = new Float32Array(this.dones.map(done => done ? 1.0 : 0.0));
+        const shapedRewards = rewardsShaping(this.rewards);
+        const dones = this.dones.map(done => done ? 1.0 : 0.0);
         dones[dones.length - 1] = 1.0;
 
         return {
@@ -143,8 +144,8 @@ export class SubMemory {
             mean: (this.mean),
             logStd: (this.logStd),
             logProbs: new Float32Array(this.logProbs),
-            rewards: new Float32Array(this.rewards),
-            dones,
+            rewards: new Float32Array(shapedRewards),
+            dones: new Float32Array(dones),
         };
     }
 
@@ -166,4 +167,23 @@ export class SubMemory {
             this.tmpDones = [];
         }
     }
+}
+
+/**
+ * Reward shaping idea:
+ * r_t_prime = (r_t * k) + (r_t - r_{t-1})
+ * r_t * k       — keeps a (small) absolute measure of how good the current
+ *                 state is (good vs. bad), scaled down by factor k.
+ * r_t - r_{t-1} — adds a delta term that rewards the agent for any
+ *                 immediate improvement and penalises deterioration.
+ *
+ * In practice this lets the policy focus on *progress* (delta) while still
+ * anchoring behaviour to an overall notion of “healthy” or “dangerous”
+ * states.  Tune k so the delta dominates, but the absolute term prevents
+ * agents from exploiting loops or camping in mediocre positions.
+ */
+function rewardsShaping(rewards: number[], k: number = 0.3): number[] {
+    return rewards.map((reward, i) => {
+        return reward * k + (i === 0 ? 0 : (reward - rewards[i - 1]));
+    });
 }

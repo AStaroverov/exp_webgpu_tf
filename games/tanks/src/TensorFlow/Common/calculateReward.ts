@@ -12,8 +12,8 @@ import { getTankHealth } from '../../ECS/Components/Tank/TankHealth.ts';
 // Константы для калибровки вознаграждений
 let REWARD_WEIGHTS = {
     TEAM: {
-        HEALTH: 0.5, // за разницу в здоровье, может быть отрицательной
-        KILLS: 5, // за разницу в количестве убитых врагов, может быть отрицательной
+        HEALTH: 0.2, // за разницу в здоровье, может быть отрицательной
+        KILLS: 2, // за разницу в количестве убитых врагов, может быть отрицательной
     },
     TEAM_MULTIPLIER: 1,
 
@@ -30,14 +30,14 @@ let REWARD_WEIGHTS = {
         DISTANCE_PENALTY: -0.1, // За расстояние до цели
         SHOOTING: 1.0,       // За стрельбу в цель
         SHOOTING_PENALTY: -0.1, // За стрельбу в пустоту
-        SHOOTING_ALLIES_PENALTY: -3.0, // За стрельбу в союзников
+        SHOOTING_ALLIES_PENALTY: -2.0, // За стрельбу в союзников
     },
     AIM_MULTIPLIER: 3,
 
     MAP_BORDER: {
         BASE: 1,          // За нахождение в пределах карты
         RETURN: 1,        // За возвращение в пределы карты
-        PENALTY: -4,    // За выход за границы
+        PENALTY: -2,    // За выход за границы
     },
     MAP_BORDER_MULTIPLIER: 1,
 
