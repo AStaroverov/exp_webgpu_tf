@@ -6,11 +6,11 @@ import {
     getMatrixTranslationY,
     GlobalTransform,
 } from '../../../../../src/ECS/Components/Transform.ts';
-import { random } from '../../../../../lib/random.ts';
 import { Children } from '../Components/Children.ts';
 import { TankPart } from '../Components/Tank/TankPart.ts';
 import { isOutOfGameZone } from './utils/isOutOfGameZone.ts';
 import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
+import { random } from '../../../../../lib/random.ts';
 
 export function createTankDecayOutOfZoneSystem({ world } = GameDI) {
     return () => {

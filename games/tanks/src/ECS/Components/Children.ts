@@ -30,16 +30,16 @@ export const Children = component({
         Children.entitiesCount[entity] = 0;
     },
 
-    removeChild(entity: number, child: number): void {
-        const children = Children.entitiesIds.getBatch(entity);
-        const length = Children.entitiesCount[entity];
-        const index = children.subarray(0, length).indexOf(child);
+    removeChild(parentEid: number, childEid: number): void {
+        const children = Children.entitiesIds.getBatch(parentEid);
+        const length = Children.entitiesCount[parentEid];
+        const index = children.subarray(0, length).indexOf(childEid);
 
         if (index === -1) return;
 
-        Children.entitiesCount[entity] -= 1;
+        Children.entitiesCount[parentEid] -= 1;
         children.set(children.subarray(0, index), 0);
         children.set(children.subarray(index + 1, length), index);
-        children[Children.entitiesCount[entity]] = 0;
+        children[Children.entitiesCount[parentEid]] = 0;
     },
 });
