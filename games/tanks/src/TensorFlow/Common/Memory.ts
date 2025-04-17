@@ -188,10 +188,10 @@ function rewardMultipliers(limit: number): number[] {
     return normalized;
 }
 
-export const STATE_COEFFICIENT = 0.25;
+const REWARD_SHAPING_COEFFICIENT = 0.25;
 
-function rewardsShaping(stateRewards: number[], actionRewards: number[], k = STATE_COEFFICIENT): number[] {
+function rewardsShaping(stateRewards: number[], actionRewards: number[], k = REWARD_SHAPING_COEFFICIENT): number[] {
     return actionRewards.map((reward, i) => {
-        return stateRewards[i] * k + (reward - stateRewards[i]) * (1 - k);
+        return reward * k + (reward - stateRewards[i]) * (1 - k);
     });
 }
