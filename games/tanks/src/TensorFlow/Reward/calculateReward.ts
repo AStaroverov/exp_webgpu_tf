@@ -349,26 +349,26 @@ function analyzeAiming(
 function computeAimQuality(
     tankX: number,
     tankY: number,
-    turretX: number,
-    turretY: number,
+    turretTargetX: number,
+    turretTargetY: number,
     enemyX: number,
     enemyY: number,
 ): { quality: number; tangentialAimQuality: number } {
     // Вектор от танка к турели
-    const tankToTurretX = turretX - tankX;
-    const tankToTurretY = turretY - tankY;
+    const tankToTurretTargetX = turretTargetX - tankX;
+    const tankToTurretTargetY = turretTargetY - tankY;
 
     // Вектор от танка к противнику
     const tankToEnemyX = enemyX - tankX;
     const tankToEnemyY = enemyY - tankY;
 
-    const turretToEnemyX = enemyX - turretX;
-    const turretToEnemyY = enemyY - turretY;
+    const turretToEnemyX = enemyX - turretTargetX;
+    const turretToEnemyY = enemyY - turretTargetY;
 
     // Вычисляем длины векторов
-    const tankToTurretDist = hypot(tankToTurretX, tankToTurretY);
     const tankToEnemyDist = hypot(tankToEnemyX, tankToEnemyY);
     const turretToEnemyDist = hypot(turretToEnemyX, turretToEnemyY);
+    const tankToTurretTargetDist = hypot(tankToTurretTargetX, tankToTurretTargetY);
 
     // Учитываем расстояние до противника (как в исходной функции)
     const distanceQuality =
@@ -377,8 +377,8 @@ function computeAimQuality(
         + lerp(0, 0.96, smoothstep(TANK_RADIUS * 1.2, 0, turretToEnemyDist));
 
     // Нормализованные векторы
-    const turretNormX = tankToTurretX / (tankToTurretDist + EPSILON);
-    const turretNormY = tankToTurretY / (tankToTurretDist + EPSILON);
+    const turretNormX = tankToTurretTargetX / (tankToTurretTargetDist + EPSILON);
+    const turretNormY = tankToTurretTargetY / (tankToTurretTargetDist + EPSILON);
     const enemyNormX = tankToEnemyX / (tankToEnemyDist + EPSILON);
     const enemyNormY = tankToEnemyY / (tankToEnemyDist + EPSILON);
 
@@ -406,7 +406,7 @@ function computeAimQuality(
     const tangentialAimQuality = smoothstep(TANK_RADIUS * 1.5, 0, Math.abs(tangentialDistance));
 
     return {
-        quality: 0.2 * distanceQuality + 0.3 * directAimQuality + 0.5 * tangentialAimQuality,
+        quality: 0.1 * directAimQuality + 0.3 * distanceQuality + 0.6 * tangentialAimQuality,
         tangentialAimQuality,
     };
 }
