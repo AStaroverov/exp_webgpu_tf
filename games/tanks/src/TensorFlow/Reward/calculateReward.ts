@@ -19,7 +19,7 @@ const WEIGHTS = Object.freeze({
     TEAM_MULTIPLIER: 1,
 
     COMMON: {
-        HEALTH: 0.2,
+        HEALTH: 0.6,
     },
     COMMON_MULTIPLIER: 1,
 
