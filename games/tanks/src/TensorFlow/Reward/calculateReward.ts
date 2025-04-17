@@ -9,8 +9,10 @@ import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../..
 import { getTankHealth } from '../../ECS/Components/Tank/TankHealth.ts';
 import { EntityId } from 'bitecs';
 
-// Константы для калибровки вознаграждений
-let REWARD_WEIGHTS = {
+const WEIGHTS = Object.freeze({
+    DEATH: -10,
+    SURVIVED: 10,
+
     TEAM: {
         SCORE: 0.2,
     },
@@ -49,7 +51,7 @@ let REWARD_WEIGHTS = {
         AVOID_QUALITY: 0.8,
     },
     BULLET_AVOIDANCE_MULTIPLIER: 1,
-};
+});
 
 // Структура для хранения многокомпонентных наград
 export type ComponentRewards = {
@@ -105,9 +107,19 @@ export function calculateReward(
     tankEid: number,
     width: number,
     height: number,
-): ComponentRewards {
-    const isShooting = TankController.shoot[tankEid] > 0;
+    isEpisodeDone: boolean,
+): number {
     const currentHealth = getTankHealth(tankEid);
+
+    if (currentHealth <= 0) {
+        return WEIGHTS.DEATH;
+    }
+
+    if (isEpisodeDone) {
+        return WEIGHTS.SURVIVED;
+    }
+
+    const isShooting = TankController.shoot[tankEid] > 0;
     const [currentTankX, currentTankY] = RigidBodyState.position.getBatch(tankEid);
     // const [currentTankSpeedX, currentTankSpeedY] = RigidBodyState.linvel.getBatche(tankEid);
     const [currentTurretTargetX, currentTurretTargetY] = getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[tankEid]));
@@ -137,7 +149,7 @@ export function calculateReward(
 
     rewards.team.score = getTeamAdvantageScore(currentBattleState);
 
-    rewards.common.health = REWARD_WEIGHTS.COMMON.HEALTH * currentHealth;
+    rewards.common.health = WEIGHTS.COMMON.HEALTH * currentHealth;
 
     rewards.positioning.mapAwareness = calculateTankMapAwarenessReward(
         width,
@@ -184,22 +196,22 @@ export function calculateReward(
     );
 
     // Рассчитываем итоговые значения
-    rewards.team.total = REWARD_WEIGHTS.TEAM_MULTIPLIER
+    rewards.team.total = WEIGHTS.TEAM_MULTIPLIER
         * (rewards.team.score);
-    rewards.common.total = REWARD_WEIGHTS.COMMON_MULTIPLIER
+    rewards.common.total = WEIGHTS.COMMON_MULTIPLIER
         * (rewards.common.health);
-    rewards.aim.total = REWARD_WEIGHTS.AIM_MULTIPLIER
+    rewards.aim.total = WEIGHTS.AIM_MULTIPLIER
         * (rewards.aim.accuracy + rewards.aim.distance + rewards.aim.shootDecision);
     rewards.positioning.total =
-        (rewards.positioning.enemiesPositioning * REWARD_WEIGHTS.DISTANCE_KEEPING_MULTIPLIER
-            + rewards.positioning.alliesPositioning * REWARD_WEIGHTS.DISTANCE_KEEPING_MULTIPLIER
-            + rewards.positioning.bulletAvoidance * REWARD_WEIGHTS.BULLET_AVOIDANCE_MULTIPLIER
-            + rewards.positioning.mapAwareness * REWARD_WEIGHTS.MAP_BORDER_MULTIPLIER);
+        (rewards.positioning.enemiesPositioning * WEIGHTS.DISTANCE_KEEPING_MULTIPLIER
+            + rewards.positioning.alliesPositioning * WEIGHTS.DISTANCE_KEEPING_MULTIPLIER
+            + rewards.positioning.bulletAvoidance * WEIGHTS.BULLET_AVOIDANCE_MULTIPLIER
+            + rewards.positioning.mapAwareness * WEIGHTS.MAP_BORDER_MULTIPLIER);
 
     // Общая итоговая награда
     rewards.totalReward = rewards.team.total + rewards.common.total + rewards.aim.total + rewards.positioning.total;
 
-    return rewards;
+    return rewards.totalReward;
 }
 
 export function getTeamAdvantageScore(
@@ -212,7 +224,7 @@ export function getTeamAdvantageScore(
     const normHP = (state.alliesTotalHealth - state.enemiesTotalHealth) / tanksCount;
 
     // Combine the two normalised components
-    return REWARD_WEIGHTS.TEAM.SCORE * (alpha * normCount + beta * normHP);
+    return WEIGHTS.TEAM.SCORE * (alpha * normCount + beta * normHP);
 }
 
 function calculateTankMapAwarenessReward(
@@ -227,8 +239,8 @@ function calculateTankMapAwarenessReward(
         return 0;
     } else {
         const dist = distanceToMap(width, height, x, y);
-        return 0.8 * REWARD_WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, 1000, dist)
-            + 0.2 * REWARD_WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, 10000, dist);
+        return 0.8 * WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, 1000, dist)
+            + 0.2 * WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, 10000, dist);
     }
 }
 
@@ -311,19 +323,19 @@ function analyzeAiming(
 
     // Награда за качество прицеливания и дистанцию до цели
     const aimQualityReward =
-        (bestEnemyAimQuality * REWARD_WEIGHTS.AIM.QUALITY)
-        + (bestEnemyAimTargetId === 0 ? REWARD_WEIGHTS.AIM.NO_TARGET_PENALTY : 0);
+        (bestEnemyAimQuality * WEIGHTS.AIM.QUALITY)
+        + (bestEnemyAimTargetId === 0 ? WEIGHTS.AIM.NO_TARGET_PENALTY : 0);
 
     // Награда за дистанцию прицеливания
     const turretTargetDistance = hypot(turretTargetX - tankX, turretTargetY - tankY);
     const aimDistanceReward =
-        REWARD_WEIGHTS.AIM.DISTANCE * (
+        WEIGHTS.AIM.DISTANCE * (
             turretTargetDistance < 300
                 ? smoothstep(TANK_RADIUS, 300, turretTargetDistance)
                 : smoothstep(800, 300, turretTargetDistance)
         )
-        + REWARD_WEIGHTS.AIM.DISTANCE_PENALTY * smoothstep(TANK_RADIUS, 0, turretTargetDistance)
-        + REWARD_WEIGHTS.AIM.DISTANCE_PENALTY * smoothstep(800, 1000, turretTargetDistance);
+        + WEIGHTS.AIM.DISTANCE_PENALTY * smoothstep(TANK_RADIUS, 0, turretTargetDistance)
+        + WEIGHTS.AIM.DISTANCE_PENALTY * smoothstep(800, 1000, turretTargetDistance);
 
     return {
         bestEnemyAimQuality,
@@ -410,15 +422,15 @@ function calculateShootingReward(
     let shootingReward = 0;
 
     if (isShooting && sumAlliesAimQuality > bestEnemyAimQuality) {
-        return REWARD_WEIGHTS.AIM.SHOOTING_ALLIES_PENALTY;
+        return WEIGHTS.AIM.SHOOTING_ALLIES_PENALTY;
     }
 
     if (isShooting) {
         // Плавная награда за стрельбу в зависимости от точности прицеливания
-        shootingReward += bestEnemyAimQuality * REWARD_WEIGHTS.AIM.SHOOTING;
+        shootingReward += bestEnemyAimQuality * WEIGHTS.AIM.SHOOTING;
     } else if (bestEnemyAimQuality > 0.7) {
         // Небольшой штраф за отсутствие стрельбы при хорошем прицеливании
-        shootingReward += REWARD_WEIGHTS.AIM.SHOOTING_PENALTY * smoothstep(0.8, 1.0, bestEnemyAimQuality);
+        shootingReward += WEIGHTS.AIM.SHOOTING_PENALTY * smoothstep(0.8, 1.0, bestEnemyAimQuality);
     }
 
     return shootingReward;
@@ -444,14 +456,14 @@ function calculateEnemyDistanceReward(
         if (distToEnemy < minDist) {
             // Штраф за слишком близкое расстояние
             const tooClosePenalty = smoothstep(minDist, 0, distToEnemy);
-            positioningReward += tooClosePenalty * REWARD_WEIGHTS.DISTANCE_KEEPING.PENALTY;
+            positioningReward += tooClosePenalty * WEIGHTS.DISTANCE_KEEPING.PENALTY;
         } else if (distToEnemy <= maxDist) {
             // Награда за оптимальную дистанцию
             const optimalDistanceReward = centerStep(minDist, maxDist, distToEnemy);
-            positioningReward += optimalDistanceReward * REWARD_WEIGHTS.DISTANCE_KEEPING.BASE;
+            positioningReward += optimalDistanceReward * WEIGHTS.DISTANCE_KEEPING.BASE;
         } else {
             // Мягкий штраф за слишком большую дистанцию
-            const tooFarPenalty = smoothstep(maxDist, maxDist * 1.5, distToEnemy) * REWARD_WEIGHTS.DISTANCE_KEEPING.PENALTY;
+            const tooFarPenalty = smoothstep(maxDist, maxDist * 1.5, distToEnemy) * WEIGHTS.DISTANCE_KEEPING.PENALTY;
             positioningReward += tooFarPenalty;
         }
     }
@@ -477,7 +489,7 @@ function calculateAllyDistanceReward(
         if (distToAlly < minDist) {
             // Штраф за слишком близкое расстояние
             const tooClosePenalty = smoothstep(minDist, 0, distToAlly);
-            positioningReward += tooClosePenalty * REWARD_WEIGHTS.DISTANCE_KEEPING.PENALTY;
+            positioningReward += tooClosePenalty * WEIGHTS.DISTANCE_KEEPING.PENALTY;
         }
     }
 
@@ -551,8 +563,8 @@ function analyzeBullet(
     const dangerLevel = smoothstep(TANK_RADIUS * 1.5, TANK_RADIUS / 2, minDist);
 
     const reward = dangerLevel < 0.2
-        ? (1 - dangerLevel) * REWARD_WEIGHTS.BULLET_AVOIDANCE.AVOID_QUALITY
-        : dangerLevel * REWARD_WEIGHTS.BULLET_AVOIDANCE.PENALTY;
+        ? (1 - dangerLevel) * WEIGHTS.BULLET_AVOIDANCE.AVOID_QUALITY
+        : dangerLevel * WEIGHTS.BULLET_AVOIDANCE.PENALTY;
 
     return { reward, dangerLevel };
 }

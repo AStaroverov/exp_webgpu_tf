@@ -87,8 +87,6 @@ export class ActorManager {
                         || ((frameCount - 3) % shouldEvery === 0
                             || (frameCount - 7) % shouldEvery === 0
                             || (frameCount - 11) % shouldEvery === 0);
-                    const isLastMemorize = isEpisodeDone
-                        || (frameCount > 11 && (frameCount - 11) % shouldEvery === 0);
                     TenserFlowDI.shouldCollectState = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
 
                     if (shouldAction) {
@@ -108,7 +106,12 @@ export class ActorManager {
 
                     if (shouldMemorize) {
                         for (const tankEid of regardedTanks) {
-                            this.memorizeTankBehaviour(tankEid, width, height, isLastMemorize ? 0.5 : 0.25);
+                            this.memorizeTankBehaviour(
+                                tankEid,
+                                width,
+                                height,
+                                isEpisodeDone,
+                            );
                         }
                     }
 
@@ -140,7 +143,8 @@ export class ActorManager {
                 tankEid,
                 width,
                 height,
-            ).totalReward;
+                false,
+            );
 
             this.agent.rememberAction(
                 tankEid,
@@ -158,21 +162,21 @@ export class ActorManager {
         tankEid: number,
         width: number,
         height: number,
-        rewardMultiplier: number,
+        isEpisodeDone: boolean,
     ) {
         // Calculate reward
         const reward = calculateReward(
             tankEid,
             width,
             height,
-        ).totalReward;
-        // Check if tank is "dead" based on health
-        const isDone = getTankHealth(tankEid) <= 0;
+            isEpisodeDone,
+        );
+        const isDone = isEpisodeDone || getTankHealth(tankEid) <= 0;
 
         // Store experience in agent's memory
         this.agent.rememberReward(
             tankEid,
-            reward * rewardMultiplier,
+            reward,
             isDone,
         );
     }

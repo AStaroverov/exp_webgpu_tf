@@ -42,7 +42,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     name: 'ppo-default',
     // Learning parameters
     clipNorm: 5,
-    gamma: 0.95,
+    gamma: 0.99,
     lam: 0.95, // TODO: not using in v-trace
     // PPO-specific parameters
     policyEpochs: 4,

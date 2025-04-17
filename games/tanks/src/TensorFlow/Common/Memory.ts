@@ -163,15 +163,34 @@ export class SubMemory {
 
     private collapseTmpData() {
         if (this.states.length > this.actionRewards.length) {
-            this.actionRewards.push(this.tmpActionRewards.reduce((acc, r) => acc + r, 0));
-            this.dones.push(this.tmpDones.reduce((acc, d) => acc || d, false));
+            const weights = rewardMultipliers(this.tmpActionRewards.length);
+            const reward = this.tmpActionRewards.reduce((acc, rew, i) => acc + rew * weights[i], 0);
+            const done = this.tmpDones.reduce((acc, d) => acc || d, false);
+
+            this.actionRewards.push(reward);
+            this.dones.push(done);
             this.tmpActionRewards = [];
             this.tmpDones = [];
         }
     }
 }
 
-function rewardsShaping(stateRewards: number[], actionRewards: number[], k = 0.25): number[] {
+function rewardMultipliers(limit: number): number[] {
+    const weights = [];
+
+    for (let i = 0; i < limit; i++) {
+        weights.push(i + 1);
+    }
+
+    const sum = weights.reduce((a, b) => a + b, 0);
+    const normalized = weights.map(w => w / sum);
+
+    return normalized;
+}
+
+export const STATE_COEFFICIENT = 0.25;
+
+function rewardsShaping(stateRewards: number[], actionRewards: number[], k = STATE_COEFFICIENT): number[] {
     return actionRewards.map((reward, i) => {
         return stateRewards[i] * k + (reward - stateRewards[i]) * (1 - k);
     });
