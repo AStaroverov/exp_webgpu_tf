@@ -10,8 +10,8 @@ import { getTankHealth } from '../../ECS/Components/Tank/TankHealth.ts';
 import { EntityId } from 'bitecs';
 
 const WEIGHTS = Object.freeze({
+    WINNER: 10,
     DEATH: -10,
-    SURVIVED: 10,
 
     TEAM: {
         SCORE: 0.2,
@@ -107,7 +107,7 @@ export function calculateReward(
     tankEid: number,
     width: number,
     height: number,
-    isEpisodeDone: boolean,
+    isWinner: boolean,
 ): number {
     const currentHealth = getTankHealth(tankEid);
 
@@ -115,8 +115,8 @@ export function calculateReward(
         return WEIGHTS.DEATH;
     }
 
-    if (isEpisodeDone) {
-        return WEIGHTS.SURVIVED;
+    if (isWinner) {
+        return WEIGHTS.WINNER;
     }
 
     const isShooting = TankController.shoot[tankEid] > 0;
