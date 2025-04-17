@@ -1,16 +1,16 @@
-import { GameDI } from '../../DI/GameDI.ts';
+import { GameDI } from '../../../DI/GameDI.ts';
 import { hasComponent, query } from 'bitecs';
-import { Tank, TANK_APPROXIMATE_COLLISION_RADIUS } from '../Components/Tank/Tank.ts';
+import { Tank, TANK_APPROXIMATE_COLLISION_RADIUS } from '../../Components/Tank/Tank.ts';
 import {
     getMatrixTranslationX,
     getMatrixTranslationY,
     GlobalTransform,
-} from '../../../../../src/ECS/Components/Transform.ts';
-import { Children } from '../Components/Children.ts';
-import { TankPart } from '../Components/Tank/TankPart.ts';
-import { isOutOfGameZone } from './utils/isOutOfGameZone.ts';
-import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
-import { random } from '../../../../../lib/random.ts';
+} from '../../../../../../src/ECS/Components/Transform.ts';
+import { Children } from '../../Components/Children.ts';
+import { TankPart } from '../../Components/Tank/TankPart.ts';
+import { isOutOfGameZone } from '../utils/isOutOfGameZone.ts';
+import { scheduleRemoveEntity } from '../../Utils/typicalRemoveEntity.ts';
+import { random } from '../../../../../../lib/random.ts';
 
 export function createTankDecayOutOfZoneSystem({ world } = GameDI) {
     return () => {
@@ -32,7 +32,7 @@ export function createTankDecayOutOfZoneSystem({ world } = GameDI) {
                     const isNotParent = !hasComponent(world, childEid, Children);
 
                     // TODO: we can check part recursively
-                    if (isTankPart && isNotParent && random() < 0.01) {
+                    if (isTankPart && isNotParent && random() < 0.05) {
                         scheduleRemoveEntity(childEid);
                         break;
                     }

@@ -1,20 +1,20 @@
-import { GameDI } from '../../DI/GameDI.ts';
+import { GameDI } from '../../../DI/GameDI.ts';
 import { query } from 'bitecs';
-import { Tank } from '../Components/Tank/Tank.ts';
-import { TankController } from '../Components/Tank/TankController.ts';
+import { Tank } from '../../Components/Tank/Tank.ts';
+import { TankController } from '../../Components/Tank/TankController.ts';
 import {
     getMatrixTranslationX,
     getMatrixTranslationY,
     LocalTransform,
     setMatrixTranslate,
-} from '../../../../../src/ECS/Components/Transform.ts';
-import { ZIndex } from '../../consts.ts';
-import { dist2, hypot } from '../../../../../lib/math.ts';
-import { RigidBodyState } from '../Components/Physical.ts';
+} from '../../../../../../src/ECS/Components/Transform.ts';
+import { ZIndex } from '../../../consts.ts';
+import { dist2, hypot } from '../../../../../../lib/math.ts';
+import { RigidBodyState } from '../../Components/Physical.ts';
 
 const MAX_DIST = 1200;
 
-export function createAimSystem({ world } = GameDI) {
+export function createTankAimSystem({ world } = GameDI) {
     return ((delta: number) => {
         const tankEids = query(world, [Tank, TankController]);
 

@@ -10,19 +10,22 @@ import {
     createPlayerTankBulletSystem,
     createPlayerTankPositionSystem,
     createPlayerTankTurretRotationSystem,
-} from './src/ECS/Systems/playerTankControllerSystems.ts';
+} from './src/ECS/Systems/PlayerTankControllerSystems.ts';
 import { createSpawnerBulletsSystem } from './src/ECS/Systems/createBulletSystem.ts';
 import { getEntityIdByPhysicalId, RigidBodyRef } from './src/ECS/Components/Physical.ts';
 import { createWorld, deleteWorld, hasComponent, resetWorld } from 'bitecs';
 import { Hitable } from './src/ECS/Components/Hitable.ts';
 import { createHitableSystem } from './src/ECS/Systems/createHitableSystem.ts';
-import { createTankAliveSystem } from './src/ECS/Systems/createTankAliveSystem.ts';
-import { createTankPositionSystem, createTankTurretRotationSystem } from './src/ECS/Systems/TankControllerSystems.ts';
+import { createTankAliveSystem } from './src/ECS/Systems/Tank/createTankAliveSystem.ts';
+import {
+    createTankPositionSystem,
+    createTankTurretRotationSystem,
+} from './src/ECS/Systems/Tank/TankControllerSystems.ts';
 import { createDestroyOutOfZoneSystem } from './src/ECS/Systems/createDestroyOutOfZoneSystem.ts';
 import { createTankInputTensorSystem } from './src/ECS/Systems/RL/createTankInputTensorSystem.ts';
 import { destroyChangeDetectorSystem } from '../../src/ECS/Systems/ChangedDetectorSystem.ts';
 import { createDestroyByTimeoutSystem } from './src/ECS/Systems/createDestroyByTimeoutSystem.ts';
-import { createAimSystem } from './src/ECS/Systems/createAimSystem.ts';
+import { createTankAimSystem } from './src/ECS/Systems/Tank/createTankAimSystem.ts';
 import { createDrawGrassSystem } from './src/ECS/Systems/Render/Grass/createDrawGrassSystem.ts';
 import { createRigidBodyStateSystem } from './src/ECS/Systems/createRigidBodyStateSystem.ts';
 import { createDestroySystem } from './src/ECS/Systems/createDestroySystem.ts';
@@ -32,7 +35,7 @@ import { PlayerEnvDI } from './src/DI/PlayerEnvDI.ts';
 import { TenserFlowDI } from './src/DI/TenserFlowDI.ts';
 import { createVisualizationTracksSystem } from './src/ECS/Systems/Tank/createVisualizationTracksSystem.ts';
 import { createPostEffect } from './src/ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
-import { createTankDecayOutOfZoneSystem } from './src/ECS/Systems/createTankDecayOutOfZoneSystem.ts';
+import { createTankDecayOutOfZoneSystem } from './src/ECS/Systems/Tank/createTankDecayOutOfZoneSystem.ts';
 
 export async function createGame({ width, height, withRender, withPlayer }: {
     width: number,
@@ -174,7 +177,7 @@ export async function createGame({ width, height, withRender, withPlayer }: {
         updateTankInputTensor();
     };
 
-    const aimUpdate = createAimSystem();
+    const aimUpdate = createTankAimSystem();
     const visTracksUpdate = createVisualizationTracksSystem();
 
     GameDI.gameTick = (delta: number) => {
