@@ -46,7 +46,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     lam: 0.95, // TODO: not using in v-trace
     // PPO-specific parameters
     policyEpochs: 4,
-    valueEpochs: 2,
+    valueEpochs: 1,
     clipRatio: 0.2,
     entropyCoeff: 0.001,
 
@@ -58,8 +58,8 @@ export const DEFAULT_EXPERIMENT: Config = {
     },
     lrConfig: {
         initial: 1e-4,
-        multHigh: 0.9,
-        multLow: 1.1,
+        multHigh: 0.95,
+        multLow: 1.05,
         min: 1e-6,
         max: 5e-3,
     },

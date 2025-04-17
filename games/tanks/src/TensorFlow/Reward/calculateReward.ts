@@ -32,7 +32,7 @@ const WEIGHTS = Object.freeze({
         SHOOTING_PENALTY: -0.3, // За стрельбу в пустоту
         SHOOTING_ALLIES_PENALTY: -1.0, // За стрельбу в союзников
     },
-    AIM_MULTIPLIER: 3,
+    AIM_MULTIPLIER: 2,
 
     MAP_BORDER: {
         BASE: 0.2,          // За нахождение в пределах карты
