@@ -42,7 +42,7 @@ export function createVisualizationTracksSystem({ world, physicalWorld } = GameD
                 let delta = (speed / 100 + (angvel * angFactor));
                 delta -= delta % 0.01;
 
-                if (delta === 0) continue;
+                if (abs(delta) < 0.05) continue;
 
                 anchor1[1] -= delta;
                 anchor1[1] -= anchor1[1] % 0.01;
