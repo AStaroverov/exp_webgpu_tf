@@ -17,8 +17,8 @@ import { createWorld, deleteWorld, hasComponent, resetWorld } from 'bitecs';
 import { Hitable } from './src/ECS/Components/Hitable.ts';
 import { createHitableSystem } from './src/ECS/Systems/createHitableSystem.ts';
 import { createTankAliveSystem } from './src/ECS/Systems/createTankAliveSystem.ts';
-import { createTankPositionSystem, createTankTurretRotationSystem } from './src/ECS/Systems/tankControllerSystems.ts';
-import { createOutZoneDestroySystem } from './src/ECS/Systems/createOutZoneDestroySystem.ts';
+import { createTankPositionSystem, createTankTurretRotationSystem } from './src/ECS/Systems/TankControllerSystems.ts';
+import { createDestroyOutOfZoneSystem } from './src/ECS/Systems/createDestroyOutOfZoneSystem.ts';
 import { createTankInputTensorSystem } from './src/ECS/Systems/RL/createTankInputTensorSystem.ts';
 import { destroyChangeDetectorSystem } from '../../src/ECS/Systems/ChangedDetectorSystem.ts';
 import { createDestroyByTimeoutSystem } from './src/ECS/Systems/createDestroyByTimeoutSystem.ts';
@@ -32,6 +32,7 @@ import { PlayerEnvDI } from './src/DI/PlayerEnvDI.ts';
 import { TenserFlowDI } from './src/DI/TenserFlowDI.ts';
 import { createVisualizationTracksSystem } from './src/ECS/Systems/Tank/createVisualizationTracksSystem.ts';
 import { createPostEffect } from './src/ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
+import { createTankDecayOutOfZoneSystem } from './src/ECS/Systems/createTankDecayOutOfZoneSystem.ts';
 
 export async function createGame({ width, height, withRender, withPlayer }: {
     width: number,
@@ -157,11 +158,14 @@ export async function createGame({ width, height, withRender, withPlayer }: {
     };
 
     const destroy = createDestroySystem();
-    const destroyOutZone = createOutZoneDestroySystem();
+    const destroyOutOfZone = createDestroyOutOfZoneSystem();
     const destroyByTimeout = createDestroyByTimeoutSystem();
+    const decayTankOnOutOfZone = createTankDecayOutOfZoneSystem();
+
     const destroyFrame = (delta: number) => {
+        decayTankOnOutOfZone();
         destroyByTimeout(delta);
-        destroyOutZone();
+        destroyOutOfZone();
         destroy();
     };
 
