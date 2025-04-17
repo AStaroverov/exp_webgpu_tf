@@ -41,7 +41,7 @@ const WEIGHTS = Object.freeze({
     MAP_BORDER_MULTIPLIER: 1,
 
     DISTANCE_KEEPING: {
-        BASE: 0.2,          // За поддержание дистанции
+        BASE: 0.8,          // За поддержание дистанции
         PENALTY: -1.0,      // За неудачную дистанцию
     },
     DISTANCE_KEEPING_MULTIPLIER: 1, // может быть несколько врагов
