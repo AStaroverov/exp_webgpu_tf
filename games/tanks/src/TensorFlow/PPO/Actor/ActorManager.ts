@@ -79,11 +79,14 @@ export class ActorManager {
                     frameCount++;
 
                     const currentTanks = game.getTanks();
-                    const isEpisodeDone = currentTanks.length <= 1 || game.getTeamsCount() <= 1 || frameCount > maxFramesCount;
+                    const gameOverByTankCount = currentTanks.length <= 1;
+                    const gameOverByTeamWin = game.getTeamsCount() === 1;
+                    const gameOverByTime = frameCount > maxFramesCount;
+                    const gameOver = gameOverByTankCount || gameOverByTeamWin || gameOverByTime;
 
                     const isWarmup = frameCount < warmupFramesCount;
                     const shouldAction = frameCount % shouldEvery === 0;
-                    const shouldMemorize = isEpisodeDone
+                    const shouldMemorize = gameOver
                         || ((frameCount - 3) % shouldEvery === 0
                             || (frameCount - 7) % shouldEvery === 0
                             || (frameCount - 11) % shouldEvery === 0);
@@ -110,12 +113,13 @@ export class ActorManager {
                                 tankEid,
                                 width,
                                 height,
-                                isEpisodeDone,
+                                gameOver,
+                                gameOverByTeamWin,
                             );
                         }
                     }
 
-                    if (isEpisodeDone) {
+                    if (gameOver) {
                         stop();
                         resolve(null);
                         break;
@@ -162,18 +166,18 @@ export class ActorManager {
         tankEid: number,
         width: number,
         height: number,
-        isEpisodeDone: boolean,
+        gameOver: boolean,
+        gameOverByTeamWin: boolean,
     ) {
-        // Calculate reward
+        const isDead = getTankHealth(tankEid) <= 0;
+        const isDone = gameOver || isDead;
         const reward = calculateReward(
             tankEid,
             width,
             height,
-            isEpisodeDone,
+            !isDead && gameOverByTeamWin,
         );
-        const isDone = isEpisodeDone || getTankHealth(tankEid) <= 0;
 
-        // Store experience in agent's memory
         this.agent.rememberReward(
             tankEid,
             reward,
