@@ -1,16 +1,12 @@
 import { GameDI } from '../../DI/GameDI.ts';
 import { Hitable } from '../Components/Hitable.ts';
-import { CollisionGroup } from '../../Physical/createRigid.ts';
-import { Children } from '../Components/Children.ts';
 import { Parent } from '../Components/Parent.ts';
-import { resetCollisionsTo } from '../../Physical/collision.ts';
-import { removePhysicalJoint } from '../../Physical/joint.ts';
 import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 import { onSet, query } from 'bitecs';
 import { Bullet } from '../Components/Bullet.ts';
 import { createChangeDetector } from '../../../../../src/ECS/Systems/ChangedDetectorSystem.ts';
 import { TankPart } from '../Components/Tank/TankPart.ts';
-import { resetTankPartJointComponent } from '../Components/Tank/TankUtils.ts';
+import { tearOffTankPart } from '../Components/Tank/TankUtils.ts';
 
 export function createHitableSystem({ world } = GameDI) {
     const hitableChanges = createChangeDetector(world, [onSet(Hitable)]);
@@ -21,16 +17,11 @@ export function createHitableSystem({ world } = GameDI) {
         for (let i = 0; i < tankPartsEids.length; i++) {
             const tankPartEid = tankPartsEids[i];
             if (!hitableChanges.has(tankPartEid)) continue;
-            const damage = Hitable.damage[tankPartEid];
-            const parentEid = Parent.id[tankPartEid];
-            const jointPid = TankPart.jointPid[tankPartEid];
 
-            if (damage > 0 && jointPid >= 0) {
-                Children.removeChild(parentEid, tankPartEid);
-                removePhysicalJoint(jointPid);
-                resetCollisionsTo(tankPartEid, CollisionGroup.ALL & ~CollisionGroup.TANK_BASE);
-                resetTankPartJointComponent(tankPartEid);
-            }
+            const damage = Hitable.damage[tankPartEid];
+            if (damage <= 0) continue;
+
+            tearOffTankPart(tankPartEid);
         }
 
         const bulletsIds = query(world, [Bullet, Hitable]);

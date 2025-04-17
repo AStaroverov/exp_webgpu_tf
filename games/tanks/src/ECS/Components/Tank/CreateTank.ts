@@ -4,7 +4,6 @@ import { GameDI } from '../../../DI/GameDI.ts';
 import { Player } from '../Player.ts';
 import { Parent } from '../Parent.ts';
 import { Children } from '../Children.ts';
-import { TankPart } from './TankPart.ts';
 import { CollisionGroup } from '../../../Physical/createRigid.ts';
 import { createRectangleRigidGroup } from '../RigidGroup.ts';
 import { addTransformComponents } from '../../../../../../src/ECS/Components/Transform.ts';
@@ -22,6 +21,7 @@ import {
     PARTS_COUNT,
 } from './CreateTankParts.ts';
 import { BASE_DENSITY, mutatedOptions, Options, resetOptions, updateColorOptions } from './Options.ts';
+import { TankPart } from './TankPart.ts';
 
 /**
  * Создает танк с его компонентами

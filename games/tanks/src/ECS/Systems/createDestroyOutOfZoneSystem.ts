@@ -7,8 +7,9 @@ import {
 import { Not, query } from 'bitecs';
 import { Parent } from '../Components/Parent.ts';
 import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
+import { isOutOfGameZone } from './utils/isOutOfGameZone.ts';
 
-export function createOutZoneDestroySystem({ world, width, height } = GameDI) {
+export function createDestroyOutOfZoneSystem({ world } = GameDI) {
     return () => {
         const eids = query(world, [GlobalTransform, Not(Parent)]);
 
@@ -18,7 +19,7 @@ export function createOutZoneDestroySystem({ world, width, height } = GameDI) {
             const x = getMatrixTranslationX(globalTransform);
             const y = getMatrixTranslationY(globalTransform);
 
-            if (x < -500 || x > width + 500 || y < -500 || y > height + 500) {
+            if (isOutOfGameZone(x, y, 500)) {
                 scheduleRemoveEntity(eid);
             }
         }
