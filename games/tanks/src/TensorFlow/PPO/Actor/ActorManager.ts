@@ -3,7 +3,6 @@ import { TANK_COUNT_SIMULATION_MAX, TANK_COUNT_SIMULATION_MIN, TICK_TIME_SIMULAT
 import { GameDI } from '../../../DI/GameDI.ts';
 import { randomRangeInt } from '../../../../../../lib/random.ts';
 import { ActorAgent } from './ActorAgent.ts';
-import { calculateReward } from '../../Common/calculateReward.ts';
 import { applyActionToTank } from '../../Common/applyActionToTank.ts';
 import { CONFIG } from '../config.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
@@ -11,6 +10,7 @@ import { prepareInputArrays } from '../../Common/InputArrays.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
 import { memoryChannel } from '../../DB';
 import { getTankHealth } from '../../../ECS/Components/Tank/TankHealth.ts';
+import { calculateReward } from '../../Reward/calculateReward.ts';
 
 type Game = Awaited<ReturnType<typeof createBattlefield>>;
 
@@ -84,11 +84,11 @@ export class ActorManager {
                     const isWarmup = frameCount < warmupFramesCount;
                     const shouldAction = frameCount % shouldEvery === 0;
                     const shouldMemorize = isEpisodeDone
-                        || ((frameCount - 4) % shouldEvery === 0
+                        || ((frameCount - 3) % shouldEvery === 0
                             || (frameCount - 7) % shouldEvery === 0
-                            || (frameCount - 10) % shouldEvery === 0);
+                            || (frameCount - 11) % shouldEvery === 0);
                     const isLastMemorize = isEpisodeDone
-                        || (frameCount > 10 && (frameCount - 10) % shouldEvery === 0);
+                        || (frameCount > 11 && (frameCount - 11) % shouldEvery === 0);
                     TenserFlowDI.shouldCollectState = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
 
                     if (shouldAction) {
@@ -108,7 +108,7 @@ export class ActorManager {
 
                     if (shouldMemorize) {
                         for (const tankEid of regardedTanks) {
-                            this.memorizeTankBehaviour(tankEid, width, height, frameCount, isLastMemorize ? 0.5 : 0.25);
+                            this.memorizeTankBehaviour(tankEid, width, height, isLastMemorize ? 0.5 : 0.25);
                         }
                     }
 
@@ -120,7 +120,6 @@ export class ActorManager {
                 }
             }, 1);
         });
-
     }
 
     private updateTankBehaviour(
@@ -130,16 +129,23 @@ export class ActorManager {
         isWarmup: boolean,
     ) {
         // Create input vector for the current state
-        const input = prepareInputArrays(tankEid, width, height);
+        const state = prepareInputArrays(tankEid, width, height);
         // Get action from agent
-        const result = this.agent.act(input);
+        const result = this.agent.act(state);
         // Apply action to tank controller
         applyActionToTank(tankEid, result.actions);
 
         if (!isWarmup) {
+            const stateReward = calculateReward(
+                tankEid,
+                width,
+                height,
+            ).totalReward;
+
             this.agent.rememberAction(
                 tankEid,
-                input,
+                state,
+                stateReward,
                 result.actions,
                 result.mean,
                 result.logStd,
@@ -152,7 +158,6 @@ export class ActorManager {
         tankEid: number,
         width: number,
         height: number,
-        step: number,
         rewardMultiplier: number,
     ) {
         // Calculate reward
@@ -160,7 +165,6 @@ export class ActorManager {
             tankEid,
             width,
             height,
-            step,
         ).totalReward;
         // Check if tank is "dead" based on health
         const isDone = getTankHealth(tankEid) <= 0;

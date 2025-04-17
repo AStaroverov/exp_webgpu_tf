@@ -1,11 +1,11 @@
 import { createGame } from './createGame.ts';
 import { PLAYER_REFS } from './src/consts.ts';
 import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
-import { calculateReward } from './src/TensorFlow/Common/calculateReward.ts';
 import { GameDI } from './src/DI/GameDI.ts';
 import { TenserFlowDI } from './src/DI/TenserFlowDI.ts';
 import { createTank } from './src/ECS/Components/Tank/CreateTank.ts';
 import { getNewPlayerId } from './src/ECS/Components/Player.ts';
+import { calculateReward } from './src/TensorFlow/Reward/calculateReward.ts';
 
 TenserFlowDI.enabled = true;
 
@@ -76,7 +76,7 @@ frameTasks.addInterval(() => {
     gameTick(16.66);
 
     if (i > 10 && i % 10 === 6) {
-        calculateReward(tanks[0], GameDI.width, GameDI.height, 0);
+        calculateReward(tanks[0], GameDI.width, GameDI.height);
     }
 
     // const enemyTankPosition = getMatrixTranslation(GlobalTransform.matrix.getBatch(enemyEid));

@@ -7,12 +7,12 @@ import { randomRangeInt } from '../../../../../../lib/random.ts';
 import { CONFIG } from '../config.ts';
 import { getDrawState } from '../../Common/uiUtils.ts';
 import { EntityId } from 'bitecs';
-import { calculateReward } from '../../Common/calculateReward.ts';
 import { prepareInputArrays } from '../../Common/InputArrays.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
 import { first, firstValueFrom, interval } from 'rxjs';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { frameTasks } from '../../../../../../lib/TasksScheduler/frameTasks.ts';
+import { calculateReward } from '../../Reward/calculateReward.ts';
 
 type Game = Awaited<ReturnType<typeof createBattlefield>>;
 
@@ -113,7 +113,7 @@ export class PlayerManager {
                     for (const tankEid of regardedTanks) {
                         this.tankRewards.set(
                             tankEid,
-                            calculateReward(tankEid, GameDI.width, GameDI.height, frameCount).totalReward,
+                            calculateReward(tankEid, GameDI.width, GameDI.height).totalReward,
                         );
                     }
                 }

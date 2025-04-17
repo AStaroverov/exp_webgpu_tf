@@ -35,11 +35,11 @@ export class Memory {
         return Array.from(this.map.values());
     }
 
-    addFirstPart(id: number, state: InputArrays, action: Float32Array, mean: Float32Array, logStd: Float32Array, logProb: number) {
+    addFirstPart(id: number, state: InputArrays, rewardState: number, action: Float32Array, mean: Float32Array, logStd: Float32Array, logProb: number) {
         if (!this.map.has(id)) {
             this.map.set(id, new SubMemory());
         }
-        this.map.get(id)!.addFirstPart(state, action, mean, logStd, logProb);
+        this.map.get(id)!.addFirstPart(state, rewardState, action, mean, logStd, logProb);
     }
 
     updateSecondPart(id: number, reward: number, done: boolean) {
@@ -83,14 +83,15 @@ export class Memory {
 
 export class SubMemory {
     private states: InputArrays[] = [];
+    private stateRewards: number[] = [];
     private actions: Float32Array[] = [];
     private mean: Float32Array[] = [];
     private logStd: Float32Array[] = [];
     private logProbs: number[] = [];
-    private rewards: number[] = [];
+    private actionRewards: number[] = [];
     private dones: boolean[] = [];
 
-    private tmpRewards: number[] = [];
+    private tmpActionRewards: number[] = [];
     private tmpDones: boolean[] = [];
 
     constructor() {
@@ -100,10 +101,11 @@ export class SubMemory {
         return this.states.length;
     }
 
-    addFirstPart(state: InputArrays, action: Float32Array, mean: Float32Array, logStd: Float32Array, logProb: number) {
+    addFirstPart(state: InputArrays, stateReward: number, action: Float32Array, mean: Float32Array, logStd: Float32Array, logProb: number) {
         this.collapseTmpData();
 
         this.states.push(state);
+        this.stateRewards.push(stateReward);
         this.actions.push(action);
         this.mean.push(mean);
         this.logStd.push(logStd);
@@ -111,7 +113,7 @@ export class SubMemory {
     }
 
     updateSecondPart(reward: number, done: boolean) {
-        this.tmpRewards.push(reward);
+        this.tmpActionRewards.push(reward);
         this.tmpDones.push(done);
     }
 
@@ -119,21 +121,21 @@ export class SubMemory {
         if (this.states.length === 0) {
             throw new Error('Memory is empty');
         }
-        if (this.tmpDones.length > 0 || this.tmpRewards.length > 0) {
+        if (this.tmpDones.length > 0 || this.tmpActionRewards.length > 0) {
             this.collapseTmpData();
         }
-        if (this.states.length !== this.rewards.length || this.states.length !== this.dones.length) {
-            const minLen = Math.min(this.states.length, this.rewards.length, this.dones.length);
+        if (this.states.length !== this.actionRewards.length || this.states.length !== this.dones.length) {
+            const minLen = Math.min(this.states.length, this.actionRewards.length, this.dones.length);
             this.states.length = minLen;
             this.actions.length = minLen;
             this.mean.length = minLen;
             this.logStd.length = minLen;
             this.logProbs.length = minLen;
-            this.rewards.length = minLen;
+            this.actionRewards.length = minLen;
             this.dones.length = minLen;
         }
 
-        const shapedRewards = rewardsShaping(this.rewards);
+        const shapedRewards = rewardsShaping(this.stateRewards, this.actionRewards);
         const dones = this.dones.map(done => done ? 1.0 : 0.0);
         dones[dones.length - 1] = 1.0;
 
@@ -153,37 +155,24 @@ export class SubMemory {
         this.states = [];
         this.actions = [];
         this.logProbs = [];
-        this.rewards = [];
+        this.actionRewards = [];
         this.dones = [];
-        this.tmpRewards = [];
+        this.tmpActionRewards = [];
         this.tmpDones = [];
     }
 
     private collapseTmpData() {
-        if (this.states.length > this.rewards.length) {
-            this.rewards.push(this.tmpRewards.reduce((acc, r) => acc + r, 0));
+        if (this.states.length > this.actionRewards.length) {
+            this.actionRewards.push(this.tmpActionRewards.reduce((acc, r) => acc + r, 0));
             this.dones.push(this.tmpDones.reduce((acc, d) => acc || d, false));
-            this.tmpRewards = [];
+            this.tmpActionRewards = [];
             this.tmpDones = [];
         }
     }
 }
 
-/**
- * Reward shaping idea:
- * r_t_prime = (r_t * k) + (r_t - r_{t-1})
- * r_t * k       — keeps a (small) absolute measure of how good the current
- *                 state is (good vs. bad), scaled down by factor k.
- * r_t - r_{t-1} — adds a delta term that rewards the agent for any
- *                 immediate improvement and penalises deterioration.
- *
- * In practice this lets the policy focus on *progress* (delta) while still
- * anchoring behaviour to an overall notion of “healthy” or “dangerous”
- * states.  Tune k so the delta dominates, but the absolute term prevents
- * agents from exploiting loops or camping in mediocre positions.
- */
-function rewardsShaping(rewards: number[], k: number = 0.3): number[] {
-    return rewards.map((reward, i) => {
-        return reward * k + (i === 0 ? 0 : (reward - rewards[i - 1]));
+function rewardsShaping(stateRewards: number[], actionRewards: number[], k = 0.25): number[] {
+    return actionRewards.map((reward, i) => {
+        return stateRewards[i] * k + (reward - stateRewards[i]) * (1 - k);
     });
 }

@@ -1,57 +1,48 @@
 import { RigidBodyState } from '../../ECS/Components/Physical.ts';
 import { BattleState, BULLET_DANGER_SPEED, getBattleState } from '../../ECS/Systems/RL/createTankInputTensorSystem.ts';
-import { abs, centerStep, hypot, lerp, max, min, smoothstep } from '../../../../../lib/math.ts';
-import { TANK_RADIUS } from './consts.ts';
+import { centerStep, hypot, lerp, max, min, smoothstep } from '../../../../../lib/math.ts';
+import { TANK_RADIUS } from '../Common/consts.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 import { Tank } from '../../ECS/Components/Tank/Tank.ts';
 import { TankController } from '../../ECS/Components/Tank/TankController.ts';
-import { CONFIG } from '../PPO/config.ts';
 import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../ECS/Components/Tank/TankState.ts';
 import { getTankHealth } from '../../ECS/Components/Tank/TankHealth.ts';
+import { EntityId } from 'bitecs';
 
 // Константы для калибровки вознаграждений
 let REWARD_WEIGHTS = {
     TEAM: {
-        HEALTH: 0.2, // за разницу в здоровье, может быть отрицательной
-        KILLS: 2, // за разницу в количестве убитых врагов, может быть отрицательной
+        SCORE: 0.2,
     },
     TEAM_MULTIPLIER: 1,
 
     COMMON: {
-        HEALTH: 0.5, // За разницу в здоровье
-        SURVIVAL: 0.5, // За выживание в бою
+        HEALTH: 0.2,
     },
     COMMON_MULTIPLIER: 1,
 
     AIM: {
         QUALITY: 1.0,       // За точное прицеливание
-        DISTANCE: 0.1,      // За расстояние до прицела
+        DISTANCE: 0.2,      // За расстояние до прицела
         NO_TARGET_PENALTY: -0.1, // За отсутствие целей
-        DISTANCE_PENALTY: -0.1, // За расстояние до цели
+        DISTANCE_PENALTY: -0.2, // За расстояние до цели
         SHOOTING: 1.0,       // За стрельбу в цель
-        SHOOTING_PENALTY: -0.1, // За стрельбу в пустоту
-        SHOOTING_ALLIES_PENALTY: -2.0, // За стрельбу в союзников
+        SHOOTING_PENALTY: -0.3, // За стрельбу в пустоту
+        SHOOTING_ALLIES_PENALTY: -1.0, // За стрельбу в союзников
     },
     AIM_MULTIPLIER: 3,
 
     MAP_BORDER: {
-        BASE: 1,          // За нахождение в пределах карты
-        RETURN: 1,        // За возвращение в пределы карты
-        PENALTY: -2,    // За выход за границы
+        BASE: 0.2,          // За нахождение в пределах карты
+        PENALTY: -1.0,    // За выход за границы
     },
     MAP_BORDER_MULTIPLIER: 1,
 
     DISTANCE_KEEPING: {
-        BASE: 1.0,          // За поддержание дистанции
-        PENALTY: -2.0,      // За неудачную дистанцию
+        BASE: 0.2,          // За поддержание дистанции
+        PENALTY: -1.0,      // За неудачную дистанцию
     },
     DISTANCE_KEEPING_MULTIPLIER: 1, // может быть несколько врагов
-
-    MOVEMENT: {
-        BASE: 0.2,          // За базовое движение
-        STRATEGIC: 0.4,     // За стратегическое движение
-    },
-    MOVEMENT_MULTIPLIER: 1,
 
     BULLET_AVOIDANCE: {
         PENALTY: -0.8,
@@ -61,16 +52,14 @@ let REWARD_WEIGHTS = {
 };
 
 // Структура для хранения многокомпонентных наград
-export interface ComponentRewards {
+export type ComponentRewards = {
     team: {
-        health: number;
-        kills: number;
-        total: number;
-    };
+        score: number;          // Награда за разницу в здоровье
+        total: number;         // Суммарная награда для команды
+    }
 
     common: {
         health: number;
-        survival: number;
         total: number;
     };
 
@@ -83,7 +72,6 @@ export interface ComponentRewards {
 
     // Награды для головы движения
     positioning: {
-        movement: number;
         enemiesPositioning: number;     // Позиционирование относительно врагов
         alliesPositioning: number;      // Позиционирование относительно союзников
         bulletAvoidance: number;       // Избегание опасности
@@ -95,16 +83,12 @@ export interface ComponentRewards {
     totalReward: number;
 }
 
-/**
- * Инициализация пустой структуры наград
- */
 function initializeRewards(): ComponentRewards {
     return {
-        common: { health: 0, survival: 0, total: 0 },
-        team: { health: 0, kills: 0, total: 0 },
+        team: { score: 0, total: 0 },
+        common: { health: 0, total: 0 },
         aim: { accuracy: 0, distance: 0, total: 0, shootDecision: 0 },
         positioning: {
-            movement: 0,
             enemiesPositioning: 0,
             alliesPositioning: 0,
             bulletAvoidance: 0,
@@ -121,54 +105,45 @@ export function calculateReward(
     tankEid: number,
     width: number,
     height: number,
-    step: number,
 ): ComponentRewards {
-    // -- before predict --
-    const beforePredictHealth = TankInputTensor.health[tankEid];
-    const [beforePredictTankX, beforePredictTankY] = TankInputTensor.position.getBatch(tankEid);
-    // const [beforePredictTankSpeedX, beforePredictTankSpeedY] = TankInputTensor.speed.getBatche(tankEid);
-    // const [beforePredictTurretTargetX, beforePredictTurretTargetY] = TankInputTensor.turretTarget.getBatch(tankEid);
-    const beforePredictEnemiesData = TankInputTensor.enemiesData.getBatch(tankEid);
-    const beforePredictAlliesData = TankInputTensor.alliesData.getBatch(tankEid);
-    const beforePredictBulletsData = TankInputTensor.bulletsData.getBatch(tankEid);
-    const beforePredictBattleState: BattleState = {
-        alliesCount: TankInputTensor.alliesCount[tankEid],
-        alliesTotalHealth: TankInputTensor.alliesTotalHealth[tankEid],
-        enemiesCount: TankInputTensor.enemiesCount[tankEid],
-        enemiesTotalHealth: TankInputTensor.enemiesTotalHealth[tankEid],
-    };
-
-    // -- current state --
-    const moveDir = TankController.move[tankEid];
     const isShooting = TankController.shoot[tankEid] > 0;
     const currentHealth = getTankHealth(tankEid);
     const [currentTankX, currentTankY] = RigidBodyState.position.getBatch(tankEid);
     // const [currentTankSpeedX, currentTankSpeedY] = RigidBodyState.linvel.getBatche(tankEid);
     const [currentTurretTargetX, currentTurretTargetY] = getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[tankEid]));
     // const currentShootings = TankController.shoot[tankEid] > 0;
-    // const currentEnemies = findTankEnemies(tankEid);
+    // const currentEnemies = findTankEnemiesEids(tankEid);
+    // const currentAllies = findTankAlliesEids(tankEid);
     // const currentDangerBullets = findTankDangerBullets(tankEid);
     const currentBattleState = getBattleState(tankEid);
 
-    // Инициализируем пустую структуру наград
+    const beforePredictEnemiesData = TankInputTensor.enemiesData.getBatch(tankEid);
+    const beforePredictEnemiesEids = beforePredictEnemiesData.reduce((acc, v, i) => {
+        if (i % ENEMY_BUFFER === 0 && v !== 0) acc.push(v);
+        return acc;
+    }, [] as EntityId[]);
+    const beforePredictAlliesData = TankInputTensor.alliesData.getBatch(tankEid);
+    const beforePredictAlliesEids = beforePredictAlliesData.reduce((acc, v, i) => {
+        if (i % ALLY_BUFFER === 0 && v !== 0) acc.push(v);
+        return acc;
+    }, [] as EntityId[]);
+    const beforePredictBulletsData = TankInputTensor.bulletsData.getBatch(tankEid);
+    const beforePredictBulletsEids = beforePredictBulletsData.reduce((acc, v, i) => {
+        if (i % BULLET_BUFFER === 0 && v !== 0) acc.push(v);
+        return acc;
+    }, [] as EntityId[]);
+
     const rewards = initializeRewards();
 
-    // 0. Награда за здоровье команды
-    rewards.team.health = REWARD_WEIGHTS.TEAM.HEALTH * calculateTeamHealth(beforePredictBattleState, currentBattleState);
-    rewards.team.kills = REWARD_WEIGHTS.TEAM.KILLS * calculateTeamKills(beforePredictBattleState, currentBattleState);
+    rewards.team.score = getTeamAdvantageScore(currentBattleState);
 
-    // 1. Награда за выживание
-    rewards.common.health = REWARD_WEIGHTS.COMMON.HEALTH * (currentHealth - beforePredictHealth);
-    rewards.common.survival = REWARD_WEIGHTS.COMMON.SURVIVAL * (step / CONFIG.episodeFrames);
+    rewards.common.health = REWARD_WEIGHTS.COMMON.HEALTH * currentHealth;
 
-    // 2. Расчет награды за нахождение в пределах карты
     rewards.positioning.mapAwareness = calculateTankMapAwarenessReward(
         width,
         height,
         currentTankX,
         currentTankY,
-        beforePredictTankX,
-        beforePredictTankY,
     );
 
     // 3. Анализ целей и вычисление награды за прицеливание
@@ -177,54 +152,46 @@ export function calculateReward(
         currentTankY,
         currentTurretTargetX,
         currentTurretTargetY,
-        beforePredictEnemiesData,
-        beforePredictAlliesData,
+        beforePredictEnemiesEids,
+        beforePredictAlliesEids,
     );
 
     rewards.aim.accuracy = aimingResult.aimQualityReward;
     rewards.aim.distance = aimingResult.aimDistanceReward;
-
-    // 5. Награда за решение о стрельбе
     rewards.aim.shootDecision = calculateShootingReward(
         isShooting,
         aimingResult.bestEnemyAimQuality,
         aimingResult.sumAlliesAimQuality,
     );
 
-    // 6. Награда за избегание пуль
     const bulletAvoidanceResult = calculateBulletAvoidanceReward(
         currentTankX,
         currentTankY,
-        beforePredictBulletsData,
+        beforePredictBulletsEids,
     );
     rewards.positioning.bulletAvoidance = bulletAvoidanceResult.reward;
 
-    // 7. Награда за движение и позиционирование
-    rewards.positioning.movement = calculateMovementReward(
-        moveDir,
-        bulletAvoidanceResult.maxDangerLevel,
-    );
     rewards.positioning.enemiesPositioning = calculateEnemyDistanceReward(
         currentTankX,
         currentTankY,
-        beforePredictEnemiesData,
+        beforePredictEnemiesEids,
     );
 
     rewards.positioning.alliesPositioning = calculateAllyDistanceReward(
         currentTankX,
         currentTankY,
-        beforePredictAlliesData,
+        beforePredictAlliesEids,
     );
 
     // Рассчитываем итоговые значения
-    rewards.team.total = REWARD_WEIGHTS.TEAM_MULTIPLIER * (rewards.team.health + rewards.team.kills);
+    rewards.team.total = REWARD_WEIGHTS.TEAM_MULTIPLIER
+        * (rewards.team.score);
     rewards.common.total = REWARD_WEIGHTS.COMMON_MULTIPLIER
-        * (rewards.common.health + rewards.common.survival);
+        * (rewards.common.health);
     rewards.aim.total = REWARD_WEIGHTS.AIM_MULTIPLIER
         * (rewards.aim.accuracy + rewards.aim.distance + rewards.aim.shootDecision);
     rewards.positioning.total =
-        (rewards.positioning.movement * REWARD_WEIGHTS.MOVEMENT_MULTIPLIER
-            + rewards.positioning.enemiesPositioning * REWARD_WEIGHTS.DISTANCE_KEEPING_MULTIPLIER
+        (rewards.positioning.enemiesPositioning * REWARD_WEIGHTS.DISTANCE_KEEPING_MULTIPLIER
             + rewards.positioning.alliesPositioning * REWARD_WEIGHTS.DISTANCE_KEEPING_MULTIPLIER
             + rewards.positioning.bulletAvoidance * REWARD_WEIGHTS.BULLET_AVOIDANCE_MULTIPLIER
             + rewards.positioning.mapAwareness * REWARD_WEIGHTS.MAP_BORDER_MULTIPLIER);
@@ -235,18 +202,17 @@ export function calculateReward(
     return rewards;
 }
 
-function calculateTeamHealth(prevBattleState: BattleState, currentBattleState: BattleState): number {
-    const alliesDelta = (currentBattleState.alliesTotalHealth - prevBattleState.alliesTotalHealth)
-        / max(1, currentBattleState.alliesCount, prevBattleState.alliesCount);
-    const enemiesDelta = (currentBattleState.enemiesTotalHealth - prevBattleState.enemiesTotalHealth)
-        / max(1, currentBattleState.enemiesCount, prevBattleState.enemiesCount);
-    return alliesDelta - enemiesDelta;
-}
+export function getTeamAdvantageScore(
+    state: BattleState,
+    alpha = 1,
+    beta = 1,
+): number {
+    const tanksCount = state.alliesCount + state.enemiesCount;
+    const normCount = (state.alliesCount - state.enemiesCount) / tanksCount;
+    const normHP = (state.alliesTotalHealth - state.enemiesTotalHealth) / tanksCount;
 
-function calculateTeamKills(prevBattleState: BattleState, currentBattleState: BattleState): number {
-    const alliesDelta = (currentBattleState.alliesCount - prevBattleState.alliesCount);
-    const enemiesDelta = (currentBattleState.enemiesCount - prevBattleState.enemiesCount);
-    return alliesDelta - enemiesDelta;
+    // Combine the two normalised components
+    return REWARD_WEIGHTS.TEAM.SCORE * (alpha * normCount + beta * normHP);
 }
 
 function calculateTankMapAwarenessReward(
@@ -254,78 +220,15 @@ function calculateTankMapAwarenessReward(
     height: number,
     x: number,
     y: number,
-    prevX: number,
-    prevY: number,
 ): number {
     const isInBounds = x >= 0 && x <= width && y >= 0 && y <= height;
-    const borderDistance = min(
-        x,
-        y,
-        width - x,
-        height - y,
-    );
 
     if (isInBounds) {
-        return REWARD_WEIGHTS.MAP_BORDER.BASE;
+        return 0;
     } else {
-        let reward = REWARD_WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, -100, borderDistance);
-
-        // Вычисляем вектор движения танка
-        const dx = x - prevX;
-        const dy = y - prevY;
-
-        // Длина вектора движения (для нормализации)
-        const moveLength = Math.sqrt(dx * dx + dy * dy);
-
-        // Если танк не двигался, просто возвращаем штраф
-        if (moveLength < 0.1) {
-            return reward;
-        }
-
-        // Определяем ближайшую точку границы карты для возврата
-        let targetX = 0;
-        let targetY = 0;
-
-        // Корректируем целевую точку к ближайшей границе
-        if (x < 0) targetX = 0;
-        else if (x > width) targetX = width;
-        else targetX = x;
-
-        if (y < 0) targetY = 0;
-        else if (y > height) targetY = height;
-        else targetY = y;
-
-        // Вектор направления к ближайшей точке карты
-        const toMapX = targetX - prevX;
-        const toMapY = targetY - prevY;
-
-        // Длина вектора к карте
-        const toMapLength = hypot(toMapX, toMapY);
-
-        // Нормализуем векторы
-        const normalizedDx = dx / moveLength;
-        const normalizedDy = dy / moveLength;
-        const normalizedToMapX = toMapX / toMapLength;
-        const normalizedToMapY = toMapY / toMapLength;
-
-        // Скалярное произведение векторов для определения косинуса угла между ними
-        // Значение от -1 (противоположные направления) до 1 (совпадающие направления)
-        const dotProduct = normalizedDx * normalizedToMapX + normalizedDy * normalizedToMapY;
-
-        // Преобразуем в диапазон [0, 1], где 1 означает движение прямо к карте
-        const directionAlignment = (dotProduct + 1) / 2;
-
-        // Дополнительно учитываем, приближаемся ли мы к карте или удаляемся от неё
-        const distanceToBorderBefore = distanceToMap(width, height, prevX, prevY);
-        const distanceToBorderAfter = distanceToMap(width, height, x, y);
-
-        // Если мы приближаемся к карте, даём дополнительный бонус
-        if (distanceToBorderAfter < distanceToBorderBefore) {
-            const directionBonus = REWARD_WEIGHTS.MAP_BORDER.RETURN * directionAlignment;
-            reward += directionBonus;
-        }
-
-        return reward;
+        const dist = distanceToMap(width, height, x, y);
+        return 0.8 * REWARD_WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, 1000, dist)
+            + 0.2 * REWARD_WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, 10000, dist);
     }
 }
 
@@ -347,8 +250,8 @@ function analyzeAiming(
     tankY: number,
     turretTargetX: number,
     turretTargetY: number,
-    beforePredictEnemiesData: Float64Array,
-    beforePredictAlliesData: Float64Array,
+    beforePredictEnemiesEids: number[],
+    beforePredictAlliesEids: number[],
 ): {
     bestEnemyAimQuality: number;
     bestEnemyAimTargetId: number;
@@ -364,12 +267,8 @@ function analyzeAiming(
 
     let sumAlliesAimQuality = 0;
 
-    // Анализируем всех видимых врагов для текущего состояния
-    for (let i = 0; i < beforePredictEnemiesData.length; i += ENEMY_BUFFER) {
-        const enemyId = beforePredictEnemiesData[i];
-
-        if (enemyId === 0) continue;
-
+    for (let i = 0; i < beforePredictEnemiesEids.length; i++) {
+        const enemyId = beforePredictEnemiesEids[i];
         const enemyX = RigidBodyState.position.get(enemyId, 0);
         const enemyY = RigidBodyState.position.get(enemyId, 1);
 
@@ -391,11 +290,8 @@ function analyzeAiming(
     }
 
     // Анализируем всех видимых союзников для текущего состояния
-    for (let i = 0; i < beforePredictAlliesData.length; i += ALLY_BUFFER) {
-        const allyId = beforePredictAlliesData[i];
-
-        if (allyId === 0) continue;
-
+    for (let i = 0; i < beforePredictAlliesEids.length; i++) {
+        const allyId = beforePredictAlliesEids[i];
         const allyX = RigidBodyState.position.get(allyId, 0);
         const allyY = RigidBodyState.position.get(allyId, 1);
         const dist = hypot(tankX - allyX, tankY - allyY);
@@ -528,55 +424,30 @@ function calculateShootingReward(
     return shootingReward;
 }
 
-/**
- * Расчет награды за движение
- */
-function calculateMovementReward(
-    moveDir: number,
-    maxDangerLevel: number,
-): number {
-    let speedReward = 0;
-    const moveFactor = abs(moveDir);
-
-    // Базовая награда за движение
-    speedReward += moveFactor * REWARD_WEIGHTS.MOVEMENT.BASE;
-
-    // Стратегическое движение при наличии опасности
-    if (maxDangerLevel > 0) {
-        // Дополнительная награда за движение при наличии опасных пуль
-        speedReward += moveFactor * REWARD_WEIGHTS.MOVEMENT.STRATEGIC;
-    }
-
-    return speedReward;
-}
-
 function calculateEnemyDistanceReward(
     tankX: number,
     tankY: number,
-    beforePredictEnemiesData: Float64Array,
+    beforePredictEnemiesEids: number[],
 ): number {
     let positioningReward = 0;
 
     // Анализируем всех видимых врагов для текущего состояния
-    for (let i = 0; i < beforePredictEnemiesData.length; i += ENEMY_BUFFER) {
-        const enemyId = beforePredictEnemiesData[i];
-
-        if (enemyId === 0) continue;
-
+    for (let i = 0; i < beforePredictEnemiesEids.length; i++) {
+        const enemyId = beforePredictEnemiesEids[i];
         const enemyX = RigidBodyState.position.get(enemyId, 0);
         const enemyY = RigidBodyState.position.get(enemyId, 1);
 
         const distToEnemy = hypot(tankX - enemyX, tankY - enemyY);
-        const minDist = TANK_RADIUS*3;
+        const minDist = TANK_RADIUS * 2;
         const maxDist = 600;
 
         if (distToEnemy < minDist) {
             // Штраф за слишком близкое расстояние
-            const tooClosePenalty = 1 - smoothstep(0, minDist, distToEnemy);
+            const tooClosePenalty = smoothstep(minDist, 0, distToEnemy);
             positioningReward += tooClosePenalty * REWARD_WEIGHTS.DISTANCE_KEEPING.PENALTY;
         } else if (distToEnemy <= maxDist) {
             // Награда за оптимальную дистанцию
-            const optimalDistanceReward = lerp(0.3, 1, centerStep(minDist, maxDist, distToEnemy));
+            const optimalDistanceReward = centerStep(minDist, maxDist, distToEnemy);
             positioningReward += optimalDistanceReward * REWARD_WEIGHTS.DISTANCE_KEEPING.BASE;
         } else {
             // Мягкий штраф за слишком большую дистанцию
@@ -591,24 +462,21 @@ function calculateEnemyDistanceReward(
 function calculateAllyDistanceReward(
     tankX: number,
     tankY: number,
-    beforePredictAlliesData: Float64Array,
+    beforePredictAlliesEids: number[],
 ): number {
     let positioningReward = 0;
 
-    // Анализируем всех видимых врагов для текущего состояния
-    for (let i = 0; i < beforePredictAlliesData.length; i += ALLY_BUFFER) {
-        const allyId = beforePredictAlliesData[i];
-
-        if (allyId === 0) continue;
-
+    for (let i = 0; i < beforePredictAlliesEids.length; i++) {
+        const allyId = beforePredictAlliesEids[i];
         const allyX = RigidBodyState.position.get(allyId, 0);
         const allyY = RigidBodyState.position.get(allyId, 1);
 
         const distToAlly = hypot(tankX - allyX, tankY - allyY);
+        const minDist = TANK_RADIUS * 2;
 
-        if (distToAlly < TANK_RADIUS * 3) {
+        if (distToAlly < minDist) {
             // Штраф за слишком близкое расстояние
-            const tooClosePenalty = 1 - smoothstep(0, TANK_RADIUS * 3, distToAlly);
+            const tooClosePenalty = smoothstep(minDist, 0, distToAlly);
             positioningReward += tooClosePenalty * REWARD_WEIGHTS.DISTANCE_KEEPING.PENALTY;
         }
     }
@@ -616,29 +484,21 @@ function calculateAllyDistanceReward(
     return positioningReward;
 }
 
-/**
- * Расчет награды за избегание пуль
- */
 function calculateBulletAvoidanceReward(
     tankX: number,
     tankY: number,
-    beforePredictBulletsData: Float64Array,
+    beforePredictBulletsEids: number[],
 ): { reward: number; maxDangerLevel: number } {
     let reward = 0;
     let maxDangerLevel = 0;
 
-    // Анализируем каждую опасную пулю
-    for (let i = 0; i < beforePredictBulletsData.length; i += BULLET_BUFFER) {
-        const bulletId = beforePredictBulletsData[i];
-
-        if (bulletId === 0) continue;
-
+    for (let i = 0; i < beforePredictBulletsEids.length; i++) {
+        const bulletId = beforePredictBulletsEids[i];
         const bulletX = RigidBodyState.position.get(bulletId, 0);
         const bulletY = RigidBodyState.position.get(bulletId, 1);
         const bulletVx = RigidBodyState.linvel.get(bulletId, 0);
         const bulletVy = RigidBodyState.linvel.get(bulletId, 1);
 
-        // Анализируем пулю с учетом как текущего, так и предыдущего состояния
         const bulletResult = analyzeBullet(
             tankX,
             tankY,
@@ -656,9 +516,6 @@ function calculateBulletAvoidanceReward(
     return { reward, maxDangerLevel };
 }
 
-/**
- * Анализ опасности пули для танка
- */
 function analyzeBullet(
     tankX: number,
     tankY: number,

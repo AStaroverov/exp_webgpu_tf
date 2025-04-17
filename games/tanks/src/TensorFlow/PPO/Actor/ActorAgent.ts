@@ -57,8 +57,8 @@ export class ActorAgent {
         this.disposeMemory();
     }
 
-    rememberAction(tankId: number, state: InputArrays, action: Float32Array, mean: Float32Array, logStd: Float32Array, logProb: number) {
-        this.memory.addFirstPart(tankId, state, action, mean, logStd, logProb);
+    rememberAction(tankId: number, state: InputArrays, rewardState: number, action: Float32Array, mean: Float32Array, logStd: Float32Array, logProb: number) {
+        this.memory.addFirstPart(tankId, state, rewardState, action, mean, logStd, logProb);
     }
 
     rememberReward(tankId: number, reward: number, done: boolean) {

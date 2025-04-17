@@ -57,7 +57,7 @@ export function createTankInputTensorSystem({ world } = GameDI) {
             );
 
             // Find closest enemies
-            const enemiesEids = findTankEnemies(tankEid);
+            const enemiesEids = findTankEnemiesEids(tankEid);
 
             for (let j = 0; j < enemiesEids.length; j++) {
                 const enemyEid = enemiesEids[j];
@@ -74,7 +74,7 @@ export function createTankInputTensorSystem({ world } = GameDI) {
             }
 
             // Find closest allies
-            const alliesEids = findTankAllies(tankEid);
+            const alliesEids = findTankAlliesEids(tankEid);
 
             for (let j = 0; j < alliesEids.length; j++) {
                 const allyEid = alliesEids[j];
@@ -131,17 +131,17 @@ export function getBattleState(tankEid: EntityId, tankEids = query(GameDI.world,
     };
 }
 
-export function findTankEnemies(tankEid: EntityId) {
+export function findTankEnemiesEids(tankEid: EntityId) {
     const tankTeamId = Team.id[tankEid];
-    return findTankNeighbours(tankEid, MAX_ENEMIES, (eid: EntityId) => tankTeamId !== Team.id[eid]);
+    return findTankNeighboursEids(tankEid, MAX_ENEMIES, (eid: EntityId) => tankTeamId !== Team.id[eid]);
 }
 
-export function findTankAllies(tankEid: EntityId) {
+export function findTankAlliesEids(tankEid: EntityId) {
     const tankTeamId = Team.id[tankEid];
-    return findTankNeighbours(tankEid, MAX_ALLIES, (eid: EntityId) => tankTeamId === Team.id[eid]);
+    return findTankNeighboursEids(tankEid, MAX_ALLIES, (eid: EntityId) => tankTeamId === Team.id[eid]);
 }
 
-export function findTankNeighbours(tankEid: EntityId, limit: number, select: (eid: EntityId) => boolean, { physicalWorld } = GameDI) {
+export function findTankNeighboursEids(tankEid: EntityId, limit: number, select: (eid: EntityId) => boolean, { physicalWorld } = GameDI) {
     // Find enemies
     const position = {
         x: RigidBodyState.position.get(tankEid, 0),
