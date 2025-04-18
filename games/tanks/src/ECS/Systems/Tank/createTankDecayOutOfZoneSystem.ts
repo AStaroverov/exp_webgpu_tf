@@ -22,7 +22,7 @@ export function createTankDecayOutOfZoneSystem({ world } = GameDI) {
             const x = getMatrixTranslationX(globalTransform);
             const y = getMatrixTranslationY(globalTransform);
 
-            if (isOutOfGameZone(x, y, TANK_APPROXIMATE_COLLISION_RADIUS / 2) && random() < 0.1) {
+            if (isOutOfGameZone(x, y, TANK_APPROXIMATE_COLLISION_RADIUS / 2) && random() < 0.3) {
                 const childrenEids = Children.entitiesIds.getBatch(tankEid);
                 const childrenCount = Children.entitiesCount[tankEid];
 
