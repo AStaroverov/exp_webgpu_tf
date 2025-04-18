@@ -1,6 +1,6 @@
 import { RigidBodyState } from '../../ECS/Components/Physical.ts';
 import { BattleState, BULLET_DANGER_SPEED, getBattleState } from '../../ECS/Systems/RL/createTankInputTensorSystem.ts';
-import { centerStep, hypot, lerp, max, min, smoothstep } from '../../../../../lib/math.ts';
+import { abs, acos, centerStep, hypot, max, min, PI, sin, smoothstep } from '../../../../../lib/math.ts';
 import { TANK_RADIUS } from '../Common/consts.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 import { Tank } from '../../ECS/Components/Tank/Tank.ts';
@@ -271,33 +271,23 @@ function analyzeAiming(
     aimQualityReward: number;
     aimDistanceReward: number;
 } {
-    let bestEnemyTangentialAimDist = 0;
-    let bestEnemyTangentialAimQuality = 0;
-
     let bestEnemyAimQuality = 0;
     let bestEnemyAimTargetId = 0;
-
-    let sumAlliesAimQuality = 0;
+    let bestEnemyDistance = 0;
+    let bestAlliesAimQuality = 0;
 
     for (let i = 0; i < beforePredictEnemiesEids.length; i++) {
         const enemyId = beforePredictEnemiesEids[i];
         const enemyX = RigidBodyState.position.get(enemyId, 0);
         const enemyY = RigidBodyState.position.get(enemyId, 1);
 
-        const {
-            quality: currentAimQuality,
-            tangentialAimQuality: currentTangentialAimQuality,
-        } = computeAimQuality(tankX, tankY, turretTargetX, turretTargetY, enemyX, enemyY);
+        const currentAimQuality = computeAimQuality(tankX, tankY, turretTargetX, turretTargetY, enemyX, enemyY);
 
         // Отслеживаем лучшее прицеливание
         if (currentAimQuality > bestEnemyAimQuality) {
             bestEnemyAimQuality = currentAimQuality;
             bestEnemyAimTargetId = enemyId;
-        }
-
-        if (currentTangentialAimQuality > bestEnemyTangentialAimQuality) {
-            bestEnemyTangentialAimDist = hypot(tankX - enemyX, tankY - enemyY);
-            bestEnemyTangentialAimQuality = currentTangentialAimQuality;
+            bestEnemyDistance = hypot(tankX - enemyX, tankY - enemyY);
         }
     }
 
@@ -306,19 +296,15 @@ function analyzeAiming(
         const allyId = beforePredictAlliesEids[i];
         const allyX = RigidBodyState.position.get(allyId, 0);
         const allyY = RigidBodyState.position.get(allyId, 1);
-        const dist = hypot(tankX - allyX, tankY - allyY);
-        let {
-            quality,
-            tangentialAimQuality,
-        } = computeAimQuality(tankX, tankY, turretTargetX, turretTargetY, allyX, allyY);
+        const allyDist = hypot(tankX - allyX, tankY - allyY);
+        let aimQuality = computeAimQuality(tankX, tankY, turretTargetX, turretTargetY, allyX, allyY);
 
-        if (dist > bestEnemyTangentialAimDist) {
-            const chanceToMissEnemy = 1 - bestEnemyTangentialAimQuality;
-            const chanceToHitAlly = min(chanceToMissEnemy, tangentialAimQuality);
-            quality *= chanceToHitAlly;
+        if (allyDist > bestEnemyDistance) {
+            const distDiff = 1 - (allyDist - bestEnemyDistance) / allyDist;
+            aimQuality *= distDiff;
         }
 
-        sumAlliesAimQuality += quality;
+        bestAlliesAimQuality = max(bestAlliesAimQuality, aimQuality);
     }
 
     // Награда за качество прицеливания и дистанцию до цели
@@ -342,7 +328,7 @@ function analyzeAiming(
         bestEnemyAimTargetId,
         aimQualityReward,
         aimDistanceReward,
-        sumAlliesAimQuality,
+        sumAlliesAimQuality: bestAlliesAimQuality,
     };
 }
 
@@ -353,7 +339,7 @@ function computeAimQuality(
     turretTargetY: number,
     enemyX: number,
     enemyY: number,
-): { quality: number; tangentialAimQuality: number } {
+): number {
     // Вектор от танка к турели
     const tankToTurretTargetX = turretTargetX - tankX;
     const tankToTurretTargetY = turretTargetY - tankY;
@@ -362,19 +348,9 @@ function computeAimQuality(
     const tankToEnemyX = enemyX - tankX;
     const tankToEnemyY = enemyY - tankY;
 
-    const turretToEnemyX = enemyX - turretTargetX;
-    const turretToEnemyY = enemyY - turretTargetY;
-
     // Вычисляем длины векторов
     const tankToEnemyDist = hypot(tankToEnemyX, tankToEnemyY);
-    const turretToEnemyDist = hypot(turretToEnemyX, turretToEnemyY);
     const tankToTurretTargetDist = hypot(tankToTurretTargetX, tankToTurretTargetY);
-
-    // Учитываем расстояние до противника (как в исходной функции)
-    const distanceQuality =
-        lerp(0, 0.02, smoothstep(1000, 0, turretToEnemyDist))
-        + lerp(0, 0.02, smoothstep(TANK_RADIUS * 3, 0, turretToEnemyDist))
-        + lerp(0, 0.96, smoothstep(TANK_RADIUS * 1.2, 0, turretToEnemyDist));
 
     // Нормализованные векторы
     const turretNormX = tankToTurretTargetX / (tankToTurretTargetDist + EPSILON);
@@ -386,54 +362,45 @@ function computeAimQuality(
     const dotProduct = turretNormX * enemyNormX + turretNormY * enemyNormY;
 
     // Угол между векторами (в радианах)
-    const angle = Math.acos(Math.max(-1, Math.min(1, dotProduct)));
+    const angle = acos(max(-1, min(1, dotProduct)));
 
     // Вычисляем векторное произведение для определения знака (по часовой или против)
     const crossProduct = turretNormX * enemyNormY - turretNormY * enemyNormX;
     const signedAngle = crossProduct >= 0 ? angle : -angle;
-
-    // Вычисляем расстояние, на котором линия выстрела пройдет от противника (расстояние касательной)
-
-    // Вычисляем перпендикулярное расстояние от линии выстрела до противника (это и есть расстояние касательной)
-    const tangentialDistance = Math.sin(angle) * tankToEnemyDist;
-
     // Вычисляем качество прицеливания для прямого выстрела
     // Чем меньше угол, тем лучше прицеливание для прямого выстрела
-    const directAimQuality = smoothstep(Math.PI / 4, 0, Math.abs(signedAngle));
+    const angleAimQuality = smoothstep(PI / 4, 0, abs(signedAngle));
 
+    // Вычисляем расстояние, на котором линия выстрела пройдет от противника (расстояние касательной)
+    // Вычисляем перпендикулярное расстояние от линии выстрела до противника (это и есть расстояние касательной)
+    const tangentialDistance = sin(angle) * tankToEnemyDist;
     // Вычисляем качество прицеливания для касательного выстрела
     // Награда за выстрел, проходящий на оптимальном расстоянии от противника
-    const tangentialAimQuality = smoothstep(TANK_RADIUS * 1.5, 0, Math.abs(tangentialDistance));
+    const tangentialAimQuality = smoothstep(TANK_RADIUS * 1.5, 0, abs(tangentialDistance));
 
-    return {
-        quality: 0.1 * directAimQuality + 0.3 * distanceQuality + 0.6 * tangentialAimQuality,
-        tangentialAimQuality,
-    };
+    return 0.2 * angleAimQuality + 0.8 * tangentialAimQuality;
 }
 
-/**
- * Расчет награды за решение о стрельбе
- */
 function calculateShootingReward(
     isShooting: boolean,
     bestEnemyAimQuality: number,
     sumAlliesAimQuality: number,
 ): number {
-    let shootingReward = 0;
-
     if (isShooting && sumAlliesAimQuality > bestEnemyAimQuality) {
         return WEIGHTS.AIM.SHOOTING_ALLIES_PENALTY;
     }
 
+    const enoughAimQuality = 0.35;
+
     if (isShooting) {
-        // Плавная награда за стрельбу в зависимости от точности прицеливания
-        shootingReward += bestEnemyAimQuality * WEIGHTS.AIM.SHOOTING;
-    } else if (bestEnemyAimQuality > 0.7) {
-        // Небольшой штраф за отсутствие стрельбы при хорошем прицеливании
-        shootingReward += WEIGHTS.AIM.SHOOTING_PENALTY * smoothstep(0.8, 1.0, bestEnemyAimQuality);
+        return bestEnemyAimQuality > enoughAimQuality
+            ? WEIGHTS.AIM.SHOOTING * bestEnemyAimQuality
+            : WEIGHTS.AIM.SHOOTING_PENALTY * (1 - bestEnemyAimQuality);
+    } else if (bestEnemyAimQuality > enoughAimQuality) {
+        return WEIGHTS.AIM.SHOOTING_PENALTY * smoothstep(0.8, 1.0, bestEnemyAimQuality);
     }
 
-    return shootingReward;
+    return 0;
 }
 
 function calculateEnemyDistanceReward(

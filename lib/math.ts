@@ -1,3 +1,4 @@
+export const PI = Math.PI;
 export const max = Math.max;
 export const min = Math.min;
 export const abs = Math.abs;
@@ -8,6 +9,7 @@ export const ceil = Math.ceil;
 export const round = Math.round;
 export const sin = Math.sin;
 export const cos = Math.cos;
+export const acos = Math.acos;
 export const trunc = Math.trunc;
 export const sqrt = Math.sqrt;
 export const atan2 = Math.atan2;
