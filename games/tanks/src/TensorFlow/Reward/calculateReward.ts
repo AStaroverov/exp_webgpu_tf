@@ -116,7 +116,6 @@ export function calculateReward(
 
     if (isEnd) {
         const score = getTankScore(tankEid) / frame;
-        console.log('>> score', score);
 
         if (currentHealth <= 0) {
             return WEIGHTS.DEATH + score;
