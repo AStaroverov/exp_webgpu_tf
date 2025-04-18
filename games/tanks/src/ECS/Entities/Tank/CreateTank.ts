@@ -1,18 +1,18 @@
 import { TColor } from '../../../../../../src/ECS/Components/Common.ts';
 import { JointData, Vector2 } from '@dimforge/rapier2d-simd';
 import { GameDI } from '../../../DI/GameDI.ts';
-import { Player } from '../Player.ts';
-import { Parent } from '../Parent.ts';
-import { Children } from '../Children.ts';
+import { PlayerRef } from '../../Components/PlayerRef.ts';
+import { Parent } from '../../Components/Parent.ts';
+import { Children } from '../../Components/Children.ts';
 import { CollisionGroup } from '../../../Physical/createRigid.ts';
-import { createRectangleRigidGroup } from '../RigidGroup.ts';
+import { createRectangleRigidGroup } from '../../Components/RigidGroup.ts';
 import { addTransformComponents } from '../../../../../../src/ECS/Components/Transform.ts';
-import { TankController } from './TankController.ts';
-import { Team } from '../Team.ts';
+import { TankController } from '../../Components/TankController.ts';
+import { TeamRef } from '../../Components/TeamRef.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
-import { TankInputTensor } from './TankState.ts';
+import { TankInputTensor } from '../../Components/TankState.ts';
 import { createCircle } from '../../../../../../src/ECS/Entities/Shapes.ts';
-import { Tank } from './Tank.ts';
+import { Tank } from '../../Components/Tank.ts';
 import {
     createTankHullParts,
     createTankTracksParts,
@@ -21,7 +21,7 @@ import {
     PARTS_COUNT,
 } from './CreateTankParts.ts';
 import { BASE_DENSITY, mutatedOptions, Options, resetOptions, updateColorOptions } from './Options.ts';
-import { TankPart } from './TankPart.ts';
+import { TankPart } from '../../Components/TankPart.ts';
 
 /**
  * Создает танк с его компонентами
@@ -97,8 +97,8 @@ function createTankBase(options: Options, { world } = GameDI): [number, number] 
     // Добавление базовых компонентов
     addTransformComponents(world, tankEid);
     Children.addComponent(world, tankEid);
-    Team.addComponent(world, tankEid, options.teamId);
-    Player.addComponent(world, tankEid, options.playerId);
+    TeamRef.addComponent(world, tankEid, options.teamId);
+    PlayerRef.addComponent(world, tankEid, options.playerId);
     TankController.addComponent(world, tankEid);
 
     // Добавление TensorFlow компонентов, если активировано

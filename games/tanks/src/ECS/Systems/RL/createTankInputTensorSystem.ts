@@ -1,18 +1,19 @@
 import { GameDI } from '../../../DI/GameDI.ts';
-import { Tank, TANK_APPROXIMATE_COLLISION_RADIUS } from '../../Components/Tank/Tank.ts';
-import { MAX_ALLIES, MAX_BULLETS, MAX_ENEMIES, TankInputTensor } from '../../Components/Tank/TankState.ts';
+import { Tank, TANK_APPROXIMATE_COLLISION_RADIUS } from '../../Components/Tank.ts';
+import { MAX_ALLIES, MAX_BULLETS, MAX_ENEMIES, TankInputTensor } from '../../Components/TankState.ts';
 import { getEntityIdByPhysicalId, RigidBodyState } from '../../Components/Physical.ts';
 import { hypot } from '../../../../../../lib/math.ts';
 import { Ball, Collider } from '@dimforge/rapier2d-simd';
 import { CollisionGroup, createCollisionGroups } from '../../../Physical/createRigid.ts';
 import { EntityId, query } from 'bitecs';
-import { Player } from '../../Components/Player.ts';
+import { PlayerRef } from '../../Components/PlayerRef.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../../src/ECS/Components/Transform.ts';
 import { hasIntersectionVectorAndCircle } from '../../../Utils/intersections.ts';
 import { shuffle } from '../../../../../../lib/shuffle.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
-import { Team } from '../../Components/Team.ts';
-import { getTankHealth } from '../../Components/Tank/TankHealth.ts';
+import { TeamRef } from '../../Components/TeamRef.ts';
+
+import { getTankHealth } from '../../Entities/Tank/TankUtils.ts';
 
 export function createTankInputTensorSystem({ world } = GameDI) {
     return () => {
@@ -117,10 +118,10 @@ export type BattleState = {
 };
 
 export function getBattleState(tankEid: EntityId, tankEids = query(GameDI.world, [Tank, TankInputTensor, RigidBodyState])): BattleState {
-    const tankTeamId = Team.id[tankEid];
-    const allEnemiesEids = tankEids.filter((eid) => Team.id[eid] !== tankTeamId);
+    const tankTeamId = TeamRef.id[tankEid];
+    const allEnemiesEids = tankEids.filter((eid) => TeamRef.id[eid] !== tankTeamId);
     const allEnemiesHealth = allEnemiesEids.reduce((acc, eid) => acc + getTankHealth(eid), 0);
-    const allAlliesEids = tankEids.filter((eid) => Team.id[eid] === tankTeamId);
+    const allAlliesEids = tankEids.filter((eid) => TeamRef.id[eid] === tankTeamId);
     const allAlliesHealth = allAlliesEids.reduce((acc, eid) => acc + getTankHealth(eid), 0);
 
     return {
@@ -132,13 +133,13 @@ export function getBattleState(tankEid: EntityId, tankEids = query(GameDI.world,
 }
 
 export function findTankEnemiesEids(tankEid: EntityId) {
-    const tankTeamId = Team.id[tankEid];
-    return findTankNeighboursEids(tankEid, MAX_ENEMIES, (eid: EntityId) => tankTeamId !== Team.id[eid]);
+    const tankTeamId = TeamRef.id[tankEid];
+    return findTankNeighboursEids(tankEid, MAX_ENEMIES, (eid: EntityId) => tankTeamId !== TeamRef.id[eid]);
 }
 
 export function findTankAlliesEids(tankEid: EntityId) {
-    const tankTeamId = Team.id[tankEid];
-    return findTankNeighboursEids(tankEid, MAX_ALLIES, (eid: EntityId) => tankTeamId === Team.id[eid]);
+    const tankTeamId = TeamRef.id[tankEid];
+    return findTankNeighboursEids(tankEid, MAX_ALLIES, (eid: EntityId) => tankTeamId === TeamRef.id[eid]);
 }
 
 export function findTankNeighboursEids(tankEid: EntityId, limit: number, select: (eid: EntityId) => boolean, { physicalWorld } = GameDI) {
@@ -184,6 +185,7 @@ export function findTankNeighboursEids(tankEid: EntityId, limit: number, select:
 export const BULLET_DANGER_SPEED = 100;
 
 export function findTankDangerBullets(tankEid: number, { physicalWorld } = GameDI) {
+    const playerId = PlayerRef.id[tankEid];
     const position = {
         x: RigidBodyState.position.get(tankEid, 0),
         y: RigidBodyState.position.get(tankEid, 1),
@@ -201,7 +203,7 @@ export function findTankDangerBullets(tankEid: number, { physicalWorld } = GameD
             (collider: Collider) => {
                 const eid = getEntityIdByPhysicalId(collider.handle);
 
-                if (tested.has(eid) || eid === 0 || Player.id[eid] === tankEid) return true;
+                if (tested.has(eid) || eid === 0 || PlayerRef.id[eid] === playerId) return true;
 
                 tested.add(eid);
 

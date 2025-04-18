@@ -85,18 +85,18 @@ export class PlayerManager {
             const maxFramesCount = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
             const width = GameDI.width;
             const height = GameDI.height;
-            let frameCount = 0;
             let regardedTanks: number[] = [];
+            let frame = 0;
 
             const stop = frameTasks.addInterval(() => {
-                frameCount++;
+                frame++;
 
                 const currentTanks = game.getTanks();
-                const isEpisodeDone = currentTanks.length <= 1 || game.getTeamsCount() <= 1 || frameCount > maxFramesCount;
+                const isEpisodeDone = currentTanks.length <= 1 || game.getTeamsCount() <= 1 || frame > maxFramesCount;
 
-                const shouldAction = frameCount > 0 && frameCount % shouldEvery === 0;
-                const shouldReward = isEpisodeDone || (frameCount > 0 && frameCount % shouldEvery === 10);
-                TenserFlowDI.shouldCollectState = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
+                const shouldAction = frame > 0 && frame % shouldEvery === 0;
+                const shouldReward = isEpisodeDone || (frame > 0 && frame % shouldEvery === 10);
+                TenserFlowDI.shouldCollectState = frame > 0 && (frame + 1) % shouldEvery === 0;
 
                 if (shouldAction) {
                     regardedTanks = currentTanks;
@@ -113,7 +113,7 @@ export class PlayerManager {
                     for (const tankEid of regardedTanks) {
                         this.tankRewards.set(
                             tankEid,
-                            calculateReward(tankEid, GameDI.width, GameDI.height, false),
+                            calculateReward(tankEid, GameDI.width, GameDI.height, frame, false),
                         );
                     }
                 }

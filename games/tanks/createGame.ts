@@ -36,6 +36,7 @@ import { TenserFlowDI } from './src/DI/TenserFlowDI.ts';
 import { createVisualizationTracksSystem } from './src/ECS/Systems/Tank/createVisualizationTracksSystem.ts';
 import { createPostEffect } from './src/ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
 import { createTankDecayOutOfZoneSystem } from './src/ECS/Systems/Tank/createTankDecayOutOfZoneSystem.ts';
+import { GameSession } from './src/ECS/Entities/GameSession.ts';
 
 export async function createGame({ width, height, withRender, withPlayer }: {
     width: number,
@@ -113,16 +114,18 @@ export async function createGame({ width, height, withRender, withPlayer }: {
             const rb2 = physicalWorld.getCollider(handle2).parent();
 
             // TODO: Replace magic number with a constant.
-            if (event.totalForceMagnitude() > 5_000_000) {
-                const eid1 = rb1 && getEntityIdByPhysicalId(rb1.handle);
-                const eid2 = rb2 && getEntityIdByPhysicalId(rb2.handle);
+            if (event.totalForceMagnitude() < 5_000_000) return;
 
-                if (eid1 && hasComponent(world, eid1, Hitable)) {
-                    Hitable.hit$(eid1, 1);
-                }
-                if (eid2 && hasComponent(world, eid2, Hitable)) {
-                    Hitable.hit$(eid2, 1);
-                }
+            const eid1 = rb1 && getEntityIdByPhysicalId(rb1.handle);
+            const eid2 = rb2 && getEntityIdByPhysicalId(rb2.handle);
+
+            if (eid1 == null || eid2 == null) return;
+
+            if (hasComponent(world, eid1, Hitable)) {
+                Hitable.hit$(eid1, eid2, 1);
+            }
+            if (hasComponent(world, eid2, Hitable)) {
+                Hitable.hit$(eid2, eid1, 1);
             }
         });
 
@@ -208,6 +211,8 @@ export async function createGame({ width, height, withRender, withPlayer }: {
         resetWorld(world);
         deleteWorld(world);
         destroyChangeDetectorSystem(world);
+
+        GameSession.reset();
 
         GameDI.width = null!;
         GameDI.height = null!;

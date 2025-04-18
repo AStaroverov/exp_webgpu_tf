@@ -9,8 +9,8 @@ import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { prepareInputArrays } from '../../Common/InputArrays.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
 import { memoryChannel } from '../../DB';
-import { getTankHealth } from '../../../ECS/Components/Tank/TankHealth.ts';
 import { calculateReward } from '../../Reward/calculateReward.ts';
+import { getTankHealth } from '../../../ECS/Entities/Tank/TankUtils.ts';
 
 type Game = Awaited<ReturnType<typeof createBattlefield>>;
 
@@ -71,32 +71,32 @@ export class ActorManager {
             const maxFramesCount = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
             const width = GameDI.width;
             const height = GameDI.height;
-            let frameCount = 0;
             let regardedTanks: number[] = [];
+            let frame = 0;
 
             const stop = macroTasks.addInterval(() => {
                 for (let i = 0; i < 100; i++) {
-                    frameCount++;
+                    frame++;
 
                     const currentTanks = game.getTanks();
                     const gameOverByTankCount = currentTanks.length <= 1;
                     const gameOverByTeamWin = game.getTeamsCount() === 1;
-                    const gameOverByTime = frameCount > maxFramesCount;
+                    const gameOverByTime = frame > maxFramesCount;
                     const gameOver = gameOverByTankCount || gameOverByTeamWin || gameOverByTime;
 
-                    const isWarmup = frameCount < warmupFramesCount;
-                    const shouldAction = frameCount % shouldEvery === 0;
+                    const isWarmup = frame < warmupFramesCount;
+                    const shouldAction = frame % shouldEvery === 0;
                     const shouldMemorize = gameOver
-                        || ((frameCount - 3) % shouldEvery === 0
-                            || (frameCount - 7) % shouldEvery === 0
-                            || (frameCount - 11) % shouldEvery === 0);
-                    TenserFlowDI.shouldCollectState = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
+                        || ((frame - 3) % shouldEvery === 0
+                            || (frame - 7) % shouldEvery === 0
+                            || (frame - 11) % shouldEvery === 0);
+                    TenserFlowDI.shouldCollectState = frame > 0 && (frame + 1) % shouldEvery === 0;
 
                     if (shouldAction) {
                         regardedTanks = currentTanks;
 
                         for (const tankEid of regardedTanks) {
-                            this.updateTankBehaviour(tankEid, width, height, isWarmup);
+                            this.updateTankBehaviour(tankEid, width, height, frame, isWarmup);
                         }
                     }
 
@@ -113,6 +113,7 @@ export class ActorManager {
                                 tankEid,
                                 width,
                                 height,
+                                frame,
                                 gameOver,
                                 gameOverByTeamWin,
                             );
@@ -133,6 +134,7 @@ export class ActorManager {
         tankEid: number,
         width: number,
         height: number,
+        frame: number,
         isWarmup: boolean,
     ) {
         // Create input vector for the current state
@@ -147,6 +149,7 @@ export class ActorManager {
                 tankEid,
                 width,
                 height,
+                frame,
                 false,
             );
 
@@ -166,6 +169,7 @@ export class ActorManager {
         tankEid: number,
         width: number,
         height: number,
+        frame: number,
         gameOver: boolean,
         gameOverByTeamWin: boolean,
     ) {
@@ -175,6 +179,7 @@ export class ActorManager {
             tankEid,
             width,
             height,
+            frame,
             !isDead && gameOverByTeamWin,
         );
 

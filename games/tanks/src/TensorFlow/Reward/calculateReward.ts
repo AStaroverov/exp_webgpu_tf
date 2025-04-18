@@ -3,12 +3,12 @@ import { BattleState, BULLET_DANGER_SPEED, getBattleState } from '../../ECS/Syst
 import { abs, acos, centerStep, hypot, max, min, PI, sin, smoothstep } from '../../../../../lib/math.ts';
 import { TANK_RADIUS } from '../Common/consts.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
-import { Tank } from '../../ECS/Components/Tank/Tank.ts';
-import { TankController } from '../../ECS/Components/Tank/TankController.ts';
-import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../ECS/Components/Tank/TankState.ts';
-import { getTankHealth } from '../../ECS/Components/Tank/TankHealth.ts';
+import { Tank } from '../../ECS/Components/Tank.ts';
+import { TankController } from '../../ECS/Components/TankController.ts';
+import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../ECS/Components/TankState.ts';
 import { EntityId } from 'bitecs';
 import { BULLET_SPEED } from '../../ECS/Components/Bullet.ts';
+import { getTankHealth, getTankScore } from '../../ECS/Entities/Tank/TankUtils.ts';
 
 const WEIGHTS = Object.freeze({
     WINNER: 10,
@@ -108,16 +108,19 @@ export function calculateReward(
     tankEid: number,
     width: number,
     height: number,
+    frame: number,
     isWinner: boolean,
 ): number {
     const currentHealth = getTankHealth(tankEid);
 
     if (currentHealth <= 0) {
-        return WEIGHTS.DEATH;
+        console.log('>>', getTankScore(tankEid) / frame);
+        return WEIGHTS.DEATH;// + getTankScore(tankEid) / frame;
     }
 
     if (isWinner) {
-        return WEIGHTS.WINNER;
+        console.log('>>', getTankScore(tankEid) / frame);
+        return WEIGHTS.WINNER;// + getTankScore(tankEid) / frame;
     }
 
     const isShooting = TankController.shoot[tankEid] > 0;

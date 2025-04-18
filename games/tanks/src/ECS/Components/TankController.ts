@@ -1,7 +1,7 @@
-import { NestedArray, TypedArray } from '../../../../../../src/utils.ts';
-import { delegate } from '../../../../../../src/delegate.ts';
+import { NestedArray, TypedArray } from '../../../../../src/utils.ts';
+import { delegate } from '../../../../../src/delegate.ts';
 import { addComponent, World } from 'bitecs';
-import { component, obs } from '../../../../../../src/ECS/utils.ts';
+import { component, obs } from '../../../../../src/ECS/utils.ts';
 
 export const TankController = component(({
     shoot: TypedArray.i8(delegate.defaultSize),

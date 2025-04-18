@@ -1,13 +1,13 @@
 import { GameDI } from '../../../DI/GameDI.ts';
-import { TankController } from '../../Components/Tank/TankController.ts';
+import { TankController } from '../../Components/TankController.ts';
 import { RevoluteImpulseJoint, Vector2 } from '@dimforge/rapier2d-simd';
-import { Tank } from '../../Components/Tank/Tank.ts';
+import { Tank } from '../../Components/Tank.ts';
 import { RigidBodyRef, RigidBodyState } from '../../Components/Physical.ts';
 import { applyRotationToVector } from '../../../Physical/applyRotationToVector.ts';
 import { sqrt } from '../../../../../../lib/math.ts';
 import { query } from 'bitecs';
 import { getMatrixTranslation, LocalTransform } from '../../../../../../src/ECS/Components/Transform.ts';
-import { TankPart } from '../../Components/Tank/TankPart.ts';
+import { TankPart } from '../../Components/TankPart.ts';
 
 export function createTankPositionSystem({ world, physicalWorld } = GameDI) {
     const nextLinvel = new Vector2(0, 0);

@@ -3,17 +3,18 @@ import { CollisionGroup } from '../../../Physical/createRigid.ts';
 import { TColor } from '../../../../../../src/ECS/Components/Common.ts';
 import { JointData, Vector2 } from '@dimforge/rapier2d-simd';
 import { GameDI } from '../../../DI/GameDI.ts';
-import { RigidBodyRef } from '../Physical.ts';
-import { createRectangleRR } from '../RigidRender.ts';
-import { Player } from '../Player.ts';
-import { Hitable } from '../Hitable.ts';
-import { Parent } from '../Parent.ts';
-import { Children } from '../Children.ts';
-import { TankPart, TankPartTrack } from './TankPart.ts';
+import { RigidBodyRef } from '../../Components/Physical.ts';
+import { createRectangleRR } from '../../Components/RigidRender.ts';
+import { PlayerRef } from '../../Components/PlayerRef.ts';
+import { Hitable } from '../../Components/Hitable.ts';
+import { Parent } from '../../Components/Parent.ts';
+import { Children } from '../../Components/Children.ts';
+import { TankPart, TankPartTrack } from '../../Components/TankPart.ts';
 import { BASE_DENSITY, Options, updateColorOptions } from './Options.ts';
 import { randomRangeFloat } from '../../../../../../lib/random.ts';
 import { clamp } from 'lodash-es';
 import { addComponent } from 'bitecs';
+import { TeamRef } from '../../Components/TeamRef.ts';
 
 export const SIZE = 5;
 export const PADDING = SIZE + 1;
@@ -173,7 +174,8 @@ function createThingFromParts(
         );
         TankPart.addComponent(world, eid, joint.handle, parentVector, childVector);
 
-        Player.addComponent(world, eid, options.playerId);
+        PlayerRef.addComponent(world, eid, options.playerId);
+        TeamRef.addComponent(world, eid, options.teamId);
         Hitable.addComponent(world, eid);
         Parent.addComponent(world, eid, parentEId);
         Children.addChildren(parentEId, eid);

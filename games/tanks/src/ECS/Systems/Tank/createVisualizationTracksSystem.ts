@@ -1,12 +1,12 @@
 import { hasComponent, query } from 'bitecs';
 import { GameDI } from '../../../DI/GameDI.ts';
-import { Tank } from '../../Components/Tank/Tank.ts';
+import { Tank } from '../../Components/Tank.ts';
 import { Children } from '../../Components/Children.ts';
-import { TankPart, TankPartTrack } from '../../Components/Tank/TankPart.ts';
+import { TankPart, TankPartTrack } from '../../Components/TankPart.ts';
 import { RigidBodyState } from '../../Components/Physical.ts';
 import { Vector2 } from '@dimforge/rapier2d-simd';
 import { abs, sign } from '../../../../../../lib/math.ts';
-import { CATERPILLAR_LINE_COUNT, CATERPILLAR_PADDING } from '../../Components/Tank/CreateTankParts.ts';
+import { CATERPILLAR_LINE_COUNT, CATERPILLAR_PADDING } from '../../Entities/Tank/CreateTankParts.ts';
 
 const CATERPILLAR_LIMIT = CATERPILLAR_LINE_COUNT * CATERPILLAR_PADDING / 2;
 

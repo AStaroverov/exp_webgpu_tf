@@ -1,14 +1,14 @@
 // DebugInfo singleton to track statistics
 import { query } from 'bitecs';
 import { GameDI } from '../../DI/GameDI.ts';
-import { Tank } from '../../ECS/Components/Tank/Tank.ts';
+import { Tank } from '../../ECS/Components/Tank.ts';
 import { RigidBodyState } from '../../ECS/Components/Physical.ts';
 import { Color } from '../../../../../src/ECS/Components/Common.ts';
 import { getDrawState } from './uiUtils.ts';
 import { frameTasks } from '../../../../../lib/TasksScheduler/frameTasks.ts';
 import { CONFIG } from '../PPO/config.ts';
 import { PlayerManager } from '../PPO/Player/PlayerManager.ts';
-import { Team } from '../../ECS/Components/Team.ts';
+import { TeamRef } from '../../ECS/Components/TeamRef.ts';
 import { drawMetrics } from '../Metrics/Browser';
 
 // Generate debug visualization using HTML and CSS
@@ -83,7 +83,7 @@ export function createTanksDebug(manager: PlayerManager) {
 
             const tankEid = tanksEids[i];
             const aim = Tank.aimEid[tankEid];
-            const teamId = Team.id[tankEid];
+            const teamId = TeamRef.id[tankEid];
             const color = `rgba(${ Color.r[aim] * 255 }, ${ Color.g[aim] * 255 }, ${ Color.b[aim] * 255 }, ${ Color.a[aim] })`;
 
             result += `

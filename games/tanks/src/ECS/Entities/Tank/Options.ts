@@ -25,8 +25,8 @@ export const mutatedOptions = {
     belongsCollisionGroup: 0,
     interactsCollisionGroup: 0,
 
-    teamId: 0,
-    playerId: 0,
+    teamId: -1,
+    playerId: -1,
 };
 
 export const defaultOptions = structuredClone(mutatedOptions);

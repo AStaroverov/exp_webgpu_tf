@@ -1,6 +1,6 @@
-import { NestedArray, TypedArray } from '../../../../../../src/utils.ts';
-import { delegate } from '../../../../../../src/delegate.ts';
-import { component } from '../../../../../../src/ECS/utils.ts';
+import { NestedArray, TypedArray } from '../../../../../src/utils.ts';
+import { delegate } from '../../../../../src/delegate.ts';
+import { component } from '../../../../../src/ECS/utils.ts';
 import { addComponent, EntityId, removeComponent, World } from 'bitecs';
 import { Vector2 } from '@dimforge/rapier2d-simd';
 

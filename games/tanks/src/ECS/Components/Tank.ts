@@ -1,6 +1,6 @@
-import { delegate } from '../../../../../../src/delegate.ts';
-import { NestedArray, TypedArray } from '../../../../../../src/utils.ts';
-import { component } from '../../../../../../src/ECS/utils.ts';
+import { delegate } from '../../../../../src/delegate.ts';
+import { NestedArray, TypedArray } from '../../../../../src/utils.ts';
+import { component } from '../../../../../src/ECS/utils.ts';
 import { addComponent, EntityId, World } from 'bitecs';
 
 export const TANK_APPROXIMATE_COLLISION_RADIUS = 80;
