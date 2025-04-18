@@ -9,6 +9,7 @@ import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../..
 import { EntityId } from 'bitecs';
 import { BULLET_SPEED } from '../../ECS/Components/Bullet.ts';
 import { getTankHealth, getTankScore } from '../../ECS/Entities/Tank/TankUtils.ts';
+import { clamp } from 'lodash-es';
 
 const WEIGHTS = Object.freeze({
     WINNER: 5,
@@ -115,7 +116,7 @@ export function calculateReward(
     const currentHealth = getTankHealth(tankEid);
 
     if (isEnd) {
-        const score = getTankScore(tankEid) / frame;
+        const score = clamp(getTankScore(tankEid) / frame, -10, 10);
 
         if (currentHealth <= 0) {
             return WEIGHTS.DEATH + score;
