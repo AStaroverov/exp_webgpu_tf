@@ -41,14 +41,14 @@ const WEIGHTS = Object.freeze({
     MAP_BORDER_MULTIPLIER: 1,
 
     DISTANCE_KEEPING: {
-        BASE: 0.8,          // За поддержание дистанции
-        PENALTY: -1.0,      // За неудачную дистанцию
+        BASE: 0.2,          // За поддержание дистанции
+        PENALTY: -0.4,      // За неудачную дистанцию
     },
     DISTANCE_KEEPING_MULTIPLIER: 1, // может быть несколько врагов
 
     BULLET_AVOIDANCE: {
-        PENALTY: -0.8,
-        AVOID_QUALITY: 0.8,
+        PENALTY: -0.6,
+        AVOID_QUALITY: 0.6,
     },
     BULLET_AVOIDANCE_MULTIPLIER: 1,
 });
@@ -468,7 +468,7 @@ function calculateEnemyDistanceReward(
         }
     }
 
-    return positioningReward;
+    return positioningReward / beforePredictEnemiesEids.length;
 }
 
 function calculateAllyDistanceReward(
@@ -493,7 +493,7 @@ function calculateAllyDistanceReward(
         }
     }
 
-    return positioningReward;
+    return positioningReward / beforePredictAlliesEids.length;
 }
 
 function calculateBulletAvoidanceReward(
