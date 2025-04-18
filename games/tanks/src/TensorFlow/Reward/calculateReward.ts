@@ -468,7 +468,7 @@ function calculateEnemyDistanceReward(
         }
     }
 
-    return positioningReward / beforePredictEnemiesEids.length;
+    return positioningReward / max(1, beforePredictEnemiesEids.length);
 }
 
 function calculateAllyDistanceReward(
@@ -493,7 +493,7 @@ function calculateAllyDistanceReward(
         }
     }
 
-    return positioningReward / beforePredictAlliesEids.length;
+    return positioningReward / max(1, beforePredictAlliesEids.length);
 }
 
 function calculateBulletAvoidanceReward(
