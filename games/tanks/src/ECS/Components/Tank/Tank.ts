@@ -9,13 +9,11 @@ export const Tank = component({
     aimEid: TypedArray.f64(delegate.defaultSize),
     turretEId: TypedArray.f64(delegate.defaultSize),
 
-    bulletSpeed: TypedArray.f64(delegate.defaultSize),
     bulletStartPosition: NestedArray.f64(2, delegate.defaultSize),
     initialPartsCount: TypedArray.f64(delegate.defaultSize),
 
-    addComponent(world: World, eid: EntityId, bulletSpeed: number, bulletStartPosition: number[], initialPartsCount: number): void {
+    addComponent(world: World, eid: EntityId, bulletStartPosition: number[], initialPartsCount: number): void {
         addComponent(world, eid, Tank);
-        Tank.bulletSpeed[eid] = bulletSpeed;
         Tank.bulletStartPosition.set(eid, 0, bulletStartPosition[0]);
         Tank.bulletStartPosition.set(eid, 1, bulletStartPosition[1]);
         Tank.initialPartsCount[eid] = initialPartsCount;

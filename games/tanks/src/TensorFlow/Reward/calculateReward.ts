@@ -8,6 +8,7 @@ import { TankController } from '../../ECS/Components/Tank/TankController.ts';
 import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../ECS/Components/Tank/TankState.ts';
 import { getTankHealth } from '../../ECS/Components/Tank/TankHealth.ts';
 import { EntityId } from 'bitecs';
+import { BULLET_SPEED } from '../../ECS/Components/Bullet.ts';
 
 const WEIGHTS = Object.freeze({
     WINNER: 10,
@@ -280,12 +281,19 @@ function analyzeAiming(
         const enemyId = beforePredictEnemiesEids[i];
         const enemyX = RigidBodyState.position.get(enemyId, 0);
         const enemyY = RigidBodyState.position.get(enemyId, 1);
+        const enemyVX = RigidBodyState.linvel.get(enemyId, 0);
+        const enemyVY = RigidBodyState.linvel.get(enemyId, 1);
 
-        const currentAimQuality = computeAimQuality(tankX, tankY, turretTargetX, turretTargetY, enemyX, enemyY);
+        const distToEnemy = hypot(tankX - enemyX, tankY - enemyY);
+        const timeDistToEnemy = distToEnemy / BULLET_SPEED;
+        const futureEnemyX = enemyX + enemyVX * timeDistToEnemy;
+        const futureEnemyY = enemyY + enemyVY * timeDistToEnemy;
+
+        const aimQuality = computeAimQuality(tankX, tankY, turretTargetX, turretTargetY, futureEnemyX, futureEnemyY);
 
         // Отслеживаем лучшее прицеливание
-        if (currentAimQuality > bestEnemyAimQuality) {
-            bestEnemyAimQuality = currentAimQuality;
+        if (aimQuality > bestEnemyAimQuality) {
+            bestEnemyAimQuality = aimQuality;
             bestEnemyAimTargetId = enemyId;
             bestEnemyDistance = hypot(tankX - enemyX, tankY - enemyY);
         }
@@ -296,11 +304,18 @@ function analyzeAiming(
         const allyId = beforePredictAlliesEids[i];
         const allyX = RigidBodyState.position.get(allyId, 0);
         const allyY = RigidBodyState.position.get(allyId, 1);
-        const allyDist = hypot(tankX - allyX, tankY - allyY);
-        let aimQuality = computeAimQuality(tankX, tankY, turretTargetX, turretTargetY, allyX, allyY);
+        const allyVX = RigidBodyState.linvel.get(allyId, 0);
+        const allyVY = RigidBodyState.linvel.get(allyId, 1);
 
-        if (allyDist > bestEnemyDistance) {
-            const distDiff = 1 - (allyDist - bestEnemyDistance) / allyDist;
+        const distToAlly = hypot(tankX - allyX, tankY - allyY);
+        const timeDistToAlly = distToAlly / BULLET_SPEED;
+        const futureAllyX = allyX + allyVX * timeDistToAlly;
+        const futureAllyY = allyY + allyVY * timeDistToAlly;
+
+        let aimQuality = computeAimQuality(tankX, tankY, turretTargetX, turretTargetY, futureAllyX, futureAllyY);
+
+        if (distToAlly > bestEnemyDistance) {
+            const distDiff = 1 - (distToAlly - bestEnemyDistance) / distToAlly;
             aimQuality *= distDiff;
         }
 

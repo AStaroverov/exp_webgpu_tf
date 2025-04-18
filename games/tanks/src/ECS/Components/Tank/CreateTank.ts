@@ -90,7 +90,6 @@ function createTankBase(options: Options, { world } = GameDI): [number, number] 
     Tank.addComponent(
         world,
         tankEid,
-        400,
         [1, -PADDING * 9],
         PARTS_COUNT,
     );

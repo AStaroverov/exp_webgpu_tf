@@ -21,6 +21,8 @@ import { Color } from '../../../../../src/ECS/Components/Common.ts';
 
 export const Bullet = {};
 
+export const BULLET_SPEED = 400;
+
 type Options = Parameters<typeof createCircleRR>[0];
 
 const optionsBulletRR: Options = {
@@ -70,8 +72,8 @@ const optionsSpawnBullet = {
     x: 0,
     y: 0,
     color: new Float32Array(4).fill(1),
-    rotation: 0,
     speed: 0,
+    rotation: 0,
     playerId: 0,
 };
 const tmpMatrix = mat4.create();
@@ -91,7 +93,7 @@ export function spawnBullet(tankEid: number) {
     optionsSpawnBullet.x = getMatrixTranslationX(tmpMatrix);
     optionsSpawnBullet.y = getMatrixTranslationY(tmpMatrix);
     optionsSpawnBullet.rotation = getMatrixRotationZ(tmpMatrix);
-    optionsSpawnBullet.speed = Tank.bulletSpeed[tankEid];
+    optionsSpawnBullet.speed = BULLET_SPEED;
     optionsSpawnBullet.playerId = Player.id[tankEid];
 
     createBulletRR(optionsSpawnBullet);
