@@ -25,15 +25,15 @@ const WEIGHTS = Object.freeze({
     COMMON_MULTIPLIER: 1,
 
     AIM: {
-        QUALITY: 1.0,       // За точное прицеливание
-        DISTANCE: 0.2,      // За расстояние до прицела
-        NO_TARGET_PENALTY: -0.1, // За отсутствие целей
-        DISTANCE_PENALTY: -0.2, // За расстояние до цели
-        SHOOTING: 1.0,       // За стрельбу в цель
-        SHOOTING_PENALTY: -0.3, // За стрельбу в пустоту
-        SHOOTING_ALLIES_PENALTY: -1.0, // За стрельбу в союзников
+        QUALITY: 1.0,
+        DISTANCE: 0.1,
+        DISTANCE_PENALTY: -0.1,
+        SHOOTING_ENEMIES: 1.0,
+        SHOOTING_ALLIES_PENALTY: -1.0,
+        SHOOTING_BAD_AIM: -0.2,
+        SHOOTING_GOOD_AIM_PENALTY: -0.3,
     },
-    AIM_MULTIPLIER: 2,
+    AIM_MULTIPLIER: 1,
 
     MAP_BORDER: {
         BASE: 0.2,          // За нахождение в пределах карты
@@ -174,7 +174,7 @@ export function calculateReward(
     rewards.aim.shootDecision = calculateShootingReward(
         isShooting,
         aimingResult.bestEnemyAimQuality,
-        aimingResult.sumAlliesAimQuality,
+        aimingResult.bestAlliesAimQuality,
     );
 
     const bulletAvoidanceResult = calculateBulletAvoidanceReward(
@@ -240,8 +240,8 @@ function calculateTankMapAwarenessReward(
         return 0;
     } else {
         const dist = distanceToMap(width, height, x, y);
-        return 0.8 * WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, 1000, dist)
-            + 0.2 * WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, 10000, dist);
+        return 0.8 * WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, 200, dist)
+            + 0.2 * WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, 500, dist);
     }
 }
 
@@ -268,7 +268,7 @@ function analyzeAiming(
 ): {
     bestEnemyAimQuality: number;
     bestEnemyAimTargetId: number;
-    sumAlliesAimQuality: number;
+    bestAlliesAimQuality: number;
     aimQualityReward: number;
     aimDistanceReward: number;
 } {
@@ -323,9 +323,7 @@ function analyzeAiming(
     }
 
     // Награда за качество прицеливания и дистанцию до цели
-    const aimQualityReward =
-        (bestEnemyAimQuality * WEIGHTS.AIM.QUALITY)
-        + (bestEnemyAimTargetId === 0 ? WEIGHTS.AIM.NO_TARGET_PENALTY : 0);
+    const aimQualityReward = (bestEnemyAimQuality * WEIGHTS.AIM.QUALITY);
 
     // Награда за дистанцию прицеливания
     const turretTargetDistance = hypot(turretTargetX - tankX, turretTargetY - tankY);
@@ -333,17 +331,17 @@ function analyzeAiming(
         WEIGHTS.AIM.DISTANCE * (
             turretTargetDistance < 300
                 ? smoothstep(TANK_RADIUS, 300, turretTargetDistance)
-                : smoothstep(800, 300, turretTargetDistance)
+                : smoothstep(600, 300, turretTargetDistance)
         )
         + WEIGHTS.AIM.DISTANCE_PENALTY * smoothstep(TANK_RADIUS, 0, turretTargetDistance)
-        + WEIGHTS.AIM.DISTANCE_PENALTY * smoothstep(800, 1000, turretTargetDistance);
+        + WEIGHTS.AIM.DISTANCE_PENALTY * smoothstep(600, 1000, turretTargetDistance);
 
     return {
         bestEnemyAimQuality,
         bestEnemyAimTargetId,
         aimQualityReward,
         aimDistanceReward,
-        sumAlliesAimQuality: bestAlliesAimQuality,
+        bestAlliesAimQuality,
     };
 }
 
@@ -399,9 +397,9 @@ function computeAimQuality(
 function calculateShootingReward(
     isShooting: boolean,
     bestEnemyAimQuality: number,
-    sumAlliesAimQuality: number,
+    bestAlliesAimQuality: number,
 ): number {
-    if (isShooting && sumAlliesAimQuality > bestEnemyAimQuality) {
+    if (isShooting && bestAlliesAimQuality > bestEnemyAimQuality) {
         return WEIGHTS.AIM.SHOOTING_ALLIES_PENALTY;
     }
 
@@ -409,10 +407,10 @@ function calculateShootingReward(
 
     if (isShooting) {
         return bestEnemyAimQuality > enoughAimQuality
-            ? WEIGHTS.AIM.SHOOTING * bestEnemyAimQuality
-            : WEIGHTS.AIM.SHOOTING_PENALTY * (1 - bestEnemyAimQuality);
+            ? WEIGHTS.AIM.SHOOTING_ENEMIES * bestEnemyAimQuality
+            : WEIGHTS.AIM.SHOOTING_BAD_AIM * (1 - bestEnemyAimQuality);
     } else if (bestEnemyAimQuality > enoughAimQuality) {
-        return WEIGHTS.AIM.SHOOTING_PENALTY * smoothstep(0.8, 1.0, bestEnemyAimQuality);
+        return WEIGHTS.AIM.SHOOTING_GOOD_AIM_PENALTY * smoothstep(0.8, 1.0, bestEnemyAimQuality);
     }
 
     return 0;
