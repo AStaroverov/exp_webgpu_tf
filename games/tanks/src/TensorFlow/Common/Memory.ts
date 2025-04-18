@@ -136,6 +136,9 @@ export class SubMemory {
         }
 
         const shapedRewards = rewardsShaping(this.stateRewards, this.actionRewards);
+        // The last reward is not shaped, because it is the reward for whole episode
+        shapedRewards[shapedRewards.length - 1] = this.actionRewards[this.actionRewards.length - 1];
+
         const dones = this.dones.map(done => done ? 1.0 : 0.0);
         dones[dones.length - 1] = 1.0;
 
@@ -163,14 +166,20 @@ export class SubMemory {
 
     private collapseTmpData() {
         if (this.states.length > this.actionRewards.length) {
-            const weights = rewardMultipliers(this.tmpActionRewards.length);
-            const reward = this.tmpActionRewards.reduce((acc, rew, i) => acc + rew * weights[i], 0);
             const done = this.tmpDones.reduce((acc, d) => acc || d, false);
 
-            this.actionRewards.push(reward);
+            // If the last action is done, we need to keep only the last reward for the whole episode
+            if (done) {
+                this.tmpActionRewards = this.tmpActionRewards.slice(-1);
+            }
+
+            const weights = rewardMultipliers(this.tmpActionRewards.length);
+            const reward = this.tmpActionRewards.reduce((acc, rew, i) => acc + rew * weights[i], 0);
+
             this.dones.push(done);
-            this.tmpActionRewards = [];
+            this.actionRewards.push(reward);
             this.tmpDones = [];
+            this.tmpActionRewards = [];
         }
     }
 }

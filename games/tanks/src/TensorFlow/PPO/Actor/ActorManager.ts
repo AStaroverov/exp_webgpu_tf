@@ -151,6 +151,7 @@ export class ActorManager {
                 height,
                 frame,
                 false,
+                false,
             );
 
             this.agent.rememberAction(
@@ -180,6 +181,7 @@ export class ActorManager {
             width,
             height,
             frame,
+            isDone,
             !isDead && gameOverByTeamWin,
         );
 

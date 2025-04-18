@@ -11,8 +11,8 @@ import { BULLET_SPEED } from '../../ECS/Components/Bullet.ts';
 import { getTankHealth, getTankScore } from '../../ECS/Entities/Tank/TankUtils.ts';
 
 const WEIGHTS = Object.freeze({
-    WINNER: 10,
-    DEATH: -10,
+    WINNER: 5,
+    DEATH: -5,
 
     TEAM: {
         SCORE: 0.2,
@@ -109,18 +109,24 @@ export function calculateReward(
     width: number,
     height: number,
     frame: number,
+    isEnd: boolean,
     isWinner: boolean,
 ): number {
     const currentHealth = getTankHealth(tankEid);
 
-    if (currentHealth <= 0) {
-        console.log('>>', getTankScore(tankEid) / frame);
-        return WEIGHTS.DEATH;// + getTankScore(tankEid) / frame;
-    }
+    if (isEnd) {
+        const score = getTankScore(tankEid) / frame;
+        console.log('>> score', score);
 
-    if (isWinner) {
-        console.log('>>', getTankScore(tankEid) / frame);
-        return WEIGHTS.WINNER;// + getTankScore(tankEid) / frame;
+        if (currentHealth <= 0) {
+            return WEIGHTS.DEATH + score;
+        }
+
+        if (isWinner) {
+            return WEIGHTS.WINNER + score;
+        }
+
+        return score;
     }
 
     const isShooting = TankController.shoot[tankEid] > 0;
