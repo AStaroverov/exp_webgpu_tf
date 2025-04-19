@@ -35,11 +35,11 @@ export class Memory {
         return Array.from(this.map.values());
     }
 
-    addFirstPart(id: number, state: InputArrays, rewardState: number, action: Float32Array, mean: Float32Array, logStd: Float32Array, logProb: number) {
+    addFirstPart(id: number, state: InputArrays, action: Float32Array, mean: Float32Array, logStd: Float32Array, logProb: number) {
         if (!this.map.has(id)) {
             this.map.set(id, new SubMemory());
         }
-        this.map.get(id)!.addFirstPart(state, rewardState, action, mean, logStd, logProb);
+        this.map.get(id)!.addFirstPart(state, action, mean, logStd, logProb);
     }
 
     updateSecondPart(id: number, reward: number, done: boolean) {
@@ -83,12 +83,11 @@ export class Memory {
 
 export class SubMemory {
     private states: InputArrays[] = [];
-    private stateRewards: number[] = [];
     private actions: Float32Array[] = [];
     private mean: Float32Array[] = [];
     private logStd: Float32Array[] = [];
     private logProbs: number[] = [];
-    private actionRewards: number[] = [];
+    private rewards: number[] = [];
     private dones: boolean[] = [];
 
     private tmpActionRewards: number[] = [];
@@ -101,11 +100,10 @@ export class SubMemory {
         return this.states.length;
     }
 
-    addFirstPart(state: InputArrays, stateReward: number, action: Float32Array, mean: Float32Array, logStd: Float32Array, logProb: number) {
+    addFirstPart(state: InputArrays, action: Float32Array, mean: Float32Array, logStd: Float32Array, logProb: number) {
         this.collapseTmpData();
 
         this.states.push(state);
-        this.stateRewards.push(stateReward);
         this.actions.push(action);
         this.mean.push(mean);
         this.logStd.push(logStd);
@@ -124,20 +122,16 @@ export class SubMemory {
         if (this.tmpDones.length > 0 || this.tmpActionRewards.length > 0) {
             this.collapseTmpData();
         }
-        if (this.states.length !== this.actionRewards.length || this.states.length !== this.dones.length) {
-            const minLen = Math.min(this.states.length, this.actionRewards.length, this.dones.length);
+        if (this.states.length !== this.rewards.length || this.states.length !== this.dones.length) {
+            const minLen = Math.min(this.states.length, this.rewards.length, this.dones.length);
             this.states.length = minLen;
             this.actions.length = minLen;
             this.mean.length = minLen;
             this.logStd.length = minLen;
             this.logProbs.length = minLen;
-            this.actionRewards.length = minLen;
+            this.rewards.length = minLen;
             this.dones.length = minLen;
         }
-
-        const shapedRewards = rewardsShaping(this.stateRewards, this.actionRewards);
-        // The last reward is not shaped, because it is the reward for whole episode
-        shapedRewards[shapedRewards.length - 1] = this.actionRewards[this.actionRewards.length - 1];
 
         const dones = this.dones.map(done => done ? 1.0 : 0.0);
         dones[dones.length - 1] = 1.0;
@@ -149,7 +143,7 @@ export class SubMemory {
             mean: (this.mean),
             logStd: (this.logStd),
             logProbs: new Float32Array(this.logProbs),
-            rewards: new Float32Array(shapedRewards),
+            rewards: new Float32Array(this.rewards),
             dones: new Float32Array(dones),
         };
     }
@@ -158,14 +152,14 @@ export class SubMemory {
         this.states = [];
         this.actions = [];
         this.logProbs = [];
-        this.actionRewards = [];
+        this.rewards = [];
         this.dones = [];
         this.tmpActionRewards = [];
         this.tmpDones = [];
     }
 
     private collapseTmpData() {
-        if (this.states.length > this.actionRewards.length) {
+        if (this.states.length > this.rewards.length) {
             const done = this.tmpDones.reduce((acc, d) => acc || d, false);
 
             // If the last action is done, we need to keep only the last reward for the whole episode
@@ -177,7 +171,7 @@ export class SubMemory {
             const reward = this.tmpActionRewards.reduce((acc, rew, i) => acc + rew * weights[i], 0);
 
             this.dones.push(done);
-            this.actionRewards.push(reward);
+            this.rewards.push(reward);
             this.tmpDones = [];
             this.tmpActionRewards = [];
         }
@@ -195,10 +189,4 @@ function rewardMultipliers(limit: number): number[] {
     const normalized = weights.map(w => w / sum);
 
     return normalized;
-}
-
-function rewardsShaping(stateRewards: number[], actionRewards: number[], k = 0.9): number[] {
-    return actionRewards.map((reward, i) => {
-        return reward * k + (reward - stateRewards[i]) * (1 - k);
-    });
 }
