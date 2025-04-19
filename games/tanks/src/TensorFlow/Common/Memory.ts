@@ -197,9 +197,7 @@ function rewardMultipliers(limit: number): number[] {
     return normalized;
 }
 
-const REWARD_SHAPING_COEFFICIENT = 0.25;
-
-function rewardsShaping(stateRewards: number[], actionRewards: number[], k = REWARD_SHAPING_COEFFICIENT): number[] {
+function rewardsShaping(stateRewards: number[], actionRewards: number[], k = 0.9): number[] {
     return actionRewards.map((reward, i) => {
         return reward * k + (reward - stateRewards[i]) * (1 - k);
     });
