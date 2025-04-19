@@ -1,11 +1,9 @@
 import { isMac } from '../../../../../lib/detect.ts';
 
 export type Config = {
-    name: string;
     // Learning parameters
     clipNorm: number;
     gamma: number;                  // Discount factor
-    lam: number;                    // GAE lambda
     // PPO-specific parameters
     policyEpochs: number;                // Number of epochs to train on policy network
     valueEpochs: number;                  // Number of epochs to train the value network
@@ -39,11 +37,9 @@ export type Config = {
 
 // Default experiment configuration for PPO
 export const DEFAULT_EXPERIMENT: Config = {
-    name: 'ppo-default',
     // Learning parameters
     clipNorm: 5,
     gamma: 0.99,
-    lam: 0.95, // TODO: not using in v-trace
     // PPO-specific parameters
     policyEpochs: 4,
     valueEpochs: 1,
@@ -73,10 +69,9 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Workers
     workerCount: isMac ? 4 : 10,
     // Training control
-    savePath: 'APPO_v1',
-    fsModelPath: 'v11-wo-vtrace',
+    savePath: isMac ? 'APPO_VTRACE' : 'APPO_v1',
+    // fsModelPath: 'v11-wo-vtrace',
 };
-
 
 // Current active experiment
 export let CONFIG: Config = DEFAULT_EXPERIMENT;

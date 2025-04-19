@@ -12,7 +12,7 @@ import { ZIndex } from '../../../consts.ts';
 import { dist2, hypot } from '../../../../../../lib/math.ts';
 import { RigidBodyState } from '../../Components/Physical.ts';
 
-const MAX_DIST = 1200;
+const MAX_DIST = 800;
 
 export function createTankAimSystem({ world } = GameDI) {
     return ((delta: number) => {

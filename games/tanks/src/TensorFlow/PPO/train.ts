@@ -10,6 +10,11 @@ import { normalize } from '../../../../../lib/math.ts';
 import { Batch } from '../Common/Memory.ts';
 import { CONFIG } from './config.ts';
 import { syncUnwrapTensor } from '../Common/Tensor.ts';
+import { isTabThread } from '../../../../../lib/detect.ts';
+
+if (isTabThread) {
+    import('./v-trace.test.ts');
+}
 
 export function trainPolicyNetwork(
     network: tf.LayersModel,
@@ -170,14 +175,14 @@ export function act(
 export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { actions: Float32Array } {
     const result = tf.tidy(() => {
         const predicted = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
-        const { mean } = parsePredict(predicted);
+        const { mean, logStd } = parsePredict(predicted);
 
-        // const noise = tf.randomNormal([ACTION_DIM]).mul(std);
-        // const actions = outMean.add(noise);
+        const noise = tf.randomNormal([ACTION_DIM]).mul(logStd.exp());
+        const actions = mean.add(noise);
 
         return {
-            // actions: actions.dataSync() as Float32Array,
-            actions: mean.dataSync() as Float32Array,
+            actions: actions.dataSync() as Float32Array,
+            // actions: mean.dataSync() as Float32Array,
         };
     });
 
@@ -279,7 +284,7 @@ function computeRho(
     return logRho.exp(); // ρ_t = π_current / π_behavior
 }
 
-function computeVTrace(
+export function computeVTrace(
     rewards: Float32Array,
     dones: Float32Array,
     values: Float32Array,
@@ -289,40 +294,28 @@ function computeVTrace(
     clipC: number,
 ): { vTraces: Float32Array, tdErrors: Float32Array } {
     const batchSize = values.length;
-    // Соберём nextValuesArr:
     const nextValues = createNextValues(values, dones);
-    // 7) Делаем цикл V-trace
     const vTraces = new Float32Array(batchSize);
     const tdErrors = new Float32Array(batchSize);
 
-    // Инициализируем последний элемент
-    vTraces[batchSize - 1] = values[batchSize - 1];
+    vTraces[batchSize - 1] = values[batchSize - 1] || rewards[batchSize - 1];
 
     for (let t = batchSize - 2; t >= 0; t--) {
-        // Если done[t], сбрасываем V-trace именно на valuesArr[t]
-        // (т.е. "начинаем" новый эпизод с самого себя)
         if (dones[t] === 1) {
-            vTraces[t] = values[t];
+            vTraces[t] = values[t] || rewards[t];
             continue;
         }
 
-        // c_t = min(rho_t, clipC)
         const c_t = Math.min(rhos[t], clipC);
-        // rho_t = min(rho_t, clipRho)
         const rho_t = Math.min(rhos[t], clipRho);
-
-        // Если done[t], то discount=0, иначе gamma
         const discount = dones[t] === 1 ? 0 : gamma;
-
         const tdError = (
             rewards[t]
             + discount * nextValues[t]
             - values[t]
         );
-        // delta_t
         const delta_t = rho_t * tdError;
 
-        // vs[t]
         vTraces[t] = values[t]
             + delta_t
             + discount * c_t * (vTraces[t + 1] - nextValues[t]);
@@ -332,7 +325,7 @@ function computeVTrace(
     return { vTraces, tdErrors };
 }
 
-function createNextValues(values: Float32Array, dones: Float32Array): Float32Array {
+export function createNextValues(values: Float32Array, dones: Float32Array): Float32Array {
     // Для nextValues, обычно делаем сдвиг на 1, но нужно аккуратно учесть done.
     // Самый простой путь:
     //   values[i+1] -> nextValue для шага i
@@ -341,10 +334,8 @@ function createNextValues(values: Float32Array, dones: Float32Array): Float32Arr
     const batchSize = values.length;
     const nextValues = new Float32Array(batchSize);
     for (let i = 0; i < batchSize - 1; i++) {
-        // Если done на шаге i, то следующий state – терминальный => nextValue=0
         nextValues[i] = dones[i] === 1 ? 0 : values[i + 1];
     }
-    // Для последнего шага
     nextValues[batchSize - 1] = dones[batchSize - 1] === 1 ? 0 : values[batchSize - 1];
 
     return nextValues;
