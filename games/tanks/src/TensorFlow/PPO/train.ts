@@ -5,6 +5,16 @@ import { InputArrays, prepareRandomInputArrays } from '../Common/InputArrays.ts'
 import { createInputTensors } from '../Common/InputTensors.ts';
 import { Scalar } from '@tensorflow/tfjs-core/dist/tensor';
 import { random } from '../../../../../lib/random.ts';
+import { flatTypedArray } from '../Common/flat.ts';
+import { normalize } from '../../../../../lib/math.ts';
+import { Batch } from '../Common/Memory.ts';
+import { CONFIG } from './config.ts';
+import { syncUnwrapTensor } from '../Common/Tensor.ts';
+import { isTabThread } from '../../../../../lib/detect.ts';
+
+if (isTabThread) {
+    import('./v-trace.test.ts');
+}
 
 export function trainPolicyNetwork(
     network: tf.LayersModel,
@@ -12,14 +22,16 @@ export function trainPolicyNetwork(
     actions: tf.Tensor,      // [batchSize, actionDim]
     oldLogProbs: tf.Tensor,  // [batchSize]
     advantages: tf.Tensor,   // [batchSize]
+    // weights: tf.Tensor,      // [batchSize], IS weights
     clipRatio: number,
     entropyCoeff: number,
     clipNorm: number,
-): Promise<number> {
-    const loss = tf.tidy(() => {
+    returnCost: boolean,
+): undefined | number {
+    const tLoss = tf.tidy(() => {
         return optimize(network.optimizer, () => {
-            const predict = network.predict(states) as tf.Tensor;
-            const { mean, logStd } = parsePredict(predict);
+            const predicted = network.predict(states) as tf.Tensor;
+            const { mean, logStd } = parsePredict(predicted);
             const std = logStd.exp();
             const newLogProbs = computeLogProb(actions, mean, std);
             const oldLogProbs2D = oldLogProbs.reshape(newLogProbs.shape);
@@ -27,6 +39,8 @@ export function trainPolicyNetwork(
             const clippedRatio = ratio.clipByValue(1 - clipRatio, 1 + clipRatio);
             const surr1 = ratio.mul(advantages);
             const surr2 = clippedRatio.mul(advantages);
+            // const weightedMin = tf.minimum(surr1, surr2).mul(weights);
+            // const policyLoss = weightedMin.sum().div(weights.sum()).mul(-1);
             const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
 
             const c = 0.5 * Math.log(2 * Math.PI * Math.E);
@@ -35,24 +49,22 @@ export function trainPolicyNetwork(
             const totalLoss = policyLoss.sub(totalEntropy.mul(entropyCoeff));
 
             return totalLoss as tf.Scalar;
-        }, { clipNorm });
+        }, { clipNorm, returnCost });
     });
 
-    return loss.data()
-        .then((v) => v[0])
-        .finally(() => loss.dispose());
+    return tLoss ? syncUnwrapTensor(tLoss)[0] : undefined;
 }
 
-// Обучение сети критика (оценка состояний)
-export async function trainValueNetwork(
+export function trainValueNetwork(
     network: tf.LayersModel,
     states: tf.Tensor[],
     returns: tf.Tensor,  // [batchSize], уже подсчитанные (GAE + V(s) или просто discountedReturns)
     oldValues: tf.Tensor, // [batchSize], для клиппинга
     clipRatio: number,
     clipNorm: number,
-): Promise<number> {
-    const loss = tf.tidy(() => {
+    returnCost: boolean,
+): undefined | number {
+    const tLoss = tf.tidy(() => {
         return optimize(network.optimizer, () => {
             // forward pass
             const predicted = network.predict(states) as tf.Tensor;
@@ -71,82 +83,90 @@ export async function trainValueNetwork(
             const finalValueLoss = tf.maximum(vfLoss1, vfLoss2).mean().mul(0.5);
 
             return finalValueLoss as tf.Scalar;
-        }, { clipNorm });
+        }, { clipNorm, returnCost });
     });
 
-
-    return loss.data()
-        .then((v) => v[0])
-        .finally(() => loss.dispose());
+    return tLoss ? syncUnwrapTensor(tLoss)[0] : undefined;
 }
 
-
-function parsePredict(predict: tf.Tensor) {
-    const outMean = predict.slice([0, 0], [-1, ACTION_DIM]);
-    const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
-    const clippedLogStd = outLogStd.clipByValue(-5, 0.2);
-
-    return { mean: outMean, logStd: clippedLogStd };
-}
-
-export function computeKullbackLeibler(
+export function computeKullbackLeiblerAprox(
     policyNetwork: tf.LayersModel,
     states: tf.Tensor[],
     actions: tf.Tensor,
     oldLogProb: tf.Tensor,
-): Promise<number> {
-    const value = tf.tidy(() => {
-        const predict = policyNetwork.predict(states) as tf.Tensor;
-        const { mean, logStd } = parsePredict(predict);
+): number {
+    return tf.tidy(() => {
+        const predicted = policyNetwork.predict(states) as tf.Tensor;
+        const { mean, logStd } = parsePredict(predicted);
         const std = logStd.exp();
         const newLogProbs = computeLogProb(actions, mean, std);
         const diff = oldLogProb.sub(newLogProbs);
         const kl = diff.mean();
-        return kl;
+        return kl.dataSync()[0];
     });
+}
 
-    return value.data()
-        .then((v) => v[0])
-        .finally(() => value.dispose());
+export function computeKullbackLeiblerExact(
+    policyNetwork: tf.LayersModel,
+    states: tf.Tensor[],
+    oldMean: tf.Tensor,
+    oldLogStd: tf.Tensor,
+): number {
+    return tf.tidy(() => {
+        const predicted = policyNetwork.predict(states) as tf.Tensor;
+        const { mean: newMean, logStd: newLogStd } = parsePredict(predicted);
+
+        const oldStd = oldLogStd.exp();
+        const newStd = newLogStd.exp();
+
+        const numerator = oldStd.square().add(oldMean.sub(newMean).square());
+        const denominator = newStd.square().mul(2);
+        const logTerm = newLogStd.sub(oldLogStd); // log(σ₂ / σ₁)
+
+        const klPerDim = logTerm.add(numerator.div(denominator)).sub(0.5);
+        const kl = klPerDim.sum(1).mean();
+
+        return kl.dataSync()[0];
+    });
 }
 
 export function act(
     policyNetwork: tf.LayersModel,
-    valueNetwork: tf.LayersModel,
     state: InputArrays,
 ): {
     actions: Float32Array,
+    mean: Float32Array,
+    logStd: Float32Array,
     logProb: number,
-    value: number
 } {
     const result = tf.tidy(() => {
-        const input = createInputTensors([state]);
-        const predict = policyNetwork.predict(input) as tf.Tensor;
-        const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
-        const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
-        const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
-        const clippedLogStd = outLogStd.clipByValue(-5, 0.2);
-        const std = clippedLogStd.exp();
+        const predicted = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
+        const { mean, logStd } = parsePredict(predicted);
+        const std = logStd.exp();
+
         const noise = tf.randomNormal([ACTION_DIM]).mul(std);
-        const actions = outMean.add(noise);
-        const logProb = computeLogProb(actions, outMean, std);
-        const value = valueNetwork.predict(input) as tf.Tensor;
+        const actions = mean.add(noise);
+        const logProb = computeLogProb(actions, mean, std);
 
         return {
             actions: actions.dataSync() as Float32Array,
+            mean: mean.dataSync() as Float32Array,
+            logStd: logStd.dataSync() as Float32Array,
             logProb: logProb.dataSync()[0],
-            value: value.squeeze().dataSync()[0],
         };
     });
 
     if (!arrayHealthCheck(result.actions)) {
         throw new Error('Invalid actions data');
     }
+    if (!arrayHealthCheck(result.mean)) {
+        throw new Error('Invalid mean data');
+    }
+    if (!arrayHealthCheck(result.logStd)) {
+        throw new Error('Invalid std data');
+    }
     if (Number.isNaN(result.logProb)) {
         throw new Error('Invalid logProb data');
-    }
-    if (Number.isNaN(result.value)) {
-        throw new Error('Invalid value data');
     }
 
     return result;
@@ -154,19 +174,15 @@ export function act(
 
 export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { actions: Float32Array } {
     const result = tf.tidy(() => {
-        const predict = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
-        const rawOutputSqueezed = predict.squeeze(); // [ACTION_DIM * 2] при batch=1
-        const outMean = rawOutputSqueezed.slice([0], [ACTION_DIM]);   // ACTION_DIM штук
+        const predicted = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
+        const { mean, logStd } = parsePredict(predicted);
 
-        // const outLogStd = rawOutputSqueezed.slice([ACTION_DIM], [ACTION_DIM]);
-        // const clippedLogStd = outLogStd.clipByValue(-5, 0.2);
-        // const std = clippedLogStd.exp();
-        // const noise = tf.randomNormal([ACTION_DIM]).mul(std);
-        // const actions = outMean.add(noise);
+        const noise = tf.randomNormal([ACTION_DIM]).mul(logStd.exp());
+        const actions = mean.add(noise);
 
         return {
-            // actions: actions.dataSync() as Float32Array,
-            actions: outMean.dataSync() as Float32Array,
+            actions: actions.dataSync() as Float32Array,
+            // actions: mean.dataSync() as Float32Array,
         };
     });
 
@@ -180,9 +196,10 @@ export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { ac
 function optimize(
     optimizer: tf.Optimizer,
     predict: () => Scalar,
-    options?: { clipNorm?: number },
-): tf.Scalar {
+    options?: { returnCost?: boolean, clipNorm?: number },
+): undefined | tf.Scalar {
     const clipNorm = options?.clipNorm ?? 1;
+    const returnCost = options?.returnCost ?? false;
 
     return tf.tidy(() => {
         const { grads, value } = tf.variableGrads(predict);
@@ -207,8 +224,129 @@ function optimize(
 
         tf.dispose(grads);
 
-        return value;
+        return returnCost ? value : undefined;
     });
+}
+
+export function computeVTraceTargets(
+    policyNetwork: tf.LayersModel,
+    valueNetwork: tf.LayersModel,
+    batch: Batch,
+    gamma: number = CONFIG.gamma,
+    clipRho: number = 1.0,
+    clipC: number = 1.0,
+): {
+    advantages: Float32Array,
+    tdErrors: Float32Array,
+    returns: Float32Array,
+    values: Float32Array,
+} {
+    return tf.tidy(() => {
+        const input = createInputTensors(batch.states);
+        const predicted = policyNetwork.predict(input) as tf.Tensor;
+        const { mean: meanCurrent, logStd: logStdCurrent } = parsePredict(predicted);
+        const actions = tf.tensor2d(flatTypedArray(batch.actions), [batch.size, ACTION_DIM]);
+
+        const logProbCurrentTensor = computeLogProb(actions, meanCurrent, logStdCurrent.exp());
+        const logProbBehaviorTensor = tf.tensor1d(batch.logProbs);
+        const rhosTensor = computeRho(logProbBehaviorTensor, logProbCurrentTensor);
+        const valuesTensor = (valueNetwork.predict(input) as tf.Tensor).squeeze();
+
+        const values = (valuesTensor.dataSync()) as Float32Array;
+        const rhos = (rhosTensor.dataSync()) as Float32Array;
+
+        const { vTraces: returns, tdErrors } = computeVTrace(
+            batch.rewards,
+            batch.dones,
+            values,
+            rhos,
+            gamma,
+            clipRho,
+            clipC,
+        );
+        // 8) Считаем advantages = vs[t] - values[t]
+        const advantages = returns.map((v, i) => v - values[i]);
+
+        return {
+            advantages: normalize(advantages),
+            tdErrors: tdErrors,
+            returns: returns,
+            values: values,
+        };
+    });
+}
+
+function computeRho(
+    logProbBehavior: tf.Tensor,
+    logProbCurrent: tf.Tensor,
+): tf.Tensor {
+    const logRho = logProbCurrent.sub(logProbBehavior);
+    return logRho.exp(); // ρ_t = π_current / π_behavior
+}
+
+export function computeVTrace(
+    rewards: Float32Array,
+    dones: Float32Array,
+    values: Float32Array,
+    rhos: Float32Array,
+    gamma: number,
+    clipRho: number,
+    clipC: number,
+): { vTraces: Float32Array, tdErrors: Float32Array } {
+    const batchSize = values.length;
+    const nextValues = createNextValues(values, dones);
+    const vTraces = new Float32Array(batchSize);
+    const tdErrors = new Float32Array(batchSize);
+
+    vTraces[batchSize - 1] = values[batchSize - 1] || rewards[batchSize - 1];
+
+    for (let t = batchSize - 2; t >= 0; t--) {
+        if (dones[t] === 1) {
+            vTraces[t] = values[t] || rewards[t];
+            continue;
+        }
+
+        const c_t = Math.min(rhos[t], clipC);
+        const rho_t = Math.min(rhos[t], clipRho);
+        const discount = dones[t] === 1 ? 0 : gamma;
+        const tdError = (
+            rewards[t]
+            + discount * nextValues[t]
+            - values[t]
+        );
+        const delta_t = rho_t * tdError;
+
+        vTraces[t] = values[t]
+            + delta_t
+            + discount * c_t * (vTraces[t + 1] - nextValues[t]);
+        tdErrors[t] = tdError;
+    }
+
+    return { vTraces, tdErrors };
+}
+
+export function createNextValues(values: Float32Array, dones: Float32Array): Float32Array {
+    // Для nextValues, обычно делаем сдвиг на 1, но нужно аккуратно учесть done.
+    // Самый простой путь:
+    //   values[i+1] -> nextValue для шага i
+    //   Если done[i], то nextValue = 0
+
+    const batchSize = values.length;
+    const nextValues = new Float32Array(batchSize);
+    for (let i = 0; i < batchSize - 1; i++) {
+        nextValues[i] = dones[i] === 1 ? 0 : values[i + 1];
+    }
+    nextValues[batchSize - 1] = dones[batchSize - 1] === 1 ? 0 : values[batchSize - 1];
+
+    return nextValues;
+}
+
+function parsePredict(predict: tf.Tensor) {
+    const outMean = predict.slice([0, 0], [-1, ACTION_DIM]);
+    const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
+    const clippedLogStd = outLogStd.clipByValue(-5, 0.2);
+
+    return { mean: outMean, logStd: clippedLogStd };
 }
 
 let randomInputTensors: tf.Tensor[];
@@ -221,7 +359,7 @@ function getRandomInputTensors() {
     return randomInputTensors;
 }
 
-export async function networkHealthCheck(network: tf.LayersModel): Promise<boolean> {
+export function networkHealthCheck(network: tf.LayersModel): boolean {
     const data = tf.tidy(() => {
         return (network.predict(getRandomInputTensors()) as tf.Tensor).squeeze().dataSync();
     }) as Float32Array;
@@ -229,6 +367,7 @@ export async function networkHealthCheck(network: tf.LayersModel): Promise<boole
     return arrayHealthCheck(data);
 }
 
-export function arrayHealthCheck(array: Float32Array): boolean {
+export function arrayHealthCheck(array: Float32Array | Uint8Array | Int32Array): boolean {
     return array.every(Number.isFinite);
 }
+

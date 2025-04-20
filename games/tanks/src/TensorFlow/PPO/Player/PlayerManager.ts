@@ -4,19 +4,21 @@ import { GameDI } from '../../../DI/GameDI.ts';
 import { createBattlefield } from '../../Common/createBattlefield.ts';
 import { applyActionToTank } from '../../Common/applyActionToTank.ts';
 import { randomRangeInt } from '../../../../../../lib/random.ts';
-import { frameTasks } from '../../../../../../lib/TasksScheduler/frameTasks.ts';
 import { CONFIG } from '../config.ts';
 import { getDrawState } from '../../Common/uiUtils.ts';
 import { EntityId } from 'bitecs';
-import { calculateReward } from '../../Common/calculateReward.ts';
 import { prepareInputArrays } from '../../Common/InputArrays.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
+import { first, firstValueFrom, interval } from 'rxjs';
+import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
+import { frameTasks } from '../../../../../../lib/TasksScheduler/frameTasks.ts';
+import { calculateReward } from '../../Reward/calculateReward.ts';
+
+type Game = Awaited<ReturnType<typeof createBattlefield>>;
 
 export class PlayerManager {
     public agent!: PlayerAgent;
 
-    private stopGameLoopInterval: VoidFunction | null = null;
-    private battlefield!: Awaited<ReturnType<typeof createBattlefield>>;
     private tankRewards = new Map<EntityId, number>();
 
     constructor() {
@@ -27,8 +29,16 @@ export class PlayerManager {
         return new PlayerManager().init();
     }
 
-    public start() {
-        this.gameLoop();
+    public async start() {
+        while (true) {
+            try {
+                await this.waitEnabling();
+                await this.runEpisode();
+            } catch (error) {
+                console.error('Error during episode:', error);
+                await new Promise(resolve => macroTasks.addTimeout(resolve, 1000));
+            }
+        }
     }
 
     public getReward(tankEid: EntityId) {
@@ -36,69 +46,84 @@ export class PlayerManager {
     }
 
     private async init() {
-        this.agent = await PlayerAgent.create();
+        this.agent = PlayerAgent.create();
         return this;
     }
 
-    // Main game loop
-    private async gameLoop() {
-        this.stopGameLoopInterval?.();
+    private waitEnabling() {
+        return firstValueFrom(interval(1000).pipe(
+            first(getDrawState),
+        ));
+    }
 
-        this.battlefield?.destroy();
-        this.battlefield = await createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX), true);
-        await this.agent.sync();
+    private beforeEpisode() {
+        return Promise.all([
+            createBattlefield(randomRangeInt(TANK_COUNT_SIMULATION_MIN, TANK_COUNT_SIMULATION_MAX), true),
+            this.agent.sync(),
+        ]);
+    }
 
-        const shouldEvery = 12;
-        const maxEpisodeFrames = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
-        const width = GameDI.width;
-        const height = GameDI.height;
+    private cleanupEpisode(game: Game) {
+        game.destroy();
+    }
 
-        let frameCount = 0;
-        let activeTanks: number[] = [];
+    private async runEpisode() {
+        const [game] = await this.beforeEpisode();
 
-        this.stopGameLoopInterval = frameTasks.addInterval(async () => {
-            if (!getDrawState()) {
-                frameCount = -1;
-                return;
-            }
+        try {
+            await this.runGameLoop(game);
+        } catch (error) {
+            throw error;
+        } finally {
+            this.cleanupEpisode(game);
+        }
+    }
 
-            if (frameCount === -1) {
-                this.gameLoop();
-                return;
-            }
+    private async runGameLoop(game: Game) {
+        return new Promise(resolve => {
+            const shouldEvery = 12;
+            const maxFramesCount = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
+            const width = GameDI.width;
+            const height = GameDI.height;
+            let regardedTanks: number[] = [];
+            let frame = 0;
 
-            const shouldAction = frameCount > 0 && frameCount % shouldEvery === 0;
-            const shouldReward = frameCount > 0 && frameCount % shouldEvery === 10;
-            TenserFlowDI.shouldCollectState = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
+            const stop = frameTasks.addInterval(() => {
+                frame++;
 
-            if (shouldAction) {
-                activeTanks = this.battlefield.getTanks();
+                const currentTanks = game.getTanks();
+                const isEpisodeDone = currentTanks.length <= 1 || game.getTeamsCount() <= 1 || frame > maxFramesCount;
 
-                // Update each tank's RL controller
-                for (const tankEid of activeTanks) {
-                    this.updateTankBehaviour(tankEid, width, height);
+                const shouldAction = frame > 0 && frame % shouldEvery === 0;
+                const shouldReward = isEpisodeDone || (frame > 0 && frame % shouldEvery === 10);
+                TenserFlowDI.shouldCollectState = frame > 0 && (frame + 1) % shouldEvery === 0;
+
+                if (shouldAction) {
+                    regardedTanks = currentTanks;
+
+                    // Update each tank's RL controller
+                    for (const tankEid of regardedTanks) {
+                        this.updateTankBehaviour(tankEid, width, height);
+                    }
                 }
-            }
 
-            this.battlefield.gameTick(TICK_TIME_SIMULATION);
+                game.gameTick(TICK_TIME_SIMULATION);
 
-            if (shouldReward) {
-                for (const tankEid of activeTanks) {
-                    this.tankRewards.set(
-                        tankEid,
-                        calculateReward(tankEid, GameDI.width, GameDI.height, frameCount).totalReward,
-                    );
+                if (shouldReward) {
+                    for (const tankEid of regardedTanks) {
+                        this.tankRewards.set(
+                            tankEid,
+                            calculateReward(tankEid, GameDI.width, GameDI.height, frame),
+                        );
+                    }
                 }
-            }
 
-            frameCount++;
-
-            const isEpisodeDone = frameCount > shouldEvery && (activeTanks.length <= 1 || frameCount > maxEpisodeFrames);
-
-            if (isEpisodeDone) {
-                frameCount = -1;
-            }
-        }, 1);
+                if (isEpisodeDone || !getDrawState()) {
+                    stop();
+                    resolve(null);
+                }
+            }, 1);
+        });
     }
 
     private updateTankBehaviour(
@@ -113,4 +138,5 @@ export class PlayerManager {
         // Apply action to tank controller
         applyActionToTank(tankEid, result.actions);
     }
+
 }

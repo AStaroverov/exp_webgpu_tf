@@ -1,18 +1,18 @@
 // Буфер опыта для PPO
 import { shuffle } from '../../../../../lib/shuffle.ts';
 import { InputArrays } from './InputArrays.ts';
+import { flatTypedArray } from './flat.ts';
 
 export type Batch = {
     states: InputArrays[],
     actions: Float32Array[],
-    logProbs: number[],
-    values: number[],
-    returns: number[],
-    advantages: number[],
+    mean: Float32Array[],
+    logStd: Float32Array[],
+    logProbs: Float32Array,
     // meta
     size: number,
-    dones: number[],
-    rewards: number[],
+    dones: Float32Array,
+    rewards: Float32Array,
 }
 
 export class Memory {
@@ -35,44 +35,49 @@ export class Memory {
         return Array.from(this.map.values());
     }
 
-    addFirstPart(id: number, state: InputArrays, action: Float32Array, logProb: number, value: number) {
+    addFirstPart(
+        id: number,
+        state: InputArrays,
+        stateReward: number,
+        action: Float32Array,
+        mean: Float32Array,
+        logStd: Float32Array,
+        logProb: number,
+    ) {
         if (!this.map.has(id)) {
             this.map.set(id, new SubMemory());
         }
-        this.map.get(id)!.addFirstPart(state, action, logProb, value);
+        this.map.get(id)!.addFirstPart(state, stateReward, action, mean, logStd, logProb);
     }
 
-    updateSecondPart(id: number, reward: number, done: boolean, isLast = false) {
+    updateSecondPart(id: number, reward: number, done: boolean) {
         if (!this.map.has(id)) {
             throw new Error('SubMemory not found');
         }
-        this.map.get(id)!.updateSecondPart(reward, done, isLast);
+        this.map.get(id)!.updateSecondPart(reward, done);
     }
 
-    getBatch(gamma: number, lam: number): Batch {
-        const batches = this.getBatches(gamma, lam);
+    getBatch(): Batch {
+        const batches = this.getBatches();
         const values = shuffle(Array.from(batches.values()));
-        const batch = {
+
+        return {
             size: values.reduce((acc, batch) => acc + batch.size, 0),
             states: (values.map(batch => batch.states)).flat(),
             actions: (values.map(batch => batch.actions)).flat(),
-            logProbs: (values.map(batch => batch.logProbs)).flat(),
-            values: (values.map(batch => batch.values)).flat(),
-            rewards: (values.map(batch => batch.rewards)).flat(),
-            dones: (values.map(batch => batch.dones)).flat(),
-            returns: (values.map(batch => batch.returns)).flat(),
-            advantages: (values.map(batch => batch.advantages)).flat(),
+            mean: (values.map(batch => batch.mean)).flat(),
+            logStd: (values.map(batch => batch.logStd)).flat(),
+            logProbs: flatTypedArray(values.map(batch => batch.logProbs)),
+            rewards: flatTypedArray(values.map(batch => batch.rewards)),
+            dones: flatTypedArray(values.map(batch => batch.dones)),
         };
-
-        return batch;
     }
 
-    // Метод для получения батча для обучения
-    getBatches(gamma: number, lam: number) {
+    getBatches() {
         const batches = new Map<number, Batch>();
 
         this.map.forEach((subMemory, id) => {
-            batches.set(id, subMemory.getBatch(gamma, lam));
+            batches.set(id, subMemory.getBatch());
         });
 
         return batches;
@@ -86,13 +91,14 @@ export class Memory {
 
 export class SubMemory {
     private states: InputArrays[] = [];
+    private stateRewards: number[] = [];
     private actions: Float32Array[] = [];
+    private mean: Float32Array[] = [];
+    private logStd: Float32Array[] = [];
     private logProbs: number[] = [];
-    private values: number[] = [];
-    private rewards: number[] = [];
+    private actionRewards: number[] = [];
     private dones: boolean[] = [];
-
-    private tmpRewards: number[] = [];
+    private tmpActionRewards: number[] = [];
     private tmpDones: boolean[] = [];
 
     constructor() {
@@ -102,113 +108,99 @@ export class SubMemory {
         return this.states.length;
     }
 
-    addFirstPart(state: InputArrays, action: Float32Array, logProb: number, value: number) {
+    addFirstPart(
+        state: InputArrays,
+        stateReward: number,
+        action: Float32Array,
+        mean: Float32Array,
+        logStd: Float32Array,
+        logProb: number,
+    ) {
+        this.collapseTmpData();
+
         this.states.push(state);
+        this.stateRewards.push(stateReward);
         this.actions.push(action);
+        this.mean.push(mean);
+        this.logStd.push(logStd);
         this.logProbs.push(logProb);
-        this.values.push(value);
     }
 
-    updateSecondPart(reward: number, done: boolean, isLast = false) {
-        this.tmpRewards.push(reward);
+    updateSecondPart(reward: number, done: boolean) {
+        this.tmpActionRewards.push(reward);
         this.tmpDones.push(done);
-
-        if (isLast) {
-            this.collapseTmpData();
-        }
     }
 
-    // Метод для получения батча для обучения
-    getBatch(gamma: number, lam: number): Batch {
+    getBatch(): Batch {
         if (this.states.length === 0) {
             throw new Error('Memory is empty');
         }
-        if (this.tmpDones.length > 0 || this.tmpRewards.length > 0) {
+        if (this.tmpDones.length > 0 || this.tmpActionRewards.length > 0) {
             this.collapseTmpData();
         }
-        if (this.states.length !== this.rewards.length || this.states.length !== this.dones.length) {
-            const minLen = Math.min(this.states.length, this.rewards.length, this.dones.length);
+        if (this.states.length !== this.actionRewards.length || this.states.length !== this.dones.length) {
+            const minLen = Math.min(this.states.length, this.actionRewards.length, this.dones.length);
             this.states.length = minLen;
             this.actions.length = minLen;
+            this.mean.length = minLen;
+            this.logStd.length = minLen;
             this.logProbs.length = minLen;
-            this.values.length = minLen;
-            this.rewards.length = minLen;
+            this.actionRewards.length = minLen;
             this.dones.length = minLen;
         }
 
-        const { returns, advantages } = this.computeReturnsAndAdvantages(gamma, lam);
+        const deltaReward = this.actionRewards.map((aR, i) => aR - this.stateRewards[i]);
+        const dones = this.dones.map(done => done ? 1.0 : 0.0);
+        dones[dones.length - 1] = 1.0;
 
         return {
             size: this.states.length,
             states: (this.states),
             actions: (this.actions),
-            logProbs: (this.logProbs),
-            values: (this.values),
-            rewards: (this.rewards),
-            dones: (this.dones.map(done => done ? 1.0 : 0.0)),
-            returns: (returns),
-            advantages: (advantages),
-        };
-    }
-
-    computeReturnsAndAdvantages(gamma: number, lam: number, lastValue: number = 0) {
-        const n = this.states.length;
-        const returns: number[] = new Array(n).fill(0);
-        const advantages: number[] = new Array(n).fill(0);
-
-        const rewards = this.rewards;// .map(r => r * 0.25);
-        const values = this.values; // shape [n]
-
-        let adv = 0;
-        // bootstrap, если последний transition не done
-        let lastVal = lastValue; // Если done в конце, возьмём 0
-
-        // Идём с конца вперёд
-        for (let i = n - 1; i >= 0; i--) {
-            if (this.dones[i]) {
-                // если done, то обнуляем хвост
-                adv = 0;
-                lastVal = 0;
-            }
-            const delta = rewards[i]
-                + gamma * lastVal * (this.dones[i] ? 0 : 1)
-                - values[i];
-            adv = delta + gamma * lam * adv * (this.dones[i] ? 0 : 1);
-
-            advantages[i] = adv;
-            returns[i] = values[i] + adv;
-
-            lastVal = values[i];
-        }
-
-        // Нормализация advantages
-        const advMean = advantages.reduce((sum, val) => sum + val, 0) / n;
-        const advStd = Math.sqrt(
-            advantages.reduce((sum, val) => sum + Math.pow(val - advMean, 2), 0) / n,
-        );
-        const normalizedAdvantages = advantages.map(adv => (adv - advMean) / (advStd + 1e-8));
-
-        return {
-            returns: returns,
-            advantages: normalizedAdvantages,  // Возвращаем нормализованные advantages
+            mean: (this.mean),
+            logStd: (this.logStd),
+            logProbs: new Float32Array(this.logProbs),
+            rewards: new Float32Array(deltaReward),
+            dones: new Float32Array(dones),
         };
     }
 
     dispose() {
-        this.states = [];
-        this.actions = [];
-        this.logProbs = [];
-        this.values = [];
-        this.rewards = [];
-        this.dones = [];
-        this.tmpRewards = [];
-        this.tmpDones = [];
+        this.states.length = 0;
+        this.stateRewards.length = 0;
+        this.actions.length = 0;
+        this.mean.length = 0;
+        this.logStd.length = 0;
+        this.logProbs.length = 0;
+        this.actionRewards.length = 0;
+        this.dones.length = 0;
+        this.tmpActionRewards.length = 0;
+        this.tmpDones.length = 0;
     }
 
     private collapseTmpData() {
-        this.rewards.push(this.tmpRewards.reduce((acc, val) => acc + val, 0));
-        this.dones.push(this.tmpDones.reduce((acc, val) => acc && val, true));
-        this.tmpRewards = [];
-        this.tmpDones = [];
+        if (this.states.length > this.actionRewards.length) {
+            const weights = rewardMultipliers(this.tmpActionRewards.length);
+            const reward = this.tmpActionRewards.reduce((acc, rew, i) => acc + rew * weights[i], 0);
+            const done = this.tmpDones.reduce((acc, d) => acc || d, false);
+
+            this.actionRewards.push(reward);
+            this.dones.push(done);
+            this.tmpActionRewards.length = 0;
+            this.tmpDones.length = 0;
+        }
     }
+}
+
+function rewardMultipliers(limit: number): number[] {
+    const weights = [];
+
+    for (let i = 0; i < limit; i++) {
+        weights.push(i + 1);
+    }
+
+    const sum = weights.reduce((a, b) => a + b, 0);
+    const normalized = weights.map(w => w / sum);
+
+    return normalized;
 }

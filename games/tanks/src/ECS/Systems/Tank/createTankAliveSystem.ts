@@ -1,16 +1,16 @@
-import { GameDI } from '../../DI/GameDI.ts';
+import { GameDI } from '../../../DI/GameDI.ts';
+import { Tank } from '../../Components/Tank.ts';
+import { Children } from '../../Components/Children.ts';
+import { CollisionGroup } from '../../../Physical/createRigid.ts';
+import { resetCollisionsTo } from '../../../Physical/collision.ts';
+import { removePhysicalJoint } from '../../../Physical/joint.ts';
+import { query } from 'bitecs';
+import { TankPart } from '../../Components/TankPart.ts';
 import {
     getTankHealth,
     removeTankComponentsWithoutParts,
     resetTankPartJointComponent,
-    Tank,
-    TankPart,
-} from '../Components/Tank.ts';
-import { Children } from '../Components/Children.ts';
-import { CollisionGroup } from '../../Physical/createRigid.ts';
-import { resetCollisionsTo } from '../../Physical/collision.ts';
-import { removePhysicalJoint } from '../../Physical/joint.ts';
-import { query } from 'bitecs';
+} from '../../Entities/Tank/TankUtils.ts';
 
 export function createTankAliveSystem({ world } = GameDI) {
     return () => {
@@ -38,6 +38,9 @@ export function createTankAliveSystem({ world } = GameDI) {
 function breakPartFromTank(eid: number, index: number) {
     const tankPartEid = Children.entitiesIds.get(eid, index);
     const jointPid = TankPart.jointPid[tankPartEid];
+
+    if (jointPid === 0) return;
+
     // remove joints
     removePhysicalJoint(jointPid);
     resetTankPartJointComponent(tankPartEid);

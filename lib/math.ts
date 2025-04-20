@@ -1,3 +1,4 @@
+export const PI = Math.PI;
 export const max = Math.max;
 export const min = Math.min;
 export const abs = Math.abs;
@@ -8,11 +9,13 @@ export const ceil = Math.ceil;
 export const round = Math.round;
 export const sin = Math.sin;
 export const cos = Math.cos;
+export const acos = Math.acos;
 export const trunc = Math.trunc;
 export const sqrt = Math.sqrt;
 export const atan2 = Math.atan2;
 export const hypot = Math.hypot;
 export const tanh = Math.tanh;
+export const pow = Math.pow;
 
 export function ufloor(n: number): number {
     return sign(n) * floor(abs(n));
@@ -45,8 +48,28 @@ export function lerp(a: number, b: number, x: number): number {
     return a + (b - a) * x;
 }
 
-export function mean(args: number[]): number {
-    return args.reduce((acc, val) => acc + val, 0) / args.length;
+export function mean(args: number[] | Float32Array | Float64Array): number {
+    let sum = 0;
+    for (let i = 0; i < args.length; i++) {
+        sum += args[i];
+    }
+    return sum / args.length;
+}
+
+export function std(args: number[] | Float32Array | Float64Array, mean: number): number {
+    let val = 0;
+    for (let i = 0; i < args.length; i++) {
+        const diff = args[i] - mean;
+        val += diff * diff;
+    }
+    val /= args.length;
+    return Math.sqrt(val);
+}
+
+export function normalize<T extends number[] | Float32Array | Float64Array>(args: T): T {
+    const m = mean(args);
+    const s = std(args, m) + 1e-8;
+    return args.map((v) => (v - m) / s) as T;
 }
 
 /**

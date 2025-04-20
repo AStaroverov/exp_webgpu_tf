@@ -7,15 +7,11 @@ if (globalThis.document != null) {
     };
 }
 
-export const learningRateChannel = new BroadcastChannel('learningRate');
-
-export const newPolicyVersionChannel = new BroadcastChannel('newPolicyVersion');
-export const newValueVersionChannel = new BroadcastChannel('newValueVersion');
-
 export const metricsChannels = {
     rewards: new BroadcastChannel('rewards'),
     values: new BroadcastChannel('value'),
     returns: new BroadcastChannel('returns'),
+    tdErrors: new BroadcastChannel('tdErrors'),
     advantages: new BroadcastChannel('advantages'),
     kl: new BroadcastChannel('kl'),
     lr: new BroadcastChannel('lr'),
@@ -25,4 +21,6 @@ export const metricsChannels = {
     waitTime: new BroadcastChannel('waitTime'),
     versionDelta: new BroadcastChannel('versionDelta'),
     batchSize: new BroadcastChannel('batchSize'),
+    prbAlpha: new BroadcastChannel('prbAlpha'),
+    prbBeta: new BroadcastChannel('prbBeta'),
 };

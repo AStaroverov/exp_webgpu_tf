@@ -6,6 +6,7 @@ import '../Common/uiUtils.ts';
 import { CONFIG } from './config.ts';
 import { PlayerManager } from './Player/PlayerManager.ts';
 import { restoreModels } from '../Models/Trained/restore.ts';
+import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
 
 setConsolePrefix(`[TAB]`);
 
@@ -19,12 +20,14 @@ async function initSystem() {
 
     CONFIG.fsModelPath && await restoreModels(CONFIG.fsModelPath);
 
-    new Worker(new URL('./PolicyLearnerWorker.ts', import.meta.url), { type: 'module' });
-    new Worker(new URL('./ValueLearnerWorker.ts', import.meta.url), { type: 'module' });
     Array.from(
         { length: CONFIG.workerCount },
         () => new Worker(new URL('./ActorWorker.ts', import.meta.url), { type: 'module' }),
     );
+
+    macroTasks.addTimeout(() => {
+        new Worker(new URL('./LearnerWorker.ts', import.meta.url), { type: 'module' });
+    }, 1000);
 
     const playerManager = await PlayerManager.create();
     playerManager.start();

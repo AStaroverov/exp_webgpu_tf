@@ -1,5 +1,13 @@
-export function flatFloat32Array(arr: Float32Array[]): Float32Array {
-    const out = new Float32Array(arr.reduce((acc, v) => acc + v.length, 0));
+type TypedArrayLike =
+    Float64Array |
+    Float32Array |
+    Uint32Array |
+    Int32Array
+
+export function flatTypedArray<T extends TypedArrayLike>(arr: T[]): T {
+    const Klass = arr[0].constructor;
+    // @ts-expect-error
+    const out = new Klass(arr.reduce((acc, v) => acc + v.length, 0));
     let offset = 0;
     for (const v of arr) {
         out.set(v, offset);

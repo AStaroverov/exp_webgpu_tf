@@ -3,14 +3,14 @@ import { TANK_COUNT_SIMULATION_MAX, TANK_COUNT_SIMULATION_MIN, TICK_TIME_SIMULAT
 import { GameDI } from '../../../DI/GameDI.ts';
 import { randomRangeInt } from '../../../../../../lib/random.ts';
 import { ActorAgent } from './ActorAgent.ts';
-import { calculateReward } from '../../Common/calculateReward.ts';
-import { getTankHealth } from '../../../ECS/Components/Tank.ts';
 import { applyActionToTank } from '../../Common/applyActionToTank.ts';
 import { CONFIG } from '../config.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { prepareInputArrays } from '../../Common/InputArrays.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
 import { memoryChannel } from '../../DB';
+import { calculateReward } from '../../Reward/calculateReward.ts';
+import { getTankHealth } from '../../../ECS/Entities/Tank/TankUtils.ts';
 
 type Game = Awaited<ReturnType<typeof createBattlefield>>;
 
@@ -31,7 +31,6 @@ export class ActorManager {
                 await this.runEpisode();
             } catch (error) {
                 console.error('Error during episode:', error);
-                await new Promise(resolve => macroTasks.addTimeout(resolve, 1000));
             }
         }
     }
@@ -58,85 +57,108 @@ export class ActorManager {
         try {
             await this.runGameLoop(game);
             this.afterEpisode();
-            this.cleanupEpisode(game);
         } catch (error) {
-            this.cleanupEpisode(game);
             throw error;
+        } finally {
+            this.cleanupEpisode(game);
         }
     }
 
-    private async runGameLoop(game: Game) {
-        const shouldEvery = 12;
-        const maxWarmupFrames = CONFIG.warmupFrames - (CONFIG.warmupFrames % shouldEvery);
-        const maxEpisodeFrames = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
-        const width = GameDI.width;
-        const height = GameDI.height;
-        let frameCount = 0;
-        let activeTanks: number[] = [];
+    private runGameLoop(game: Game) {
+        return new Promise(resolve => {
+            const shouldEvery = 12;
+            const warmupFramesCount = CONFIG.warmupFrames - (CONFIG.warmupFrames % shouldEvery);
+            const maxFramesCount = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
+            const width = GameDI.width;
+            const height = GameDI.height;
+            let regardedTanks: number[] = [];
+            let frame = 0;
 
-        for (let i = 0; i <= maxEpisodeFrames; i++) {
-            if (frameCount % 100 === 0) {
-                await new Promise(resolve => macroTasks.addTimeout(resolve, 0));
-            }
+            const stop = macroTasks.addInterval(() => {
+                for (let i = 0; i < 100; i++) {
+                    frame++;
 
-            frameCount++;
+                    const currentTanks = game.getTanks();
+                    const gameOverByTankCount = currentTanks.length <= 1;
+                    const gameOverByTeamWin = game.getTeamsCount() === 1;
+                    const gameOverByTime = frame > maxFramesCount;
+                    const gameOver = gameOverByTankCount || gameOverByTeamWin || gameOverByTime;
 
-            const isWarmup = frameCount < maxWarmupFrames;
-            const shouldAction = frameCount % shouldEvery === 0;
-            const shouldMemorize =
-                (frameCount - 4) % shouldEvery === 0
-                || (frameCount - 7) % shouldEvery === 0
-                || (frameCount - 10) % shouldEvery === 0;
-            const isLastMemorize = frameCount > 10 && (frameCount - 10) % shouldEvery === 0;
-            TenserFlowDI.shouldCollectState = frameCount > 0 && (frameCount + 1) % shouldEvery === 0;
+                    const isWarmup = frame < warmupFramesCount;
+                    const shouldAction = frame % shouldEvery === 0;
+                    const shouldMemorize = gameOver
+                        || ((frame - 3) % shouldEvery === 0
+                            || (frame - 7) % shouldEvery === 0
+                            || (frame - 11) % shouldEvery === 0);
+                    TenserFlowDI.shouldCollectState = frame > 0 && (frame + 1) % shouldEvery === 0;
 
-            if (shouldAction) {
-                activeTanks = game.getTanks();
+                    if (shouldAction) {
+                        regardedTanks = currentTanks;
 
-                for (const tankEid of activeTanks) {
-                    this.updateTankBehaviour(tankEid, width, height, isWarmup);
+                        for (const tankEid of regardedTanks) {
+                            this.updateTankBehaviour(tankEid, width, height, frame, isWarmup);
+                        }
+                    }
+
+                    // Execute game tick
+                    game.gameTick(TICK_TIME_SIMULATION * (isWarmup ? 2 : 1));
+
+                    if (isWarmup) {
+                        continue;
+                    }
+
+                    if (shouldMemorize) {
+                        for (const tankEid of regardedTanks) {
+                            this.memorizeTankBehaviour(
+                                tankEid,
+                                width,
+                                height,
+                                frame,
+                                gameOver,
+                            );
+                        }
+                    }
+
+                    if (gameOver) {
+                        stop();
+                        resolve(null);
+                        break;
+                    }
                 }
-            }
-
-            // Execute game tick
-            game.gameTick(TICK_TIME_SIMULATION * (isWarmup ? 2 : 1));
-
-            if (isWarmup) {
-                continue;
-            }
-
-            if (shouldMemorize) {
-                for (const tankEid of activeTanks) {
-                    this.memorizeTankBehaviour(tankEid, width, height, frameCount, isLastMemorize ? 0.5 : 0.25, isLastMemorize);
-                }
-            }
-
-            if (activeTanks.length <= 1) {
-                break;
-            }
-        }
+            }, 1);
+        });
     }
 
     private updateTankBehaviour(
         tankEid: number,
         width: number,
         height: number,
+        frame: number,
         isWarmup: boolean,
     ) {
         // Create input vector for the current state
-        const input = prepareInputArrays(tankEid, width, height);
+        const state = prepareInputArrays(tankEid, width, height);
         // Get action from agent
-        const result = this.agent.act(input);
+        const result = this.agent.act(state);
         // Apply action to tank controller
         applyActionToTank(tankEid, result.actions);
 
         if (!isWarmup) {
+            const stateReward = calculateReward(
+                tankEid,
+                width,
+                height,
+                frame,
+            );
+
             this.agent.rememberAction(
                 tankEid,
-                input,
+                state,
+                stateReward,
                 result.actions,
+                result.mean,
+                result.logStd,
                 result.logProb,
-                result.value,
             );
         }
     }
@@ -145,26 +167,22 @@ export class ActorManager {
         tankEid: number,
         width: number,
         height: number,
-        step: number,
-        rewardMultiplier: number,
-        isLast: boolean,
+        frame: number,
+        gameOver: boolean,
     ) {
-        // Calculate reward
+        const isDead = getTankHealth(tankEid) <= 0;
+        const isDone = gameOver || isDead;
         const reward = calculateReward(
             tankEid,
             width,
             height,
-            step,
-        ).totalReward;
-        // Check if tank is "dead" based on health
-        const isDone = getTankHealth(tankEid) <= 0;
+            frame,
+        );
 
-        // Store experience in agent's memory
         this.agent.rememberReward(
             tankEid,
-            reward * rewardMultiplier,
+            reward,
             isDone,
-            isLast,
         );
     }
 }

@@ -1,12 +1,17 @@
-import { addComponent } from 'bitecs';
-import { GameDI } from '../../DI/GameDI.ts';
+import { addComponent, hasComponent, World } from 'bitecs';
 import { delegate } from '../../../../../src/delegate.ts';
+import { component } from '../../../../../src/ECS/utils.ts';
+import { Children } from './Children.ts';
 
-export const Parent = ({
+export const Parent = component({
     id: new Float64Array(delegate.defaultSize),
-});
 
-export function addParentComponent(entity: number, parentEid: number, { world } = GameDI) {
-    addComponent(world, entity, Parent);
-    Parent.id[entity] = parentEid;
-}
+    addComponent(world: World, eid: number, parentEid: number): void {
+        addComponent(world, eid, Parent);
+        Parent.id[eid] = parentEid;
+
+        if (!hasComponent(world, parentEid, Children)) {
+            console.warn('Parent component added to entity without Children component');
+        }
+    },
+});

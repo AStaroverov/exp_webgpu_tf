@@ -52,7 +52,7 @@ const VIGNETTE_STRENGTH: f32 = 0.3;   // Умеренное виньетиров
 const VIGNETTE_SIZE: f32 = 0.6;
 const ENABLE_DITHERING: bool = false; // Без дизеринга для четких границ
 const ENABLE_SHARPENING: bool = true; // С повышением резкости
-const SATURATION: f32 = 1.6;          // Высокая насыщенность
+const SATURATION: f32 = 1.3;          // Высокая насыщенность
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4f {

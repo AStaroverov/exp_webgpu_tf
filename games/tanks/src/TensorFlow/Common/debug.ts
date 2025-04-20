@@ -8,8 +8,8 @@ import { getDrawState } from './uiUtils.ts';
 import { frameTasks } from '../../../../../lib/TasksScheduler/frameTasks.ts';
 import { CONFIG } from '../PPO/config.ts';
 import { PlayerManager } from '../PPO/Player/PlayerManager.ts';
+import { TeamRef } from '../../ECS/Components/TeamRef.ts';
 import { drawMetrics } from '../Metrics/Browser';
-import { Team } from '../../ECS/Components/Team.ts';
 
 // Generate debug visualization using HTML and CSS
 export function createDebugVisualization(container: HTMLElement, manager: PlayerManager) {
@@ -74,7 +74,7 @@ export function createCommonDebug(manager: PlayerManager) {
 
 export function createTanksDebug(manager: PlayerManager) {
     return () => {
-        if (!getDrawState()) return '';
+        if (!getDrawState() || !GameDI.world) return '';
 
         let result = '';
         const tanksEids = query(GameDI.world, [Tank, RigidBodyState]);
@@ -83,7 +83,7 @@ export function createTanksDebug(manager: PlayerManager) {
 
             const tankEid = tanksEids[i];
             const aim = Tank.aimEid[tankEid];
-            const teamId = Team.id[tankEid];
+            const teamId = TeamRef.id[tankEid];
             const color = `rgba(${ Color.r[aim] * 255 }, ${ Color.g[aim] * 255 }, ${ Color.b[aim] * 255 }, ${ Color.a[aim] })`;
 
             result += `

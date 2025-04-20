@@ -1,18 +1,21 @@
 import { createGame } from '../../../createGame.ts';
-import { createTankRR, Tank } from '../../ECS/Components/Tank.ts';
+import { Tank } from '../../ECS/Components/Tank.ts';
 import { random, randomRangeFloat, randomSign } from '../../../../../lib/random.ts';
 import { GameDI } from '../../DI/GameDI.ts';
 import { TANK_RADIUS } from './consts.ts';
 import { TankController } from '../../ECS/Components/TankController.ts';
 import { query } from 'bitecs';
 import { TenserFlowDI } from '../../DI/TenserFlowDI.ts';
+import { TeamRef } from '../../ECS/Components/TeamRef.ts';
+import { createTank } from '../../ECS/Entities/Tank/CreateTank.ts';
+import { createPlayer } from '../../ECS/Entities/Player.ts';
 
 const MAX_PADDING = 100;
 
 export async function createBattlefield(tanksCount: number, withRender = false, withPlayer = false) {
     TenserFlowDI.enabled = true;
 
-    const game = await createGame({ width: 1000, height: 1000, withPlayer, withRender });
+    const game = await createGame({ width: 1400, height: 1200, withPlayer, withRender });
     const width = GameDI.width;
     const height = GameDI.height;
     const padding = random() * MAX_PADDING;
@@ -44,7 +47,8 @@ export async function createBattlefield(tanksCount: number, withRender = false, 
         } while (isTooClose(x, y));
 
         const teamId = teamZeroCount-- > 0 ? 0 : 1;
-        const eid = createTankRR({
+        const eid = createTank({
+            playerId: createPlayer(teamId),
             teamId,
             x,
             y,
@@ -68,5 +72,11 @@ export async function createBattlefield(tanksCount: number, withRender = false, 
         return [...query(GameDI.world, [Tank])];
     };
 
-    return { ...game, gameTick, getTanks };
+    const getTeamsCount = () => {
+        const tanks = getTanks();
+        const teamsCount = new Set(tanks.map(tankId => TeamRef.id[tankId]));
+        return teamsCount.size;
+    };
+
+    return { ...game, gameTick, getTanks, getTeamsCount };
 }

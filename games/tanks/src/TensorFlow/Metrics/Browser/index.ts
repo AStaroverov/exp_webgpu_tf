@@ -2,177 +2,16 @@ import * as tfvis from '@tensorflow/tfjs-vis';
 import { isObject, throttle } from 'lodash-es';
 import { metricsChannels } from '../../Common/channels.ts';
 import { getAgentLog, setAgentLog } from './store.ts';
-
-type Point = { x: number, y: number };
-
-function getLastX(...points: Point[]): number {
-    return Math.max(...points.map((p) => p.x));
-}
-
-class CompressedBuffer {
-    private buffer: Point[] = [];
-    private avgBuffer: Point[] = [];
-    private minBuffer: Point[] = [];
-    private maxBuffer: Point[] = [];
-
-    constructor(
-        private size: number,
-        private compressBatch: number,
-    ) {
-    }
-
-    add(...data: number[]) {
-        for (let i = 0; i < data.length; i++) {
-            const item = data[i];
-            const last = this.buffer[this.buffer.length - 1] ?? this.avgBuffer[this.avgBuffer.length - 1];
-            const lastX = last !== undefined ? getLastX(last) : 0;
-            this.buffer.push({ x: lastX + 1, y: item });
-        }
-
-        if (this.buffer.length >= this.size / 2) {
-            this.compress();
-        }
-    }
-
-    toArrayMin(): RenderPoint[] {
-        return this.minBuffer.map((p, i) => ({ x: i, y: p.y }));
-    }
-
-    toArrayMax(): RenderPoint[] {
-        return this.maxBuffer.map((p, i) => ({ x: i, y: p.y }));
-    }
-
-    toArray(): RenderPoint[] {
-        return this.avgBuffer.concat(this.buffer).map((p, i) => ({ x: i, y: p.y }));
-    }
-
-    toJson() {
-        return {
-            buffer: this.buffer,
-            avgBuffer: this.avgBuffer,
-            minBuffer: this.minBuffer,
-            maxBuffer: this.maxBuffer,
-        };
-    }
-
-    fromJson(data: unknown) {
-        if (typeof data === 'object' && data !== null) {
-            if ('buffer' in data && data.buffer instanceof Array) {
-                this.buffer = data.buffer;
-            }
-            if ('avgBuffer' in data && data.avgBuffer instanceof Array) {
-                this.avgBuffer = data.avgBuffer;
-            }
-            if ('minBuffer' in data && data.minBuffer instanceof Array) {
-                this.minBuffer = data.minBuffer;
-            }
-            if ('maxBuffer' in data && data.maxBuffer instanceof Array) {
-                this.maxBuffer = data.maxBuffer;
-            }
-        }
-    }
-
-    private compress() {
-        if (this.avgBuffer.length > this.size / 2) {
-            this.avgBuffer = this.compressAvg(this.avgBuffer, 2);
-            this.minBuffer = this.compressMin(this.minBuffer, 2);
-            this.maxBuffer = this.compressMax(this.maxBuffer, 2);
-        }
-        this.compressRawBuffer(this.compressBatch);
-    }
-
-    private compressRawBuffer(batch: number) {
-        const buffer = this.buffer;
-        const length = buffer.length;
-
-        for (let i = 0; i < length; i += batch) {
-            const firstItem = buffer[i];
-            let lastItem = firstItem;
-            let min = firstItem;
-            let max = firstItem;
-            let sum = firstItem.y;
-            let count = 1;
-            for (let j = i + 1; j < Math.min(i + batch, length); j++) {
-                lastItem = buffer[j];
-                if (min.y > lastItem.y) {
-                    min = lastItem;
-                }
-                if (max.y < lastItem.y) {
-                    max = lastItem;
-                }
-                sum += lastItem.y;
-                count++;
-            }
-            this.avgBuffer.push({ x: (lastItem.x + firstItem.x) / 2, y: sum / count });
-            this.minBuffer.push(min);
-            this.maxBuffer.push(max);
-        }
-        this.buffer = [];
-    }
-
-    private compressAvg(buffer: Point[], batch: number) {
-        const compressedAvg: Point[] = [];
-        const length = buffer.length;
-
-        for (let i = 0; i < length; i += batch) {
-            const firstItem = buffer[i];
-            let lastItem = firstItem;
-            let sum = firstItem.y;
-            let count = 1;
-            for (let j = i + 1; j < Math.min(i + batch, length); j++) {
-                lastItem = buffer[j];
-                sum += lastItem.y;
-                count++;
-            }
-            compressedAvg.push({ x: (lastItem.x + firstItem.x) / 2, y: sum / count });
-        }
-
-        return compressedAvg;
-    }
-
-    private compressMin(buffer: Point[], batch: number) {
-        const compressedMin: Point[] = [];
-        const length = buffer.length;
-
-        for (let i = 0; i < length; i += batch) {
-            let min = buffer[i];
-            for (let j = i + 1; j < Math.min(i + batch, length); j++) {
-                if (min.y > buffer[j].y) {
-                    min = buffer[j];
-                }
-            }
-            compressedMin.push(min);
-        }
-
-        return compressedMin;
-    }
-
-    private compressMax(buffer: Point[], batch: number) {
-        const compressedMax: Point[] = [];
-        const length = buffer.length;
-
-        for (let i = 0; i < length; i += batch) {
-            let max = buffer[i];
-            for (let j = i + 1; j < Math.min(i + batch, length); j++) {
-                if (max.y < buffer[j].y) {
-                    max = buffer[j];
-                }
-            }
-            compressedMax.push(max);
-        }
-
-        return compressedMax;
-    }
-}
-
-type RenderPoint = { x: number, y: number };
+import { CompressedBuffer } from './CompressedBuffer.ts';
+import { get } from 'lodash';
 
 const store = {
-    rewards: new CompressedBuffer(10_000, 5),
+    rewards: new CompressedBuffer(10_000, 10),
     values: new CompressedBuffer(10_000, 5),
     returns: new CompressedBuffer(10_000, 5),
+    tdErrors: new CompressedBuffer(10_000, 5),
     advantages: new CompressedBuffer(10_000, 5),
-    kl: new CompressedBuffer(10_000, 5),
+    kl: new CompressedBuffer(1_000, 5),
     lr: new CompressedBuffer(1_000, 5),
     valueLoss: new CompressedBuffer(1_000, 5),
     policyLoss: new CompressedBuffer(1_000, 5),
@@ -183,32 +22,20 @@ const store = {
 };
 
 getAgentLog().then((data) => {
-    // @ts-ignore
-    if (isObject(data) && data.version === 1) {
-        // @ts-ignore
-        store.rewards.fromJson(data.rewards);
-        // @ts-ignore
-        store.values.fromJson(data.values);
-        // @ts-ignore
-        store.returns.fromJson(data.returns);
-        // @ts-ignore
-        store.advantages.fromJson(data.advantages);
-        // @ts-ignore
-        store.kl.fromJson(data.kl);
-        // @ts-ignore
-        store.lr.fromJson(data.lr);
-        // @ts-ignore
-        store.valueLoss.fromJson(data.valueLoss);
-        // @ts-ignore
-        store.policyLoss.fromJson(data.policyLoss);
-        // @ts-ignore
-        store.trainTime.fromJson(data.trainTime);
-        // @ts-ignore
-        store.waitTime.fromJson(data.waitTime);
-        // @ts-ignore
-        store.versionDelta.fromJson(data.versionDelta);
-        // @ts-ignore
-        store.batchSize.fromJson(data.batchSize);
+    if (isObject(data) && get(data, 'version') === 1) {
+        store.rewards.fromJson(get(data, 'rewards'));
+        store.values.fromJson(get(data, 'values'));
+        store.returns.fromJson(get(data, 'returns'));
+        store.tdErrors.fromJson(get(data, 'tdErrors'));
+        store.advantages.fromJson(get(data, 'advantages'));
+        store.kl.fromJson(get(data, 'kl'));
+        store.lr.fromJson(get(data, 'lr'));
+        store.valueLoss.fromJson(get(data, 'valueLoss'));
+        store.policyLoss.fromJson(get(data, 'policyLoss'));
+        store.trainTime.fromJson(get(data, 'trainTime'));
+        store.waitTime.fromJson(get(data, 'waitTime'));
+        store.versionDelta.fromJson(get(data, 'versionDelta'));
+        store.batchSize.fromJson(get(data, 'batchSize'));
     }
 
     subscribeOnMetrics();
@@ -228,6 +55,7 @@ export const saveMetrics = throttle(() => {
         rewards: store.rewards.toJson(),
         values: store.values.toJson(),
         returns: store.returns.toJson(),
+        tdErrors: store.tdErrors.toJson(),
         advantages: store.advantages.toJson(),
         valueLoss: store.valueLoss.toJson(),
         policyLoss: store.policyLoss.toJson(),
@@ -248,10 +76,11 @@ export function subscribeOnMetrics() {
     metricsChannels.rewards.onmessage = w((event) => store.rewards.add(...event.data));
     metricsChannels.values.onmessage = w((event) => store.values.add(...event.data));
     metricsChannels.returns.onmessage = w((event) => store.returns.add(...event.data));
+    metricsChannels.tdErrors.onmessage = w((event) => store.tdErrors.add(...event.data));
     metricsChannels.advantages.onmessage = w((event) => store.advantages.add(...event.data));
-    metricsChannels.kl.onmessage = w((event) => store.kl.add(event.data));
-    metricsChannels.valueLoss.onmessage = w((event) => store.valueLoss.add(event.data));
-    metricsChannels.policyLoss.onmessage = w((event) => store.policyLoss.add(event.data));
+    metricsChannels.kl.onmessage = w((event) => store.kl.add(...event.data));
+    metricsChannels.policyLoss.onmessage = w((event) => store.policyLoss.add(...event.data));
+    metricsChannels.valueLoss.onmessage = w((event) => store.valueLoss.add(...event.data));
     metricsChannels.lr.onmessage = w((event) => store.lr.add(event.data));
     metricsChannels.versionDelta.onmessage = w((event) => store.versionDelta.add(event.data));
     metricsChannels.batchSize.onmessage = w((event) => store.batchSize.add(event.data));
@@ -265,7 +94,7 @@ function drawTab1() {
     const avgRewardsMA = calculateMovingAverage(avgRewards, 1000);
     const minRewards = store.rewards.toArrayMin();
     const maxRewards = store.rewards.toArrayMax();
-    tfvis.render.linechart({ name: 'Reward', tab }, {
+    tfvis.render.scatterplot({ name: 'Reward', tab }, {
         values: [minRewards, maxRewards, avgRewards, avgRewardsMA],
         series: ['Min', 'Max', 'Avg', 'Avg MA'],
     }, {
@@ -275,8 +104,9 @@ function drawTab1() {
         height: 300,
     });
 
-    tfvis.render.linechart({ name: 'KL', tab }, {
-        values: [store.kl.toArray(), calculateMovingAverage(store.kl.toArray(), 50)],
+    const avgKL = store.kl.toArray();
+    tfvis.render.scatterplot({ name: 'KL', tab }, {
+        values: [avgKL, calculateMovingAverage(avgKL, 25)],
         series: ['Avg', 'MA'],
     }, {
         xLabel: 'Version',
@@ -290,15 +120,6 @@ function drawTab1() {
     }, {
         xLabel: 'Version',
         yLabel: 'LR',
-        width: 500,
-        height: 300,
-    });
-
-    tfvis.render.scatterplot({ name: 'Advantage', tab }, {
-        values: [store.advantages.toArrayMin(), store.advantages.toArrayMax()],
-    }, {
-        xLabel: 'Version',
-        yLabel: 'Advantage',
         width: 500,
         height: 300,
     });
@@ -317,6 +138,7 @@ function drawTab1() {
         width: 500,
         height: 300,
     });
+
     const avgReturns = store.returns.toArray();
     tfvis.render.scatterplot({ name: 'Return', tab }, {
         values: [
@@ -331,6 +153,26 @@ function drawTab1() {
         width: 500,
         height: 300,
     });
+
+    tfvis.render.scatterplot({ name: 'TD Error', tab }, {
+        values: [store.tdErrors.toArrayMin(), store.tdErrors.toArrayMax()],
+    }, {
+        xLabel: 'Version',
+        yLabel: 'TD Error',
+        width: 500,
+        height: 300,
+    });
+
+    tfvis.render.scatterplot({ name: 'Advantage', tab }, {
+        values: [store.advantages.toArrayMin(), store.advantages.toArrayMax()],
+    }, {
+        xLabel: 'Version',
+        yLabel: 'Advantage',
+        width: 500,
+        height: 300,
+    });
+
+
 }
 
 function drawTab2() {
@@ -400,12 +242,31 @@ function drawTab3() {
     });
 }
 
+type RenderPoint = { x: number, y: number };
+
 function calculateMovingAverage(data: RenderPoint[], windowSize: number): RenderPoint[] {
+    if (data.length === 0) return [];
+    if (windowSize <= 0) throw new Error('Window size must be positive');
+
     const averaged: RenderPoint[] = [];
-    for (let i = 0; i < data.length; i++) {
-        const win = data.slice(Math.max(i - windowSize + 1, 0), i + 1);
-        const avg = win.reduce((sum, v) => sum + v.y, 0) / win.length;
-        averaged.push({ x: data[i].x, y: avg });
+    let sum = 0;
+
+    // Первое окно - рассчитываем сумму первых элементов
+    const initialWindow = Math.min(windowSize, data.length);
+    for (let i = 0; i < initialWindow; i++) {
+        const val = data[i].y;
+        if (!isFinite(val)) continue;
+        sum += val;
+        averaged.push({ x: data[i].x, y: sum / (i + 1) });
     }
+
+    // Используем скользящее окно для остальных элементов
+    for (let i = initialWindow; i < data.length; i++) {
+        const val = data[i].y - (i >= windowSize ? data[i - windowSize].y : 0);
+        if (!isFinite(val)) continue;
+        sum += val;
+        averaged.push({ x: data[i].x, y: sum / windowSize });
+    }
+
     return averaged;
 }

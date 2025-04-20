@@ -10,20 +10,22 @@ import {
     createPlayerTankBulletSystem,
     createPlayerTankPositionSystem,
     createPlayerTankTurretRotationSystem,
-} from './src/ECS/Systems/playerTankControllerSystems.ts';
+} from './src/ECS/Systems/PlayerTankControllerSystems.ts';
 import { createSpawnerBulletsSystem } from './src/ECS/Systems/createBulletSystem.ts';
 import { getEntityIdByPhysicalId, RigidBodyRef } from './src/ECS/Components/Physical.ts';
 import { createWorld, deleteWorld, hasComponent, resetWorld } from 'bitecs';
 import { Hitable } from './src/ECS/Components/Hitable.ts';
 import { createHitableSystem } from './src/ECS/Systems/createHitableSystem.ts';
-import { createTankAliveSystem } from './src/ECS/Systems/createTankAliveSystem.ts';
-import { createTankPositionSystem, createTankTurretRotationSystem } from './src/ECS/Systems/tankControllerSystems.ts';
-import { createOutZoneDestroySystem } from './src/ECS/Systems/createOutZoneDestroySystem.ts';
+import { createTankAliveSystem } from './src/ECS/Systems/Tank/createTankAliveSystem.ts';
+import {
+    createTankPositionSystem,
+    createTankTurretRotationSystem,
+} from './src/ECS/Systems/Tank/TankControllerSystems.ts';
+import { createDestroyOutOfZoneSystem } from './src/ECS/Systems/createDestroyOutOfZoneSystem.ts';
 import { createTankInputTensorSystem } from './src/ECS/Systems/RL/createTankInputTensorSystem.ts';
 import { destroyChangeDetectorSystem } from '../../src/ECS/Systems/ChangedDetectorSystem.ts';
 import { createDestroyByTimeoutSystem } from './src/ECS/Systems/createDestroyByTimeoutSystem.ts';
-import { createAimSystem } from './src/ECS/Systems/createAimSystem.ts';
-import { createPostEffect } from './src/ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
+import { createTankAimSystem } from './src/ECS/Systems/Tank/createTankAimSystem.ts';
 import { createDrawGrassSystem } from './src/ECS/Systems/Render/Grass/createDrawGrassSystem.ts';
 import { createRigidBodyStateSystem } from './src/ECS/Systems/createRigidBodyStateSystem.ts';
 import { createDestroySystem } from './src/ECS/Systems/createDestroySystem.ts';
@@ -31,6 +33,10 @@ import { RenderDI } from './src/DI/RenderDI.ts';
 import { noop } from 'lodash-es';
 import { PlayerEnvDI } from './src/DI/PlayerEnvDI.ts';
 import { TenserFlowDI } from './src/DI/TenserFlowDI.ts';
+import { createVisualizationTracksSystem } from './src/ECS/Systems/Tank/createVisualizationTracksSystem.ts';
+import { createPostEffect } from './src/ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
+import { createTankDecayOutOfZoneSystem } from './src/ECS/Systems/Tank/createTankDecayOutOfZoneSystem.ts';
+import { GameSession } from './src/ECS/Entities/GameSession.ts';
 
 export async function createGame({ width, height, withRender, withPlayer }: {
     width: number,
@@ -108,16 +114,18 @@ export async function createGame({ width, height, withRender, withPlayer }: {
             const rb2 = physicalWorld.getCollider(handle2).parent();
 
             // TODO: Replace magic number with a constant.
-            if (event.totalForceMagnitude() > 5_000_000) {
-                const eid1 = rb1 && getEntityIdByPhysicalId(rb1.handle);
-                const eid2 = rb2 && getEntityIdByPhysicalId(rb2.handle);
+            if (event.totalForceMagnitude() < 5_000_000) return;
 
-                if (eid1 && hasComponent(world, eid1, Hitable)) {
-                    Hitable.hit$(eid1, 1);
-                }
-                if (eid2 && hasComponent(world, eid2, Hitable)) {
-                    Hitable.hit$(eid2, 1);
-                }
+            const eid1 = rb1 && getEntityIdByPhysicalId(rb1.handle);
+            const eid2 = rb2 && getEntityIdByPhysicalId(rb2.handle);
+
+            if (eid1 == null || eid2 == null) return;
+
+            if (hasComponent(world, eid1, Hitable)) {
+                Hitable.hit$(eid1, eid2, 1);
+            }
+            if (hasComponent(world, eid2, Hitable)) {
+                Hitable.hit$(eid2, eid1, 1);
             }
         });
 
@@ -156,11 +164,14 @@ export async function createGame({ width, height, withRender, withPlayer }: {
     };
 
     const destroy = createDestroySystem();
-    const destroyOutZone = createOutZoneDestroySystem();
+    const destroyOutOfZone = createDestroyOutOfZoneSystem();
     const destroyByTimeout = createDestroyByTimeoutSystem();
+    const decayTankOnOutOfZone = createTankDecayOutOfZoneSystem();
+
     const destroyFrame = (delta: number) => {
+        decayTankOnOutOfZone();
         destroyByTimeout(delta);
-        destroyOutZone();
+        destroyOutOfZone();
         destroy();
     };
 
@@ -169,7 +180,8 @@ export async function createGame({ width, height, withRender, withPlayer }: {
         updateTankInputTensor();
     };
 
-    const aimUpdate = createAimSystem();
+    const aimUpdate = createTankAimSystem();
+    const visTracksUpdate = createVisualizationTracksSystem();
 
     GameDI.gameTick = (delta: number) => {
         spawnFrame(delta);
@@ -177,6 +189,7 @@ export async function createGame({ width, height, withRender, withPlayer }: {
         physicalFrame(delta);
 
         aimUpdate(delta);
+        visTracksUpdate(delta);
         // updateMap();
 
         // stats.begin();
@@ -198,6 +211,8 @@ export async function createGame({ width, height, withRender, withPlayer }: {
         resetWorld(world);
         deleteWorld(world);
         destroyChangeDetectorSystem(world);
+
+        GameSession.reset();
 
         GameDI.width = null!;
         GameDI.height = null!;

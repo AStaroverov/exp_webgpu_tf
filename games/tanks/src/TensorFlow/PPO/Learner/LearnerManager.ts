@@ -1,27 +1,19 @@
-import { PolicyLearnerAgent } from './PolicyLearner/PolicyLearnerAgent.ts';
-import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
-import { EntityId } from 'bitecs';
-import { ValueLearnerAgent } from './ValueLearner/ValueLearnerAgent.ts';
-import { forceExitChannel } from '../Common/channels.ts';
-import { learnerStateChannel } from '../DB';
+import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
+import { forceExitChannel } from '../../Common/channels.ts';
+import { learnerStateChannel } from '../../DB';
+import { LearnerAgent } from './LearnerAgent.ts';
 
 export class LearnerManager {
-    private tankRewards = new Map<EntityId, number>();
-
-    constructor(public agent: PolicyLearnerAgent | ValueLearnerAgent) {
+    constructor(public agent: LearnerAgent) {
 
     }
 
-    static create(agent: PolicyLearnerAgent | ValueLearnerAgent) {
+    static create(agent: LearnerAgent) {
         return new LearnerManager(agent).init();
     }
 
     public start() {
         this.trainLoop();
-    }
-
-    public getReward(tankEid: EntityId) {
-        return this.tankRewards.get(tankEid) || 0;
     }
 
     // Save models
@@ -34,7 +26,6 @@ export class LearnerManager {
         await this.agent.save();
 
         learnerStateChannel.emit({
-            model: this.agent.modelName,
             version: this.agent.getVersion(),
             training: false,
         });
@@ -54,7 +45,6 @@ export class LearnerManager {
 
             if (errorCount > 5) {
                 console.error('Error count exceeded');
-                debugger
                 forceExitChannel.postMessage(null);
                 break;
             }
@@ -64,12 +54,11 @@ export class LearnerManager {
     private async train() {
         try {
             learnerStateChannel.emit({
-                model: this.agent.modelName,
                 version: this.agent.getVersion(),
                 training: true,
             });
 
-            await this.agent.train();
+            this.agent.train();
 
             const health = await this.agent.healthCheck();
 
@@ -85,7 +74,6 @@ export class LearnerManager {
             return false;
         } finally {
             learnerStateChannel.emit({
-                model: this.agent.modelName,
                 version: this.agent.getVersion(),
                 training: false,
             });
