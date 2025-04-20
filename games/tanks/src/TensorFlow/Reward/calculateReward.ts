@@ -206,9 +206,6 @@ export function calculateReward(
     // Общая итоговая награда
     rewards.totalReward = rewards.team.total + rewards.common.total + rewards.aim.total + rewards.positioning.total;
 
-    if (rewards.common.score > 0.5) {
-        console.log('>>', rewards.common.score, rewards.common.score / rewards.totalReward);
-    }
     return rewards.totalReward;
 }
 
