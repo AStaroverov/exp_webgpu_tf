@@ -27,8 +27,6 @@ export class PolicyLearnerAgent extends BaseLearnerAgent {
             actions: Float32Array[],
             logProbs: number[],
             advantages: number[],
-            // IS for prioritized replay
-            // weights: number[],
         },
         getKlBatch: (batchSize: number) => {
             states: InputArrays[],
@@ -56,7 +54,6 @@ export class PolicyLearnerAgent extends BaseLearnerAgent {
                         tf.tensor2d(flatTypedArray(mBatch.actions), [mBatch.actions.length, mBatch.actions[0].length]),
                         tf.tensor1d(mBatch.logProbs),
                         tf.tensor1d(mBatch.advantages),
-                        // tf.tensor1d(mBatch.weights),
                         CONFIG.clipRatio, CONFIG.entropyCoeff, CONFIG.clipNorm,
                         j === batchCount - 1,
                     );

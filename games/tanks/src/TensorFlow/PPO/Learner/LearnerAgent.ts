@@ -122,8 +122,6 @@ export class LearnerAgent {
                 waitTime,
                 startTime,
                 endTime,
-                // prbAlpha: prb.alpha,
-                // prbBeta: prb.beta,
             });
         }, 0);
     }
@@ -185,8 +183,6 @@ export class LearnerAgent {
             waitTime,
             startTime,
             endTime,
-            // prbAlpha,
-            // prbBeta,
         }: {
             klList: number[],
             policyLossList: number[],
@@ -196,8 +192,6 @@ export class LearnerAgent {
             waitTime: number,
             startTime: number,
             endTime: number,
-            // prbAlpha: number,
-            // prbBeta: number,
         },
     ) {
         console.log('[Metrics] KL', klList.map(v => v.toFixed(4)));
@@ -206,9 +200,6 @@ export class LearnerAgent {
         metricsChannels.policyLoss.postMessage(policyLossList);
         console.log('[Metrics] Value loss', valueLossList.map(v => v.toFixed(4)));
         metricsChannels.valueLoss.postMessage(valueLossList);
-
-        // metricsChannels.prbAlpha.postMessage(prbAlpha);
-        // metricsChannels.prbBeta.postMessage(prbBeta);
 
         for (const batch of batches) {
             metricsChannels.versionDelta.postMessage(version - batch.version);
