@@ -110,7 +110,7 @@ export function calculateReward(
     height: number,
     frame: number,
 ): number {
-    const currentScore = clamp(getTankScore(tankEid) / frame, -2, 2);
+    const currentScore = clamp(getTankScore(tankEid) / frame, -1, 1);
     const currentHealth = getTankHealth(tankEid);
 
     const isShooting = TankController.shoot[tankEid] > 0;
