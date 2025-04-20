@@ -96,7 +96,7 @@ export class ActorManager {
                         regardedTanks = currentTanks;
 
                         for (const tankEid of regardedTanks) {
-                            this.updateTankBehaviour(tankEid, width, height, isWarmup);
+                            this.updateTankBehaviour(tankEid, width, height, frame, isWarmup);
                         }
                     }
 
@@ -133,6 +133,7 @@ export class ActorManager {
         tankEid: number,
         width: number,
         height: number,
+        frame: number,
         isWarmup: boolean,
     ) {
         // Create input vector for the current state
@@ -143,9 +144,17 @@ export class ActorManager {
         applyActionToTank(tankEid, result.actions);
 
         if (!isWarmup) {
+            const stateReward = calculateReward(
+                tankEid,
+                width,
+                height,
+                frame,
+            );
+
             this.agent.rememberAction(
                 tankEid,
                 state,
+                stateReward,
                 result.actions,
                 result.mean,
                 result.logStd,

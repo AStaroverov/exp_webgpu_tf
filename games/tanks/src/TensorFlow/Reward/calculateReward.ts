@@ -18,7 +18,7 @@ const WEIGHTS = Object.freeze({
     TEAM_MULTIPLIER: 1,
 
     COMMON: {
-        SCORE: 1.0,
+        SCORE: 0.2,
         HEALTH: 0.6,
     },
     COMMON_MULTIPLIER: 1,
@@ -110,7 +110,7 @@ export function calculateReward(
     height: number,
     frame: number,
 ): number {
-    const currentScore = clamp(getTankScore(tankEid) / frame, -1, 1);
+    const currentScore = clamp(getTankScore(tankEid) / frame, -5, 5);
     const currentHealth = getTankHealth(tankEid);
 
     const isShooting = TankController.shoot[tankEid] > 0;
