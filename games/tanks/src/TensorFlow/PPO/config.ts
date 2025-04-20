@@ -42,14 +42,14 @@ export const DEFAULT_EXPERIMENT: Config = {
     gamma: 0.97,
     // PPO-specific parameters
     policyEpochs: 4,
-    valueEpochs: 1,
+    valueEpochs: 2,
     clipRatio: 0.2,
-    entropyCoeff: isMac ? 0.01 : 0.001,
+    entropyCoeff: isMac ? 0.01 : 0.01,
 
     klConfig: {
-        target: 0.03,
-        high: 0.04,
-        low: 0.02,
+        target: 0.01,
+        high: 0.02,
+        low: 0.005,
         max: 0.5,
     },
     lrConfig: {
@@ -69,7 +69,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Workers
     workerCount: isMac ? 6 : 10,
     // Training control
-    savePath: isMac ? 'APPO_VTRACE' : 'APPO_v1',
+    savePath: isMac ? 'APPO_VTRACE' : 'APPO_VTRACE_V1',
     // fsModelPath: 'v11-wo-vtrace',
 };
 
