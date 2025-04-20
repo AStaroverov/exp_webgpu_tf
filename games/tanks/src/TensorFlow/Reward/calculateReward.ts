@@ -25,8 +25,6 @@ const WEIGHTS = Object.freeze({
 
     AIM: {
         QUALITY: 1.0,
-        DISTANCE: 0.1,
-        DISTANCE_PENALTY: -0.1,
         SHOOTING_ENEMIES: 1.0,
         SHOOTING_ALLIES_PENALTY: -1.0,
         SHOOTING_BAD_AIM: -0.2,
@@ -67,7 +65,6 @@ export type ComponentRewards = {
     };
 
     aim: {
-        distance: number;        // Расстояние до цели
         accuracy: number;        // Точность прицеливания
         shootDecision: number;   // Решение о стрельбе
         total: number;           // Суммарная награда для головы прицеливания
@@ -90,7 +87,7 @@ function initializeRewards(): ComponentRewards {
     return {
         team: { score: 0, total: 0 },
         common: { score: 0, health: 0, total: 0 },
-        aim: { accuracy: 0, distance: 0, total: 0, shootDecision: 0 },
+        aim: { accuracy: 0, total: 0, shootDecision: 0 },
         positioning: {
             enemiesPositioning: 0,
             alliesPositioning: 0,
@@ -164,7 +161,6 @@ export function calculateReward(
     );
 
     rewards.aim.accuracy = aimingResult.aimQualityReward;
-    rewards.aim.distance = aimingResult.aimDistanceReward;
     rewards.aim.shootDecision = calculateShootingReward(
         isShooting,
         aimingResult.bestEnemyAimQuality,
@@ -196,7 +192,7 @@ export function calculateReward(
     rewards.common.total = WEIGHTS.COMMON_MULTIPLIER
         * (rewards.common.health + rewards.common.score);
     rewards.aim.total = WEIGHTS.AIM_MULTIPLIER
-        * (rewards.aim.accuracy + rewards.aim.distance + rewards.aim.shootDecision);
+        * (rewards.aim.accuracy + rewards.aim.shootDecision);
     rewards.positioning.total =
         (rewards.positioning.enemiesPositioning * WEIGHTS.DISTANCE_KEEPING_MULTIPLIER
             + rewards.positioning.alliesPositioning * WEIGHTS.DISTANCE_KEEPING_MULTIPLIER
@@ -205,6 +201,13 @@ export function calculateReward(
 
     // Общая итоговая награда
     rewards.totalReward = rewards.team.total + rewards.common.total + rewards.aim.total + rewards.positioning.total;
+
+    // console.log('>>', `
+    //     team: ${ rewards.team.total.toFixed(2) },
+    //     common: ${ rewards.common.total.toFixed(2) },
+    //     aim: ${ rewards.aim.total.toFixed(2) },
+    //     positioning: ${ rewards.positioning.total.toFixed(2) },
+    // `);
 
     return rewards.totalReward;
 }
@@ -264,7 +267,6 @@ function analyzeAiming(
     bestEnemyAimTargetId: number;
     bestAlliesAimQuality: number;
     aimQualityReward: number;
-    aimDistanceReward: number;
 } {
     let bestEnemyAimQuality = 0;
     let bestEnemyAimTargetId = 0;
@@ -319,23 +321,11 @@ function analyzeAiming(
     // Награда за качество прицеливания и дистанцию до цели
     const aimQualityReward = (bestEnemyAimQuality * WEIGHTS.AIM.QUALITY);
 
-    // Награда за дистанцию прицеливания
-    const turretTargetDistance = hypot(turretTargetX - tankX, turretTargetY - tankY);
-    const aimDistanceReward =
-        WEIGHTS.AIM.DISTANCE * (
-            turretTargetDistance < 300
-                ? smoothstep(TANK_RADIUS, 300, turretTargetDistance)
-                : smoothstep(600, 300, turretTargetDistance)
-        )
-        + WEIGHTS.AIM.DISTANCE_PENALTY * smoothstep(TANK_RADIUS, 0, turretTargetDistance)
-        + WEIGHTS.AIM.DISTANCE_PENALTY * smoothstep(600, 1000, turretTargetDistance);
-
     return {
         bestEnemyAimQuality,
         bestEnemyAimTargetId,
-        aimQualityReward,
-        aimDistanceReward,
         bestAlliesAimQuality,
+        aimQualityReward,
     };
 }
 
@@ -367,6 +357,8 @@ function computeAimQuality(
 
     // Скалярное произведение нормализованных векторов
     const dotProduct = turretNormX * enemyNormX + turretNormY * enemyNormY;
+
+    if (dotProduct < 0) return 0;
 
     // Угол между векторами (в радианах)
     const angle = acos(max(-1, min(1, dotProduct)));
