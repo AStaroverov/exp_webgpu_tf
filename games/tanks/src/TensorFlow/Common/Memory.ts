@@ -91,14 +91,13 @@ export class Memory {
 
 export class SubMemory {
     private states: InputArrays[] = [];
-    private stateReward: number[] = [];
+    private stateRewards: number[] = [];
     private actions: Float32Array[] = [];
     private mean: Float32Array[] = [];
     private logStd: Float32Array[] = [];
     private logProbs: number[] = [];
     private actionRewards: number[] = [];
     private dones: boolean[] = [];
-
     private tmpActionRewards: number[] = [];
     private tmpDones: boolean[] = [];
 
@@ -120,7 +119,7 @@ export class SubMemory {
         this.collapseTmpData();
 
         this.states.push(state);
-        this.stateReward.push(stateReward);
+        this.stateRewards.push(stateReward);
         this.actions.push(action);
         this.mean.push(mean);
         this.logStd.push(logStd);
@@ -150,7 +149,7 @@ export class SubMemory {
             this.dones.length = minLen;
         }
 
-        const deltaReward = this.actionRewards.map((aR, i) => aR - this.stateReward[i]);
+        const deltaReward = this.actionRewards.map((aR, i) => aR - this.stateRewards[i]);
         const dones = this.dones.map(done => done ? 1.0 : 0.0);
         dones[dones.length - 1] = 1.0;
 
@@ -167,13 +166,16 @@ export class SubMemory {
     }
 
     dispose() {
-        this.states = [];
-        this.actions = [];
-        this.logProbs = [];
-        this.actionRewards = [];
-        this.dones = [];
-        this.tmpActionRewards = [];
-        this.tmpDones = [];
+        this.states.length = 0;
+        this.stateRewards.length = 0;
+        this.actions.length = 0;
+        this.mean.length = 0;
+        this.logStd.length = 0;
+        this.logProbs.length = 0;
+        this.actionRewards.length = 0;
+        this.dones.length = 0;
+        this.tmpActionRewards.length = 0;
+        this.tmpDones.length = 0;
     }
 
     private collapseTmpData() {
@@ -184,8 +186,8 @@ export class SubMemory {
 
             this.actionRewards.push(reward);
             this.dones.push(done);
-            this.tmpActionRewards = [];
-            this.tmpDones = [];
+            this.tmpActionRewards.length = 0;
+            this.tmpDones.length = 0;
         }
     }
 }
