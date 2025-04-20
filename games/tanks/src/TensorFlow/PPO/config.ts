@@ -39,12 +39,12 @@ export type Config = {
 export const DEFAULT_EXPERIMENT: Config = {
     // Learning parameters
     clipNorm: 5,
-    gamma: 0.99,
+    gamma: 0.97,
     // PPO-specific parameters
     policyEpochs: 4,
     valueEpochs: 1,
     clipRatio: 0.2,
-    entropyCoeff: 0.001,
+    entropyCoeff: isMac ? 0.01 : 0.001,
 
     klConfig: {
         target: 0.03,

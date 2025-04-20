@@ -115,7 +115,6 @@ export class ActorManager {
                                 height,
                                 frame,
                                 gameOver,
-                                gameOverByTeamWin,
                             );
                         }
                     }
@@ -161,7 +160,6 @@ export class ActorManager {
         height: number,
         frame: number,
         gameOver: boolean,
-        gameOverByTeamWin: boolean,
     ) {
         const isDead = getTankHealth(tankEid) <= 0;
         const isDone = gameOver || isDead;
@@ -170,8 +168,6 @@ export class ActorManager {
             width,
             height,
             frame,
-            isDone,
-            !isDead && gameOverByTeamWin,
         );
 
         this.agent.rememberReward(

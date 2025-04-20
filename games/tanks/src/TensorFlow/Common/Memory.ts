@@ -160,20 +160,14 @@ export class SubMemory {
 
     private collapseTmpData() {
         if (this.states.length > this.rewards.length) {
-            const done = this.tmpDones.reduce((acc, d) => acc || d, false);
-
-            // If the last action is done, we need to keep only the last reward for the whole episode
-            if (done) {
-                this.tmpActionRewards = this.tmpActionRewards.slice(-1);
-            }
-
             const weights = rewardMultipliers(this.tmpActionRewards.length);
             const reward = this.tmpActionRewards.reduce((acc, rew, i) => acc + rew * weights[i], 0);
+            const done = this.tmpDones.reduce((acc, d) => acc || d, false);
 
-            this.dones.push(done);
             this.rewards.push(reward);
-            this.tmpDones = [];
+            this.dones.push(done);
             this.tmpActionRewards = [];
+            this.tmpDones = [];
         }
     }
 }

@@ -12,15 +12,13 @@ import { getTankHealth, getTankScore } from '../../ECS/Entities/Tank/TankUtils.t
 import { clamp } from 'lodash-es';
 
 const WEIGHTS = Object.freeze({
-    WINNER: 5,
-    DEATH: -5,
-
     TEAM: {
         SCORE: 0.2,
     },
     TEAM_MULTIPLIER: 1,
 
     COMMON: {
+        SCORE: 1.0,
         HEALTH: 0.6,
     },
     COMMON_MULTIPLIER: 1,
@@ -63,6 +61,7 @@ export type ComponentRewards = {
     }
 
     common: {
+        score: number;
         health: number;
         total: number;
     };
@@ -90,7 +89,7 @@ export type ComponentRewards = {
 function initializeRewards(): ComponentRewards {
     return {
         team: { score: 0, total: 0 },
-        common: { health: 0, total: 0 },
+        common: { score: 0, health: 0, total: 0 },
         aim: { accuracy: 0, distance: 0, total: 0, shootDecision: 0 },
         positioning: {
             enemiesPositioning: 0,
@@ -110,24 +109,9 @@ export function calculateReward(
     width: number,
     height: number,
     frame: number,
-    isEnd: boolean,
-    isWinner: boolean,
 ): number {
+    const currentScore = clamp(getTankScore(tankEid) / frame, -2, 2);
     const currentHealth = getTankHealth(tankEid);
-
-    if (isEnd) {
-        const score = clamp(getTankScore(tankEid) / frame, -10, 10);
-
-        if (currentHealth <= 0) {
-            return WEIGHTS.DEATH + score;
-        }
-
-        if (isWinner) {
-            return WEIGHTS.WINNER + score;
-        }
-
-        return score;
-    }
 
     const isShooting = TankController.shoot[tankEid] > 0;
     const [currentTankX, currentTankY] = RigidBodyState.position.getBatch(tankEid);
@@ -159,6 +143,7 @@ export function calculateReward(
 
     rewards.team.score = getTeamAdvantageScore(currentBattleState);
 
+    rewards.common.score = WEIGHTS.COMMON.SCORE * currentScore;
     rewards.common.health = WEIGHTS.COMMON.HEALTH * currentHealth;
 
     rewards.positioning.mapAwareness = calculateTankMapAwarenessReward(
@@ -209,7 +194,7 @@ export function calculateReward(
     rewards.team.total = WEIGHTS.TEAM_MULTIPLIER
         * (rewards.team.score);
     rewards.common.total = WEIGHTS.COMMON_MULTIPLIER
-        * (rewards.common.health);
+        * (rewards.common.health + rewards.common.score);
     rewards.aim.total = WEIGHTS.AIM_MULTIPLIER
         * (rewards.aim.accuracy + rewards.aim.distance + rewards.aim.shootDecision);
     rewards.positioning.total =
@@ -221,6 +206,9 @@ export function calculateReward(
     // Общая итоговая награда
     rewards.totalReward = rewards.team.total + rewards.common.total + rewards.aim.total + rewards.positioning.total;
 
+    if (rewards.common.score > 0.5) {
+        console.log('>>', rewards.common.score, rewards.common.score / rewards.totalReward);
+    }
     return rewards.totalReward;
 }
 
