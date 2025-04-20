@@ -61,7 +61,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     },
 
     batchSize: isMac ? 500 : 2000,
-    miniBatchSize: 128,
+    miniBatchSize: isMac ? 125 : 500,
 
     // Training parameters
     warmupFrames: 100,
