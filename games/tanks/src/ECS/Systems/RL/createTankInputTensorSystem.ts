@@ -45,15 +45,17 @@ export function createTankInputTensorSystem({ world } = GameDI) {
 
             // Set tank data
             const health = getTankHealth(tankEid);
-            const linvel = RigidBodyState.linvel.getBatch(tankEid);
             const position = RigidBodyState.position.getBatch(tankEid);
+            const rotation = RigidBodyState.rotation[tankEid];
+            const linvel = RigidBodyState.linvel.getBatch(tankEid);
             const aimLocal = LocalTransform.matrix.getBatch(Tank.aimEid[tankEid]);
 
             TankInputTensor.setTankData(
                 tankEid,
                 health,
-                linvel,
                 position,
+                rotation,
+                linvel,
                 getMatrixTranslation(aimLocal),
             );
 

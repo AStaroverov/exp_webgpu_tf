@@ -12,6 +12,7 @@ export const BULLET_BUFFER = 5;
 export const TankInputTensor = component({
     health: TypedArray.f64(delegate.defaultSize),
     position: NestedArray.f64(2, delegate.defaultSize),
+    rotation: TypedArray.f64(delegate.defaultSize),
     speed: NestedArray.f64(2, delegate.defaultSize),
     turretTarget: NestedArray.f64(2, delegate.defaultSize),
 
@@ -38,13 +39,15 @@ export const TankInputTensor = component({
     setTankData(
         eid: number,
         health: number,
-        speed: Float64Array,
         position: Float64Array,
+        rotation: number,
+        speed: Float64Array,
         turretTarget: Float32Array,
     ) {
         TankInputTensor.health[eid] = health;
-        TankInputTensor.speed.setBatch(eid, speed);
         TankInputTensor.position.setBatch(eid, position);
+        TankInputTensor.rotation[eid] = rotation;
+        TankInputTensor.speed.setBatch(eid, speed);
         TankInputTensor.turretTarget.setBatch(eid, turretTarget);
     },
 

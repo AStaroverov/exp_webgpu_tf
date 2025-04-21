@@ -4,7 +4,7 @@ import { RevoluteImpulseJoint, Vector2 } from '@dimforge/rapier2d-simd';
 import { Tank } from '../../Components/Tank.ts';
 import { RigidBodyRef, RigidBodyState } from '../../Components/Physical.ts';
 import { applyRotationToVector } from '../../../Physical/applyRotationToVector.ts';
-import { sqrt } from '../../../../../../lib/math.ts';
+import { smoothstep, sqrt } from '../../../../../../lib/math.ts';
 import { query } from 'bitecs';
 import { getMatrixTranslation, LocalTransform } from '../../../../../../src/ECS/Components/Transform.ts';
 import { TankPart } from '../../Components/TankPart.ts';
@@ -72,7 +72,7 @@ function rotateByMotor(delta: number, tankEid: number, { physicalWorld } = GameD
     // Расстояние от мыши до дула
     const distance = sqrt((targetPos[0] - turretPos[0]) ** 2 + (targetPos[1] - turretPos[1]) ** 2);
     // Плавно интерполируем влияние мыши от 0 до 1
-    const influence = smoothStep(10, 100, distance);
+    const influence = smoothstep(10, 100, distance);
     // Ограничиваем изменение угла с учётом влияния мыши
     const maxAngleChange = maxRotationSpeed * (delta / 1000);
     const limitedDeltaRot = Math.sign(deltaRot) * Math.min(Math.abs(deltaRot), maxAngleChange) * influence;
@@ -89,11 +89,4 @@ function normalizeAngle(angle: number): number {
     while (angle < -Math.PI) angle += 2 * Math.PI;
     while (angle > Math.PI) angle -= 2 * Math.PI;
     return angle;
-}
-
-// Плавная функция smoothStep: значение 0, если x <= edge0, 1 если x >= edge1, и плавное переходное значение между ними.
-function smoothStep(edge0: number, edge1: number, x: number): number {
-    // Нормализуем x к диапазону [0,1]
-    const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
-    return t * t * (3 - 2 * t);
 }
