@@ -149,7 +149,7 @@ export class SubMemory {
             this.dones.length = minLen;
         }
 
-        const deltaReward = this.actionRewards.map((aR, i) => aR - this.stateRewards[i]);
+        const deltaReward = this.actionRewards.map((aR, i) => aR + 0.2 * (aR - this.stateRewards[i]));
         const dones = this.dones.map(done => done ? 1.0 : 0.0);
         dones[dones.length - 1] = 1.0;
 
