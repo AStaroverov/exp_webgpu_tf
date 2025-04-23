@@ -304,7 +304,7 @@ export function computeVTrace(
 
     for (let t = T - 1; t >= 0; --t) {
         const discount = dones[t] ? 0 : gamma;
-        const nextValue = discount > 0 ? values[t + 1] : 0;
+        const nextValue = dones[t] ? 0 : values[t + 1];
         const value = values[t];
 
         const rho = Math.min(rhos[t], clipRho);
@@ -317,7 +317,7 @@ export function computeVTrace(
 
         // policy-gradient advantage
         const rhoPG = Math.min(rhos[t], clipRhoPG);
-        advantages[t] = rhoPG * (rewards[t] + discount * vTraces[t] - value);
+        advantages[t] = rhoPG * (rewards[t] + discount * vtp1 - value);
 
         vtp1 = vTraces[t];
     }
