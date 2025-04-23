@@ -41,8 +41,8 @@ export const DEFAULT_EXPERIMENT: Config = {
     clipNorm: 5,
     gamma: 0.95,
     // PPO-specific parameters
-    policyEpochs: 4,
-    valueEpochs: 2,
+    policyEpochs: 3,
+    valueEpochs: 3,
     clipRatio: 0.2,
     entropyCoeff: 0.01,
 
