@@ -84,7 +84,7 @@ export class LearnerAgent {
 
         // policy
         const getPolicyBatch = (batchSize: number, index: number) => {
-            const indices = prb.getSampleWithTop(batchSize, index * batchSize, (index + 1) * batchSize);
+            const indices = prb.getSample(batchSize, index * batchSize, (index + 1) * batchSize);
             return createPolicyBatch(batch, indices);
         };
         const getKLBatch = (size: number) => {
