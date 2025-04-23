@@ -62,20 +62,14 @@ export function trainValueNetwork(
 ): undefined | number {
     const tLoss = tf.tidy(() => {
         return optimize(network.optimizer, () => {
-            // forward pass
             const predicted = network.predict(states) as tf.Tensor;
-            // shape [batchSize,1], приводим к [batchSize]
-            const valuePred = predicted.squeeze(); // [batchSize]
-
-            // Клипаем (PPO2 style)
-            const oldVal2D = oldValues.reshape(valuePred.shape);   // тоже [batchSize]
-            const valuePredClipped = oldVal2D.add(
-                valuePred.sub(oldVal2D).clipByValue(-clipRatio, clipRatio),
+            const newValues = predicted.squeeze();
+            const newValuesClipped = oldValues.add(
+                newValues.sub(oldValues).clipByValue(-clipRatio, clipRatio),
             );
-            const returns2D = returns.reshape(valuePred.shape);
 
-            const vfLoss1 = returns2D.sub(valuePred).square();
-            const vfLoss2 = returns2D.sub(valuePredClipped).square();
+            const vfLoss1 = returns.sub(newValues).square();
+            const vfLoss2 = returns.sub(newValuesClipped).square();
             const finalValueLoss = tf.maximum(vfLoss1, vfLoss2).mean().mul(0.5);
 
             return finalValueLoss as tf.Scalar;
