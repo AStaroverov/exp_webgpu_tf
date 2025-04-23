@@ -36,7 +36,7 @@ export class ValueLearnerAgent extends BaseLearnerAgent {
                         createInputTensors(mBatch.states),
                         tf.tensor1d(mBatch.returns),
                         tf.tensor1d(mBatch.values),
-                        CONFIG.clipRatio * 2, CONFIG.clipNorm,
+                        CONFIG.valueClipRatio, CONFIG.clipNorm,
                         j === batchCount - 1,
                     );
 

@@ -6,9 +6,11 @@ export type Config = {
     gamma: number;                  // Discount factor
     // PPO-specific parameters
     policyEpochs: number;                // Number of epochs to train on policy network
+    policyClipRatio: number;             // Clipping ratio for PPO
+    policyEntropyCoeff: number;           // Entropy coefficient for encouraging exploration
+
     valueEpochs: number;                  // Number of epochs to train the value network
-    clipRatio: number;             // Clipping ratio for PPO
-    entropyCoeff: number;           // Entropy coefficient for encouraging exploration
+    valueClipRatio: number;             // Clipping ratio for PPO
 
     klConfig: {
         target: number,
@@ -38,13 +40,15 @@ export type Config = {
 // Default experiment configuration for PPO
 export const DEFAULT_EXPERIMENT: Config = {
     // Learning parameters
-    clipNorm: 5,
-    gamma: 0.95,
+    clipNorm: 20,
     // PPO-specific parameters
+    gamma: 0.95,
     policyEpochs: 3,
+    policyClipRatio: 0.2,
+    policyEntropyCoeff: 0.01,
+
     valueEpochs: 3,
-    clipRatio: 0.2,
-    entropyCoeff: 0.01,
+    valueClipRatio: 1,
 
     klConfig: {
         target: 0.01,

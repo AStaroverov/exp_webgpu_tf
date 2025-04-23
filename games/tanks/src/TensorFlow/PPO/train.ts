@@ -54,8 +54,8 @@ export function trainPolicyNetwork(
 export function trainValueNetwork(
     network: tf.LayersModel,
     states: tf.Tensor[],
-    returns: tf.Tensor,  // [batchSize], уже подсчитанные (GAE + V(s) или просто discountedReturns)
-    oldValues: tf.Tensor, // [batchSize], для клиппинга
+    returns: tf.Tensor,
+    oldValues: tf.Tensor,
     clipRatio: number,
     clipNorm: number,
     returnCost: boolean,
