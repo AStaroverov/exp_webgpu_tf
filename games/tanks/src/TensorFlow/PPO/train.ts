@@ -57,20 +57,20 @@ export function trainValueNetwork(
     returns: tf.Tensor,
     oldValues: tf.Tensor,
     clipRatio: number,
+    lossCoeff: number,
     clipNorm: number,
     returnCost: boolean,
 ): undefined | number {
     const tLoss = tf.tidy(() => {
         return optimize(network.optimizer, () => {
-            const predicted = network.predict(states) as tf.Tensor;
-            const newValues = predicted.squeeze();
+            const newValues = (network.predict(states) as tf.Tensor).squeeze();
             const newValuesClipped = oldValues.add(
                 newValues.sub(oldValues).clipByValue(-clipRatio, clipRatio),
             );
 
             const vfLoss1 = returns.sub(newValues).square();
             const vfLoss2 = returns.sub(newValuesClipped).square();
-            const finalValueLoss = tf.maximum(vfLoss1, vfLoss2).mean().mul(0.5);
+            const finalValueLoss = tf.maximum(vfLoss1, vfLoss2).mean().mul(lossCoeff);
 
             return finalValueLoss as tf.Scalar;
         }, { clipNorm, returnCost });

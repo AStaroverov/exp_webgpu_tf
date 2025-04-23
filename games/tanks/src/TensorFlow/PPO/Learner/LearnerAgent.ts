@@ -103,7 +103,8 @@ export class LearnerAgent {
 
         // value
         const getValueBatch = (batchSize: number, index: number) => {
-            return createValueBatch(batch, prb.getSample(batchSize, index * batchSize, (index + 1) * batchSize));
+            const indices = prb.getSample(batchSize, index * batchSize, (index + 1) * batchSize);
+            return createValueBatch(batch, indices);
         };
         const valueTrainMetrics = this.valueLA.train(
             miniBatchCount,

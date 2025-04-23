@@ -11,6 +11,7 @@ export type Config = {
 
     valueEpochs: number;                  // Number of epochs to train the value network
     valueClipRatio: number;             // Clipping ratio for PPO
+    valueLossCoeff: number;                  // Number of epochs to train the value network
 
     klConfig: {
         target: number,
@@ -49,6 +50,7 @@ export const DEFAULT_EXPERIMENT: Config = {
 
     valueEpochs: 3,
     valueClipRatio: 1,
+    valueLossCoeff: 0.5,
 
     klConfig: {
         target: 0.01,
