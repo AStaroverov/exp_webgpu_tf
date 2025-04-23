@@ -18,7 +18,7 @@ const WEIGHTS = Object.freeze({
     TEAM_MULTIPLIER: 1,
 
     COMMON: {
-        SCORE: 0.2,
+        SCORE: 0.8,
         HEALTH: 0.6,
     },
     COMMON_MULTIPLIER: 1,
@@ -33,16 +33,16 @@ const WEIGHTS = Object.freeze({
     AIM_MULTIPLIER: 1,
 
     MAP_BORDER: {
-        BASE: 0.2,          // За нахождение в пределах карты
-        PENALTY: -1.0,    // За выход за границы
+        BASE: 0.2,
+        PENALTY: -1.0,
     },
     MAP_BORDER_MULTIPLIER: 1,
 
     DISTANCE_KEEPING: {
-        BASE: 0.2,          // За поддержание дистанции
-        PENALTY: -0.4,      // За неудачную дистанцию
+        BASE: 1.0,
+        PENALTY: -0.8,
     },
-    DISTANCE_KEEPING_MULTIPLIER: 1, // может быть несколько врагов
+    DISTANCE_KEEPING_MULTIPLIER: 1,
 
     BULLET_AVOIDANCE: {
         PENALTY: -0.6,
@@ -51,11 +51,10 @@ const WEIGHTS = Object.freeze({
     BULLET_AVOIDANCE_MULTIPLIER: 1,
 });
 
-// Структура для хранения многокомпонентных наград
 export type ComponentRewards = {
     team: {
-        score: number;          // Награда за разницу в здоровье
-        total: number;         // Суммарная награда для команды
+        score: number;
+        total: number;
     }
 
     common: {
@@ -310,7 +309,7 @@ function analyzeAiming(
 
         let aimQuality = computeAimQuality(tankX, tankY, turretTargetX, turretTargetY, futureAllyX, futureAllyY);
 
-        if (distToAlly > bestEnemyDistance) {
+        if (bestEnemyAimQuality > 0 && distToAlly > bestEnemyDistance) {
             const distDiff = 1 - (distToAlly - bestEnemyDistance) / distToAlly;
             aimQuality *= distDiff;
         }
