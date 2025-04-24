@@ -124,13 +124,11 @@ function drawTab1() {
         height: 300,
     });
 
-    const avgValues = store.values.toArray();
     tfvis.render.scatterplot({ name: 'Value', tab }, {
         values: [
             store.values.toArrayMin(),
             store.values.toArrayMax(),
-            avgValues,
-            calculateMovingAverage(avgValues, 1000),
+            store.values.toArray(),
         ],
     }, {
         xLabel: 'Version',
@@ -139,13 +137,11 @@ function drawTab1() {
         height: 300,
     });
 
-    const avgReturns = store.returns.toArray();
     tfvis.render.scatterplot({ name: 'Return', tab }, {
         values: [
             store.returns.toArrayMin(),
             store.returns.toArrayMax(),
-            avgReturns,
-            calculateMovingAverage(avgReturns, 1000),
+            store.returns.toArray(),
         ],
     }, {
         xLabel: 'Version',
@@ -155,7 +151,7 @@ function drawTab1() {
     });
 
     tfvis.render.scatterplot({ name: 'TD Error', tab }, {
-        values: [store.tdErrors.toArrayMin(), store.tdErrors.toArrayMax()],
+        values: [store.tdErrors.toArrayMin(), store.tdErrors.toArrayMax(), store.tdErrors.toArray()],
     }, {
         xLabel: 'Version',
         yLabel: 'TD Error',
