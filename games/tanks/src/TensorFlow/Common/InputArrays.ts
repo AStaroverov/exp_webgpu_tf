@@ -18,20 +18,19 @@ function normForTanh(v: number, size: number): number {
     return v / size;
 }
 
+const SPACE = 1; // it is a space for normalization, 0-space is bad negative values, space-2*space is normal values, 2*space-3*space is bad positive values
 function normForRelu(v: number, size: number): number {
-    return (normForTanh(v, size) + 1) / 2;
+    const f0t1 = (normForTanh(v, size) + 1) / 2;
+    return clamp(f0t1 * SPACE + SPACE, 0, SPACE * 3);
 }
 
-const SPACE = 1; // it is a space for normalization, 0-space is bad negative values, space-2*space is normal values, 2*space-3*space is bad positive values
-
 function norm(v: number, size: number): number {
-    return clamp(normForRelu(v, size) * SPACE + SPACE, 0, SPACE * 3);
+    return normForRelu(v, size);
 }
 
 const ENEMIES_INDEXES = new Uint32Array(Array.from({ length: ENEMY_SLOTS }, (_, i) => i));
 const ALLIES_INDEXES = new Uint32Array(Array.from({ length: ALLY_SLOTS }, (_, i) => i));
 const BULLETS_INDEXES = new Uint32Array(Array.from({ length: BULLET_SLOTS }, (_, i) => i));
-
 
 export type InputArrays = {
     battleFeatures: Float32Array,

@@ -46,7 +46,6 @@ export function createPolicyNetwork(): tf.LayersModel {
     return model;
 }
 
-// Аналогично для Value-сети
 export function createValueNetwork(): tf.LayersModel {
     const { inputs, merged } = createInputLayer();
     const withDenseLayers = applyDenseLayers(merged, denseLayersValue);

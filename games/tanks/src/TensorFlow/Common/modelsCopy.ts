@@ -2,7 +2,6 @@ import * as tf from '@tensorflow/tfjs';
 import { AdamOptimizer } from '@tensorflow/tfjs';
 
 export async function setModelState(targetModel: tf.LayersModel, sourceModel: tf.LayersModel): Promise<tf.LayersModel> {
-    // 1. Копируем веса
     const sourceWeights = sourceModel.getWeights();
     const targetWeights = targetModel.getWeights();
 
@@ -34,7 +33,6 @@ export async function setModelState(targetModel: tf.LayersModel, sourceModel: tf
         targetOptimizer.epsilon = sourceOptimizer.epsilon;
     }
 
-    // 4. (необязательно) Копируем loss и metrics
     if (sourceModel.loss != null) {
         targetModel.loss = sourceModel.loss;
     }
