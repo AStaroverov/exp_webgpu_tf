@@ -43,7 +43,7 @@ export class ActorAgent {
         this.hasNewNetworks$ = this.learnerState$.pipe(
             map((states) => states.version > this.version),
         );
-        this.backpressure$ = timer(200);
+        this.backpressure$ = timer(800);
 
         // hot observable
         this.learnerState$.subscribe();

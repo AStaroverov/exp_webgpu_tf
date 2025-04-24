@@ -44,13 +44,13 @@ export const DEFAULT_EXPERIMENT: Config = {
     clipNorm: 20,
     // PPO-specific parameters
     gamma: 0.95,
-    policyEpochs: 3,
+    policyEpochs: 4,
     policyClipRatio: 0.2,
     policyEntropyCoeff: 0.01,
 
-    valueEpochs: 3,
-    valueClipRatio: 1,
-    valueLossCoeff: 0.5,
+    valueEpochs: 4,
+    valueClipRatio: 0.2,
+    valueLossCoeff: 1,
 
     klConfig: {
         target: 0.01,

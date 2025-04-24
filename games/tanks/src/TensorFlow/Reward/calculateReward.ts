@@ -30,7 +30,7 @@ const WEIGHTS = Object.freeze({
         SHOOTING_BAD_AIM: -0.2,
         SHOOTING_GOOD_AIM_PENALTY: -0.3,
     },
-    AIM_MULTIPLIER: 1,
+    AIM_MULTIPLIER: 2,
 
     MAP_BORDER: {
         BASE: 0.2,
