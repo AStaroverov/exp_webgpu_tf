@@ -98,14 +98,16 @@ export class SubMemory {
     private logProbs: number[] = [];
     private actionRewards: number[] = [];
     private dones: boolean[] = [];
-    private tmpActionRewards: number[] = [];
-    private tmpDones: boolean[] = [];
 
     constructor() {
     }
 
     size() {
         return this.states.length;
+    }
+
+    isDone() {
+        return this.dones[this.dones.length - 1];
     }
 
     addFirstPart(
@@ -116,8 +118,9 @@ export class SubMemory {
         logStd: Float32Array,
         logProb: number,
     ) {
-        this.collapseTmpData();
-
+        if (this.isDone()) {
+            return;
+        }
         this.states.push(state);
         this.stateRewards.push(stateReward);
         this.actions.push(action);
@@ -127,26 +130,19 @@ export class SubMemory {
     }
 
     updateSecondPart(reward: number, done: boolean) {
-        this.tmpActionRewards.push(reward);
-        this.tmpDones.push(done);
+        if (this.isDone()) {
+            return;
+        }
+        this.actionRewards.push(reward);
+        this.dones.push(done);
     }
 
     getBatch(): Batch {
         if (this.states.length === 0) {
             throw new Error('Memory is empty');
         }
-        if (this.tmpDones.length > 0 || this.tmpActionRewards.length > 0) {
-            this.collapseTmpData();
-        }
-        if (this.states.length !== this.actionRewards.length || this.states.length !== this.dones.length) {
-            const minLen = Math.min(this.states.length, this.actionRewards.length, this.dones.length);
-            this.states.length = minLen;
-            this.actions.length = minLen;
-            this.mean.length = minLen;
-            this.logStd.length = minLen;
-            this.logProbs.length = minLen;
-            this.actionRewards.length = minLen;
-            this.dones.length = minLen;
+        if (this.states.length !== this.dones.length) {
+            throw new Error('States and dones length mismatch');
         }
 
         const deltaReward = this.actionRewards.map((aR, i) => aR - this.stateRewards[i]);
@@ -174,33 +170,5 @@ export class SubMemory {
         this.logProbs.length = 0;
         this.actionRewards.length = 0;
         this.dones.length = 0;
-        this.tmpActionRewards.length = 0;
-        this.tmpDones.length = 0;
     }
-
-    private collapseTmpData() {
-        if (this.states.length > this.actionRewards.length) {
-            const weights = rewardMultipliers(this.tmpActionRewards.length);
-            const reward = this.tmpActionRewards.reduce((acc, rew, i) => acc + rew * weights[i], 0);
-            const done = this.tmpDones.reduce((acc, d) => acc || d, false);
-
-            this.actionRewards.push(reward);
-            this.dones.push(done);
-            this.tmpActionRewards.length = 0;
-            this.tmpDones.length = 0;
-        }
-    }
-}
-
-function rewardMultipliers(limit: number): number[] {
-    const weights = [];
-
-    for (let i = 0; i < limit; i++) {
-        weights.push(i + 1);
-    }
-
-    const sum = weights.reduce((a, b) => a + b, 0);
-    const normalized = weights.map(w => w / sum);
-
-    return normalized;
 }

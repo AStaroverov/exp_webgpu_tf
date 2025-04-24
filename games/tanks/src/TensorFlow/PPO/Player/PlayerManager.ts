@@ -1,5 +1,10 @@
 import { PlayerAgent } from './PlayerAgent.ts';
-import { TANK_COUNT_SIMULATION_MAX, TANK_COUNT_SIMULATION_MIN, TICK_TIME_SIMULATION } from '../../Common/consts.ts';
+import {
+    SNAPSHOT_EVERY,
+    TANK_COUNT_SIMULATION_MAX,
+    TANK_COUNT_SIMULATION_MIN,
+    TICK_TIME_SIMULATION,
+} from '../../Common/consts.ts';
 import { GameDI } from '../../../DI/GameDI.ts';
 import { createBattlefield } from '../../Common/createBattlefield.ts';
 import { applyActionToTank } from '../../Common/applyActionToTank.ts';
@@ -81,7 +86,7 @@ export class PlayerManager {
 
     private async runGameLoop(game: Game) {
         return new Promise(resolve => {
-            const shouldEvery = 12;
+            const shouldEvery = SNAPSHOT_EVERY;
             const maxFramesCount = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
             const width = GameDI.width;
             const height = GameDI.height;
@@ -94,9 +99,9 @@ export class PlayerManager {
                 const currentTanks = game.getTanks();
                 const isEpisodeDone = currentTanks.length <= 1 || game.getTeamsCount() <= 1 || frame > maxFramesCount;
 
-                const shouldAction = frame > 0 && frame % shouldEvery === 0;
-                const shouldReward = isEpisodeDone || (frame > 0 && frame % shouldEvery === 10);
-                TenserFlowDI.shouldCollectState = frame > 0 && (frame + 1) % shouldEvery === 0;
+                const shouldAction = frame % shouldEvery === 0;
+                const shouldReward = isEpisodeDone || ((frame - (shouldEvery - 1)) % shouldEvery === 0);
+                TenserFlowDI.shouldCollectState = (frame + 1) % shouldEvery === 0;
 
                 if (shouldAction) {
                     regardedTanks = currentTanks;
