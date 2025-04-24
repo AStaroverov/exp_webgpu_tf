@@ -40,9 +40,11 @@ export function resetTankPartJointComponent(tankPartEid: number, { world } = Gam
 
 export function getTankCurrentPartsCount(tankEid: number) {
     return Children.entitiesCount[tankEid] + Children.entitiesCount[Tank.turretEId[tankEid]];
-} // return from 0 to 1
+}
+
 export const HEALTH_THRESHOLD = 0.75;
 
+// return from 0 to 1
 export function getTankHealth(tankEid: number): number {
     const initialPartsCount = Tank.initialPartsCount[tankEid];
     const partsCount = getTankCurrentPartsCount(tankEid);
