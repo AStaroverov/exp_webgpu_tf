@@ -145,7 +145,7 @@ export class SubMemory {
             throw new Error('States and dones length mismatch');
         }
 
-        const deltaReward = this.actionRewards.map((aR, i) => aR - this.stateRewards[i]);
+        const deltaReward = this.actionRewards.map((aR) => 0.1 * aR);
         const dones = this.dones.map(done => done ? 1.0 : 0.0);
         dones[dones.length - 1] = 1.0;
 
