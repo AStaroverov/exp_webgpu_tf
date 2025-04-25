@@ -32,7 +32,7 @@ export class ActorAgent {
             map((states) => states.version > this.version),
         );
         this.backpressure$ = learnerState$.pipe(
-            filter((states) => states.queueSize < 3),
+            filter((states) => states.queueSize < 2),
         );
 
         // hot observable
