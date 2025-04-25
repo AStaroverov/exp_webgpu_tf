@@ -7,7 +7,21 @@ import { setModelState } from '../../Common/modelsCopy.ts';
 import { createPolicyNetwork } from '../../Models/Create.ts';
 import { loadNetworkFromDB, Model } from '../../Models/Transfer.ts';
 import { learnerStateChannel } from '../channels.ts';
-import { filter, firstValueFrom, map, mergeMap, Observable, of, retry, shareReplay, startWith, take, tap } from 'rxjs';
+import {
+    filter,
+    firstValueFrom,
+    map,
+    mergeMap,
+    Observable,
+    of,
+    race,
+    retry,
+    shareReplay,
+    startWith,
+    take,
+    tap,
+    timer,
+} from 'rxjs';
 import { fromPromise } from 'rxjs/internal/observable/innerFrom';
 import { getNetworkVersion } from '../../Common/utils.ts';
 
@@ -31,9 +45,12 @@ export class ActorAgent {
         this.hasNewNetworks$ = learnerState$.pipe(
             map((states) => states.version > this.version),
         );
-        this.backpressure$ = learnerState$.pipe(
-            filter((states) => states.queueSize < 3),
-        );
+        this.backpressure$ = race([
+            timer(60_000),
+            learnerState$.pipe(
+                filter((states) => states.queueSize < 3),
+            ),
+        ]);
 
         // hot observable
         learnerState$.subscribe();
