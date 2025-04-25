@@ -13,7 +13,7 @@ import { CONFIG } from '../config.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { prepareInputArrays } from '../../Common/InputArrays.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
-import { memoryChannel } from '../channels.ts';
+import { actorMemoryChannel } from '../channels.ts';
 import { calculateReward } from '../../Reward/calculateReward.ts';
 import { getTankHealth } from '../../../ECS/Entities/Tank/TankUtils.ts';
 
@@ -48,7 +48,7 @@ export class ActorManager {
 
     private afterEpisode() {
         const memory = this.agent.readMemory();
-        memoryChannel.emit(memory);
+        actorMemoryChannel.emit(memory);
     }
 
     private cleanupEpisode(game: Game) {

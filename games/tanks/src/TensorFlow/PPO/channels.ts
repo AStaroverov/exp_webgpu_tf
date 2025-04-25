@@ -3,7 +3,7 @@ import { createChannel } from '../../../../../lib/channles.ts';
 import { LearnBatch } from './Learner/createLearnerManager.ts';
 import { Model } from '../Models/Transfer.ts';
 
-export const memoryChannel = createChannel<{ memories: Batch, version: number }>('memory-channel');
+export const actorMemoryChannel = createChannel<{ memories: Batch, version: number }>('memory-channel');
 
 export const learnMemoryChannel = createChannel<
     LearnBatch,
@@ -15,4 +15,5 @@ export const learningRateChannel = createChannel<number>('learning-rate-channel'
 export const learnerStateChannel = createChannel<{
     version: number,
     training: boolean,
+    queueSize: number
 }>('learner-state-channel');

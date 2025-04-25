@@ -1,5 +1,5 @@
 import { forceExitChannel, metricsChannels } from '../../Common/channels.ts';
-import { learnMemoryChannel, memoryChannel } from '../channels.ts';
+import { actorMemoryChannel, learnerStateChannel, learnMemoryChannel } from '../channels.ts';
 import { createPolicyNetwork, createValueNetwork } from '../../Models/Create.ts';
 import { concatMap, first, forkJoin, map, mergeMap, scan, tap } from 'rxjs';
 import { upsertNetwork } from './createLearnerAgent.ts';
@@ -9,6 +9,7 @@ import { Batch } from '../../Common/Memory.ts';
 import { computeVTraceTargets } from '../train.ts';
 import { bufferWhile } from '../../../../../../lib/Rx/bufferWhile.ts';
 import { CONFIG } from '../config.ts';
+import { getNetworkVersion } from '../../Common/utils.ts';
 
 export type LearnBatch = Batch & {
     values: Float32Array,
@@ -21,11 +22,18 @@ export function createLearnerManager() {
     const policyNetwork = createPolicyNetwork();
     const valueNetwork = createValueNetwork();
     let lastBufferTime = 0;
+    let queueSize = 0;
 
-    memoryChannel.obs.pipe(
+    actorMemoryChannel.obs.pipe(
         bufferWhile((batches) => batches.reduce((acc, b) => acc + b.memories.size, 0) < CONFIG.batchSize),
+        tap(() => (queueSize++)),
         concatMap((batches) => {
             console.info('Start processing batch');
+            learnerStateChannel.emit({
+                version: getNetworkVersion(policyNetwork),
+                training: true,
+                queueSize,
+            });
 
             const startTime = Date.now();
             const waitTime = lastBufferTime === 0 ? 0 : startTime - lastBufferTime;
@@ -36,6 +44,10 @@ export function createLearnerManager() {
                 upsertNetwork(Model.Value, valueNetwork),
             ]).pipe(
                 map((): LearnBatch => {
+                    metricsChannels.versionDelta.postMessage(
+                        batches.map(b => getNetworkVersion(policyNetwork) - b.version),
+                    );
+
                     const batch = squeezeBatches(batches.map(b => b.memories));
 
                     return {
@@ -55,9 +67,16 @@ export function createLearnerManager() {
                         }, { [Model.Policy]: false, [Model.Value]: false }),
                         first((state) => state[Model.Policy] && state[Model.Value]),
                         tap(() => {
+                            queueSize--;
+                            console.info('Batch processed successfully');
+                            learnerStateChannel.emit({
+                                version: getNetworkVersion(policyNetwork),
+                                training: false,
+                                queueSize,
+                            });
+
                             const endTime = Date.now();
 
-                            console.info('Batch processed successfully');
                             // metricsChannels.versionDelta.postMessage(version - batch.version);
                             metricsChannels.batchSize.postMessage(batch.size);
                             metricsChannels.rewards.postMessage(batch.rewards);

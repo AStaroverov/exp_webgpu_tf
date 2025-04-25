@@ -7,20 +7,7 @@ import { setModelState } from '../../Common/modelsCopy.ts';
 import { createPolicyNetwork } from '../../Models/Create.ts';
 import { loadNetworkFromDB, Model } from '../../Models/Transfer.ts';
 import { learnerStateChannel } from '../channels.ts';
-import {
-    filter,
-    firstValueFrom,
-    map,
-    mergeMap,
-    Observable,
-    of,
-    retry,
-    shareReplay,
-    startWith,
-    take,
-    tap,
-    timer,
-} from 'rxjs';
+import { filter, firstValueFrom, map, mergeMap, Observable, of, retry, shareReplay, startWith, take, tap } from 'rxjs';
 import { fromPromise } from 'rxjs/internal/observable/innerFrom';
 import { getNetworkVersion } from '../../Common/utils.ts';
 
@@ -30,24 +17,35 @@ export class ActorAgent {
     private version = -1;
     private policyNetwork?: tf.LayersModel;
 
-    private learnerState$: Observable<{ version: number, training: boolean }>;
     private backpressure$: Observable<unknown>;
     private hasNewNetworks$: Observable<boolean>;
 
     constructor() {
         this.memory = new Memory();
 
-        this.learnerState$ = learnerStateChannel.obs.pipe(
-            startWith({ version: 0, training: false }),
+        const learnerState$ = learnerStateChannel.obs.pipe(
+            startWith({ version: 0, queueSize: 0, training: false }),
             shareReplay(1),
         );
-        this.hasNewNetworks$ = this.learnerState$.pipe(
+        this.hasNewNetworks$ = learnerState$.pipe(
             map((states) => states.version > this.version),
         );
-        this.backpressure$ = timer(800);
+        let time: undefined | number = undefined;
+        this.backpressure$ = learnerState$.pipe(
+            filter((states) => {
+                if (states.queueSize >= 3) {
+                    time = Date.now();
+                }
+                if (states.queueSize < 3) {
+                    time !== undefined && console.log('>> waiting', Date.now() - time);
+                    time = undefined;
+                }
+                return states.queueSize < 3;
+            }),
+        );
 
         // hot observable
-        this.learnerState$.subscribe();
+        learnerState$.subscribe();
     }
 
     public static create() {
