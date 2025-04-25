@@ -1,4 +1,5 @@
-import { merge, Observable, Subject } from 'rxjs';
+import { fromEvent, map, merge, Subject } from 'rxjs';
+import { get } from 'lodash';
 
 export function createChannel<Req, Res = unknown>(name: string) {
     const request = new Subject<Req>();
@@ -8,24 +9,16 @@ export function createChannel<Req, Res = unknown>(name: string) {
 
     const request$ = merge(
         request,
-        new Observable<Req>((observer) => {
-            crossRequest.onmessage = (event) => observer.next(event.data);
-            return () => {
-                crossRequest.onmessage = null;
-                crossRequest.close();
-            };
-        }),
+        fromEvent(crossRequest, 'message').pipe(
+            map((event: Event) => get(event, 'data') as Req),
+        ),
     );
 
     const response$ = merge(
         response,
-        new Observable<Res>((observer) => {
-            crossResponse.onmessage = (event) => observer.next(event.data);
-            return () => {
-                crossResponse.onmessage = null;
-                crossResponse.close();
-            };
-        }),
+        fromEvent(crossResponse, 'message').pipe(
+            map((event: Event) => get(event, 'data') as Res),
+        ),
     );
 
     return {
@@ -39,9 +32,9 @@ export function createChannel<Req, Res = unknown>(name: string) {
             crossRequest.postMessage(data);
             return response$;
         },
-        response: (cb: (data: Req) => Res) => {
-            const sub = request$.subscribe((data) => {
-                const res = cb(data);
+        response: (cb: (data: Req) => Res | Promise<Res>) => {
+            const sub = request$.subscribe(async (data) => {
+                const res = await cb(data);
                 response.next(res);
                 crossResponse.postMessage(res);
             });

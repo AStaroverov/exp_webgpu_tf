@@ -348,4 +348,3 @@ export function networkHealthCheck(network: tf.LayersModel): boolean {
 export function arrayHealthCheck(array: Float32Array | Uint8Array | Int32Array): boolean {
     return array.every(Number.isFinite);
 }
-

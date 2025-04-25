@@ -26,7 +26,8 @@ async function initSystem() {
     );
 
     macroTasks.addTimeout(() => {
-        new Worker(new URL('./LearnerWorker.ts', import.meta.url), { type: 'module' });
+        new Worker(new URL('./LearnerPolicyWorker.ts', import.meta.url), { type: 'module' });
+        new Worker(new URL('./LearnerValueWorker.ts', import.meta.url), { type: 'module' });
     }, 1000);
 
     const playerManager = await PlayerManager.create();

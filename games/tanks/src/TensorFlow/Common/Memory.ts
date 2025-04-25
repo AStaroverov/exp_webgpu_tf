@@ -4,15 +4,14 @@ import { InputArrays } from './InputArrays.ts';
 import { flatTypedArray } from './flat.ts';
 
 export type Batch = {
+    size: number,
     states: InputArrays[],
     actions: Float32Array[],
+    rewards: Float32Array,
+    dones: Float32Array,
     mean: Float32Array[],
     logStd: Float32Array[],
     logProbs: Float32Array,
-    // meta
-    size: number,
-    dones: Float32Array,
-    rewards: Float32Array,
 }
 
 export class Memory {

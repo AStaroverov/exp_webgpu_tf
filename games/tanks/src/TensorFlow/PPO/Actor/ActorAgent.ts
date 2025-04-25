@@ -6,23 +6,23 @@ import { InputArrays } from '../../Common/InputArrays.ts';
 import { setModelState } from '../../Common/modelsCopy.ts';
 import { createPolicyNetwork } from '../../Models/Create.ts';
 import { loadNetworkFromDB, Model } from '../../Models/Transfer.ts';
-import { disposeNetwork } from '../../Models/Utils.ts';
-import { learnerStateChannel } from '../../DB';
+import { learnerStateChannel } from '../channels.ts';
 import {
     filter,
     firstValueFrom,
-    forkJoin,
     map,
     mergeMap,
     Observable,
     of,
     retry,
     shareReplay,
+    startWith,
     take,
     tap,
     timer,
 } from 'rxjs';
 import { fromPromise } from 'rxjs/internal/observable/innerFrom';
+import { getNetworkVersion } from '../../Common/utils.ts';
 
 export class ActorAgent {
     private memory: Memory;
@@ -38,6 +38,7 @@ export class ActorAgent {
         this.memory = new Memory();
 
         this.learnerState$ = learnerStateChannel.obs.pipe(
+            startWith({ version: 0, training: false }),
             shareReplay(1),
         );
         this.hasNewNetworks$ = this.learnerState$.pipe(
@@ -124,25 +125,22 @@ export class ActorAgent {
                     throw new Error('Models not loaded');
                 }
 
-                return forkJoin([
-                    this.learnerState$.pipe(take(1)),
-                    setModelState(this.policyNetwork ?? createPolicyNetwork(), policyNetwork),
-                ]).pipe(
-                    tap({
-                        next: ([state, policyNetwork]) => {
-                            this.version = state.version;
-                            this.policyNetwork = policyNetwork;
-                            console.log('Models loaded successfully');
-                        },
-                        error: () => this.resetNetworks(),
-                        finalize: () => disposeNetwork(policyNetwork),
-                    }),
-                );
+                return setModelState(this.policyNetwork ?? createPolicyNetwork(), policyNetwork).finally(() => {
+                    policyNetwork.dispose();
+                });
+            }),
+            tap({
+                next: (policyNetwork) => {
+                    this.version = getNetworkVersion(policyNetwork);
+                    this.policyNetwork = policyNetwork;
+                    console.log('Models loaded successfully');
+                },
+                error: () => this.resetState(),
             }),
         );
     }
 
-    private resetNetworks() {
+    private resetState() {
         this.policyNetwork?.dispose();
         this.policyNetwork = undefined;
         this.version = -1;

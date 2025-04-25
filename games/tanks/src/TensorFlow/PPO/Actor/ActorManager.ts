@@ -13,7 +13,7 @@ import { CONFIG } from '../config.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { prepareInputArrays } from '../../Common/InputArrays.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
-import { memoryChannel } from '../../DB';
+import { memoryChannel } from '../channels.ts';
 import { calculateReward } from '../../Reward/calculateReward.ts';
 import { getTankHealth } from '../../../ECS/Entities/Tank/TankUtils.ts';
 
