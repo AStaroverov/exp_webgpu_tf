@@ -27,21 +27,12 @@ export class ActorAgent {
             startWith({ version: 0, queueSize: 0, training: false }),
             shareReplay(1),
         );
+
         this.hasNewNetworks$ = learnerState$.pipe(
             map((states) => states.version > this.version),
         );
-        let time: undefined | number = undefined;
         this.backpressure$ = learnerState$.pipe(
-            filter((states) => {
-                if (states.queueSize >= 3) {
-                    time = Date.now();
-                }
-                if (states.queueSize < 3) {
-                    time !== undefined && console.log('>> waiting', Date.now() - time);
-                    time = undefined;
-                }
-                return states.queueSize < 3;
-            }),
+            filter((states) => states.queueSize < 3),
         );
 
         // hot observable

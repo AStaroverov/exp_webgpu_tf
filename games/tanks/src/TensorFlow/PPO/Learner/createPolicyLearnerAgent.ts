@@ -3,7 +3,6 @@ import { getNetworkLearningRate, getNetworkVersion } from '../../Common/utils.ts
 import { Model } from '../../Models/Transfer.ts';
 import { createLearnerAgent } from './createLearnerAgent.ts';
 import { createPolicyNetwork } from '../../Models/Create.ts';
-import { FinalBatch } from './LearnerAgent.ts';
 import { CONFIG } from '../config.ts';
 import * as tf from '@tensorflow/tfjs';
 import { computeKullbackLeiblerExact, trainPolicyNetwork } from '../train.ts';
@@ -16,6 +15,7 @@ import { flatTypedArray } from '../../Common/flat.ts';
 import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
 import { RingBuffer } from 'ring-buffer-ts';
 import { learningRateChannel } from '../channels.ts';
+import { LearnBatch } from './createLearnerManager.ts';
 
 export function createPolicyLearnerAgent() {
     createLearnerAgent({
@@ -27,7 +27,7 @@ export function createPolicyLearnerAgent() {
 
 const klHistory = new RingBuffer<number>(25);
 
-function trainPolicy(network: tf.LayersModel, batch: FinalBatch) {
+function trainPolicy(network: tf.LayersModel, batch: LearnBatch) {
     const version = getNetworkVersion(network);
     const rb = new ReplayBuffer(batch.states.length);
     const mbs = CONFIG.miniBatchSize;
@@ -101,7 +101,7 @@ function trainPolicy(network: tf.LayersModel, batch: FinalBatch) {
 }
 
 
-function createPolicyBatch(batch: FinalBatch, indices: number[]) {
+function createPolicyBatch(batch: LearnBatch, indices: number[]) {
     const states = indices.map(i => batch.states[i]);
     const actions = indices.map(i => batch.actions[i]);
     const logProbs = indices.map(i => batch.logProbs[i]);
@@ -115,7 +115,7 @@ function createPolicyBatch(batch: FinalBatch, indices: number[]) {
     };
 }
 
-function createKlBatch(batch: FinalBatch, indices: number[]) {
+function createKlBatch(batch: LearnBatch, indices: number[]) {
     const states = indices.map(i => batch.states[i]);
     const actions = indices.map(i => batch.actions[i]);
     const mean = indices.map(i => batch.mean[i]);

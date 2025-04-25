@@ -47,6 +47,9 @@ export function createLearnerManager() {
                     metricsChannels.versionDelta.postMessage(
                         batches.map(b => getNetworkVersion(policyNetwork) - b.version),
                     );
+                    metricsChannels.batchSize.postMessage(
+                        batches.map(b => b.memories.size),
+                    );
 
                     const batch = squeezeBatches(batches.map(b => b.memories));
 
@@ -77,8 +80,6 @@ export function createLearnerManager() {
 
                             const endTime = Date.now();
 
-                            // metricsChannels.versionDelta.postMessage(version - batch.version);
-                            metricsChannels.batchSize.postMessage(batch.size);
                             metricsChannels.rewards.postMessage(batch.rewards);
                             metricsChannels.values.postMessage(batch.values);
                             metricsChannels.returns.postMessage(batch.returns);

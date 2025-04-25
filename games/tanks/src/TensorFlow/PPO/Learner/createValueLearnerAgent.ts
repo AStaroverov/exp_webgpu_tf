@@ -1,7 +1,6 @@
 import { Model } from '../../Models/Transfer.ts';
 import { createLearnerAgent } from './createLearnerAgent.ts';
 import { createValueNetwork } from '../../Models/Create.ts';
-import { FinalBatch } from './LearnerAgent.ts';
 import { CONFIG } from '../config.ts';
 import * as tf from '@tensorflow/tfjs';
 import { trainValueNetwork } from '../train.ts';
@@ -11,6 +10,7 @@ import { ceil } from '../../../../../../lib/math.ts';
 import { metricsChannels } from '../../Common/channels.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { getNetworkVersion } from '../../Common/utils.ts';
+import { LearnBatch } from './createLearnerManager.ts';
 
 export function createValueLearnerAgent() {
     createLearnerAgent({
@@ -20,7 +20,7 @@ export function createValueLearnerAgent() {
     });
 }
 
-function trainValue(network: tf.LayersModel, batch: FinalBatch) {
+function trainValue(network: tf.LayersModel, batch: LearnBatch) {
     const rb = new ReplayBuffer(batch.states.length);
     const mbs = CONFIG.miniBatchSize;
     const mbc = ceil(batch.size / mbs);
@@ -57,7 +57,7 @@ function trainValue(network: tf.LayersModel, batch: FinalBatch) {
     }, 0);
 }
 
-function createValueBatch(batch: FinalBatch, indices: number[]) {
+function createValueBatch(batch: LearnBatch, indices: number[]) {
     const states = indices.map(i => batch.states[i]);
     const values = indices.map(i => batch.values[i]);
     const returns = indices.map(i => batch.returns[i]);

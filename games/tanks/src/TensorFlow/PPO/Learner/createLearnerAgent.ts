@@ -1,16 +1,16 @@
 import { loadNetworkFromDB, Model, saveNetworkToDB } from '../../Models/Transfer.ts';
 import * as tf from '@tensorflow/tfjs';
-import { FinalBatch } from './LearnerAgent.ts';
 import { learningRateChannel, learnMemoryChannel } from '../channels.ts';
 import { networkHealthCheck } from '../train.ts';
 import { get } from 'lodash';
 import { setModelState } from '../../Common/modelsCopy.ts';
 import { getNetworkVersion, patientAction } from '../../Common/utils.ts';
+import { LearnBatch } from './createLearnerManager.ts';
 
 export function createLearnerAgent({ modelName, createNetwork, trainNetwork }: {
     modelName: Model,
     createNetwork: () => tf.LayersModel,
-    trainNetwork: (network: tf.LayersModel, batch: FinalBatch) => void,
+    trainNetwork: (network: tf.LayersModel, batch: LearnBatch) => void,
 }) {
     const network = createNetwork();
     const loaded = upsertNetwork(modelName, network);
@@ -19,7 +19,7 @@ export function createLearnerAgent({ modelName, createNetwork, trainNetwork }: {
         setLR(network, lr);
     });
 
-    learnMemoryChannel.response(async (batch) => {
+    learnMemoryChannel.response(async (batch: LearnBatch) => {
         try {
             await loaded;
 
