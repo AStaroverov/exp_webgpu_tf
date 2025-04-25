@@ -83,7 +83,7 @@ export function subscribeOnMetrics() {
     metricsChannels.valueLoss.onmessage = w((event) => store.valueLoss.add(...event.data));
     metricsChannels.lr.onmessage = w((event) => store.lr.add(event.data));
     metricsChannels.versionDelta.onmessage = w((event) => store.versionDelta.add(...event.data));
-    metricsChannels.batchSize.onmessage = w((event) => store.batchSize.add(event.data));
+    metricsChannels.batchSize.onmessage = w((event) => store.batchSize.add(...event.data));
     metricsChannels.trainTime.onmessage = w((event) => store.trainTime.add(event.data));
     metricsChannels.waitTime.onmessage = w((event) => store.waitTime.add(event.data));
 }
