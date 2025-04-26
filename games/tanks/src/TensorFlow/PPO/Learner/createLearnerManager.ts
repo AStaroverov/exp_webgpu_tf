@@ -9,7 +9,6 @@ import { bufferWhile } from '../../../../../../lib/Rx/bufferWhile.ts';
 import { CONFIG } from '../config.ts';
 import { getNetworkVersion } from '../../Common/utils.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
-import { createPolicyNetwork, createValueNetwork } from '../../Models/Create.ts';
 
 export type LearnBatch = Batch & {
     values: Float32Array,
@@ -32,8 +31,8 @@ export function createLearnerManager() {
             lastBufferTime = startTime;
 
             return forkJoin([
-                getNetwork(Model.Policy, createPolicyNetwork),
-                getNetwork(Model.Value, createValueNetwork),
+                getNetwork(Model.Policy),
+                getNetwork(Model.Value),
             ]).pipe(
                 map(([policyNetwork, valueNetwork]): LearnBatch => {
                     const batch = squeezeBatches(batches.map(b => b.memories));

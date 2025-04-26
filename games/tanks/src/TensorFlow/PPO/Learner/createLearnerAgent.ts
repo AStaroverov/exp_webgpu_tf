@@ -12,7 +12,11 @@ export async function createLearnerAgent({ modelName, createNetwork, trainNetwor
     createNetwork: () => tf.LayersModel,
     trainNetwork: (network: tf.LayersModel, batch: LearnBatch) => void,
 }) {
-    let network = await getNetwork(modelName, createNetwork);
+    let network = await getNetwork(modelName, () => {
+        const newNetwork = createNetwork();
+        patientAction(() => saveNetworkToDB(newNetwork, modelName));
+        return newNetwork;
+    });
 
     learningRateChannel.obs.subscribe((lr) => {
         setLR(network, lr);
