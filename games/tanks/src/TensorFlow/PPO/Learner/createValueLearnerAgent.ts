@@ -13,7 +13,7 @@ import { getNetworkVersion } from '../../Common/utils.ts';
 import { LearnBatch } from './createLearnerManager.ts';
 
 export function createValueLearnerAgent() {
-    createLearnerAgent({
+    return createLearnerAgent({
         modelName: Model.Value,
         createNetwork: createValueNetwork,
         trainNetwork: trainValue,

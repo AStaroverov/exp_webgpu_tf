@@ -18,7 +18,7 @@ import { learningRateChannel } from '../channels.ts';
 import { LearnBatch } from './createLearnerManager.ts';
 
 export function createPolicyLearnerAgent() {
-    createLearnerAgent({
+    return createLearnerAgent({
         modelName: Model.Policy,
         createNetwork: createPolicyNetwork,
         trainNetwork: trainPolicy,

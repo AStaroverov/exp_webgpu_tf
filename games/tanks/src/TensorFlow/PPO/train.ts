@@ -10,6 +10,7 @@ import { normalize } from '../../../../../lib/math.ts';
 import { Batch } from '../Common/Memory.ts';
 import { CONFIG } from './config.ts';
 import { syncUnwrapTensor } from '../Common/Tensor.ts';
+import { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
 
 // if (isTabThread) {
 //     import('./v-trace.test.ts');
@@ -204,10 +205,13 @@ function optimize(
         const clipCoef = tf.minimum(tf.scalar(1), tf.div(clipNorm, safeGlobalNorm));
 
         // применяем клиппинг к каждому градиенту
-        const clippedGrads: Record<string, tf.Tensor> = {};
+        const clippedGrads: NamedTensor[] = [];
         for (const [varName, grad] of Object.entries(grads)) {
-            clippedGrads[varName] = tf.mul(grad, clipCoef);
+            clippedGrads.push({ name: varName, tensor: tf.mul(grad, clipCoef) });
         }
+
+        // fix for internal implementation of applyGradients
+        clippedGrads.sort((a, b) => a.name.localeCompare(b.name));
 
         // применяем обрезанные градиенты
         optimizer.applyGradients(clippedGrads);

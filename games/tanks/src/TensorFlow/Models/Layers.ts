@@ -15,7 +15,8 @@ export function applyAttentionLayer(name: string, qInput: tf.SymbolicTensor, kvI
 
     const scores = tf.layers.dot({ axes: -1 }).apply([Q_reshaped, K]) as tf.SymbolicTensor;
 
-    const maskedScores = new AttentionMaskLayer().apply([scores, kvMaskInput]) as tf.SymbolicTensor;
+    const maskedScores = new AttentionMaskLayer({ name: name + '_AttentionMaskLayer' })
+        .apply([scores, kvMaskInput]) as tf.SymbolicTensor;
 
     const attnWeights = tf.layers.activation({ activation: 'softmax' }).apply(maskedScores) as tf.SymbolicTensor;
 

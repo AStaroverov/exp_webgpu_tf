@@ -3,58 +3,27 @@ import '@tensorflow/tfjs-backend-wasm';
 import { Memory } from '../../Common/Memory.ts';
 import { act } from '../train.ts';
 import { InputArrays } from '../../Common/InputArrays.ts';
-import { setModelState } from '../../Common/modelsCopy.ts';
-import { createPolicyNetwork } from '../../Models/Create.ts';
-import { loadNetworkFromDB, Model } from '../../Models/Transfer.ts';
-import { learnerStateChannel } from '../channels.ts';
-import {
-    filter,
-    first,
-    firstValueFrom,
-    map,
-    mergeMap,
-    Observable,
-    of,
-    race,
-    retry,
-    shareReplay,
-    startWith,
-    tap,
-    timer,
-} from 'rxjs';
-import { fromPromise } from 'rxjs/internal/observable/innerFrom';
+import { Model } from '../../Models/Transfer.ts';
+import { queueSizeChannel } from '../channels.ts';
+import { filter, first, firstValueFrom, mergeMap, race, retry, shareReplay, startWith, timer } from 'rxjs';
 import { getNetworkVersion } from '../../Common/utils.ts';
-import { disposeNetwork } from '../../Models/Utils.ts';
+import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
+
+const queueSize$ = queueSizeChannel.obs.pipe(
+    startWith(0),
+    shareReplay(1),
+);
+const backpressure$ = race([
+    timer(60_000),
+    queueSize$.pipe(filter((queueSize) => queueSize < 2)),
+]).pipe(first());
 
 export class ActorAgent {
     private memory: Memory;
-
-    private version = -1;
     private policyNetwork?: tf.LayersModel;
-
-    private backpressure$: Observable<unknown>;
-    private hasNewNetworks$: Observable<boolean>;
 
     constructor() {
         this.memory = new Memory();
-
-        const learnerState$ = learnerStateChannel.obs.pipe(
-            startWith({ version: 0, queueSize: 0 }),
-            shareReplay(1),
-        );
-
-        this.hasNewNetworks$ = learnerState$.pipe(
-            map((states) => states.version > this.version),
-        );
-        this.backpressure$ = race([
-            timer(60_000),
-            learnerState$.pipe(
-                filter((states) => states.queueSize < 2),
-            ),
-        ]);
-
-        // hot observable
-        learnerState$.subscribe();
     }
 
     public static create() {
@@ -83,7 +52,7 @@ export class ActorAgent {
 
     readMemory() {
         return {
-            version: this.version,
+            version: getNetworkVersion(this.policyNetwork!),
             memories: this.memory.getBatch(),
         };
     }
@@ -98,55 +67,26 @@ export class ActorAgent {
         logStd: Float32Array,
         logProb: number,
     } {
-        if (this.policyNetwork == null) {
-            throw new Error('Models not loaded');
-        }
-
         return act(
-            this.policyNetwork,
+            this.policyNetwork!,
             state,
         );
     }
 
     public sync() {
-        return firstValueFrom(this.backpressure$.pipe(
-            first(),
-            mergeMap(() => this.shouldInitNetworks() ? of(true) : this.hasNewNetworks$),
-            first(),
-            mergeMap((shouldLoad) => shouldLoad ? this.load() : of(null)),
+        return firstValueFrom(backpressure$.pipe(
+            mergeMap(() => this.load()),
             retry({ delay: 1000 }),
         ));
     }
 
-    private shouldInitNetworks() {
-        return this.policyNetwork == null;
-    }
-
-    private load() {
-        return fromPromise(loadNetworkFromDB(Model.Policy)).pipe(
-            mergeMap((policyNetwork) => {
-                if (!policyNetwork) {
-                    throw new Error('Models not loaded');
-                }
-
-                return setModelState(this.policyNetwork ?? createPolicyNetwork(), policyNetwork).finally(() => {
-                    disposeNetwork(policyNetwork);
-                });
-            }),
-            tap({
-                next: (policyNetwork) => {
-                    this.version = getNetworkVersion(policyNetwork);
-                    this.policyNetwork = policyNetwork;
-                    console.log('Models loaded successfully');
-                },
-                error: () => this.resetState(),
-            }),
-        );
+    private async load() {
+        this.resetState();
+        this.policyNetwork = await getNetwork(Model.Policy);
     }
 
     private resetState() {
         this.policyNetwork && disposeNetwork(this.policyNetwork);
         this.policyNetwork = undefined;
-        this.version = -1;
     }
 }

@@ -26,11 +26,11 @@ const denseLayersPolicy: [ActivationIdentifier, number][] = [['relu', 256], ['re
 const denseLayersValue: [ActivationIdentifier, number][] = [['relu', 64], ['relu', 32]];
 
 export function createPolicyNetwork(): tf.LayersModel {
-    const { inputs, merged } = createInputLayer();
+    const { inputs, merged } = createInputLayer(Model.Policy);
     const withDenseLayers = applyDenseLayers(merged, denseLayersPolicy);
     // Выход: ACTION_DIM * 2 (пример: mean и logStd) ---
     const policyOutput = tf.layers.dense({
-        name: 'policy/output',
+        name: Model.Policy + '_output',
         units: ACTION_DIM * 2,
         activation: 'linear',
     }).apply(withDenseLayers) as tf.SymbolicTensor;
@@ -47,10 +47,10 @@ export function createPolicyNetwork(): tf.LayersModel {
 }
 
 export function createValueNetwork(): tf.LayersModel {
-    const { inputs, merged } = createInputLayer();
+    const { inputs, merged } = createInputLayer(Model.Value);
     const withDenseLayers = applyDenseLayers(merged, denseLayersValue);
     const valueOutput = tf.layers.dense({
-        name: 'value/output',
+        name: Model.Value + '_output',
         units: 1,
         activation: 'linear',
     }).apply(withDenseLayers) as tf.SymbolicTensor;
@@ -66,22 +66,24 @@ export function createValueNetwork(): tf.LayersModel {
     return model;
 }
 
-function createInputLayer() {
-    const battleInput = tf.input({ name: 'battlefieldInput', shape: [BATTLE_FEATURES_DIM] });
-    const tankInput = tf.input({ name: 'tankInput', shape: [TANK_FEATURES_DIM] });
+function createInputLayer(name: string) {
+    const battleInput = tf.input({ name: name + '_battlefieldInput', shape: [BATTLE_FEATURES_DIM] });
+    const tankInput = tf.input({ name: name + '_tankInput', shape: [TANK_FEATURES_DIM] });
 
-    const enemiesInput = tf.input({ name: 'enemiesInput', shape: [ENEMY_SLOTS, ENEMY_FEATURES_DIM] });
-    const enemiesMaskInput = tf.input({ name: 'enemiesMaskInput', shape: [ENEMY_SLOTS] });
-    const alliesInput = tf.input({ name: 'alliesInput', shape: [ALLY_SLOTS, ALLY_FEATURES_DIM] });
-    const alliesMaskInput = tf.input({ name: 'alliesMaskInput', shape: [ALLY_SLOTS] });
-    const bulletsInput = tf.input({ name: 'bulletsInput', shape: [BULLET_SLOTS, BULLET_FEATURES_DIM] });
-    const bulletsMaskInput = tf.input({ name: 'bulletsMaskInput', shape: [BULLET_SLOTS] });
+    const enemiesInput = tf.input({ name: name + '_enemiesInput', shape: [ENEMY_SLOTS, ENEMY_FEATURES_DIM] });
+    const enemiesMaskInput = tf.input({ name: name + '_enemiesMaskInput', shape: [ENEMY_SLOTS] });
+    const alliesInput = tf.input({ name: name + '_alliesInput', shape: [ALLY_SLOTS, ALLY_FEATURES_DIM] });
+    const alliesMaskInput = tf.input({ name: name + '_alliesMaskInput', shape: [ALLY_SLOTS] });
+    const bulletsInput = tf.input({ name: name + '_bulletsInput', shape: [BULLET_SLOTS, BULLET_FEATURES_DIM] });
+    const bulletsMaskInput = tf.input({ name: name + '_bulletsMaskInput', shape: [BULLET_SLOTS] });
 
-    const enemiesAttentionContext = applyAttentionLayer('enemies', tankInput, enemiesInput, enemiesMaskInput);
-    const alliesAttentionContext = applyAttentionLayer('allies', tankInput, alliesInput, alliesMaskInput);
-    const bulletsAttentionContext = applyAttentionLayer('bullets', tankInput, bulletsInput, bulletsMaskInput);
+    const enemiesAttentionContext = applyAttentionLayer(name + '_enemies', tankInput, enemiesInput, enemiesMaskInput);
+    const alliesAttentionContext = applyAttentionLayer(name + '_allies', tankInput, alliesInput, alliesMaskInput);
+    const bulletsAttentionContext = applyAttentionLayer(name + '_bullets', tankInput, bulletsInput, bulletsMaskInput);
 
-    const merged = tf.layers.concatenate().apply([
+    const merged = tf.layers.concatenate({
+        name: name + '_merged',
+    }).apply([
         battleInput,
         tankInput,
         alliesAttentionContext,
@@ -103,4 +105,3 @@ function createInputLayer() {
         merged,
     };
 }
-

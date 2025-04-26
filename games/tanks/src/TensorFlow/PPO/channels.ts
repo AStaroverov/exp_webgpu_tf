@@ -10,9 +10,6 @@ export const learnMemoryChannel = createChannel<
     { modelName: Model, version: number } | { modelName: Model, error: string }
 >('learn-memory-channel');
 
-export const learningRateChannel = createChannel<number>('learning-rate-channel');
+export const learningRateChannel = createChannel<number>('learningRateChannel');
 
-export const learnerStateChannel = createChannel<{
-    version: number,
-    queueSize: number
-}>('learner-state-channel');
+export const queueSizeChannel = createChannel<number>('queueSizeChannel');
