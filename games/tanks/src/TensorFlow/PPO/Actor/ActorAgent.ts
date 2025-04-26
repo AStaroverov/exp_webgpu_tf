@@ -8,6 +8,7 @@ import { queueSizeChannel } from '../channels.ts';
 import { filter, first, firstValueFrom, mergeMap, race, retry, shareReplay, startWith, timer } from 'rxjs';
 import { getNetworkVersion } from '../../Common/utils.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
+import { createPolicyNetwork } from '../../Models/Create.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -82,7 +83,7 @@ export class ActorAgent {
 
     private async load() {
         this.resetState();
-        this.policyNetwork = await getNetwork(Model.Policy);
+        this.policyNetwork = await getNetwork(Model.Policy, createPolicyNetwork);
     }
 
     private resetState() {

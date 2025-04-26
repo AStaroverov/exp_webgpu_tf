@@ -2,6 +2,7 @@ import { Config } from '../PPO/config.ts';
 import * as tf from '@tensorflow/tfjs';
 import { LayersModel } from '@tensorflow/tfjs';
 import { loadNetworkFromDB, Model } from './Transfer.ts';
+import { patientAction } from '../Common/utils.ts';
 
 export function getStorePath(name: string, config: Config): string {
     return `${ config.savePath }-${ name }`;
@@ -12,18 +13,14 @@ export function getIndexedDBModelPath(name: string, config: Config): string {
 }
 
 
-export async function getNetwork(modelName: Model, getInitial?: () => tf.LayersModel) {
-    let network = await loadNetworkFromDB(modelName);
+export async function getNetwork(modelName: Model, getInitial: () => tf.LayersModel) {
+    let network: undefined | tf.LayersModel;
 
-    if (!network) {
-        if (!getInitial) {
-            throw new Error('No network found and no initial network provided');
-        }
-
-        network = getInitial();
-        console.log('Created a new model');
-    } else {
-        console.log('Model loaded successfully');
+    try {
+        network = await patientAction(() => loadNetworkFromDB(modelName), 3);
+    } catch (error) {
+        console.warn(`[getNetwork] Could not load model ${ modelName } from DB:`, error);
+        network = getInitial?.();
     }
 
     return network;

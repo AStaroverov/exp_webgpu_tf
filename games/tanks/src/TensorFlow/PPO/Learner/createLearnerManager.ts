@@ -7,8 +7,9 @@ import { Batch } from '../../Common/Memory.ts';
 import { computeVTraceTargets } from '../train.ts';
 import { bufferWhile } from '../../../../../../lib/Rx/bufferWhile.ts';
 import { CONFIG } from '../config.ts';
-import { getNetworkVersion, patientAction } from '../../Common/utils.ts';
+import { getNetworkVersion } from '../../Common/utils.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
+import { createPolicyNetwork, createValueNetwork } from '../../Models/Create.ts';
 
 export type LearnBatch = Batch & {
     values: Float32Array,
@@ -31,8 +32,8 @@ export function createLearnerManager() {
             lastBufferTime = startTime;
 
             return forkJoin([
-                patientAction(() => getNetwork(Model.Policy), 3),
-                patientAction(() => getNetwork(Model.Value), 3),
+                getNetwork(Model.Policy, createPolicyNetwork),
+                getNetwork(Model.Value, createValueNetwork),
             ]).pipe(
                 map(([policyNetwork, valueNetwork]): LearnBatch => {
                     const batch = squeezeBatches(batches.map(b => b.memories));

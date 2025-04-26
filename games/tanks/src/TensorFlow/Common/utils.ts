@@ -13,16 +13,17 @@ export function getNetworkLearningRate(network: tf.LayersModel): number {
 }
 
 export async function patientAction<T>(action: () => T | Promise<T>, attempts: number = 100): Promise<T> {
-    try {
+    while (true) {
         attempts--;
-        return await action();
-    } catch (error) {
-        if (attempts <= 0) {
-            throw error;
-        }
+        try {
+            return await action();
+        } catch (error) {
+            if (attempts <= 0) {
+                throw error;
+            }
 
-        await new Promise(resolve => macroTasks.addTimeout(resolve, 100));
-        return patientAction(action);
+            await new Promise(resolve => macroTasks.addTimeout(resolve, 1000));
+        }
     }
 }
 
