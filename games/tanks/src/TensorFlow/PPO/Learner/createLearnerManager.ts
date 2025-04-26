@@ -23,7 +23,7 @@ export function createLearnerManager() {
 
     actorMemoryChannel.obs.pipe(
         bufferWhile((batches) => batches.reduce((acc, b) => acc + b.memories.size, 0) < CONFIG.batchSize),
-        tap(() => (queueSize++)),
+        tap(() => queueSizeChannel.emit(queueSize++)),
         concatMap((batches) => {
             console.info('Start processing batch');
             const startTime = Date.now();
@@ -43,8 +43,6 @@ export function createLearnerManager() {
 
                     disposeNetwork(policyNetwork);
                     disposeNetwork(valueNetwork);
-
-                    queueSizeChannel.emit(queueSize);
 
                     metricsChannels.versionDelta.postMessage(
                         batches.map(b => getNetworkVersion(policyNetwork) - b.version),
