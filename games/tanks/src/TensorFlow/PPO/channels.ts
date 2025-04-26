@@ -14,6 +14,5 @@ export const learningRateChannel = createChannel<number>('learning-rate-channel'
 
 export const learnerStateChannel = createChannel<{
     version: number,
-    training: boolean,
     queueSize: number
 }>('learner-state-channel');

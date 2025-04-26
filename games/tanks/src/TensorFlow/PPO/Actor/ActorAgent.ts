@@ -9,6 +9,7 @@ import { loadNetworkFromDB, Model } from '../../Models/Transfer.ts';
 import { learnerStateChannel } from '../channels.ts';
 import {
     filter,
+    first,
     firstValueFrom,
     map,
     mergeMap,
@@ -18,12 +19,12 @@ import {
     retry,
     shareReplay,
     startWith,
-    take,
     tap,
     timer,
 } from 'rxjs';
 import { fromPromise } from 'rxjs/internal/observable/innerFrom';
 import { getNetworkVersion } from '../../Common/utils.ts';
+import { disposeNetwork } from '../../Models/Utils.ts';
 
 export class ActorAgent {
     private memory: Memory;
@@ -38,7 +39,7 @@ export class ActorAgent {
         this.memory = new Memory();
 
         const learnerState$ = learnerStateChannel.obs.pipe(
-            startWith({ version: 0, queueSize: 0, training: false }),
+            startWith({ version: 0, queueSize: 0 }),
             shareReplay(1),
         );
 
@@ -109,14 +110,11 @@ export class ActorAgent {
 
     public sync() {
         return firstValueFrom(this.backpressure$.pipe(
-            mergeMap(() => this.hasNewNetworks$),
-            mergeMap((hasNew) => {
-                if (!hasNew) return of(this.shouldInitNetworks());
-                return this.load().pipe(map(() => false));
-            }),
-            filter((shouldWait) => !shouldWait),
+            first(),
+            mergeMap(() => this.shouldInitNetworks() ? of(true) : this.hasNewNetworks$),
+            first(),
+            mergeMap((shouldLoad) => shouldLoad ? this.load() : of(null)),
             retry({ delay: 1000 }),
-            take(1),
         ));
     }
 
@@ -132,7 +130,7 @@ export class ActorAgent {
                 }
 
                 return setModelState(this.policyNetwork ?? createPolicyNetwork(), policyNetwork).finally(() => {
-                    policyNetwork.dispose();
+                    disposeNetwork(policyNetwork);
                 });
             }),
             tap({
@@ -147,7 +145,7 @@ export class ActorAgent {
     }
 
     private resetState() {
-        this.policyNetwork?.dispose();
+        this.policyNetwork && disposeNetwork(this.policyNetwork);
         this.policyNetwork = undefined;
         this.version = -1;
     }

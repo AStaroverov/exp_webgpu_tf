@@ -6,6 +6,7 @@ import { get } from 'lodash';
 import { setModelState } from '../../Common/modelsCopy.ts';
 import { getNetworkVersion, patientAction } from '../../Common/utils.ts';
 import { LearnBatch } from './createLearnerManager.ts';
+import { disposeNetwork } from '../../Models/Utils.ts';
 
 export function createLearnerAgent({ modelName, createNetwork, trainNetwork }: {
     modelName: Model,
@@ -53,7 +54,7 @@ export async function upsertNetwork(modelName: Model, outNetwork: tf.LayersModel
 
         await setModelState(outNetwork, network);
 
-        network.dispose();
+        disposeNetwork(network);
 
         console.log('Models loaded successfully');
         return true;

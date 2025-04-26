@@ -1,4 +1,5 @@
 import { loadNetworkFromDB, loadNetworkFromFS, Model, saveNetworkToDB } from '../Transfer.ts';
+import { disposeNetwork } from '../Utils.ts';
 
 export function restoreModels(path: string) {
     return Promise.all([
@@ -9,8 +10,8 @@ export function restoreModels(path: string) {
             throw new Error('Failed to load models');
         }
 
-        policyNetwork.dispose();
-        valueNetwork.dispose();
+        disposeNetwork(policyNetwork);
+        disposeNetwork(valueNetwork);
     }).catch(error => {
         console.warn('Error loading models from DB', error);
 
@@ -26,8 +27,8 @@ export function restoreModels(path: string) {
                 saveNetworkToDB(policyNetwork, Model.Policy),
                 saveNetworkToDB(valueNetwork, Model.Value),
             ]).then(() => {
-                policyNetwork.dispose();
-                valueNetwork.dispose();
+                disposeNetwork(policyNetwork);
+                disposeNetwork(valueNetwork);
             }).catch(error => {
                 console.error('Error saving models to DB', error);
             });

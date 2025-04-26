@@ -21,6 +21,7 @@ export type LearnBatch = Batch & {
 export function createLearnerManager() {
     const policyNetwork = createPolicyNetwork();
     const valueNetwork = createValueNetwork();
+
     let lastBufferTime = 0;
     let queueSize = 0;
 
@@ -29,12 +30,6 @@ export function createLearnerManager() {
         tap(() => (queueSize++)),
         concatMap((batches) => {
             console.info('Start processing batch');
-            learnerStateChannel.emit({
-                version: getNetworkVersion(policyNetwork),
-                training: true,
-                queueSize,
-            });
-
             const startTime = Date.now();
             const waitTime = lastBufferTime === 0 ? 0 : startTime - lastBufferTime;
             lastBufferTime = startTime;
@@ -44,6 +39,11 @@ export function createLearnerManager() {
                 upsertNetwork(Model.Value, valueNetwork),
             ]).pipe(
                 map((): LearnBatch => {
+                    learnerStateChannel.emit({
+                        version: getNetworkVersion(policyNetwork),
+                        queueSize,
+                    });
+
                     metricsChannels.versionDelta.postMessage(
                         batches.map(b => getNetworkVersion(policyNetwork) - b.version),
                     );
@@ -74,7 +74,6 @@ export function createLearnerManager() {
                             console.info('Batch processed successfully');
                             learnerStateChannel.emit({
                                 version: getNetworkVersion(policyNetwork),
-                                training: false,
                                 queueSize,
                             });
 

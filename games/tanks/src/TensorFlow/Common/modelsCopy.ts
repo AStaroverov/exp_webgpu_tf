@@ -20,7 +20,11 @@ export async function setModelState(targetModel: tf.LayersModel, sourceModel: tf
     if (sourceOptimizer && targetOptimizer) {
         const targetWeights = await targetOptimizer.getWeights();
         const sourceWeights = await sourceOptimizer.getWeights();
-        await targetOptimizer.setWeights(sourceWeights);
+        const clonedWeights = sourceWeights.map(nt => ({
+            name: nt.name,
+            tensor: nt.tensor.clone(),
+        }));
+        await targetOptimizer.setWeights(clonedWeights);
         tf.dispose(targetWeights.map(nt => nt.tensor));
         tf.dispose(sourceWeights.map(nt => nt.tensor));
         // @ts-ignore
