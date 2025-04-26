@@ -26,7 +26,7 @@ function trainValue(network: tf.LayersModel, batch: LearnBatch) {
     const mbc = ceil(batch.size / mbs);
     const version = getNetworkVersion(network);
 
-    console.log(`[Train Policy]: Iteration ${ version },
+    console.log(`[Train Value]: Iteration ${ version },
          Sum batch size: ${ batch.size },
          Mini batch count: ${ mbc } by ${ mbs }`);
 

@@ -3,8 +3,7 @@ import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
 import { throwingError } from '../../../../../lib/throwingError.ts';
 
 export function getNetworkVersion(network: tf.LayersModel): number {
-    const version = network.optimizer.iterations ?? throwingError('Network version is not defined');
-    return version;
+    return network.optimizer.iterations ?? throwingError('Network version is not defined');
 }
 
 export function getNetworkLearningRate(network: tf.LayersModel): number {
@@ -22,7 +21,7 @@ export async function patientAction<T>(action: () => T | Promise<T>, attempts: n
                 throw error;
             }
 
-            await new Promise(resolve => macroTasks.addTimeout(resolve, 1000));
+            await new Promise(resolve => macroTasks.addTimeout(resolve, 30));
         }
     }
 }

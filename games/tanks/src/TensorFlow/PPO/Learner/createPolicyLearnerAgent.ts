@@ -92,14 +92,13 @@ function trainPolicy(network: tf.LayersModel, batch: LearnBatch) {
     );
 
     learningRateChannel.emit(lr);
-    metricsChannels.lr.postMessage(lr);
 
     macroTasks.addTimeout(() => {
+        metricsChannels.lr.postMessage(lr);
         metricsChannels.kl.postMessage(klList);
         metricsChannels.policyLoss.postMessage(policyLossList);
     }, 0);
 }
-
 
 function createPolicyBatch(batch: LearnBatch, indices: number[]) {
     const states = indices.map(i => batch.states[i]);
