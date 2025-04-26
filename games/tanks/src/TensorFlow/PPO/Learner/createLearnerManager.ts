@@ -65,7 +65,7 @@ export function createLearnerManager() {
                         }, { [Model.Policy]: false, [Model.Value]: false }),
                         first((state) => state[Model.Policy] && state[Model.Value]),
                         tap(() => {
-                            queueSize--;
+                            queueSizeChannel.emit(queueSize--);
                             console.info('Batch processed successfully');
 
                             const endTime = Date.now();
