@@ -15,7 +15,7 @@ const queueSize$ = queueSizeChannel.obs.pipe(
 );
 const backpressure$ = race([
     timer(60_000),
-    queueSize$.pipe(filter((queueSize) => queueSize < 2)),
+    queueSize$.pipe(filter((queueSize) => queueSize < 3)),
 ]).pipe(first());
 
 export class ActorAgent {
