@@ -1,4 +1,4 @@
-import { PhysicalWorld } from '../index.ts';
+import { PhysicalWorld } from '../Physical/initPhysicalWorld.ts';
 import { World } from '../../../../src/ECS/world.ts';
 
 export const GameDI: {

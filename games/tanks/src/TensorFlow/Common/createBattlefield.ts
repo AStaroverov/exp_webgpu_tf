@@ -1,4 +1,4 @@
-import { createGame } from '../../../createGame.ts';
+import { createGame } from '../../createGame.ts';
 import { Tank } from '../../ECS/Components/Tank.ts';
 import { random, randomRangeFloat, randomSign } from '../../../../../lib/random.ts';
 import { GameDI } from '../../DI/GameDI.ts';

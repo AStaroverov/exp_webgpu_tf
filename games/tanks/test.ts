@@ -1,4 +1,4 @@
-import { createGame } from './createGame.ts';
+import { createGame } from './src/createGame.ts';
 import { PLAYER_REFS } from './src/consts.ts';
 import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
 import { GameDI } from './src/DI/GameDI.ts';
