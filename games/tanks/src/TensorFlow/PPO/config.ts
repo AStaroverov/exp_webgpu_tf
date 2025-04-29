@@ -43,7 +43,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Learning parameters
     clipNorm: 20,
     // PPO-specific parameters
-    gamma: 0.95,
+    gamma: 0.90,
     policyEpochs: 6,
     policyClipRatio: 0.2,
     policyEntropyCoeff: 0.01,
@@ -76,7 +76,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     workerCount: isMac ? 4 : 6,
     // Training control
     savePath: isMac ? 'APPO_VTRACE' : 'APPO_VTRACE_V1',
-    // fsModelPath: 'v11-wo-vtrace',
+    fsModelPath: 'v20',
 };
 
 // Current active experiment
