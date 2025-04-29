@@ -96,15 +96,20 @@ export class PlayerManager {
             const stop = frameTasks.addInterval(() => {
                 frame++;
 
+                const agentTanks = game.getAgenTanks();
                 const currentTanks = game.getTanks();
-                const isEpisodeDone = currentTanks.length <= 1 || game.getTeamsCount() <= 1 || frame > maxFramesCount;
+                const isEpisodeDone =
+                    currentTanks.length <= 1
+                    || agentTanks.length <= 0
+                    || game.getTeamsCount() <= 1
+                    || frame > maxFramesCount;
 
                 const shouldAction = frame % shouldEvery === 0;
                 const shouldReward = isEpisodeDone || ((frame - (shouldEvery - 1)) % shouldEvery === 0);
                 TenserFlowDI.shouldCollectState = (frame + 1) % shouldEvery === 0;
 
                 if (shouldAction) {
-                    regardedTanks = currentTanks;
+                    regardedTanks = agentTanks;
 
                     // Update each tank's RL controller
                     for (const tankEid of regardedTanks) {

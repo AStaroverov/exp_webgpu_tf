@@ -83,8 +83,9 @@ export class ActorManager {
                 for (let i = 0; i < 100; i++) {
                     frame++;
 
+                    const agentTanks = game.getAgenTanks();
                     const currentTanks = game.getTanks();
-                    const gameOverByTankCount = currentTanks.length <= 1;
+                    const gameOverByTankCount = agentTanks.length <= 0 || currentTanks.length <= 1;
                     const gameOverByTeamWin = game.getTeamsCount() === 1;
                     const gameOverByTime = frame > maxFramesCount;
                     const gameOver = gameOverByTankCount || gameOverByTeamWin || gameOverByTime;
@@ -95,7 +96,7 @@ export class ActorManager {
                     TenserFlowDI.shouldCollectState = (frame + 1) % shouldEvery === 0;
 
                     if (shouldAction) {
-                        regardedTanks = currentTanks;
+                        regardedTanks = agentTanks;
 
                         for (const tankEid of regardedTanks) {
                             this.updateTankBehaviour(tankEid, width, height, frame, isWarmup);

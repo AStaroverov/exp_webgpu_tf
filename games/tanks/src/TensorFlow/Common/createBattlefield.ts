@@ -1,16 +1,15 @@
 import { createGame } from '../../createGame.ts';
 import { Tank } from '../../ECS/Components/Tank.ts';
-import { random, randomRangeFloat, randomSign } from '../../../../../lib/random.ts';
+import { random, randomRangeFloat } from '../../../../../lib/random.ts';
 import { GameDI } from '../../DI/GameDI.ts';
 import { TANK_RADIUS } from './consts.ts';
-import { TankController } from '../../ECS/Components/TankController.ts';
 import { query } from 'bitecs';
 import { TenserFlowDI } from '../../DI/TenserFlowDI.ts';
 import { TeamRef } from '../../ECS/Components/TeamRef.ts';
 import { createTank } from '../../ECS/Entities/Tank/CreateTank.ts';
 import { createPlayer } from '../../ECS/Entities/Player.ts';
 
-const MAX_PADDING = 100;
+const MAX_PADDING = 0;
 
 export async function createBattlefield(tanksCount: number, withRender = false, withPlayer = false) {
     TenserFlowDI.enabled = true;
@@ -35,8 +34,6 @@ export async function createBattlefield(tanksCount: number, withRender = false, 
         return false;
     };
 
-    // Создаем танки с проверкой минимального расстояния
-    let teamZeroCount = Math.floor(tanksCount / 2);
     for (let i = 0; i < tanksCount; i++) {
         let x: number, y: number;
 
@@ -46,8 +43,8 @@ export async function createBattlefield(tanksCount: number, withRender = false, 
             y = randomRangeFloat(TANK_RADIUS - padding, height - TANK_RADIUS + padding);
         } while (isTooClose(x, y));
 
-        const teamId = teamZeroCount-- > 0 ? 0 : 1;
-        const eid = createTank({
+        const teamId = i % 2;
+        createTank({
             playerId: createPlayer(teamId),
             teamId,
             x,
@@ -55,12 +52,6 @@ export async function createBattlefield(tanksCount: number, withRender = false, 
             rotation: Math.PI * randomRangeFloat(0, 2), // Случайный поворот от 0 до 2π
             color: [teamId, randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1],
         });
-        TankController.setTurretDir$(
-            eid,
-            randomSign() * random(),
-            randomSign() * random(),
-        );
-
         tankPositions.push({ x, y });
     }
 
@@ -78,5 +69,10 @@ export async function createBattlefield(tanksCount: number, withRender = false, 
         return teamsCount.size;
     };
 
-    return { ...game, gameTick, getTanks, getTeamsCount };
+    const activeAgents = new Set([getTanks()[0], ...getTanks().filter(() => random() > 0.85)]);
+    const getAgenTanks = () => {
+        return getTanks().filter((id) => activeAgents.has(id));
+    };
+
+    return { ...game, gameTick, getTanks, getAgenTanks, getTeamsCount };
 }
