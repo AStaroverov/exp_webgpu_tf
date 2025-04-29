@@ -15,6 +15,7 @@ import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
 import { RingBuffer } from 'ring-buffer-ts';
 import { learningRateChannel } from '../channels.ts';
 import { LearnBatch } from './createLearnerManager.ts';
+import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
 
 export function createPolicyLearnerAgent() {
     return createLearnerAgent({
@@ -46,8 +47,8 @@ function trainPolicy(network: tf.LayersModel, batch: LearnBatch) {
     };
 
     const klSize = floor(mbs * ceil(mbc / 3));
-    const klList: Promise<number>[] = [];
-    const policyLossList: Promise<number>[] = [];
+    const klList: tf.Tensor[] = [];
+    const policyLossList: tf.Tensor[] = [];
 
     for (let i = 0; i < CONFIG.policyEpochs; i++) {
         for (let j = 0; j < mbc; j++) {
@@ -76,39 +77,40 @@ function trainPolicy(network: tf.LayersModel, batch: LearnBatch) {
         }
 
         const lkBatch = getKLBatch(klSize);
-        const klPromise = computeKullbackLeiblerExact(
+        const klTensor = computeKullbackLeiblerExact(
             network,
             createInputTensors(lkBatch.states),
             tf.tensor2d(flatTypedArray(lkBatch.mean), [lkBatch.mean.length, lkBatch.mean[0].length]),
             tf.tensor2d(flatTypedArray(lkBatch.logStd), [lkBatch.logStd.length, lkBatch.logStd[0].length]),
         );
 
-        klList.push(klPromise);
-        klPromise.then((kl) => {
-            if (kl > CONFIG.klConfig.max) {
-                console.warn(`[Train]: KL divergence was too high: ${ kl }, in epoch ${ i }`);
-                forceExitChannel.postMessage(null);
-            }
-        });
+        klList.push(klTensor);
     }
 
-    Promise.all([
-        Promise.all(klList),
-        Promise.all(policyLossList),
-    ]).then(([klList, policyLossList]) => {
-        klHistory.add(...klList);
+    return onReadyRead()
+        .then(() => Promise.all([
+            Promise.all(klList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
+            Promise.all(policyLossList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
+        ]))
+        .then(([klList, policyLossList]) => {
+            if (klList.some(kl => kl > CONFIG.klConfig.max)) {
+                console.warn(`[Train]: KL divergence was too high`);
+                forceExitChannel.postMessage(null);
+            }
 
-        const lr = getDynamicLearningRate(
-            mean(klHistory.toArray()),
-            getNetworkLearningRate(network),
-        );
+            klHistory.add(...klList);
 
-        learningRateChannel.emit(lr);
+            const lr = getDynamicLearningRate(
+                mean(klHistory.toArray()),
+                getNetworkLearningRate(network),
+            );
 
-        metricsChannels.lr.postMessage(lr);
-        metricsChannels.kl.postMessage(klList);
-        metricsChannels.policyLoss.postMessage(policyLossList);
-    });
+            learningRateChannel.emit(lr);
+
+            metricsChannels.lr.postMessage(lr);
+            metricsChannels.kl.postMessage(klList);
+            metricsChannels.policyLoss.postMessage(policyLossList);
+        });
 }
 
 function createPolicyBatch(batch: LearnBatch, indices: number[]) {

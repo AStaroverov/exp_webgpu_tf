@@ -19,7 +19,6 @@ export function syncUnwrapTensor<T extends Float32Array | Uint8Array | Int32Arra
 
 export async function asyncUnwrapTensor<T extends Float32Array | Uint8Array | Int32Array>(tensor: tf.Tensor): Promise<T> {
     try {
-        await onReadyRead();
         const value = await tensor.data() as T;
         if (!arrayHealthCheck(value)) {
             throw new Error('Invalid tensor value');
@@ -34,4 +33,5 @@ export function onReadyRead() {
     if (tf.getBackend() === 'webgpu') {
         return (tf.backend() as WebGPUBackend).device.queue.onSubmittedWorkDone();
     }
+    return Promise.resolve();
 }

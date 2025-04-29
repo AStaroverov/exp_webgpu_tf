@@ -9,7 +9,7 @@ import { flatTypedArray } from '../Common/flat.ts';
 import { normalize } from '../../../../../lib/math.ts';
 import { Batch } from '../Common/Memory.ts';
 import { CONFIG } from './config.ts';
-import { asyncUnwrapTensor, syncUnwrapTensor } from '../Common/Tensor.ts';
+import { asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../Common/Tensor.ts';
 import { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
 
 export function trainPolicyNetwork(
@@ -22,8 +22,8 @@ export function trainPolicyNetwork(
     entropyCoeff: number,
     clipNorm: number,
     returnCost: boolean,
-): undefined | Promise<number> {
-    const tLoss = tf.tidy(() => {
+): undefined | tf.Tensor {
+    return tf.tidy(() => {
         return optimize(network.optimizer, () => {
             const predicted = network.predict(states) as tf.Tensor;
             const { mean, logStd } = parsePredict(predicted);
@@ -44,8 +44,6 @@ export function trainPolicyNetwork(
             return totalLoss as tf.Scalar;
         }, { clipNorm, returnCost });
     });
-
-    return tLoss ? asyncUnwrapTensor(tLoss).then(v => v[0]) : undefined;
 }
 
 export function trainValueNetwork(
@@ -98,8 +96,8 @@ export function computeKullbackLeiblerExact(
     states: tf.Tensor[],
     oldMean: tf.Tensor,
     oldLogStd: tf.Tensor,
-): Promise<number> {
-    const kl = tf.tidy(() => {
+): tf.Tensor {
+    return tf.tidy(() => {
         const predicted = policyNetwork.predict(states) as tf.Tensor;
         const { mean: newMean, logStd: newLogStd } = parsePredict(predicted);
 
@@ -115,8 +113,6 @@ export function computeKullbackLeiblerExact(
 
         return kl;
     });
-
-    return asyncUnwrapTensor(kl).then((v) => v[0]);
 }
 
 export function act(
@@ -323,5 +319,5 @@ export function networkHealthCheck(network: tf.LayersModel): Promise<boolean> {
         return (network.predict(getRandomInputTensors()) as tf.Tensor).squeeze();
     });
 
-    return asyncUnwrapTensor(tData).then(() => true);
+    return onReadyRead().then(() => asyncUnwrapTensor(tData)).then(() => true);
 }

@@ -10,7 +10,7 @@ import { getNetwork } from '../../Models/Utils.ts';
 export async function createLearnerAgent({ modelName, createNetwork, trainNetwork }: {
     modelName: Model,
     createNetwork: () => tf.LayersModel,
-    trainNetwork: (network: tf.LayersModel, batch: LearnBatch) => void,
+    trainNetwork: (network: tf.LayersModel, batch: LearnBatch) => unknown | Promise<unknown>,
 }) {
     let network = await getNetwork(modelName, () => {
         const newNetwork = createNetwork();
@@ -24,8 +24,7 @@ export async function createLearnerAgent({ modelName, createNetwork, trainNetwor
 
     learnMemoryChannel.response(async (batch: LearnBatch) => {
         try {
-            trainNetwork(network, batch);
-
+            await trainNetwork(network, batch);
             await patientAction(() => networkHealthCheck(network));
             await patientAction(() => saveNetworkToDB(network, modelName));
 
