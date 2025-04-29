@@ -9,7 +9,7 @@ setConsolePrefix(`[LEARNER_VALUE]`);
 // Main initialization function
 async function initSystem() {
     // Initialize TensorFlow.js
-    const tfInitialized = await initTensorFlow('wasm');
+    const tfInitialized = await initTensorFlow('webgpu');
     if (!tfInitialized) {
         throw new Error('Failed to initialize TensorFlow.js');
     }

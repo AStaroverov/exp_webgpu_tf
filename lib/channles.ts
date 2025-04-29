@@ -23,13 +23,13 @@ export function createChannel<Req, Res = unknown>(name: string) {
 
     return {
         emit: (data: Req) => {
-            request.next(data);
             crossRequest.postMessage(data);
+            request.next(data);
         },
         obs: request$,
         request: (data: Req, { withCross = true }: { withCross?: boolean } = {}) => {
-            request.next(data);
             withCross && crossRequest.postMessage(data);
+            request.next(data);
             return response$;
         },
         response: (cb: (data: Req) => Res | Promise<Res>) => {
