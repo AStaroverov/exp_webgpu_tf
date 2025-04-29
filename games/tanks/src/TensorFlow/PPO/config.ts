@@ -44,13 +44,13 @@ export const DEFAULT_EXPERIMENT: Config = {
     clipNorm: 20,
     // PPO-specific parameters
     gamma: 0.90,
-    policyEpochs: 6,
+    policyEpochs: 8,
     policyClipRatio: 0.2,
     policyEntropyCoeff: 0.01,
 
     valueEpochs: 6,
     valueClipRatio: 0.4,
-    valueLossCoeff: 1,
+    valueLossCoeff: 0.5,
 
     klConfig: {
         target: 0.01,
@@ -66,7 +66,7 @@ export const DEFAULT_EXPERIMENT: Config = {
         max: 5e-3,
     },
 
-    batchSize: isMac ? 500 : 4000,
+    batchSize: isMac ? 500 : 10_000,
     miniBatchSize: isMac ? 128 : 512,
 
     // Training parameters
@@ -76,7 +76,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     workerCount: isMac ? 4 : 6,
     // Training control
     savePath: isMac ? 'APPO_VTRACE' : 'APPO_VTRACE_V1',
-    fsModelPath: 'v20',
+    // fsModelPath: 'v20',
 };
 
 // Current active experiment
