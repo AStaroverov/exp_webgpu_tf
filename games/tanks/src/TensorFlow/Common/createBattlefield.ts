@@ -69,7 +69,7 @@ export async function createBattlefield(tanksCount: number, withRender = false, 
         return teamsCount.size;
     };
 
-    const activeAgents = new Set([getTanks()[0], ...getTanks().filter(() => random() > 0.85)]);
+    const activeAgents = new Set([getTanks()[0]]); // , ...getTanks().filter(() => random() > 0.85)
     const getAgenTanks = () => {
         return getTanks().filter((id) => activeAgents.has(id));
     };

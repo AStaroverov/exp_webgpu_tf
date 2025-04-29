@@ -66,14 +66,14 @@ export const DEFAULT_EXPERIMENT: Config = {
         max: 5e-3,
     },
 
-    batchSize: isMac ? 500 : 10_000,
-    miniBatchSize: isMac ? 128 : 512,
+    batchSize: isMac ? 500 : 2_000,
+    miniBatchSize: isMac ? 128 : 128,
 
     // Training parameters
     warmupFrames: 100,
     episodeFrames: 1200, // usually produce 250 samples
     // Workers
-    workerCount: isMac ? 4 : 6,
+    workerCount: isMac ? 4 : 10,
     // Training control
     savePath: isMac ? 'APPO_VTRACE' : 'APPO_VTRACE_V1',
     // fsModelPath: 'v20',
