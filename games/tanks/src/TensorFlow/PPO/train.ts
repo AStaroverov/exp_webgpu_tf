@@ -9,12 +9,8 @@ import { flatTypedArray } from '../Common/flat.ts';
 import { normalize } from '../../../../../lib/math.ts';
 import { Batch } from '../Common/Memory.ts';
 import { CONFIG } from './config.ts';
-import { syncUnwrapTensor } from '../Common/Tensor.ts';
+import { asyncUnwrapTensor, syncUnwrapTensor } from '../Common/Tensor.ts';
 import { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
-
-// if (isTabThread) {
-//     import('./v-trace.test.ts');
-// }
 
 export function trainPolicyNetwork(
     network: tf.LayersModel,
@@ -26,7 +22,7 @@ export function trainPolicyNetwork(
     entropyCoeff: number,
     clipNorm: number,
     returnCost: boolean,
-): undefined | number {
+): undefined | Promise<number> {
     const tLoss = tf.tidy(() => {
         return optimize(network.optimizer, () => {
             const predicted = network.predict(states) as tf.Tensor;
@@ -49,7 +45,7 @@ export function trainPolicyNetwork(
         }, { clipNorm, returnCost });
     });
 
-    return tLoss ? syncUnwrapTensor(tLoss)[0] : undefined;
+    return tLoss ? asyncUnwrapTensor(tLoss).then(v => v[0]) : undefined;
 }
 
 export function trainValueNetwork(
@@ -102,8 +98,8 @@ export function computeKullbackLeiblerExact(
     states: tf.Tensor[],
     oldMean: tf.Tensor,
     oldLogStd: tf.Tensor,
-): number {
-    return tf.tidy(() => {
+): Promise<number> {
+    const kl = tf.tidy(() => {
         const predicted = policyNetwork.predict(states) as tf.Tensor;
         const { mean: newMean, logStd: newLogStd } = parsePredict(predicted);
 
@@ -117,8 +113,10 @@ export function computeKullbackLeiblerExact(
         const klPerDim = logTerm.add(numerator.div(denominator)).sub(0.5);
         const kl = klPerDim.sum(1).mean();
 
-        return kl.dataSync()[0];
+        return kl;
     });
+
+    return asyncUnwrapTensor(kl).then((v) => v[0]);
 }
 
 export function act(
@@ -130,7 +128,7 @@ export function act(
     logStd: Float32Array,
     logProb: number,
 } {
-    const result = tf.tidy(() => {
+    return tf.tidy(() => {
         const predicted = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
         const { mean, logStd } = parsePredict(predicted);
         const std = logStd.exp();
@@ -140,31 +138,16 @@ export function act(
         const logProb = computeLogProb(actions, mean, std);
 
         return {
-            actions: actions.dataSync() as Float32Array,
-            mean: mean.dataSync() as Float32Array,
-            logStd: logStd.dataSync() as Float32Array,
-            logProb: logProb.dataSync()[0],
+            actions: syncUnwrapTensor(actions) as Float32Array,
+            mean: syncUnwrapTensor(mean) as Float32Array,
+            logStd: syncUnwrapTensor(logStd) as Float32Array,
+            logProb: syncUnwrapTensor(logProb)[0],
         };
     });
-
-    if (!arrayHealthCheck(result.actions)) {
-        throw new Error('Invalid actions data');
-    }
-    if (!arrayHealthCheck(result.mean)) {
-        throw new Error('Invalid mean data');
-    }
-    if (!arrayHealthCheck(result.logStd)) {
-        throw new Error('Invalid std data');
-    }
-    if (Number.isNaN(result.logProb)) {
-        throw new Error('Invalid logProb data');
-    }
-
-    return result;
 }
 
 export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { actions: Float32Array } {
-    const result = tf.tidy(() => {
+    return tf.tidy(() => {
         const predicted = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
         const { mean, logStd } = parsePredict(predicted);
 
@@ -172,16 +155,10 @@ export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { ac
         const actions = mean.add(noise);
 
         return {
-            actions: actions.dataSync() as Float32Array,
+            actions: syncUnwrapTensor(actions) as Float32Array,
             // actions: mean.dataSync() as Float32Array,
         };
     });
-
-    if (!arrayHealthCheck(result.actions)) {
-        throw new Error('Invalid actions data');
-    }
-
-    return result;
 }
 
 function optimize(
@@ -341,14 +318,10 @@ function getRandomInputTensors() {
     return randomInputTensors;
 }
 
-export function networkHealthCheck(network: tf.LayersModel): boolean {
-    const data = tf.tidy(() => {
-        return (network.predict(getRandomInputTensors()) as tf.Tensor).squeeze().dataSync();
-    }) as Float32Array;
+export function networkHealthCheck(network: tf.LayersModel): Promise<boolean> {
+    const tData = tf.tidy(() => {
+        return (network.predict(getRandomInputTensors()) as tf.Tensor).squeeze();
+    });
 
-    return arrayHealthCheck(data);
-}
-
-export function arrayHealthCheck(array: Float32Array | Uint8Array | Int32Array): boolean {
-    return array.every(Number.isFinite);
+    return asyncUnwrapTensor(tData).then(() => true);
 }

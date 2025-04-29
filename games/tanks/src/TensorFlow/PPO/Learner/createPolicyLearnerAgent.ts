@@ -10,7 +10,6 @@ import { createInputTensors } from '../../Common/InputTensors.ts';
 import { ReplayBuffer } from '../../Common/ReplayBuffer.ts';
 import { ceil, floor, mean } from '../../../../../../lib/math.ts';
 import { forceExitChannel, metricsChannels } from '../../Common/channels.ts';
-import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { flatTypedArray } from '../../Common/flat.ts';
 import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
 import { RingBuffer } from 'ring-buffer-ts';
@@ -47,57 +46,69 @@ function trainPolicy(network: tf.LayersModel, batch: LearnBatch) {
     };
 
     const klSize = floor(mbs * ceil(mbc / 3));
-    const klList: number[] = [];
-    const policyLossList: number[] = [];
+    const klList: Promise<number>[] = [];
+    const policyLossList: Promise<number>[] = [];
 
     for (let i = 0; i < CONFIG.policyEpochs; i++) {
         for (let j = 0; j < mbc; j++) {
             const mBatch = getPolicyBatch(mbs, j);
 
-            tf.tidy(() => {
-                const policyLoss = trainPolicyNetwork(
-                    network,
-                    createInputTensors(mBatch.states),
-                    tf.tensor2d(flatTypedArray(mBatch.actions), [mBatch.actions.length, mBatch.actions[0].length]),
-                    tf.tensor1d(mBatch.logProbs),
-                    tf.tensor1d(mBatch.advantages),
-                    CONFIG.policyClipRatio, CONFIG.policyEntropyCoeff, CONFIG.clipNorm,
-                    j === mbc - 1,
-                );
-                policyLoss && policyLossList.push(policyLoss);
-            });
+            const tStates = createInputTensors(mBatch.states);
+            const tActions = tf.tensor2d(flatTypedArray(mBatch.actions), [mBatch.actions.length, mBatch.actions[0].length]);
+            const tOldLogProbs = tf.tensor1d(mBatch.logProbs);
+            const tAdvantages = tf.tensor1d(mBatch.advantages);
+
+            const policyLoss = trainPolicyNetwork(
+                network,
+                tStates,
+                tActions,
+                tOldLogProbs,
+                tAdvantages,
+                CONFIG.policyClipRatio, CONFIG.policyEntropyCoeff, CONFIG.clipNorm,
+                j === mbc - 1,
+            );
+            policyLoss && policyLossList.push(policyLoss);
+
+            tf.dispose(tStates);
+            tActions.dispose();
+            tOldLogProbs.dispose();
+            tAdvantages.dispose();
         }
 
         const lkBatch = getKLBatch(klSize);
-        const kl = computeKullbackLeiblerExact(
+        const klPromise = computeKullbackLeiblerExact(
             network,
             createInputTensors(lkBatch.states),
             tf.tensor2d(flatTypedArray(lkBatch.mean), [lkBatch.mean.length, lkBatch.mean[0].length]),
             tf.tensor2d(flatTypedArray(lkBatch.logStd), [lkBatch.logStd.length, lkBatch.logStd[0].length]),
         );
 
-        if (kl > CONFIG.klConfig.max) {
-            console.warn(`[Train]: KL divergence was too high: ${ kl }, in epoch ${ i }`);
-            forceExitChannel.postMessage(null);
-            break;
-        }
-
-        klHistory.add(kl);
-        klList.push(kl);
+        klList.push(klPromise);
+        klPromise.then((kl) => {
+            if (kl > CONFIG.klConfig.max) {
+                console.warn(`[Train]: KL divergence was too high: ${ kl }, in epoch ${ i }`);
+                forceExitChannel.postMessage(null);
+            }
+        });
     }
 
-    const lr = getDynamicLearningRate(
-        mean(klHistory.toArray()),
-        getNetworkLearningRate(network),
-    );
+    Promise.all([
+        Promise.all(klList),
+        Promise.all(policyLossList),
+    ]).then(([klList, policyLossList]) => {
+        klHistory.add(...klList);
 
-    learningRateChannel.emit(lr);
+        const lr = getDynamicLearningRate(
+            mean(klHistory.toArray()),
+            getNetworkLearningRate(network),
+        );
 
-    macroTasks.addTimeout(() => {
+        learningRateChannel.emit(lr);
+
         metricsChannels.lr.postMessage(lr);
         metricsChannels.kl.postMessage(klList);
         metricsChannels.policyLoss.postMessage(policyLossList);
-    }, 0);
+    });
 }
 
 function createPolicyBatch(batch: LearnBatch, indices: number[]) {
