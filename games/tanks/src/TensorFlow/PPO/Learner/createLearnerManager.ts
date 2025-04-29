@@ -54,7 +54,7 @@ export function createLearnerManager() {
                     return learnBatch;
                 }),
                 mergeMap((batch) => {
-                    return learnMemoryChannel.request(batch).pipe(
+                    return learnMemoryChannel.request(batch, { withCross: false }).pipe(
                         scan((acc, envelope) => {
                             if ('version' in envelope) {
                                 acc[envelope.modelName] = true;

@@ -8,9 +8,9 @@ import { createInputTensors } from '../../Common/InputTensors.ts';
 import { ReplayBuffer } from '../../Common/ReplayBuffer.ts';
 import { ceil } from '../../../../../../lib/math.ts';
 import { metricsChannels } from '../../Common/channels.ts';
-import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { getNetworkVersion } from '../../Common/utils.ts';
 import { LearnBatch } from './createLearnerManager.ts';
+import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
 
 export function createValueLearnerAgent() {
     return createLearnerAgent({
@@ -30,31 +30,42 @@ function trainValue(network: tf.LayersModel, batch: LearnBatch) {
          Sum batch size: ${ batch.size },
          Mini batch count: ${ mbc } by ${ mbs }`);
 
-    const valueLossList: number[] = [];
+    const valueLossList: tf.Tensor[] = [];
 
     for (let i = 0; i < CONFIG.valueEpochs; i++) {
         for (let j = 0; j < mbc; j++) {
             const indices = rb.getSample(mbs, j * mbs, (j + 1) * mbs);
             const mBatch = createValueBatch(batch, indices);
 
-            tf.tidy(() => {
-                const loss = trainValueNetwork(
-                    network,
-                    createInputTensors(mBatch.states),
-                    tf.tensor1d(mBatch.returns),
-                    tf.tensor1d(mBatch.values),
-                    CONFIG.valueClipRatio, CONFIG.valueLossCoeff, CONFIG.clipNorm,
-                    j === mbc - 1,
-                );
+            const tStates = createInputTensors(mBatch.states);
+            const tReturns = tf.tensor1d(mBatch.returns);
+            const tValues = tf.tensor1d(mBatch.values);
 
-                loss && valueLossList.push(loss);
-            });
+            const loss = trainValueNetwork(
+                network,
+                tStates,
+                tReturns,
+                tValues,
+                CONFIG.valueClipRatio, CONFIG.valueLossCoeff, CONFIG.clipNorm,
+                j === mbc - 1,
+            );
+            loss && valueLossList.push(loss);
+
+            tf.dispose(tStates);
+            tReturns.dispose();
+            tValues.dispose();
         }
     }
 
-    macroTasks.addTimeout(() => {
-        metricsChannels.valueLoss.postMessage(valueLossList);
-    }, 0);
+    return onReadyRead()
+        .then(() =>
+            Promise.all(
+                valueLossList.map((t) => asyncUnwrapTensor(t).then((v) => v[0])),
+            ),
+        )
+        .then((valueLossList) => {
+            metricsChannels.valueLoss.postMessage(valueLossList);
+        });
 }
 
 function createValueBatch(batch: LearnBatch, indices: number[]) {

@@ -55,8 +55,8 @@ export function trainValueNetwork(
     lossCoeff: number,
     clipNorm: number,
     returnCost: boolean,
-): undefined | number {
-    const tLoss = tf.tidy(() => {
+): undefined | tf.Tensor {
+    return tf.tidy(() => {
         return optimize(network.optimizer, () => {
             const newValues = (network.predict(states) as tf.Tensor).squeeze();
             const newValuesClipped = oldValues.add(
@@ -70,8 +70,6 @@ export function trainValueNetwork(
             return finalValueLoss as tf.Scalar;
         }, { clipNorm, returnCost });
     });
-
-    return tLoss ? syncUnwrapTensor(tLoss)[0] : undefined;
 }
 
 export function computeKullbackLeiblerAprox(

@@ -4,6 +4,7 @@ import { setConsolePrefix } from '../Common/console.ts';
 import '../Common/uiUtils.ts';
 import { createLearnerManager } from './Learner/createLearnerManager.ts';
 import { createPolicyLearnerAgent } from './Learner/createPolicyLearnerAgent.ts';
+import { createValueLearnerAgent } from './Learner/createValueLearnerAgent.ts';
 
 setConsolePrefix(`[LEARNER_POLICY]`);
 
@@ -17,6 +18,7 @@ async function initSystem() {
 
     createLearnerManager();
     createPolicyLearnerAgent();
+    createValueLearnerAgent();
 }
 
 initSystem();

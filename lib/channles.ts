@@ -27,9 +27,9 @@ export function createChannel<Req, Res = unknown>(name: string) {
             crossRequest.postMessage(data);
         },
         obs: request$,
-        request: (data: Req) => {
+        request: (data: Req, { withCross = true }: { withCross?: boolean } = {}) => {
             request.next(data);
-            crossRequest.postMessage(data);
+            withCross && crossRequest.postMessage(data);
             return response$;
         },
         response: (cb: (data: Req) => Res | Promise<Res>) => {
