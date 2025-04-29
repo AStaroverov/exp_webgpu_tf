@@ -76,15 +76,22 @@ function trainPolicy(network: tf.LayersModel, batch: LearnBatch) {
             tAdvantages.dispose();
         }
 
+        // KL
         const lkBatch = getKLBatch(klSize);
-        const klTensor = computeKullbackLeiblerExact(
-            network,
-            createInputTensors(lkBatch.states),
-            tf.tensor2d(flatTypedArray(lkBatch.mean), [lkBatch.mean.length, lkBatch.mean[0].length]),
-            tf.tensor2d(flatTypedArray(lkBatch.logStd), [lkBatch.logStd.length, lkBatch.logStd[0].length]),
-        );
+        const tStates = createInputTensors(lkBatch.states);
+        const tMean = tf.tensor2d(flatTypedArray(lkBatch.mean), [lkBatch.mean.length, lkBatch.mean[0].length]);
+        const tLogStd = tf.tensor2d(flatTypedArray(lkBatch.logStd), [lkBatch.logStd.length, lkBatch.logStd[0].length]);
 
-        klList.push(klTensor);
+        klList.push(computeKullbackLeiblerExact(
+            network,
+            tStates,
+            tMean,
+            tLogStd,
+        ));
+
+        tf.dispose(tStates);
+        tMean.dispose();
+        tLogStd.dispose();
     }
 
     return onReadyRead()
