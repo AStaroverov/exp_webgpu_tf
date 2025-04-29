@@ -2,13 +2,16 @@ import { getIndexedDBModelPath } from './Utils.ts';
 import { CONFIG } from '../PPO/config.ts';
 import * as tf from '@tensorflow/tfjs';
 import { isBrowser } from '../../../../../lib/detect.ts';
+import { onReadyRead } from '../Common/Tensor.ts';
 
 export enum Model {
     Policy = 'policy-model',
     Value = 'value-model',
 }
 
-export function saveNetworkToDB(network: tf.LayersModel, name: Model) {
+export async function saveNetworkToDB(network: tf.LayersModel, name: Model) {
+    await onReadyRead();
+
     if (isBrowser) {
         return network.save(getIndexedDBModelPath(name, CONFIG), { includeOptimizer: true });
     }

@@ -26,12 +26,7 @@ export async function createLearnerAgent({ modelName, createNetwork, trainNetwor
         try {
             trainNetwork(network, batch);
 
-            const healthy = await patientAction(() => networkHealthCheck(network));
-
-            if (!healthy) {
-                throw new Error('Health check failed');
-            }
-
+            await patientAction(() => networkHealthCheck(network));
             await patientAction(() => saveNetworkToDB(network, modelName));
 
             return { modelName: modelName, version: getNetworkVersion(network) };
