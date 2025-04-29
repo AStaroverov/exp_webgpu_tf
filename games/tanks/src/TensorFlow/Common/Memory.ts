@@ -144,7 +144,7 @@ export class SubMemory {
             throw new Error('States and dones length mismatch');
         }
 
-        const deltaReward = this.actionRewards.map((aR, i) => 0.1 * (aR - this.stateRewards[i]));
+        const rewards = this.actionRewards.map((aR, i) => 0.1 * aR);
         const dones = this.dones.map(done => done ? 1.0 : 0.0);
         dones[dones.length - 1] = 1.0;
 
@@ -155,7 +155,7 @@ export class SubMemory {
             mean: (this.mean),
             logStd: (this.logStd),
             logProbs: new Float32Array(this.logProbs),
-            rewards: new Float32Array(deltaReward),
+            rewards: new Float32Array(rewards),
             dones: new Float32Array(dones),
         };
     }
