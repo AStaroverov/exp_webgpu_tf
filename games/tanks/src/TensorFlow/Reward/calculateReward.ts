@@ -14,13 +14,13 @@ const WEIGHTS = Object.freeze({
     TEAM: {
         SCORE: 2,
     },
-    TEAM_MULTIPLIER: 3,
+    TEAM_MULTIPLIER: 2,
 
     COMMON: {
         SCORE: 1,
         HEALTH: 1,
     },
-    COMMON_MULTIPLIER: 3,
+    COMMON_MULTIPLIER: 2,
 
     AIM: {
         QUALITY: 1.0,
