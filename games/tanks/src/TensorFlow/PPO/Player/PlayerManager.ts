@@ -24,7 +24,8 @@ type Game = Awaited<ReturnType<typeof createBattlefield>>;
 export class PlayerManager {
     public agent!: PlayerAgent;
 
-    private tankRewards = new Map<EntityId, number>();
+    private tankStateRewards = new Map<EntityId, number>();
+    private tankDeltaRewards = new Map<EntityId, number>();
 
     constructor() {
 
@@ -47,7 +48,7 @@ export class PlayerManager {
     }
 
     public getReward(tankEid: EntityId) {
-        return this.tankRewards.get(tankEid) || 0;
+        return this.tankDeltaRewards.get(tankEid) || 0;
     }
 
     private async init() {
@@ -111,9 +112,14 @@ export class PlayerManager {
                 if (shouldAction) {
                     regardedTanks = agentTanks;
 
+                    this.tankStateRewards.clear();
                     // Update each tank's RL controller
                     for (const tankEid of regardedTanks) {
                         this.updateTankBehaviour(tankEid, width, height);
+                        this.tankStateRewards.set(
+                            tankEid,
+                            calculateReward(tankEid, GameDI.width, GameDI.height),
+                        );
                     }
                 }
 
@@ -121,9 +127,12 @@ export class PlayerManager {
 
                 if (shouldReward) {
                     for (const tankEid of regardedTanks) {
-                        this.tankRewards.set(
+                        if (!this.tankStateRewards.has(tankEid)) continue;
+
+                        this.tankDeltaRewards.set(
                             tankEid,
-                            calculateReward(tankEid, GameDI.width, GameDI.height),
+                            calculateReward(tankEid, GameDI.width, GameDI.height)
+                            - this.tankStateRewards.get(tankEid)!,
                         );
                     }
                 }

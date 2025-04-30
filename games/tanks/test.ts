@@ -75,7 +75,7 @@ frameTasks.addInterval(() => {
     gameTick(16.66);
 
     if (i > 10 && i % 10 === 6) {
-        calculateReward(tanks[0], GameDI.width, GameDI.height);
+        console.log(calculateReward(tanks[0], GameDI.width, GameDI.height));
     }
 
     // const enemyTankPosition = getMatrixTranslation(GlobalTransform.matrix.getBatch(enemyEid));
