@@ -40,8 +40,8 @@ const WEIGHTS = Object.freeze({
     MAP_BORDER_MULTIPLIER: 10,
 
     DISTANCE_KEEPING: {
-        BASE: 1.0,
-        PENALTY: -0.8,
+        BASE: 0.2,
+        PENALTY: -1.0,
     },
     DISTANCE_KEEPING_MULTIPLIER: 10,
 
