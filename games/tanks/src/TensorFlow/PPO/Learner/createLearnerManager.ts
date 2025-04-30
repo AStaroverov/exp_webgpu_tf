@@ -18,7 +18,7 @@ export type LearnBatch = Batch & {
 };
 
 export function createLearnerManager() {
-    let lastBufferTime = 0;
+    let lastEndTime = 0;
     let queueSize = 0;
 
     actorMemoryChannel.obs.pipe(
@@ -27,8 +27,7 @@ export function createLearnerManager() {
         concatMap((batches) => {
             console.info('Start processing batch');
             const startTime = Date.now();
-            const waitTime = lastBufferTime === 0 ? 0 : startTime - lastBufferTime;
-            lastBufferTime = startTime;
+            const waitTime = lastEndTime === 0 ? 0 : startTime - lastEndTime;
 
             return forkJoin([
                 getNetwork(Model.Policy),
@@ -68,7 +67,7 @@ export function createLearnerManager() {
                             queueSizeChannel.emit(queueSize--);
                             console.info('Batch processed successfully');
 
-                            const endTime = Date.now();
+                            lastEndTime = Date.now();
 
                             metricsChannels.rewards.postMessage(batch.rewards);
                             metricsChannels.values.postMessage(batch.values);
@@ -77,7 +76,7 @@ export function createLearnerManager() {
                             metricsChannels.advantages.postMessage(batch.advantages);
 
                             waitTime > 0 && metricsChannels.waitTime.postMessage(waitTime / 1000);
-                            metricsChannels.trainTime.postMessage((endTime - startTime) / 1000);
+                            metricsChannels.trainTime.postMessage((lastEndTime - startTime) / 1000);
                         }),
                     );
                 }),
