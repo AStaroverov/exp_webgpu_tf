@@ -11,6 +11,7 @@ import { BULLET_SPEED } from '../../ECS/Components/Bullet.ts';
 import { getTankHealth, getTankScore } from '../../ECS/Entities/Tank/TankUtils.ts';
 
 const WEIGHTS = Object.freeze({
+    // Rear rewards, huge size in delta view
     TEAM: {
         SCORE: 2,
     },
@@ -22,6 +23,7 @@ const WEIGHTS = Object.freeze({
     },
     COMMON_MULTIPLIER: 2,
 
+    // Permament rewards, small size in delta view
     AIM: {
         QUALITY: 1.0,
         SHOOTING_ENEMIES: 1.0,
@@ -29,25 +31,25 @@ const WEIGHTS = Object.freeze({
         SHOOTING_BAD_AIM: -0.1,
         SHOOTING_GOOD_AIM_PENALTY: -0.2,
     },
-    AIM_MULTIPLIER: 1,
+    AIM_MULTIPLIER: 10,
 
     MAP_BORDER: {
         BASE: 0.2,
         PENALTY: -1.0,
     },
-    MAP_BORDER_MULTIPLIER: 1,
+    MAP_BORDER_MULTIPLIER: 10,
 
     DISTANCE_KEEPING: {
         BASE: 1.0,
         PENALTY: -0.8,
     },
-    DISTANCE_KEEPING_MULTIPLIER: 1,
+    DISTANCE_KEEPING_MULTIPLIER: 10,
 
     BULLET_AVOIDANCE: {
         PENALTY: -0.6,
         AVOID_QUALITY: 0.6,
     },
-    BULLET_AVOIDANCE_MULTIPLIER: 1,
+    BULLET_AVOIDANCE_MULTIPLIER: 10,
 });
 
 export type ComponentRewards = {
