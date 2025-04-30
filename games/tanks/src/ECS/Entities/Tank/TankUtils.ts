@@ -10,6 +10,8 @@ import { CollisionGroup } from '../../../Physical/createRigid.ts';
 import { min, smoothstep } from '../../../../../../lib/math.ts';
 import { PlayerRef } from '../../Components/PlayerRef.ts';
 import { Score } from '../../Components/Score.ts';
+import { removeComponent } from 'bitecs';
+import { TeamRef } from '../../Components/TeamRef.ts';
 
 export function removeTankComponentsWithoutParts(tankEid: number) {
     const aimEid = Tank.aimEid[tankEid];
@@ -21,15 +23,20 @@ export function removeTankComponentsWithoutParts(tankEid: number) {
     scheduleRemoveEntity(tankEid, false);
 }
 
-export function tearOffTankPart(tankPartEid: number) {
-    const parentEid = Parent.id[tankPartEid];
-    const jointPid = TankPart.jointPid[tankPartEid];
+export function tearOffTankPart(tankPartEid: number, shouldBreakConnection: boolean = true, { world } = GameDI) {
+    removeComponent(world, tankPartEid, TeamRef);
+    removeComponent(world, tankPartEid, PlayerRef);
 
-    if (jointPid >= 0) {
+    const parentEid = Parent.id[tankPartEid];
+    if (shouldBreakConnection) {
         Children.removeChild(parentEid, tankPartEid);
-        removePhysicalJoint(jointPid);
-        resetCollisionsTo(tankPartEid, CollisionGroup.ALL & ~CollisionGroup.TANK_BASE);
+    }
+
+    const jointPid = TankPart.jointPid[tankPartEid];
+    if (jointPid > 0) {
         resetTankPartJointComponent(tankPartEid);
+        resetCollisionsTo(tankPartEid, CollisionGroup.ALL & ~CollisionGroup.TANK_BASE);
+        removePhysicalJoint(jointPid);
     }
 }
 
@@ -42,7 +49,7 @@ export function getTankCurrentPartsCount(tankEid: number) {
     return Children.entitiesCount[tankEid] + Children.entitiesCount[Tank.turretEId[tankEid]];
 }
 
-export const HEALTH_THRESHOLD = 0.75;
+export const HEALTH_THRESHOLD = 0.85;
 
 // return from 0 to 1
 export function getTankHealth(tankEid: number): number {

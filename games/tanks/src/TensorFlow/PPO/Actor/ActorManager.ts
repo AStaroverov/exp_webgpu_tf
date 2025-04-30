@@ -99,7 +99,7 @@ export class ActorManager {
                         regardedTanks = agentTanks;
 
                         for (const tankEid of regardedTanks) {
-                            this.updateTankBehaviour(tankEid, width, height, frame, isWarmup);
+                            this.updateTankBehaviour(tankEid, width, height, isWarmup);
                         }
                     }
 
@@ -116,7 +116,6 @@ export class ActorManager {
                                 tankEid,
                                 width,
                                 height,
-                                frame,
                                 gameOver,
                             );
                         }
@@ -136,7 +135,6 @@ export class ActorManager {
         tankEid: number,
         width: number,
         height: number,
-        frame: number,
         isWarmup: boolean,
     ) {
         // Create input vector for the current state
@@ -151,7 +149,6 @@ export class ActorManager {
                 tankEid,
                 width,
                 height,
-                frame,
             );
 
             this.agent.rememberAction(
@@ -170,7 +167,6 @@ export class ActorManager {
         tankEid: number,
         width: number,
         height: number,
-        frame: number,
         gameOver: boolean,
     ) {
         const isDead = getTankHealth(tankEid) <= 0;
@@ -179,7 +175,6 @@ export class ActorManager {
             tankEid,
             width,
             height,
-            frame,
         );
 
         this.agent.rememberReward(

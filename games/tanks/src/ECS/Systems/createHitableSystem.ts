@@ -8,6 +8,7 @@ import { TankPart } from '../Components/TankPart.ts';
 import { tearOffTankPart } from '../Entities/Tank/TankUtils.ts';
 import { Score } from '../Components/Score.ts';
 import { TeamRef } from '../Components/TeamRef.ts';
+import { PlayerRef } from '../Components/PlayerRef.ts';
 
 export function createHitableSystem({ world } = GameDI) {
     const hitableChanges = createChangeDetector(world, [onSet(Hitable)]);
@@ -23,15 +24,21 @@ export function createHitableSystem({ world } = GameDI) {
             const damage = Hitable.damage[tankPartEid];
             if (damage <= 0) continue;
 
-            tearOffTankPart(tankPartEid);
-
             const secondEid = Hitable.secondEid[tankPartEid];
-            if (!hasComponent(world, tankPartEid, TeamRef) || !hasComponent(world, secondEid, TeamRef)) continue;
 
-            const tankPartTeamId = TeamRef.id[tankPartEid];
-            const secondTeamId = TeamRef.id[secondEid];
+            if (
+                hasComponent(world, tankPartEid, TeamRef)
+                && hasComponent(world, secondEid, TeamRef)
+                && hasComponent(world, secondEid, PlayerRef)
+            ) {
+                const tankPartTeamId = TeamRef.id[tankPartEid];
+                const secondTeamId = TeamRef.id[secondEid];
+                const playerId = PlayerRef.id[secondEid];
 
-            Score.updateScore(secondTeamId, tankPartTeamId === secondTeamId ? -1 : 1);
+                Score.updateScore(playerId, tankPartTeamId === secondTeamId ? -1 : 1);
+            }
+
+            tearOffTankPart(tankPartEid, true);
         }
 
         const bulletIds = query(world, [Bullet, Hitable]);

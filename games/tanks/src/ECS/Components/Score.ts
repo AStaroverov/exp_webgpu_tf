@@ -8,15 +8,15 @@ export const Score = component({
     negativeScore: TypedArray.f64(delegate.defaultSize),
     positiveScore: TypedArray.f64(delegate.defaultSize),
 
-    addComponent(world: World, eid: EntityId): void {
-        addComponent(world, eid, Score);
+    addComponent(world: World, playerEid: EntityId): void {
+        addComponent(world, playerEid, Score);
     },
 
-    updateScore(tankEid: number, delta: number) {
+    updateScore(playerEid: number, delta: number) {
         if (delta > 0) {
-            Score.positiveScore[tankEid] += delta;
+            Score.positiveScore[playerEid] += delta;
         } else {
-            Score.negativeScore[tankEid] += delta;
+            Score.negativeScore[playerEid] += delta;
         }
     },
 });

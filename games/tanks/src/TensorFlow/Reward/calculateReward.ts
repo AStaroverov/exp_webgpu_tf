@@ -9,19 +9,18 @@ import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../..
 import { EntityId } from 'bitecs';
 import { BULLET_SPEED } from '../../ECS/Components/Bullet.ts';
 import { getTankHealth, getTankScore } from '../../ECS/Entities/Tank/TankUtils.ts';
-import { clamp } from 'lodash-es';
 
 const WEIGHTS = Object.freeze({
     TEAM: {
-        SCORE: 0.2,
+        SCORE: 2,
     },
-    TEAM_MULTIPLIER: 1,
+    TEAM_MULTIPLIER: 2,
 
     COMMON: {
-        SCORE: 0.8,
-        HEALTH: 0.6,
+        SCORE: 1,
+        HEALTH: 1,
     },
-    COMMON_MULTIPLIER: 1,
+    COMMON_MULTIPLIER: 2,
 
     AIM: {
         QUALITY: 1.0,
@@ -30,25 +29,25 @@ const WEIGHTS = Object.freeze({
         SHOOTING_BAD_AIM: -0.1,
         SHOOTING_GOOD_AIM_PENALTY: -0.2,
     },
-    AIM_MULTIPLIER: 1,
+    AIM_MULTIPLIER: 0.5,
 
     MAP_BORDER: {
         BASE: 0.2,
         PENALTY: -1.0,
     },
-    MAP_BORDER_MULTIPLIER: 1,
+    MAP_BORDER_MULTIPLIER: 0.5,
 
     DISTANCE_KEEPING: {
         BASE: 1.0,
         PENALTY: -0.8,
     },
-    DISTANCE_KEEPING_MULTIPLIER: 1,
+    DISTANCE_KEEPING_MULTIPLIER: 0.5,
 
     BULLET_AVOIDANCE: {
         PENALTY: -0.6,
         AVOID_QUALITY: 0.6,
     },
-    BULLET_AVOIDANCE_MULTIPLIER: 1,
+    BULLET_AVOIDANCE_MULTIPLIER: 0.5,
 });
 
 export type ComponentRewards = {
@@ -104,9 +103,8 @@ export function calculateReward(
     tankEid: number,
     width: number,
     height: number,
-    frame: number,
 ): number {
-    const currentScore = clamp(getTankScore(tankEid) / frame, -5, 5);
+    const currentScore = getTankScore(tankEid);
     const currentHealth = getTankHealth(tankEid);
 
     const isShooting = TankController.shoot[tankEid] > 0;
@@ -216,9 +214,8 @@ export function getTeamAdvantageScore(
     alpha = 1,
     beta = 1,
 ): number {
-    const tanksCount = state.alliesCount + state.enemiesCount;
-    const normCount = (state.alliesCount - state.enemiesCount) / tanksCount;
-    const normHP = (state.alliesTotalHealth - state.enemiesTotalHealth) / tanksCount;
+    const normCount = (state.alliesCount - state.enemiesCount);
+    const normHP = (state.alliesTotalHealth - state.enemiesTotalHealth);
 
     // Combine the two normalised components
     return WEIGHTS.TEAM.SCORE * (alpha * normCount + beta * normHP);

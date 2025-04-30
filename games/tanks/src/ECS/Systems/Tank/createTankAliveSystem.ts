@@ -1,16 +1,8 @@
 import { GameDI } from '../../../DI/GameDI.ts';
 import { Tank } from '../../Components/Tank.ts';
 import { Children } from '../../Components/Children.ts';
-import { CollisionGroup } from '../../../Physical/createRigid.ts';
-import { resetCollisionsTo } from '../../../Physical/collision.ts';
-import { removePhysicalJoint } from '../../../Physical/joint.ts';
 import { query } from 'bitecs';
-import { TankPart } from '../../Components/TankPart.ts';
-import {
-    getTankHealth,
-    removeTankComponentsWithoutParts,
-    resetTankPartJointComponent,
-} from '../../Entities/Tank/TankUtils.ts';
+import { getTankHealth, removeTankComponentsWithoutParts, tearOffTankPart } from '../../Entities/Tank/TankUtils.ts';
 
 export function createTankAliveSystem({ world } = GameDI) {
     return () => {
@@ -23,27 +15,18 @@ export function createTankAliveSystem({ world } = GameDI) {
                 // turret
                 const turretEid = Tank.turretEId[tankEid];
                 for (let i = 0; i < Children.entitiesCount[turretEid]; i++) {
-                    breakPartFromTank(turretEid, i);
+                    const eid = Children.entitiesIds.get(turretEid, i);
+                    tearOffTankPart(eid, false);
                 }
+                Children.removeAllChildren(turretEid);
                 // tank parts
                 for (let i = 0; i < Children.entitiesCount[tankEid]; i++) {
-                    breakPartFromTank(tankEid, i);
+                    const partEid = Children.entitiesIds.get(tankEid, i);
+                    tearOffTankPart(partEid, false);
                 }
+                Children.removeAllChildren(tankEid);
                 removeTankComponentsWithoutParts(tankEid);
             }
         }
     };
-}
-
-function breakPartFromTank(eid: number, index: number) {
-    const tankPartEid = Children.entitiesIds.get(eid, index);
-    const jointPid = TankPart.jointPid[tankPartEid];
-
-    if (jointPid === 0) return;
-
-    // remove joints
-    removePhysicalJoint(jointPid);
-    resetTankPartJointComponent(tankPartEid);
-    // change collision group
-    resetCollisionsTo(tankPartEid, CollisionGroup.ALL & ~CollisionGroup.TANK_BASE);
 }

@@ -123,7 +123,7 @@ export class PlayerManager {
                     for (const tankEid of regardedTanks) {
                         this.tankRewards.set(
                             tankEid,
-                            calculateReward(tankEid, GameDI.width, GameDI.height, frame),
+                            calculateReward(tankEid, GameDI.width, GameDI.height),
                         );
                     }
                 }
