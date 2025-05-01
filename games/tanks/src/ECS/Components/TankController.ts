@@ -16,6 +16,12 @@ export const TankController = component(({
     // Methods
     addComponent(world: World, eid: number) {
         addComponent(world, eid, TankController);
+        TankController.shoot[eid] = 0;
+        TankController.shootCooldown[eid] = 0;
+        TankController.move[eid] = 0;
+        TankController.rotation[eid] = 0;
+        TankController.turretDir.set(eid, 0, 0);
+        TankController.turretDir.set(eid, 1, 0);
     },
     shouldShoot(eid: number): boolean {
         return TankController.shoot[eid] > 0 && TankController.shootCooldown[eid] <= 0;
