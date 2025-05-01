@@ -23,7 +23,7 @@ const store = {
     versionDelta: new CompressedBuffer(1_000, 5),
     // successRatioN
     ...Array.from({ length: 10 }, (_, i) => i).reduce((acc, i) => {
-        acc[`successRatio${ i as SuccessRatioIndex }`] = new CompressedBuffer(100, 5);
+        acc[`successRatio${ i as SuccessRatioIndex }`] = new CompressedBuffer(500, 5);
         return acc;
     }, {} as Record<`successRatio${ SuccessRatioIndex }`, CompressedBuffer>),
 };
@@ -83,7 +83,7 @@ function drawTab0() {
     const tab = 'Tab 0';
     const renderSuccessRatio = (index: SuccessRatioIndex) => {
         const successRatio = store[`successRatio${ index }`].toArray();
-        const successRatioMA = calculateMovingAverage(successRatio, 10);
+        const successRatioMA = calculateMovingAverage(successRatio, 100);
         tfvis.render.scatterplot({ name: 'Success Ratio ' + index, tab }, {
             values: [successRatio, successRatioMA],
             series: ['Success Ratio', 'MA'],
