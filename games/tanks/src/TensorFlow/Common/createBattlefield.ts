@@ -1,6 +1,6 @@
 import { createGame } from '../../createGame.ts';
 import { Tank } from '../../ECS/Components/Tank.ts';
-import { random, randomRangeFloat, randomRangeInt } from '../../../../../lib/random.ts';
+import { random, randomRangeFloat } from '../../../../../lib/random.ts';
 import { GameDI } from '../../DI/GameDI.ts';
 import { TANK_RADIUS } from './consts.ts';
 import { query } from 'bitecs';
@@ -69,19 +69,5 @@ export async function createBattlefield(tanksCount: number, withRender = false, 
         return teamsCount.size;
     };
 
-    const initedTanks = getTanks();
-    const activeAgents = new Set();
-    const activeTeam = randomRangeInt(0, 1);
-
-    activeAgents.add(initedTanks[activeTeam]);
-
-    if (tanksCount >= 4 && random() > 0.9) {
-        activeAgents.add(initedTanks[activeTeam + 2]);
-    }
-
-    const getAgenTanks = () => {
-        return getTanks().filter((id) => activeAgents.has(id));
-    };
-
-    return { ...game, activeTeam, gameTick, getTanks, getAgenTanks, getTeamsCount };
+    return { ...game, gameTick, getTanks, getTeamsCount };
 }

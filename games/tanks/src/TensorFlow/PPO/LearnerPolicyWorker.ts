@@ -7,16 +7,6 @@ import { createLearnerManager } from './Learner/createLearnerManager.ts';
 
 setConsolePrefix(`[LEARNER_POLICY]`);
 
-// Main initialization function
-async function initSystem() {
-    // Initialize TensorFlow.js
-    const tfInitialized = await initTensorFlow('webgpu');
-    if (!tfInitialized) {
-        throw new Error('Failed to initialize TensorFlow.js');
-    }
-
-    createLearnerManager();
-    createPolicyLearnerAgent();
-}
-
-initSystem();
+await initTensorFlow('webgpu');
+createLearnerManager();
+createPolicyLearnerAgent();

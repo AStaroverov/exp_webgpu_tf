@@ -1,19 +1,28 @@
-import { Batch } from '../Common/Memory.ts';
+import { AgentMemoryBatch } from '../Common/Memory.ts';
 import { createChannel } from '../../../../../lib/channles.ts';
-import { LearnBatch } from './Learner/createLearnerManager.ts';
+import { LearnData } from './Learner/createLearnerManager.ts';
 import { Model } from '../Models/Transfer.ts';
 
-export const actorMemoryChannel = createChannel<{
-    version: number,
-    memories: Batch,
-    successRatio: number
-}>('memory-channel');
+export type EpisodeSample = {
+    memoryBatch: AgentMemoryBatch,
+    networkVersion: number,
+    scenarioIndex: number,
+    successRatio: number,
+}
 
-export const learnMemoryChannel = createChannel<
-    LearnBatch,
+export const episodeSampleChannel = createChannel<EpisodeSample>('episodeSampleChannel');
+
+export const learnProcessChannel = createChannel<
+    LearnData,
     { modelName: Model, version: number } | { modelName: Model, error: string }
 >('learn-memory-channel');
 
+export const queueSizeChannel = createChannel<number>('queueSizeChannel');
+
 export const learningRateChannel = createChannel<number>('learningRateChannel');
 
-export const queueSizeChannel = createChannel<number>('queueSizeChannel');
+export type CurriculumState = {
+    mapScenarioIndexToSuccessRatio: Record<number, number>,
+}
+
+export const curriculumStateChannel = createChannel<CurriculumState>('curriculumStateChannel');

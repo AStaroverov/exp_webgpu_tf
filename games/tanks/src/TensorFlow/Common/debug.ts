@@ -7,12 +7,12 @@ import { Color } from '../../../../../src/ECS/Components/Common.ts';
 import { getDrawState } from './uiUtils.ts';
 import { frameTasks } from '../../../../../lib/TasksScheduler/frameTasks.ts';
 import { CONFIG } from '../PPO/config.ts';
-import { PlayerManager } from '../PPO/Player/PlayerManager.ts';
 import { TeamRef } from '../../ECS/Components/TeamRef.ts';
 import { drawMetrics } from '../Metrics/Browser';
+import { VisTestEpisodeManager } from '../PPO/VisTest/VisTestEpisodeManager.ts';
 
 // Generate debug visualization using HTML and CSS
-export function createDebugVisualization(container: HTMLElement, manager: PlayerManager) {
+export function createDebugVisualization(container: HTMLElement, manager: VisTestEpisodeManager) {
     // Create main container
     const debugContainer = document.createElement('div');
     debugContainer.className = 'debug-container';
@@ -63,16 +63,16 @@ export function createDebugVisualization(container: HTMLElement, manager: Player
     return debugContainer;
 }
 
-export function createCommonDebug(manager: PlayerManager) {
+export function createCommonDebug(manager: VisTestEpisodeManager) {
     return () => {
         return `
             <div>Workers: ${ CONFIG.workerCount }</div>
-            <div>Version: ${ manager.agent.getVersion() } </div>
+            <div>Version: ${ manager.getVersion() } </div>
         `;
     };
 }
 
-export function createTanksDebug(manager: PlayerManager) {
+export function createTanksDebug(manager: VisTestEpisodeManager) {
     return () => {
         if (!getDrawState() || !GameDI.world) return '';
 

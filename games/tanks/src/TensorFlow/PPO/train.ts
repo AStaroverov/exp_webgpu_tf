@@ -7,7 +7,7 @@ import { Scalar } from '@tensorflow/tfjs-core/dist/tensor';
 import { random } from '../../../../../lib/random.ts';
 import { flatTypedArray } from '../Common/flat.ts';
 import { normalize } from '../../../../../lib/math.ts';
-import { Batch } from '../Common/Memory.ts';
+import { AgentMemoryBatch } from '../Common/Memory.ts';
 import { CONFIG } from './config.ts';
 import { asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../Common/Tensor.ts';
 import { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
@@ -196,7 +196,7 @@ function optimize(
 export function computeVTraceTargets(
     policyNetwork: tf.LayersModel,
     valueNetwork: tf.LayersModel,
-    batch: Batch,
+    batch: AgentMemoryBatch,
     gamma: number = CONFIG.gamma,
     clipRho: number = 1.0,
     clipC: number = 1.0,

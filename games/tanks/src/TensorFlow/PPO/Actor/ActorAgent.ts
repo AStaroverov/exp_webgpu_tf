@@ -1,13 +1,16 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
-import { Memory } from '../../Common/Memory.ts';
 import { act } from '../train.ts';
-import { InputArrays } from '../../Common/InputArrays.ts';
+import { prepareInputArrays } from '../../Common/InputArrays.ts';
 import { Model } from '../../Models/Transfer.ts';
 import { queueSizeChannel } from '../channels.ts';
-import { filter, first, firstValueFrom, mergeMap, race, retry, shareReplay, startWith, timer } from 'rxjs';
-import { getNetworkVersion } from '../../Common/utils.ts';
+import { filter, first, firstValueFrom, mergeMap, race, retry, shareReplay, startWith, tap, timer } from 'rxjs';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
+import { getNetworkVersion } from '../../Common/utils.ts';
+import { applyActionToTank } from '../../Common/applyActionToTank.ts';
+import { calculateReward } from '../../Reward/calculateReward.ts';
+import { AgentMemory, AgentMemoryBatch } from '../../Common/Memory.ts';
+import { getTankHealth } from '../../../ECS/Entities/Tank/TankUtils.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -18,75 +21,104 @@ const backpressure$ = race([
     queueSize$.pipe(filter((queueSize) => queueSize < 3)),
 ]).pipe(first());
 
-export class ActorAgent {
-    private memory: Memory;
+export type TankAgent = {
+    tankEid: number;
+
+    sync(): Promise<void>;
+    dispose(): void;
+    getVersion(): number;
+
+    hasMemory(): boolean;
+    getMemory(): AgentMemory;
+    getMemoryBatch(): AgentMemoryBatch;
+
+    updateTankBehaviour(width: number, height: number): void;
+    memorizeTankBehaviour(width: number, height: number, gameOver: boolean): void;
+}
+
+export class ActorAgent implements TankAgent {
+    private memory = new AgentMemory();
     private policyNetwork?: tf.LayersModel;
 
-    constructor() {
-        this.memory = new Memory();
+    constructor(public readonly tankEid: number) {
     }
 
-    public static create() {
-        return new ActorAgent();
+    public static create(tankEid: number): TankAgent {
+        return new ActorAgent(tankEid);
     }
 
-    dispose() {
-        this.disposeMemory();
+    public getVersion() {
+        return this.policyNetwork != null ? getNetworkVersion(this.policyNetwork) : 0;
     }
 
-    rememberAction(
-        tankId: number,
-        state: InputArrays,
-        stateReward: number,
-        action: Float32Array,
-        mean: Float32Array,
-        logStd: Float32Array,
-        logProb: number,
-    ) {
-        this.memory.addFirstPart(tankId, state, stateReward, action, mean, logStd, logProb);
+    public hasMemory() {
+        return true;
     }
 
-    rememberReward(tankId: number, reward: number, done: boolean) {
-        this.memory.updateSecondPart(tankId, reward, done);
+    public getMemory() {
+        return this.memory;
     }
 
-    readMemory() {
-        return {
-            version: getNetworkVersion(this.policyNetwork!),
-            memories: this.memory.getBatch(),
-        };
+    public getMemoryBatch() {
+        return this.memory.getBatch();
     }
 
-    disposeMemory() {
+    public dispose() {
+        this.policyNetwork && disposeNetwork(this.policyNetwork);
+        this.policyNetwork = undefined;
         this.memory.dispose();
-    }
-
-    act(state: InputArrays): {
-        actions: Float32Array,
-        mean: Float32Array,
-        logStd: Float32Array,
-        logProb: number,
-    } {
-        return act(
-            this.policyNetwork!,
-            state,
-        );
     }
 
     public sync() {
         return firstValueFrom(backpressure$.pipe(
+            tap(() => this.dispose()),
             mergeMap(() => this.load()),
             retry({ delay: 1000 }),
         ));
     }
 
-    private async load() {
-        this.resetState();
-        this.policyNetwork = await getNetwork(Model.Policy);
+    public updateTankBehaviour(
+        width: number,
+        height: number,
+    ) {
+        const state = prepareInputArrays(this.tankEid, width, height);
+        const result = act(this.policyNetwork!, state);
+
+        applyActionToTank(this.tankEid, result.actions);
+
+        const stateReward = calculateReward(
+            this.tankEid,
+            width,
+            height,
+        );
+
+        this.memory.addFirstPart(
+            state,
+            stateReward,
+            result.actions,
+            result.mean,
+            result.logStd,
+            result.logProb,
+        );
     }
 
-    private resetState() {
-        this.policyNetwork && disposeNetwork(this.policyNetwork);
-        this.policyNetwork = undefined;
+    public memorizeTankBehaviour(
+        width: number,
+        height: number,
+        gameOver: boolean,
+    ) {
+        const isDead = getTankHealth(this.tankEid) <= 0;
+        const isDone = gameOver || isDead;
+        const reward = calculateReward(
+            this.tankEid,
+            width,
+            height,
+        );
+
+        this.memory.updateSecondPart(reward, isDone);
+    }
+
+    private async load() {
+        this.policyNetwork = await getNetwork(Model.Policy);
     }
 }

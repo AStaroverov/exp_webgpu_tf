@@ -29,7 +29,6 @@ export type Config = {
 
     batchSize: number;              // Batch size for worker
     miniBatchSize: number,
-    warmupFrames: number;              // Maximum number of frames to train on
     episodeFrames: number;              // Maximum number of frames to train on
     // Workers
     workerCount: number;                // Number of parallel workers
@@ -66,14 +65,13 @@ export const DEFAULT_EXPERIMENT: Config = {
         max: 5e-3,
     },
 
-    batchSize: isMac ? 500 : 2_000,
+    batchSize: isMac ? 300 : 2_000,
     miniBatchSize: isMac ? 128 : 128,
 
     // Training parameters
-    warmupFrames: 100,
-    episodeFrames: 2000, // usually produce 250 samples
+    episodeFrames: 2000,
     // Workers
-    workerCount: isMac ? 4 : 10,
+    workerCount: isMac ? 3 : 10,
     // Training control
     savePath: isMac ? 'APPO_VTRACE' : 'APPO_VTRACE_V1',
     // fsModelPath: 'v20',

@@ -19,9 +19,7 @@ export const metricsChannels = {
     policyLoss: new BroadcastChannel('policyLoss'),
     trainTime: new BroadcastChannel('trainTime'),
     waitTime: new BroadcastChannel('waitTime'),
+    batchSize: new BroadcastChannel('batchSize'),
     versionDelta: new BroadcastChannel('versionDelta'),
     successRatio: new BroadcastChannel('successRatio'),
-    batchSize: new BroadcastChannel('batchSize'),
-    prbAlpha: new BroadcastChannel('prbAlpha'),
-    prbBeta: new BroadcastChannel('prbBeta'),
 };

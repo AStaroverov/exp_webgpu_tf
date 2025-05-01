@@ -1,9 +1,11 @@
 import * as tfvis from '@tensorflow/tfjs-vis';
-import { isObject, throttle } from 'lodash-es';
+import { isObject, mapValues, throttle } from 'lodash-es';
 import { metricsChannels } from '../../Common/channels.ts';
 import { getAgentLog, setAgentLog } from './store.ts';
 import { CompressedBuffer } from './CompressedBuffer.ts';
 import { get } from 'lodash';
+
+type SuccessRatioIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
 const store = {
     rewards: new CompressedBuffer(10_000, 10),
@@ -17,33 +19,28 @@ const store = {
     policyLoss: new CompressedBuffer(1_000, 5),
     trainTime: new CompressedBuffer(1_000, 5),
     waitTime: new CompressedBuffer(1_000, 5),
-    versionDelta: new CompressedBuffer(1_000, 5),
-    successRatio: new CompressedBuffer(1_000, 5),
     batchSize: new CompressedBuffer(1_000, 5),
+    versionDelta: new CompressedBuffer(1_000, 5),
+    // successRatioN
+    ...Array.from({ length: 10 }, (_, i) => i).reduce((acc, i) => {
+        acc[`successRatio${ i as SuccessRatioIndex }`] = new CompressedBuffer(100, 5);
+        return acc;
+    }, {} as Record<`successRatio${ SuccessRatioIndex }`, CompressedBuffer>),
 };
 
 getAgentLog().then((data) => {
     if (isObject(data) && get(data, 'version') === 1) {
-        store.rewards.fromJson(get(data, 'rewards'));
-        store.values.fromJson(get(data, 'values'));
-        store.returns.fromJson(get(data, 'returns'));
-        store.tdErrors.fromJson(get(data, 'tdErrors'));
-        store.advantages.fromJson(get(data, 'advantages'));
-        store.kl.fromJson(get(data, 'kl'));
-        store.lr.fromJson(get(data, 'lr'));
-        store.valueLoss.fromJson(get(data, 'valueLoss'));
-        store.policyLoss.fromJson(get(data, 'policyLoss'));
-        store.trainTime.fromJson(get(data, 'trainTime'));
-        store.waitTime.fromJson(get(data, 'waitTime'));
-        store.versionDelta.fromJson(get(data, 'versionDelta'));
-        store.successRatio.fromJson(get(data, 'successRatio'));
-        store.batchSize.fromJson(get(data, 'batchSize'));
+        Object.keys(store).forEach((key) => {
+            if (!(key in store)) return;
+            store[key as keyof typeof store].fromJson(get(data, key));
+        });
     }
 
     subscribeOnMetrics();
 });
 
 export function drawMetrics() {
+    drawTab0();
     drawTab1();
     drawTab2();
     drawTab3();
@@ -52,20 +49,7 @@ export function drawMetrics() {
 export const saveMetrics = throttle(() => {
     setAgentLog({
         version: 1,
-        kl: store.kl.toJson(),
-        lr: store.lr.toJson(),
-        rewards: store.rewards.toJson(),
-        values: store.values.toJson(),
-        returns: store.returns.toJson(),
-        tdErrors: store.tdErrors.toJson(),
-        advantages: store.advantages.toJson(),
-        valueLoss: store.valueLoss.toJson(),
-        policyLoss: store.policyLoss.toJson(),
-        trainTime: store.trainTime.toJson(),
-        waitTime: store.waitTime.toJson(),
-        versionDelta: store.versionDelta.toJson(),
-        successRatio: store.successRatio.toJson(),
-        batchSize: store.batchSize.toJson(),
+        ...mapValues(store, (value) => value.toJson()),
     });
 }, 10_000);
 
@@ -76,36 +60,48 @@ export function subscribeOnMetrics() {
             saveMetrics();
         };
     };
-    metricsChannels.rewards.onmessage = w((event) => store.rewards.add(...event.data));
-    metricsChannels.values.onmessage = w((event) => store.values.add(...event.data));
-    metricsChannels.returns.onmessage = w((event) => store.returns.add(...event.data));
-    metricsChannels.tdErrors.onmessage = w((event) => store.tdErrors.add(...event.data));
-    metricsChannels.advantages.onmessage = w((event) => store.advantages.add(...event.data));
-    metricsChannels.kl.onmessage = w((event) => store.kl.add(...event.data));
-    metricsChannels.policyLoss.onmessage = w((event) => store.policyLoss.add(...event.data));
-    metricsChannels.valueLoss.onmessage = w((event) => store.valueLoss.add(...event.data));
-    metricsChannels.lr.onmessage = w((event) => store.lr.add(event.data));
-    metricsChannels.versionDelta.onmessage = w((event) => store.versionDelta.add(...event.data));
-    metricsChannels.successRatio.onmessage = w((event) => store.successRatio.add(...event.data));
-    metricsChannels.batchSize.onmessage = w((event) => store.batchSize.add(...event.data));
-    metricsChannels.trainTime.onmessage = w((event) => store.trainTime.add(event.data));
-    metricsChannels.waitTime.onmessage = w((event) => store.waitTime.add(event.data));
+    Object.keys(metricsChannels).forEach((key) => {
+        const channel = metricsChannels[key as keyof typeof metricsChannels];
+        if (key === 'successRatio') {
+            channel.onmessage = w((event) => {
+                (event.data as {
+                    scenarioIndex: SuccessRatioIndex,
+                    successRatio: number
+                }[]).forEach(({ scenarioIndex, successRatio }) => {
+                    store[`successRatio${ scenarioIndex }` as keyof typeof store].add(successRatio);
+                });
+            });
+        } else {
+            channel.onmessage = w((event) => {
+                store[key as keyof typeof store].add(...event.data);
+            });
+        }
+    });
+}
+
+function drawTab0() {
+    const tab = 'Tab 0';
+    const renderSuccessRatio = (index: SuccessRatioIndex) => {
+        const successRatio = store[`successRatio${ index }`].toArray();
+        const successRatioMA = calculateMovingAverage(successRatio, 10);
+        tfvis.render.scatterplot({ name: 'Success Ratio ' + index, tab }, {
+            values: [successRatio, successRatioMA],
+            series: ['Success Ratio', 'MA'],
+        }, {
+            xLabel: 'Version',
+            yLabel: 'Success Ratio',
+            width: 500,
+            height: 300,
+        });
+    };
+
+    Array.from({ length: 5 }, (_, i) => i).forEach((i) => {
+        renderSuccessRatio(i as SuccessRatioIndex);
+    });
 }
 
 function drawTab1() {
     const tab = 'Tab 1';
-
-    const successRatio = store.successRatio.toArray();
-    const successRatioMA = calculateMovingAverage(successRatio, 100);
-    tfvis.render.scatterplot({ name: 'Success Ratio', tab }, {
-        values: [successRatio, successRatioMA],
-        series: ['Success Ratio', 'MA'],
-    }, {
-        xLabel: 'Version',
-        yLabel: 'Success Ratio',
-        width: 500,
-        height: 300,
-    });
 
     const avgRewards = store.rewards.toArray();
     const avgRewardsMA = calculateMovingAverage(avgRewards, 1000);
