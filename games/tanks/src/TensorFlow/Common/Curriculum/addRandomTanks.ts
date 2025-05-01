@@ -4,7 +4,7 @@ import { randomRangeFloat } from '../../../../../../lib/random.ts';
 import { createTank } from '../../../ECS/Entities/Tank/CreateTank.ts';
 import { createPlayer } from '../../../ECS/Entities/Player.ts';
 
-export function addRandomTanks(teamIdToCount: [number, number][]) {
+export function addRandomTanks(teamIdAndCount: [number, number][]) {
     const tanks = [];
     const width = GameDI.width;
     const height = GameDI.height;
@@ -24,7 +24,7 @@ export function addRandomTanks(teamIdToCount: [number, number][]) {
         return false;
     };
 
-    for (const [teamId, count] of teamIdToCount) {
+    for (const [teamId, count] of teamIdAndCount) {
         for (let i = 0; i < count; i++) {
             let x: number, y: number;
 

@@ -24,7 +24,7 @@ const mapIndexToConstructor = new Map([
     [indexScenarioWithHeuristicAgents, createScenarioWithHeuristicAgents],
 ]);
 
-if (mapIndexToConstructor.size !== 5) {
+if (mapIndexToConstructor.size !== 4) {
     throw new Error('Scenario index is not unique');
 }
 

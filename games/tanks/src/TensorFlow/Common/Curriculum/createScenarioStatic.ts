@@ -6,12 +6,14 @@ import { randomRangeInt } from '../../../../../../lib/random.ts';
 import { getTankTeamId } from '../../../ECS/Entities/Tank/TankUtils.ts';
 import { getScenarioIndex, getSuccessRatio, getTeamHealth } from './utils.ts';
 import { Scenario } from './types.ts';
+import { max } from '../../../../../../lib/math.ts';
 
 export const indexScenarioStatic = getScenarioIndex();
 
 export async function createScenarioStatic(options: Parameters<typeof createBattlefield>[0]): Promise<Scenario> {
     const game = await createBattlefield(options);
-    const tanks = addRandomTanks([[0, randomRangeInt(1, 3)], [1, randomRangeInt(1, 3)]]);
+    const count = randomRangeInt(1, 3);
+    const tanks = addRandomTanks([[0, count], [1, max(1, count + randomRangeInt(-1, 1))]]);
     const activeTeam = getTankTeamId(tanks[0]);
     const initialTeamHealth = getTeamHealth(tanks);
 
