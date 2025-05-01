@@ -18,8 +18,8 @@ const WEIGHTS = Object.freeze({
     TEAM_MULTIPLIER: 2,
 
     COMMON: {
-        SCORE: 1,
-        HEALTH: 1,
+        SCORE: 2,
+        HEALTH: 20,
     },
     COMMON_MULTIPLIER: 2,
 
@@ -45,11 +45,12 @@ const WEIGHTS = Object.freeze({
     },
     DISTANCE_KEEPING_MULTIPLIER: 10,
 
+    // Dynamic rewards, small size in delta view
     BULLET_AVOIDANCE: {
-        PENALTY: -0.6,
-        AVOID_QUALITY: 0.6,
+        PENALTY: -0.2,
+        AVOID_QUALITY: 0.2,
     },
-    BULLET_AVOIDANCE_MULTIPLIER: 10,
+    BULLET_AVOIDANCE_MULTIPLIER: 2,
 });
 
 export type ComponentRewards = {
@@ -211,16 +212,12 @@ export function calculateReward(
     return rewards.totalReward;
 }
 
-export function getTeamAdvantageScore(
-    state: BattleState,
-    alpha = 1,
-    beta = 1,
-): number {
+export function getTeamAdvantageScore(state: BattleState): number {
     const normCount = (state.alliesCount - state.enemiesCount);
     const normHP = (state.alliesTotalHealth - state.enemiesTotalHealth);
 
     // Combine the two normalised components
-    return WEIGHTS.TEAM.SCORE * (alpha * normCount + beta * normHP);
+    return WEIGHTS.TEAM.SCORE * (normCount + normHP);
 }
 
 function calculateTankMapAwarenessReward(
