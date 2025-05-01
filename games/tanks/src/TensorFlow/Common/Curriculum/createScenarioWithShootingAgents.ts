@@ -6,14 +6,17 @@ import { createScenarioStaticWithCoop } from './createScenarioStaticWithCoop.ts'
 import { getScenarioIndex } from './utils.ts';
 import { addSimpleHeuristicAgents } from './addSimpleHeuristicAgents.ts';
 
-export const indexScenarioWithMovingAgents = getScenarioIndex();
+export const indexScenarioWithShootingAgents = getScenarioIndex();
 
-export async function createScenarioWithMovingAgents(options: Parameters<typeof createBattlefield>[0]): Promise<Scenario> {
+export async function createScenarioWithShootingAgents(options: Parameters<typeof createBattlefield>[0]): Promise<Scenario> {
     const episode = await (random() > 0.5 ? createScenarioStatic : createScenarioStaticWithCoop)(options);
-    episode.index = indexScenarioWithMovingAgents;
+    episode.index = indexScenarioWithShootingAgents;
 
     addSimpleHeuristicAgents(episode, {
-        move: randomRangeFloat(0.4, 1),
+        aim: {
+            aimError: randomRangeFloat(1, 3),
+            shootChance: randomRangeFloat(0.2, 0.4),
+        },
     });
 
     return episode;

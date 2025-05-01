@@ -1,62 +1,57 @@
 import { RigidBodyState } from '../../../../ECS/Components/Physical';
-import { hypot, max, min } from '../../../../../../../lib/math.ts';
+import { hypot } from '../../../../../../../lib/math.ts';
 import { TankController } from '../../../../ECS/Components/TankController.ts';
-import { getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
+import { getAimPosition, getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
 import { findTankEnemiesEids } from '../../../../ECS/Systems/RL/createTankInputTensorSystem.ts';
 import { Actions } from '../../actions.ts';
 import { applyActionToTank } from '../../applyActionToTank.ts';
 import { TankAgent } from './ActorAgent.ts';
-import { randomRangeFloat, randomSign } from '../../../../../../../lib/random.ts';
+import { random, randomRangeFloat, randomSign } from '../../../../../../../lib/random.ts';
+import { clamp } from 'lodash-es';
 
-export type AgentFeatures = {
+export type SimpleHeuristicAgentFeatures = {
     move?: number;
-    aim?: boolean;
-    shoot?: boolean;
+    aim?: {
+        aimError: number;
+        shootChance: number;
+    };
 }
 
 export class SimpleHeuristicAgent implements TankAgent {
     private waypoint?: { x: number; y: number };
-    private currentTargetId: number | undefined;
 
     constructor(
         public readonly tankEid: number,
-        private readonly features: AgentFeatures = {},
-        private readonly shootChance: number = 0.25,
+        private readonly features: SimpleHeuristicAgentFeatures = {},
     ) {
     }
 
     updateTankBehaviour(width: number, height: number): void {
         this.updateWaypoint(width, height);
 
-        // 1. выбор цели (если нужно прицеливаться или стрелять)
-        if (this.features.aim === true || this.features.shoot === true) {
-            this.currentTargetId = this.selectTarget();
-        } else {
-            this.currentTargetId = undefined;
-        }
-
-        // 2. управление башней
-        const turretCmd = this.features.aim === false && this.features.shoot === false
-            ? { aimX: 0 as -1 | 0 | 1, aimY: 0 as -1 | 0 | 1, shoot: 0 as 0 | 1 }
-            : this.controlTurret(this.currentTargetId);
-
-        // 3. управление корпусом
-        const withMove = typeof this.features.move === 'number';
-        const maxMove = withMove ? this.features.move : 0;
-        const move = this.updateBodyVelocity();
-        const rotation = withMove ? this.updateBodyRotationTowardsWaypoint() : 0;
-
-        // 4. формируем действие
-        const shoot = this.features.shoot === false ? 0 : turretCmd.shoot;
+        const targetId = this.withAim() ? this.getTarget() : undefined;
+        const aim = targetId !== undefined ? this.getAimAction(targetId) : { aimX: 0, aimY: 0, shoot: false };
+        const maxMove = this.withMove() ? this.features.move : 0;
+        const move = this.getMoveAction();
+        const rotation = this.withMove() ? this.getRotationAction() : 0;
 
         const action: Actions = [
-            shoot,
+            aim.shoot ? 1 : 0,
             move,
             rotation,
-            turretCmd.aimX,
-            turretCmd.aimY,
+            aim.aimX,
+            aim.aimY,
         ];
+
         applyActionToTank(this.tankEid, action, maxMove);
+    }
+
+    private withMove() {
+        return this.features.move !== undefined;
+    }
+
+    private withAim() {
+        return this.features.aim !== undefined;
     }
 
     private updateWaypoint(width: number, height: number): void {
@@ -75,62 +70,52 @@ export class SimpleHeuristicAgent implements TankAgent {
 
     }
 
-    private selectTarget(): number | undefined {
+    private getTarget(): number | undefined {
         const enemies = findTankEnemiesEids(this.tankEid) as number[];
+        const tx = RigidBodyState.position.get(this.tankEid, 0);
+        const ty = RigidBodyState.position.get(this.tankEid, 1);
         let bestId: number | undefined;
         let bestDist = Infinity;
-        const sx = RigidBodyState.position.get(this.tankEid, 0);
-        const sy = RigidBodyState.position.get(this.tankEid, 1);
 
         for (const eid of enemies) {
             if (getTankHealth(eid) <= 0) continue;
             const ex = RigidBodyState.position.get(eid, 0);
             const ey = RigidBodyState.position.get(eid, 1);
-            const d = hypot(sx - ex, sy - ey);
+            const d = hypot(tx - ex, ty - ey);
             if (d < bestDist) {
                 bestDist = d;
                 bestId = eid;
             }
         }
+
         return bestId;
     }
 
-    private controlTurret(targetId: number | undefined): { aimX: -1 | 0 | 1; aimY: -1 | 0 | 1; shoot: 0 | 1 } {
-        let aimX: -1 | 0 | 1 = 0;
-        let aimY: -1 | 0 | 1 = 0;
-        let shoot: 0 | 1 = 0;
+    private getAimAction(targetId: number): { aimX: number; aimY: number; shoot: boolean } {
+        const aimError = this.features.aim?.aimError ?? 0;
+        const shootChance = this.features.aim?.shootChance ?? 0;
 
-        if (targetId !== undefined) {
-            const sx = RigidBodyState.position.get(this.tankEid, 0);
-            const sy = RigidBodyState.position.get(this.tankEid, 1);
-            const ex = RigidBodyState.position.get(targetId, 0);
-            const ey = RigidBodyState.position.get(targetId, 1);
-            const tx = ex - sx;
-            const ty = ey - sy;
-            const len = hypot(tx, ty) + 1e-6;
-            const tnx = tx / len;
-            const tny = ty / len;
+        // --- вектор «к цели» ---
+        const [aimX, aimY] = getAimPosition(this.tankEid);
+        const targetX = RigidBodyState.position.get(targetId, 0);
+        const targetY = RigidBodyState.position.get(targetId, 1);
 
-            const cx = TankController.turretDir.get(this.tankEid, 0);
-            const cy = TankController.turretDir.get(this.tankEid, 1);
+        // --- дельта по компонентам ---
+        const dx = targetX - aimX;
+        const dy = targetY - aimY;
 
-            const dot = max(-1, min(1, cx * tnx + cy * tny));
-            const aligned = dot > 0.985;
-            const cross = cx * tny - cy * tnx;
+        // --- стрельба, если почти соосно ---
+        const misalign = Math.abs(dx) + Math.abs(dy);  // L1-норма расхождения
+        const shoot = (misalign < 100 && shootChance > random()) || random() > 0.9;
 
-            if (this.features.aim === true && !aligned) {
-                aimX = cross > 0 ? 1 : -1;
-            }
-
-            if (aligned && this.features.shoot === true && Math.random() < this.shootChance) {
-                shoot = 1;
-            }
-        }
-
-        return { aimX, aimY, shoot };
+        return {
+            shoot,
+            aimX: clamp(dx, -2, 2) * randomRangeFloat(1 - aimError / 10, 1 + aimError),
+            aimY: clamp(dy, -2, 2) * randomRangeFloat(1 - aimError / 10, 1 + aimError),
+        };
     }
 
-    private updateBodyVelocity(): number {
+    private getMoveAction(): number {
         let move = TankController.move[this.tankEid];
         let velocity = randomRangeFloat(0, 1);
 
@@ -141,7 +126,7 @@ export class SimpleHeuristicAgent implements TankAgent {
         return velocity;
     }
 
-    private updateBodyRotationTowardsWaypoint(): number {
+    private getRotationAction(): number {
         if (!this.waypoint) return 0;
 
         // --- позиция танка ---

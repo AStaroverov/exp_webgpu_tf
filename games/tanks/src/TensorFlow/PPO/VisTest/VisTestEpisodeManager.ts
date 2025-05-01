@@ -44,7 +44,7 @@ export class VisTestEpisodeManager extends EpisodeManager {
 
     protected beforeEpisode() {
         return createScenarioByCurriculumState(this.curriculumState, {
-            // return createScenarioWithMovingAgents({
+            // return createScenarioWithHeuristicAgents({
             withRender: true,
             withPlayer: false,
         }).then((scenario) => (this.currentScenario = scenario));

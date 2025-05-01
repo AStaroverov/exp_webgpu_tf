@@ -5,6 +5,14 @@ import { random } from '../../../../../../lib/random.ts';
 import { createScenarioStaticWithCoop, indexScenarioStaticWithCoop } from './createScenarioStaticWithCoop.ts';
 import { createBattlefield } from './createBattlefield.ts';
 import { createScenarioWithMovingAgents, indexScenarioWithMovingAgents } from './createScenarioWithMovingAgents.ts';
+import {
+    createScenarioWithShootingAgents,
+    indexScenarioWithShootingAgents,
+} from './createScenarioWithShootingAgents.ts';
+import {
+    createScenarioWithHeuristicAgents,
+    indexScenarioWithHeuristicAgents,
+} from './createScenarioWithHeuristicAgents.ts';
 
 type ScenarioOptions = Parameters<typeof createBattlefield>[0];
 
@@ -12,9 +20,11 @@ const mapIndexToConstructor = new Map([
     [indexScenarioStatic, createScenarioStatic],
     [indexScenarioStaticWithCoop, createScenarioStaticWithCoop],
     [indexScenarioWithMovingAgents, createScenarioWithMovingAgents],
+    [indexScenarioWithShootingAgents, createScenarioWithShootingAgents],
+    [indexScenarioWithHeuristicAgents, createScenarioWithHeuristicAgents],
 ]);
 
-if (mapIndexToConstructor.size !== 3) {
+if (mapIndexToConstructor.size !== 5) {
     throw new Error('Scenario index is not unique');
 }
 

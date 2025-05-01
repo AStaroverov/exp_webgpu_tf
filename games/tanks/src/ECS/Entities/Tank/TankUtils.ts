@@ -12,6 +12,7 @@ import { PlayerRef } from '../../Components/PlayerRef.ts';
 import { Score } from '../../Components/Score.ts';
 import { removeComponent } from 'bitecs';
 import { TeamRef } from '../../Components/TeamRef.ts';
+import { getMatrixTranslation, LocalTransform } from '../../../../../../src/ECS/Components/Transform.ts';
 
 export function removeTankComponentsWithoutParts(tankEid: number) {
     const aimEid = Tank.aimEid[tankEid];
@@ -71,4 +72,10 @@ export function getTankScore(tankEid: number): number {
 export function getTankTeamId(tankEid: number) {
     const teamId = TeamRef.id[tankEid];
     return teamId;
+}
+
+export function getAimPosition(tankEid: number): Float32Array {
+    const aimEid = Tank.aimEid[tankEid];
+    const aimLocal = LocalTransform.matrix.getBatch(aimEid);
+    return getMatrixTranslation(aimLocal);
 }
