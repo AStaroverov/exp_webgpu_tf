@@ -11,13 +11,13 @@ export async function createScenarioStaticWithCoop(options: Parameters<typeof cr
     const episode = await createScenarioStatic(options);
     episode.index = indexScenarioStaticWithCoop;
 
-    const agent = episode.getAgents();
-    const activeTeam = getTankTeamId(agent[0].tankEid);
     const tankEids = episode.getFreeTankEids();
+    const firstAgent = episode.getAgents();
+    const activeTeam = getTankTeamId(firstAgent[0].tankEid);
 
     const newAgents = [];
 
-    for (let i = 1; i < tankEids.length; i++) {
+    for (let i = 0; i < tankEids.length; i++) {
         const tankEid = tankEids[i];
 
         if (getTankTeamId(tankEid) !== activeTeam) continue;
