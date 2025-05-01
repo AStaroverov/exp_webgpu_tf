@@ -9,7 +9,7 @@ import { ReplayBuffer } from '../../Common/ReplayBuffer.ts';
 import { ceil } from '../../../../../../lib/math.ts';
 import { metricsChannels } from '../../Common/channels.ts';
 import { getNetworkVersion } from '../../Common/utils.ts';
-import { LearnBatch } from './createLearnerManager.ts';
+import { LearnData } from './createLearnerManager.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
 
 export function createValueLearnerAgent() {
@@ -20,7 +20,7 @@ export function createValueLearnerAgent() {
     });
 }
 
-function trainValue(network: tf.LayersModel, batch: LearnBatch) {
+function trainValue(network: tf.LayersModel, batch: LearnData) {
     const rb = new ReplayBuffer(batch.states.length);
     const mbs = CONFIG.miniBatchSize;
     const mbc = ceil(batch.size / mbs);
@@ -68,7 +68,7 @@ function trainValue(network: tf.LayersModel, batch: LearnBatch) {
         });
 }
 
-function createValueBatch(batch: LearnBatch, indices: number[]) {
+function createValueBatch(batch: LearnData, indices: number[]) {
     const states = indices.map(i => batch.states[i]);
     const values = indices.map(i => batch.values[i]);
     const returns = indices.map(i => batch.returns[i]);

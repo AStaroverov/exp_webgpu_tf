@@ -2,7 +2,7 @@ import '@tensorflow/tfjs-backend-wasm';
 import { initTensorFlow } from '../Common/initTensorFlow.ts';
 import { setConsolePrefix } from '../Common/console.ts';
 import { getShortRandomId } from '../../../../../lib/random.ts';
-import { ActorManager } from './Actor/ActorManager.ts';
+import { EpisodeManager } from './Actor/EpisodeManager.ts';
 
 setConsolePrefix(`[ACTOR|${ getShortRandomId() }]`);
 
@@ -17,7 +17,7 @@ async function initSystem() {
 
     // Start the game
     try {
-        ActorManager.create().start();
+        (new EpisodeManager()).start();
 
         console.log('Slave Manager successfully initialized');
     } catch (error) {

@@ -14,7 +14,7 @@ import { flatTypedArray } from '../../Common/flat.ts';
 import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
 import { RingBuffer } from 'ring-buffer-ts';
 import { learningRateChannel } from '../channels.ts';
-import { LearnBatch } from './createLearnerManager.ts';
+import { LearnData } from './createLearnerManager.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
 
 export function createPolicyLearnerAgent() {
@@ -27,7 +27,7 @@ export function createPolicyLearnerAgent() {
 
 const klHistory = new RingBuffer<number>(25);
 
-function trainPolicy(network: tf.LayersModel, batch: LearnBatch) {
+function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const version = getNetworkVersion(network);
     const rb = new ReplayBuffer(batch.states.length);
     const mbs = CONFIG.miniBatchSize;
@@ -114,13 +114,13 @@ function trainPolicy(network: tf.LayersModel, batch: LearnBatch) {
 
             learningRateChannel.emit(lr);
 
-            metricsChannels.lr.postMessage(lr);
+            metricsChannels.lr.postMessage([lr]);
             metricsChannels.kl.postMessage(klList);
             metricsChannels.policyLoss.postMessage(policyLossList);
         });
 }
 
-function createPolicyBatch(batch: LearnBatch, indices: number[]) {
+function createPolicyBatch(batch: LearnData, indices: number[]) {
     const states = indices.map(i => batch.states[i]);
     const actions = indices.map(i => batch.actions[i]);
     const logProbs = indices.map(i => batch.logProbs[i]);
@@ -134,7 +134,7 @@ function createPolicyBatch(batch: LearnBatch, indices: number[]) {
     };
 }
 
-function createKlBatch(batch: LearnBatch, indices: number[]) {
+function createKlBatch(batch: LearnData, indices: number[]) {
     const states = indices.map(i => batch.states[i]);
     const actions = indices.map(i => batch.actions[i]);
     const mean = indices.map(i => batch.mean[i]);
