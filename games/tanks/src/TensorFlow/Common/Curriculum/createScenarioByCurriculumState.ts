@@ -22,17 +22,14 @@ export async function createScenarioByCurriculumState(
     createAgent: (tankEid: EntityId) => TankAgent,
     options: Parameters<typeof createBattlefield>[0],
 ): Promise<Scenario> {
-
-    const entries = Object
-        .entries(curriculumState.mapScenarioIndexToSuccessRatio)
-        .sort((a, b) => Number(b[0]) - Number(a[0]));
-
     let constructor = createScenario0;
 
-    for (const [index, successRatio] of entries) {
-        constructor = mapIndexToConstructor[Number(index)] || constructor;
+    for (const [index, createScenario] of Object.entries(mapIndexToConstructor)) {
+        constructor = createScenario;
 
-        if (successRatio < 0.8 || random() < 0.2) {
+        const successRatio = curriculumState.mapScenarioIndexToSuccessRatio[Number(index)] ?? 0;
+
+        if (successRatio < 0.75 || random() < 0.2) {
             break;
         }
     }

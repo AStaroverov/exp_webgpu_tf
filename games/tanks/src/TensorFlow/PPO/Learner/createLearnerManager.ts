@@ -31,7 +31,7 @@ export function createLearnerManager() {
     let queueSize = 0;
     const mapScenarioIndexToSuccessRatio = new Map<number, RingBuffer<number>>;
     const mapScenarioIndexToAvgSuccessRatio = new Map<number, number>;
-    const getCuriculumState = (samples: EpisodeSample[]): CurriculumState => {
+    const computeCurriculumState = (samples: EpisodeSample[]): CurriculumState => {
         for (const sample of samples) {
             if (!mapScenarioIndexToSuccessRatio.has(sample.scenarioIndex)) {
                 mapScenarioIndexToSuccessRatio.set(sample.scenarioIndex, new RingBuffer(100));
@@ -42,7 +42,7 @@ export function createLearnerManager() {
         for (const [scenarioIndex, successRatioHistory] of mapScenarioIndexToSuccessRatio) {
             mapScenarioIndexToAvgSuccessRatio.set(
                 scenarioIndex,
-                successRatioHistory.toArray().reduce((acc, v) => acc + v, 0) / successRatioHistory.getSize(),
+                successRatioHistory.toArray().reduce((acc, v) => acc + v, 0) / successRatioHistory.getBufferLength(),
             );
         }
 
@@ -59,7 +59,7 @@ export function createLearnerManager() {
             const startTime = Date.now();
             const waitTime = lastEndTime === 0 ? 0 : startTime - lastEndTime;
 
-            curriculumStateChannel.emit(getCuriculumState(samples));
+            curriculumStateChannel.emit(computeCurriculumState(samples));
             metricsChannels.batchSize.postMessage(samples.map(b => b.memoryBatch.size));
             metricsChannels.successRatio.postMessage(samples.map(b => pick(b, 'scenarioIndex', 'successRatio')));
 
