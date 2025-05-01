@@ -69,26 +69,26 @@ export class EpisodeManager {
         return new Promise(resolve => {
             const shouldEvery = SNAPSHOT_EVERY;
             const maxFramesCount = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
-            let regardedActors: TankAgent[] = [];
+            let regardedAgents: TankAgent[] = [];
             let frame = 0;
 
             const stop = macroTasks.addInterval(() => {
                 for (let i = 0; i < 100; i++) {
                     frame++;
-                    const nextRegardedActors = this.runGameTick(
+                    const nextRegardedAgents = this.runGameTick(
                         episode,
-                        regardedActors,
+                        regardedAgents,
                         frame,
                         maxFramesCount,
                         shouldEvery,
                     );
 
-                    if (nextRegardedActors == null) {
+                    if (nextRegardedAgents == null) {
                         stop();
                         resolve(null);
                         break;
                     } else {
-                        regardedActors = nextRegardedActors;
+                        regardedAgents = nextRegardedAgents;
                     }
                 }
             }, 1);
@@ -97,7 +97,7 @@ export class EpisodeManager {
 
     protected runGameTick(
         scenario: Scenario,
-        prevActors: TankAgent[],
+        prevAgents: TankAgent[],
         frame: number,
         maxFrames: number,
         shouldEvery: number,
@@ -114,9 +114,9 @@ export class EpisodeManager {
         TenserFlowDI.shouldCollectState = (frame + 1) % shouldEvery === 0;
 
         if (shouldAction) {
-            prevActors = actors;
+            prevAgents = scenario.getAgents();
 
-            for (const agent of prevActors) {
+            for (const agent of prevAgents) {
                 agent.updateTankBehaviour(GameDI.width, GameDI.height);
             }
         }
@@ -125,7 +125,7 @@ export class EpisodeManager {
         scenario.gameTick(TICK_TIME_SIMULATION);
 
         if (shouldMemorize) {
-            for (const agent of prevActors) {
+            for (const agent of prevAgents) {
                 agent.memorizeTankBehaviour?.(
                     GameDI.width,
                     GameDI.height,
@@ -134,6 +134,6 @@ export class EpisodeManager {
             }
         }
 
-        return gameOver ? null : prevActors;
+        return gameOver ? null : prevAgents;
     }
 }

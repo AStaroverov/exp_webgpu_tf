@@ -36,7 +36,7 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
 
         const successRatio = curriculumState.mapScenarioIndexToSuccessRatio[Number(index)] ?? 0;
 
-        if (successRatio < 0.75 || random() < 0.2) {
+        if (successRatio < 0.75 || random() < 0.1) {
             break;
         }
     }
