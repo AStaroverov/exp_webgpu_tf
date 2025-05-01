@@ -21,7 +21,7 @@ if (mapIndexToConstructor.size !== 3) {
 export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: ScenarioOptions): Promise<Scenario> {
     let constructor = createScenarioStatic;
 
-    for (const [index, createScenario] of Object.entries(mapIndexToConstructor)) {
+    for (const [index, createScenario] of mapIndexToConstructor) {
         constructor = createScenario;
 
         const successRatio = curriculumState.mapScenarioIndexToSuccessRatio[Number(index)] ?? 0;
