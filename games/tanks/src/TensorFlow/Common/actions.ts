@@ -1,6 +1,6 @@
 import { clamp } from 'lodash-es';
 
-export type Actions = Float32Array;
+export type Actions = Float32Array | [number, number, number, number, number];
 
 export function readActions(actions: Actions) {
     return {

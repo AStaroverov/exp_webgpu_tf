@@ -1,6 +1,6 @@
 import { SNAPSHOT_EVERY, TICK_TIME_SIMULATION } from '../../Common/consts.ts';
 import { GameDI } from '../../../DI/GameDI.ts';
-import { ActorAgent, TankAgent } from './ActorAgent.ts';
+import { TankAgent } from '../../Common/Curriculum/Agents/ActorAgent.ts';
 import { CONFIG } from '../config.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
@@ -30,7 +30,7 @@ export class EpisodeManager {
     }
 
     protected async beforeEpisode() {
-        return createScenarioByCurriculumState(this.curriculumState, ActorAgent.create, {
+        return createScenarioByCurriculumState(this.curriculumState, {
             withRender: false,
             withPlayer: false,
         });
@@ -38,7 +38,8 @@ export class EpisodeManager {
 
     protected afterEpisode(episode: Scenario) {
         episode.getAgents().forEach(agent => {
-            agent.hasMemory() && episodeSampleChannel.emit({
+            if (agent.getVersion == null || agent.getMemoryBatch == null) return;
+            episodeSampleChannel.emit({
                 networkVersion: agent.getVersion(),
                 memoryBatch: agent.getMemoryBatch(),
                 successRatio: episode.getSuccessRatio(),
@@ -124,7 +125,7 @@ export class EpisodeManager {
 
         if (shouldMemorize) {
             for (const agent of prevAgents) {
-                agent.memorizeTankBehaviour(
+                agent.memorizeTankBehaviour?.(
                     GameDI.width,
                     GameDI.height,
                     gameOver,

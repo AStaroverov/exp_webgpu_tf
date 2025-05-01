@@ -1,5 +1,5 @@
 import { createBattlefield } from './createBattlefield.ts';
-import { TankAgent } from '../../PPO/Actor/ActorAgent.ts';
+import { TankAgent } from './Agents/ActorAgent.ts';
 import { EntityId } from 'bitecs';
 
 export type Scenario = Awaited<ReturnType<typeof createBattlefield>> & {
@@ -10,4 +10,5 @@ export type Scenario = Awaited<ReturnType<typeof createBattlefield>> & {
     // private
     addAgent(tankEid: EntityId, agent: TankAgent): void;
     getAgent(tankEid: EntityId): TankAgent | undefined;
+    getFreeTankEids(): EntityId[];
 }

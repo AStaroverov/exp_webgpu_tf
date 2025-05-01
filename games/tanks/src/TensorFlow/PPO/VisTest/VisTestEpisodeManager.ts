@@ -5,11 +5,11 @@ import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { EpisodeManager } from '../Actor/EpisodeManager.ts';
 import { Scenario } from '../../Common/Curriculum/types.ts';
 import { max } from '../../../../../../lib/math.ts';
-import { createScenarioByCurriculumState } from '../../Common/Curriculum/createScenarioByCurriculumState.ts';
-import { ActorAgent, TankAgent } from '../Actor/ActorAgent.ts';
+import { TankAgent } from '../../Common/Curriculum/Agents/ActorAgent.ts';
 import { SNAPSHOT_EVERY } from '../../Common/consts.ts';
 import { CONFIG } from '../config.ts';
 import { frameTasks } from '../../../../../../lib/TasksScheduler/frameTasks.ts';
+import { createScenarioByCurriculumState } from '../../Common/Curriculum/createScenarioByCurriculumState.ts';
 
 export class VisTestEpisodeManager extends EpisodeManager {
     private currentScenario?: Scenario;
@@ -27,7 +27,7 @@ export class VisTestEpisodeManager extends EpisodeManager {
     }
 
     public getReward(tankEid: EntityId) {
-        const memory = this.currentScenario?.getAgent(tankEid)?.getMemory();
+        const memory = this.currentScenario?.getAgent(tankEid)?.getMemory?.();
 
         if (memory == null || memory.actionRewards.length === 0) return 0;
 
@@ -38,14 +38,23 @@ export class VisTestEpisodeManager extends EpisodeManager {
     }
 
     public getVersion() {
-        return this.currentScenario?.getAgents().reduce((acc, agent) => max(acc, agent.getVersion()), 0) ?? 0;
+        return this.currentScenario?.getAgents()
+            .reduce((acc, agent) => max(acc, agent.getVersion?.() ?? 0), 0) ?? 0;
     }
 
     protected beforeEpisode() {
-        return createScenarioByCurriculumState(this.curriculumState, ActorAgent.create, {
+        return createScenarioByCurriculumState(this.curriculumState, {
+            // return createScenarioWithMovingAgents({
             withRender: true,
             withPlayer: false,
         }).then((scenario) => (this.currentScenario = scenario));
+    }
+
+
+    protected afterEpisode(episode: Scenario) {
+        if (getDrawState()) {
+            super.afterEpisode(episode);
+        }
     }
 
     protected cleanupEpisode(episode: Scenario) {

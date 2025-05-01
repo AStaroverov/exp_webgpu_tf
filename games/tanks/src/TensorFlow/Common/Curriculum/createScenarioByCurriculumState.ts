@@ -1,28 +1,25 @@
-import { TankAgent } from '../../PPO/Actor/ActorAgent.ts';
-import { EntityId } from 'bitecs';
 import { Scenario } from './types.ts';
 import { CurriculumState } from '../../PPO/channels.ts';
-import { createScenario0 } from './createScenario0.ts';
+import { createScenarioStatic, indexScenarioStatic } from './createScenarioStatic.ts';
 import { random } from '../../../../../../lib/random.ts';
-import { createScenario1 } from './createScenario1.ts';
+import { createScenarioStaticWithCoop, indexScenarioStaticWithCoop } from './createScenarioStaticWithCoop.ts';
 import { createBattlefield } from './createBattlefield.ts';
+import { createScenarioWithMovingAgents, indexScenarioWithMovingAgents } from './createScenarioWithMovingAgents.ts';
 
-type ScenarioConstructor = (
-    createAgent: (tankEid: EntityId) => TankAgent,
-    options: Parameters<typeof createBattlefield>[0],
-) => Promise<Scenario>;
+type ScenarioOptions = Parameters<typeof createBattlefield>[0];
 
-const mapIndexToConstructor: Record<number, ScenarioConstructor> = {
-    0: createScenario0,
-    1: createScenario1,
-};
+const mapIndexToConstructor = new Map([
+    [indexScenarioStatic, createScenarioStatic],
+    [indexScenarioStaticWithCoop, createScenarioStaticWithCoop],
+    [indexScenarioWithMovingAgents, createScenarioWithMovingAgents],
+]);
 
-export async function createScenarioByCurriculumState(
-    curriculumState: CurriculumState,
-    createAgent: (tankEid: EntityId) => TankAgent,
-    options: Parameters<typeof createBattlefield>[0],
-): Promise<Scenario> {
-    let constructor = createScenario0;
+if (mapIndexToConstructor.size !== 3) {
+    throw new Error('Scenario index is not unique');
+}
+
+export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: ScenarioOptions): Promise<Scenario> {
+    let constructor = createScenarioStatic;
 
     for (const [index, createScenario] of Object.entries(mapIndexToConstructor)) {
         constructor = createScenario;
@@ -34,5 +31,5 @@ export async function createScenarioByCurriculumState(
         }
     }
 
-    return constructor(createAgent, options);
+    return constructor(options);
 }

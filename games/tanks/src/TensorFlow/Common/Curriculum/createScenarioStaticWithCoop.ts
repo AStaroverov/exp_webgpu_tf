@@ -1,16 +1,17 @@
-import { TankAgent } from '../../PPO/Actor/ActorAgent.ts';
+import { ActorAgent } from './Agents/ActorAgent.ts';
 import { getTankTeamId } from '../../../ECS/Entities/Tank/TankUtils.ts';
 import { random } from '../../../../../../lib/random.ts';
-import { EntityId } from 'bitecs';
-import { createScenario0 } from './createScenario0.ts';
+import { createScenarioStatic } from './createScenarioStatic.ts';
 import { Scenario } from './types.ts';
 import { createBattlefield } from './createBattlefield.ts';
+import { getScenarioIndex } from './utils.ts';
 
-export async function createScenario1(
-    createAgent: (tankEid: EntityId) => TankAgent,
-    options: Parameters<typeof createBattlefield>[0],
-): Promise<Scenario> {
-    const episode = await createScenario0(createAgent, options);
+export const indexScenarioStaticWithCoop = getScenarioIndex();
+
+export async function createScenarioStaticWithCoop(options: Parameters<typeof createBattlefield>[0]): Promise<Scenario> {
+    const episode = await createScenarioStatic(options);
+    episode.index = indexScenarioStaticWithCoop;
+
     const tankEids = episode.getTankEids();
     const activeTeam = getTankTeamId(episode.getAgents()[0].tankEid);
 
@@ -20,7 +21,7 @@ export async function createScenario1(
         const tankEid = tankEids[i];
         if (getTankTeamId(tankEid) !== activeTeam) continue;
 
-        const agent = createAgent(tankEid);
+        const agent = new ActorAgent(tankEid);
         episode.addAgent(tankEid, agent);
         newAgents.push(agent);
 
@@ -30,9 +31,7 @@ export async function createScenario1(
         }
     }
 
-    await Promise.all(newAgents.map(agent => agent.sync()));
-
-    episode.index = 1;
+    await Promise.all(newAgents.map(agent => agent.sync?.()));
 
     return episode;
 }

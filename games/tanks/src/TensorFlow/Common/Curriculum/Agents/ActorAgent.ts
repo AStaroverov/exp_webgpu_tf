@@ -1,16 +1,16 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
-import { act } from '../train.ts';
-import { prepareInputArrays } from '../../Common/InputArrays.ts';
-import { Model } from '../../Models/Transfer.ts';
-import { queueSizeChannel } from '../channels.ts';
+import { act } from '../../../PPO/train.ts';
+import { prepareInputArrays } from '../../InputArrays.ts';
+import { Model } from '../../../Models/Transfer.ts';
+import { queueSizeChannel } from '../../../PPO/channels.ts';
 import { filter, first, firstValueFrom, mergeMap, race, retry, shareReplay, startWith, tap, timer } from 'rxjs';
-import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
-import { getNetworkVersion } from '../../Common/utils.ts';
-import { applyActionToTank } from '../../Common/applyActionToTank.ts';
-import { calculateReward } from '../../Reward/calculateReward.ts';
-import { AgentMemory, AgentMemoryBatch } from '../../Common/Memory.ts';
-import { getTankHealth } from '../../../ECS/Entities/Tank/TankUtils.ts';
+import { disposeNetwork, getNetwork } from '../../../Models/Utils.ts';
+import { getNetworkVersion } from '../../utils.ts';
+import { applyActionToTank } from '../../applyActionToTank.ts';
+import { calculateReward } from '../../../Reward/calculateReward.ts';
+import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
+import { getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -24,16 +24,15 @@ const backpressure$ = race([
 export type TankAgent = {
     tankEid: number;
 
-    sync(): Promise<void>;
-    dispose(): void;
-    getVersion(): number;
+    sync?(): Promise<void>;
+    dispose?(): void;
+    getVersion?(): number;
 
-    hasMemory(): boolean;
-    getMemory(): AgentMemory;
-    getMemoryBatch(): AgentMemoryBatch;
+    getMemory?(): AgentMemory;
+    getMemoryBatch?(): AgentMemoryBatch;
 
     updateTankBehaviour(width: number, height: number): void;
-    memorizeTankBehaviour(width: number, height: number, gameOver: boolean): void;
+    memorizeTankBehaviour?(width: number, height: number, gameOver: boolean): void;
 }
 
 export class ActorAgent implements TankAgent {
@@ -43,16 +42,8 @@ export class ActorAgent implements TankAgent {
     constructor(public readonly tankEid: number) {
     }
 
-    public static create(tankEid: number): TankAgent {
-        return new ActorAgent(tankEid);
-    }
-
     public getVersion() {
         return this.policyNetwork != null ? getNetworkVersion(this.policyNetwork) : 0;
-    }
-
-    public hasMemory() {
-        return true;
     }
 
     public getMemory() {
