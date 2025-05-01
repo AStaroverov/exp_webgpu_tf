@@ -18,6 +18,7 @@ const store = {
     trainTime: new CompressedBuffer(1_000, 5),
     waitTime: new CompressedBuffer(1_000, 5),
     versionDelta: new CompressedBuffer(1_000, 5),
+    successRatio: new CompressedBuffer(1_000, 5),
     batchSize: new CompressedBuffer(1_000, 5),
 };
 
@@ -35,6 +36,7 @@ getAgentLog().then((data) => {
         store.trainTime.fromJson(get(data, 'trainTime'));
         store.waitTime.fromJson(get(data, 'waitTime'));
         store.versionDelta.fromJson(get(data, 'versionDelta'));
+        store.successRatio.fromJson(get(data, 'successRatio'));
         store.batchSize.fromJson(get(data, 'batchSize'));
     }
 
@@ -62,6 +64,7 @@ export const saveMetrics = throttle(() => {
         trainTime: store.trainTime.toJson(),
         waitTime: store.waitTime.toJson(),
         versionDelta: store.versionDelta.toJson(),
+        successRatio: store.successRatio.toJson(),
         batchSize: store.batchSize.toJson(),
     });
 }, 10_000);
@@ -83,6 +86,7 @@ export function subscribeOnMetrics() {
     metricsChannels.valueLoss.onmessage = w((event) => store.valueLoss.add(...event.data));
     metricsChannels.lr.onmessage = w((event) => store.lr.add(event.data));
     metricsChannels.versionDelta.onmessage = w((event) => store.versionDelta.add(...event.data));
+    metricsChannels.successRatio.onmessage = w((event) => store.successRatio.add(...event.data));
     metricsChannels.batchSize.onmessage = w((event) => store.batchSize.add(...event.data));
     metricsChannels.trainTime.onmessage = w((event) => store.trainTime.add(event.data));
     metricsChannels.waitTime.onmessage = w((event) => store.waitTime.add(event.data));
@@ -90,6 +94,19 @@ export function subscribeOnMetrics() {
 
 function drawTab1() {
     const tab = 'Tab 1';
+
+    const successRatio = store.successRatio.toArray();
+    const successRatioMA = calculateMovingAverage(successRatio, 100);
+    tfvis.render.scatterplot({ name: 'Success Ratio', tab }, {
+        values: [successRatio, successRatioMA],
+        series: ['Success Ratio', 'MA'],
+    }, {
+        xLabel: 'Version',
+        yLabel: 'Success Ratio',
+        width: 500,
+        height: 300,
+    });
+
     const avgRewards = store.rewards.toArray();
     const avgRewardsMA = calculateMovingAverage(avgRewards, 1000);
     const minRewards = store.rewards.toArrayMin();

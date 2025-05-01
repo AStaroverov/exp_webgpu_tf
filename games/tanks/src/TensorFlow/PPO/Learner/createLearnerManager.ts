@@ -43,6 +43,9 @@ export function createLearnerManager() {
                     disposeNetwork(policyNetwork);
                     disposeNetwork(valueNetwork);
 
+                    metricsChannels.successRatio.postMessage(
+                        batches.map(b => b.successRatio),
+                    );
                     metricsChannels.versionDelta.postMessage(
                         batches.map(b => getNetworkVersion(policyNetwork) - b.version),
                     );

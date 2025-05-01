@@ -83,5 +83,5 @@ export async function createBattlefield(tanksCount: number, withRender = false, 
         return getTanks().filter((id) => activeAgents.has(id));
     };
 
-    return { ...game, gameTick, getTanks, getAgenTanks, getTeamsCount };
+    return { ...game, activeTeam, gameTick, getTanks, getAgenTanks, getTeamsCount };
 }

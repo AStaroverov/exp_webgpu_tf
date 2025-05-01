@@ -67,3 +67,8 @@ export function getTankScore(tankEid: number): number {
 
     return score;
 }
+
+export function getTankTeamId(tankEid: number) {
+    const teamId = TeamRef.id[tankEid];
+    return teamId;
+}

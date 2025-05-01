@@ -3,7 +3,11 @@ import { createChannel } from '../../../../../lib/channles.ts';
 import { LearnBatch } from './Learner/createLearnerManager.ts';
 import { Model } from '../Models/Transfer.ts';
 
-export const actorMemoryChannel = createChannel<{ memories: Batch, version: number }>('memory-channel');
+export const actorMemoryChannel = createChannel<{
+    version: number,
+    memories: Batch,
+    successRatio: number
+}>('memory-channel');
 
 export const learnMemoryChannel = createChannel<
     LearnBatch,

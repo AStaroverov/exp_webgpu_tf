@@ -15,7 +15,7 @@ import { prepareInputArrays } from '../../Common/InputArrays.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
 import { actorMemoryChannel } from '../channels.ts';
 import { calculateReward } from '../../Reward/calculateReward.ts';
-import { getTankHealth } from '../../../ECS/Entities/Tank/TankUtils.ts';
+import { getTankHealth, getTankTeamId } from '../../../ECS/Entities/Tank/TankUtils.ts';
 
 type Game = Awaited<ReturnType<typeof createBattlefield>>;
 
@@ -46,9 +46,9 @@ export class ActorManager {
         ]));
     }
 
-    private afterEpisode() {
+    private afterEpisode(successRatio: number) {
         const memory = this.agent.readMemory();
-        actorMemoryChannel.emit(memory);
+        actorMemoryChannel.emit({ ...memory, successRatio });
     }
 
     private cleanupEpisode(game: Game) {
@@ -58,10 +58,16 @@ export class ActorManager {
 
     private async runEpisode() {
         const [game] = await this.beforeEpisode();
+        const tanks = game.getTanks();
+
+        const teamHealth = getTeamHealth(tanks);
 
         try {
             await this.runGameLoop(game);
-            this.afterEpisode();
+
+            const successRatio = getSuccessRatio(game, teamHealth);
+
+            this.afterEpisode(successRatio);
         } catch (error) {
             throw error;
         } finally {
@@ -183,4 +189,29 @@ export class ActorManager {
             isDone,
         );
     }
+}
+
+function getTeamHealth(tanks: number[]) {
+    return tanks.reduce((acc, tankEid) => {
+        const team = getTankTeamId(tankEid);
+        const health = getTankHealth(tankEid);
+        acc[team] = (acc[team] || 0) + health;
+        return acc;
+    }, {} as Record<number, number>);
+}
+
+function getSuccessRatio(game: Game, initialTeamHealth: Record<number, number>) {
+    const activeTeam = game.activeTeam;
+    const tanks = game.getTanks();
+    const teamHealth = getTeamHealth(tanks);
+    const successRatio = Object.entries(teamHealth)
+        .map(([k, v]) => [Number(k), v])
+        .reduce((acc, [teamId, health]) => {
+            const delta = activeTeam === Number(teamId)
+                ? (health / initialTeamHealth[teamId])
+                : 1 - (health / initialTeamHealth[teamId]);
+            return acc + delta;
+        }, 0);
+
+    return successRatio / game.getTeamsCount();
 }

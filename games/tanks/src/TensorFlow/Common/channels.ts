@@ -20,6 +20,7 @@ export const metricsChannels = {
     trainTime: new BroadcastChannel('trainTime'),
     waitTime: new BroadcastChannel('waitTime'),
     versionDelta: new BroadcastChannel('versionDelta'),
+    successRatio: new BroadcastChannel('successRatio'),
     batchSize: new BroadcastChannel('batchSize'),
     prbAlpha: new BroadcastChannel('prbAlpha'),
     prbBeta: new BroadcastChannel('prbBeta'),
