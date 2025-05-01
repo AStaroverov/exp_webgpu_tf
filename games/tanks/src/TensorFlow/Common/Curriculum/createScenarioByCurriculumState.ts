@@ -16,15 +16,16 @@ import {
 
 type ScenarioOptions = Parameters<typeof createBattlefield>[0];
 
-const mapIndexToConstructor = new Map([
+const mapEntries = [
     [indexScenarioStatic, createScenarioStatic],
     [indexScenarioStaticWithCoop, createScenarioStaticWithCoop],
     [indexScenarioWithMovingAgents, createScenarioWithMovingAgents],
     [indexScenarioWithShootingAgents, createScenarioWithShootingAgents],
     [indexScenarioWithHeuristicAgents, createScenarioWithHeuristicAgents],
-]);
+] as const;
+const mapIndexToConstructor = new Map(mapEntries);
 
-if (mapIndexToConstructor.size !== 4) {
+if (mapIndexToConstructor.size !== mapEntries.length) {
     throw new Error('Scenario index is not unique');
 }
 
