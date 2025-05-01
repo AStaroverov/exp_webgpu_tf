@@ -58,7 +58,6 @@ export const shaderMeta = new ShaderMeta(
             
             if (dist > 0.0 || color.a == 0.0) { 
                 discard;
-//                return vec4<f32>(1.0, 1.0, 1.0, 0.1);
             }
 
             return FragmentOutput(
@@ -108,8 +107,6 @@ export const shaderMeta = new ShaderMeta(
             let light_dir = normalize(vec2<f32>(-0.5, -0.5) * rotation);
 
             let shadow = compute_shadow(local_position, light_dir, instance_index);
-//            return vec4<f32>(vec3<f32>(0.0), shadow);
-                            
             let brightnessFactor = 1.0 - smoothstep(fadeStart, fadeEnd, abs(dist));
         
             return vec4<f32>(uColor[instance_index].rgb * 0.2, shadow * brightnessFactor);
