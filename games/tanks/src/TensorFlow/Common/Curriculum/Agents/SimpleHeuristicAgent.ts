@@ -8,12 +8,6 @@ import { applyActionToTank } from '../../applyActionToTank.ts';
 import { TankAgent } from './ActorAgent.ts';
 import { randomRangeFloat, randomSign } from '../../../../../../../lib/random.ts';
 
-interface BodyState {
-    rotation: -1 | 0 | 1;
-    escapingBorder: boolean;
-    borderRotation: -1 | 1;
-}
-
 export type AgentFeatures = {
     move?: number;
     aim?: boolean;
@@ -21,21 +15,18 @@ export type AgentFeatures = {
 }
 
 export class SimpleHeuristicAgent implements TankAgent {
-    private tickCounter = 0;
-    private bodyState: BodyState = { rotation: 0, escapingBorder: false, borderRotation: 1 };
+    private waypoint?: { x: number; y: number };
     private currentTargetId: number | undefined;
 
     constructor(
         public readonly tankEid: number,
         private readonly features: AgentFeatures = {},
-        private readonly turnInterval: number = 30,
         private readonly shootChance: number = 0.25,
-        private readonly border: number = 200,
     ) {
     }
 
     updateTankBehaviour(width: number, height: number): void {
-        this.tickCounter++;
+        this.updateWaypoint(width, height);
 
         // 1. выбор цели (если нужно прицеливаться или стрелять)
         if (this.features.aim === true || this.features.shoot === true) {
@@ -53,7 +44,7 @@ export class SimpleHeuristicAgent implements TankAgent {
         const withMove = typeof this.features.move === 'number';
         const maxMove = withMove ? this.features.move : 0;
         const move = this.updateBodyVelocity();
-        const rotation = withMove ? this.updateBodyRotation(width, height) : 0;
+        const rotation = withMove ? this.updateBodyRotationTowardsWaypoint() : 0;
 
         // 4. формируем действие
         const shoot = this.features.shoot === false ? 0 : turretCmd.shoot;
@@ -66,6 +57,22 @@ export class SimpleHeuristicAgent implements TankAgent {
             turretCmd.aimY,
         ];
         applyActionToTank(this.tankEid, action, maxMove);
+    }
+
+    private updateWaypoint(width: number, height: number): void {
+        if (!this.waypoint) {
+            this.waypoint = getRandomWaypoint(width, height);
+        }
+
+        const sx = RigidBodyState.position.get(this.tankEid, 0);
+        const sy = RigidBodyState.position.get(this.tankEid, 1);
+        const dx = this.waypoint.x - sx;
+        const dy = this.waypoint.y - sy;
+
+        if (hypot(dx, dy) < 100) {
+            this.waypoint = getRandomWaypoint(width, height);
+        }
+
     }
 
     private selectTarget(): number | undefined {
@@ -134,33 +141,38 @@ export class SimpleHeuristicAgent implements TankAgent {
         return velocity;
     }
 
-    private updateBodyRotation(width: number, height: number): -1 | 0 | 1 {
-        const x = RigidBodyState.position.get(this.tankEid, 0);
-        const y = RigidBodyState.position.get(this.tankEid, 1);
-        const atBorder = (
-            x < this.border || x > width - this.border || y < this.border || y > height - this.border
-        );
+    private updateBodyRotationTowardsWaypoint(): number {
+        if (!this.waypoint) return 0;
 
-        if (atBorder) {
-            if (!this.bodyState.escapingBorder) {
-                this.bodyState.escapingBorder = true;
-                this.bodyState.borderRotation = Math.random() < 0.5 ? -1 : 1;
-            }
-            this.bodyState.rotation = this.bodyState.borderRotation;
-            return this.bodyState.rotation;
-        }
+        // --- позиция танка ---
+        const px = RigidBodyState.position.get(this.tankEid, 0);
+        const py = RigidBodyState.position.get(this.tankEid, 1);
 
-        // вышли из зоны края
-        if (this.bodyState.escapingBorder) {
-            this.bodyState.escapingBorder = false;
-        }
+        // --- позиция точки ---
+        const dx = this.waypoint.x - px;
+        const dy = this.waypoint.y - py;
+        const targetAngle = Math.atan2(dy, dx);
 
-        // случайная смена курса, если включена фича randomTurn
-        if (this.tickCounter % this.turnInterval === 0) {
-            const r = Math.random();
-            this.bodyState.rotation = r < 0.33 ? -1 : r < 0.66 ? 1 : 0;
-        }
+        // --- текущий угол корпуса ---
+        const bodyAngle = RigidBodyState.rotation[this.tankEid];
 
-        return this.bodyState.rotation;
+        // --- разница углов, нормализованная к [-π, π] ---
+        const delta = -wrapPi((targetAngle - bodyAngle) - Math.PI / 2);    // -π … π
+
+        // --- преобразуем в диапазон [-1; 1] ---
+        return (delta / Math.PI);                // -1 … 1
     }
+}
+
+function wrapPi(a: number): number {
+    while (a > Math.PI) a -= 2 * Math.PI;
+    while (a < -Math.PI) a += 2 * Math.PI;
+    return a;
+}
+
+function getRandomWaypoint(width: number, height: number) {
+    return {
+        x: randomRangeFloat(200, width - 200),
+        y: randomRangeFloat(200, height - 200),
+    };
 }

@@ -16,7 +16,7 @@ export async function createScenarioWithMovingAgents(options: Parameters<typeof 
 
     for (const tankEid of freeTanks) {
         const agent = new SimpleHeuristicAgent(tankEid, {
-            move: randomRangeFloat(0.2, 1),
+            move: randomRangeFloat(0.4, 1),
         });
         episode.addAgent(tankEid, agent);
     }

@@ -22,22 +22,22 @@ export function createTankAimSystem({ world } = GameDI) {
             const tankEid = tankEids[i];
             const aimEid = Tank.aimEid[tankEid];
             const tankPos = RigidBodyState.position.getBatch(tankEid);
-            const turretLocal = LocalTransform.matrix.getBatch(aimEid);
-            const turretDir = TankController.turretDir.getBatch(tankEid);
-            let turretTargetX = getMatrixTranslationX(turretLocal) + turretDir[0] * delta * 0.1;
-            let turretTargetY = getMatrixTranslationY(turretLocal) + turretDir[1] * delta * 0.1;
+            const aimLocal = LocalTransform.matrix.getBatch(aimEid);
+            const aimDir = TankController.turretDir.getBatch(tankEid);
+            let aimX = getMatrixTranslationX(aimLocal) + aimDir[0] * delta * 0.1;
+            let aimY = getMatrixTranslationY(aimLocal) + aimDir[1] * delta * 0.1;
 
-            if (dist2(tankPos[0], tankPos[1], turretTargetX, turretTargetY) > MAX_DIST) {
-                const dX = turretTargetX - tankPos[0];
-                const dY = turretTargetY - tankPos[1];
+            if (dist2(tankPos[0], tankPos[1], aimX, aimY) > MAX_DIST) {
+                const dX = aimX - tankPos[0];
+                const dY = aimY - tankPos[1];
                 const dist = hypot(dX, dY);
                 const nX = dX / dist;
                 const nY = dY / dist;
-                turretTargetX = tankPos[0] + nX * MAX_DIST;
-                turretTargetY = tankPos[1] + nY * MAX_DIST;
+                aimX = tankPos[0] + nX * MAX_DIST;
+                aimY = tankPos[1] + nY * MAX_DIST;
             }
 
-            setMatrixTranslate(LocalTransform.matrix.getBatch(aimEid), turretTargetX, turretTargetY, ZIndex.Bullet);
+            setMatrixTranslate(aimLocal, aimX, aimY, ZIndex.Bullet);
         }
     });
 }
