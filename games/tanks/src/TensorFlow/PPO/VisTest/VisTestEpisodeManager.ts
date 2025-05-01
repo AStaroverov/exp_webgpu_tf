@@ -72,24 +72,24 @@ export class VisTestEpisodeManager extends EpisodeManager {
         return new Promise(resolve => {
             const shouldEvery = SNAPSHOT_EVERY;
             const maxFramesCount = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
-            let regardedAgents: TankAgent[] = [];
+            let regardedActors: TankAgent[] = [];
             let frame = 0;
 
             const stop = frameTasks.addInterval(() => {
                 frame++;
-                const nextRegardedAgents = this.runGameTick(
+                const nextRegardedActors = this.runGameTick(
                     episode,
-                    regardedAgents,
+                    regardedActors,
                     frame,
                     maxFramesCount,
                     shouldEvery,
                 );
 
-                if (nextRegardedAgents == null || !getDrawState()) {
+                if (nextRegardedActors == null || !getDrawState()) {
                     stop();
                     resolve(null);
                 } else {
-                    regardedAgents = nextRegardedAgents;
+                    regardedActors = nextRegardedActors;
                 }
             }, 1);
         });

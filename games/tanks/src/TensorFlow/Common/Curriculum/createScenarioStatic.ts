@@ -27,6 +27,11 @@ export async function createScenarioStatic(options: Parameters<typeof createBatt
             game.destroy();
             mapTankIdToAgent.forEach(agent => agent.dispose?.());
         },
+        getActors() {
+            return game.getTankEids()
+                .filter((eid) => mapTankIdToAgent.has(eid) && mapTankIdToAgent.get(eid) instanceof ActorAgent)
+                .map((eid) => mapTankIdToAgent.get(eid) as ActorAgent);
+        },
         getAgents() {
             return game.getTankEids()
                 .filter((eid) => mapTankIdToAgent.has(eid))

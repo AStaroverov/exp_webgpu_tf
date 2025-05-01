@@ -7,6 +7,8 @@ export type Scenario = Awaited<ReturnType<typeof createBattlefield>> & {
     getAgents: () => TankAgent[];
     getSuccessRatio: () => number;
 
+    getActors(): TankAgent[];
+
     // private
     addAgent(tankEid: EntityId, agent: TankAgent): void;
     getAgent(tankEid: EntityId): TankAgent | undefined;

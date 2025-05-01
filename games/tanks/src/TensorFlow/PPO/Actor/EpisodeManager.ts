@@ -69,26 +69,26 @@ export class EpisodeManager {
         return new Promise(resolve => {
             const shouldEvery = SNAPSHOT_EVERY;
             const maxFramesCount = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
-            let regardedAgents: TankAgent[] = [];
+            let regardedActors: TankAgent[] = [];
             let frame = 0;
 
             const stop = macroTasks.addInterval(() => {
                 for (let i = 0; i < 100; i++) {
                     frame++;
-                    const nextRegardedAgents = this.runGameTick(
+                    const nextRegardedActors = this.runGameTick(
                         episode,
-                        regardedAgents,
+                        regardedActors,
                         frame,
                         maxFramesCount,
                         shouldEvery,
                     );
 
-                    if (nextRegardedAgents == null) {
+                    if (nextRegardedActors == null) {
                         stop();
                         resolve(null);
                         break;
                     } else {
-                        regardedAgents = nextRegardedAgents;
+                        regardedActors = nextRegardedActors;
                     }
                 }
             }, 1);
@@ -97,25 +97,26 @@ export class EpisodeManager {
 
     protected runGameTick(
         scenario: Scenario,
-        prevAgents: TankAgent[],
+        prevActors: TankAgent[],
         frame: number,
         maxFrames: number,
         shouldEvery: number,
     ) {
-        const agents = scenario.getAgents();
+        const actors = scenario.getActors();
         const currentTanks = scenario.getTankEids();
-        const gameOverByTankCount = agents.length <= 0 || currentTanks.length <= 1;
+        const gameOverByActorCount = actors.length <= 0;
+        const gameOverByTankCount = currentTanks.length <= 1;
         const gameOverByTeamWin = scenario.getTeamsCount() === 1;
         const gameOverByTime = frame > maxFrames;
-        const gameOver = gameOverByTankCount || gameOverByTeamWin || gameOverByTime;
+        const gameOver = gameOverByActorCount || gameOverByTankCount || gameOverByTeamWin || gameOverByTime;
         const shouldAction = frame % shouldEvery === 0;
         const shouldMemorize = gameOver || (frame - (shouldEvery - 1)) % shouldEvery === 0;
         TenserFlowDI.shouldCollectState = (frame + 1) % shouldEvery === 0;
 
         if (shouldAction) {
-            prevAgents = agents;
+            prevActors = actors;
 
-            for (const agent of prevAgents) {
+            for (const agent of prevActors) {
                 agent.updateTankBehaviour(GameDI.width, GameDI.height);
             }
         }
@@ -124,7 +125,7 @@ export class EpisodeManager {
         scenario.gameTick(TICK_TIME_SIMULATION);
 
         if (shouldMemorize) {
-            for (const agent of prevAgents) {
+            for (const agent of prevActors) {
                 agent.memorizeTankBehaviour?.(
                     GameDI.width,
                     GameDI.height,
@@ -133,6 +134,6 @@ export class EpisodeManager {
             }
         }
 
-        return gameOver ? null : prevAgents;
+        return gameOver ? null : prevActors;
     }
 }
