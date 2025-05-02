@@ -41,9 +41,9 @@ export type Config = {
 // Default experiment configuration for PPO
 export const DEFAULT_EXPERIMENT: Config = {
     // Learning parameters
-    clipNorm: 20,
+    clipNorm: 40,
     // PPO-specific parameters
-    gamma: 0.93,
+    gamma: 0.95,
     policyEpochs: 8,
     policyClipRatio: 0.2,
     policyEntropyCoeff: 0.01,
@@ -53,9 +53,9 @@ export const DEFAULT_EXPERIMENT: Config = {
     valueLossCoeff: 0.5,
 
     klConfig: {
-        target: 0.02,
-        high: 0.03,
-        low: 0.01,
+        target: 0.01,
+        high: 0.02,
+        low: 0.005,
         max: 0.5,
     },
     lrConfig: {
