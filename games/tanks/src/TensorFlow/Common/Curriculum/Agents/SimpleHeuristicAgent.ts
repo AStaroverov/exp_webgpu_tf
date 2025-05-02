@@ -2,7 +2,7 @@ import { RigidBodyState } from '../../../../ECS/Components/Physical';
 import { hypot } from '../../../../../../../lib/math.ts';
 import { TankController } from '../../../../ECS/Components/TankController.ts';
 import { getAimPosition, getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
-import { findTankEnemiesEids } from '../../../../ECS/Systems/RL/createTankInputTensorSystem.ts';
+import { findTankEnemiesEids } from '../../../../ECS/Utils/snapshotTankInputTensor.ts';
 import { Actions } from '../../actions.ts';
 import { applyActionToTank } from '../../applyActionToTank.ts';
 import { TankAgent } from './ActorAgent.ts';

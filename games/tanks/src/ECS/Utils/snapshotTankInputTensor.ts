@@ -1,114 +1,109 @@
-import { GameDI } from '../../../DI/GameDI.ts';
-import { Tank, TANK_APPROXIMATE_COLLISION_RADIUS } from '../../Components/Tank.ts';
-import { MAX_ALLIES, MAX_BULLETS, MAX_ENEMIES, TankInputTensor } from '../../Components/TankState.ts';
-import { getEntityIdByPhysicalId, RigidBodyState } from '../../Components/Physical.ts';
-import { hypot } from '../../../../../../lib/math.ts';
+import { GameDI } from '../../DI/GameDI.ts';
+import { Tank, TANK_APPROXIMATE_COLLISION_RADIUS } from '../Components/Tank.ts';
+import { MAX_ALLIES, MAX_BULLETS, MAX_ENEMIES, TankInputTensor } from '../Components/TankState.ts';
+import { getEntityIdByPhysicalId, RigidBodyState } from '../Components/Physical.ts';
+import { hypot } from '../../../../../lib/math.ts';
 import { Ball, Collider } from '@dimforge/rapier2d-simd';
-import { CollisionGroup, createCollisionGroups } from '../../../Physical/createRigid.ts';
+import { CollisionGroup, createCollisionGroups } from '../../Physical/createRigid.ts';
 import { EntityId, query } from 'bitecs';
-import { PlayerRef } from '../../Components/PlayerRef.ts';
-import { getMatrixTranslation, LocalTransform } from '../../../../../../src/ECS/Components/Transform.ts';
-import { hasIntersectionVectorAndCircle } from '../../../Utils/intersections.ts';
-import { shuffle } from '../../../../../../lib/shuffle.ts';
-import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
-import { TeamRef } from '../../Components/TeamRef.ts';
+import { PlayerRef } from '../Components/PlayerRef.ts';
+import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
+import { hasIntersectionVectorAndCircle } from '../../Utils/intersections.ts';
+import { shuffle } from '../../../../../lib/shuffle.ts';
+import { TeamRef } from '../Components/TeamRef.ts';
 
-import { getTankHealth } from '../../Entities/Tank/TankUtils.ts';
+import { getTankHealth } from '../Entities/Tank/TankUtils.ts';
 
-export function createTankInputTensorSystem({ world } = GameDI) {
-    return () => {
-        if (!TenserFlowDI.enabled || !TenserFlowDI.shouldCollectState) return;
+export function snapshotTankInputTensor({ world } = GameDI) {
+    const tankEids = query(world, [Tank, TankInputTensor, RigidBodyState]);
 
-        const tankEids = query(world, [Tank, TankInputTensor, RigidBodyState]);
+    TankInputTensor.resetEnemiesCoords();
+    TankInputTensor.resetAlliesCoords();
+    TankInputTensor.resetBulletsCoords();
 
-        TankInputTensor.resetEnemiesCoords();
-        TankInputTensor.resetAlliesCoords();
-        TankInputTensor.resetBulletsCoords();
+    for (let i = 0; i < tankEids.length; i++) {
+        const tankEid = tankEids[i];
 
-        for (let i = 0; i < tankEids.length; i++) {
-            const tankEid = tankEids[i];
+        const {
+            enemiesCount,
+            enemiesTotalHealth,
+            alliesCount,
+            alliesTotalHealth,
+        } = getBattleState(tankEid, tankEids);
 
-            const {
-                enemiesCount,
-                enemiesTotalHealth,
-                alliesCount,
-                alliesTotalHealth,
-            } = getBattleState(tankEid, tankEids);
+        TankInputTensor.setBattlefieldData(
+            tankEid,
+            enemiesCount,
+            enemiesTotalHealth,
+            alliesCount,
+            alliesTotalHealth,
+        );
 
-            TankInputTensor.setBattlefieldData(
+        // Set tank data
+        const health = getTankHealth(tankEid);
+        const position = RigidBodyState.position.getBatch(tankEid);
+        const rotation = RigidBodyState.rotation[tankEid];
+        const linvel = RigidBodyState.linvel.getBatch(tankEid);
+        const aimLocal = LocalTransform.matrix.getBatch(Tank.aimEid[tankEid]);
+
+        TankInputTensor.setTankData(
+            tankEid,
+            health,
+            position,
+            rotation,
+            linvel,
+            getMatrixTranslation(aimLocal),
+        );
+
+        // Find closest enemies
+        const enemiesEids = findTankEnemiesEids(tankEid);
+
+        for (let j = 0; j < enemiesEids.length; j++) {
+            const enemyEid = enemiesEids[j];
+
+            TankInputTensor.setEnemiesData(
                 tankEid,
-                enemiesCount,
-                enemiesTotalHealth,
-                alliesCount,
-                alliesTotalHealth,
+                j,
+                enemyEid,
+                getTankHealth(enemyEid),
+                RigidBodyState.position.getBatch(enemyEid),
+                RigidBodyState.linvel.getBatch(enemyEid),
+                getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[enemyEid])),
             );
-
-            // Set tank data
-            const health = getTankHealth(tankEid);
-            const position = RigidBodyState.position.getBatch(tankEid);
-            const rotation = RigidBodyState.rotation[tankEid];
-            const linvel = RigidBodyState.linvel.getBatch(tankEid);
-            const aimLocal = LocalTransform.matrix.getBatch(Tank.aimEid[tankEid]);
-
-            TankInputTensor.setTankData(
-                tankEid,
-                health,
-                position,
-                rotation,
-                linvel,
-                getMatrixTranslation(aimLocal),
-            );
-
-            // Find closest enemies
-            const enemiesEids = findTankEnemiesEids(tankEid);
-
-            for (let j = 0; j < enemiesEids.length; j++) {
-                const enemyEid = enemiesEids[j];
-
-                TankInputTensor.setEnemiesData(
-                    tankEid,
-                    j,
-                    enemyEid,
-                    getTankHealth(enemyEid),
-                    RigidBodyState.position.getBatch(enemyEid),
-                    RigidBodyState.linvel.getBatch(enemyEid),
-                    getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[enemyEid])),
-                );
-            }
-
-            // Find closest allies
-            const alliesEids = findTankAlliesEids(tankEid);
-
-            for (let j = 0; j < alliesEids.length; j++) {
-                const allyEid = alliesEids[j];
-
-                TankInputTensor.setAlliesData(
-                    tankEid,
-                    j,
-                    allyEid,
-                    getTankHealth(allyEid),
-                    RigidBodyState.position.getBatch(allyEid),
-                    RigidBodyState.linvel.getBatch(allyEid),
-                    getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[allyEid])),
-                );
-            }
-
-            // Find closest bullets
-            const bulletsEids = findTankDangerBullets(tankEid);
-
-            for (let j = 0; j < bulletsEids.length; j++) {
-                const bulletEid = bulletsEids[j];
-
-                TankInputTensor.setBulletsData(
-                    tankEid,
-                    j,
-                    bulletEid,
-                    RigidBodyState.position.getBatch(bulletEid),
-                    RigidBodyState.linvel.getBatch(bulletEid),
-                );
-            }
         }
-    };
+
+        // Find closest allies
+        const alliesEids = findTankAlliesEids(tankEid);
+
+        for (let j = 0; j < alliesEids.length; j++) {
+            const allyEid = alliesEids[j];
+
+            TankInputTensor.setAlliesData(
+                tankEid,
+                j,
+                allyEid,
+                getTankHealth(allyEid),
+                RigidBodyState.position.getBatch(allyEid),
+                RigidBodyState.linvel.getBatch(allyEid),
+                getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[allyEid])),
+            );
+        }
+
+        // Find closest bullets
+        const bulletsEids = findTankDangerBullets(tankEid);
+
+        for (let j = 0; j < bulletsEids.length; j++) {
+            const bulletEid = bulletsEids[j];
+
+            TankInputTensor.setBulletsData(
+                tankEid,
+                j,
+                bulletEid,
+                RigidBodyState.position.getBatch(bulletEid),
+                RigidBodyState.linvel.getBatch(bulletEid),
+            );
+        }
+    }
 }
 
 

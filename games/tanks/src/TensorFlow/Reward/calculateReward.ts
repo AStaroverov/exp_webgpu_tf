@@ -1,5 +1,5 @@
 import { RigidBodyState } from '../../ECS/Components/Physical.ts';
-import { BattleState, BULLET_DANGER_SPEED, getBattleState } from '../../ECS/Systems/RL/createTankInputTensorSystem.ts';
+import { BattleState, BULLET_DANGER_SPEED, getBattleState } from '../../ECS/Utils/snapshotTankInputTensor.ts';
 import { abs, acos, centerStep, hypot, max, min, PI, sin, smoothstep } from '../../../../../lib/math.ts';
 import { TANK_RADIUS } from '../Common/consts.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';

@@ -19,7 +19,6 @@ import { createHitableSystem } from './ECS/Systems/createHitableSystem.ts';
 import { createTankAliveSystem } from './ECS/Systems/Tank/createTankAliveSystem.ts';
 import { createTankPositionSystem, createTankTurretRotationSystem } from './ECS/Systems/Tank/TankControllerSystems.ts';
 import { createDestroyOutOfZoneSystem } from './ECS/Systems/createDestroyOutOfZoneSystem.ts';
-import { createTankInputTensorSystem } from './ECS/Systems/RL/createTankInputTensorSystem.ts';
 import { destroyChangeDetectorSystem } from '../../../src/ECS/Systems/ChangedDetectorSystem.ts';
 import { createDestroyByTimeoutSystem } from './ECS/Systems/createDestroyByTimeoutSystem.ts';
 import { createTankAimSystem } from './ECS/Systems/Tank/createTankAimSystem.ts';
@@ -172,11 +171,6 @@ export async function createGame({ width, height, withRender, withPlayer }: {
         destroy();
     };
 
-    const updateTankInputTensor = createTankInputTensorSystem();
-    const statsFrame = () => {
-        updateTankInputTensor();
-    };
-
     const aimUpdate = createTankAimSystem();
     const visTracksUpdate = createVisualizationTracksSystem();
 
@@ -195,8 +189,6 @@ export async function createGame({ width, height, withRender, withPlayer }: {
         // stats.update();
         //
         destroyFrame(delta);
-
-        statsFrame();
 
         inputFrame();
     };

@@ -32,7 +32,7 @@ export type TankAgent = {
     getMemoryBatch?(): AgentMemoryBatch;
 
     updateTankBehaviour(width: number, height: number): void;
-    memorizeTankBehaviour?(width: number, height: number, gameOver: boolean): void;
+    evaluateTankBehaviour?(width: number, height: number, gameOver: boolean): void;
 }
 
 export class ActorAgent implements TankAgent {
@@ -93,7 +93,7 @@ export class ActorAgent implements TankAgent {
         );
     }
 
-    public memorizeTankBehaviour(
+    public evaluateTankBehaviour(
         width: number,
         height: number,
         gameOver: boolean,
