@@ -126,7 +126,7 @@ export function act(
     return tf.tidy(() => {
         const predicted = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
         const { mean, logStd } = parsePredict(predicted);
-        const std = logStd.exp().mul(0.3);
+        const std = logStd.exp();
 
         const whiteNoise = tf.randomNormal([ACTION_DIM]).mul(std);
         const whiteActions = mean.add(whiteNoise);
@@ -284,7 +284,7 @@ export function computeVTrace(
 function parsePredict(predict: tf.Tensor) {
     const outMean = predict.slice([0, 0], [-1, ACTION_DIM]);
     const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
-    const clippedLogStd = outLogStd.clipByValue(-5, 0.2);
+    const clippedLogStd = outLogStd.clipByValue(-5, 1);
 
     return { mean: outMean, logStd: clippedLogStd };
 }

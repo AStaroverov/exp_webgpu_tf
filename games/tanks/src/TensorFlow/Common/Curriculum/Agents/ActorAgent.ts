@@ -7,7 +7,7 @@ import { queueSizeChannel } from '../../../PPO/channels.ts';
 import { filter, first, firstValueFrom, mergeMap, race, retry, shareReplay, startWith, tap, timer } from 'rxjs';
 import { disposeNetwork, getNetwork } from '../../../Models/Utils.ts';
 import { getNetworkVersion } from '../../utils.ts';
-import { applyActionToTank } from '../../applyActionToTank.ts';
+import { Actions, applyActionToTank } from '../../applyActionToTank.ts';
 import { calculateReward } from '../../../Reward/calculateReward.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
 import { getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
@@ -84,13 +84,13 @@ export class ActorAgent implements TankAgent {
         const result = act(this.policyNetwork!, state, this.noise);
 
         if (++this.step % 30 === 0) {
-            const sigma = clamp(mean(result.logStd.map(Math.exp)), 0.05, 0.3);
+            const sigma = 2 * clamp(mean(result.logStd.map(Math.exp)), 0.05, 1);
             const newNoise = ouNoise(this.noise ?? tf.zeros([ACTION_DIM]), sigma);
             this.noise?.dispose();
             this.noise = newNoise;
         }
 
-        applyActionToTank(this.tankEid, result.actions);
+        applyActionToTank(this.tankEid, prepareActions(result.actions));
 
         const stateReward = calculateReward(
             this.tankEid,
@@ -128,4 +128,8 @@ export class ActorAgent implements TankAgent {
         this.policyNetwork = await getNetwork(Model.Policy);
         perturbWeights(this.policyNetwork);
     }
+}
+
+function prepareActions(actions: Actions): Actions {
+    return actions.map(v => v / 10) as Actions;
 }

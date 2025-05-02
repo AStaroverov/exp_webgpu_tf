@@ -11,13 +11,13 @@ export function applyActionToTank(
     limitRotation = PI,
     limitAimDir = 2,
 ) {
-    const shoot = actions[0];
+    const shoot = actions[0] > 0;
     const move = actions[1];
     const rotate = actions[2];
     const aimX = actions[3];
     const aimY = actions[4];
 
-    TankController.setShooting$(tankEid, shoot > 0);
+    TankController.setShooting$(tankEid, shoot);
     TankController.setMove$(tankEid, clamp(TankController.move[tankEid] + move, -limitMove, limitMove));
     TankController.setRotate$(tankEid, clamp(TankController.rotation[tankEid] + rotate, -limitRotation, limitRotation));
     TankController.setTurretDir$(
