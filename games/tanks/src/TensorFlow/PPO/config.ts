@@ -1,4 +1,5 @@
 import { isMac } from '../../../../../lib/detect.ts';
+import { TICK_TIME_SIMULATION } from '../Common/consts.ts';
 
 export type Config = {
     // Learning parameters
@@ -68,8 +69,8 @@ export const DEFAULT_EXPERIMENT: Config = {
     batchSize: isMac ? 300 : 2_000,
     miniBatchSize: isMac ? 128 : 128,
 
-    // Training parameters
-    episodeFrames: 2000,
+    // Training parameters - FRAMES = 30sec / TICK_TIME_SIMULATION
+    episodeFrames: 30 * 1000 / TICK_TIME_SIMULATION,
     // Workers
     workerCount: isMac ? 3 : 10,
     // Training control
