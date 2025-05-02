@@ -116,41 +116,28 @@ export function computeKullbackLeiblerExact(
 export function act(
     policyNetwork: tf.LayersModel,
     state: InputArrays,
+    ouNoise: tf.Tensor = tf.zeros([ACTION_DIM]),
 ): {
     actions: Float32Array,
     mean: Float32Array,
     logStd: Float32Array,
-    logProb: number,
+    logProb: number
 } {
     return tf.tidy(() => {
         const predicted = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
         const { mean, logStd } = parsePredict(predicted);
-        const std = logStd.exp();
+        const std = logStd.exp().mul(0.3);
 
-        const noise = tf.randomNormal([ACTION_DIM]).mul(std);
-        const actions = mean.add(noise);
-        const logProb = computeLogProb(actions, mean, std);
+        const whiteNoise = tf.randomNormal([ACTION_DIM]).mul(std);
+        const whiteActions = mean.add(whiteNoise);
+        const logProb = computeLogProb(whiteActions, mean, std);
+        const actions = whiteActions.add(ouNoise);
 
         return {
             actions: syncUnwrapTensor(actions) as Float32Array,
             mean: syncUnwrapTensor(mean) as Float32Array,
             logStd: syncUnwrapTensor(logStd) as Float32Array,
             logProb: syncUnwrapTensor(logProb)[0],
-        };
-    });
-}
-
-export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { actions: Float32Array } {
-    return tf.tidy(() => {
-        const predicted = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
-        const { mean, logStd } = parsePredict(predicted);
-
-        const noise = tf.randomNormal([ACTION_DIM]).mul(logStd.exp());
-        const actions = mean.add(noise);
-
-        return {
-            actions: syncUnwrapTensor(actions) as Float32Array,
-            // actions: mean.dataSync() as Float32Array,
         };
     });
 }
@@ -300,6 +287,20 @@ function parsePredict(predict: tf.Tensor) {
     const clippedLogStd = outLogStd.clipByValue(-5, 0.2);
 
     return { mean: outMean, logStd: clippedLogStd };
+}
+
+export function ouNoise(noise: tf.Tensor, sigma = 0.3, theta = 0.3, dt = 1) {
+    return noise.add(
+        tf.randomNormal([ACTION_DIM]).mul(sigma * Math.sqrt(dt))
+            .sub(noise.mul(theta * dt)),
+    );
+}
+
+export function perturbWeights(model: tf.LayersModel, scale = 0.02) {
+    const w = model.getWeights().map(t =>
+        t.add(tf.randomNormal(t.shape).mul(scale)),
+    );
+    model.setWeights(w);
 }
 
 let randomInputTensors: tf.Tensor[];

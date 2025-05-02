@@ -76,6 +76,7 @@ export class EpisodeManager {
                 for (let i = 0; i < 100; i++) {
                     frame++;
                     const nextRegardedAgents = this.runGameTick(
+                        TICK_TIME_SIMULATION,
                         episode,
                         regardedAgents,
                         frame,
@@ -96,6 +97,7 @@ export class EpisodeManager {
     }
 
     protected runGameTick(
+        deltaTime: number,
         scenario: Scenario,
         currentAgents: TankAgent[],
         frame: number,
@@ -131,7 +133,7 @@ export class EpisodeManager {
             }
         }
 
-        scenario.gameTick(TICK_TIME_SIMULATION);
+        scenario.gameTick(deltaTime);
 
         return currentAgents;
     }

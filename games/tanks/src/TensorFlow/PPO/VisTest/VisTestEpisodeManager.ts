@@ -78,6 +78,7 @@ export class VisTestEpisodeManager extends EpisodeManager {
             const stop = frameTasks.addInterval(() => {
                 frame++;
                 const nextRegardedAgents = this.runGameTick(
+                    16.667,
                     episode,
                     regardedAgents,
                     frame,

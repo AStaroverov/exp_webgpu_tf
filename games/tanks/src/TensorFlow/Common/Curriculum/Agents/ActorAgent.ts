@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
-import { act } from '../../../PPO/train.ts';
+import { act, ouNoise, perturbWeights } from '../../../PPO/train.ts';
 import { prepareInputArrays } from '../../InputArrays.ts';
 import { Model } from '../../../Models/Transfer.ts';
 import { queueSizeChannel } from '../../../PPO/channels.ts';
@@ -11,6 +11,9 @@ import { applyActionToTank } from '../../applyActionToTank.ts';
 import { calculateReward } from '../../../Reward/calculateReward.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
 import { getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
+import { ACTION_DIM } from '../../consts.ts';
+import { mean } from '../../../../../../../lib/math.ts';
+import { clamp } from 'lodash-es';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -36,6 +39,8 @@ export type TankAgent = {
 }
 
 export class ActorAgent implements TankAgent {
+    private step = 0;
+    private noise?: tf.Tensor;
     private memory = new AgentMemory();
     private policyNetwork?: tf.LayersModel;
 
@@ -57,7 +62,10 @@ export class ActorAgent implements TankAgent {
     public dispose() {
         this.policyNetwork && disposeNetwork(this.policyNetwork);
         this.policyNetwork = undefined;
+        this.noise?.dispose();
+        this.noise = undefined;
         this.memory.dispose();
+        this.step = 0;
     }
 
     public sync() {
@@ -73,7 +81,14 @@ export class ActorAgent implements TankAgent {
         height: number,
     ) {
         const state = prepareInputArrays(this.tankEid, width, height);
-        const result = act(this.policyNetwork!, state);
+        const result = act(this.policyNetwork!, state, this.noise);
+
+        if (++this.step % 30 === 0) {
+            const sigma = clamp(mean(result.logStd.map(Math.exp)), 0.05, 0.3);
+            const newNoise = ouNoise(this.noise ?? tf.zeros([ACTION_DIM]), sigma);
+            this.noise?.dispose();
+            this.noise = newNoise;
+        }
 
         applyActionToTank(this.tankEid, result.actions);
 
@@ -111,5 +126,6 @@ export class ActorAgent implements TankAgent {
 
     private async load() {
         this.policyNetwork = await getNetwork(Model.Policy);
+        perturbWeights(this.policyNetwork);
     }
 }
