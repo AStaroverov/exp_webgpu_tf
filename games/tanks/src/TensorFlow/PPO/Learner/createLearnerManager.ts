@@ -34,7 +34,7 @@ export function createLearnerManager() {
     const computeCurriculumState = (samples: EpisodeSample[]): CurriculumState => {
         for (const sample of samples) {
             if (!mapScenarioIndexToSuccessRatio.has(sample.scenarioIndex)) {
-                mapScenarioIndexToSuccessRatio.set(sample.scenarioIndex, new RingBuffer(100));
+                mapScenarioIndexToSuccessRatio.set(sample.scenarioIndex, new RingBuffer(30));
             }
             mapScenarioIndexToSuccessRatio.get(sample.scenarioIndex)!.add(sample.successRatio);
         }
