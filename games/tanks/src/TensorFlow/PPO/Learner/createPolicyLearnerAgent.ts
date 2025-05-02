@@ -101,7 +101,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
         ]))
         .then(([klList, policyLossList]) => {
             if (klList.some(kl => kl > CONFIG.klConfig.max)) {
-                console.warn(`[Train]: KL divergence was too high`);
+                console.error(`[Train]: KL divergence was too high`);
                 forceExitChannel.postMessage(null);
             }
 
