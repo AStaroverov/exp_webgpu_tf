@@ -6,7 +6,7 @@ import { createInputTensors } from '../Common/InputTensors.ts';
 import { Scalar } from '@tensorflow/tfjs-core/dist/tensor';
 import { random } from '../../../../../lib/random.ts';
 import { flatTypedArray } from '../Common/flat.ts';
-import { normalize } from '../../../../../lib/math.ts';
+import { abs, normalize } from '../../../../../lib/math.ts';
 import { AgentMemoryBatch } from '../Common/Memory.ts';
 import { CONFIG } from './config.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../Common/Tensor.ts';
@@ -128,7 +128,7 @@ export function act(
         const { mean, logStd } = parsePredict(predicted);
         const std = logStd.exp();
 
-        const noise = tf.randomNormal([ACTION_DIM]).mul(std).add(ouNoise);
+        const noise = (tf.randomNormal([ACTION_DIM]).add(ouNoise)).mul(std);
         const actions = mean.add(noise);
         const logProb = computeLogProb(actions, mean, std);
 
@@ -301,7 +301,7 @@ function parsePredict(predict: tf.Tensor) {
     return { mean: outMean, logStd: clippedLogStd };
 }
 
-export function ouNoise(noise: tf.Tensor, sigma = 0.3, theta = 0.3, dt = 1) {
+export function ouNoise(noise: tf.Tensor = tf.zeros([ACTION_DIM]), sigma = 1, theta = 0.3, dt = 1) {
     return noise.add(
         tf.randomNormal([ACTION_DIM]).mul(sigma * Math.sqrt(dt))
             .sub(noise.mul(theta * dt)),

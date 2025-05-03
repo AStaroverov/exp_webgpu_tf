@@ -11,8 +11,6 @@ import { Actions, applyActionToTank } from '../../applyActionToTank.ts';
 import { calculateReward } from '../../../Reward/calculateReward.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
 import { getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
-import { ACTION_DIM } from '../../consts.ts';
-import { max, mean } from '../../../../../../../lib/math.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -83,8 +81,7 @@ export class ActorAgent implements TankAgent {
         const result = act(this.policyNetwork!, state, this.noise);
 
         if (this.step++ % 30 === 0) {
-            const sigma = max(2 * mean(result.logStd.map(Math.exp)), 0.05);
-            const newNoise = ouNoise(this.noise ?? tf.zeros([ACTION_DIM]), sigma);
+            const newNoise = ouNoise(this.noise, 2);
             this.noise?.dispose();
             this.noise = newNoise;
         }
