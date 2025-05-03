@@ -192,15 +192,12 @@ export function prepareRandomInputArrays(): InputArrays {
 }
 
 export function checkInputArrays(inputArray: InputArrays): boolean {
-    if (inputArray.battleFeatures.every(Number.isFinite)
+    return inputArray.battleFeatures.every(Number.isFinite)
         && inputArray.tankFeatures.every(Number.isFinite)
         && inputArray.enemiesFeatures.every(Number.isFinite)
         && inputArray.enemiesMask.every(Number.isFinite)
         && inputArray.alliesFeatures.every(Number.isFinite)
         && inputArray.alliesMask.every(Number.isFinite)
         && inputArray.bulletsFeatures.every(Number.isFinite)
-        && inputArray.bulletsMask.every(Number.isFinite)) {
-        return true;
-    }
-    return false;
+        && inputArray.bulletsMask.every(Number.isFinite);
 }

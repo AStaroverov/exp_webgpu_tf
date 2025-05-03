@@ -6,11 +6,12 @@ import * as tf from '@tensorflow/tfjs';
 import { trainValueNetwork } from '../train.ts';
 import { createInputTensors } from '../../Common/InputTensors.ts';
 import { ReplayBuffer } from '../../Common/ReplayBuffer.ts';
-import { ceil } from '../../../../../../lib/math.ts';
-import { metricsChannels } from '../../Common/channels.ts';
+import { ceil, mean } from '../../../../../../lib/math.ts';
+import { forceExitChannel, metricsChannels } from '../../Common/channels.ts';
 import { getNetworkVersion } from '../../Common/utils.ts';
 import { LearnData } from './createLearnerManager.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
+import { RingBuffer } from 'ring-buffer-ts';
 
 export function createValueLearnerAgent() {
     return createLearnerAgent({
@@ -19,6 +20,8 @@ export function createValueLearnerAgent() {
         trainNetwork: trainValue,
     });
 }
+
+const lossHistory = new RingBuffer<number>(100);
 
 function trainValue(network: tf.LayersModel, batch: LearnData) {
     const rb = new ReplayBuffer(batch.states.length);
@@ -64,6 +67,12 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
             ),
         )
         .then((valueLossList) => {
+            const lossHistoryMean = mean(lossHistory.toArray());
+            if (valueLossList.some(loss => loss * 1000 > lossHistoryMean)) {
+                console.error(`[Train]: Policy loss was too high`);
+                forceExitChannel.postMessage(null);
+            }
+
             metricsChannels.valueLoss.postMessage(valueLossList);
         });
 }

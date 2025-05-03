@@ -1,7 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
 import { WebGPUBackend } from '@tensorflow/tfjs-backend-webgpu';
 
-function arrayHealthCheck(array: Float32Array | Uint8Array | Int32Array): boolean {
+export function arrayHealthCheck(array: Float32Array | Uint8Array | Int32Array): boolean {
     return array.every(Number.isFinite);
 }
 

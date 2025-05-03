@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
-import { act, ouNoise, perturbWeights } from '../../../PPO/train.ts';
+import { act, ouNoise } from '../../../PPO/train.ts';
 import { prepareInputArrays } from '../../InputArrays.ts';
 import { Model } from '../../../Models/Transfer.ts';
 import { queueSizeChannel } from '../../../PPO/channels.ts';
@@ -125,6 +125,5 @@ export class ActorAgent implements TankAgent {
 
     private async load() {
         this.policyNetwork = await getNetwork(Model.Policy);
-        perturbWeights(this.policyNetwork);
     }
 }

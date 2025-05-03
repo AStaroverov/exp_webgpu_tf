@@ -26,6 +26,7 @@ export function createPolicyLearnerAgent() {
 }
 
 const klHistory = new RingBuffer<number>(25);
+const lossHistory = new RingBuffer<number>(100);
 
 function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const version = getNetworkVersion(network);
@@ -105,7 +106,14 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
                 forceExitChannel.postMessage(null);
             }
 
+            const lossHistoryMean = mean(lossHistory.toArray());
+            if (policyLossList.some(loss => loss * 1000 > lossHistoryMean)) {
+                console.error(`[Train]: Policy loss was too high`);
+                forceExitChannel.postMessage(null);
+            }
+
             klHistory.add(...klList);
+            lossHistory.add(...policyLossList);
 
             const lr = getDynamicLearningRate(
                 mean(klHistory.toArray()),

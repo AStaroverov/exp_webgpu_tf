@@ -9,7 +9,7 @@ import { flatTypedArray } from '../Common/flat.ts';
 import { normalize } from '../../../../../lib/math.ts';
 import { AgentMemoryBatch } from '../Common/Memory.ts';
 import { CONFIG } from './config.ts';
-import { asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../Common/Tensor.ts';
+import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../Common/Tensor.ts';
 import { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
 
 export function trainPolicyNetwork(
@@ -204,8 +204,8 @@ export function computeVTraceTargets(
         const rhosTensor = computeRho(logProbBehaviorTensor, logProbCurrentTensor);
         const valuesTensor = (valueNetwork.predict(input) as tf.Tensor).squeeze();
 
-        const values = (valuesTensor.dataSync()) as Float32Array;
-        const rhos = (rhosTensor.dataSync()) as Float32Array;
+        const values = syncUnwrapTensor(valuesTensor) as Float32Array;
+        const rhos = syncUnwrapTensor(rhosTensor) as Float32Array;
 
         const { advantages, tdErrors, vTraces } = computeVTrace(
             batch.rewards,
@@ -217,6 +217,19 @@ export function computeVTraceTargets(
             clipC,
             clipRhoPG,
         );
+
+        if (!arrayHealthCheck(advantages)) {
+            throw new Error('VTrace advantages are NaN');
+        }
+        if (!arrayHealthCheck(tdErrors)) {
+            throw new Error('VTrace tdErrors are NaN');
+        }
+        if (!arrayHealthCheck(vTraces)) {
+            throw new Error('VTrace returns are NaN');
+        }
+        if (!arrayHealthCheck(values)) {
+            throw new Error('VTrace values are NaN');
+        }
 
         return {
             advantages: normalize(advantages),
@@ -295,17 +308,17 @@ export function ouNoise(noise: tf.Tensor, sigma = 0.3, theta = 0.3, dt = 1) {
     );
 }
 
-export function perturbWeights(model: tf.LayersModel, scale = 0.01) {
-    // tf.tidy(() => {
-    //     const weights = model.getWeights().map((w) => {
-    //         const layerStd = tf.moments(w).variance.sqrt();     // σ слоя
-    //         const eps = tf.randomNormal(w.shape).mul(layerStd).mul(scale);
-    //         return w.add(eps);
-    //     });
-    //
-    //     model.setWeights(weights);
-    // });
-}
+// export function perturbWeights(model: tf.LayersModel, scale = 0.01) {
+// tf.tidy(() => {
+//     const weights = model.getWeights().map((w) => {
+//         const layerStd = tf.moments(w).variance.sqrt();     // σ слоя
+//         const eps = tf.randomNormal(w.shape).mul(layerStd).mul(scale);
+//         return w.add(eps);
+//     });
+//
+//     model.setWeights(weights);
+// });
+// }
 
 let randomInputTensors: tf.Tensor[];
 

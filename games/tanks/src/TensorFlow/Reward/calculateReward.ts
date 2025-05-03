@@ -209,6 +209,16 @@ export function calculateReward(
     //     positioning: ${ rewards.positioning.total.toFixed(2) },
     // `);
 
+    if (!Number.isFinite(rewards.totalReward)) {
+        console.error(`
+            team: ${ rewards.team.total.toFixed(2) },
+            common: ${ rewards.common.total.toFixed(2) },
+            aim: ${ rewards.aim.total.toFixed(2) },
+            positioning: ${ rewards.positioning.total.toFixed(2) },
+        `);
+        throw new Error('Rewards are not finite:');
+    }
+
     return rewards.totalReward;
 }
 

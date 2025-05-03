@@ -79,31 +79,36 @@ export class EpisodeManager {
     }
 
     protected runGameLoop(episode: Scenario) {
-        return new Promise(resolve => {
+        return new Promise((resolve, reject) => {
             const shouldEvery = SNAPSHOT_EVERY;
             const maxFramesCount = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
             let regardedAgents: TankAgent[] = [];
             let frame = 0;
 
             const stop = macroTasks.addInterval(() => {
-                for (let i = 0; i < 100; i++) {
-                    frame++;
-                    const nextRegardedAgents = this.runGameTick(
-                        TICK_TIME_SIMULATION,
-                        episode,
-                        regardedAgents,
-                        frame,
-                        maxFramesCount,
-                        shouldEvery,
-                    );
+                try {
+                    for (let i = 0; i < 100; i++) {
+                        frame++;
+                        const nextRegardedAgents = this.runGameTick(
+                            TICK_TIME_SIMULATION,
+                            episode,
+                            regardedAgents,
+                            frame,
+                            maxFramesCount,
+                            shouldEvery,
+                        );
 
-                    if (nextRegardedAgents == null) {
-                        stop();
-                        resolve(null);
-                        break;
-                    } else {
-                        regardedAgents = nextRegardedAgents;
+                        if (nextRegardedAgents == null) {
+                            stop();
+                            resolve(null);
+                            break;
+                        } else {
+                            regardedAgents = nextRegardedAgents;
+                        }
                     }
+                } catch (error) {
+                    stop();
+                    reject(error);
                 }
             }, 1);
         });
