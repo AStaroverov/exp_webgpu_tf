@@ -128,10 +128,9 @@ export function act(
         const { mean, logStd } = parsePredict(predicted);
         const std = logStd.exp();
 
-        const whiteNoise = tf.randomNormal([ACTION_DIM]).mul(std);
-        const whiteActions = mean.add(whiteNoise);
-        const logProb = computeLogProb(whiteActions, mean, std);
-        const actions = whiteActions.add(ouNoise);
+        const noise = tf.randomNormal([ACTION_DIM]).mul(std).add(ouNoise);
+        const actions = mean.add(noise);
+        const logProb = computeLogProb(actions, mean, std);
 
         return {
             actions: syncUnwrapTensor(actions) as Float32Array,
@@ -297,10 +296,16 @@ export function ouNoise(noise: tf.Tensor, sigma = 0.3, theta = 0.3, dt = 1) {
 }
 
 export function perturbWeights(model: tf.LayersModel, scale = 0.02) {
-    const w = model.getWeights().map(t =>
-        t.add(tf.randomNormal(t.shape).mul(scale)),
-    );
-    model.setWeights(w);
+    tf.tidy(() => {
+        const weights = model.getWeights().map((w) => {
+            const layerStd = tf.moments(w).variance.sqrt();     // σ слоя
+            const eps = tf.randomNormal(w.shape)
+                .mul(layerStd).mul(scale);
+            return w.add(eps);
+        });
+
+        model.setWeights(weights);
+    });
 }
 
 let randomInputTensors: tf.Tensor[];

@@ -18,11 +18,11 @@ export function applyActionToTank(
     const aimY = actions[4];
 
     TankController.setShooting$(tankEid, shoot);
-    TankController.setMove$(tankEid, clamp(TankController.move[tankEid] + move, -limitMove, limitMove));
-    TankController.setRotate$(tankEid, clamp(TankController.rotation[tankEid] + rotate, -limitRotation, limitRotation));
+    TankController.setMove$(tankEid, clamp(move, -limitMove, limitMove));
+    TankController.setRotate$(tankEid, clamp(rotate, -limitRotation, limitRotation));
     TankController.setTurretDir$(
         tankEid,
-        clamp(TankController.turretDir.get(tankEid, 0) + aimX, -limitAimDir, limitAimDir),
-        clamp(TankController.turretDir.get(tankEid, 1) + aimY, -limitAimDir, limitAimDir),
+        clamp(aimX, -limitAimDir, limitAimDir),
+        clamp(aimY, -limitAimDir, limitAimDir),
     );
 }
