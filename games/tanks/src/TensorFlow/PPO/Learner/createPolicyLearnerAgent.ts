@@ -106,7 +106,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             }
 
             if (klList.some(kl => kl > CONFIG.klConfig.max)) {
-                throw new Error(`KL divergence too high: ${ min(...klList) }, ${ max(...klList) }`);
+                throw new Error(`KL divergence too high ${ max(...klList) }`);
             }
             klHistory.add(...klList);
 
