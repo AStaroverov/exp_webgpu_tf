@@ -44,8 +44,7 @@ export class EpisodeManager {
             const minReward = min(...memoryBatch.rewards);
             const maxReward = max(...memoryBatch.rewards);
 
-            if (abs(minReward) < 1 && abs(maxReward) < 1) {
-                console.log('>> useless');
+            if (abs(minReward) < 2 && abs(maxReward) < 2) {
                 return;
             }
 
