@@ -107,7 +107,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             }
 
             const lossHistoryMean = mean(lossHistory.toArray());
-            if (policyLossList.some(loss => loss > lossHistoryMean * 1000)) {
+            if (lossHistory.getBufferLength() > 0 && policyLossList.some(loss => loss > lossHistoryMean * 1000)) {
                 console.error(`Policy loss too dangerous`, min(...policyLossList), max(...policyLossList));
                 forceExitChannel.postMessage(null);
             }

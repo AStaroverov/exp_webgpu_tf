@@ -68,7 +68,7 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
         )
         .then((valueLossList) => {
             const lossHistoryMean = mean(lossHistory.toArray());
-            if (valueLossList.some(loss => loss > lossHistoryMean * 1000)) {
+            if (lossHistory.getBufferLength() > 0 && valueLossList.some(loss => loss > lossHistoryMean * 1000)) {
                 console.error(`Value loss too dangerous`, min(...valueLossList), max(...valueLossList));
                 forceExitChannel.postMessage(null);
             }
