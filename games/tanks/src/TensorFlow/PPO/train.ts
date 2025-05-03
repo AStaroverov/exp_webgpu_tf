@@ -295,12 +295,11 @@ export function ouNoise(noise: tf.Tensor, sigma = 0.3, theta = 0.3, dt = 1) {
     );
 }
 
-export function perturbWeights(model: tf.LayersModel, scale = 0.02) {
+export function perturbWeights(model: tf.LayersModel, scale = 0.05) {
     tf.tidy(() => {
         const weights = model.getWeights().map((w) => {
             const layerStd = tf.moments(w).variance.sqrt();     // σ слоя
-            const eps = tf.randomNormal(w.shape)
-                .mul(layerStd).mul(scale);
+            const eps = tf.randomNormal(w.shape).mul(layerStd).mul(scale);
             return w.add(eps);
         });
 
