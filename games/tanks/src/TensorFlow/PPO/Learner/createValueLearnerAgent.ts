@@ -6,7 +6,7 @@ import * as tf from '@tensorflow/tfjs';
 import { trainValueNetwork } from '../train.ts';
 import { createInputTensors } from '../../Common/InputTensors.ts';
 import { ReplayBuffer } from '../../Common/ReplayBuffer.ts';
-import { ceil, mean } from '../../../../../../lib/math.ts';
+import { ceil, max, mean, min } from '../../../../../../lib/math.ts';
 import { forceExitChannel, metricsChannels } from '../../Common/channels.ts';
 import { getNetworkVersion } from '../../Common/utils.ts';
 import { LearnData } from './createLearnerManager.ts';
@@ -68,10 +68,11 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
         )
         .then((valueLossList) => {
             const lossHistoryMean = mean(lossHistory.toArray());
-            if (valueLossList.some(loss => loss * 1000 > lossHistoryMean)) {
-                console.error(`[Train]: Policy loss was too high`);
+            if (valueLossList.some(loss => loss > lossHistoryMean * 1000)) {
+                console.error(`Value loss too dangerous`, min(...valueLossList), max(...valueLossList));
                 forceExitChannel.postMessage(null);
             }
+            lossHistory.add(...valueLossList);
 
             metricsChannels.valueLoss.postMessage(valueLossList);
         });

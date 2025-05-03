@@ -8,7 +8,7 @@ import * as tf from '@tensorflow/tfjs';
 import { computeKullbackLeiblerExact, trainPolicyNetwork } from '../train.ts';
 import { createInputTensors } from '../../Common/InputTensors.ts';
 import { ReplayBuffer } from '../../Common/ReplayBuffer.ts';
-import { ceil, floor, mean } from '../../../../../../lib/math.ts';
+import { ceil, floor, max, mean, min } from '../../../../../../lib/math.ts';
 import { forceExitChannel, metricsChannels } from '../../Common/channels.ts';
 import { flatTypedArray } from '../../Common/flat.ts';
 import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
@@ -102,13 +102,13 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
         ]))
         .then(([klList, policyLossList]) => {
             if (klList.some(kl => kl > CONFIG.klConfig.max)) {
-                console.error(`[Train]: KL divergence was too high`);
+                console.error(`KL divergence was too high`);
                 forceExitChannel.postMessage(null);
             }
 
             const lossHistoryMean = mean(lossHistory.toArray());
-            if (policyLossList.some(loss => loss * 1000 > lossHistoryMean)) {
-                console.error(`[Train]: Policy loss was too high`);
+            if (policyLossList.some(loss => loss > lossHistoryMean * 1000)) {
+                console.error(`Policy loss too dangerous`, min(...policyLossList), max(...policyLossList));
                 forceExitChannel.postMessage(null);
             }
 
