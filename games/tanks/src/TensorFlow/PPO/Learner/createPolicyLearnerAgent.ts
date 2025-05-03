@@ -101,7 +101,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             Promise.all(klList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
         ]))
         .then(([policyLossList, klList]) => {
-            if (policyLossList.some(isLossDangerous)) {
+            if (policyLossList.some((v) => isLossDangerous(v, 10))) {
                 throw new Error(`Policy loss too dangerous: ${ min(...policyLossList) }, ${ max(...policyLossList) }`);
             }
 
