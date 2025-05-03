@@ -6,7 +6,7 @@ import { createInputTensors } from '../Common/InputTensors.ts';
 import { Scalar } from '@tensorflow/tfjs-core/dist/tensor';
 import { random } from '../../../../../lib/random.ts';
 import { flatTypedArray } from '../Common/flat.ts';
-import { abs, normalize } from '../../../../../lib/math.ts';
+import { normalize } from '../../../../../lib/math.ts';
 import { AgentMemoryBatch } from '../Common/Memory.ts';
 import { CONFIG } from './config.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../Common/Tensor.ts';
@@ -128,7 +128,7 @@ export function act(
         const { mean, logStd } = parsePredict(predicted);
         const std = logStd.exp();
 
-        const noise = (tf.randomNormal([ACTION_DIM]).add(ouNoise)).mul(std);
+        const noise = ouNoise.mul(std);
         const actions = mean.add(noise);
         const logProb = computeLogProb(actions, mean, std);
 
