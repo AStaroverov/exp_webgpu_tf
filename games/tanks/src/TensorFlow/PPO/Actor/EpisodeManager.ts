@@ -39,12 +39,16 @@ export class EpisodeManager {
 
     protected afterEpisode(episode: Scenario) {
         episode.getAgents().forEach(agent => {
-            if (agent.getVersion == null || agent.getMemoryBatch == null) return;
+            if (agent.getVersion == null || agent.getMemoryBatch == null) {
+                return;
+            }
+
             const memoryBatch = agent.getMemoryBatch();
             const minReward = min(...memoryBatch.rewards);
             const maxReward = max(...memoryBatch.rewards);
 
             if (abs(minReward) < 2 && abs(maxReward) < 2) {
+                // Skip if the rewards are too small, indicating no significant learning
                 return;
             }
 
