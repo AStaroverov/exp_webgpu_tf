@@ -12,7 +12,7 @@ export function createLossChecker() {
             const arr = history.toArray();
             const minLoss = min(...arr);
             const maxLoss = max(...arr);
-            const diff = maxLoss - minLoss;
+            const diff = min(0.1, maxLoss - minLoss);
             const shift = diff * 500;
 
             const result = losses.every(loss => loss === clamp(loss, minLoss - shift, maxLoss + shift));
