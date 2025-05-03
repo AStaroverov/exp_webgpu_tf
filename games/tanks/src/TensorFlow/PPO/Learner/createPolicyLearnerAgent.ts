@@ -9,7 +9,7 @@ import { computeKullbackLeiblerExact, trainPolicyNetwork } from '../train.ts';
 import { createInputTensors } from '../../Common/InputTensors.ts';
 import { ReplayBuffer } from '../../Common/ReplayBuffer.ts';
 import { ceil, floor, max, mean, min } from '../../../../../../lib/math.ts';
-import { forceExitChannel, metricsChannels } from '../../Common/channels.ts';
+import { metricsChannels } from '../../Common/channels.ts';
 import { flatTypedArray } from '../../Common/flat.ts';
 import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
 import { RingBuffer } from 'ring-buffer-ts';
@@ -103,13 +103,11 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
         ]))
         .then(([policyLossList, klList]) => {
             if (!lossChecker.check(policyLossList)) {
-                console.error(`Policy loss too dangerous`, min(...policyLossList), max(...policyLossList));
-                forceExitChannel.postMessage(null);
+                throw new Error(`Policy loss too dangerous: ${ min(...policyLossList) }, ${ max(...policyLossList) }`);
             }
 
             if (klList.some(kl => kl > CONFIG.klConfig.max)) {
-                console.error(`KL divergence was too high`);
-                forceExitChannel.postMessage(null);
+                throw new Error(`KL divergence too high: ${ min(...klList) }, ${ max(...klList) }`);
             }
             klHistory.add(...klList);
 

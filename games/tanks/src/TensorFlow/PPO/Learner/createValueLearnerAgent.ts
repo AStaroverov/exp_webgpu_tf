@@ -7,7 +7,7 @@ import { trainValueNetwork } from '../train.ts';
 import { createInputTensors } from '../../Common/InputTensors.ts';
 import { ReplayBuffer } from '../../Common/ReplayBuffer.ts';
 import { ceil, max, min } from '../../../../../../lib/math.ts';
-import { forceExitChannel, metricsChannels } from '../../Common/channels.ts';
+import { metricsChannels } from '../../Common/channels.ts';
 import { getNetworkVersion } from '../../Common/utils.ts';
 import { LearnData } from './createLearnerManager.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
@@ -68,8 +68,7 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
         )
         .then((valueLossList) => {
             if (!lossChecker.check(valueLossList)) {
-                console.error(`Value loss too dangerous`, min(...valueLossList), max(...valueLossList));
-                forceExitChannel.postMessage(null);
+                throw new Error(`Value loss too dangerous: ${ min(...valueLossList) } ${ max(...valueLossList) }`);
             }
 
             metricsChannels.valueLoss.postMessage(valueLossList);
