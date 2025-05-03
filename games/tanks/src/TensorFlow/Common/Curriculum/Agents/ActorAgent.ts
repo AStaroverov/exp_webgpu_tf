@@ -12,8 +12,7 @@ import { calculateReward } from '../../../Reward/calculateReward.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
 import { getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
 import { ACTION_DIM } from '../../consts.ts';
-import { mean } from '../../../../../../../lib/math.ts';
-import { clamp } from 'lodash-es';
+import { max, mean } from '../../../../../../../lib/math.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -83,14 +82,14 @@ export class ActorAgent implements TankAgent {
         const state = prepareInputArrays(this.tankEid, width, height);
         const result = act(this.policyNetwork!, state, this.noise);
 
-        if (++this.step % 30 === 0) {
-            const sigma = 2 * clamp(mean(result.logStd.map(Math.exp)), 0.05, 1);
+        if (this.step++ % 30 === 0) {
+            const sigma = max(2 * mean(result.logStd.map(Math.exp)), 0.05);
             const newNoise = ouNoise(this.noise ?? tf.zeros([ACTION_DIM]), sigma);
             this.noise?.dispose();
             this.noise = newNoise;
         }
 
-        applyActionToTank(this.tankEid, prepareActions(result.actions));
+        applyActionToTank(this.tankEid, result.actions.map(v => v / 10) as Actions);
 
         const stateReward = calculateReward(
             this.tankEid,
@@ -128,8 +127,4 @@ export class ActorAgent implements TankAgent {
         this.policyNetwork = await getNetwork(Model.Policy);
         perturbWeights(this.policyNetwork);
     }
-}
-
-function prepareActions(actions: Actions): Actions {
-    return actions.map(v => v / 10) as Actions;
 }
