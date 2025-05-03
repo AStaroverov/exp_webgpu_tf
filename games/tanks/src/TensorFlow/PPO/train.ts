@@ -296,15 +296,16 @@ export function computeVTrace(
 function parsePredict(predict: tf.Tensor) {
     const outMean = predict.slice([0, 0], [-1, ACTION_DIM]);
     const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
-    const clippedLogStd = outLogStd.clipByValue(-5, 1);
+    const clippedLogStd = outLogStd.clipByValue(-5, 0);
 
     return { mean: outMean, logStd: clippedLogStd };
 }
 
-export function ouNoise(noise: tf.Tensor = tf.zeros([ACTION_DIM]), sigma = 1, theta = 0.3, dt = 1) {
+export function ouNoise(noise: tf.Tensor = tf.zeros([ACTION_DIM]), sigma: number, theta: number) {
     return noise.add(
-        tf.randomNormal([ACTION_DIM]).mul(sigma * Math.sqrt(dt))
-            .sub(noise.mul(theta * dt)),
+        tf.randomNormal([ACTION_DIM])
+            .mul(sigma)
+            .sub(noise.mul(theta)),
     );
 }
 

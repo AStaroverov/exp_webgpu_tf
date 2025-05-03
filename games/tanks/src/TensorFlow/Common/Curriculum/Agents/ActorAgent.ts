@@ -81,7 +81,7 @@ export class ActorAgent implements TankAgent {
         const result = act(this.policyNetwork!, state, this.noise);
 
         if (this.step++ % 10 === 0) {
-            const newNoise = ouNoise(this.noise, 0.3); // 30% exploration
+            const newNoise = ouNoise(this.noise, 0.12, 0.3); // 30% exploration
             this.noise?.dispose();
             this.noise = newNoise;
         }
