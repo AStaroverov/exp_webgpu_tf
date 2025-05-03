@@ -11,7 +11,7 @@ import { metricsChannels } from '../../Common/channels.ts';
 import { getNetworkVersion } from '../../Common/utils.ts';
 import { LearnData } from './createLearnerManager.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
-import { createLossChecker } from './createLossChecker.ts';
+import { isLossDangerous } from './isLossDangerous.ts';
 
 export function createValueLearnerAgent() {
     return createLearnerAgent({
@@ -20,8 +20,6 @@ export function createValueLearnerAgent() {
         trainNetwork: trainValue,
     });
 }
-
-const lossChecker = createLossChecker();
 
 function trainValue(network: tf.LayersModel, batch: LearnData) {
     const rb = new ReplayBuffer(batch.states.length);
@@ -67,7 +65,7 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
             ),
         )
         .then((valueLossList) => {
-            if (!lossChecker.check(valueLossList)) {
+            if (valueLossList.some(isLossDangerous)) {
                 throw new Error(`Value loss too dangerous: ${ min(...valueLossList) } ${ max(...valueLossList) }`);
             }
 

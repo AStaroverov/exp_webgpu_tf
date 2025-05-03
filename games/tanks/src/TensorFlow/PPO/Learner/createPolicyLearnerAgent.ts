@@ -16,7 +16,7 @@ import { RingBuffer } from 'ring-buffer-ts';
 import { learningRateChannel } from '../channels.ts';
 import { LearnData } from './createLearnerManager.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
-import { createLossChecker } from './createLossChecker.ts';
+import { isLossDangerous } from './isLossDangerous.ts';
 
 export function createPolicyLearnerAgent() {
     return createLearnerAgent({
@@ -27,7 +27,6 @@ export function createPolicyLearnerAgent() {
 }
 
 const klHistory = new RingBuffer<number>(25);
-const lossChecker = createLossChecker();
 
 function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const version = getNetworkVersion(network);
@@ -102,7 +101,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             Promise.all(klList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
         ]))
         .then(([policyLossList, klList]) => {
-            if (!lossChecker.check(policyLossList)) {
+            if (policyLossList.some(isLossDangerous)) {
                 throw new Error(`Policy loss too dangerous: ${ min(...policyLossList) }, ${ max(...policyLossList) }`);
             }
 
