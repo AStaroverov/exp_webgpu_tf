@@ -7,6 +7,7 @@ import { CurriculumState, curriculumStateChannel, episodeSampleChannel } from '.
 import { Scenario } from '../../Common/Curriculum/types.ts';
 import { createScenarioByCurriculumState } from '../../Common/Curriculum/createScenarioByCurriculumState.ts';
 import { snapshotTankInputTensor } from '../../../ECS/Utils/snapshotTankInputTensor.ts';
+import { abs, max, min } from '../../../../../../lib/math.ts';
 
 export class EpisodeManager {
     protected curriculumState: CurriculumState = {
@@ -39,9 +40,18 @@ export class EpisodeManager {
     protected afterEpisode(episode: Scenario) {
         episode.getAgents().forEach(agent => {
             if (agent.getVersion == null || agent.getMemoryBatch == null) return;
+            const memoryBatch = agent.getMemoryBatch();
+            const minReward = min(...memoryBatch.rewards);
+            const maxReward = max(...memoryBatch.rewards);
+
+            if (abs(minReward) < 1 && abs(maxReward) < 1) {
+                console.log('>> useless');
+                return;
+            }
+
             episodeSampleChannel.emit({
                 networkVersion: agent.getVersion(),
-                memoryBatch: agent.getMemoryBatch(),
+                memoryBatch,
                 successRatio: episode.getSuccessRatio(),
                 scenarioIndex: episode.index,
             });
