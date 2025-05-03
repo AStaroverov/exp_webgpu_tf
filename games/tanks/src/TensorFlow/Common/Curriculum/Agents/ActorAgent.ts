@@ -89,7 +89,7 @@ export class ActorAgent implements TankAgent {
             this.noise = newNoise;
         }
 
-        applyActionToTank(this.tankEid, result.actions.map(v => v / 10) as Actions);
+        applyActionToTank(this.tankEid, result.actions.map(v => v / 8) as Actions);
 
         const stateReward = calculateReward(
             this.tankEid,
