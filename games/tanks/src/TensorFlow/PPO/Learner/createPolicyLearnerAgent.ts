@@ -16,6 +16,7 @@ import { RingBuffer } from 'ring-buffer-ts';
 import { learningRateChannel } from '../channels.ts';
 import { LearnData } from './createLearnerManager.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
+import { createLossChecker } from './createLossChecker.ts';
 
 export function createPolicyLearnerAgent() {
     return createLearnerAgent({
@@ -26,7 +27,7 @@ export function createPolicyLearnerAgent() {
 }
 
 const klHistory = new RingBuffer<number>(25);
-const lossHistory = new RingBuffer<number>(100);
+const lossChecker = createLossChecker();
 
 function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const version = getNetworkVersion(network);
@@ -105,15 +106,12 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
                 console.error(`KL divergence was too high`);
                 forceExitChannel.postMessage(null);
             }
+            klHistory.add(...klList);
 
-            const lossHistoryMean = mean(lossHistory.toArray());
-            if (lossHistory.getBufferLength() > 0 && policyLossList.some(loss => loss > lossHistoryMean * 1000)) {
+            if (!lossChecker.check(policyLossList)) {
                 console.error(`Policy loss too dangerous`, min(...policyLossList), max(...policyLossList));
                 forceExitChannel.postMessage(null);
             }
-
-            klHistory.add(...klList);
-            lossHistory.add(...policyLossList);
 
             const lr = getDynamicLearningRate(
                 mean(klHistory.toArray()),

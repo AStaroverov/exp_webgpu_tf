@@ -6,12 +6,12 @@ import * as tf from '@tensorflow/tfjs';
 import { trainValueNetwork } from '../train.ts';
 import { createInputTensors } from '../../Common/InputTensors.ts';
 import { ReplayBuffer } from '../../Common/ReplayBuffer.ts';
-import { ceil, max, mean, min } from '../../../../../../lib/math.ts';
+import { ceil, max, min } from '../../../../../../lib/math.ts';
 import { forceExitChannel, metricsChannels } from '../../Common/channels.ts';
 import { getNetworkVersion } from '../../Common/utils.ts';
 import { LearnData } from './createLearnerManager.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
-import { RingBuffer } from 'ring-buffer-ts';
+import { createLossChecker } from './createLossChecker.ts';
 
 export function createValueLearnerAgent() {
     return createLearnerAgent({
@@ -21,7 +21,7 @@ export function createValueLearnerAgent() {
     });
 }
 
-const lossHistory = new RingBuffer<number>(100);
+const lossChecker = createLossChecker();
 
 function trainValue(network: tf.LayersModel, batch: LearnData) {
     const rb = new ReplayBuffer(batch.states.length);
@@ -67,12 +67,10 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
             ),
         )
         .then((valueLossList) => {
-            const lossHistoryMean = mean(lossHistory.toArray());
-            if (lossHistory.getBufferLength() > 0 && valueLossList.some(loss => loss > lossHistoryMean * 1000)) {
+            if (!lossChecker.check(valueLossList)) {
                 console.error(`Value loss too dangerous`, min(...valueLossList), max(...valueLossList));
                 forceExitChannel.postMessage(null);
             }
-            lossHistory.add(...valueLossList);
 
             metricsChannels.valueLoss.postMessage(valueLossList);
         });
