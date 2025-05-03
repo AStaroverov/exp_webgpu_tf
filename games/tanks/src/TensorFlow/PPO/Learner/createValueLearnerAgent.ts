@@ -50,7 +50,7 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
                 tReturns,
                 tValues,
                 CONFIG.valueClipRatio, CONFIG.valueLossCoeff, CONFIG.clipNorm,
-                j === mbc - 1,
+                true,//j === mbc - 1,
             );
             loss && valueLossList.push(loss);
 

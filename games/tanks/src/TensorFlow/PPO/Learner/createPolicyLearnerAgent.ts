@@ -68,7 +68,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
                 tOldLogProbs,
                 tAdvantages,
                 CONFIG.policyClipRatio, CONFIG.policyEntropyCoeff, CONFIG.clipNorm,
-                j === mbc - 1,
+                true,//j === mbc - 1,
             );
             policyLoss && policyLossList.push(policyLoss);
 
@@ -98,20 +98,20 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
 
     return onReadyRead()
         .then(() => Promise.all([
-            Promise.all(klList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
             Promise.all(policyLossList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
+            Promise.all(klList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
         ]))
-        .then(([klList, policyLossList]) => {
+        .then(([policyLossList, klList]) => {
+            if (!lossChecker.check(policyLossList)) {
+                console.error(`Policy loss too dangerous`, min(...policyLossList), max(...policyLossList));
+                forceExitChannel.postMessage(null);
+            }
+
             if (klList.some(kl => kl > CONFIG.klConfig.max)) {
                 console.error(`KL divergence was too high`);
                 forceExitChannel.postMessage(null);
             }
             klHistory.add(...klList);
-
-            if (!lossChecker.check(policyLossList)) {
-                console.error(`Policy loss too dangerous`, min(...policyLossList), max(...policyLossList));
-                forceExitChannel.postMessage(null);
-            }
 
             const lr = getDynamicLearningRate(
                 mean(klHistory.toArray()),
