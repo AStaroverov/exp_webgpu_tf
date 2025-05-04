@@ -1,4 +1,5 @@
 import * as tf from '@tensorflow/tfjs';
+import { Variable } from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { act } from '../../../PPO/train.ts';
 import { prepareInputArrays } from '../../InputArrays.ts';
@@ -12,6 +13,7 @@ import { calculateReward } from '../../../Reward/calculateReward.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
 import { getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
 import { clamp } from 'lodash-es';
+import { randomRangeFloat } from '../../../../../../../lib/random.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -118,18 +120,17 @@ export class ActorAgent implements TankAgent {
 
     private async load() {
         this.policyNetwork = await getNetwork(Model.Policy);
-        // perturbWeights(this.policyNetwork);
+        perturbWeights(this.policyNetwork, randomRangeFloat(0.01, 0.05));
     }
 }
 
-export function perturbWeights(model: tf.LayersModel, scale = 0.02) {
+export function perturbWeights(model: tf.LayersModel, scale: number) {
     tf.tidy(() => {
-        const weights = model.getWeights().map((w) => {
-            const layerStd = tf.moments(w).variance.sqrt();
-            const eps = tf.randomNormal(w.shape).mul(layerStd).mul(scale);
-            return w.add(eps);
+        model.trainableWeights.forEach(v => {
+            const val = v.read() as Variable;
+            const std = tf.moments(val).variance.sqrt();
+            const eps = tf.randomNormal(val.shape).mul(std).mul(scale);
+            val.assign(val.add(eps));
         });
-
-        model.setWeights(weights);
     });
 }
