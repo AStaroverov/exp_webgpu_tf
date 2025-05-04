@@ -12,6 +12,7 @@ import { calculateReward } from '../../../Reward/calculateReward.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
 import { getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
 import { ACTION_DIM } from '../../consts.ts';
+import { sqrt } from '../../../../../../../lib/math.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -76,12 +77,9 @@ export class ActorAgent implements TankAgent {
         width: number,
         height: number,
     ) {
-        const newNoise = ouNoise(this.noise, 0.15, 0.05);
-        this.noise?.dispose();
-        this.noise = newNoise;
-
+        const { noise, std } = this.updateNoise();
         const state = prepareInputArrays(this.tankEid, width, height);
-        const result = act(this.policyNetwork!, state, this.noise);
+        const result = act(this.policyNetwork!, state, noise, std);
 
         applyActionToTank(this.tankEid, result.actions);
 
@@ -119,6 +117,17 @@ export class ActorAgent implements TankAgent {
 
     private async load() {
         this.policyNetwork = await getNetwork(Model.Policy);
+    }
+
+    private updateNoise() {
+        const sigma = 0.15;
+        const theta = 0.05;
+        const std = sigma / sqrt(2 * theta);
+        const noise = ouNoise(this.noise, sigma, theta);
+        this.noise?.dispose();
+        this.noise = noise;
+
+        return { noise, std };
     }
 }
 
