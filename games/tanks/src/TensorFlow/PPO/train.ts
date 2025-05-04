@@ -140,21 +140,6 @@ export function act(
     });
 }
 
-export function predict(policyNetwork: tf.LayersModel, state: InputArrays): { actions: Float32Array } {
-    return tf.tidy(() => {
-        const predicted = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
-        const { mean, logStd } = parsePredict(predicted);
-
-        const noise = tf.randomNormal([ACTION_DIM]).mul(logStd.exp());
-        const actions = mean.add(noise);
-
-        return {
-            actions: syncUnwrapTensor(actions) as Float32Array,
-            // actions: mean.dataSync() as Float32Array,
-        };
-    });
-}
-
 function optimize(
     optimizer: tf.Optimizer,
     predict: () => Scalar,
