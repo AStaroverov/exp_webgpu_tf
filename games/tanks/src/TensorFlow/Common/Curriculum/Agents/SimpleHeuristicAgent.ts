@@ -29,9 +29,8 @@ export class SimpleHeuristicAgent implements TankAgent {
         this.updateWaypoint(width, height);
 
         const targetId = this.withAim() ? this.getTarget() : undefined;
-        const aim = targetId !== undefined ? this.getAimAction(targetId) : { aimX: 0, aimY: 0, shoot: false };
-        const maxMove = this.withMove() ? this.features.move : 0;
-        const move = this.getMoveAction();
+        const aim = targetId !== undefined ? this.getAimAction(targetId) : { aimX: 0, aimY: 0, shoot: -1 };
+        const move = this.withMove() ? this.getMoveAction() : 0;
         const rotation = this.withMove() ? this.getRotationAction() : 0;
 
         const action: Actions = [
@@ -42,7 +41,7 @@ export class SimpleHeuristicAgent implements TankAgent {
             aim.aimY,
         ];
 
-        applyActionToTank(this.tankEid, action, maxMove);
+        applyActionToTank(this.tankEid, action);
     }
 
     private withMove() {
@@ -90,7 +89,7 @@ export class SimpleHeuristicAgent implements TankAgent {
         return bestId;
     }
 
-    private getAimAction(targetId: number): { aimX: number; aimY: number; shoot: boolean } {
+    private getAimAction(targetId: number): { aimX: number; aimY: number; shoot: number } {
         const aimError = this.features.aim?.aimError ?? 0;
         const shootChance = this.features.aim?.shootChance ?? 0;
 
@@ -105,7 +104,7 @@ export class SimpleHeuristicAgent implements TankAgent {
 
         // --- стрельба, если почти соосно ---
         const misalign = Math.abs(dx) + Math.abs(dy);  // L1-норма расхождения
-        const shoot = (misalign < 100 && shootChance > random()) || random() > 0.9;
+        const shoot = ((misalign < 100 && shootChance > random()) || random() > 0.9) ? 1 : -1;
 
         return {
             shoot,

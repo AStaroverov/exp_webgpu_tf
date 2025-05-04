@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
-import { act, ouNoise } from '../../../PPO/train.ts';
+import { act } from '../../../PPO/train.ts';
 import { prepareInputArrays } from '../../InputArrays.ts';
 import { Model } from '../../../Models/Transfer.ts';
 import { queueSizeChannel } from '../../../PPO/channels.ts';
@@ -11,6 +11,7 @@ import { applyActionToTank } from '../../applyActionToTank.ts';
 import { calculateReward } from '../../../Reward/calculateReward.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
 import { getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
+import { clamp } from 'lodash-es';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -36,8 +37,6 @@ export type TankAgent = {
 }
 
 export class ActorAgent implements TankAgent {
-    private step = 0;
-    private noise?: tf.Tensor;
     private memory = new AgentMemory();
     private policyNetwork?: tf.LayersModel;
 
@@ -59,10 +58,7 @@ export class ActorAgent implements TankAgent {
     public dispose() {
         this.policyNetwork && disposeNetwork(this.policyNetwork);
         this.policyNetwork = undefined;
-        this.noise?.dispose();
-        this.noise = undefined;
         this.memory.dispose();
-        this.step = 0;
     }
 
     public sync() {
@@ -78,15 +74,15 @@ export class ActorAgent implements TankAgent {
         height: number,
     ) {
         const state = prepareInputArrays(this.tankEid, width, height);
-        const result = act(this.policyNetwork!, state, this.noise);
+        const result = act(this.policyNetwork!, state);
 
-        if (this.step++ % 10 === 0) {
-            const newNoise = ouNoise(this.noise, 0.12, 0.3); // 30% exploration
-            this.noise?.dispose();
-            this.noise = newNoise;
-        }
-
-        applyActionToTank(this.tankEid, result.actions);
+        applyActionToTank(
+            this.tankEid,
+            result.actions,
+            result.logStd.map((v) => clamp(
+                1 - Math.exp(v) / Math.exp(0.2), 0.1, 0.9),
+            ),
+        );
 
         const stateReward = calculateReward(
             this.tankEid,
