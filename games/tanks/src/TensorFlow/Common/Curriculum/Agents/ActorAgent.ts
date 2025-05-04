@@ -38,6 +38,7 @@ export type TankAgent = {
 }
 
 export class ActorAgent implements TankAgent {
+    private step = 0;
     private noise?: tf.Tensor;
     private memory = new AgentMemory();
     private policyNetwork?: tf.LayersModel;
@@ -58,6 +59,7 @@ export class ActorAgent implements TankAgent {
     }
 
     public dispose() {
+        this.step = 0;
         this.noise?.dispose();
         this.noise = undefined;
         this.memory.dispose();
@@ -77,9 +79,9 @@ export class ActorAgent implements TankAgent {
         width: number,
         height: number,
     ) {
-        const { noise, std } = this.updateNoise();
+        const { noise, noiseScale } = this.updateNoise();
         const state = prepareInputArrays(this.tankEid, width, height);
-        const result = act(this.policyNetwork!, state, noise, std);
+        const result = act(this.policyNetwork!, state, noise, noiseScale);
 
         applyActionToTank(this.tankEid, result.actions);
 
@@ -120,18 +122,20 @@ export class ActorAgent implements TankAgent {
     }
 
     private updateNoise() {
-        const sigma = 0.15;
-        const theta = 0.05;
-        const std = sigma / sqrt(2 * theta);
-        const noise = ouNoise(this.noise, sigma, theta);
+        const sigma = 0.05;
+        const theta = 0.047;
+        const k = 1 - Math.pow(1 - 2 * theta, ++this.step);
+        const noiseScale = sigma * sqrt(k / (2 * theta));
+
+        const noise = ouNoise(this.noise ?? tf.zeros([ACTION_DIM]), sigma, theta);
         this.noise?.dispose();
         this.noise = noise;
 
-        return { noise, std };
+        return { noise, noiseScale };
     }
 }
 
-function ouNoise(noise: tf.Tensor = tf.zeros([ACTION_DIM]), sigma: number, theta: number) {
+function ouNoise(noise: tf.Tensor, sigma: number, theta: number) {
     return noise.add(
         tf.randomNormal([ACTION_DIM])
             .mul(sigma)

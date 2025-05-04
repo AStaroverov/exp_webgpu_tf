@@ -117,7 +117,7 @@ export function act(
     policyNetwork: tf.LayersModel,
     state: InputArrays,
     noise: tf.Tensor,
-    noiseStd: number,
+    noiseScale: number,
 ): {
     actions: Float32Array,
     mean: Float32Array,
@@ -130,7 +130,7 @@ export function act(
         const std = logStd.exp();
 
         const actions = mean.add(noise.mul(std));
-        const logProb = computeLogProb(actions, mean, std.mul(noiseStd));
+        const logProb = computeLogProb(actions, mean, std.mul(noiseScale));
 
         return {
             actions: syncUnwrapTensor(actions) as Float32Array,
