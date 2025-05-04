@@ -121,8 +121,8 @@ export class ActorAgent implements TankAgent {
     private async load() {
         this.policyNetwork = await getNetwork(Model.Policy);
 
-        if (random() > 0.3) {
-            perturbWeights(this.policyNetwork, randomRangeFloat(0.01, 0.05));
+        if (random() > 0.7) {
+            perturbWeights(this.policyNetwork, randomRangeFloat(0.02, 0.05));
         }
     }
 }
