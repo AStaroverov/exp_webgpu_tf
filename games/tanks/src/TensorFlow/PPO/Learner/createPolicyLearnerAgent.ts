@@ -67,7 +67,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
                 tOldLogProbs,
                 tAdvantages,
                 CONFIG.policyClipRatio, CONFIG.policyEntropyCoeff, CONFIG.clipNorm,
-                true,//j === mbc - 1,
+                j === mbc - 1,
             );
             policyLoss && policyLossList.push(policyLoss);
 
