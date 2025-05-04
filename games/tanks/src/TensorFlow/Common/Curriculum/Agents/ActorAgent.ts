@@ -13,7 +13,7 @@ import { calculateReward } from '../../../Reward/calculateReward.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
 import { getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
 import { clamp } from 'lodash-es';
-import { randomRangeFloat } from '../../../../../../../lib/random.ts';
+import { random, randomRangeFloat } from '../../../../../../../lib/random.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -120,7 +120,10 @@ export class ActorAgent implements TankAgent {
 
     private async load() {
         this.policyNetwork = await getNetwork(Model.Policy);
-        perturbWeights(this.policyNetwork, randomRangeFloat(0.01, 0.05));
+
+        if (random() > 0.3) {
+            perturbWeights(this.policyNetwork, randomRangeFloat(0.01, 0.05));
+        }
     }
 }
 
