@@ -11,6 +11,7 @@ import { applyActionToTank } from '../../applyActionToTank.ts';
 import { calculateReward } from '../../../Reward/calculateReward.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
 import { getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
+import { ACTION_DIM } from '../../consts.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -36,6 +37,7 @@ export type TankAgent = {
 }
 
 export class ActorAgent implements TankAgent {
+    private noise?: tf.Tensor;
     private memory = new AgentMemory();
     private policyNetwork?: tf.LayersModel;
 
@@ -55,9 +57,11 @@ export class ActorAgent implements TankAgent {
     }
 
     public dispose() {
+        this.noise?.dispose();
+        this.noise = undefined;
+        this.memory.dispose();
         this.policyNetwork && disposeNetwork(this.policyNetwork);
         this.policyNetwork = undefined;
-        this.memory.dispose();
     }
 
     public sync() {
@@ -72,8 +76,12 @@ export class ActorAgent implements TankAgent {
         width: number,
         height: number,
     ) {
+        const newNoise = ouNoise(this.noise, 0.15, 0.05);
+        this.noise?.dispose();
+        this.noise = newNoise;
+
         const state = prepareInputArrays(this.tankEid, width, height);
-        const result = act(this.policyNetwork!, state);
+        const result = act(this.policyNetwork!, state, this.noise);
 
         applyActionToTank(this.tankEid, result.actions);
 
@@ -112,4 +120,12 @@ export class ActorAgent implements TankAgent {
     private async load() {
         this.policyNetwork = await getNetwork(Model.Policy);
     }
+}
+
+function ouNoise(noise: tf.Tensor = tf.zeros([ACTION_DIM]), sigma: number, theta: number) {
+    return noise.add(
+        tf.randomNormal([ACTION_DIM])
+            .mul(sigma)
+            .sub(noise.mul(theta)),
+    );
 }

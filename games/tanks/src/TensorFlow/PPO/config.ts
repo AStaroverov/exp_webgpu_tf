@@ -72,7 +72,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Training parameters - FRAMES = 30sec / TICK_TIME_SIMULATION
     episodeFrames: 30 * 1000 / TICK_TIME_SIMULATION,
     // Workers
-    workerCount: isMac ? 3 : 10,
+    workerCount: isMac ? 0 : 10,
     // Training control
     savePath: isMac ? 'APPO_VTRACE' : 'APPO_VTRACE_V1',
     // fsModelPath: 'v20',
