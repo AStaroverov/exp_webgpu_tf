@@ -3,10 +3,8 @@ import { Variable } from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { act } from '../../../PPO/train.ts';
 import { prepareInputArrays } from '../../InputArrays.ts';
-import { queueSizeChannel } from '../../../PPO/channels.ts';
-import { filter, first, firstValueFrom, mergeMap, race, retry, shareReplay, startWith, tap, timer } from 'rxjs';
 import { disposeNetwork, getNetwork } from '../../../Models/Utils.ts';
-import { getNetworkVersion } from '../../utils.ts';
+import { getNetworkVersion, patientAction } from '../../utils.ts';
 import { applyActionToTank } from '../../applyActionToTank.ts';
 import { calculateReward } from '../../../Reward/calculateReward.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
@@ -14,15 +12,6 @@ import { getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
 import { clamp } from 'lodash-es';
 import { random, randomRangeFloat } from '../../../../../../../lib/random.ts';
 import { Model } from '../../../Models/def.ts';
-
-const queueSize$ = queueSizeChannel.obs.pipe(
-    startWith(0),
-    shareReplay(1),
-);
-const backpressure$ = race([
-    timer(60_000),
-    queueSize$.pipe(filter((queueSize) => queueSize < 3)),
-]).pipe(first());
 
 export type TankAgent = {
     tankEid: number;
@@ -38,7 +27,7 @@ export type TankAgent = {
     evaluateTankBehaviour?(width: number, height: number, gameOver: boolean): void;
 }
 
-export class ActorAgent implements TankAgent {
+export class CurrentActorAgent implements TankAgent {
     private memory = new AgentMemory();
     private policyNetwork?: tf.LayersModel;
 
@@ -64,11 +53,8 @@ export class ActorAgent implements TankAgent {
     }
 
     public sync() {
-        return firstValueFrom(backpressure$.pipe(
-            tap(() => this.dispose()),
-            mergeMap(() => this.load()),
-            retry({ delay: 1000 }),
-        ));
+        this.dispose();
+        return patientAction(() => this.load());
     }
 
     public updateTankBehaviour(

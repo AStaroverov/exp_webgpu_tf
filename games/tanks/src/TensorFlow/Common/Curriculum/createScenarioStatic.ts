@@ -1,7 +1,7 @@
 import { createBattlefield } from './createBattlefield.ts';
-import { ActorAgent, TankAgent } from './Agents/ActorAgent.ts';
+import { CurrentActorAgent, TankAgent } from './Agents/CurrentActorAgent.ts';
 import { EntityId } from 'bitecs';
-import { addRandomTanks } from './addRandomTanks.ts';
+import { addRandomTanks } from './Utils/addRandomTanks.ts';
 import { randomRangeInt } from '../../../../../../lib/random.ts';
 import { getTankTeamId } from '../../../ECS/Entities/Tank/TankUtils.ts';
 import { getScenarioIndex, getSuccessRatio, getTeamHealth } from './utils.ts';
@@ -18,7 +18,7 @@ export async function createScenarioStatic(options: Parameters<typeof createBatt
     const initialTeamHealth = getTeamHealth(tanks);
 
     const mapTankIdToAgent = new Map<number, TankAgent>();
-    mapTankIdToAgent.set(tanks[0], new ActorAgent(tanks[0]));
+    mapTankIdToAgent.set(tanks[0], new CurrentActorAgent(tanks[0]));
 
     await Promise.all(Array.from(mapTankIdToAgent.values()).map(agent => agent.sync?.()));
 
@@ -31,8 +31,8 @@ export async function createScenarioStatic(options: Parameters<typeof createBatt
         },
         getActors() {
             return game.getTankEids()
-                .filter((eid) => mapTankIdToAgent.has(eid) && mapTankIdToAgent.get(eid) instanceof ActorAgent)
-                .map((eid) => mapTankIdToAgent.get(eid) as ActorAgent);
+                .filter((eid) => mapTankIdToAgent.has(eid) && mapTankIdToAgent.get(eid) instanceof CurrentActorAgent)
+                .map((eid) => mapTankIdToAgent.get(eid) as CurrentActorAgent);
         },
         getAgents() {
             return game.getTankEids()

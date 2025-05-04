@@ -3,7 +3,7 @@ import { createBattlefield } from './createBattlefield.ts';
 import { randomRangeFloat } from '../../../../../../lib/random.ts';
 import { createScenarioStaticWithCoop } from './createScenarioStaticWithCoop.ts';
 import { getScenarioIndex } from './utils.ts';
-import { addSimpleHeuristicAgents } from './addSimpleHeuristicAgents.ts';
+import { fillWithSimpleHeuristicAgents } from './Utils/fillWithSimpleHeuristicAgents.ts';
 
 export const indexScenarioWithHeuristicAgents = getScenarioIndex();
 
@@ -11,7 +11,7 @@ export async function createScenarioWithHeuristicAgents(options: Parameters<type
     const episode = await createScenarioStaticWithCoop(options);
     episode.index = indexScenarioWithHeuristicAgents;
 
-    addSimpleHeuristicAgents(episode, {
+    fillWithSimpleHeuristicAgents(episode, {
         move: randomRangeFloat(0.8, 1),
         aim: {
             aimError: randomRangeFloat(1, 3),

@@ -4,7 +4,7 @@ import { TankController } from '../../../../ECS/Components/TankController.ts';
 import { getAimPosition, getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
 import { findTankEnemiesEids } from '../../../../ECS/Utils/snapshotTankInputTensor.ts';
 import { Actions, applyActionToTank } from '../../applyActionToTank.ts';
-import { TankAgent } from './ActorAgent.ts';
+import { TankAgent } from './CurrentActorAgent.ts';
 import { random, randomRangeFloat, randomSign } from '../../../../../../../lib/random.ts';
 import { clamp } from 'lodash-es';
 

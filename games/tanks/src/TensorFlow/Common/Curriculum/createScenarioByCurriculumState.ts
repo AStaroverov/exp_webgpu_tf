@@ -13,6 +13,10 @@ import {
     createScenarioWithHeuristicAgents,
     indexScenarioWithHeuristicAgents,
 } from './createScenarioWithHeuristicAgents.ts';
+import {
+    createScenarioWithHistoricalAgents,
+    indexScenarioWithHistoricalAgents,
+} from './createScenarioWithHistoricalAgents.ts';
 
 type ScenarioOptions = Parameters<typeof createBattlefield>[0];
 
@@ -22,12 +26,15 @@ const mapEntries = [
     [indexScenarioWithMovingAgents, createScenarioWithMovingAgents],
     [indexScenarioWithShootingAgents, createScenarioWithShootingAgents],
     [indexScenarioWithHeuristicAgents, createScenarioWithHeuristicAgents],
+    [indexScenarioWithHistoricalAgents, createScenarioWithHistoricalAgents],
 ] as const;
 const mapIndexToConstructor = new Map(mapEntries);
 
 if (mapIndexToConstructor.size !== mapEntries.length) {
     throw new Error('Scenario index is not unique');
 }
+
+export const scenariosCount = mapIndexToConstructor.size;
 
 export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: ScenarioOptions): Promise<Scenario> {
     let constructor = createScenarioStatic;

@@ -1,0 +1,45 @@
+import * as tf from '@tensorflow/tfjs';
+import '@tensorflow/tfjs-backend-wasm';
+import { act } from '../../../PPO/train.ts';
+import { prepareInputArrays } from '../../InputArrays.ts';
+import { disposeNetwork, getRandomHistoricalNetwork } from '../../../Models/Utils.ts';
+import { patientAction } from '../../utils.ts';
+import { applyActionToTank } from '../../applyActionToTank.ts';
+import { Model } from '../../../Models/def.ts';
+import { TankAgent } from './CurrentActorAgent.ts';
+import { clamp } from 'lodash-es';
+
+export class RandomHistoricalAgent implements TankAgent {
+    private policyNetwork?: tf.LayersModel;
+
+    constructor(public readonly tankEid: number) {
+    }
+
+    public dispose() {
+        this.policyNetwork && disposeNetwork(this.policyNetwork);
+        this.policyNetwork = undefined;
+    }
+
+    public sync() {
+        this.dispose();
+        return patientAction(() => this.load());
+    }
+
+    public updateTankBehaviour(
+        width: number,
+        height: number,
+    ) {
+        const state = prepareInputArrays(this.tankEid, width, height);
+        const result = act(this.policyNetwork!, state);
+
+        applyActionToTank(
+            this.tankEid,
+            result.actions,
+            result.logStd.map((v) => clamp(1 - Math.exp(v) / Math.exp(0.2), 0.1, 0.9)),
+        );
+    }
+
+    private async load() {
+        this.policyNetwork = await getRandomHistoricalNetwork(Model.Policy);
+    }
+}

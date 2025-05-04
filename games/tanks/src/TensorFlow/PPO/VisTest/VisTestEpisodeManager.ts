@@ -5,7 +5,7 @@ import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { EpisodeManager } from '../Actor/EpisodeManager.ts';
 import { Scenario } from '../../Common/Curriculum/types.ts';
 import { max } from '../../../../../../lib/math.ts';
-import { TankAgent } from '../../Common/Curriculum/Agents/ActorAgent.ts';
+import { TankAgent } from '../../Common/Curriculum/Agents/CurrentActorAgent.ts';
 import { SNAPSHOT_EVERY } from '../../Common/consts.ts';
 import { CONFIG } from '../config.ts';
 import { frameTasks } from '../../../../../../lib/TasksScheduler/frameTasks.ts';
@@ -44,7 +44,7 @@ export class VisTestEpisodeManager extends EpisodeManager {
 
     protected beforeEpisode() {
         return createScenarioByCurriculumState(this.curriculumState, {
-            // return createScenarioWithHeuristicAgents({
+            // return createScenarioWithHistoricalAgents({
             withRender: true,
             withPlayer: false,
         }).then((scenario) => (this.currentScenario = scenario));

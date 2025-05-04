@@ -4,6 +4,7 @@ import { metricsChannels } from '../../Common/channels.ts';
 import { getAgentLog, setAgentLog } from './store.ts';
 import { CompressedBuffer } from './CompressedBuffer.ts';
 import { get } from 'lodash';
+import { scenariosCount } from '../../Common/Curriculum/createScenarioByCurriculumState.ts';
 
 type SuccessRatioIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
@@ -22,7 +23,7 @@ const store = {
     batchSize: new CompressedBuffer(1_000, 5),
     versionDelta: new CompressedBuffer(1_000, 5),
     // successRatioN
-    ...Array.from({ length: 10 }, (_, i) => i).reduce((acc, i) => {
+    ...Array.from({ length: scenariosCount }, (_, i) => i).reduce((acc, i) => {
         acc[`successRatio${ i as SuccessRatioIndex }`] = new CompressedBuffer(500, 5);
         return acc;
     }, {} as Record<`successRatio${ SuccessRatioIndex }`, CompressedBuffer>),
@@ -95,7 +96,7 @@ function drawTab0() {
         });
     };
 
-    Array.from({ length: 5 }, (_, i) => i).forEach((i) => {
+    Array.from({ length: scenariosCount }, (_, i) => i).forEach((i) => {
         renderSuccessRatio(i as SuccessRatioIndex);
     });
 }

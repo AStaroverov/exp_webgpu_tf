@@ -1,13 +1,23 @@
 import { SNAPSHOT_EVERY, TICK_TIME_SIMULATION } from '../../Common/consts.ts';
 import { GameDI } from '../../../DI/GameDI.ts';
-import { TankAgent } from '../../Common/Curriculum/Agents/ActorAgent.ts';
+import { TankAgent } from '../../Common/Curriculum/Agents/CurrentActorAgent.ts';
 import { CONFIG } from '../config.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
-import { CurriculumState, curriculumStateChannel, episodeSampleChannel } from '../channels.ts';
+import { CurriculumState, curriculumStateChannel, episodeSampleChannel, queueSizeChannel } from '../channels.ts';
 import { Scenario } from '../../Common/Curriculum/types.ts';
 import { createScenarioByCurriculumState } from '../../Common/Curriculum/createScenarioByCurriculumState.ts';
 import { snapshotTankInputTensor } from '../../../ECS/Utils/snapshotTankInputTensor.ts';
 import { abs, max, min } from '../../../../../../lib/math.ts';
+import { filter, first, firstValueFrom, race, shareReplay, startWith, timer } from 'rxjs';
+
+const queueSize$ = queueSizeChannel.obs.pipe(
+    startWith(0),
+    shareReplay(1),
+);
+const backpressure$ = race([
+    timer(60_000),
+    queueSize$.pipe(filter((queueSize) => queueSize < 3)),
+]).pipe(first());
 
 export class EpisodeManager {
     protected curriculumState: CurriculumState = {
@@ -23,6 +33,7 @@ export class EpisodeManager {
     public async start() {
         while (true) {
             try {
+                await firstValueFrom(backpressure$);
                 await this.runEpisode();
             } catch (error) {
                 console.error('Error during episode:', error);

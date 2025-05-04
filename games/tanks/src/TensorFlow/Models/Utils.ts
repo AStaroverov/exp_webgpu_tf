@@ -1,11 +1,11 @@
 import { CONFIG } from '../PPO/config.ts';
 import * as tf from '@tensorflow/tfjs';
 import { LayersModel } from '@tensorflow/tfjs';
-import { loadLastNetworkFromDB } from './Transfer.ts';
+import { loadLastNetworkFromDB, loadNetworkFromDB } from './Transfer.ts';
 import { patientAction } from '../Common/utils.ts';
 import { isFunction } from 'lodash-es';
-import { random } from '../../../../../lib/random.ts';
-import { LAST_NETWORK_VERSION, Model } from './def.ts';
+import { random, randomRangeInt } from '../../../../../lib/random.ts';
+import { LAST_NETWORK_VERSION, Model, NetworkInfo } from './def.ts';
 import { isBrowser } from '../../../../../lib/detect.ts';
 
 export function disposeNetwork(network: LayersModel) {
@@ -44,10 +44,11 @@ export async function getNetwork(modelName: Model, getInitial?: () => tf.LayersM
     return network;
 }
 
-export type NetworkInfo = {
-    name: string,
-    path: string,
-    dateSaved: Date;
+export async function getRandomHistoricalNetwork(modelName: Model) {
+    const randomInfo = await getRandomNetworkInfo(modelName);
+    let version = getVersionFromStorePath(randomInfo.name);
+    version = Number.isNaN(version) ? LAST_NETWORK_VERSION : version;
+    return patientAction(() => loadNetworkFromDB(modelName, version), 10);
 }
 
 const defaultSubNames = {
@@ -66,6 +67,11 @@ export async function getNetworkInfoList(model: Model) {
         }
         return acc;
     }, [] as NetworkInfo[]));
+}
+
+export async function getRandomNetworkInfo(model: Model) {
+    const list = await getNetworkInfoList(model);
+    return list[randomRangeInt(0, list.length - 1)];
 }
 
 export async function getPenultimateNetworkVersion(name: Model): Promise<number | undefined> {
@@ -97,7 +103,6 @@ export async function shouldSaveHistoricalVersion(name: Model, version: number) 
 }
 
 const NETWORKS_LIMIT_COUNT = 20;
-
 
 export async function removeOutLimitNetworks(name: Model) {
     const list = await getNetworkInfoList(name);
