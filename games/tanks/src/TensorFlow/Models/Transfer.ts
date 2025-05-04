@@ -1,4 +1,4 @@
-import { getIndexedDBModelPath, shouldSaveHistoricalVersion } from './Utils.ts';
+import { getIndexedDBModelPath, removeOutLimitNetworks, shouldSaveHistoricalVersion } from './Utils.ts';
 import * as tf from '@tensorflow/tfjs';
 import { isBrowser } from '../../../../../lib/detect.ts';
 import { onReadyRead } from '../Common/Tensor.ts';
@@ -15,6 +15,7 @@ export async function saveNetworkToDB(network: tf.LayersModel, name: Model) {
         if (shouldSaveHistorical) {
             console.info('Saving historical version of network:', name, networkVersion);
             void network.save(getIndexedDBModelPath(name, networkVersion), { includeOptimizer: true });
+            void removeOutLimitNetworks(name);
         }
 
         return network.save(getIndexedDBModelPath(name, LAST_NETWORK_VERSION), { includeOptimizer: true });

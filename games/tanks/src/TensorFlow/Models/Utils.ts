@@ -6,6 +6,7 @@ import { patientAction } from '../Common/utils.ts';
 import { isFunction } from 'lodash-es';
 import { random } from '../../../../../lib/random.ts';
 import { LAST_NETWORK_VERSION, Model } from './def.ts';
+import { isBrowser } from '../../../../../lib/detect.ts';
 
 export function disposeNetwork(network: LayersModel) {
     network.optimizer?.dispose();
@@ -93,4 +94,26 @@ export async function shouldSaveHistoricalVersion(name: Model, version: number) 
     }
 
     return version - penultimateNetworkVersion > step;
+}
+
+const NETWORKS_LIMIT_COUNT = 20;
+
+
+export async function removeOutLimitNetworks(name: Model) {
+    const list = await getNetworkInfoList(name);
+
+    if (list.length > NETWORKS_LIMIT_COUNT) {
+        const forRemove = list
+            .sort((a, b) => a.dateSaved.getTime() - b.dateSaved.getTime())
+            .slice(0, list.length - NETWORKS_LIMIT_COUNT);
+
+
+        if (isBrowser) {
+            for (const networkInfo of forRemove) {
+                tf.io.removeModel(networkInfo.path);
+            }
+        } else {
+            throw new Error('Unsupported environment for removing model');
+        }
+    }
 }
