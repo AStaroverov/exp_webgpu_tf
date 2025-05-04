@@ -1,30 +1,38 @@
-import { getIndexedDBModelPath } from './Utils.ts';
-import { CONFIG } from '../PPO/config.ts';
+import { getIndexedDBModelPath, shouldSaveHistoricalVersion } from './Utils.ts';
 import * as tf from '@tensorflow/tfjs';
 import { isBrowser } from '../../../../../lib/detect.ts';
 import { onReadyRead } from '../Common/Tensor.ts';
-
-export enum Model {
-    Policy = 'policy-model',
-    Value = 'value-model',
-}
+import { getNetworkVersion } from '../Common/utils.ts';
+import { LAST_NETWORK_VERSION, Model } from './def.ts';
 
 export async function saveNetworkToDB(network: tf.LayersModel, name: Model) {
     await onReadyRead();
 
+    const networkVersion = getNetworkVersion(network);
+    const shouldSaveHistorical = await shouldSaveHistoricalVersion(name, networkVersion);
+
     if (isBrowser) {
-        return network.save(getIndexedDBModelPath(name, CONFIG), { includeOptimizer: true });
+        if (shouldSaveHistorical) {
+            console.info('Saving historical version of network:', name, networkVersion);
+            void network.save(getIndexedDBModelPath(name, networkVersion), { includeOptimizer: true });
+        }
+
+        return network.save(getIndexedDBModelPath(name, LAST_NETWORK_VERSION), { includeOptimizer: true });
     }
 
     throw new Error('Unsupported environment for saving model');
 }
 
-export function loadNetworkFromDB(name: Model) {
+export function loadNetworkFromDB(name: Model, version: number) {
     if (isBrowser) {
-        return tf.loadLayersModel(getIndexedDBModelPath(name, CONFIG));
+        return tf.loadLayersModel(getIndexedDBModelPath(name, version));
     }
 
     throw new Error('Unsupported environment for loading model');
+}
+
+export async function loadLastNetworkFromDB(name: Model) {
+    return loadNetworkFromDB(name, LAST_NETWORK_VERSION);
 }
 
 export async function loadNetworkFromFS(path: string, name: Model) {
@@ -39,5 +47,6 @@ export async function loadNetworkFromFS(path: string, name: Model) {
 }
 
 export function downloadNetwork(name: Model) {
-    return loadNetworkFromDB(name).then((network) => network.save(`downloads://${ name }`, { includeOptimizer: true }));
+    return loadNetworkFromDB(name, LAST_NETWORK_VERSION)
+        .then((network) => network.save(`downloads://${ name }`, { includeOptimizer: true }));
 }

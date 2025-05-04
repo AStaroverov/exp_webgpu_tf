@@ -1,6 +1,5 @@
 import { getNetworkLearningRate, getNetworkVersion } from '../../Common/utils.ts';
 
-import { Model } from '../../Models/Transfer.ts';
 import { createLearnerAgent } from './createLearnerAgent.ts';
 import { createPolicyNetwork } from '../../Models/Create.ts';
 import { CONFIG } from '../config.ts';
@@ -17,6 +16,7 @@ import { learningRateChannel } from '../channels.ts';
 import { LearnData } from './createLearnerManager.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
 import { isLossDangerous } from './isLossDangerous.ts';
+import { Model } from '../../Models/def.ts';
 
 export function createPolicyLearnerAgent() {
     return createLearnerAgent({

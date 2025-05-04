@@ -1,6 +1,7 @@
 import Dexie from 'dexie';
 import { forceExitChannel } from './channels.ts';
-import { downloadNetwork, Model } from '../Models/Transfer.ts';
+import { downloadNetwork } from '../Models/Transfer.ts';
+import { Model } from '../Models/def.ts';
 
 // Инициализируем базу Dexie с таблицей settings
 const db = new Dexie('ui-tank-rl');

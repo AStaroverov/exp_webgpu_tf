@@ -1,10 +1,11 @@
-import { loadNetworkFromDB, loadNetworkFromFS, Model, saveNetworkToDB } from '../Transfer.ts';
+import { loadLastNetworkFromDB, loadNetworkFromFS, saveNetworkToDB } from '../Transfer.ts';
 import { disposeNetwork } from '../Utils.ts';
+import { Model } from '../def.ts';
 
 export function restoreModels(path: string) {
     return Promise.all([
-        loadNetworkFromDB(Model.Policy),
-        loadNetworkFromDB(Model.Value),
+        loadLastNetworkFromDB(Model.Policy),
+        loadLastNetworkFromDB(Model.Value),
     ]).then(([policyNetwork, valueNetwork]) => {
         if (!policyNetwork || !valueNetwork) {
             throw new Error('Failed to load models');

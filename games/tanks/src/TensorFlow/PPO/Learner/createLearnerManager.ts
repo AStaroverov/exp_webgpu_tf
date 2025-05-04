@@ -8,7 +8,6 @@ import {
     queueSizeChannel,
 } from '../channels.ts';
 import { concatMap, first, forkJoin, map, mergeMap, scan, tap } from 'rxjs';
-import { Model } from '../../Models/Transfer.ts';
 import { flatTypedArray } from '../../Common/flat.ts';
 import { AgentMemoryBatch } from '../../Common/Memory.ts';
 import { computeVTraceTargets } from '../train.ts';
@@ -18,6 +17,7 @@ import { getNetworkVersion } from '../../Common/utils.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
 import { RingBuffer } from 'ring-buffer-ts';
 import { pick } from 'lodash-es';
+import { Model } from '../../Models/def.ts';
 
 export type LearnData = AgentMemoryBatch & {
     values: Float32Array,

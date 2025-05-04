@@ -1,4 +1,4 @@
-import { Model, saveNetworkToDB } from '../../Models/Transfer.ts';
+import { saveNetworkToDB } from '../../Models/Transfer.ts';
 import * as tf from '@tensorflow/tfjs';
 import { learningRateChannel, learnProcessChannel } from '../channels.ts';
 import { networkHealthCheck } from '../train.ts';
@@ -6,6 +6,7 @@ import { get } from 'lodash';
 import { getNetworkVersion, patientAction } from '../../Common/utils.ts';
 import { LearnData } from './createLearnerManager.ts';
 import { getNetwork } from '../../Models/Utils.ts';
+import { Model } from '../../Models/def.ts';
 
 export async function createLearnerAgent({ modelName, createNetwork, trainNetwork }: {
     modelName: Model,

@@ -3,7 +3,6 @@ import { Variable } from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 import { act } from '../../../PPO/train.ts';
 import { prepareInputArrays } from '../../InputArrays.ts';
-import { Model } from '../../../Models/Transfer.ts';
 import { queueSizeChannel } from '../../../PPO/channels.ts';
 import { filter, first, firstValueFrom, mergeMap, race, retry, shareReplay, startWith, tap, timer } from 'rxjs';
 import { disposeNetwork, getNetwork } from '../../../Models/Utils.ts';
@@ -14,6 +13,7 @@ import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
 import { getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
 import { clamp } from 'lodash-es';
 import { random, randomRangeFloat } from '../../../../../../../lib/random.ts';
+import { Model } from '../../../Models/def.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),

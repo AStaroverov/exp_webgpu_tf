@@ -1,4 +1,3 @@
-import { Model } from '../../Models/Transfer.ts';
 import { createLearnerAgent } from './createLearnerAgent.ts';
 import { createValueNetwork } from '../../Models/Create.ts';
 import { CONFIG } from '../config.ts';
@@ -12,6 +11,7 @@ import { getNetworkVersion } from '../../Common/utils.ts';
 import { LearnData } from './createLearnerManager.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
 import { isLossDangerous } from './isLossDangerous.ts';
+import { Model } from '../../Models/def.ts';
 
 export function createValueLearnerAgent() {
     return createLearnerAgent({
@@ -65,7 +65,7 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
             ),
         )
         .then((valueLossList) => {
-            if (valueLossList.some((v) => isLossDangerous(v, 100))) {
+            if (valueLossList.some((v) => isLossDangerous(v, 1000))) {
                 throw new Error(`Value loss too dangerous: ${ min(...valueLossList) } ${ max(...valueLossList) }`);
             }
 

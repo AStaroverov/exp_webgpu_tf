@@ -1,7 +1,8 @@
 import { AgentMemoryBatch } from '../Common/Memory.ts';
 import { createChannel } from '../../../../../lib/channles.ts';
 import { LearnData } from './Learner/createLearnerManager.ts';
-import { Model } from '../Models/Transfer.ts';
+
+import { Model } from '../Models/def.ts';
 
 export type EpisodeSample = {
     memoryBatch: AgentMemoryBatch,

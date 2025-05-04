@@ -11,7 +11,8 @@ import { ACTION_DIM } from '../Common/consts.ts';
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 import { CONFIG } from '../PPO/config.ts';
 import { applyAttentionLayer, applyDenseLayers } from './Layers.ts';
-import { Model } from './Transfer.ts';
+
+import { Model } from './def.ts';
 
 export const BATTLE_FEATURES_DIM = 4;
 export const TANK_FEATURES_DIM = 8;
