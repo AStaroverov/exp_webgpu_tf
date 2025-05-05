@@ -10,9 +10,9 @@ import { calculateReward } from '../../../Reward/calculateReward.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
 import { getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
 import { clamp } from 'lodash-es';
-import { random } from '../../../../../../../lib/random.ts';
 import { Model } from '../../../Models/def.ts';
-import {CONFIG} from "../../../PPO/config.ts";
+import { CONFIG } from '../../../PPO/config.ts';
+import { random } from '../../../../../../../lib/random.ts';
 
 export type TankAgent = {
     tankEid: number;
@@ -109,8 +109,8 @@ export class CurrentActorAgent implements TankAgent {
         this.policyNetwork = await getNetwork(Model.Policy);
 
 
-        if (random() > Math.pow(1 - 0.3, 1 / CONFIG.workerCount)) { // 30% for N workers
-            perturbWeights(this.policyNetwork, 0.015);
+        if (random() > Math.pow(1 - 0.5, 1 / CONFIG.workerCount)) { // 50% for N workers
+            perturbWeights(this.policyNetwork, 0.02);
         }
     }
 }
@@ -118,10 +118,29 @@ export class CurrentActorAgent implements TankAgent {
 export function perturbWeights(model: tf.LayersModel, scale: number) {
     tf.tidy(() => {
         model.trainableWeights.forEach(v => {
+            if (!isPerturbable(v)) return;
+
             const val = v.read() as Variable;
             const std = tf.moments(val).variance.sqrt();
             const eps = tf.randomNormal(val.shape).mul(std).mul(scale);
             val.assign(val.add(eps));
         });
     });
+}
+
+function isPerturbable(v: tf.LayerVariable) {
+    // 1. работаем только с float-весами
+    if (v.dtype !== 'float32') return false;
+
+    // 2. не трогаем BatchNorm-параметры
+    if (v.name.includes('batch_normalization') ||
+        v.name.includes('batchnorm') ||
+        v.name.includes('/gamma') ||  // scale
+        v.name.includes('/beta'))     // shift
+        return false;
+
+    // 3. (опционально) пропускаем bias-векторы
+    if (v.name.endsWith('/bias')) return false;
+
+    return true;
 }
