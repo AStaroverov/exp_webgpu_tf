@@ -1,17 +1,6 @@
-/**
- * Multi-Head **Self-Attention** layer for TensorFlow.js (TypeScript).
- * Works with inputs   [tokens, mask?]
- *   tokens : tf.Tensor  [B, S, dModel]
- *   mask   : tf.Tensor  [B, S]      (0 / 1, 0 → padding)
- *
- * Example:
- *   const attn = new MultiHeadSelfAttentionLayer({numHeads: 4, keyDim: 16});
- *   const out  = attn.apply([tokens, mask]) as tf.SymbolicTensor;
- */
 import * as tf from '@tensorflow/tfjs';
 import { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
 
-/* ---------- config interface ---------- */
 export interface MHSAArgs extends LayerArgs {
     numHeads: number;          // H
     keyDim: number;           // d_k  (= dModel / H)
