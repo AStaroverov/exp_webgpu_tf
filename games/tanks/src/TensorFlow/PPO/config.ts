@@ -54,7 +54,7 @@ export const DEFAULT_EXPERIMENT: Config = {
 
     klConfig: {
         target: 0.02,
-        high: 0.03,
+        high: 0.04,
         low: 0.01,
         max: 0.5,
     },

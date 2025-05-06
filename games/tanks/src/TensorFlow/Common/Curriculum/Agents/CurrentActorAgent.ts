@@ -110,7 +110,7 @@ export class CurrentActorAgent implements TankAgent {
 
 
         if (random() > Math.pow(1 - 0.5, 1 / CONFIG.workerCount)) { // 50% for N workers
-            perturbWeights(this.policyNetwork, 0.02);
+            perturbWeights(this.policyNetwork, 0.01);
         }
     }
 }
