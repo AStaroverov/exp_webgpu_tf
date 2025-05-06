@@ -34,7 +34,8 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const mbs = CONFIG.miniBatchSize;
     const mbc = ceil(batch.size / mbs);
 
-    console.log(`[Train Policy]: Iteration ${ version },
+    console.info(`[Train Policy]: Stating..
+         Iteration ${ version },
          Sum batch size: ${ batch.size },
          Mini batch count: ${ mbc } by ${ mbs }`);
 
@@ -101,6 +102,8 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             Promise.all(klList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
         ]))
         .then(([policyLossList, klList]) => {
+            console.info(`[Train Policy]: Finish`);
+
             if (policyLossList.some((v) => isLossDangerous(v, 2))) {
                 throw new Error(`Policy loss too dangerous: ${ min(...policyLossList) }, ${ max(...policyLossList) }`);
             }
