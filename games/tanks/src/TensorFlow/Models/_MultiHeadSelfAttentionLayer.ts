@@ -9,15 +9,14 @@ export interface MHSAArgs extends LayerArgs {
 
 export class MultiHeadSelfAttentionLayer extends tf.layers.Layer {
     static className = 'MultiHeadSelfAttentionLayer';
-    // private wkv!: tf.LayerVariable;
-    protected wqkv!: tf.LayerVariable;
     private readonly keyDim: number;
     private readonly numHeads: number;
     private readonly numKvHeads: number;
-    // private wq!: tf.LayerVariable;
+    private readonly scale: number;
+    private wq!: tf.LayerVariable;
     // private wk!: tf.LayerVariable;
     // private wv!: tf.LayerVariable;
-    private readonly scale: number;
+    private wkv!: tf.LayerVariable;
 
     // private wo!: tf.LayerVariable;
 
@@ -50,13 +49,11 @@ export class MultiHeadSelfAttentionLayer extends tf.layers.Layer {
         const dModel = shape[shape.length - 1] as number;
 
         const init = tf.initializers.glorotUniform({});
-        // this.wq = this.addWeight('wq', [dModel, dModel], 'float32', init);
+        this.wq = this.addWeight('wq', [dModel, dModel], 'float32', init);
         // this.wk = this.addWeight('wk', [dModel, dModel], 'float32', init);
         // this.wv = this.addWeight('wv', [dModel, dModel], 'float32', init);
-        // this.wkv = this.addWeight('wqkv', [dModel, 2 * this.numKvHeads * this.keyDim], 'float32', init);
+        this.wkv = this.addWeight('wqkv', [dModel, 2 * this.numKvHeads * this.keyDim], 'float32', init);
         // this.wo = this.addWeight('wo', [dModel, dModel], 'float32', init);
-        this.wqkv = this.addWeight('wqkv', [dModel, dModel + 2 * this.numKvHeads * this.keyDim],
-            'float32', init);           // d × (d + 2·G·d_k)
 
         this.built = true;
     }
@@ -67,40 +64,26 @@ export class MultiHeadSelfAttentionLayer extends tf.layers.Layer {
             : [inputs as tf.Tensor, undefined];
 
         const [B, S, dModel] = tokens.shape;
-        // const G = this.numKvHeads;
+        const G = this.numKvHeads;
 
         /* ---- flat projection ----- */
         const flat = tokens.reshape([-1, dModel]);            // [B·S, d]
 
-        // /* ---------- Q ----------- */
-        // const Q = tf.matMul(flat, this.wq.read())          // [B·S, d]
-        //     .reshape([B, S, this.numHeads, this.keyDim])
-        //     .transpose([0, 2, 1, 3]);             // [B,H,S,d_k]
-        //
-        // /* ---------- K | V (G голов) ----------- */
-        // const kv = tf.matMul(flat, this.wkv.read())        // [B·S, 2·G·d_k]
-        //     .reshape([B, S, 2, G, this.keyDim]) // [B,S,2,G,d_k]
-        //     .transpose([2, 0, 3, 1, 4]);        // 2 × [B,G,S,d_k]
-        //
-        // const [K, V] = tf.unstack(kv, 0);                  // каждая: [B,G,S,d_k]
+        /* ---------- Q ----------- */
+        const Q = tf.matMul(flat, this.wq.read())          // [B·S, d]
+            .reshape([B, S, this.numHeads, this.keyDim])
+            .transpose([0, 2, 1, 3]);             // [B,H,S,d_k]
 
-        const qkv = tf.matMul(flat, this.wqkv.read())          // [B·S, d + 2·G·d_k]
-            .reshape([B, S, 1 + 2 * this.numKvHeads, this.keyDim]) // [B,S,1+2G,d_k]
-            .transpose([2, 0, 3, 1, 4]);                         // [1+2G, B,*,S,d_k]
+        /* ---------- K | V (G голов) ----------- */
+        const kv = tf.matMul(flat, this.wkv.read())        // [B·S, 2·G·d_k]
+            .reshape([B, S, 2, G, this.keyDim]) // [B,S,2,G,d_k]
+            .transpose([2, 0, 3, 1, 4]);        // 2 × [B,G,S,d_k]
 
-        const Q = qkv.slice([0, 0, 0, 0, 0], [1, -1, -1, -1, -1]) // [1,B,H?,S,d_k] позже tile
-            .reshape([B, this.numHeads, S, this.keyDim]);
-
-        const K = qkv.slice([1, 0, 0, 0, 0], [this.numKvHeads, -1, -1, -1, -1])
-            .reshape([B, this.numKvHeads, S, this.keyDim]);
-
-        const V = qkv.slice([1 + this.numKvHeads, 0, 0, 0, 0], [this.numKvHeads, -1, -1, -1, -1])
-            .reshape([B, this.numKvHeads, S, this.keyDim]);
+        const [K, V] = tf.unstack(kv, 0);                  // каждая: [B,G,S,d_k]
 
         const repeat = this.numHeads / this.numKvHeads;    // = H/G
         const kh = repeat === 1 ? K : tf.tile(K, [1, repeat, 1, 1]);
         const vh = repeat === 1 ? V : tf.tile(V, [1, repeat, 1, 1]);
-
 
         /* ----- scaled dot-product attention ----- */
         // tf.matMul делает broadcast: K/V [B,1,S,d_k] «растягиваются» на H

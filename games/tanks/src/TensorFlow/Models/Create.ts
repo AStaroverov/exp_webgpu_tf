@@ -8,7 +8,6 @@ import {
     MAX_ENEMIES,
 } from '../../ECS/Components/TankState.ts';
 import { ACTION_DIM } from '../Common/consts.ts';
-import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 import { CONFIG } from '../PPO/config.ts';
 import { applyDenseLayers, applySelfAttentionLayer, createInputs } from './Layers.ts';
 
@@ -24,13 +23,11 @@ export const ALLY_FEATURES_DIM = ALLY_BUFFER - 1; // -1 потому что id �
 export const BULLET_SLOTS = MAX_BULLETS;
 export const BULLET_FEATURES_DIM = BULLET_BUFFER - 1; // -1 потому что id не считаем
 
-const denseLayersPolicy: [ActivationIdentifier, number][] = [['relu', 256], ['relu', 128], ['relu', 64]];
-const denseLayersValue: [ActivationIdentifier, number][] = [['relu', 64], ['relu', 32]];
-
 export function createPolicyNetwork(): tf.LayersModel {
+    const dModel = 32;
     const inputs = createInputs(Model.Policy);
-    const attentionLayer = applySelfAttentionLayer(Model.Policy, 32, inputs);
-    const withDenseLayers = applyDenseLayers(attentionLayer, denseLayersPolicy);
+    const attentionLayer = applySelfAttentionLayer(Model.Policy, dModel, inputs);
+    const withDenseLayers = applyDenseLayers(attentionLayer, [['relu', dModel * 4], ['relu', dModel * 2]]);
     // Выход: ACTION_DIM * 2 (пример: mean и logStd) ---
     const policyOutput = tf.layers.dense({
         name: Model.Policy + '_output',
@@ -51,9 +48,10 @@ export function createPolicyNetwork(): tf.LayersModel {
 }
 
 export function createValueNetwork(): tf.LayersModel {
+    const dModel = 16;
     const inputs = createInputs(Model.Value);
-    const attentionLayer = applySelfAttentionLayer(Model.Value, 16, inputs);
-    const withDenseLayers = applyDenseLayers(attentionLayer, denseLayersValue);
+    const attentionLayer = applySelfAttentionLayer(Model.Value, dModel, inputs);
+    const withDenseLayers = applyDenseLayers(attentionLayer, [['relu', dModel * 4], ['relu', dModel * 2]]);
     const valueOutput = tf.layers.dense({
         name: Model.Value + '_output',
         units: 1,
