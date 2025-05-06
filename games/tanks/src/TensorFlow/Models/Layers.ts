@@ -77,7 +77,7 @@ export function applyDenseLayers(layer: tf.SymbolicTensor, hiddenLayers: [Activa
 }
 
 function proj(x: tf.SymbolicTensor, dModel: number, name: string) {
-    return tf.layers.dense({ units: dModel, useBias: true, activation: 'relu', name: name + '_tokProj' }).apply(x);
+    return tf.layers.dense({ units: dModel, useBias: true, name: name + '_tokProj' }).apply(x);
 }
 
 export function applySelfAttentionLayer(
@@ -94,7 +94,7 @@ export function applySelfAttentionLayer(
         bulletsMaskInput,
     }: ReturnType<typeof createInputs>,
 ) {
-    name = name + '_AttentionLayer';
+    name = name + '_SelfAttentionLayer';
 
     // ---------- embed everything to a common d_model ---------------------------
     const battleTok = tf.layers.reshape({ targetShape: [1, dModel] })
@@ -126,8 +126,8 @@ export function applySelfAttentionLayer(
     }
     let x = new MultiHeadSelfAttentionLayer({
         name: name + '_MultiHeadSelfAttentionLayer',
-        numHeads: dModel / 16,
         keyDim: 16,
+        numHeads: dModel / 16,
     }).apply([tokens, mask]) as tf.SymbolicTensor;
 
     x = tf.layers.add({ name: name + '_add' }).apply([x, tokens]) as tf.SymbolicTensor;

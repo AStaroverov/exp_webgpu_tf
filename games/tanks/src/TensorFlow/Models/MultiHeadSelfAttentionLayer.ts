@@ -110,7 +110,6 @@
 //
 // tf.serialization.registerClass(MultiHeadSelfAttentionLayer);
 
-
 import * as tf from '@tensorflow/tfjs';
 import { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
 
@@ -124,8 +123,8 @@ export class MultiHeadSelfAttentionLayer extends tf.layers.Layer {
     static readonly className = 'MultiHeadSelfAttentionLayer';
 
     private numHeads!: number;                  // H (выровненный)
-    private keyDim !: number;                   // d_k
-    private scale  !: number;                   // √d_k
+    private keyDim!: number;                   // d_k
+    private scale!: number;                   // √d_k
 
     private denseQ!: tf.layers.Layer;
     private denseK!: tf.layers.Layer;
@@ -151,7 +150,6 @@ export class MultiHeadSelfAttentionLayer extends tf.layers.Layer {
             ? inputShape
             : inputShape[0]) as tf.Shape;
         const dModel = shape[shape.length - 1] as number;
-        debugger
 
         const makeDense = (name: string) =>
             tf.layers.dense({
