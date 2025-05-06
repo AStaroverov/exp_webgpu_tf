@@ -97,7 +97,7 @@ function createInputs(name: string) {
 }
 
 function proj(x: tf.SymbolicTensor, dModel: number, name: string) {
-    return tf.layers.dense({ units: dModel, activation: 'relu', name: name + '_token' }).apply(x);
+    return tf.layers.dense({ units: dModel, useBias: true, activation: 'relu', name: name + '_tokProj' }).apply(x);
 }
 
 function createAttentionLayer(
@@ -131,7 +131,7 @@ function createAttentionLayer(
     // ---------- build 0/1 padding mask -----------------------------------------
     const battleInputFixedMask = new OnesMask({ name: name + '_battleInputFixedMask' }).apply(battleInput) as tf.SymbolicTensor;   // [dModel,2]
     const tankInputFixedMask = new OnesMask({ name: name + '_tankInputFixedMask' }).apply(tankInput) as tf.SymbolicTensor;   // [dModel,2]
-    const mask = tf.layers.concatenate({ name: name + '_masks', axis: 1 })
+    const mask = tf.layers.concatenate({ name: name + '_mask', axis: 1 })
         .apply([
             battleInputFixedMask,
             tankInputFixedMask,
@@ -151,7 +151,7 @@ function createAttentionLayer(
     }).apply([tokens, mask]) as tf.SymbolicTensor;
 
     x = tf.layers.add({ name: name + '_add' }).apply([x, tokens]) as tf.SymbolicTensor;
-    x = tf.layers.layerNormalization({ name: name + 'normalization', epsilon: 1e-5 }).apply(x) as tf.SymbolicTensor;
+    x = tf.layers.layerNormalization({ name: name + '_normalization', epsilon: 1e-5 }).apply(x) as tf.SymbolicTensor;
 
     return tf.layers.flatten({ name: name + '_flatten' }).apply(x) as tf.SymbolicTensor;
 }
