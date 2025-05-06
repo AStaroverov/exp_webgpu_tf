@@ -27,7 +27,8 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
     const mbc = ceil(batch.size / mbs);
     const version = getNetworkVersion(network);
 
-    console.log(`[Train Value]: Iteration ${ version },
+    console.info(`[Train Value]: Starting...
+         Iteration ${ version },
          Sum batch size: ${ batch.size },
          Mini batch count: ${ mbc } by ${ mbs }`);
 
@@ -65,6 +66,8 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
             ),
         )
         .then((valueLossList) => {
+            console.info(`[Train Value]: Finish`);
+
             if (valueLossList.some((v) => isLossDangerous(v, 1000))) {
                 throw new Error(`Value loss too dangerous: ${ min(...valueLossList) } ${ max(...valueLossList) }`);
             }
