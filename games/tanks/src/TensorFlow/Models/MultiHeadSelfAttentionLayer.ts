@@ -2,36 +2,27 @@ import * as tf from '@tensorflow/tfjs';
 import { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
 
 export interface MHSAArgs extends LayerArgs {
-    keyDim: number;           // d_k  (= dModel / H)
     numHeads: number;          // H
-    numKvHeads?: number;        // H (для MQA)
+    keyDim: number;           // d_k  (= dModel / H)
+    useBias?: boolean;
 }
 
 export class MultiHeadSelfAttentionLayer extends tf.layers.Layer {
     static className = 'MultiHeadSelfAttentionLayer';
-    // private wkv!: tf.LayerVariable;
-    protected wqkv!: tf.LayerVariable;
-    private readonly keyDim: number;
-    private readonly numHeads: number;
-    private readonly numKvHeads: number;
-    // private wq!: tf.LayerVariable;
-    // private wk!: tf.LayerVariable;
-    // private wv!: tf.LayerVariable;
-    private readonly scale: number;
 
-    // private wo!: tf.LayerVariable;
+    private readonly numHeads: number;
+    private readonly keyDim: number;
+    private readonly useBias: boolean;
+    private readonly scale: number;
+    private wqkv!: tf.LayerVariable;
+    private wo!: tf.LayerVariable;
 
     constructor(config: MHSAArgs) {
         super(config);
-
-        this.scale = Math.sqrt(config.keyDim);
-        this.keyDim = config.keyDim;
         this.numHeads = config.numHeads;
-        this.numKvHeads = config.numKvHeads ?? Math.min(config.numHeads, 2);
-
-        if (this.numHeads % this.numKvHeads !== 0) {
-            throw new Error('numHeads must be divisible by numKvHeads');
-        }
+        this.keyDim = config.keyDim;
+        this.useBias = config.useBias ?? false;
+        this.scale = Math.sqrt(this.keyDim);
     }
 
     /** Shape doesn’t change: [B,S,dModel] → [B,S,dModel] */
@@ -50,97 +41,51 @@ export class MultiHeadSelfAttentionLayer extends tf.layers.Layer {
         const dModel = shape[shape.length - 1] as number;
 
         const init = tf.initializers.glorotUniform({});
-        // this.wq = this.addWeight('wq', [dModel, dModel], 'float32', init);
-        // this.wk = this.addWeight('wk', [dModel, dModel], 'float32', init);
-        // this.wv = this.addWeight('wv', [dModel, dModel], 'float32', init);
-        // this.wkv = this.addWeight('wqkv', [dModel, 2 * this.numKvHeads * this.keyDim], 'float32', init);
-        // this.wo = this.addWeight('wo', [dModel, dModel], 'float32', init);
-        this.wqkv = this.addWeight('wqkv', [dModel, dModel + 2 * this.numKvHeads * this.keyDim],
-            'float32', init);           // d × (d + 2·G·d_k)
+        this.wqkv = this.addWeight('wqkv', [dModel, 3 * dModel], 'float32', init);
+        this.wo = this.addWeight('wo', [dModel, dModel], 'float32', init);
 
         this.built = true;
     }
 
     call(inputs: tf.Tensor | tf.Tensor[]): tf.Tensor {
-        const [tokens, mask] = Array.isArray(inputs)
-            ? inputs as [tf.Tensor, tf.Tensor?]
-            : [inputs as tf.Tensor, undefined];
+        return tf.tidy(() => {
+            const [tokens, mask] = Array.isArray(inputs)
+                ? inputs as [tf.Tensor, tf.Tensor?]
+                : [inputs as tf.Tensor, undefined];
 
-        const [B, S, dModel] = tokens.shape;
-        // const G = this.numKvHeads;
+            const [B, S, dModel] = tokens.shape;
 
-        /* ---- flat projection ----- */
-        const flat = tokens.reshape([-1, dModel]);            // [B·S, d]
+            /* ---- flat projection ----- */
+            const flat = tokens.reshape([-1, dModel]);            // [B·S, d]
 
-        // /* ---------- Q ----------- */
-        // const Q = tf.matMul(flat, this.wq.read())          // [B·S, d]
-        //     .reshape([B, S, this.numHeads, this.keyDim])
-        //     .transpose([0, 2, 1, 3]);             // [B,H,S,d_k]
-        //
-        // /* ---------- K | V (G голов) ----------- */
-        // const kv = tf.matMul(flat, this.wkv.read())        // [B·S, 2·G·d_k]
-        //     .reshape([B, S, 2, G, this.keyDim]) // [B,S,2,G,d_k]
-        //     .transpose([2, 0, 3, 1, 4]);        // 2 × [B,G,S,d_k]
-        //
-        // const [K, V] = tf.unstack(kv, 0);                  // каждая: [B,G,S,d_k]
+            const qkv = tf.matMul(flat, this.wqkv.read())              // [B·S, 3d]
+                .reshape([B, S, 3, this.numHeads, this.keyDim])
+                .transpose([2, 0, 3, 1, 4]);                // 3 × B × H × S × d_k
 
-        const qkv = tf.matMul(flat, this.wqkv.read())          // [B·S, d + 2·G·d_k]
-            .reshape([B, S, 1 + 2 * this.numKvHeads, this.keyDim]) // [B,S,1+2G,d_k]
-            .transpose([2, 0, 3, 1, 4]);                         // [1+2G, B,*,S,d_k]
+            /* ---- split heads [B,H,S,d_k] ---- */
+            const [qh, kh, vh] = tf.unstack(qkv, 0);
 
-        const Q = qkv.slice([0, 0, 0, 0, 0], [1, -1, -1, -1, -1]) // [1,B,H?,S,d_k] позже tile
-            .reshape([B, this.numHeads, S, this.keyDim]);
+            /* ---- scaled dot-product ---- */
+            let scores = tf.matMul(qh, kh, false, true).div(this.scale); // [B,H,S,S]
 
-        const K = qkv.slice([1, 0, 0, 0, 0], [this.numKvHeads, -1, -1, -1, -1])
-            .reshape([B, this.numKvHeads, S, this.keyDim]);
+            if (mask) {
+                const m4 = mask.reshape([B, 1, 1, S]);
+                scores = scores.add(m4.sub(1).mul(tf.scalar(-1e9)));
+            }
 
-        const V = qkv.slice([1 + this.numKvHeads, 0, 0, 0, 0], [this.numKvHeads, -1, -1, -1, -1])
-            .reshape([B, this.numKvHeads, S, this.keyDim]);
+            const weights = tf.softmax(scores);          // [B,H,S,S]
+            const ctx = tf.matMul(weights, vh);      // [B,H,S,d_k]
 
-        const repeat = this.numHeads / this.numKvHeads;    // = H/G
-        const kh = repeat === 1 ? K : tf.tile(K, [1, repeat, 1, 1]);
-        const vh = repeat === 1 ? V : tf.tile(V, [1, repeat, 1, 1]);
+            /* ---------- merge heads back: [B,S,dModel] ---------- */
+            const merged = ctx
+                .transpose([0, 2, 1, 3])        // [B,S,H,d_k]
+                .reshape([B, S, dModel]);       // [B,S,d]
 
-
-        /* ----- scaled dot-product attention ----- */
-        // tf.matMul делает broadcast: K/V [B,1,S,d_k] «растягиваются» на H
-        // const kh = K.reshape([B, 1, S, this.keyDim]);      // [B,1,S,d_k]
-        // const vh = V.reshape([B, 1, S, this.keyDim]);      // [B,1,S,d_k]
-
-        let scores = tf.matMul(Q, kh, false, true)         // [B,H,S,S]
-            .div(this.scale);
-
-        // const Q = tf.matMul(flat, this.wq.read()).reshape([B, S, dModel]);
-        // const K = tf.matMul(flat, this.wk.read()).reshape([B, S, dModel]);
-        // const V = tf.matMul(flat, this.wv.read()).reshape([B, S, dModel]);
-        ///* ---- split heads [B,H,S,d_k] ---- */
-        // const splitH = (t: tf.Tensor) =>
-        //     t.reshape([B, S, this.numHeads, this.keyDim]).transpose([0, 2, 1, 3]);
-        //
-        // const qh = splitH(Q);
-        // const kh = splitH(K);
-        // const vh = splitH(V);
-        //
-        // /* ---- scaled dot-product ---- */
-        // let scores = tf.matMul(qh, kh, false, true).div(this.scale); // [B,H,S,S]
-
-        if (mask) {
-            const m4 = mask.reshape([B, 1, 1, S]);           // [B,1,1,S]
-            scores = scores.add(m4.sub(1).mul(-1e9));
-        }
-
-        const ctx = tf.matMul(tf.softmax(scores), vh);      // [B,H,S,d_k]
-
-        /* ----- merge heads + вернуть W_O проекцию ----- */
-        const merged = ctx
-            .transpose([0, 2, 1, 3])         // [B,S,H,d_k]
-            .reshape([B, S, dModel]);       // [B,S,d]
-
-        return merged;
-        // /* ---------- final linear proj W_O  (с флэтом!) ------ */
-        // const flatOut = merged.reshape([-1, dModel]);          // [B·S, d]
-        // const proj = tf.matMul(flatOut, this.wo.read());       // [B·S, d]
-        // return proj.reshape([B, S, dModel]);                   // [B,S,dModel]
+            /* ---------- final linear proj W_O ------ */
+            const flatOut = merged.reshape([-1, dModel]);          // [B·S, d]
+            const proj = tf.matMul(flatOut, this.wo.read());       // [B·S, d]
+            return proj.reshape([B, S, dModel]);                   // [B,S,dModel]
+        });
     }
 
     /** Save & load support */
@@ -148,6 +93,7 @@ export class MultiHeadSelfAttentionLayer extends tf.layers.Layer {
         const base = super.getConfig();
         return {
             ...base,
+            useBias: this.useBias,
             keyDim: this.keyDim,
             numHeads: this.numHeads,
         };
@@ -155,112 +101,3 @@ export class MultiHeadSelfAttentionLayer extends tf.layers.Layer {
 }
 
 tf.serialization.registerClass(MultiHeadSelfAttentionLayer);
-
-// import * as tf from '@tensorflow/tfjs';
-// import { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
-//
-// export interface MHSAArgs extends LayerArgs {
-//     numHeads: number;   // H  (будет пере-проверено, чтобы d_k ≥ 16)
-//     keyDim: number;    // d_k (= dModel / H)
-//     useBias?: boolean;
-// }
-//
-// export class MultiHeadSelfAttentionLayer extends tf.layers.Layer {
-//     static readonly className = 'MultiHeadSelfAttentionLayer';
-//
-//     private numHeads!: number;                  // H (выровненный)
-//     private keyDim!: number;                   // d_k
-//     private scale!: number;                   // √d_k
-//
-//     private denseQ!: tf.layers.Layer;
-//     private denseK!: tf.layers.Layer;
-//     private denseV!: tf.layers.Layer;
-//     private denseO!: tf.layers.Layer;
-//
-//     constructor(cfg: MHSAArgs) {
-//         super(cfg);
-//         this.keyDim = cfg.keyDim;
-//         this.numHeads = cfg.numHeads;
-//         this.scale = Math.sqrt(this.keyDim);
-//     }
-//
-//     computeOutputShape(inputShape: tf.Shape | tf.Shape[]): tf.Shape {
-//         const shape = ((inputShape[0] === null || typeof inputShape[0] === 'number')
-//             ? inputShape
-//             : inputShape[0]) as tf.Shape;
-//         return shape;
-//     }
-//
-//     build(inputShape: tf.Shape | tf.Shape[]): void {
-//         const shape = ((inputShape[0] === null || typeof inputShape[0] === 'number')
-//             ? inputShape
-//             : inputShape[0]) as tf.Shape;
-//         const dModel = shape[shape.length - 1] as number;
-//
-//         const makeDense = (name: string) =>
-//             tf.layers.dense({
-//                 name: name,
-//                 units: dModel,
-//                 useBias: false,
-//                 kernelInitializer: 'glorotUniform',
-//             });
-//
-//         this.denseQ = makeDense(this.name + '_denseQ');
-//         this.denseK = makeDense(this.name + '_denseK');
-//         this.denseV = makeDense(this.name + '_denseV');
-//         this.denseO = makeDense(this.name + '_denseO');
-//
-//         this.built = true;
-//     }
-//
-//     call(inputs: tf.Tensor | tf.Tensor[]): tf.Tensor {
-//         const [tokens, mask] = Array.isArray(inputs)
-//             ? inputs as [tf.Tensor, tf.Tensor?]
-//             : [inputs as tf.Tensor, undefined];
-//
-//         const [B, S, dModel] = tokens.shape;
-//
-//         /* ---- Q / K / V : [B,S,d]  (через fused-Dense) ------------------- */
-//         const Q = this.denseQ.apply(tokens) as tf.Tensor;
-//         const K = this.denseK.apply(tokens) as tf.Tensor;
-//         const V = this.denseV.apply(tokens) as tf.Tensor;
-//
-//         /* ---- split heads → [B,H,S,d_k] ---------------------------------- */
-//         const split = (t: tf.Tensor) =>
-//             t.reshape([B, S, this.numHeads, this.keyDim])
-//                 .transpose([0, 2, 1, 3]);                        // [B,H,S,d_k]
-//
-//         const qh = split(Q);
-//         const kh = split(K);
-//         const vh = split(V);
-//
-//         /* ---- scaled dot-product ---------------------------------------- */
-//         let scores = tf.matMul(qh, kh, false, true)      // [B,H,S,S]
-//             .div(this.scale);
-//
-//         if (mask) {
-//             const m4 = tf.expandDims(tf.expandDims(mask, 1), 1);  // [B,1,1,S]
-//             scores = scores.add(m4.sub(1).mul(tf.scalar(-1e9)));
-//         }
-//
-//         const weights = tf.softmax(scores);              // [B,H,S,S]
-//         const ctx = tf.matMul(weights, vh);          // [B,H,S,d_k]
-//
-//         /* ---- merge heads back → [B,S,d] -------------------------------- */
-//         const merged = ctx.transpose([0, 2, 1, 3])          // [B,S,H,d_k]
-//             .reshape([B, S, dModel]);
-//
-//         /* ---- O-проекция (Dense) ---------------------------------------- */
-//         return this.denseO.apply(merged) as tf.Tensor;   // [B,S,d]
-//     }
-//
-//     getConfig(): tf.serialization.ConfigDict {
-//         return {
-//             ...super.getConfig(),
-//             keyDim: this.keyDim,
-//             numHeads: this.numHeads,
-//         };
-//     }
-// }
-//
-// tf.serialization.registerClass(MultiHeadSelfAttentionLayer);
