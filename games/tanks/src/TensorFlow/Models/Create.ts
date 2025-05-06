@@ -10,9 +10,12 @@ import {
 import { ACTION_DIM } from '../Common/consts.ts';
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 import { CONFIG } from '../PPO/config.ts';
-import { applyAttentionLayer, applyDenseLayers } from './Layers.ts';
+import { applyDenseLayers } from './Layers.ts';
 
 import { Model } from './def.ts';
+import { MultiHeadSelfAttentionLayer } from './MultiHeadSelfAttentionLayer.ts';
+import { SymbolicTensor } from '@tensorflow/tfjs-layers/dist/engine/topology';
+import { OnesMask } from './ConstOnesMaskLayer.ts';
 
 export const BATTLE_FEATURES_DIM = 4;
 export const TANK_FEATURES_DIM = 8;
@@ -27,17 +30,19 @@ const denseLayersPolicy: [ActivationIdentifier, number][] = [['relu', 256], ['re
 const denseLayersValue: [ActivationIdentifier, number][] = [['relu', 64], ['relu', 32]];
 
 export function createPolicyNetwork(): tf.LayersModel {
-    const { inputs, merged } = createInputLayer(Model.Policy);
-    const withDenseLayers = applyDenseLayers(merged, denseLayersPolicy);
+    const inputs = createInputs(Model.Policy);
+    const attentionLayer = createAttentionLayer(Model.Policy, 64, inputs);
+    const withDenseLayers = applyDenseLayers(attentionLayer, denseLayersPolicy);
     // Выход: ACTION_DIM * 2 (пример: mean и logStd) ---
     const policyOutput = tf.layers.dense({
         name: Model.Policy + '_output',
         units: ACTION_DIM * 2,
         activation: 'linear',
     }).apply(withDenseLayers) as tf.SymbolicTensor;
+    const inputsArr = Object.values(inputs);
     const model = tf.model({
         name: Model.Policy,
-        inputs: inputs,
+        inputs: inputsArr,
         outputs: policyOutput,
     });
     model.optimizer = tf.train.adam(CONFIG.lrConfig.initial);
@@ -48,8 +53,9 @@ export function createPolicyNetwork(): tf.LayersModel {
 }
 
 export function createValueNetwork(): tf.LayersModel {
-    const { inputs, merged } = createInputLayer(Model.Value);
-    const withDenseLayers = applyDenseLayers(merged, denseLayersValue);
+    const inputs = createInputs(Model.Value);
+    const attentionLayer = createAttentionLayer(Model.Value, 32, inputs);
+    const withDenseLayers = applyDenseLayers(attentionLayer, denseLayersValue);
     const valueOutput = tf.layers.dense({
         name: Model.Value + '_output',
         units: 1,
@@ -57,7 +63,7 @@ export function createValueNetwork(): tf.LayersModel {
     }).apply(withDenseLayers) as tf.SymbolicTensor;
     const model = tf.model({
         name: Model.Value,
-        inputs: inputs,
+        inputs: Object.values(inputs),
         outputs: valueOutput,
     });
     model.optimizer = tf.train.adam(CONFIG.lrConfig.initial);
@@ -67,7 +73,7 @@ export function createValueNetwork(): tf.LayersModel {
     return model;
 }
 
-function createInputLayer(name: string) {
+function createInputs(name: string) {
     const battleInput = tf.input({ name: name + '_battlefieldInput', shape: [BATTLE_FEATURES_DIM] });
     const tankInput = tf.input({ name: name + '_tankInput', shape: [TANK_FEATURES_DIM] });
 
@@ -78,31 +84,71 @@ function createInputLayer(name: string) {
     const bulletsInput = tf.input({ name: name + '_bulletsInput', shape: [BULLET_SLOTS, BULLET_FEATURES_DIM] });
     const bulletsMaskInput = tf.input({ name: name + '_bulletsMaskInput', shape: [BULLET_SLOTS] });
 
-    const enemiesAttentionContext = applyAttentionLayer(name + '_enemies', tankInput, enemiesInput, enemiesMaskInput);
-    const alliesAttentionContext = applyAttentionLayer(name + '_allies', tankInput, alliesInput, alliesMaskInput);
-    const bulletsAttentionContext = applyAttentionLayer(name + '_bullets', tankInput, bulletsInput, bulletsMaskInput);
-
-    const merged = tf.layers.concatenate({
-        name: name + '_merged',
-    }).apply([
+    return {
         battleInput,
         tankInput,
-        alliesAttentionContext,
-        enemiesAttentionContext,
-        bulletsAttentionContext,
-    ]) as tf.SymbolicTensor;
-
-    return {
-        inputs: [
-            battleInput,
-            tankInput,
-            enemiesInput,
-            enemiesMaskInput,
-            alliesInput,
-            alliesMaskInput,
-            bulletsInput,
-            bulletsMaskInput,
-        ],
-        merged,
+        enemiesInput,
+        enemiesMaskInput,
+        alliesInput,
+        alliesMaskInput,
+        bulletsInput,
+        bulletsMaskInput,
     };
+}
+
+function proj(x: tf.SymbolicTensor, dModel: number, name: string) {
+    return tf.layers.dense({ units: dModel, activation: 'relu', name: name + '_token' }).apply(x);
+}
+
+function createAttentionLayer(
+    name: string,
+    dModel: number, // 32 | 64 |....
+    {
+        battleInput,
+        tankInput,
+        alliesInput,
+        enemiesInput,
+        bulletsInput,
+        alliesMaskInput,
+        enemiesMaskInput,
+        bulletsMaskInput,
+    }: ReturnType<typeof createInputs>,
+) {
+    name = name + '_AttentionLayer';
+
+    // ---------- embed everything to a common d_model ---------------------------
+    const battleTok = tf.layers.reshape({ targetShape: [1, dModel] })
+        .apply(proj(battleInput, dModel, name + '_' + battleInput.name));
+    const tankTok = tf.layers.reshape({ targetShape: [1, dModel] })
+        .apply(proj(tankInput, dModel, name + '_' + tankInput.name));
+    const allyTok = proj(alliesInput, dModel, name + '_' + alliesInput.name);   // [B,3,d]
+    const enemyTok = proj(enemiesInput, dModel, name + '_' + enemiesInput.name);  // [B,4,d]
+    const bulletTok = proj(bulletsInput, dModel, name + '_' + bulletsInput.name);  // [B,N,d]
+
+    const tokens = tf.layers.concatenate({ name: name + '_tokens', axis: 1 })
+        .apply([battleTok, tankTok, allyTok, enemyTok, bulletTok] as tf.SymbolicTensor[]) as tf.SymbolicTensor;            // [B,S,d]
+
+    // ---------- build 0/1 padding mask -----------------------------------------
+    const battleInputFixedMask = new OnesMask({ name: name + '_battleInputFixedMask' }).apply([battleInput]) as tf.SymbolicTensor;   // [dModel,2]
+    const tankInputFixedMask = new OnesMask({ name: name + '_tankInputFixedMask' }).apply([tankInput]) as tf.SymbolicTensor;   // [dModel,2]
+    const mask = tf.layers.concatenate({ name: name + '_masks', axis: 1 })
+        .apply([
+            battleInputFixedMask,
+            tankInputFixedMask,
+            alliesMaskInput,
+            enemiesMaskInput,
+            bulletsMaskInput,
+        ] as SymbolicTensor[]) as tf.SymbolicTensor;           // [B,S]
+
+    // ---------- self-attention block -------------------------------------------
+    let x = new MultiHeadSelfAttentionLayer({
+        name: name + '_MultiHeadSelfAttentionLayer',
+        numHeads: 4,
+        keyDim: dModel / 4,
+    }).apply([tokens, mask]) as tf.SymbolicTensor;
+
+    x = tf.layers.add({ name: name + '_add' }).apply([x, tokens]) as tf.SymbolicTensor;
+    x = tf.layers.layerNormalization({ name: name + 'normalization', epsilon: 1e-5 }).apply(x) as tf.SymbolicTensor;
+
+    return tf.layers.flatten({ name: name + '_flatten' }).apply(x) as tf.SymbolicTensor;
 }

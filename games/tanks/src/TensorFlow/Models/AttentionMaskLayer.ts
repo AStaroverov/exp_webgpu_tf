@@ -32,10 +32,6 @@ export class AttentionMaskLayer extends tf.layers.Layer {
     computeOutputShape(inputShape: [number[], number[]]): number[] {
         return inputShape[0]; // output shape = scores shape
     }
-
-    getConfig() {
-        return { ...super.getConfig() };
-    }
 }
 
 tf.serialization.registerClass(AttentionMaskLayer);
