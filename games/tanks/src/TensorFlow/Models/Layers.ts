@@ -14,6 +14,7 @@ import {
     ENEMY_SLOTS,
     TANK_FEATURES_DIM,
 } from './Create.ts';
+import { CrossAttentionLayer } from './CrossAttentionLayer.ts';
 
 export function createInputs(name: string) {
     const battleInput = tf.input({ name: name + '_battlefieldInput', shape: [BATTLE_FEATURES_DIM] });
@@ -83,6 +84,7 @@ function proj(x: tf.SymbolicTensor, dModel: number, name: string) {
 export function applySelfAttentionLayer(
     name: string,
     dModel: number, // 32 | 64 |....
+    numHeads: number,
     {
         battleInput,
         tankInput,
@@ -94,16 +96,16 @@ export function applySelfAttentionLayer(
         bulletsMaskInput,
     }: ReturnType<typeof createInputs>,
 ) {
-    name = name + '_SelfAttentionLayer';
+    name = name + '_applySelfAttentionLayer';
 
     // ---------- embed everything to a common d_model ---------------------------
     const battleTok = tf.layers.reshape({ targetShape: [1, dModel] })
         .apply(proj(battleInput, dModel, name + '_' + battleInput.name));
     const tankTok = tf.layers.reshape({ targetShape: [1, dModel] })
         .apply(proj(tankInput, dModel, name + '_' + tankInput.name));
-    const allyTok = proj(alliesInput, dModel, name + '_' + alliesInput.name);   // [B,3,d]
-    const enemyTok = proj(enemiesInput, dModel, name + '_' + enemiesInput.name);  // [B,4,d]
-    const bulletTok = proj(bulletsInput, dModel, name + '_' + bulletsInput.name);  // [B,N,d]
+    const allyTok = proj(alliesInput, dModel, name + '_' + alliesInput.name);
+    const enemyTok = proj(enemiesInput, dModel, name + '_' + enemiesInput.name);
+    const bulletTok = proj(bulletsInput, dModel, name + '_' + bulletsInput.name);
 
     const tokens = tf.layers.concatenate({ name: name + '_tokens', axis: 1 })
         .apply([battleTok, tankTok, allyTok, enemyTok, bulletTok] as tf.SymbolicTensor[]) as tf.SymbolicTensor;            // [B,S,d]
@@ -121,13 +123,10 @@ export function applySelfAttentionLayer(
         ] as SymbolicTensor[]) as tf.SymbolicTensor;           // [B,S]
 
     // ---------- self-attention block -------------------------------------------
-    if (dModel % 16 !== 0) {
-        throw new Error('Dim model for attention layer must be pow of 2 and more than 16');
-    }
     let x = new MultiHeadSelfAttentionLayer({
         name: name + '_MultiHeadSelfAttentionLayer',
-        keyDim: 16,
-        numHeads: dModel / 16,
+        numHeads: numHeads,
+        keyDim: dModel / numHeads,
     }).apply([tokens, mask]) as tf.SymbolicTensor;
 
     x = tf.layers.add({ name: name + '_add' }).apply([x, tokens]) as tf.SymbolicTensor;
@@ -135,3 +134,61 @@ export function applySelfAttentionLayer(
 
     return tf.layers.flatten({ name: name + '_flatten' }).apply(x) as tf.SymbolicTensor;
 }
+
+export function applyCrossAttentionLayer(
+    name: string,
+    dModel: number, // 32 | 64 |....
+    numHeads: number,
+    {
+        battleInput,
+        tankInput,
+        alliesInput,
+        enemiesInput,
+        bulletsInput,
+        alliesMaskInput,
+        enemiesMaskInput,
+        bulletsMaskInput,
+    }: ReturnType<typeof createInputs>,
+) {
+    name = name + '_applyCrossAttentionLayer';
+
+    // ---------- embed everything to a common d_model ---------------------------
+    const tankTok = tf.layers.reshape({ targetShape: [1, dModel] })
+        .apply(proj(tankInput, dModel, name + '_' + tankInput.name)) as tf.SymbolicTensor;
+    const battleTok = tf.layers.reshape({ targetShape: [1, dModel] })
+        .apply(proj(battleInput, dModel, name + '_' + battleInput.name));
+    const allyTok = proj(alliesInput, dModel, name + '_' + alliesInput.name);
+    const enemyTok = proj(enemiesInput, dModel, name + '_' + enemiesInput.name);
+    const bulletTok = proj(bulletsInput, dModel, name + '_' + bulletsInput.name);
+
+    const kvTok = tf.layers.concatenate({ name: name + '_tokens', axis: 1 })
+        .apply([battleTok, allyTok, enemyTok, bulletTok] as tf.SymbolicTensor[]) as tf.SymbolicTensor;            // [B,S,d]
+
+    // ---------- build 0/1 padding mask -----------------------------------------
+    const battleInputFixedMask = new OnesMask({ name: name + '_battleInputFixedMask' }).apply(battleInput) as tf.SymbolicTensor;   // [dModel,2]
+    const maskKv = tf.layers.concatenate({ name: name + '_mask', axis: 1 })
+        .apply([
+            battleInputFixedMask,
+            alliesMaskInput,
+            enemiesMaskInput,
+            bulletsMaskInput,
+        ] as SymbolicTensor[]) as tf.SymbolicTensor;           // [B,S]
+
+    console.assert(
+        kvTok.shape[1] === maskKv.shape[1],
+        `Mask length ${ maskKv.shape[1] } ≠ kvTok slots ${ kvTok.shape[1] }`,
+    );
+
+    // ---------- self-attention block -------------------------------------------
+    let x = new CrossAttentionLayer({
+        name: name + '_CrossAttentionLayer',
+        numHeads: numHeads,
+        keyDim: dModel / numHeads,
+    }).apply([tankTok, kvTok, maskKv]) as tf.SymbolicTensor;
+
+    x = tf.layers.add({ name: name + '_add' }).apply([x, tankTok]) as tf.SymbolicTensor;
+    x = tf.layers.layerNormalization({ name: name + '_normalization', epsilon: 1e-5 }).apply(x) as tf.SymbolicTensor;
+
+    return tf.layers.flatten({ name: name + '_flatten' }).apply(x) as tf.SymbolicTensor;
+}
+

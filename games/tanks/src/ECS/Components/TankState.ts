@@ -7,7 +7,7 @@ export const MAX_ENEMIES = 3;
 export const ENEMY_BUFFER = 8;
 export const MAX_ALLIES = 3;
 export const ALLY_BUFFER = 8;
-export const MAX_BULLETS = 10;
+export const MAX_BULLETS = 8;
 export const BULLET_BUFFER = 5;
 export const TankInputTensor = component({
     health: TypedArray.f64(delegate.defaultSize),
