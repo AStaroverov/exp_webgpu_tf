@@ -11,8 +11,6 @@ import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
 import { getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
 import { clamp } from 'lodash-es';
 import { Model } from '../../../Models/def.ts';
-import { CONFIG } from '../../../PPO/config.ts';
-import { random } from '../../../../../../../lib/random.ts';
 
 export type TankAgent = {
     tankEid: number;
@@ -109,9 +107,9 @@ export class CurrentActorAgent implements TankAgent {
         this.policyNetwork = await getNetwork(Model.Policy);
 
 
-        if (random() > Math.pow(1 - 0.5, 1 / CONFIG.workerCount)) { // 50% for N workers
-            perturbWeights(this.policyNetwork, 0.01);
-        }
+        // if (random() > Math.pow(1 - 0.5, 1 / CONFIG.workerCount)) { // 50% for N workers
+        //     perturbWeights(this.policyNetwork, 0.02);
+        // }
     }
 }
 
