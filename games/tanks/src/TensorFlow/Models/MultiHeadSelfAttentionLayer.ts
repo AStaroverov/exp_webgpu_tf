@@ -2,9 +2,8 @@ import * as tf from '@tensorflow/tfjs';
 import { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
 
 export interface MHSAArgs extends LayerArgs {
-    numHeads: number;          // H
-    keyDim: number;           // d_k  (= dModel / H)
-    useBias?: boolean;
+    keyDim: number;
+    numHeads: number;
 }
 
 export class MultiHeadSelfAttentionLayer extends tf.layers.Layer {
@@ -12,16 +11,14 @@ export class MultiHeadSelfAttentionLayer extends tf.layers.Layer {
 
     private readonly numHeads: number;
     private readonly keyDim: number;
-    private readonly useBias: boolean;
     private readonly scale: number;
     private wqkv!: tf.LayerVariable;
     private wo!: tf.LayerVariable;
 
     constructor(config: MHSAArgs) {
         super(config);
-        this.numHeads = config.numHeads;
         this.keyDim = config.keyDim;
-        this.useBias = config.useBias ?? false;
+        this.numHeads = config.numHeads;
         this.scale = Math.sqrt(this.keyDim);
     }
 
@@ -93,7 +90,6 @@ export class MultiHeadSelfAttentionLayer extends tf.layers.Layer {
         const base = super.getConfig();
         return {
             ...base,
-            useBias: this.useBias,
             keyDim: this.keyDim,
             numHeads: this.numHeads,
         };

@@ -9,7 +9,7 @@ import {
 } from '../../ECS/Components/TankState.ts';
 import { ACTION_DIM } from '../Common/consts.ts';
 import { CONFIG } from '../PPO/config.ts';
-import { applyDenseLayers, applySelfAttentionLayer, createInputs } from './Layers.ts';
+import { applyCrossAttentionLayer, applyDenseLayers, createInputs } from './Layers.ts';
 
 import { Model } from './def.ts';
 import { PatchedAdamOptimizer } from './PatchedAdamOptimizer.ts';
@@ -24,10 +24,10 @@ export const BULLET_SLOTS = MAX_BULLETS;
 export const BULLET_FEATURES_DIM = BULLET_BUFFER - 1; // -1 потому что id не считаем
 
 export function createPolicyNetwork(): tf.LayersModel {
-    const dModel = 32;
+    const dModel = 64;
     const inputs = createInputs(Model.Policy);
-    const attentionLayer = applySelfAttentionLayer(Model.Policy, dModel, inputs);
-    const withDenseLayers = applyDenseLayers(attentionLayer, [['relu', dModel * 4], ['relu', dModel * 2]]);
+    const attentionLayer = applyCrossAttentionLayer(Model.Policy, dModel, 4, inputs);
+    const withDenseLayers = applyDenseLayers(attentionLayer, [['relu', 128], ['relu', 64]]);
     // Выход: ACTION_DIM * 2 (пример: mean и logStd) ---
     const policyOutput = tf.layers.dense({
         name: Model.Policy + '_output',
@@ -50,8 +50,8 @@ export function createPolicyNetwork(): tf.LayersModel {
 export function createValueNetwork(): tf.LayersModel {
     const dModel = 16;
     const inputs = createInputs(Model.Value);
-    const attentionLayer = applySelfAttentionLayer(Model.Value, dModel, inputs);
-    const withDenseLayers = applyDenseLayers(attentionLayer, [['relu', dModel * 4], ['relu', dModel * 2]]);
+    const attentionLayer = applyCrossAttentionLayer(Model.Value, dModel, 1, inputs);
+    const withDenseLayers = applyDenseLayers(attentionLayer, [['relu', 64], ['relu', 32]]);
     const valueOutput = tf.layers.dense({
         name: Model.Value + '_output',
         units: 1,
