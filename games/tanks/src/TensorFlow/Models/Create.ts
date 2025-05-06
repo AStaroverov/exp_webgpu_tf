@@ -13,6 +13,7 @@ import { CONFIG } from '../PPO/config.ts';
 import { applyDenseLayers, applySelfAttentionLayer, createInputs } from './Layers.ts';
 
 import { Model } from './def.ts';
+import { PatchedAdamOptimizer } from './PatchedAdamOptimizer.ts';
 
 export const BATTLE_FEATURES_DIM = 4;
 export const TANK_FEATURES_DIM = 8;
@@ -42,7 +43,7 @@ export function createPolicyNetwork(): tf.LayersModel {
         inputs: inputsArr,
         outputs: policyOutput,
     });
-    model.optimizer = tf.train.adam(CONFIG.lrConfig.initial);
+    model.optimizer = new PatchedAdamOptimizer(CONFIG.lrConfig.initial);
     // fake loss for save optimizer with model
     model.loss = 'meanSquaredError';
 
@@ -63,7 +64,7 @@ export function createValueNetwork(): tf.LayersModel {
         inputs: Object.values(inputs),
         outputs: valueOutput,
     });
-    model.optimizer = tf.train.adam(CONFIG.lrConfig.initial);
+    model.optimizer = new PatchedAdamOptimizer(CONFIG.lrConfig.initial);
     // fake loss for save optimizer with model
     model.loss = 'meanSquaredError';
 
