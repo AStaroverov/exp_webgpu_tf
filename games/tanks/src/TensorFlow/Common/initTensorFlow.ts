@@ -1,5 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
 
+tf.enableProdMode();
+
 export async function initTensorFlow(type: 'wasm' | 'webgpu' = 'wasm') {
     try {
         if (type === 'wasm') {
