@@ -44,6 +44,12 @@ export class MultiHeadSelfAttentionLayer extends tf.layers.Layer {
         this.built = true;
     }
 
+    dispose() {
+        this.wqkv.dispose();
+        this.wo.dispose();
+        return super.dispose();
+    }
+
     call(inputs: tf.Tensor | tf.Tensor[]): tf.Tensor {
         return tf.tidy(() => {
             const [tokens, mask] = Array.isArray(inputs)
