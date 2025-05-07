@@ -9,7 +9,12 @@ import {
 } from '../../ECS/Components/TankState.ts';
 import { ACTION_DIM } from '../Common/consts.ts';
 import { CONFIG } from '../PPO/config.ts';
-import { applyCrossAttentionLayer, applyDenseLayers, createInputs } from './Layers.ts';
+import {
+    applyCrossAttentionLayer,
+    applyDenseLayers,
+    convertInputsToCrossAttentionTokens,
+    createInputs,
+} from './Layers.ts';
 
 import { Model } from './def.ts';
 import { PatchedAdamOptimizer } from './PatchedAdamOptimizer.ts';
@@ -26,7 +31,8 @@ export const BULLET_FEATURES_DIM = BULLET_BUFFER - 1; // -1 потому что 
 export function createPolicyNetwork(): tf.LayersModel {
     const dModel = 64;
     const inputs = createInputs(Model.Policy);
-    const attentionLayer = applyCrossAttentionLayer(Model.Policy, dModel, 4, inputs);
+    const tokens = convertInputsToCrossAttentionTokens(inputs, dModel);
+    const attentionLayer = applyCrossAttentionLayer(Model.Policy, dModel, 4, tokens);
     const withDenseLayers = applyDenseLayers(attentionLayer, [['relu', 128], ['relu', 64]]);
     // Выход: ACTION_DIM * 2 (пример: mean и logStd) ---
     const policyOutput = tf.layers.dense({
@@ -50,7 +56,8 @@ export function createPolicyNetwork(): tf.LayersModel {
 export function createValueNetwork(): tf.LayersModel {
     const dModel = 16;
     const inputs = createInputs(Model.Value);
-    const attentionLayer = applyCrossAttentionLayer(Model.Value, dModel, 1, inputs);
+    const tokens = convertInputsToCrossAttentionTokens(inputs, dModel);
+    const attentionLayer = applyCrossAttentionLayer(Model.Value, dModel, 1, tokens);
     const withDenseLayers = applyDenseLayers(attentionLayer, [['relu', 64], ['relu', 32]]);
     const valueOutput = tf.layers.dense({
         name: Model.Value + '_output',
