@@ -21,8 +21,8 @@ export class OnesMask extends tf.layers.Layer {
     }
 
     call(inputs: tf.Tensor | tf.Tensor[]): tf.Tensor {
-        const x = Array.isArray(inputs) ? inputs[0] as tf.Tensor : inputs as tf.Tensor; // любой SymbolicTensor
-        const onesCol = tf.sum(x.mul(0), -1, true).add(1);  // [B,1] динамически
+        const x = Array.isArray(inputs) ? inputs[0] as tf.Tensor : inputs as tf.Tensor;
+        const onesCol = tf.sum(x.mul(0), -1, true).add(1);  // [B,1]
         return tf.tile(onesCol, [1, this.length]);          // [B,L]
     }
 
