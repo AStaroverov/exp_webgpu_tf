@@ -84,8 +84,9 @@ export class CrossAttentionLayer extends tf.layers.Layer {
             let scores = tf.matMul(qh, kh, false, true).div(this.scale); // [B,H,Q,K]
 
             if (mask) {
-                const m4 = tf.expandDims(tf.expandDims(mask, 1), 1); // [B,1,1,K]
-                scores = scores.add(m4.sub(1).mul(tf.scalar(-1e9)));
+                const mShape = mask.shape;
+                const m4 = mask.reshape([mShape[0], 1, 1, mShape[1]!]);
+                scores = scores.add(m4.sub(1).mul(tf.scalar(1e9)));
             }
 
             const weights = tf.softmax(scores);   // [B,H,Q,K]

@@ -67,7 +67,7 @@ export class MultiHeadSelfAttentionLayer extends tf.layers.Layer {
 
             if (mask) {
                 const m4 = mask.reshape([B, 1, 1, S]);
-                scores = scores.add(m4.sub(1).mul(tf.scalar(-1e9)));
+                scores = scores.add(m4.sub(1).mul(tf.scalar(1e9)));
             }
 
             const weights = tf.softmax(scores);          // [B,H,S,S]
