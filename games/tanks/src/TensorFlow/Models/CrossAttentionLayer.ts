@@ -40,6 +40,13 @@ export class CrossAttentionLayer extends tf.layers.Layer {
 
         const units = shape[shape.length - 1]!;
 
+        if (units !== this.numHeads * this.keyDim) {
+            throw new Error(
+                `The input feature dimension (dModel=${ units }) must be equal to numHeads (${ this.numHeads }) * keyDim (${ this.keyDim }). ` +
+                `Currently, numHeads * keyDim = ${ this.numHeads * this.keyDim }.`,
+            );
+        }
+
         const createDense = (name: string, useBias: boolean) =>
             tf.layers.dense({ name, units, useBias });
 
