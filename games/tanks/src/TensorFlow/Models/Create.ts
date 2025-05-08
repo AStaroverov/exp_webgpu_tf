@@ -29,11 +29,11 @@ export const BULLET_SLOTS = MAX_BULLETS;
 export const BULLET_FEATURES_DIM = BULLET_BUFFER - 1; // -1 потому что id не считаем
 
 export function createPolicyNetwork(): tf.LayersModel {
-    const dModel = 64;
+    const dModel = 32;
     const inputs = createInputs(Model.Policy);
     const tokens = convertInputsToCrossAttentionTokens(inputs, dModel);
-    const attentionLayer = applyCrossAttentionLayer(Model.Policy, dModel, 4, tokens);
-    const withDenseLayers = applyDenseLayers(attentionLayer, [['relu', 128], ['relu', 64]]);
+    const attentionLayer = applyCrossAttentionLayer(Model.Policy, dModel, 1, tokens);
+    const withDenseLayers = applyDenseLayers(attentionLayer, [['relu', 64], ['relu', 32]]);
     // Выход: ACTION_DIM * 2 (пример: mean и logStd) ---
     const policyOutput = tf.layers.dense({
         name: Model.Policy + '_output',
@@ -58,7 +58,7 @@ export function createValueNetwork(): tf.LayersModel {
     const inputs = createInputs(Model.Value);
     const tokens = convertInputsToCrossAttentionTokens(inputs, dModel);
     const attentionLayer = applyCrossAttentionLayer(Model.Value, dModel, 1, tokens);
-    const withDenseLayers = applyDenseLayers(attentionLayer, [['relu', 64], ['relu', 32]]);
+    const withDenseLayers = applyDenseLayers(attentionLayer, [['relu', 32], ['relu', 16]]);
     const valueOutput = tf.layers.dense({
         name: Model.Value + '_output',
         units: 1,
