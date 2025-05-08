@@ -12,6 +12,8 @@ import { CONFIG } from './config.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../Common/Tensor.ts';
 import { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
 
+const PREDICT_OPTIONS = { batchSize: CONFIG.miniBatchSize };
+
 export function trainPolicyNetwork(
     network: tf.LayersModel,
     states: tf.Tensor[],
@@ -25,7 +27,7 @@ export function trainPolicyNetwork(
 ): undefined | tf.Tensor {
     return tf.tidy(() => {
         return optimize(network.optimizer, () => {
-            const predicted = network.predict(states) as tf.Tensor;
+            const predicted = network.predict(states, PREDICT_OPTIONS) as tf.Tensor;
             const { mean, logStd } = parsePredict(predicted);
             const std = logStd.exp();
             const newLogProbs = computeLogProb(actions, mean, std);
@@ -58,7 +60,7 @@ export function trainValueNetwork(
 ): undefined | tf.Tensor {
     return tf.tidy(() => {
         return optimize(network.optimizer, () => {
-            const newValues = (network.predict(states) as tf.Tensor).squeeze();
+            const newValues = (network.predict(states, PREDICT_OPTIONS) as tf.Tensor).squeeze();
             const newValuesClipped = oldValues.add(
                 newValues.sub(oldValues).clipByValue(-clipRatio, clipRatio),
             );
@@ -79,7 +81,7 @@ export function computeKullbackLeiblerAprox(
     oldLogProb: tf.Tensor,
 ): number {
     return tf.tidy(() => {
-        const predicted = policyNetwork.predict(states) as tf.Tensor;
+        const predicted = policyNetwork.predict(states, PREDICT_OPTIONS) as tf.Tensor;
         const { mean, logStd } = parsePredict(predicted);
         const std = logStd.exp();
         const newLogProbs = computeLogProb(actions, mean, std);
@@ -96,7 +98,7 @@ export function computeKullbackLeiblerExact(
     oldLogStd: tf.Tensor,
 ): tf.Tensor {
     return tf.tidy(() => {
-        const predicted = policyNetwork.predict(states) as tf.Tensor;
+        const predicted = policyNetwork.predict(states, PREDICT_OPTIONS) as tf.Tensor;
         const { mean: newMean, logStd: newLogStd } = parsePredict(predicted);
 
         const oldStd = oldLogStd.exp();
@@ -123,7 +125,7 @@ export function act(
     logProb: number
 } {
     return tf.tidy(() => {
-        const predicted = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
+        const predicted = policyNetwork.predict(createInputTensors([state]), PREDICT_OPTIONS) as tf.Tensor;
         const { mean, logStd } = parsePredict(predicted);
         const std = logStd.exp();
 
@@ -194,14 +196,14 @@ export function computeVTraceTargets(
 } {
     return tf.tidy(() => {
         const input = createInputTensors(batch.states);
-        const predicted = policyNetwork.predict(input) as tf.Tensor;
+        const predicted = policyNetwork.predict(input, PREDICT_OPTIONS) as tf.Tensor;
         const { mean: meanCurrent, logStd: logStdCurrent } = parsePredict(predicted);
         const actions = tf.tensor2d(flatTypedArray(batch.actions), [batch.size, ACTION_DIM]);
 
         const logProbCurrentTensor = computeLogProb(actions, meanCurrent, logStdCurrent.exp());
         const logProbBehaviorTensor = tf.tensor1d(batch.logProbs);
         const rhosTensor = computeRho(logProbBehaviorTensor, logProbCurrentTensor);
-        const valuesTensor = (valueNetwork.predict(input) as tf.Tensor).squeeze();
+        const valuesTensor = (valueNetwork.predict(input, PREDICT_OPTIONS) as tf.Tensor).squeeze();
 
         const values = syncUnwrapTensor(valuesTensor) as Float32Array;
         const rhos = syncUnwrapTensor(rhosTensor) as Float32Array;
@@ -300,26 +302,6 @@ function parsePredict(predict: tf.Tensor) {
     return { mean: outMean, logStd: clippedLogStd };
 }
 
-export function ouNoise(noise: tf.Tensor = tf.zeros([ACTION_DIM]), sigma: number, theta: number) {
-    return noise.add(
-        tf.randomNormal([ACTION_DIM])
-            .mul(sigma)
-            .sub(noise.mul(theta)),
-    );
-}
-
-// export function perturbWeights(model: tf.LayersModel, scale = 0.01) {
-// tf.tidy(() => {
-//     const weights = model.getWeights().map((w) => {
-//         const layerStd = tf.moments(w).variance.sqrt();     // σ слоя
-//         const eps = tf.randomNormal(w.shape).mul(layerStd).mul(scale);
-//         return w.add(eps);
-//     });
-//
-//     model.setWeights(weights);
-// });
-// }
-
 let randomInputTensors: tf.Tensor[];
 
 function getRandomInputTensors() {
@@ -332,7 +314,7 @@ function getRandomInputTensors() {
 
 export function networkHealthCheck(network: tf.LayersModel): Promise<boolean> {
     const tData = tf.tidy(() => {
-        return (network.predict(getRandomInputTensors()) as tf.Tensor).squeeze();
+        return (network.predict(getRandomInputTensors(), PREDICT_OPTIONS) as tf.Tensor).squeeze();
     });
 
     return onReadyRead().then(() => asyncUnwrapTensor(tData)).then(() => true);
