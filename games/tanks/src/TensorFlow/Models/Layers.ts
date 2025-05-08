@@ -145,17 +145,21 @@ export function applyCrossAttentionLayer(
         kvMask: tf.SymbolicTensor,
     },
 ) {
-    let x = new CrossAttentionLayer({
+    const qTokNorm = tf.layers.layerNormalization({
+        name: name + '_normalization',
+        epsilon: 1e-5,
+    }).apply(qTok) as tf.SymbolicTensor;
+
+    const attention = new CrossAttentionLayer({
         name: name + '_CrossAttentionLayer',
         keyDim: dModel / numHeads,
         numHeads: numHeads,
         useBias: false,
-    }).apply([qTok, kvTok, kvMask]) as tf.SymbolicTensor;
+    }).apply([qTokNorm, kvTok, kvMask]) as tf.SymbolicTensor;
 
-    x = tf.layers.add({ name: name + '_add' }).apply([x, qTok]) as tf.SymbolicTensor;
-    x = tf.layers.layerNormalization({ name: name + '_normalization', epsilon: 1e-5 }).apply(x) as tf.SymbolicTensor;
+    const residual = tf.layers.add({ name: name + '_add' }).apply([attention, qTok]) as tf.SymbolicTensor;
 
-    return tf.layers.flatten({ name: name + '_flatten' }).apply(x) as tf.SymbolicTensor;
+    return tf.layers.flatten({ name: name + '_flatten' }).apply(residual) as tf.SymbolicTensor;
 }
 
 export function applySelfAttentionLayer(
