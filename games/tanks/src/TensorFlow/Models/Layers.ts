@@ -17,7 +17,7 @@ import { CrossAttentionLayer } from './CrossAttentionLayer.ts';
 import { OnesMask } from './ConstOnesMaskLayer.ts';
 
 export function tokenProj(x: tf.SymbolicTensor, dModel: number, name: string): SymbolicTensor {
-    return tf.layers.dense({ units: dModel, useBias: true, name: name + '_tokProj' }).apply(x) as SymbolicTensor;
+    return tf.layers.dense({ units: dModel, useBias: false, name: name + '_tokProj' }).apply(x) as SymbolicTensor;
 }
 
 export function createInputs(name: string) {
@@ -147,8 +147,9 @@ export function applyCrossAttentionLayer(
 ) {
     let x = new CrossAttentionLayer({
         name: name + '_CrossAttentionLayer',
-        numHeads: numHeads,
         keyDim: dModel / numHeads,
+        numHeads: numHeads,
+        useBias: false,
     }).apply([qTok, kvTok, kvMask]) as tf.SymbolicTensor;
 
     x = tf.layers.add({ name: name + '_add' }).apply([x, qTok]) as tf.SymbolicTensor;

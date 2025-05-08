@@ -38,20 +38,15 @@ export class CrossAttentionLayer extends tf.layers.Layer {
             ? inputShape
             : inputShape[0]) as tf.Shape;
 
-        const dModel = shape[shape.length - 1]!;
+        const units = shape[shape.length - 1]!;
 
-        const createDense = (name: string) =>
-            tf.layers.dense({
-                name,
-                units: dModel,
-                useBias: this.useBias,
-                kernelInitializer: 'glorotUniform',
-            });
+        const createDense = (name: string, useBias: boolean) =>
+            tf.layers.dense({ name, units, useBias });
 
-        this.denseQ = createDense(this.name + '_Q');
-        this.denseK = createDense(this.name + '_K');
-        this.denseV = createDense(this.name + '_V');
-        this.denseO = createDense(this.name + '_O');
+        this.denseQ = createDense(this.name + '_Q', this.useBias);
+        this.denseK = createDense(this.name + '_K', this.useBias);
+        this.denseV = createDense(this.name + '_V', this.useBias);
+        this.denseO = createDense(this.name + '_O', true);
 
         this.built = true;
     }
