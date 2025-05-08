@@ -105,8 +105,6 @@ export class CurrentActorAgent implements TankAgent {
 
     private async load() {
         this.policyNetwork = await getNetwork(Model.Policy);
-
-
         // if (random() > Math.pow(1 - 0.5, 1 / CONFIG.workerCount)) { // 50% for N workers
         //     perturbWeights(this.policyNetwork, 0.02);
         // }
