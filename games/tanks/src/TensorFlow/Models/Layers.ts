@@ -222,9 +222,11 @@ export function applyCrossAttentionLayer(
         useBias: false,
     }).apply(attentionInputs) as tf.SymbolicTensor;
 
-    const residual = tf.layers.add({ name: name + '_add' }).apply([attention, qTok]) as tf.SymbolicTensor;
+    return attention;
 
-    return residual;
+    // const residual = tf.layers.add({ name: name + '_add' }).apply([attention, qTok]) as tf.SymbolicTensor;
+    //
+    // return residual;
 }
 
 export function applySelfAttentionLayer(
