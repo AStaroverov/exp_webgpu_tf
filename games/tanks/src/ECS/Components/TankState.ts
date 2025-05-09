@@ -10,11 +10,18 @@ export const ALLY_BUFFER = 8;
 export const MAX_BULLETS = 8;
 export const BULLET_BUFFER = 5;
 export const TankInputTensor = component({
+    // Tank
     health: TypedArray.f64(delegate.defaultSize),
     position: NestedArray.f64(2, delegate.defaultSize),
     rotation: TypedArray.f64(delegate.defaultSize),
     speed: NestedArray.f64(2, delegate.defaultSize),
     turretTarget: NestedArray.f64(2, delegate.defaultSize),
+
+    // Controller
+    shoot: TypedArray.f64(delegate.defaultSize),
+    move: TypedArray.f64(delegate.defaultSize),
+    rotate: TypedArray.f64(delegate.defaultSize),
+    turretDir: NestedArray.f64(2, delegate.defaultSize),
 
     // Battlefield
     enemiesCount: TypedArray.i32(delegate.defaultSize),
@@ -49,6 +56,19 @@ export const TankInputTensor = component({
         TankInputTensor.rotation[eid] = rotation;
         TankInputTensor.speed.setBatch(eid, speed);
         TankInputTensor.turretTarget.setBatch(eid, turretTarget);
+    },
+
+    setControllerData(
+        eid: number,
+        shoot: number,
+        move: number,
+        rotate: number,
+        turretDir: Float64Array,
+    ) {
+        TankInputTensor.shoot[eid] = shoot;
+        TankInputTensor.move[eid] = move;
+        TankInputTensor.rotate[eid] = rotate;
+        TankInputTensor.turretDir.setBatch(eid, turretDir);
     },
 
     setBattlefieldData(
