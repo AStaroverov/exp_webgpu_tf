@@ -7,6 +7,7 @@ import {
     BATTLE_FEATURES_DIM,
     BULLET_FEATURES_DIM,
     BULLET_SLOTS,
+    CONTROLLER_FEATURES_DIM,
     ENEMY_FEATURES_DIM,
     ENEMY_SLOTS,
     TANK_FEATURES_DIM,
@@ -15,8 +16,10 @@ import {
 export function createInputTensors(
     state: InputArrays[],
 ): tf.Tensor[] {
-    //[battleInput, tankInput, enemiesInput, enemiesMaskInput, alliesInput, alliesMaskInput, bulletsInput, bulletsMaskInput],
+    //[controller, battleInput, tankInput, enemiesInput, enemiesMaskInput, alliesInput, alliesMaskInput, bulletsInput, bulletsMaskInput],
     return [
+        // controller
+        tf.tensor2d(flatTypedArray(state.map((s) => s.controllerFeatures)), [state.length, CONTROLLER_FEATURES_DIM]),
         // battle
         tf.tensor2d(flatTypedArray(state.map((s) => s.battleFeatures)), [state.length, BATTLE_FEATURES_DIM]),
         // tank
@@ -57,6 +60,8 @@ export function sliceInputTensors(tensors: tf.Tensor[], start: number, size: num
     }
 
     return [
+        // controller
+        tensors[0].slice([start, 0], [size, -1]),
         // battlefield
         tensors[0].slice([start, 0], [size, -1]),
         // tank

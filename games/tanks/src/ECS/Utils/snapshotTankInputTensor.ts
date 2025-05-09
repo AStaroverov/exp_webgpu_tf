@@ -13,6 +13,7 @@ import { shuffle } from '../../../../../lib/shuffle.ts';
 import { TeamRef } from '../Components/TeamRef.ts';
 
 import { getTankHealth } from '../Entities/Tank/TankUtils.ts';
+import { TankController } from '../Components/TankController.ts';
 
 export function snapshotTankInputTensor({ world } = GameDI) {
     const tankEids = query(world, [Tank, TankInputTensor, RigidBodyState]);
@@ -37,6 +38,14 @@ export function snapshotTankInputTensor({ world } = GameDI) {
             enemiesTotalHealth,
             alliesCount,
             alliesTotalHealth,
+        );
+
+        TankInputTensor.setControllerData(
+            tankEid,
+            TankController.move[tankEid],
+            TankController.rotation[tankEid],
+            TankController.shoot[tankEid],
+            TankController.turretDir.getBatch(tankEid),
         );
 
         // Set tank data

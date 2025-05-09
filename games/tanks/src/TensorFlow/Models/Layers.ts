@@ -9,6 +9,7 @@ import {
     BATTLE_FEATURES_DIM,
     BULLET_FEATURES_DIM,
     BULLET_SLOTS,
+    CONTROLLER_FEATURES_DIM,
     ENEMY_FEATURES_DIM,
     ENEMY_SLOTS,
     TANK_FEATURES_DIM,
@@ -16,11 +17,14 @@ import {
 import { CrossAttentionLayer } from './CrossAttentionLayer.ts';
 import { OnesMask } from './ConstOnesMaskLayer.ts';
 
+tf.layers.embedding;
+
 export function tokenProj(x: tf.SymbolicTensor, dModel: number, name: string): SymbolicTensor {
     return tf.layers.dense({ units: dModel, useBias: false, name: name + '_tokProj' }).apply(x) as SymbolicTensor;
 }
 
 export function createInputs(name: string) {
+    const controllerInput = tf.input({ name: name + '_controllerInput', shape: [CONTROLLER_FEATURES_DIM] });
     const battleInput = tf.input({ name: name + '_battlefieldInput', shape: [BATTLE_FEATURES_DIM] });
     const tankInput = tf.input({ name: name + '_tankInput', shape: [TANK_FEATURES_DIM] });
 
@@ -32,6 +36,7 @@ export function createInputs(name: string) {
     const bulletsMaskInput = tf.input({ name: name + '_bulletsMaskInput', shape: [BULLET_SLOTS] });
 
     return {
+        controllerInput,
         battleInput,
         tankInput,
         enemiesInput,
@@ -81,8 +86,42 @@ export function applyDenseLayers(layer: tf.SymbolicTensor, hiddenLayers: [Activa
     return x;
 }
 
+
+export function convertInputsToTokens(
+    {
+        controllerInput,
+        battleInput,
+        tankInput,
+        enemiesInput,
+        alliesInput,
+        bulletsInput,
+    }: ReturnType<typeof createInputs>,
+    dModel: number,
+) {
+    const controllerTok = tf.layers.reshape({ targetShape: [1, dModel] })
+        .apply(tokenProj(controllerInput, dModel, controllerInput.name)) as tf.SymbolicTensor;
+    const battleTok = tf.layers.reshape({ targetShape: [1, dModel] })
+        .apply(tokenProj(battleInput, dModel, battleInput.name)) as tf.SymbolicTensor;
+    const tankTok = tf.layers.reshape({ targetShape: [1, dModel], name: `Q_TOKEN__${ tankInput.name }` })
+        .apply(tokenProj(tankInput, dModel, tankInput.name)) as tf.SymbolicTensor;
+    const alliesTok = tokenProj(alliesInput, dModel, alliesInput.name);
+    const enemiesTok = tokenProj(enemiesInput, dModel, enemiesInput.name);
+    const bulletsTok = tokenProj(bulletsInput, dModel, bulletsInput.name);
+
+    return {
+        controllerTok,
+        battleTok,
+        tankTok,
+        alliesTok,
+        enemiesTok,
+        bulletsTok,
+    };
+}
+
+
 export function convertInputsToCrossAttentionTokens(
     {
+        controllerInput,
         battleInput,
         tankInput,
         enemiesInput,
@@ -97,27 +136,32 @@ export function convertInputsToCrossAttentionTokens(
     const tankTok = tf.layers.reshape({ targetShape: [1, dModel], name: `Q_TOKEN__${ tankInput.name }` })
         .apply(tokenProj(tankInput, dModel, tankInput.name)) as tf.SymbolicTensor;
 
+    const controllerTok = tf.layers.reshape({ targetShape: [1, dModel] })
+        .apply(tokenProj(controllerInput, dModel, controllerInput.name)) as tf.SymbolicTensor;
     const battleTok = tf.layers.reshape({ targetShape: [1, dModel] })
         .apply(tokenProj(battleInput, dModel, battleInput.name)) as tf.SymbolicTensor;
     const allyTok = tokenProj(alliesInput, dModel, alliesInput.name);
     const enemyTok = tokenProj(enemiesInput, dModel, enemiesInput.name);
     const bulletTok = tokenProj(bulletsInput, dModel, bulletsInput.name);
 
-    const kvTokName = [battleTok, allyTok, enemyTok, bulletTok]
+    const kvTokName = [controllerTok, battleTok, allyTok, enemyTok, bulletTok]
         .map((t) => t.name).join('_');
     const kvTok = tf.layers.concatenate({ name: `KV_TOKEN__${ kvTokName }`, axis: 1 })
-        .apply([battleTok, allyTok, enemyTok, bulletTok] as tf.SymbolicTensor[]) as tf.SymbolicTensor;            // [B,S,d]
+        .apply([controllerTok, battleTok, allyTok, enemyTok, bulletTok] as tf.SymbolicTensor[]) as tf.SymbolicTensor;            // [B,S,d]
 
-    const battleInputFixedMask = new OnesMask({ name: battleTok.name + '_fixedMask' }).apply(battleInput) as tf.SymbolicTensor;   // [dModel,2]
-    const kvMaskName = [battleInputFixedMask, alliesMaskInput, enemiesMaskInput, bulletsMaskInput]
+    const controllerFixedMask = new OnesMask({ name: controllerTok.name + '_fixedMask' }).apply(controllerInput) as tf.SymbolicTensor;   // [dModel,2]
+    const battleFixedMask = new OnesMask({ name: battleTok.name + '_fixedMask' }).apply(battleInput) as tf.SymbolicTensor;   // [dModel,2]
+
+    const kvMaskName = [battleFixedMask, alliesMaskInput, enemiesMaskInput, bulletsMaskInput]
         .map((t) => t.name).join('_');
     const kvMask = tf.layers.concatenate({ name: `KV_MASK__${ kvMaskName }`, axis: 1 })
         .apply([
-            battleInputFixedMask,
+            controllerFixedMask,
+            battleFixedMask,
             alliesMaskInput,
             enemiesMaskInput,
             bulletsMaskInput,
-        ]) as tf.SymbolicTensor;           // [B,S]
+        ]) as tf.SymbolicTensor;
 
     console.assert(
         kvTok.shape[1] === kvMask.shape[1],
@@ -128,6 +172,25 @@ export function convertInputsToCrossAttentionTokens(
         qTok: tankTok,
         kvTok,
         kvMask,
+    };
+}
+
+
+export function prepareCrossAttentionTokens(
+    name: string,
+    dModel: number,
+    qInput: tf.SymbolicTensor,
+    kvInput: tf.SymbolicTensor,
+    kvMaskInput?: tf.SymbolicTensor,
+) {
+    const qTok = tf.layers.reshape({ targetShape: [1, dModel], name: `${ name }__Q_TOKEN__${ qInput.name }` })
+        .apply(tokenProj(qInput, dModel, qInput.name)) as tf.SymbolicTensor;
+    const kvTok = tokenProj(kvInput, dModel, kvInput.name);
+
+    return {
+        qTok: qTok,
+        kvTok: kvTok,
+        kvMask: kvMaskInput,
     };
 }
 
@@ -142,7 +205,7 @@ export function applyCrossAttentionLayer(
     }: {
         qTok: tf.SymbolicTensor,
         kvTok: tf.SymbolicTensor,
-        kvMask: tf.SymbolicTensor,
+        kvMask?: tf.SymbolicTensor,
     },
 ) {
     const qTokNorm = tf.layers.layerNormalization({
@@ -150,16 +213,18 @@ export function applyCrossAttentionLayer(
         epsilon: 1e-5,
     }).apply(qTok) as tf.SymbolicTensor;
 
+    const attentionInputs = [qTokNorm, kvTok];
+    kvMask && attentionInputs.push(kvMask);
     const attention = new CrossAttentionLayer({
         name: name + '_CrossAttentionLayer',
         keyDim: dModel / numHeads,
         numHeads: numHeads,
         useBias: false,
-    }).apply([qTokNorm, kvTok, kvMask]) as tf.SymbolicTensor;
+    }).apply(attentionInputs) as tf.SymbolicTensor;
 
     const residual = tf.layers.add({ name: name + '_add' }).apply([attention, qTok]) as tf.SymbolicTensor;
 
-    return tf.layers.flatten({ name: name + '_flatten' }).apply(residual) as tf.SymbolicTensor;
+    return residual;
 }
 
 export function applySelfAttentionLayer(

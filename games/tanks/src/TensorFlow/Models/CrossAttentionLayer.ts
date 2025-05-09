@@ -54,7 +54,6 @@ export class CrossAttentionLayer extends tf.layers.Layer {
         this.denseK = createDense(this.name + '_K', this.useBias);
         this.denseV = createDense(this.name + '_V', this.useBias);
         this.denseO = createDense(this.name + '_O', true);
-
         this.built = true;
     }
 
