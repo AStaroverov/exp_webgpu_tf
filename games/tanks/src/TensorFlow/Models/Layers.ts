@@ -94,12 +94,16 @@ export function convertInputsToTokens(
     }: ReturnType<typeof createInputs>,
     dModel: number,
 ) {
-    const controllerTok = tf.layers.reshape({ name: `${ controllerInput.name }_tok-reshape`, targetShape: [1, dModel] })
-        .apply(tokenProj(controllerInput, dModel, controllerInput.name)) as tf.SymbolicTensor;
-    const battleTok = tf.layers.reshape({ name: `${ battleInput.name }_tok-reshape`, targetShape: [1, dModel] })
-        .apply(tokenProj(battleInput, dModel, battleInput.name)) as tf.SymbolicTensor;
-    const tankTok = tf.layers.reshape({ name: `${ tankInput.name }_tok-reshape`, targetShape: [1, dModel] })
-        .apply(tokenProj(tankInput, dModel, tankInput.name)) as tf.SymbolicTensor;
+    const reshape = (x: tf.SymbolicTensor) => {
+        return tf.layers.reshape({
+            name: `${ x.name }_reshape`,
+            targetShape: [1, dModel],
+        }).apply(x) as tf.SymbolicTensor;
+    };
+
+    const controllerTok = reshape(tokenProj(controllerInput, dModel, controllerInput.name)) as tf.SymbolicTensor;
+    const battleTok = reshape(tokenProj(battleInput, dModel, battleInput.name)) as tf.SymbolicTensor;
+    const tankTok = reshape(tokenProj(tankInput, dModel, tankInput.name)) as tf.SymbolicTensor;
     const alliesTok = tokenProj(alliesInput, dModel, alliesInput.name);
     const enemiesTok = tokenProj(enemiesInput, dModel, enemiesInput.name);
     const bulletsTok = tokenProj(bulletsInput, dModel, bulletsInput.name);

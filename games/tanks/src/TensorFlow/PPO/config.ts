@@ -44,29 +44,29 @@ export const DEFAULT_EXPERIMENT: Config = {
     clipNorm: 20,
     // PPO-specific parameters
     gamma: 0.92,
-    policyEpochs: 8,
-    policyClipRatio: 0.2,
-    policyEntropyCoeff: 0.01,
+    policyEpochs: 4,
+    policyClipRatio: 0.1,
+    policyEntropyCoeff: 0.005,
 
-    valueEpochs: 8,
-    valueClipRatio: 0.4,
+    valueEpochs: 4,
+    valueClipRatio: 0.2,
     valueLossCoeff: 0.5,
 
     klConfig: {
         target: 0.02,
         high: 0.04,
         low: 0.01,
-        max: 1,
+        max: 2,
     },
     lrConfig: {
-        initial: 1e-5,
+        initial: 5e-5,
         multHigh: 0.95,
         multLow: 1.05,
-        min: 1e-6,
-        max: 5e-3,
+        min: 1e-5,
+        max: 1e-3,
     },
 
-    batchSize: isMac ? 300 : 2_000,
+    batchSize: isMac ? 1_000 : 4_000,
     miniBatchSize: isMac ? 128 : 128,
 
     // Training parameters - FRAMES = 30sec / TICK_TIME_SIMULATION
