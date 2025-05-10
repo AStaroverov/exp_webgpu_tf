@@ -9,7 +9,13 @@ import {
 } from '../../ECS/Components/TankState.ts';
 import { ACTION_DIM } from '../Common/consts.ts';
 import { CONFIG } from '../PPO/config.ts';
-import { applyCrossAttentionLayer, applyDenseLayers, convertInputsToTokens, createInputs } from './Layers.ts';
+import {
+    applyCrossAttentionLayer,
+    applyDenseLayers,
+    applySelfAttentionLayer,
+    convertInputsToTokens,
+    createInputs,
+} from './Layers.ts';
 
 import { Model } from './def.ts';
 import { PatchedAdamOptimizer } from './PatchedAdamOptimizer.ts';
@@ -67,42 +73,23 @@ function createBaseNetwork(modelName: Model, dModel: number, heads: number) {
     const inputs = createInputs(modelName);
     const tokens = convertInputsToTokens(inputs, dModel);
 
-    const tankToEnemiesAttn = applyCrossAttentionLayer(modelName + '_tankToEnemiesAttn', dModel, heads, {
+    const tankToEnemiesAttn = applyCrossAttentionLayer(modelName + '_tankToEnemiesAttn', heads, {
         qTok: tokens.tankTok,
         kvTok: tokens.enemiesTok,
         kvMask: inputs.enemiesMaskInput,
     });
-    const tankToAlliesAttn = applyCrossAttentionLayer(modelName + '_tankToAlliesAttn', dModel, heads, {
+    const tankToAlliesAttn = applyCrossAttentionLayer(modelName + '_tankToAlliesAttn', heads, {
         qTok: tokens.tankTok,
         kvTok: tokens.alliesTok,
         kvMask: inputs.alliesMaskInput,
     });
-    const tankToBulletsAttn = applyCrossAttentionLayer(modelName + '_tankToBulletsAttn', dModel, heads, {
+    const tankToBulletsAttn = applyCrossAttentionLayer(modelName + '_tankToBulletsAttn', heads, {
         qTok: tokens.tankTok,
         kvTok: tokens.bulletsTok,
         kvMask: inputs.bulletsMaskInput,
     });
 
-    // const envToken = tf.layers.concatenate({ name: modelName + '_envToken' }).apply([
-    //     tokens.tankTok,
-    //     tokens.battleTok,
-    //     tankToEnemiesAttn,
-    //     tankToAlliesAttn,
-    //     tankToBulletsAttn,
-    // ]) as tf.SymbolicTensor;
-    // // TODO: self-attention over envToken
-    //
-    // const controllerToEnvAttn = applyCrossAttentionLayer(modelName + '_controllerToEnvAttn', dModel, heads, {
-    //     qTok: tokens.controllerTok,
-    //     kvTok: envToken,
-    // });
-    //
-    // const withDenseLayers = applyDenseLayers(
-    //     tf.layers.flatten().apply(controllerToEnvAttn) as tf.SymbolicTensor,
-    //     [['relu', dModel * 2], ['relu', dModel]],
-    // );
-
-    const envToken = tf.layers.concatenate({ name: modelName + '_envToken' }).apply([
+    const envToken = tf.layers.concatenate({ name: modelName + '_envToken', axis: 1 }).apply([
         tokens.controllerTok,
         tokens.battleTok,
         tokens.tankTok,
@@ -110,12 +97,18 @@ function createBaseNetwork(modelName: Model, dModel: number, heads: number) {
         tankToAlliesAttn,
         tankToBulletsAttn,
     ]) as tf.SymbolicTensor;
-    const normEnvToken = tf.layers.layerNormalization({ name: modelName + 'normEnvToken' }).apply(envToken) as tf.SymbolicTensor;
-    const flattenedEnvToken = tf.layers.flatten({ name: modelName + '_flattenEnvToken' }).apply(normEnvToken) as tf.SymbolicTensor;
 
+    const selfAttn = applySelfAttentionLayer(modelName + '_envTokenSelfAttn', heads, {
+        tokens: envToken,
+    });
+
+    const normSelfAttn = tf.layers.layerNormalization({ name: modelName + 'normEnvToken' }).apply(selfAttn) as tf.SymbolicTensor;
+    const finalToken = tf.layers.flatten({ name: modelName + '_flattenEnvToken' }).apply(normSelfAttn) as tf.SymbolicTensor;
+
+    const finalTokenDim = finalToken.shape[1]!;
     const withDenseLayers = applyDenseLayers(
-        flattenedEnvToken,
-        [['relu', flattenedEnvToken.shape[1]! * 2], ['relu', flattenedEnvToken.shape[1]!]],
+        finalToken,
+        [['relu', finalTokenDim * 2], ['relu', finalTokenDim]],
     );
 
     return { inputs, network: withDenseLayers };
