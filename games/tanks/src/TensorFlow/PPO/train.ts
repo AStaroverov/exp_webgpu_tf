@@ -31,8 +31,7 @@ export function trainPolicyNetwork(
             const { mean, logStd } = parsePredict(predicted);
             const std = logStd.exp();
             const newLogProbs = computeLogProb(actions, mean, std);
-            const oldLogProbs2D = oldLogProbs.reshape(newLogProbs.shape);
-            const ratio = tf.exp(newLogProbs.sub(oldLogProbs2D));
+            const ratio = tf.exp(newLogProbs.sub(oldLogProbs));
             const clippedRatio = ratio.clipByValue(1 - clipRatio, 1 + clipRatio);
             const surr1 = ratio.mul(advantages);
             const surr2 = clippedRatio.mul(advantages);
