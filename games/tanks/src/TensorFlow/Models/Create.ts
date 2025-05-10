@@ -32,10 +32,9 @@ export function createPolicyNetwork(): tf.LayersModel {
         units: ACTION_DIM * 2,
         activation: 'linear',
     }).apply(network) as tf.SymbolicTensor;
-    const inputsArr = Object.values(inputs);
     const model = tf.model({
         name: Model.Policy,
-        inputs: inputsArr,
+        inputs: Object.values(inputs),
         outputs: policyOutput,
     });
     model.optimizer = new PatchedAdamOptimizer(CONFIG.lrConfig.initial);
@@ -84,23 +83,38 @@ function createBaseNetwork(modelName: Model, dModel: number, heads: number) {
         kvMask: inputs.bulletsMaskInput,
     });
 
+    // const envToken = tf.layers.concatenate({ name: modelName + '_envToken' }).apply([
+    //     tokens.tankTok,
+    //     tokens.battleTok,
+    //     tankToEnemiesAttn,
+    //     tankToAlliesAttn,
+    //     tankToBulletsAttn,
+    // ]) as tf.SymbolicTensor;
+    // // TODO: self-attention over envToken
+    //
+    // const controllerToEnvAttn = applyCrossAttentionLayer(modelName + '_controllerToEnvAttn', dModel, heads, {
+    //     qTok: tokens.controllerTok,
+    //     kvTok: envToken,
+    // });
+    //
+    // const withDenseLayers = applyDenseLayers(
+    //     tf.layers.flatten().apply(controllerToEnvAttn) as tf.SymbolicTensor,
+    //     [['relu', dModel * 2], ['relu', dModel]],
+    // );
+
     const envToken = tf.layers.concatenate({ name: modelName + '_envToken' }).apply([
-        tokens.tankTok,
+        tokens.controllerTok,
         tokens.battleTok,
+        tokens.tankTok,
         tankToEnemiesAttn,
         tankToAlliesAttn,
         tankToBulletsAttn,
     ]) as tf.SymbolicTensor;
-    // TODO: self-attention over envToken
-
-    const controllerToEnvAttn = applyCrossAttentionLayer(modelName + '_controllerToEnvAttn', dModel, heads, {
-        qTok: tokens.controllerTok,
-        kvTok: envToken,
-    });
+    const flattenedEnvToken = tf.layers.flatten().apply(envToken) as tf.SymbolicTensor;
 
     const withDenseLayers = applyDenseLayers(
-        tf.layers.flatten().apply(controllerToEnvAttn) as tf.SymbolicTensor,
-        [['relu', dModel * 2], ['relu', dModel]],
+        flattenedEnvToken,
+        [['relu', flattenedEnvToken.shape[1]! * 2], ['relu', flattenedEnvToken.shape[1]!]],
     );
 
     return { inputs, network: withDenseLayers };
