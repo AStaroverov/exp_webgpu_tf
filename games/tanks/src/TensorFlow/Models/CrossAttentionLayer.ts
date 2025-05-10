@@ -4,7 +4,7 @@ import { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
 export interface CrossAttentionArgs extends LayerArgs {
     numHeads: number;       // количество голов
     keyDim: number;         // размерность одной головы
-    useBias?: boolean;      // по умолчанию true
+    useBias: boolean;      // по умолчанию true
 }
 
 export class CrossAttentionLayer extends tf.layers.Layer {
@@ -22,7 +22,7 @@ export class CrossAttentionLayer extends tf.layers.Layer {
         super(cfg);
         this.numHeads = cfg.numHeads;
         this.keyDim = cfg.keyDim;
-        this.useBias = cfg.useBias ?? true;
+        this.useBias = cfg.useBias;
         this.scale = Math.sqrt(this.keyDim);
     }
 

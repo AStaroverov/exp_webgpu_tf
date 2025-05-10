@@ -14,7 +14,7 @@ import {
     ENEMY_SLOTS,
     TANK_FEATURES_DIM,
 } from './Create.ts';
-import { CrossAttentionLayer } from './CrossAttentionLayer.ts';
+import { MultiHeadAttention } from './MultiHeadAttention.ts';
 
 export function createInputs(name: string) {
     const controllerInput = tf.input({ name: name + '_controllerInput', shape: [CONTROLLER_FEATURES_DIM] });
@@ -39,29 +39,6 @@ export function createInputs(name: string) {
         bulletsInput,
         bulletsMaskInput,
     };
-}
-
-export function applyAttentionLayer(name: string, qInput: tf.SymbolicTensor, kvInput: tf.SymbolicTensor, kvMaskInput: tf.SymbolicTensor, dModel = 32): tf.SymbolicTensor {
-    const denseQ = tf.layers.dense({ name: name + '_denseQ', units: dModel, useBias: false });
-    const denseK = tf.layers.dense({ name: name + '_denseK', units: dModel, useBias: false });
-    const denseV = tf.layers.dense({ name: name + '_denseV', units: dModel, useBias: false });
-
-    const Q = denseQ.apply(qInput) as tf.SymbolicTensor;  // [batch, dim model]
-    const K = denseK.apply(kvInput) as tf.SymbolicTensor;  // [batch, slots, dim model]
-    const V = denseV.apply(kvInput) as tf.SymbolicTensor;
-
-    const Q_reshaped = tf.layers.reshape({ targetShape: [1, dModel] }).apply(Q) as tf.SymbolicTensor; // [batch, 1, d_model]
-
-    const scores = tf.layers.dot({ axes: -1 }).apply([Q_reshaped, K]) as tf.SymbolicTensor;
-
-    const maskedScores = new AttentionMaskLayer({ name: name + '_AttentionMaskLayer' })
-        .apply([scores, kvMaskInput]) as tf.SymbolicTensor;
-
-    const attnWeights = tf.layers.activation({ activation: 'softmax' }).apply(maskedScores) as tf.SymbolicTensor;
-
-    const context = tf.layers.dot({ axes: [2, 1] }).apply([attnWeights, V]) as tf.SymbolicTensor;
-
-    return tf.layers.flatten().apply(context) as tf.SymbolicTensor; // [batch, d_model]
 }
 
 export function applyDenseLayers(layer: tf.SymbolicTensor, hiddenLayers: [ActivationIdentifier, number][]) {
@@ -133,20 +110,26 @@ export function applyCrossAttentionLayer(
     },
 ) {
     const qTokNorm = tf.layers.layerNormalization({
-        name: name + '_normalization',
+        name: name + '_CrossAttentionQNorm_' + qTok.name,
         epsilon: 1e-5,
     }).apply(qTok) as tf.SymbolicTensor;
 
     const attentionInputs = [qTokNorm, kvTok];
     kvMask && attentionInputs.push(kvMask);
-    const attention = new CrossAttentionLayer({
+
+    const attention = new MultiHeadAttention({
         name: name + '_CrossAttentionLayer',
         keyDim: dModel / numHeads,
         numHeads: numHeads,
-        useBias: false,
     }).apply(attentionInputs) as tf.SymbolicTensor;
 
-    return attention;
+    const output = tf.layers.dense({
+        name: name + '_CrossAttentionOutput',
+        units: dModel,
+        useBias: true,
+    }).apply(attention) as SymbolicTensor;
+
+    return output;
 }
 
 export function applySelfAttentionLayer(
@@ -171,4 +154,27 @@ export function applySelfAttentionLayer(
     x = tf.layers.layerNormalization({ name: name + '_normalization', epsilon: 1e-5 }).apply(x) as tf.SymbolicTensor;
 
     return tf.layers.flatten({ name: name + '_flatten' }).apply(x) as tf.SymbolicTensor;
+}
+
+export function applyAttentionLayer(name: string, qInput: tf.SymbolicTensor, kvInput: tf.SymbolicTensor, kvMaskInput: tf.SymbolicTensor, dModel = 32): tf.SymbolicTensor {
+    const denseQ = tf.layers.dense({ name: name + '_denseQ', units: dModel, useBias: false });
+    const denseK = tf.layers.dense({ name: name + '_denseK', units: dModel, useBias: false });
+    const denseV = tf.layers.dense({ name: name + '_denseV', units: dModel, useBias: false });
+
+    const Q = denseQ.apply(qInput) as tf.SymbolicTensor;  // [batch, dim model]
+    const K = denseK.apply(kvInput) as tf.SymbolicTensor;  // [batch, slots, dim model]
+    const V = denseV.apply(kvInput) as tf.SymbolicTensor;
+
+    const Q_reshaped = tf.layers.reshape({ targetShape: [1, dModel] }).apply(Q) as tf.SymbolicTensor; // [batch, 1, d_model]
+
+    const scores = tf.layers.dot({ axes: -1 }).apply([Q_reshaped, K]) as tf.SymbolicTensor;
+
+    const maskedScores = new AttentionMaskLayer({ name: name + '_AttentionMaskLayer' })
+        .apply([scores, kvMaskInput]) as tf.SymbolicTensor;
+
+    const attnWeights = tf.layers.activation({ activation: 'softmax' }).apply(maskedScores) as tf.SymbolicTensor;
+
+    const context = tf.layers.dot({ axes: [2, 1] }).apply([attnWeights, V]) as tf.SymbolicTensor;
+
+    return tf.layers.flatten().apply(context) as tf.SymbolicTensor; // [batch, d_model]
 }

@@ -45,11 +45,11 @@ export const DEFAULT_EXPERIMENT: Config = {
     // PPO-specific parameters
     gamma: 0.92,
     policyEpochs: 4,
-    policyClipRatio: 0.1,
+    policyClipRatio: 0.2,
     policyEntropyCoeff: 0.01,
 
     valueEpochs: 4,
-    valueClipRatio: 0.2,
+    valueClipRatio: 0.4,
     valueLossCoeff: 0.5,
 
     klConfig: {
@@ -66,8 +66,8 @@ export const DEFAULT_EXPERIMENT: Config = {
         max: 1e-3,
     },
 
-    batchSize: isMac ? 200 : 4_000,
-    miniBatchSize: isMac ? 128 : 128,
+    batchSize: isMac ? 200 : 2_000,
+    miniBatchSize: isMac ? 128 : 64,
 
     // Training parameters - FRAMES = 30sec / TICK_TIME_SIMULATION
     episodeFrames: Math.round(20 * 1000 / TICK_TIME_SIMULATION),
