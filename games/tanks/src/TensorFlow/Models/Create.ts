@@ -110,7 +110,8 @@ function createBaseNetwork(modelName: Model, dModel: number, heads: number) {
         tankToAlliesAttn,
         tankToBulletsAttn,
     ]) as tf.SymbolicTensor;
-    const flattenedEnvToken = tf.layers.flatten().apply(envToken) as tf.SymbolicTensor;
+    const normEnvToken = tf.layers.layerNormalization({ name: modelName + 'normEnvToken' }).apply(envToken) as tf.SymbolicTensor;
+    const flattenedEnvToken = tf.layers.flatten({ name: modelName + '_flattenEnvToken' }).apply(normEnvToken) as tf.SymbolicTensor;
 
     const withDenseLayers = applyDenseLayers(
         flattenedEnvToken,
