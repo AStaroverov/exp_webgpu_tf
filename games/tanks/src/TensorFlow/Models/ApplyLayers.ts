@@ -15,6 +15,7 @@ import {
 import { MultiHeadAttentionLayer } from './Layers/MultiHeadAttentionLayer.ts';
 import { FixedPositionalEncodingLayer } from './Layers/FixedPositionalEncodingLayer.ts';
 import { RoleEmbeddingLayer } from './Layers/RoleEncodingLayer.ts';
+import { AttentionPoolLayer } from './Layers/AttentionPoolLayer.ts';
 
 export function createInputs(name: string) {
     const controllerInput = tf.input({ name: name + '_controllerInput', shape: [CONTROLLER_FEATURES_DIM] });
@@ -229,6 +230,12 @@ export function applyTransformerLayer(
     return finalOut;
 }
 
+export function applyAttentionPool(
+    name: string,
+    tokens: tf.SymbolicTensor,
+) {
+    return new AttentionPoolLayer({ name }).apply(tokens) as tf.SymbolicTensor;
+}
 
 export function applyEncoding(token: tf.SymbolicTensor): tf.SymbolicTensor {
     const N = token.shape[1]!;

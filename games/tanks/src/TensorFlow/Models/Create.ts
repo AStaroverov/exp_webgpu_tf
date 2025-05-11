@@ -10,6 +10,7 @@ import {
 import { ACTION_DIM } from '../Common/consts.ts';
 import { CONFIG } from '../PPO/config.ts';
 import {
+    applyAttentionPool,
     applyCrossAttentionLayer,
     applyDenseLayers,
     applyEncoding,
@@ -118,7 +119,7 @@ function createBaseNetwork(modelName: Model, dModel: number, heads: number) {
     // });
 
     const normSelfAttn = tf.layers.layerNormalization({ name: modelName + '_normEnvToken' }).apply(selfAttn1) as tf.SymbolicTensor;
-    const pooled = tf.layers.globalAveragePooling1d({ name: modelName + '_averagePooling' }).apply(normSelfAttn) as tf.SymbolicTensor;
+    const pooled = applyAttentionPool(modelName + '_attentionPool', normSelfAttn) as tf.SymbolicTensor;
 
     const finalTokenDim = pooled.shape[1]!;
     const withDenseLayers = applyDenseLayers(
