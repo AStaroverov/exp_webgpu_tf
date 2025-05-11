@@ -111,13 +111,13 @@ function createBaseNetwork(modelName: Model, dModel: number, heads: number) {
         tokens: envToken,
     });
 
-    const selfAttn2 = applyTransformerLayer(modelName + '_envTransformer2', {
-        numHeads: heads,
-        dropout: 0.1,
-        tokens: selfAttn1,
-    });
+    // const selfAttn2 = applyTransformerLayer(modelName + '_envTransformer2', {
+    //     numHeads: heads,
+    //     dropout: 0.1,
+    //     tokens: selfAttn1,
+    // });
 
-    const normSelfAttn = tf.layers.layerNormalization({ name: modelName + '_normEnvToken' }).apply(selfAttn2) as tf.SymbolicTensor;
+    const normSelfAttn = tf.layers.layerNormalization({ name: modelName + '_normEnvToken' }).apply(selfAttn1) as tf.SymbolicTensor;
     const pooled = tf.layers.globalAveragePooling1d({ name: modelName + '_averagePooling' }).apply(normSelfAttn) as tf.SymbolicTensor;
 
     const finalTokenDim = pooled.shape[1]!;
