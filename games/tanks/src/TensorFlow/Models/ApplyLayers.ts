@@ -122,7 +122,7 @@ export function applyCrossAttentionLayer(
 ) {
     const dModel = qTok.shape[qTok.shape.length - 1]!;
     const qTokNorm = tf.layers.layerNormalization({
-        name: name + '_CrossAttentionQNorm_' + qTok.name,
+        name: name + '_QNorm_' + qTok.name,
         epsilon: 1e-5,
     }).apply(qTok) as tf.SymbolicTensor;
 
@@ -130,13 +130,13 @@ export function applyCrossAttentionLayer(
     kvMask && attentionInputs.push(kvMask);
 
     const attention = new MultiHeadAttentionLayer({
-        name: name + '_CrossAttentionLayer',
+        name: name + '_MultiHeadAttentionLayer',
         keyDim: dModel / numHeads,
         numHeads: numHeads,
     }).apply(attentionInputs) as tf.SymbolicTensor;
 
     const output = tf.layers.dense({
-        name: name + '_CrossAttentionOutput',
+        name: name + '_output',
         units: dModel,
         useBias: true,
     }).apply(attention) as SymbolicTensor;
@@ -157,7 +157,7 @@ export function applySelfAttentionLayer(
 ) {
     const dModel = tokens.shape[tokens.shape.length - 1]!;
     const tokensNorm = tf.layers.layerNormalization({
-        name: name + '_SelfAttentionTokensNorm_' + tokens.name,
+        name: name + '_QNorm_' + tokens.name,
         epsilon: 1e-5,
     }).apply(tokens) as tf.SymbolicTensor;
 
@@ -165,22 +165,70 @@ export function applySelfAttentionLayer(
     mask && attentionInputs.push(mask);
 
     const attention = new MultiHeadAttentionLayer({
-        name: name + '_SelfAttentionLayer',
+        name: name + '_MultiHeadAttentionLayer',
         keyDim: dModel / numHeads,
         numHeads: numHeads,
     }).apply(attentionInputs) as tf.SymbolicTensor;
 
-    const attentionOutput = tf.layers.dense({
-        name: name + '_SelfAttentionOutput',
+    const output = tf.layers.dense({
+        name: name + '_output',
         units: dModel,
         useBias: true,
     }).apply(attention) as SymbolicTensor;
 
-    let output = tf.layers.add({ name: name + '_SelfAttentionResidual' })
-        .apply([attentionOutput, tokens]) as tf.SymbolicTensor;
-
     return output;
 }
+
+export function applyTransformerLayer(
+    name: string,
+    {
+        numHeads,
+        dropout,
+        tokens,
+        mask,
+    }: {
+        numHeads: number,
+        dropout: number;
+        tokens: tf.SymbolicTensor;
+        mask?: tf.SymbolicTensor;
+    },
+) {
+    const dModel = tokens.shape[tokens.shape.length - 1]!;
+    const selfAttn = applySelfAttentionLayer(name, numHeads, { tokens, mask });
+
+    const attnProj = tf.layers.dropout({ rate: dropout, name: `${ name }_drop` })
+        .apply(selfAttn) as tf.SymbolicTensor;
+
+    const attnResidual = tf.layers.add({ name: `${ name }_residual` })
+        .apply([tokens, attnProj]) as tf.SymbolicTensor;
+
+    const norm2 = tf.layers.layerNormalization({
+        name: `${ name }_ln2`,
+        epsilon: 1e-5,
+    }).apply(attnResidual) as tf.SymbolicTensor;
+
+    const ffnInner = tf.layers.dense({
+        name: `${ name }_ffn1`,
+        units: dModel * 4,
+        useBias: true,
+        activation: 'relu',
+    }).apply(norm2) as tf.SymbolicTensor;
+
+    const ffnOut = tf.layers.dense({
+        name: `${ name }_ffn2`,
+        units: dModel,
+        useBias: true,
+    }).apply(ffnInner) as tf.SymbolicTensor;
+
+    const ffnDrop = tf.layers.dropout({ rate: dropout, name: `${ name }_ffnDrop` })
+        .apply(ffnOut) as tf.SymbolicTensor;
+
+    const finalOut = tf.layers.add({ name: `${ name }_ffnAdd` })
+        .apply([attnResidual, ffnDrop]) as tf.SymbolicTensor;
+
+    return finalOut;
+}
+
 
 export function applyEncoding(token: tf.SymbolicTensor): tf.SymbolicTensor {
     const N = token.shape[1]!;

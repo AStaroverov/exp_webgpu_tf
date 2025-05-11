@@ -67,7 +67,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     },
 
     batchSize: isMac ? 200 : 2_000,
-    miniBatchSize: isMac ? 128 : 64,
+    miniBatchSize: isMac ? 128 : 128,
 
     // Training parameters - FRAMES = 30sec / TICK_TIME_SIMULATION
     episodeFrames: Math.round(20 * 1000 / TICK_TIME_SIMULATION),
