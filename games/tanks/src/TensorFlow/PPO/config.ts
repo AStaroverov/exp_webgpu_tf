@@ -53,10 +53,10 @@ export const DEFAULT_EXPERIMENT: Config = {
     valueLossCoeff: 0.5,
 
     klConfig: {
-        target: 0.02,
-        high: 0.04,
-        low: 0.01,
-        max: 2,
+        target: 0.01,
+        high: 0.02,
+        low: 0.005,
+        max: 0.5,
     },
     lrConfig: {
         initial: 5e-5,
@@ -72,7 +72,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Training parameters - FRAMES = 30sec / TICK_TIME_SIMULATION
     episodeFrames: Math.round(20 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: isMac ? 2 : 12,
+    workerCount: isMac ? 1 : 12,
     // Training control
     savePath: isMac ? 'PPO_MHA' : 'PPO_MHA_V1',
     // fsModelPath: 'v20',
