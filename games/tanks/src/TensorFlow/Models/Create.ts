@@ -118,7 +118,7 @@ function createBaseNetwork(modelName: Model, dModel: number, heads: number) {
     //     tokens: selfAttn1,
     // });
 
-    const normSelfAttn = tf.layers.layerNormalization({ name: modelName + '_normEnvToken' }).apply(selfAttn1) as tf.SymbolicTensor;
+    const normSelfAttn = tf.layers.layerNormalization({ name: modelName + '_normEnv' }).apply(selfAttn1) as tf.SymbolicTensor;
     const pooled = applyAttentionPool(modelName + '_attentionPool', normSelfAttn) as tf.SymbolicTensor;
 
     const finalTokenDim = pooled.shape[1]!;

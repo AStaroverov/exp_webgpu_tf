@@ -15,6 +15,13 @@ export class AttentionPoolLayer extends tf.layers.Layer {
         this.built = true;
     }
 
+    computeOutputShape(inputShape: tf.Shape | tf.Shape[]) {
+        const shape = ((inputShape[0] === null || typeof inputShape[0] === 'number')
+            ? inputShape
+            : inputShape[0]) as tf.Shape;
+        return [shape[0], shape[2]];
+    }
+
     call(tokens: tf.Tensor | tf.Tensor[]) {
         const token = Array.isArray(tokens) ? tokens[0] : tokens;
         const scores = tf.sum(tf.mul(token, this.w.read()), -1);

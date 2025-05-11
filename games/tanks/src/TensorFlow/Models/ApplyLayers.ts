@@ -234,7 +234,7 @@ export function applyAttentionPool(
     name: string,
     tokens: tf.SymbolicTensor,
 ) {
-    return new AttentionPoolLayer({ name }).apply(tokens) as tf.SymbolicTensor;
+    return new AttentionPoolLayer({ name: name + '_AttentionPoolLayer' }).apply(tokens) as tf.SymbolicTensor;
 }
 
 export function applyEncoding(token: tf.SymbolicTensor): tf.SymbolicTensor {
