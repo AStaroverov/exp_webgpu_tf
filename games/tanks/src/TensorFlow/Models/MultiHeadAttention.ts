@@ -53,7 +53,7 @@ export class MultiHeadAttention extends tf.layers.Layer {
 
     call(inputs: tf.Tensor | tf.Tensor[]) {
         const [qTok, kvTok, kvMask] = inputs as [tf.Tensor, tf.Tensor, tf.Tensor?];
-        const [B, Q, dModel] = qTok.shape;
+        const [B, N, dModel] = qTok.shape;
 
         const q = write(qTok, this.wq);   // [b, qLen, heads*keyDim]
         const k = write(kvTok, this.wk);   // [b, kLen, heads*keyDim]
@@ -66,18 +66,23 @@ export class MultiHeadAttention extends tf.layers.Layer {
         const qh = split(q);
         const kh = split(k);
         const vh = split(v);
+        const mask = kvMask?.reshape([B, 1, 1, kvMask.shape[1]!]);
 
         let scores = tf.matMul(qh, kh, false, true).div(Math.sqrt(this.keyDim)); // [B,H,Q,K]
 
-        if (kvMask) {
-            const shape = kvMask.shape;
-            const expandedMask = kvMask.reshape([shape[0], 1, 1, shape[1]!]);
-            scores = scores.add(expandedMask.sub(1).mul(1e9));
+        if (mask != null) {
+            scores = scores.add(mask.sub(1).mul(1e9));
         }
 
-        const weights = tf.softmax(scores);
+        let weights = tf.softmax(scores);
+
+        // remove noise if kvMask every == 0
+        if (mask != null) {
+            weights = tf.mul(weights, mask);
+        }
+
         const context = tf.matMul(weights, vh);
-        const merged = context.transpose([0, 2, 1, 3]).reshape([B, Q, dModel]);
+        const merged = context.transpose([0, 2, 1, 3]).reshape([B, N, dModel]);
 
         return merged;
     }

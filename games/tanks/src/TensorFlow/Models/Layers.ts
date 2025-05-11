@@ -13,6 +13,7 @@ import {
     TANK_FEATURES_DIM,
 } from './Create.ts';
 import { MultiHeadAttention } from './MultiHeadAttention.ts';
+import { applyEncoding } from './Encoding.ts';
 
 export function createInputs(name: string) {
     const controllerInput = tf.input({ name: name + '_controllerInput', shape: [CONTROLLER_FEATURES_DIM] });
@@ -76,12 +77,24 @@ export function convertInputsToTokens(
         }).apply(x) as tf.SymbolicTensor;
     };
 
-    const controllerTok = reshape(tokenProj(controllerInput, dModel, controllerInput.name)) as tf.SymbolicTensor;
-    const battleTok = reshape(tokenProj(battleInput, dModel, battleInput.name)) as tf.SymbolicTensor;
-    const tankTok = reshape(tokenProj(tankInput, dModel, tankInput.name)) as tf.SymbolicTensor;
-    const alliesTok = tokenProj(alliesInput, dModel, alliesInput.name);
-    const enemiesTok = tokenProj(enemiesInput, dModel, enemiesInput.name);
-    const bulletsTok = tokenProj(bulletsInput, dModel, bulletsInput.name);
+    const controllerTok =
+        applyEncoding(
+            reshape(tokenProj(controllerInput, dModel, controllerInput.name)));
+    const battleTok =
+        applyEncoding(
+            reshape(tokenProj(battleInput, dModel, battleInput.name)));
+    const tankTok =
+        applyEncoding(
+            reshape(tokenProj(tankInput, dModel, tankInput.name)));
+    const alliesTok =
+        applyEncoding(
+            tokenProj(alliesInput, dModel, alliesInput.name));
+    const enemiesTok =
+        applyEncoding(
+            tokenProj(enemiesInput, dModel, enemiesInput.name));
+    const bulletsTok =
+        applyEncoding(
+            tokenProj(bulletsInput, dModel, bulletsInput.name));
 
     return {
         controllerTok,
@@ -141,7 +154,6 @@ export function applySelfAttentionLayer(
         mask?: tf.SymbolicTensor,
     },
 ) {
-
     const dModel = tokens.shape[tokens.shape.length - 1]!;
     const tokensNorm = tf.layers.layerNormalization({
         name: name + '_SelfAttentionTokensNorm_' + tokens.name,
@@ -168,3 +180,4 @@ export function applySelfAttentionLayer(
 
     return output;
 }
+

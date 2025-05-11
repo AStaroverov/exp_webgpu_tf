@@ -19,6 +19,7 @@ import {
 
 import { Model } from './def.ts';
 import { PatchedAdamOptimizer } from './PatchedAdamOptimizer.ts';
+import { applyEncoding } from './Encoding.ts';
 
 export const CONTROLLER_FEATURES_DIM = 5;
 export const BATTLE_FEATURES_DIM = 4;
@@ -73,21 +74,27 @@ function createBaseNetwork(modelName: Model, dModel: number, heads: number) {
     const inputs = createInputs(modelName);
     const tokens = convertInputsToTokens(inputs, dModel);
 
-    const tankToEnemiesAttn = applyCrossAttentionLayer(modelName + '_tankToEnemiesAttn', heads, {
-        qTok: tokens.tankTok,
-        kvTok: tokens.enemiesTok,
-        kvMask: inputs.enemiesMaskInput,
-    });
-    const tankToAlliesAttn = applyCrossAttentionLayer(modelName + '_tankToAlliesAttn', heads, {
-        qTok: tokens.tankTok,
-        kvTok: tokens.alliesTok,
-        kvMask: inputs.alliesMaskInput,
-    });
-    const tankToBulletsAttn = applyCrossAttentionLayer(modelName + '_tankToBulletsAttn', heads, {
-        qTok: tokens.tankTok,
-        kvTok: tokens.bulletsTok,
-        kvMask: inputs.bulletsMaskInput,
-    });
+    const tankToEnemiesAttn = applyEncoding(
+        applyCrossAttentionLayer(modelName + '_tankToEnemiesAttn', heads, {
+            qTok: tokens.tankTok,
+            kvTok: tokens.enemiesTok,
+            kvMask: inputs.enemiesMaskInput,
+        }),
+    );
+    const tankToAlliesAttn = applyEncoding(
+        applyCrossAttentionLayer(modelName + '_tankToAlliesAttn', heads, {
+            qTok: tokens.tankTok,
+            kvTok: tokens.alliesTok,
+            kvMask: inputs.alliesMaskInput,
+        }),
+    );
+    const tankToBulletsAttn = applyEncoding(
+        applyCrossAttentionLayer(modelName + '_tankToBulletsAttn', heads, {
+            qTok: tokens.tankTok,
+            kvTok: tokens.bulletsTok,
+            kvMask: inputs.bulletsMaskInput,
+        }),
+    );
 
     const envToken = tf.layers.concatenate({ name: modelName + '_envToken', axis: 1 }).apply([
         tokens.controllerTok,
