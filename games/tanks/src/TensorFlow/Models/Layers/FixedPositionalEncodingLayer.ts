@@ -29,7 +29,7 @@ export class FixedPositionalEncodingLayer extends tf.layers.Layer {
     }
 
     private createEncoding(length: number, dModel: number): tf.Tensor3D {
-        const position = tf.range(0, length, 1).expandDims(1);  // [length, 1]
+        const position = tf.range(1, length + 1, 1).expandDims(1);  // [length, 1]
         const divTerm = tf.exp(
             tf.mul(
                 tf.range(0, dModel, 2).div(dModel),

@@ -7,7 +7,7 @@ interface MHAConfig extends LayerArgs {
 }
 
 
-export class MultiHeadAttention extends tf.layers.Layer {
+export class MultiHeadAttentionLayer extends tf.layers.Layer {
     static readonly className = 'MultiHeadAttention';
 
     private numHeads: number;
@@ -107,5 +107,5 @@ function write(
     return projected.reshape([B, L, D]);
 }
 
-tf.serialization.registerClass(MultiHeadAttention);
+tf.serialization.registerClass(MultiHeadAttentionLayer);
 

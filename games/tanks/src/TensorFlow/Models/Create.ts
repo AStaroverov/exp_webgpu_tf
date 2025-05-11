@@ -12,14 +12,14 @@ import { CONFIG } from '../PPO/config.ts';
 import {
     applyCrossAttentionLayer,
     applyDenseLayers,
+    applyEncoding,
     applySelfAttentionLayer,
     convertInputsToTokens,
     createInputs,
-} from './Layers.ts';
+} from './ApplyLayers.ts';
 
 import { Model } from './def.ts';
 import { PatchedAdamOptimizer } from './PatchedAdamOptimizer.ts';
-import { applyEncoding } from './Encoding.ts';
 
 export const CONTROLLER_FEATURES_DIM = 5;
 export const BATTLE_FEATURES_DIM = 4;

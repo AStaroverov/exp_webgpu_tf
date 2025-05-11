@@ -12,8 +12,9 @@ import {
     ENEMY_SLOTS,
     TANK_FEATURES_DIM,
 } from './Create.ts';
-import { MultiHeadAttention } from './MultiHeadAttention.ts';
-import { applyEncoding } from './Encoding.ts';
+import { MultiHeadAttentionLayer } from './Layers/MultiHeadAttentionLayer.ts';
+import { FixedPositionalEncodingLayer } from './Layers/FixedPositionalEncodingLayer.ts';
+import { RoleEmbeddingLayer } from './Layers/RoleEncodingLayer.ts';
 
 export function createInputs(name: string) {
     const controllerInput = tf.input({ name: name + '_controllerInput', shape: [CONTROLLER_FEATURES_DIM] });
@@ -128,7 +129,7 @@ export function applyCrossAttentionLayer(
     const attentionInputs = [qTokNorm, kvTok];
     kvMask && attentionInputs.push(kvMask);
 
-    const attention = new MultiHeadAttention({
+    const attention = new MultiHeadAttentionLayer({
         name: name + '_CrossAttentionLayer',
         keyDim: dModel / numHeads,
         numHeads: numHeads,
@@ -163,7 +164,7 @@ export function applySelfAttentionLayer(
     const attentionInputs = [tokensNorm, tokensNorm];
     mask && attentionInputs.push(mask);
 
-    const attention = new MultiHeadAttention({
+    const attention = new MultiHeadAttentionLayer({
         name: name + '_SelfAttentionLayer',
         keyDim: dModel / numHeads,
         numHeads: numHeads,
@@ -181,3 +182,16 @@ export function applySelfAttentionLayer(
     return output;
 }
 
+export function applyEncoding(token: tf.SymbolicTensor): tf.SymbolicTensor {
+    const N = token.shape[1]!;
+
+    const posEmbedding = N === 1
+        ? token
+        : new FixedPositionalEncodingLayer({ name: token.name + '_withPos' })
+            .apply(token) as tf.SymbolicTensor;
+
+    const roleEmbedding = new RoleEmbeddingLayer({ name: posEmbedding.name + 'withRole' })
+        .apply(posEmbedding) as tf.SymbolicTensor;
+
+    return roleEmbedding;
+}
