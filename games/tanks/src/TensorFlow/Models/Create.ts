@@ -10,7 +10,6 @@ import {
 import { ACTION_DIM } from '../Common/consts.ts';
 import { CONFIG } from '../PPO/config.ts';
 import {
-    applyAttentionPool,
     applyCrossAttentionLayer,
     applyDenseLayers,
     applyEncoding,
@@ -21,6 +20,7 @@ import {
 
 import { Model } from './def.ts';
 import { PatchedAdamOptimizer } from './PatchedAdamOptimizer.ts';
+import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 
 export const CONTROLLER_FEATURES_DIM = 5;
 export const BATTLE_FEATURES_DIM = 4;
@@ -32,8 +32,26 @@ export const ALLY_FEATURES_DIM = ALLY_BUFFER - 1; // -1 потому что id �
 export const BULLET_SLOTS = MAX_BULLETS;
 export const BULLET_FEATURES_DIM = BULLET_BUFFER - 1; // -1 потому что id не считаем
 
+const policyNetworkConfig = {
+    dim: 32,
+    heads: 1,
+    denseLayers: [
+        ['relu', 32 * 4],
+        ['relu', 32 * 2],
+        ['relu', 32 * 1],
+    ] as [ActivationIdentifier, number][],
+};
+const valueNetworkConfig = {
+    dim: 16,
+    heads: 1,
+    denseLayers: [
+        ['relu', 16 * 2],
+        ['relu', 16 * 1],
+    ] as [ActivationIdentifier, number][],
+};
+
 export function createPolicyNetwork(): tf.LayersModel {
-    const { inputs, network } = createBaseNetwork(Model.Policy, 32, 1);
+    const { inputs, network } = createBaseNetwork(Model.Policy, policyNetworkConfig);
     // Выход: ACTION_DIM * 2 (пример: mean и logStd) ---
     const policyOutput = tf.layers.dense({
         name: Model.Policy + '_output',
@@ -53,7 +71,7 @@ export function createPolicyNetwork(): tf.LayersModel {
 }
 
 export function createValueNetwork(): tf.LayersModel {
-    const { inputs, network } = createBaseNetwork(Model.Policy, 16, 1);
+    const { inputs, network } = createBaseNetwork(Model.Value, valueNetworkConfig);
     const valueOutput = tf.layers.dense({
         name: Model.Value + '_output',
         units: 1,
@@ -71,26 +89,26 @@ export function createValueNetwork(): tf.LayersModel {
     return model;
 }
 
-function createBaseNetwork(modelName: Model, dModel: number, heads: number) {
+function createBaseNetwork(modelName: Model, config: typeof policyNetworkConfig) {
     const inputs = createInputs(modelName);
-    const tokens = convertInputsToTokens(inputs, dModel);
+    const tokens = convertInputsToTokens(inputs, config.dim);
 
     const tankToEnemiesAttn = applyEncoding(
-        applyCrossAttentionLayer(modelName + '_tankToEnemiesCrossAttn', heads, {
+        applyCrossAttentionLayer(modelName + '_tankToEnemiesCrossAttn', config.heads, {
             qTok: tokens.tankTok,
             kvTok: tokens.enemiesTok,
             kvMask: inputs.enemiesMaskInput,
         }),
     );
     const tankToAlliesAttn = applyEncoding(
-        applyCrossAttentionLayer(modelName + '_tankToAlliesCrossAttn', heads, {
+        applyCrossAttentionLayer(modelName + '_tankToAlliesCrossAttn', config.heads, {
             qTok: tokens.tankTok,
             kvTok: tokens.alliesTok,
             kvMask: inputs.alliesMaskInput,
         }),
     );
     const tankToBulletsAttn = applyEncoding(
-        applyCrossAttentionLayer(modelName + '_tankToBulletsCrossAttn', heads, {
+        applyCrossAttentionLayer(modelName + '_tankToBulletsCrossAttn', config.heads, {
             qTok: tokens.tankTok,
             kvTok: tokens.bulletsTok,
             kvMask: inputs.bulletsMaskInput,
@@ -107,25 +125,21 @@ function createBaseNetwork(modelName: Model, dModel: number, heads: number) {
     ]) as tf.SymbolicTensor;
 
     const selfAttn1 = applyTransformerLayer(modelName + '_envTransformer1', {
-        numHeads: heads,
+        numHeads: config.heads,
         dropout: 0.1,
         tokens: envToken,
     });
 
-    // const selfAttn2 = applyTransformerLayer(modelName + '_envTransformer2', {
-    //     numHeads: heads,
-    //     dropout: 0.1,
-    //     tokens: selfAttn1,
-    // });
-
     const normSelfAttn = tf.layers.layerNormalization({ name: modelName + '_normEnv' }).apply(selfAttn1) as tf.SymbolicTensor;
-    const pooled = applyAttentionPool(modelName + '_attentionPool', normSelfAttn) as tf.SymbolicTensor;
+    // const pooled = applyAttentionPool(modelName + '_attentionPool', normSelfAttn) as tf.SymbolicTensor;
+    // const flatten = tf.layers.flatten({ name: modelName + '_InputMLP' }).apply(normSelfAttn) as tf.SymbolicTensor;
 
-    const finalTokenDim = pooled.shape[1]!;
-    const withDenseLayers = applyDenseLayers(
-        pooled,
-        [['relu', finalTokenDim * 2], ['relu', finalTokenDim]],
+    const finalMLP = applyDenseLayers(
+        normSelfAttn,
+        config.denseLayers,
     );
 
-    return { inputs, network: withDenseLayers };
+    const output = tf.layers.flatten({ name: modelName + '_flatten' }).apply(finalMLP) as tf.SymbolicTensor;
+
+    return { inputs, network: output };
 }
