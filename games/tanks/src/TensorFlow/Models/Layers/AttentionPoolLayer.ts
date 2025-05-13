@@ -4,14 +4,22 @@ export class AttentionPoolLayer extends tf.layers.Layer {
     static className = 'AttentionPool';
 
     private w!: tf.LayerVariable;
+    private scale!: number;
 
     build(inputShape: tf.Shape | tf.Shape[]) {
         const shape = ((inputShape[0] === null || typeof inputShape[0] === 'number')
             ? inputShape
             : inputShape[0]) as tf.Shape;
-        const D = shape[2];
+        const D = shape[2]!;
 
-        this.w = this.addWeight('w', [1, 1, D], 'float32', tf.initializers.glorotUniform({}));
+        this.w = this.addWeight(
+            'q',
+            [D],
+            'float32',
+            tf.initializers.randomNormal({ mean: 0, stddev: 1 / Math.sqrt(D) }),
+        );
+        this.scale = Math.sqrt(D);
+
         this.built = true;
     }
 
@@ -24,13 +32,20 @@ export class AttentionPoolLayer extends tf.layers.Layer {
 
     call(tokens: tf.Tensor | tf.Tensor[]) {
         const token = Array.isArray(tokens) ? tokens[0] : tokens;
-        const scores = tf.sum(tf.mul(token, this.w.read()), -1);
-        const attnWeights = tf.softmax(scores);
-        const attnWeightsExp = tf.expandDims(attnWeights, -1);
-        const weightedTokens = tf.mul(token, attnWeightsExp);
-        const pooledOutput = tf.sum(weightedTokens, 1);
 
-        return pooledOutput;
+        const scores = tf.mul(token, this.w.read()).sum(-1).div(this.scale);
+        const weights = tf.softmax(scores, -1).expandDims(-1);
+        const weightedTokens = tf.mul(token, weights);
+        const pooledToken = tf.sum(weightedTokens, 1);
+
+        // @ts-expect-error
+        if (globalThis.debugAttnPool === true) {
+            const max = tf.mean(weights).dataSync()[0];
+            const mean = tf.mean(weights).dataSync()[0];
+            console.log('>>', max, mean, max > mean * 2);
+        }
+
+        return pooledToken;
     }
 }
 

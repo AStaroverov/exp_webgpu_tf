@@ -234,7 +234,10 @@ export function applyAttentionPool(
     name: string,
     tokens: tf.SymbolicTensor,
 ) {
-    return new AttentionPoolLayer({ name: name + '_AttentionPoolLayer' }).apply(tokens) as tf.SymbolicTensor;
+    let x = new AttentionPoolLayer({ name: name + '_AttentionPoolLayer' }).apply(tokens) as tf.SymbolicTensor;
+    x = tf.layers.layerNormalization({ name: name + '_norm' }).apply(x) as tf.SymbolicTensor;
+    x = tf.layers.dropout({ name: name + '_dropout', rate: 0.1 }).apply(x) as tf.SymbolicTensor;
+    return x;
 }
 
 export function applyEncoding(token: tf.SymbolicTensor): tf.SymbolicTensor {

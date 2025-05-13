@@ -10,8 +10,8 @@ import {
 import { ACTION_DIM } from '../Common/consts.ts';
 import { CONFIG } from '../PPO/config.ts';
 import {
+    applyAttentionPool,
     applyCrossAttentionLayer,
-    applyDenseLayers,
     applyEncoding,
     applyTransformerLayer,
     convertInputsToTokens,
@@ -131,15 +131,8 @@ function createBaseNetwork(modelName: Model, config: typeof policyNetworkConfig)
     });
 
     const normSelfAttn = tf.layers.layerNormalization({ name: modelName + '_normEnv' }).apply(selfAttn1) as tf.SymbolicTensor;
-    // const pooled = applyAttentionPool(modelName + '_attentionPool', normSelfAttn) as tf.SymbolicTensor;
-    // const flatten = tf.layers.flatten({ name: modelName + '_InputMLP' }).apply(normSelfAttn) as tf.SymbolicTensor;
 
-    const finalMLP = applyDenseLayers(
-        normSelfAttn,
-        config.denseLayers,
-    );
+    const attentionPool = applyAttentionPool(modelName + '_attentionPool', normSelfAttn) as tf.SymbolicTensor;
 
-    const output = tf.layers.flatten({ name: modelName + '_flatten' }).apply(finalMLP) as tf.SymbolicTensor;
-
-    return { inputs, network: output };
+    return { inputs, network: attentionPool };
 }

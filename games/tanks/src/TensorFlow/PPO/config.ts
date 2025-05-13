@@ -53,9 +53,9 @@ export const DEFAULT_EXPERIMENT: Config = {
     valueLossCoeff: 0.5,
 
     klConfig: {
-        target: 0.01,
-        high: 0.02,
-        low: 0.005,
+        target: 0.02,
+        high: 0.04,
+        low: 0.01,
         max: 0.5,
     },
     lrConfig: {
