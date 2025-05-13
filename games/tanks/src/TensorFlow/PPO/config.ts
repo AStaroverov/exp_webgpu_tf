@@ -72,7 +72,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Training parameters - FRAMES = 30sec / TICK_TIME_SIMULATION
     episodeFrames: Math.round(20 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: isMac ? 1 : 12,
+    workerCount: isMac ? 3 : 12,
     // Training control
     savePath: isMac ? 'PPO_MHA' : 'PPO_MHA_V1',
     // fsModelPath: 'v20',

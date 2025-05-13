@@ -58,7 +58,7 @@ export function applyDenseLayers(layer: tf.SymbolicTensor, hiddenLayers: [Activa
 }
 
 export function tokenProj(x: tf.SymbolicTensor, dModel: number, name: string): SymbolicTensor {
-    return tf.layers.dense({ units: dModel, useBias: false, name: name + '_tokProj' }).apply(x) as SymbolicTensor;
+    return tf.layers.dense({ units: dModel, useBias: true, name: name + '_tokProj' }).apply(x) as SymbolicTensor;
 }
 
 export function convertInputsToTokens(

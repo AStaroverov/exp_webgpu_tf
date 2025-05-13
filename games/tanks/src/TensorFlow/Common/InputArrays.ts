@@ -1,4 +1,3 @@
-import { clamp } from 'lodash-es';
 import { shuffle } from '../../../../../lib/shuffle.ts';
 import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../ECS/Components/TankState.ts';
 import {
@@ -14,19 +13,10 @@ import {
 } from '../Models/Create.ts';
 import { max } from '../../../../../lib/math.ts';
 import { random, randomRangeInt } from '../../../../../lib/random.ts';
+import { MAX_APPROXIMATE_COLLIDER_RADIUS } from '../../ECS/Components/HeuristicsData.ts';
 
-function normForTanh(v: number, size: number): number {
+function norm(v: number, size: number): number {
     return v / size;
-}
-
-function normForRelu(v: number, size: number): number {
-    return (normForTanh(v, size) + 1) / 2;
-}
-
-// space - it is a space for normalization, 0-space is bad negative values, space-2*space is normal values, 2*space-3*space is bad positive values
-function normPosition(v: number, size: number, space = 1): number {
-    const f0t1 = normForRelu(v, size);
-    return clamp(f0t1 * space + space, 0, space * 3);
 }
 
 const ENEMIES_INDEXES = new Uint32Array(Array.from({ length: ENEMY_SLOTS }, (_, i) => i));
@@ -55,6 +45,9 @@ export function prepareInputArrays(
     let bi = 0;
 
     const maxCount = max(1, TankInputTensor.alliesCount[tankEid], TankInputTensor.enemiesCount[tankEid]);
+
+    battleFeatures[bi++] = Math.log1p(width);
+    battleFeatures[bi++] = Math.log1p(height);
     battleFeatures[bi++] = TankInputTensor.alliesCount[tankEid] / maxCount;
     battleFeatures[bi++] = TankInputTensor.alliesTotalHealth[tankEid] / max(1, TankInputTensor.alliesCount[tankEid]);
     battleFeatures[bi++] = TankInputTensor.enemiesCount[tankEid] / maxCount;
@@ -64,11 +57,11 @@ export function prepareInputArrays(
     const controllerFeatures = new Float32Array(CONTROLLER_FEATURES_DIM);
     let ci = 0;
 
-    controllerFeatures[ci++] = normForRelu(TankInputTensor.shoot[tankEid], 1);
-    controllerFeatures[ci++] = normForRelu(TankInputTensor.move[tankEid], 1);
-    controllerFeatures[ci++] = normForRelu(TankInputTensor.rotate[tankEid], 1);
-    controllerFeatures[ci++] = normForRelu(TankInputTensor.turretDir.get(tankEid, 0), 2);
-    controllerFeatures[ci++] = normForRelu(TankInputTensor.turretDir.get(tankEid, 1), 2);
+    controllerFeatures[ci++] = norm(TankInputTensor.shoot[tankEid], 1);
+    controllerFeatures[ci++] = norm(TankInputTensor.move[tankEid], 1);
+    controllerFeatures[ci++] = norm(TankInputTensor.rotate[tankEid], 1);
+    controllerFeatures[ci++] = norm(TankInputTensor.turretDir.get(tankEid, 0), 2);
+    controllerFeatures[ci++] = norm(TankInputTensor.turretDir.get(tankEid, 1), 2);
 
     // ---- Tank features ----
     const tankFeatures = new Float32Array(TANK_FEATURES_DIM);
@@ -81,15 +74,17 @@ export function prepareInputArrays(
     const speedY = TankInputTensor.speed.get(tankEid, 1);
     const turretTargetX = TankInputTensor.turretTarget.get(tankEid, 0);
     const turretTargetY = TankInputTensor.turretTarget.get(tankEid, 1);
+    const colliderRadius = TankInputTensor.colliderRadius[tankEid];
 
     tankFeatures[ti++] = TankInputTensor.health[tankEid];
-    tankFeatures[ti++] = normPosition(tankX - width / 2, width / 2);
-    tankFeatures[ti++] = normPosition(tankY - height / 2, height / 2);
-    tankFeatures[ti++] = normForRelu(rotation, Math.PI);
-    tankFeatures[ti++] = normForRelu(speedX, width);
-    tankFeatures[ti++] = normForRelu(speedY, height);
-    tankFeatures[ti++] = normPosition(turretTargetX - tankX, width);
-    tankFeatures[ti++] = normPosition(turretTargetY - tankY, height);
+    tankFeatures[ti++] = norm(tankX - width / 2, width / 2);
+    tankFeatures[ti++] = norm(tankY - height / 2, height / 2);
+    tankFeatures[ti++] = norm(rotation, Math.PI);
+    tankFeatures[ti++] = norm(speedX, width);
+    tankFeatures[ti++] = norm(speedY, height);
+    tankFeatures[ti++] = norm(turretTargetX - tankX, width);
+    tankFeatures[ti++] = norm(turretTargetY - tankY, height);
+    tankFeatures[ti++] = norm(colliderRadius, MAX_APPROXIMATE_COLLIDER_RADIUS);
 
     // ---- Enemies features ----
     const enemiesMask = new Float32Array(ENEMY_SLOTS);
@@ -109,12 +104,13 @@ export function prepareInputArrays(
 
         enemiesMask[w] = 1;
         enemiesFeatures[dstOffset + 0] = enemiesBuffer[srcOffset + 1];
-        enemiesFeatures[dstOffset + 1] = normPosition(enemiesBuffer[srcOffset + 2] - tankX, width);
-        enemiesFeatures[dstOffset + 2] = normPosition(enemiesBuffer[srcOffset + 3] - tankY, height);
-        enemiesFeatures[dstOffset + 3] = normForRelu(enemiesBuffer[srcOffset + 4], width);
-        enemiesFeatures[dstOffset + 4] = normForRelu(enemiesBuffer[srcOffset + 5], height);
-        enemiesFeatures[dstOffset + 5] = normPosition(enemiesBuffer[srcOffset + 6] - tankX, width);
-        enemiesFeatures[dstOffset + 6] = normPosition(enemiesBuffer[srcOffset + 7] - tankY, height);
+        enemiesFeatures[dstOffset + 1] = norm(enemiesBuffer[srcOffset + 2] - tankX, width);
+        enemiesFeatures[dstOffset + 2] = norm(enemiesBuffer[srcOffset + 3] - tankY, height);
+        enemiesFeatures[dstOffset + 3] = norm(enemiesBuffer[srcOffset + 4], width);
+        enemiesFeatures[dstOffset + 4] = norm(enemiesBuffer[srcOffset + 5], height);
+        enemiesFeatures[dstOffset + 5] = norm(enemiesBuffer[srcOffset + 6] - tankX, width);
+        enemiesFeatures[dstOffset + 6] = norm(enemiesBuffer[srcOffset + 7] - tankY, height);
+        enemiesFeatures[dstOffset + 7] = norm(enemiesBuffer[srcOffset + 8], MAX_APPROXIMATE_COLLIDER_RADIUS);
     }
 
     // ---- Allies features ----
@@ -135,12 +131,13 @@ export function prepareInputArrays(
 
         alliesMask[w] = 1;
         alliesFeatures[dstOffset + 0] = alliesBuffer[srcOffset + 1]; // hp
-        alliesFeatures[dstOffset + 1] = normPosition(alliesBuffer[srcOffset + 2] - tankX, width);
-        alliesFeatures[dstOffset + 2] = normPosition(alliesBuffer[srcOffset + 3] - tankY, height);
-        alliesFeatures[dstOffset + 3] = normForRelu(alliesBuffer[srcOffset + 4], width); // speed x
-        alliesFeatures[dstOffset + 4] = normForRelu(alliesBuffer[srcOffset + 5], height); // speed y
-        alliesFeatures[dstOffset + 5] = normPosition(alliesBuffer[srcOffset + 6] - tankX, width);
-        alliesFeatures[dstOffset + 6] = normPosition(alliesBuffer[srcOffset + 7] - tankY, height);
+        alliesFeatures[dstOffset + 1] = norm(alliesBuffer[srcOffset + 2] - tankX, width);
+        alliesFeatures[dstOffset + 2] = norm(alliesBuffer[srcOffset + 3] - tankY, height);
+        alliesFeatures[dstOffset + 3] = norm(alliesBuffer[srcOffset + 4], width);
+        alliesFeatures[dstOffset + 4] = norm(alliesBuffer[srcOffset + 5], height);
+        alliesFeatures[dstOffset + 5] = norm(alliesBuffer[srcOffset + 6] - tankX, width);
+        alliesFeatures[dstOffset + 6] = norm(alliesBuffer[srcOffset + 7] - tankY, height);
+        alliesFeatures[dstOffset + 7] = norm(alliesBuffer[srcOffset + 8], MAX_APPROXIMATE_COLLIDER_RADIUS);
     }
 
     // ---- Bullets features ----
@@ -160,10 +157,10 @@ export function prepareInputArrays(
         }
 
         bulletsMask[w] = 1;
-        bulletsFeatures[dstOffset + 0] = normPosition(bulletsBuffer[srcOffset + 1] - tankX, width);
-        bulletsFeatures[dstOffset + 1] = normPosition(bulletsBuffer[srcOffset + 2] - tankY, height);
-        bulletsFeatures[dstOffset + 2] = normForRelu(bulletsBuffer[srcOffset + 3], width);
-        bulletsFeatures[dstOffset + 3] = normForRelu(bulletsBuffer[srcOffset + 4], height);
+        bulletsFeatures[dstOffset + 0] = norm(bulletsBuffer[srcOffset + 1] - tankX, width);
+        bulletsFeatures[dstOffset + 1] = norm(bulletsBuffer[srcOffset + 2] - tankY, height);
+        bulletsFeatures[dstOffset + 2] = norm(bulletsBuffer[srcOffset + 3], width);
+        bulletsFeatures[dstOffset + 3] = norm(bulletsBuffer[srcOffset + 4], height);
     }
 
     const result = {

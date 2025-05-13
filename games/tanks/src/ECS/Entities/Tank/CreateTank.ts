@@ -22,6 +22,7 @@ import {
 } from './CreateTankParts.ts';
 import { BASE_DENSITY, mutatedOptions, Options, resetOptions, updateColorOptions } from './Options.ts';
 import { TankPart } from '../../Components/TankPart.ts';
+import { HeuristicsData, TANK_APPROXIMATE_COLLIDER_RADIUS } from '../../Components/HeuristicsData.ts';
 
 /**
  * Создает танк с его компонентами
@@ -100,6 +101,7 @@ function createTankBase(options: Options, { world } = GameDI): [number, number] 
     TeamRef.addComponent(world, tankEid, options.teamId);
     PlayerRef.addComponent(world, tankEid, options.playerId);
     TankController.addComponent(world, tankEid);
+    HeuristicsData.addComponent(world, tankEid, TANK_APPROXIMATE_COLLIDER_RADIUS);
 
     // Добавление TensorFlow компонентов, если активировано
     if (TenserFlowDI.enabled) {

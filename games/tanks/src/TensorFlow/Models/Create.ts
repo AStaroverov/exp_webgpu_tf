@@ -23,7 +23,7 @@ import { PatchedAdamOptimizer } from './PatchedAdamOptimizer.ts';
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 
 export const CONTROLLER_FEATURES_DIM = 5;
-export const BATTLE_FEATURES_DIM = 4;
+export const BATTLE_FEATURES_DIM = 6;
 export const TANK_FEATURES_DIM = 8;
 export const ENEMY_SLOTS = MAX_ENEMIES;
 export const ENEMY_FEATURES_DIM = ENEMY_BUFFER - 1; // -1 потому что id не считаем
@@ -33,8 +33,8 @@ export const BULLET_SLOTS = MAX_BULLETS;
 export const BULLET_FEATURES_DIM = BULLET_BUFFER - 1; // -1 потому что id не считаем
 
 const policyNetworkConfig = {
-    dim: 32,
-    heads: 1,
+    dim: 64,
+    heads: 4,
     denseLayers: [
         ['relu', 32 * 4],
         ['relu', 32 * 2],

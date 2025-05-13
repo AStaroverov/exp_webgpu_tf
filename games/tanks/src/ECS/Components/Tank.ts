@@ -3,8 +3,6 @@ import { NestedArray, TypedArray } from '../../../../../src/utils.ts';
 import { component } from '../../../../../src/ECS/utils.ts';
 import { addComponent, EntityId, World } from 'bitecs';
 
-export const TANK_APPROXIMATE_COLLISION_RADIUS = 80;
-
 export const Tank = component({
     aimEid: TypedArray.f64(delegate.defaultSize),
     turretEId: TypedArray.f64(delegate.defaultSize),

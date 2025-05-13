@@ -1,5 +1,5 @@
 import { GameDI } from '../../DI/GameDI.ts';
-import { Tank, TANK_APPROXIMATE_COLLISION_RADIUS } from '../Components/Tank.ts';
+import { Tank } from '../Components/Tank.ts';
 import { MAX_ALLIES, MAX_BULLETS, MAX_ENEMIES, TankInputTensor } from '../Components/TankState.ts';
 import { getEntityIdByPhysicalId, RigidBodyState } from '../Components/Physical.ts';
 import { hypot } from '../../../../../lib/math.ts';
@@ -14,6 +14,7 @@ import { TeamRef } from '../Components/TeamRef.ts';
 
 import { getTankHealth } from '../Entities/Tank/TankUtils.ts';
 import { TankController } from '../Components/TankController.ts';
+import { TANK_APPROXIMATE_COLLIDER_RADIUS } from '../Components/HeuristicsData.ts';
 
 export function snapshotTankInputTensor({ world } = GameDI) {
     const tankEids = query(world, [Tank, TankInputTensor, RigidBodyState]);
@@ -62,6 +63,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
             rotation,
             linvel,
             getMatrixTranslation(aimLocal),
+            TANK_APPROXIMATE_COLLIDER_RADIUS,
         );
 
         // Find closest enemies
@@ -78,6 +80,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
                 RigidBodyState.position.getBatch(enemyEid),
                 RigidBodyState.linvel.getBatch(enemyEid),
                 getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[enemyEid])),
+                TANK_APPROXIMATE_COLLIDER_RADIUS,
             );
         }
 
@@ -95,6 +98,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
                 RigidBodyState.position.getBatch(allyEid),
                 RigidBodyState.linvel.getBatch(allyEid),
                 getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[allyEid])),
+                TANK_APPROXIMATE_COLLIDER_RADIUS,
             );
         }
 
@@ -225,7 +229,7 @@ export function findTankDangerBullets(tankEid: number, { physicalWorld } = GameD
                     bulletVelocity[1],
                     position.x,
                     position.y,
-                    TANK_APPROXIMATE_COLLISION_RADIUS * 2,
+                    TANK_APPROXIMATE_COLLIDER_RADIUS * 2,
                 );
                 if (!dangerTrajectory) return true;
 
