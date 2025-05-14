@@ -42,16 +42,43 @@ export function createInputs(name: string) {
     };
 }
 
-export function applyDenseLayers(layer: tf.SymbolicTensor, hiddenLayers: [ActivationIdentifier, number][]) {
+export function applyDenseLayers(name: string, layer: tf.SymbolicTensor, hiddenLayers: [ActivationIdentifier, number][]) {
     let x = layer;
     let i = 0;
     for (const [activation, units] of hiddenLayers) {
         x = tf.layers.dense({
-            name: `${ layer.name }/dense${ i++ }`,
+            name: `${ name }/dense${ i++ }`,
             units,
             activation,
             kernelInitializer: 'glorotUniform',
         }).apply(x) as tf.SymbolicTensor;
+    }
+
+    return x;
+}
+
+
+export function applyTransformLayers(name: string, {
+    depth,
+    numHeads,
+    dropout,
+    token,
+    mask,
+}: {
+    depth: number,
+    numHeads: number,
+    dropout?: number;
+    token: tf.SymbolicTensor,
+    mask?: tf.SymbolicTensor
+}) {
+    let x = token;
+    for (let i = 0; i < depth; i++) {
+        x = applyTransformerLayer(`${ name }/transformer${ i }`, {
+            numHeads,
+            dropout,
+            token: x,
+            mask,
+        });
     }
 
     return x;
@@ -149,18 +176,18 @@ export function applySelfAttentionLayer(
     name: string,
     numHeads: number,
     {
-        tokens,
+        token,
         mask,
     }: {
-        tokens: tf.SymbolicTensor,
+        token: tf.SymbolicTensor,
         mask?: tf.SymbolicTensor,
     },
 ) {
-    const dModel = tokens.shape[tokens.shape.length - 1]!;
+    const dModel = token.shape[token.shape.length - 1]!;
     const tokensNorm = tf.layers.layerNormalization({
-        name: name + '_QNorm_' + tokens.name,
+        name: name + '_QNorm_' + token.name,
         epsilon: 1e-5,
-    }).apply(tokens) as tf.SymbolicTensor;
+    }).apply(token) as tf.SymbolicTensor;
 
     const attentionInputs = [tokensNorm, tokensNorm];
     mask && attentionInputs.push(mask);
@@ -185,23 +212,23 @@ export function applyTransformerLayer(
     {
         numHeads,
         dropout,
-        tokens,
+        token,
         mask,
     }: {
         numHeads: number,
-        dropout: number;
-        tokens: tf.SymbolicTensor;
+        dropout?: number;
+        token: tf.SymbolicTensor;
         mask?: tf.SymbolicTensor;
     },
 ) {
-    const dModel = tokens.shape[tokens.shape.length - 1]!;
-    const selfAttn = applySelfAttentionLayer(name, numHeads, { tokens, mask });
+    const dModel = token.shape[token.shape.length - 1]!;
+    const selfAttn = applySelfAttentionLayer(name, numHeads, { token, mask });
 
-    const attnProj = tf.layers.dropout({ rate: dropout, name: `${ name }_drop` })
+    const attnProj = dropout == null ? selfAttn : tf.layers.dropout({ rate: dropout, name: `${ name }_drop` })
         .apply(selfAttn) as tf.SymbolicTensor;
 
     const attnResidual = tf.layers.add({ name: `${ name }_residual` })
-        .apply([tokens, attnProj]) as tf.SymbolicTensor;
+        .apply([token, attnProj]) as tf.SymbolicTensor;
 
     const norm2 = tf.layers.layerNormalization({
         name: `${ name }_ln2`,
@@ -221,7 +248,7 @@ export function applyTransformerLayer(
         useBias: true,
     }).apply(ffnInner) as tf.SymbolicTensor;
 
-    const ffnDrop = tf.layers.dropout({ rate: dropout, name: `${ name }_ffnDrop` })
+    const ffnDrop = dropout == null ? ffnOut : tf.layers.dropout({ rate: dropout, name: `${ name }_ffnDrop` })
         .apply(ffnOut) as tf.SymbolicTensor;
 
     const finalOut = tf.layers.add({ name: `${ name }_ffnAdd` })
@@ -233,10 +260,15 @@ export function applyTransformerLayer(
 export function applyAttentionPool(
     name: string,
     tokens: tf.SymbolicTensor,
+    dropout?: number,
 ) {
     let x = new AttentionPoolLayer({ name: name + '_AttentionPoolLayer' }).apply(tokens) as tf.SymbolicTensor;
     x = tf.layers.layerNormalization({ name: name + '_norm' }).apply(x) as tf.SymbolicTensor;
-    x = tf.layers.dropout({ name: name + '_dropout', rate: 0.1 }).apply(x) as tf.SymbolicTensor;
+    x = dropout == null ? x : tf.layers.dropout({
+        name: name + '_dropout',
+        rate: dropout,
+    }).apply(x) as tf.SymbolicTensor;
+
     return x;
 }
 

@@ -227,9 +227,6 @@ export function computeVTraceTargets(
         if (!arrayHealthCheck(vTraces)) {
             throw new Error('VTrace returns are NaN');
         }
-        if (!arrayHealthCheck(values)) {
-            throw new Error('VTrace values are NaN');
-        }
 
         return {
             advantages: normalize(advantages),
