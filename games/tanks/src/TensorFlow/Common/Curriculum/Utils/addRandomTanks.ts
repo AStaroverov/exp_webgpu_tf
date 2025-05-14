@@ -1,9 +1,9 @@
-import { GameDI } from '../../../../DI/GameDI.ts';
+import { GameDI } from '../../../../Game/DI/GameDI.ts';
 import { randomRangeFloat } from '../../../../../../../lib/random.ts';
-import { createTank } from '../../../../ECS/Entities/Tank/CreateTank.ts';
-import { createPlayer } from '../../../../ECS/Entities/Player.ts';
+import { createTank } from '../../../../Game/ECS/Entities/Tank/CreateTank.ts';
+import { createPlayer } from '../../../../Game/ECS/Entities/Player.ts';
 import { PI, pow, sqrt } from '../../../../../../../lib/math.ts';
-import { TANK_APPROXIMATE_COLLIDER_RADIUS } from '../../../../ECS/Components/HeuristicsData.ts';
+import { TANK_APPROXIMATE_COLLIDER_RADIUS } from '../../../../Game/ECS/Components/HeuristicsData.ts';
 
 export function addRandomTanks(teamIdAndCount: [number, number][]) {
     const tanks = [];

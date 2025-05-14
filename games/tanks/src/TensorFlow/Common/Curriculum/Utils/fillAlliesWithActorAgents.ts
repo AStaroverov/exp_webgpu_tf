@@ -1,5 +1,5 @@
 import { Scenario } from '../types.ts';
-import { getTankTeamId } from '../../../../ECS/Entities/Tank/TankUtils.ts';
+import { getTankTeamId } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { CurrentActorAgent } from '../Agents/CurrentActorAgent.ts';
 
 export async function fillAlliesWithActorAgents(episode: Scenario) {

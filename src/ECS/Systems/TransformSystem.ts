@@ -1,4 +1,4 @@
-import { Children } from '../../../games/tanks/src/ECS/Components/Children.ts';
+import { Children } from '../../../games/tanks/src/Game/ECS/Components/Children.ts';
 import { GlobalTransform, LocalTransform } from '../Components/Transform.ts';
 import { mat4 } from 'gl-matrix';
 import { World } from '../world.ts';

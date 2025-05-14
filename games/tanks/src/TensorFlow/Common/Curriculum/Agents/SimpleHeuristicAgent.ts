@@ -1,8 +1,8 @@
-import { RigidBodyState } from '../../../../ECS/Components/Physical';
+import { RigidBodyState } from '../../../../Game/ECS/Components/Physical';
 import { hypot } from '../../../../../../../lib/math.ts';
-import { TankController } from '../../../../ECS/Components/TankController.ts';
-import { getAimPosition, getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
-import { findTankEnemiesEids } from '../../../../ECS/Utils/snapshotTankInputTensor.ts';
+import { TankController } from '../../../../Game/ECS/Components/TankController.ts';
+import { getAimPosition, getTankHealth } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
+import { findTankEnemiesEids } from '../../../../Game/ECS/Utils/snapshotTankInputTensor.ts';
 import { Actions, applyActionToTank } from '../../applyActionToTank.ts';
 import { TankAgent } from './CurrentActorAgent.ts';
 import { random, randomRangeFloat, randomSign } from '../../../../../../../lib/random.ts';

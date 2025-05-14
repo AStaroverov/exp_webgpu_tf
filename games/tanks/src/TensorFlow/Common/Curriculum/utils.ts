@@ -1,4 +1,4 @@
-import { getTankHealth, getTankTeamId } from '../../../ECS/Entities/Tank/TankUtils.ts';
+import { getTankHealth, getTankTeamId } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
 
 let index = 0;
 

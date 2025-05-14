@@ -8,7 +8,7 @@ import { getNetworkVersion, patientAction } from '../../utils.ts';
 import { applyActionToTank } from '../../applyActionToTank.ts';
 import { calculateReward } from '../../../Reward/calculateReward.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
-import { getTankHealth } from '../../../../ECS/Entities/Tank/TankUtils.ts';
+import { getTankHealth } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { clamp } from 'lodash-es';
 import { Model } from '../../../Models/def.ts';
 

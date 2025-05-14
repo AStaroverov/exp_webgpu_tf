@@ -1,13 +1,13 @@
 // DebugInfo singleton to track statistics
 import { query } from 'bitecs';
-import { GameDI } from '../../DI/GameDI.ts';
-import { Tank } from '../../ECS/Components/Tank.ts';
-import { RigidBodyState } from '../../ECS/Components/Physical.ts';
+import { GameDI } from '../../Game/DI/GameDI.ts';
+import { Tank } from '../../Game/ECS/Components/Tank.ts';
+import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
 import { Color } from '../../../../../src/ECS/Components/Common.ts';
 import { getDrawState } from './uiUtils.ts';
 import { frameTasks } from '../../../../../lib/TasksScheduler/frameTasks.ts';
 import { CONFIG } from '../PPO/config.ts';
-import { TeamRef } from '../../ECS/Components/TeamRef.ts';
+import { TeamRef } from '../../Game/ECS/Components/TeamRef.ts';
 import { drawMetrics } from '../Metrics/Browser';
 import { VisTestEpisodeManager } from '../PPO/VisTest/VisTestEpisodeManager.ts';
 

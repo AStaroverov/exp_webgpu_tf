@@ -1,5 +1,5 @@
 import { addComponent } from 'bitecs';
-import { GameDI } from '../../games/tanks/src/DI/GameDI.ts';
+import { GameDI } from '../../games/tanks/src/Game/DI/GameDI.ts';
 
 const $CompRef = Symbol('CompRef');
 let indexCompRef = 0;

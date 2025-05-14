@@ -1,8 +1,8 @@
-import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
-import { createGame } from '../../../createGame.ts';
+import { TenserFlowDI } from '../../../Game/DI/TenserFlowDI.ts';
+import { createGame } from '../../../Game/createGame.ts';
 import { query } from 'bitecs';
-import { Tank } from '../../../ECS/Components/Tank.ts';
-import { TeamRef } from '../../../ECS/Components/TeamRef.ts';
+import { Tank } from '../../../Game/ECS/Components/Tank.ts';
+import { TeamRef } from '../../../Game/ECS/Components/TeamRef.ts';
 
 export async function createBattlefield(options: { withRender: boolean, withPlayer: boolean }) {
     TenserFlowDI.enabled = true;

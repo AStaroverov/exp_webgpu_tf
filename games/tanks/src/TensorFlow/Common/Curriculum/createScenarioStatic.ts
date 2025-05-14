@@ -3,7 +3,7 @@ import { CurrentActorAgent, TankAgent } from './Agents/CurrentActorAgent.ts';
 import { EntityId } from 'bitecs';
 import { addRandomTanks } from './Utils/addRandomTanks.ts';
 import { randomRangeInt } from '../../../../../../lib/random.ts';
-import { getTankTeamId } from '../../../ECS/Entities/Tank/TankUtils.ts';
+import { getTankTeamId } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { getScenarioIndex, getSuccessRatio, getTeamHealth } from './utils.ts';
 import { Scenario } from './types.ts';
 import { max } from '../../../../../../lib/math.ts';

@@ -1,12 +1,12 @@
 import { SNAPSHOT_EVERY, TICK_TIME_SIMULATION } from '../../Common/consts.ts';
-import { GameDI } from '../../../DI/GameDI.ts';
+import { GameDI } from '../../../Game/DI/GameDI.ts';
 import { TankAgent } from '../../Common/Curriculum/Agents/CurrentActorAgent.ts';
 import { CONFIG } from '../config.ts';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { CurriculumState, curriculumStateChannel, episodeSampleChannel, queueSizeChannel } from '../channels.ts';
 import { Scenario } from '../../Common/Curriculum/types.ts';
 import { createScenarioByCurriculumState } from '../../Common/Curriculum/createScenarioByCurriculumState.ts';
-import { snapshotTankInputTensor } from '../../../ECS/Utils/snapshotTankInputTensor.ts';
+import { snapshotTankInputTensor } from '../../../Game/ECS/Utils/snapshotTankInputTensor.ts';
 import { abs, max, min } from '../../../../../../lib/math.ts';
 import { filter, first, firstValueFrom, race, shareReplay, startWith, timer } from 'rxjs';
 

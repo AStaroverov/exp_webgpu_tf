@@ -1,11 +1,11 @@
-import { createGame } from './src/createGame.ts';
-import { PLAYER_REFS } from './src/consts.ts';
+import { createGame } from './src/Game/createGame.ts';
+import { PLAYER_REFS } from './src/Game/consts.ts';
 import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
-import { GameDI } from './src/DI/GameDI.ts';
-import { TenserFlowDI } from './src/DI/TenserFlowDI.ts';
+import { GameDI } from './src/Game/DI/GameDI.ts';
+import { TenserFlowDI } from './src/Game/DI/TenserFlowDI.ts';
 import { calculateReward } from './src/TensorFlow/Reward/calculateReward.ts';
-import { createTank } from './src/ECS/Entities/Tank/CreateTank.ts';
-import { createPlayer } from './src/ECS/Entities/Player.ts';
+import { createTank } from './src/Game/ECS/Entities/Tank/CreateTank.ts';
+import { createPlayer } from './src/Game/ECS/Entities/Player.ts';
 
 TenserFlowDI.enabled = true;
 

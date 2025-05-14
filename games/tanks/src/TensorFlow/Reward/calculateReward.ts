@@ -1,14 +1,14 @@
-import { RigidBodyState } from '../../ECS/Components/Physical.ts';
-import { BattleState, BULLET_DANGER_SPEED, getBattleState } from '../../ECS/Utils/snapshotTankInputTensor.ts';
+import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
+import { BattleState, BULLET_DANGER_SPEED, getBattleState } from '../../Game/ECS/Utils/snapshotTankInputTensor.ts';
 import { abs, acos, centerStep, hypot, max, min, PI, sin, smoothstep } from '../../../../../lib/math.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
-import { Tank } from '../../ECS/Components/Tank.ts';
-import { TankController } from '../../ECS/Components/TankController.ts';
-import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../ECS/Components/TankState.ts';
+import { Tank } from '../../Game/ECS/Components/Tank.ts';
+import { TankController } from '../../Game/ECS/Components/TankController.ts';
+import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../Game/ECS/Components/TankState.ts';
 import { EntityId } from 'bitecs';
-import { BULLET_SPEED } from '../../ECS/Components/Bullet.ts';
-import { getTankHealth, getTankScore } from '../../ECS/Entities/Tank/TankUtils.ts';
-import { HeuristicsData } from '../../ECS/Components/HeuristicsData.ts';
+import { BULLET_SPEED } from '../../Game/ECS/Components/Bullet.ts';
+import { getTankHealth, getTankScore } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
+import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
 
 const WEIGHTS = Object.freeze({
     // Rear rewards, huge size in delta view
