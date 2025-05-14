@@ -1,13 +1,13 @@
 import { Scenario } from '../types.ts';
 import { getTankTeamId } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { CurrentActorAgent } from '../Agents/CurrentActorAgent.ts';
+import { CurrentActorAgent, TankAgent } from '../Agents/CurrentActorAgent.ts';
 
 export async function fillAlliesWithActorAgents(episode: Scenario) {
     const tankEids = episode.getFreeTankEids();
     const firstAgent = episode.getAgents();
     const activeTeam = getTankTeamId(firstAgent[0].tankEid);
 
-    const newAgents = [];
+    const newAgents: TankAgent[] = [];
 
     for (let i = 0; i < tankEids.length; i++) {
         const tankEid = tankEids[i];
@@ -20,5 +20,9 @@ export async function fillAlliesWithActorAgents(episode: Scenario) {
     }
 
     await Promise.all(newAgents.map(agent => agent.sync?.()));
+
+    return () => {
+        newAgents.forEach(agent => agent.dispose?.());
+    };
 }
 

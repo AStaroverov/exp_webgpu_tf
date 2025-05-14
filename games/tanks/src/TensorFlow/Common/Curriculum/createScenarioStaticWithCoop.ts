@@ -10,7 +10,13 @@ export async function createScenarioStaticWithCoop(options: Parameters<typeof cr
     const episode = await createScenarioStatic(options);
     episode.index = indexScenarioStaticWithCoop;
 
-    await fillAlliesWithActorAgents(episode);
+    const destroy = await fillAlliesWithActorAgents(episode);
 
-    return episode;
+    return {
+        ...episode,
+        destroy: () => {
+            episode.destroy();
+            destroy();
+        },
+    };
 }

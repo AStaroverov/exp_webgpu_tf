@@ -10,8 +10,14 @@ export async function createScenarioWithHistoricalAgents(options: Parameters<typ
     const episode = await createScenarioStaticWithCoop(options);
     episode.index = indexScenarioWithHistoricalAgents;
 
-    await fillWithRandomHistoricalAgents(episode);
+    const destroy = await fillWithRandomHistoricalAgents(episode);
 
-    return episode;
+    return {
+        ...episode,
+        destroy: () => {
+            destroy();
+            episode.destroy();
+        },
+    };
 }
 
