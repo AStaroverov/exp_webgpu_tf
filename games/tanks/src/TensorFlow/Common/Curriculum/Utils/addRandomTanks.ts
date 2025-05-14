@@ -10,10 +10,8 @@ export function addRandomTanks(teamIdAndCount: [number, number][]) {
     const width = GameDI.width;
     const height = GameDI.height;
 
-    // Храним координаты танков в отдельном массиве
     let tankPositions: { x: number, y: number }[] = [];
 
-    // Функция для проверки минимального расстояния между танками
     const isTooClose = (x: number, y: number): boolean => {
         for (let i = 0; i < tankPositions.length; i++) {
             const tank = tankPositions[i];
@@ -29,7 +27,6 @@ export function addRandomTanks(teamIdAndCount: [number, number][]) {
         for (let i = 0; i < count; i++) {
             let x: number, y: number;
 
-            // Пытаемся найти подходящую позицию
             do {
                 x = randomRangeFloat(TANK_APPROXIMATE_COLLIDER_RADIUS, width - TANK_APPROXIMATE_COLLIDER_RADIUS);
                 y = randomRangeFloat(TANK_APPROXIMATE_COLLIDER_RADIUS, height - TANK_APPROXIMATE_COLLIDER_RADIUS);
@@ -40,7 +37,7 @@ export function addRandomTanks(teamIdAndCount: [number, number][]) {
                 teamId,
                 x,
                 y,
-                rotation: PI * randomRangeFloat(0, 2), // Случайный поворот от 0 до 2π
+                rotation: PI * randomRangeFloat(0, 2),
                 color: [teamId, randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1],
             });
             tanks.push(tank);

@@ -34,10 +34,11 @@ import { createPostEffect } from './ECS/Systems/Render/PostEffect/Pixelate/creat
 import { createTankDecayOutOfZoneSystem } from './ECS/Systems/Tank/createTankDecayOutOfZoneSystem.ts';
 import { GameSession } from './ECS/Entities/GameSession.ts';
 
-export async function createGame({ width, height, withRender, withPlayer }: {
+export type Game = ReturnType<typeof createGame>;
+
+export function createGame({ width, height, withPlayer }: {
     width: number,
     height: number,
-    withRender: boolean
     withPlayer: boolean
 }) {
     const world = createWorld();
@@ -48,15 +49,45 @@ export async function createGame({ width, height, withRender, withPlayer }: {
     GameDI.world = world;
     GameDI.physicalWorld = physicalWorld;
 
-    if (withRender && RenderDI.canvas == null) {
-        const canvas = document.querySelector('canvas')!;
-        canvas.style.width = width + 'px';
-        canvas.style.height = height + 'px';
+    GameDI.setRenderTarget = async (canvas: null | undefined | HTMLCanvasElement) => {
+        if (canvas === RenderDI.canvas) {
+            return;
+        }
+
+        if (canvas == null) {
+            RenderDI.renderFrame = null!;
+            RenderDI.canvas = null!;
+            RenderDI.device = null!;
+            RenderDI.context = null!;
+            return;
+        }
+
         const { device, context } = await initWebGPU(canvas);
         RenderDI.canvas = canvas;
         RenderDI.device = device;
         RenderDI.context = context;
-    }
+
+        const drawGrass = createDrawGrassSystem();
+        const drawShape = createDrawShapeSystem(world, device);
+        const { renderFrame, renderTexture } = createFrameTick({
+            canvas,
+            device,
+            context,
+            background: [173, 193, 120, 255].map(v => v / 255),
+            getPixelRatio: () => window.devicePixelRatio,
+        }, ({ passEncoder, delta }) => {
+            drawGrass(passEncoder, delta);
+            drawShape(passEncoder);
+        });
+        const postEffectFrame = createPostEffect(device, context, renderTexture);
+
+        RenderDI.renderFrame = (delta: number) => {
+            const commandEncoder = device.createCommandEncoder();
+            renderFrame(commandEncoder, delta);
+            postEffectFrame(commandEncoder);
+            device.queue.submit([commandEncoder.finish()]);
+        };
+    };
 
     if (withPlayer) {
         PlayerEnvDI.container = RenderDI.canvas;
@@ -129,31 +160,6 @@ export async function createGame({ width, height, withRender, withPlayer }: {
         updateTankAliveSystem();
     };
 
-    const renderFrame = withRender ? (() => {
-        const { canvas, device, context } = RenderDI;
-        const drawGrass = createDrawGrassSystem();
-        const drawShape = createDrawShapeSystem(world, device);
-        const { renderFrame, renderTexture } = createFrameTick({
-            canvas,
-            device,
-            context,
-            background: [173, 193, 120, 255].map(v => v / 255),
-            getPixelRatio: () => window.devicePixelRatio,
-        }, ({ passEncoder, delta }) => {
-            drawGrass(passEncoder, delta);
-            drawShape(passEncoder);
-        });
-        const postEffectFrame = createPostEffect(device, context, renderTexture);
-
-        return (delta: number) => {
-            const commandEncoder = device.createCommandEncoder();
-            renderFrame(commandEncoder, delta);
-            postEffectFrame(commandEncoder);
-            device.queue.submit([commandEncoder.finish()]);
-        };
-    })() : noop;
-
-
     const spawnBullets = createSpawnerBulletsSystem();
     const spawnFrame = (delta: number) => {
         spawnBullets(delta);
@@ -184,7 +190,7 @@ export async function createGame({ width, height, withRender, withPlayer }: {
         // updateMap();
 
         // stats.begin();
-        renderFrame(delta);
+        RenderDI.renderFrame?.(delta);
         // stats.end();
         // stats.update();
         //

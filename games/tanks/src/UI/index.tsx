@@ -1,10 +1,11 @@
+import './index.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 
-import './index.css';
+import { BaseScreen } from './Components/BaseScreen.tsx';
 
 ReactDOM.createRoot(document.getElementById('ui')!).render(
     <React.StrictMode>
-        <div className="flex">hello world</div>
+        <BaseScreen className="w-full h-full"/>
     </React.StrictMode>,
 );
