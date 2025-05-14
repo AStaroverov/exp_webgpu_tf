@@ -1,6 +1,6 @@
 import { GameDI } from '../../../DI/GameDI.ts';
 import { hasComponent, query } from 'bitecs';
-import { Tank, TANK_APPROXIMATE_COLLISION_RADIUS } from '../../Components/Tank.ts';
+import { Tank } from '../../Components/Tank.ts';
 import {
     getMatrixTranslationX,
     getMatrixTranslationY,
@@ -11,6 +11,7 @@ import { TankPart } from '../../Components/TankPart.ts';
 import { isOutOfGameZone } from '../utils/isOutOfGameZone.ts';
 import { scheduleRemoveEntity } from '../../Utils/typicalRemoveEntity.ts';
 import { random } from '../../../../../../lib/random.ts';
+import { TANK_APPROXIMATE_COLLIDER_RADIUS } from '../../Components/HeuristicsData.ts';
 
 export function createTankDecayOutOfZoneSystem({ world } = GameDI) {
     return () => {
@@ -22,7 +23,7 @@ export function createTankDecayOutOfZoneSystem({ world } = GameDI) {
             const x = getMatrixTranslationX(globalTransform);
             const y = getMatrixTranslationY(globalTransform);
 
-            if (isOutOfGameZone(x, y, TANK_APPROXIMATE_COLLISION_RADIUS / 2) && random() < 0.3) {
+            if (isOutOfGameZone(x, y, TANK_APPROXIMATE_COLLIDER_RADIUS / 2) && random() < 0.3) {
                 const childrenEids = Children.entitiesIds.getBatch(tankEid);
                 const childrenCount = Children.entitiesCount[tankEid];
 

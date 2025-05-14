@@ -1,4 +1,3 @@
-import { clamp } from 'lodash-es';
 import { shuffle } from '../../../../../lib/shuffle.ts';
 import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../ECS/Components/TankState.ts';
 import {
@@ -7,25 +6,17 @@ import {
     BATTLE_FEATURES_DIM,
     BULLET_FEATURES_DIM,
     BULLET_SLOTS,
+    CONTROLLER_FEATURES_DIM,
     ENEMY_FEATURES_DIM,
     ENEMY_SLOTS,
     TANK_FEATURES_DIM,
 } from '../Models/Create.ts';
 import { max } from '../../../../../lib/math.ts';
 import { random, randomRangeInt } from '../../../../../lib/random.ts';
-
-function normForTanh(v: number, size: number): number {
-    return v / size;
-}
-
-const SPACE = 1; // it is a space for normalization, 0-space is bad negative values, space-2*space is normal values, 2*space-3*space is bad positive values
-function normForRelu(v: number, size: number): number {
-    const f0t1 = (normForTanh(v, size) + 1) / 2;
-    return clamp(f0t1 * SPACE + SPACE, 0, SPACE * 3);
-}
+import { MAX_APPROXIMATE_COLLIDER_RADIUS } from '../../ECS/Components/HeuristicsData.ts';
 
 function norm(v: number, size: number): number {
-    return normForRelu(v, size);
+    return v / size;
 }
 
 const ENEMIES_INDEXES = new Uint32Array(Array.from({ length: ENEMY_SLOTS }, (_, i) => i));
@@ -33,6 +24,7 @@ const ALLIES_INDEXES = new Uint32Array(Array.from({ length: ALLY_SLOTS }, (_, i)
 const BULLETS_INDEXES = new Uint32Array(Array.from({ length: BULLET_SLOTS }, (_, i) => i));
 
 export type InputArrays = {
+    controllerFeatures: Float32Array,
     battleFeatures: Float32Array,
     tankFeatures: Float32Array,
     enemiesFeatures: Float32Array,
@@ -48,15 +40,30 @@ export function prepareInputArrays(
     width: number,
     height: number,
 ): InputArrays {
+    // ---- Battlefield features ----
     const battleFeatures = new Float32Array(BATTLE_FEATURES_DIM);
     let bi = 0;
 
     const maxCount = max(1, TankInputTensor.alliesCount[tankEid], TankInputTensor.enemiesCount[tankEid]);
+
+    battleFeatures[bi++] = Math.log1p(width);
+    battleFeatures[bi++] = Math.log1p(height);
     battleFeatures[bi++] = TankInputTensor.alliesCount[tankEid] / maxCount;
     battleFeatures[bi++] = TankInputTensor.alliesTotalHealth[tankEid] / max(1, TankInputTensor.alliesCount[tankEid]);
     battleFeatures[bi++] = TankInputTensor.enemiesCount[tankEid] / maxCount;
     battleFeatures[bi++] = TankInputTensor.enemiesTotalHealth[tankEid] / max(1, TankInputTensor.enemiesCount[tankEid]);
 
+    // ---- Controller features ----
+    const controllerFeatures = new Float32Array(CONTROLLER_FEATURES_DIM);
+    let ci = 0;
+
+    controllerFeatures[ci++] = norm(TankInputTensor.shoot[tankEid], 1);
+    controllerFeatures[ci++] = norm(TankInputTensor.move[tankEid], 1);
+    controllerFeatures[ci++] = norm(TankInputTensor.rotate[tankEid], 1);
+    controllerFeatures[ci++] = norm(TankInputTensor.turretDir.get(tankEid, 0), 2);
+    controllerFeatures[ci++] = norm(TankInputTensor.turretDir.get(tankEid, 1), 2);
+
+    // ---- Tank features ----
     const tankFeatures = new Float32Array(TANK_FEATURES_DIM);
     let ti = 0;
 
@@ -67,17 +74,19 @@ export function prepareInputArrays(
     const speedY = TankInputTensor.speed.get(tankEid, 1);
     const turretTargetX = TankInputTensor.turretTarget.get(tankEid, 0);
     const turretTargetY = TankInputTensor.turretTarget.get(tankEid, 1);
+    const colliderRadius = TankInputTensor.colliderRadius[tankEid];
 
     tankFeatures[ti++] = TankInputTensor.health[tankEid];
     tankFeatures[ti++] = norm(tankX - width / 2, width / 2);
     tankFeatures[ti++] = norm(tankY - height / 2, height / 2);
-    tankFeatures[ti++] = rotation / Math.PI;
+    tankFeatures[ti++] = norm(rotation, Math.PI);
     tankFeatures[ti++] = norm(speedX, width);
     tankFeatures[ti++] = norm(speedY, height);
     tankFeatures[ti++] = norm(turretTargetX - tankX, width);
     tankFeatures[ti++] = norm(turretTargetY - tankY, height);
+    tankFeatures[ti++] = norm(colliderRadius, MAX_APPROXIMATE_COLLIDER_RADIUS);
 
-
+    // ---- Enemies features ----
     const enemiesMask = new Float32Array(ENEMY_SLOTS);
     const enemiesFeatures = new Float32Array(ENEMY_SLOTS * ENEMY_FEATURES_DIM);
     const enemiesBuffer = TankInputTensor.enemiesData.getBatch(tankEid);
@@ -101,8 +110,10 @@ export function prepareInputArrays(
         enemiesFeatures[dstOffset + 4] = norm(enemiesBuffer[srcOffset + 5], height);
         enemiesFeatures[dstOffset + 5] = norm(enemiesBuffer[srcOffset + 6] - tankX, width);
         enemiesFeatures[dstOffset + 6] = norm(enemiesBuffer[srcOffset + 7] - tankY, height);
+        enemiesFeatures[dstOffset + 7] = norm(enemiesBuffer[srcOffset + 8], MAX_APPROXIMATE_COLLIDER_RADIUS);
     }
 
+    // ---- Allies features ----
     const alliesMask = new Float32Array(ALLY_SLOTS);
     const alliesFeatures = new Float32Array(ALLY_SLOTS * ALLY_FEATURES_DIM);
     const alliesBuffer = TankInputTensor.alliesData.getBatch(tankEid);
@@ -126,8 +137,10 @@ export function prepareInputArrays(
         alliesFeatures[dstOffset + 4] = norm(alliesBuffer[srcOffset + 5], height);
         alliesFeatures[dstOffset + 5] = norm(alliesBuffer[srcOffset + 6] - tankX, width);
         alliesFeatures[dstOffset + 6] = norm(alliesBuffer[srcOffset + 7] - tankY, height);
+        alliesFeatures[dstOffset + 7] = norm(alliesBuffer[srcOffset + 8], MAX_APPROXIMATE_COLLIDER_RADIUS);
     }
 
+    // ---- Bullets features ----
     const bulletsMask = new Float32Array(BULLET_SLOTS);
     const bulletsFeatures = new Float32Array(BULLET_SLOTS * BULLET_FEATURES_DIM);
     const bulletsBuffer = TankInputTensor.bulletsData.getBatch(tankEid);
@@ -151,6 +164,7 @@ export function prepareInputArrays(
     }
 
     const result = {
+        controllerFeatures,
         battleFeatures,
         tankFeatures,
         enemiesFeatures,
@@ -170,6 +184,7 @@ export function prepareInputArrays(
 }
 
 export function prepareRandomInputArrays(): InputArrays {
+    const controllerFeatures = new Float32Array(CONTROLLER_FEATURES_DIM).map(() => random());
     const battleFeatures = new Float32Array(BATTLE_FEATURES_DIM).map(() => random());
     const tankFeatures = new Float32Array(TANK_FEATURES_DIM).map(() => random());
     const enemiesMask = new Float32Array(ENEMY_SLOTS).map(() => randomRangeInt(0, 1));
@@ -180,6 +195,7 @@ export function prepareRandomInputArrays(): InputArrays {
     const bulletsFeatures = new Float32Array(BULLET_SLOTS * BULLET_FEATURES_DIM).map(() => random());
 
     return {
+        controllerFeatures,
         battleFeatures,
         tankFeatures,
         enemiesFeatures,
@@ -192,7 +208,8 @@ export function prepareRandomInputArrays(): InputArrays {
 }
 
 export function checkInputArrays(inputArray: InputArrays): boolean {
-    return inputArray.battleFeatures.every(Number.isFinite)
+    return inputArray.controllerFeatures.every(Number.isFinite)
+        && inputArray.battleFeatures.every(Number.isFinite)
         && inputArray.tankFeatures.every(Number.isFinite)
         && inputArray.enemiesFeatures.every(Number.isFinite)
         && inputArray.enemiesMask.every(Number.isFinite)

@@ -1,7 +1,6 @@
 import { RigidBodyState } from '../../ECS/Components/Physical.ts';
 import { BattleState, BULLET_DANGER_SPEED, getBattleState } from '../../ECS/Utils/snapshotTankInputTensor.ts';
 import { abs, acos, centerStep, hypot, max, min, PI, sin, smoothstep } from '../../../../../lib/math.ts';
-import { TANK_RADIUS } from '../Common/consts.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 import { Tank } from '../../ECS/Components/Tank.ts';
 import { TankController } from '../../ECS/Components/TankController.ts';
@@ -9,6 +8,7 @@ import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../..
 import { EntityId } from 'bitecs';
 import { BULLET_SPEED } from '../../ECS/Components/Bullet.ts';
 import { getTankHealth, getTankScore } from '../../ECS/Entities/Tank/TankUtils.ts';
+import { HeuristicsData } from '../../ECS/Components/HeuristicsData.ts';
 
 const WEIGHTS = Object.freeze({
     // Rear rewards, huge size in delta view
@@ -109,6 +109,7 @@ export function calculateReward(
 ): number {
     const currentScore = getTankScore(tankEid);
     const currentHealth = getTankHealth(tankEid);
+    const currentBattleState = getBattleState(tankEid);
 
     const isShooting = TankController.shoot[tankEid] > 0;
     const [currentTankX, currentTankY] = RigidBodyState.position.getBatch(tankEid);
@@ -118,7 +119,7 @@ export function calculateReward(
     // const currentEnemies = findTankEnemiesEids(tankEid);
     // const currentAllies = findTankAlliesEids(tankEid);
     // const currentDangerBullets = findTankDangerBullets(tankEid);
-    const currentBattleState = getBattleState(tankEid);
+    const tankColliderRadius = HeuristicsData.approxColliderRadius[tankEid];
 
     const beforePredictEnemiesData = TankInputTensor.enemiesData.getBatch(tankEid);
     const beforePredictEnemiesEids = beforePredictEnemiesData.reduce((acc, v, i) => {
@@ -170,6 +171,7 @@ export function calculateReward(
     const bulletAvoidanceResult = calculateBulletAvoidanceReward(
         currentTankX,
         currentTankY,
+        tankColliderRadius,
         beforePredictBulletsEids,
     );
     rewards.positioning.bulletAvoidance = bulletAvoidanceResult.reward;
@@ -289,8 +291,9 @@ function analyzeAiming(
         const timeDistToEnemy = distToEnemy / BULLET_SPEED;
         const futureEnemyX = enemyX + enemyVX * timeDistToEnemy;
         const futureEnemyY = enemyY + enemyVY * timeDistToEnemy;
+        const enemyColliderRadius = HeuristicsData.approxColliderRadius[enemyId];
 
-        const aimQuality = computeAimQuality(tankX, tankY, turretTargetX, turretTargetY, futureEnemyX, futureEnemyY);
+        const aimQuality = computeAimQuality(tankX, tankY, turretTargetX, turretTargetY, futureEnemyX, futureEnemyY, enemyColliderRadius);
 
         // Отслеживаем лучшее прицеливание
         if (aimQuality > bestEnemyAimQuality) {
@@ -312,8 +315,9 @@ function analyzeAiming(
         const timeDistToAlly = distToAlly / BULLET_SPEED;
         const futureAllyX = allyX + allyVX * timeDistToAlly;
         const futureAllyY = allyY + allyVY * timeDistToAlly;
+        const allyColliderRadius = HeuristicsData.approxColliderRadius[allyId];
 
-        let aimQuality = computeAimQuality(tankX, tankY, turretTargetX, turretTargetY, futureAllyX, futureAllyY);
+        let aimQuality = computeAimQuality(tankX, tankY, turretTargetX, turretTargetY, futureAllyX, futureAllyY, allyColliderRadius);
 
         if (bestEnemyAimQuality > 0 && distToAlly > bestEnemyDistance) {
             const distDiff = 1 - (distToAlly - bestEnemyDistance) / distToAlly;
@@ -341,6 +345,7 @@ function computeAimQuality(
     turretTargetY: number,
     enemyX: number,
     enemyY: number,
+    colliderRadius: number,
 ): number {
     // Вектор от танка к турели
     const tankToTurretTargetX = turretTargetX - tankX;
@@ -380,7 +385,7 @@ function computeAimQuality(
     const tangentialDistance = sin(angle) * tankToEnemyDist;
     // Вычисляем качество прицеливания для касательного выстрела
     // Награда за выстрел, проходящий на оптимальном расстоянии от противника
-    const tangentialAimQuality = smoothstep(TANK_RADIUS * 1.5, 0, abs(tangentialDistance));
+    const tangentialAimQuality = smoothstep(colliderRadius * 1.5, 0, abs(tangentialDistance));
 
     return 0.2 * angleAimQuality + 0.8 * tangentialAimQuality;
 }
@@ -419,9 +424,10 @@ function calculateEnemyDistanceReward(
         const enemyId = beforePredictEnemiesEids[i];
         const enemyX = RigidBodyState.position.get(enemyId, 0);
         const enemyY = RigidBodyState.position.get(enemyId, 1);
+        const colliderRadius = HeuristicsData.approxColliderRadius[enemyId];
 
         const distToEnemy = hypot(tankX - enemyX, tankY - enemyY);
-        const minDist = TANK_RADIUS * 2;
+        const minDist = colliderRadius * 2;
         const maxDist = 600;
 
         if (distToEnemy < minDist) {
@@ -453,9 +459,10 @@ function calculateAllyDistanceReward(
         const allyId = beforePredictAlliesEids[i];
         const allyX = RigidBodyState.position.get(allyId, 0);
         const allyY = RigidBodyState.position.get(allyId, 1);
+        const colliderRadius = HeuristicsData.approxColliderRadius[allyId];
 
         const distToAlly = hypot(tankX - allyX, tankY - allyY);
-        const minDist = TANK_RADIUS * 2;
+        const minDist = colliderRadius * 2;
 
         if (distToAlly < minDist) {
             // Штраф за слишком близкое расстояние
@@ -470,6 +477,7 @@ function calculateAllyDistanceReward(
 function calculateBulletAvoidanceReward(
     tankX: number,
     tankY: number,
+    tankColliderRadius: number,
     beforePredictBulletsEids: number[],
 ): { reward: number; maxDangerLevel: number } {
     let reward = 0;
@@ -485,6 +493,7 @@ function calculateBulletAvoidanceReward(
         const bulletResult = analyzeBullet(
             tankX,
             tankY,
+            tankColliderRadius,
             bulletX,
             bulletY,
             bulletVx,
@@ -502,6 +511,7 @@ function calculateBulletAvoidanceReward(
 function analyzeBullet(
     tankX: number,
     tankY: number,
+    tankColliderRadius: number,
     bulletX: number,
     bulletY: number,
     bulletVx: number,
@@ -531,7 +541,7 @@ function analyzeBullet(
     // Расстояние в точке наибольшего сближения
     const minDist = hypot(closestPointX - tankX, closestPointY - tankY);
 
-    const dangerLevel = smoothstep(TANK_RADIUS * 1.5, TANK_RADIUS / 2, minDist);
+    const dangerLevel = smoothstep(tankColliderRadius * 1.5, tankColliderRadius / 2, minDist);
 
     const reward = dangerLevel < 0.2
         ? (1 - dangerLevel) * WEIGHTS.BULLET_AVOIDANCE.AVOID_QUALITY
