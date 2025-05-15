@@ -38,13 +38,6 @@ export class AttentionPoolLayer extends tf.layers.Layer {
         const weightedTokens = tf.mul(token, weights);
         const pooledToken = tf.sum(weightedTokens, 1);
 
-        // @ts-expect-error
-        if (globalThis.debugAttnPool === true) {
-            const max = tf.mean(weights).dataSync()[0];
-            const mean = tf.mean(weights).dataSync()[0];
-            console.log('>>', max, mean, max > mean * 2);
-        }
-
         return pooledToken;
     }
 }
