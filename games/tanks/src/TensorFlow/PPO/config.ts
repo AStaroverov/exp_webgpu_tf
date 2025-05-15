@@ -44,17 +44,17 @@ export const DEFAULT_EXPERIMENT: Config = {
     clipNorm: 20,
     // PPO-specific parameters
     gamma: 0.92,
-    policyEpochs: 4,
+    policyEpochs: 2,
     policyClipRatio: 0.2,
     policyEntropyCoeff: 0.01,
 
-    valueEpochs: 4,
+    valueEpochs: 2,
     valueClipRatio: 0.4,
     valueLossCoeff: 0.5,
 
     klConfig: {
         target: 0.02,
-        high: 0.04,
+        high: 0.03,
         low: 0.01,
         max: 0.5,
     },
@@ -66,13 +66,13 @@ export const DEFAULT_EXPERIMENT: Config = {
         max: 1e-3,
     },
 
-    batchSize: isMac ? 200 : 2_000,
+    batchSize: isMac ? 200 : 3_000,
     miniBatchSize: isMac ? 128 : 128,
 
     // Training parameters - FRAMES = 30sec / TICK_TIME_SIMULATION
     episodeFrames: Math.round(20 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: isMac ? 3 : 12,
+    workerCount: isMac ? 3 : 8,
     // Training control
     savePath: isMac ? 'PPO_MHA' : 'PPO_MHA_V1',
     // fsModelPath: 'v20',
