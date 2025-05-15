@@ -193,7 +193,7 @@ export function createGame({ width, height, withPlayer }: {
         RenderDI.renderFrame?.(delta);
         // stats.end();
         // stats.update();
-        //
+
         destroyFrame(delta);
 
         inputFrame();
@@ -215,6 +215,11 @@ export function createGame({ width, height, withPlayer }: {
         GameDI.physicalWorld = null!;
         GameDI.gameTick = null!;
         GameDI.destroy = null!;
+
+        RenderDI.canvas = null!;
+        RenderDI.device = null!;
+        RenderDI.context = null!;
+        RenderDI.renderFrame = null!;
 
         PlayerEnvDI.window = null!;
         PlayerEnvDI.document = null!;
