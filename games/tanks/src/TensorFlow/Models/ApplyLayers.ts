@@ -273,6 +273,8 @@ export function applyAttentionPool(
 }
 
 export function applyEncoding(token: tf.SymbolicTensor): tf.SymbolicTensor {
+    return token;
+
     const N = token.shape[1]!;
 
     const posEmbedding = N === 1

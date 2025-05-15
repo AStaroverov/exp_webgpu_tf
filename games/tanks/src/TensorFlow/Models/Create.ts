@@ -36,24 +36,34 @@ type NetworkConfig = {
     dim: number;
     heads: number;
     dropout?: number;
-    denseLayers: [ActivationIdentifier, number][];
+    hiddenDenseLayers: [ActivationIdentifier, number][];
+    flatDenseLayers: [ActivationIdentifier, number][];
 }
 
 const policyNetworkConfig: NetworkConfig = {
     dim: 64,
     heads: 4,
-    denseLayers: [
-        ['relu', 1024],
+    hiddenDenseLayers: [
+        ['relu', 64 * 2],
+        ['relu', 64],
+        ['relu', 32],
+    ] as [ActivationIdentifier, number][],
+    flatDenseLayers: [
         ['relu', 512],
+        ['relu', 256],
         ['relu', 64],
     ] as [ActivationIdentifier, number][],
 };
 const valueNetworkConfig: NetworkConfig = {
     dim: 16,
     heads: 1,
-    denseLayers: [
-        ['relu', 256],
-        ['relu', 32],
+    hiddenDenseLayers: [
+        ['relu', 16 * 2],
+        ['relu', 16],
+    ] as [ActivationIdentifier, number][],
+    flatDenseLayers: [
+        ['relu', 128],
+        ['relu', 16],
     ] as [ActivationIdentifier, number][],
 };
 
@@ -143,13 +153,20 @@ function createBaseNetwork(modelName: Model, config: typeof policyNetworkConfig)
 
     const normTransformedEnvToken = tf.layers.layerNormalization({ name: modelName + '_normTransformedEnvToken' }).apply(transformedEnvToken) as tf.SymbolicTensor;
 
-    const flattenToken = tf.layers.flatten({ name: modelName + '_flattenToken' }).apply(normTransformedEnvToken) as tf.SymbolicTensor;
-
-    const mlp = applyDenseLayers(
-        modelName + '_mlp',
-        flattenToken,
-        config.denseLayers,
+    const hiddenMLP = applyDenseLayers(
+        modelName + '_hiddenMLP',
+        normTransformedEnvToken,
+        config.hiddenDenseLayers,
     );
 
-    return { inputs, network: mlp };
+    const flattenFinalToken = tf.layers.flatten({ name: modelName + '_flattenFinalToken' }).apply(hiddenMLP) as tf.SymbolicTensor;
+    const normFinalToken = tf.layers.layerNormalization({ name: modelName + '_normFinalToken' }).apply(flattenFinalToken) as tf.SymbolicTensor;
+
+    const flattenMLP = applyDenseLayers(
+        modelName + '_flattenMLP',
+        normFinalToken,
+        config.flatDenseLayers,
+    );
+
+    return { inputs, network: flattenMLP };
 }
