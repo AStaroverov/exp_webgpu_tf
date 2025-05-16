@@ -42,7 +42,7 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
 
     let weights = [];
     let totalWeight = 0;
-    for (let i = 0, minSuccessRatio = 0; i < mapIndexToConstructor.size; i++) {
+    for (let i = 0, minSuccessRatio = 1; i < mapIndexToConstructor.size; i++) {
         const successRatio = curriculumState.mapScenarioIndexToSuccessRatio[i] ?? 0;
         if (successRatio === 0 && minSuccessRatio < 0.75) {
             break;
