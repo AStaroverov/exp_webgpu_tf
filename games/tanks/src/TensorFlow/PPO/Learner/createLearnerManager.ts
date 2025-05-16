@@ -40,10 +40,13 @@ export function createLearnerManager() {
         }
 
         for (const [scenarioIndex, successRatioHistory] of mapScenarioIndexToSuccessRatio) {
-            mapScenarioIndexToAvgSuccessRatio.set(
-                scenarioIndex,
-                successRatioHistory.toArray().reduce((acc, v) => acc + v, 0) / successRatioHistory.getBufferLength(),
-            );
+            const length = successRatioHistory.getBufferLength();
+            const size = successRatioHistory.getSize();
+            const ratio = length < size
+                ? 0.5
+                : successRatioHistory.toArray().reduce((acc, v) => acc + v, 0) / length;
+
+            mapScenarioIndexToAvgSuccessRatio.set(scenarioIndex, ratio);
         }
 
         return {
