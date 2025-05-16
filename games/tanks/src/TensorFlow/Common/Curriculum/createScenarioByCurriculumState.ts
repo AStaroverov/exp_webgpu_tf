@@ -17,6 +17,7 @@ import {
     createScenarioWithHistoricalAgents,
     indexScenarioWithHistoricalAgents,
 } from './createScenarioWithHistoricalAgents.ts';
+import { min } from '../../../../../../lib/math.ts';
 
 type ScenarioOptions = Parameters<typeof createBattlefield>[0];
 
@@ -41,22 +42,26 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
 
     let weights = [];
     let totalWeight = 0;
+    for (let i = 0, minSuccessRatio = 0; i < mapIndexToConstructor.size; i++) {
+        const successRatio = curriculumState.mapScenarioIndexToSuccessRatio[i] ?? 0;
+        if (successRatio === 0 && minSuccessRatio < 0.75) {
+            break;
+        }
 
-    for (const [index, createScenario] of mapIndexToConstructor.entries()) {
-        const successRatio = curriculumState.mapScenarioIndexToSuccessRatio[Number(index)] ?? 0;
         const weight = 1 - successRatio;
 
-        weights.push({ createScenario, weight });
+        weights.push(weight);
         totalWeight += weight;
-
-        if (successRatio < 0.75) break;
+        minSuccessRatio = min(minSuccessRatio, successRatio);
     }
 
-    let r = random() * totalWeight;
-
-    for (const { createScenario, weight } of weights) {
+    for (let i = 0, r = random() * totalWeight; i < weights.length; i++) {
+        const weight = weights[i];
         if (r < weight) {
-            constructor = createScenario;
+            constructor = mapIndexToConstructor.get(i) ?? (() => {
+                console.warn(`Scenario ${ i } not found, using default scenario static`);
+                return createScenarioStatic;
+            })();
             break;
         }
         r -= weight;
