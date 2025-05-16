@@ -1,11 +1,16 @@
 import './index.css';
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
 
-import { BaseScreen } from './Components/BaseScreen.tsx';
+import { BaseScreen } from './Widgets/BaseScreen.tsx';
+import { GameMenuEffects } from './Effects/GameMenu.ts';
+import { GameStateEffects } from './State/Game/GameState.ts';
 
-ReactDOM.createRoot(document.getElementById('ui')!).render(
-    <React.StrictMode>
+createRoot(document.getElementById('ui')!).render(
+    <StrictMode>
         <BaseScreen className="w-full h-full"/>
-    </React.StrictMode>,
+    </StrictMode>,
 );
+
+GameStateEffects().subscribe();
+GameMenuEffects().subscribe();

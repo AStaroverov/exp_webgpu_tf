@@ -15,16 +15,10 @@ export function randomSign(): number {
     return random() > 0.5 ? 1 : -1;
 }
 
-export function getRandomId(): string {
+export function randomId(): string {
     return String(trunc(Date.now() * Math.random()));
 }
 
-export function getShortRandomId(): string {
-    return getRandomId().slice(-6);
-}
-
-const CHARACTERS = 'abcdefghijklmnopqrstuvwxyz';
-
-export function getRandomChar(): string {
-    return CHARACTERS[randomRangeInt(0, CHARACTERS.length - 1)];
+export function randomShortId(): string {
+    return randomId().slice(-6);
 }

@@ -10,9 +10,26 @@ import { CollisionGroup } from '../../../Physical/createRigid.ts';
 import { min, smoothstep } from '../../../../../../../lib/math.ts';
 import { PlayerRef } from '../../Components/PlayerRef.ts';
 import { Score } from '../../Components/Score.ts';
-import { removeComponent } from 'bitecs';
+import { EntityId, removeComponent } from 'bitecs';
 import { TeamRef } from '../../Components/TeamRef.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../../../src/ECS/Components/Transform.ts';
+
+export function destroyTank(tankEid: EntityId) {
+    // turret
+    const turretEid = Tank.turretEId[tankEid];
+    for (let i = 0; i < Children.entitiesCount[turretEid]; i++) {
+        const eid = Children.entitiesIds.get(turretEid, i);
+        tearOffTankPart(eid, false);
+    }
+    Children.removeAllChildren(turretEid);
+    // tank parts
+    for (let i = 0; i < Children.entitiesCount[tankEid]; i++) {
+        const partEid = Children.entitiesIds.get(tankEid, i);
+        tearOffTankPart(partEid, false);
+    }
+    Children.removeAllChildren(tankEid);
+    removeTankComponentsWithoutParts(tankEid);
+}
 
 export function removeTankComponentsWithoutParts(tankEid: number) {
     const aimEid = Tank.aimEid[tankEid];

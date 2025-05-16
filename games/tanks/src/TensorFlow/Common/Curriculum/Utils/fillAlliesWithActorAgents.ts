@@ -14,7 +14,7 @@ export async function fillAlliesWithActorAgents(episode: Scenario) {
 
         if (getTankTeamId(tankEid) !== activeTeam) continue;
 
-        const agent = new CurrentActorAgent(tankEid);
+        const agent = new CurrentActorAgent(tankEid, true);
         episode.addAgent(tankEid, agent);
         newAgents.push(agent);
     }

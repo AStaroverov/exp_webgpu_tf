@@ -18,7 +18,7 @@ export async function createScenarioStatic(options: Parameters<typeof createBatt
     const initialTeamHealth = getTeamHealth(tanks);
 
     const mapTankIdToAgent = new Map<number, TankAgent>();
-    mapTankIdToAgent.set(tanks[0], new CurrentActorAgent(tanks[0]));
+    mapTankIdToAgent.set(tanks[0], new CurrentActorAgent(tanks[0], true));
 
     await Promise.all(Array.from(mapTankIdToAgent.values()).map(agent => agent.sync?.()));
 

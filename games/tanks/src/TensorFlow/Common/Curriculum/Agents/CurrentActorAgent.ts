@@ -1,6 +1,5 @@
 import * as tf from '@tensorflow/tfjs';
 import { Variable } from '@tensorflow/tfjs';
-import '@tensorflow/tfjs-backend-wasm';
 import { act } from '../../../PPO/train.ts';
 import { prepareInputArrays } from '../../InputArrays.ts';
 import { disposeNetwork, getNetwork } from '../../../Models/Utils.ts';
@@ -30,7 +29,7 @@ export class CurrentActorAgent implements TankAgent {
     private memory = new AgentMemory();
     private policyNetwork?: tf.LayersModel;
 
-    constructor(public readonly tankEid: number) {
+    constructor(public readonly tankEid: number, private train: boolean) {
     }
 
     public getVersion() {
@@ -71,6 +70,8 @@ export class CurrentActorAgent implements TankAgent {
             ),
         );
 
+        if (!this.train) return;
+
         const stateReward = calculateReward(
             this.tankEid,
             width,
@@ -92,6 +93,8 @@ export class CurrentActorAgent implements TankAgent {
         height: number,
         gameOver: boolean,
     ) {
+        if (!this.train) return;
+
         const isDead = getTankHealth(this.tankEid) <= 0;
         const isDone = gameOver || isDead;
         const reward = calculateReward(
