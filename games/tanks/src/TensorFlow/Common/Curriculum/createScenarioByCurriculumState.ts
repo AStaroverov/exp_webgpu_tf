@@ -39,14 +39,27 @@ export const scenariosCount = mapIndexToConstructor.size;
 export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: ScenarioOptions): Promise<Scenario> {
     let constructor = createScenarioStatic;
 
-    for (const [index, createScenario] of mapIndexToConstructor) {
-        constructor = createScenario;
+    let weights = [];
+    let totalWeight = 0;
 
+    for (const [index, createScenario] of mapIndexToConstructor.entries()) {
         const successRatio = curriculumState.mapScenarioIndexToSuccessRatio[Number(index)] ?? 0;
+        const weight = 1 - successRatio;
 
-        if (successRatio < 0.75 || random() < 0.1) {
+        weights.push({ createScenario, weight });
+        totalWeight += weight;
+
+        if (successRatio < 0.75) break;
+    }
+
+    let r = random() * totalWeight;
+
+    for (const { createScenario, weight } of weights) {
+        if (r < weight) {
+            constructor = createScenario;
             break;
         }
+        r -= weight;
     }
 
     return constructor(options);
