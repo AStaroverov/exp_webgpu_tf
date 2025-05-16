@@ -58,7 +58,7 @@ export function applyDenseLayers(name: string, layer: tf.SymbolicTensor, hiddenL
 }
 
 
-export function applyTransformLayers(name: string, {
+export function applySelfTransformLayers(name: string, {
     depth,
     numHeads,
     dropout,
@@ -73,7 +73,7 @@ export function applyTransformLayers(name: string, {
 }) {
     let x = token;
     for (let i = 0; i < depth; i++) {
-        x = applyTransformerLayer(`${ name }/transformer${ i }`, {
+        x = applySelfTransformerLayer(`${ name }/transformer${ i }`, {
             numHeads,
             dropout,
             token: x,
@@ -106,24 +106,12 @@ export function convertInputsToTokens(
         }).apply(x) as tf.SymbolicTensor;
     };
 
-    const controllerTok =
-        applyEncoding(
-            reshape(tokenProj(controllerInput, dModel, controllerInput.name)));
-    const battleTok =
-        applyEncoding(
-            reshape(tokenProj(battleInput, dModel, battleInput.name)));
-    const tankTok =
-        applyEncoding(
-            reshape(tokenProj(tankInput, dModel, tankInput.name)));
-    const alliesTok =
-        applyEncoding(
-            tokenProj(alliesInput, dModel, alliesInput.name));
-    const enemiesTok =
-        applyEncoding(
-            tokenProj(enemiesInput, dModel, enemiesInput.name));
-    const bulletsTok =
-        applyEncoding(
-            tokenProj(bulletsInput, dModel, bulletsInput.name));
+    const controllerTok = reshape(tokenProj(controllerInput, dModel, controllerInput.name));
+    const battleTok = reshape(tokenProj(battleInput, dModel, battleInput.name));
+    const tankTok = reshape(tokenProj(tankInput, dModel, tankInput.name));
+    const alliesTok = tokenProj(alliesInput, dModel, alliesInput.name);
+    const enemiesTok = tokenProj(enemiesInput, dModel, enemiesInput.name);
+    const bulletsTok = tokenProj(bulletsInput, dModel, bulletsInput.name);
 
     return {
         controllerTok,
@@ -207,7 +195,53 @@ export function applySelfAttentionLayer(
     return output;
 }
 
-export function applyTransformerLayer(
+export function applyCrossTransformerLayer(
+    name: string,
+    {
+        numHeads,
+        dropout,
+        qTok,
+        kvTok,
+        kvMask,
+    }: {
+        numHeads: number,
+        dropout?: number;
+        qTok: tf.SymbolicTensor,
+        kvTok: tf.SymbolicTensor,
+        kvMask?: tf.SymbolicTensor,
+    },
+) {
+    const dModel = qTok.shape[qTok.shape.length - 1]!;
+    const crossAttn = applyCrossAttentionLayer(name, numHeads, { qTok, kvTok, kvMask });
+
+    const attnProj = dropout == null ? crossAttn : tf.layers.dropout({ rate: dropout, name: `${ name }_drop` })
+        .apply(crossAttn) as tf.SymbolicTensor;
+
+    const norm2 = tf.layers.layerNormalization({
+        name: `${ name }_ln2`,
+        epsilon: 1e-5,
+    }).apply(attnProj) as tf.SymbolicTensor;
+
+    const ffnInner = tf.layers.dense({
+        name: `${ name }_ffn1`,
+        units: dModel * 4,
+        useBias: true,
+        activation: 'relu',
+    }).apply(norm2) as tf.SymbolicTensor;
+
+    const ffnOut = tf.layers.dense({
+        name: `${ name }_ffn2`,
+        units: dModel,
+        useBias: true,
+    }).apply(ffnInner) as tf.SymbolicTensor;
+
+    const ffnDrop = dropout == null ? ffnOut : tf.layers.dropout({ rate: dropout, name: `${ name }_ffnDrop` })
+        .apply(ffnOut) as tf.SymbolicTensor;
+
+    return ffnDrop;
+}
+
+export function applySelfTransformerLayer(
     name: string,
     {
         numHeads,
@@ -273,8 +307,6 @@ export function applyAttentionPool(
 }
 
 export function applyEncoding(token: tf.SymbolicTensor): tf.SymbolicTensor {
-    return token;
-
     const N = token.shape[1]!;
 
     const posEmbedding = N === 1

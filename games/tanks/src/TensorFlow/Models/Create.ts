@@ -10,10 +10,9 @@ import {
 import { ACTION_DIM } from '../Common/consts.ts';
 import { CONFIG } from '../PPO/config.ts';
 import {
-    applyCrossAttentionLayer,
+    applyCrossTransformerLayer,
     applyDenseLayers,
-    applyEncoding,
-    applyTransformLayers,
+    applySelfTransformLayers,
     convertInputsToTokens,
     createInputs,
 } from './ApplyLayers.ts';
@@ -36,34 +35,26 @@ type NetworkConfig = {
     dim: number;
     heads: number;
     dropout?: number;
-    hiddenDenseLayers: [ActivationIdentifier, number][];
-    flatDenseLayers: [ActivationIdentifier, number][];
+    finalMLP: [ActivationIdentifier, number][];
 }
 
 const policyNetworkConfig: NetworkConfig = {
     dim: 64,
     heads: 4,
-    hiddenDenseLayers: [
-        ['relu', 64 * 2],
-        ['relu', 64],
-        ['relu', 32],
-    ] as [ActivationIdentifier, number][],
-    flatDenseLayers: [
+    finalMLP: [
         ['relu', 512],
         ['relu', 256],
-        ['relu', 64],
+        ['relu', 256],
+        ['relu', 128],
     ] as [ActivationIdentifier, number][],
 };
 const valueNetworkConfig: NetworkConfig = {
     dim: 16,
     heads: 1,
-    hiddenDenseLayers: [
-        ['relu', 16 * 2],
-        ['relu', 16],
-    ] as [ActivationIdentifier, number][],
-    flatDenseLayers: [
+    finalMLP: [
         ['relu', 128],
-        ['relu', 16],
+        ['relu', 64],
+        ['relu', 32],
     ] as [ActivationIdentifier, number][],
 };
 
@@ -110,27 +101,24 @@ function createBaseNetwork(modelName: Model, config: typeof policyNetworkConfig)
     const inputs = createInputs(modelName);
     const tokens = convertInputsToTokens(inputs, config.dim);
 
-    const tankToEnemiesAttn = applyEncoding(
-        applyCrossAttentionLayer(modelName + '_tankToEnemiesAttn', config.heads, {
-            qTok: tokens.tankTok,
-            kvTok: tokens.enemiesTok,
-            kvMask: inputs.enemiesMaskInput,
-        }),
-    );
-    const tankToAlliesAttn = applyEncoding(
-        applyCrossAttentionLayer(modelName + '_tankToAlliesAttn', config.heads, {
-            qTok: tokens.tankTok,
-            kvTok: tokens.alliesTok,
-            kvMask: inputs.alliesMaskInput,
-        }),
-    );
-    const tankToBulletsAttn = applyEncoding(
-        applyCrossAttentionLayer(modelName + '_tankToBulletsAttn', config.heads, {
-            qTok: tokens.tankTok,
-            kvTok: tokens.bulletsTok,
-            kvMask: inputs.bulletsMaskInput,
-        }),
-    );
+    const tankToEnemiesAttn = applyCrossTransformerLayer(modelName + '_tankToEnemiesAttn', {
+        numHeads: config.heads,
+        qTok: tokens.tankTok,
+        kvTok: tokens.enemiesTok,
+        kvMask: inputs.enemiesMaskInput,
+    });
+    const tankToAlliesAttn = applyCrossTransformerLayer(modelName + '_tankToAlliesAttn', {
+        numHeads: config.heads,
+        qTok: tokens.tankTok,
+        kvTok: tokens.alliesTok,
+        kvMask: inputs.alliesMaskInput,
+    });
+    const tankToBulletsAttn = applyCrossTransformerLayer(modelName + '_tankToBulletsAttn', {
+        numHeads: config.heads,
+        qTok: tokens.tankTok,
+        kvTok: tokens.bulletsTok,
+        kvMask: inputs.bulletsMaskInput,
+    });
 
     const envToken = tf.layers.concatenate({ name: modelName + '_envToken', axis: 1 }).apply([
         tokens.controllerTok,
@@ -141,7 +129,7 @@ function createBaseNetwork(modelName: Model, config: typeof policyNetworkConfig)
         tankToBulletsAttn,
     ]) as tf.SymbolicTensor;
 
-    const transformedEnvToken = applyTransformLayers(
+    const transformedEnvToken = applySelfTransformLayers(
         modelName + '_transformedEnvToken',
         {
             depth: 2,
@@ -151,22 +139,14 @@ function createBaseNetwork(modelName: Model, config: typeof policyNetworkConfig)
         },
     );
 
-    const normTransformedEnvToken = tf.layers.layerNormalization({ name: modelName + '_normTransformedEnvToken' }).apply(transformedEnvToken) as tf.SymbolicTensor;
-
-    const hiddenMLP = applyDenseLayers(
-        modelName + '_hiddenMLP',
-        normTransformedEnvToken,
-        config.hiddenDenseLayers,
-    );
-
-    const flattenFinalToken = tf.layers.flatten({ name: modelName + '_flattenFinalToken' }).apply(hiddenMLP) as tf.SymbolicTensor;
+    const flattenFinalToken = tf.layers.flatten({ name: modelName + '_flattenFinalToken' }).apply(transformedEnvToken) as tf.SymbolicTensor;
     const normFinalToken = tf.layers.layerNormalization({ name: modelName + '_normFinalToken' }).apply(flattenFinalToken) as tf.SymbolicTensor;
 
-    const flattenMLP = applyDenseLayers(
-        modelName + '_flattenMLP',
+    const finalMLP = applyDenseLayers(
+        modelName + '_finalMLP',
         normFinalToken,
-        config.flatDenseLayers,
+        config.finalMLP,
     );
 
-    return { inputs, network: flattenMLP };
+    return { inputs, network: finalMLP };
 }

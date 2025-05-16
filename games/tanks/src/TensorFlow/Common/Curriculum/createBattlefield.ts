@@ -4,10 +4,10 @@ import { query } from 'bitecs';
 import { Tank } from '../../../Game/ECS/Components/Tank.ts';
 import { TeamRef } from '../../../Game/ECS/Components/TeamRef.ts';
 
-export async function createBattlefield(options: { withPlayer: boolean }) {
+export function createBattlefield(options: { withPlayer: boolean }) {
     TenserFlowDI.enabled = true;
 
-    const game = await createGame({ width: 1400, height: 1200, ...options });
+    const game = createGame({ width: 1400, height: 1200, ...options });
 
     const getTankEids = () => {
         return [...query(game.world, [Tank])];

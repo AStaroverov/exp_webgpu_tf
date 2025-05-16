@@ -43,7 +43,6 @@ export class EpisodeManager {
 
     protected async beforeEpisode() {
         return createScenarioByCurriculumState(this.curriculumState, {
-            withRender: false,
             withPlayer: false,
         });
     }
