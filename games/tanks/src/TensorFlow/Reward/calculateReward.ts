@@ -31,26 +31,26 @@ const WEIGHTS = Object.freeze({
         SHOOTING_BAD_AIM: -0.1,
         SHOOTING_GOOD_AIM_PENALTY: -0.2,
     },
-    AIM_MULTIPLIER: 10,
+    AIM_MULTIPLIER: 30,
 
     MAP_BORDER: {
         BASE: 0.2,
         PENALTY: -1.0,
     },
-    MAP_BORDER_MULTIPLIER: 10,
+    MAP_BORDER_MULTIPLIER: 30,
 
     DISTANCE_KEEPING: {
         BASE: 0.2,
         PENALTY: -1.0,
     },
-    DISTANCE_KEEPING_MULTIPLIER: 10,
+    DISTANCE_KEEPING_MULTIPLIER: 30,
 
     // Dynamic rewards, small size in delta view
     BULLET_AVOIDANCE: {
         PENALTY: -0.2,
         AVOID_QUALITY: 0.2,
     },
-    BULLET_AVOIDANCE_MULTIPLIER: 2,
+    BULLET_AVOIDANCE_MULTIPLIER: 8,
 });
 
 export type ComponentRewards = {

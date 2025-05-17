@@ -67,7 +67,8 @@ export function createCommonDebug(manager: VisTestEpisodeManager) {
     return () => {
         return `
             <div>Workers: ${ CONFIG.workerCount }</div>
-            <div>Version: ${ manager.getVersion() } </div>
+            <div>Version: ${ manager.getVersion() }</div>
+            <div>Success: ${ manager.getSuccessRatio().toFixed(2) }</div>
         `;
     };
 }

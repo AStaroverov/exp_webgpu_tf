@@ -31,15 +31,24 @@ export class VisTestEpisodeManager extends EpisodeManager {
 
         if (memory == null || memory.actionRewards.length === 0) return 0;
 
-        const index = memory.actionRewards.length - 1;
-        const lastStateReward = memory.stateRewards[index];
-        const lastActionReward = memory.actionRewards[index];
-        return lastActionReward - lastStateReward;
+        let sum = 0;
+        const len = memory.actionRewards.length - 1;
+        for (let i = 0; i < len; i++) {
+            const lastStateReward = memory.stateRewards[i];
+            const lastActionReward = memory.actionRewards[i];
+
+            sum += lastActionReward - lastStateReward;
+        }
+        return sum;
     }
 
     public getVersion() {
         return this.currentScenario?.getAgents()
             .reduce((acc, agent) => max(acc, agent.getVersion?.() ?? 0), 0) ?? 0;
+    }
+
+    public getSuccessRatio() {
+        return this.currentScenario?.getSuccessRatio() ?? 0;
     }
 
     protected beforeEpisode() {
