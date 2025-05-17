@@ -42,7 +42,7 @@ export function createLearnerManager() {
         for (const [scenarioIndex, successRatioHistory] of mapScenarioIndexToSuccessRatio) {
             const length = successRatioHistory.getBufferLength();
             const size = successRatioHistory.getSize();
-            const ratio = length < size
+            const ratio = length < size / 2
                 ? 0.5
                 : successRatioHistory.toArray().reduce((acc, v) => acc + v, 0) / length;
 
