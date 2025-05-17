@@ -33,6 +33,8 @@ export type Config = {
     episodeFrames: number;              // Maximum number of frames to train on
     // Workers
     workerCount: number;                // Number of parallel workers
+    // perturbWeights
+    perturbWeightsScale: number;
     // Training control
     savePath: string;
     fsModelPath?: string;
@@ -53,9 +55,9 @@ export const DEFAULT_EXPERIMENT: Config = {
     valueLossCoeff: 0.5,
 
     klConfig: {
-        target: 0.015,
-        high: 0.025,
-        low: 0.005,
+        target: 0.01,
+        high: 0.02,
+        low: 0.0075,
         max: 0.5,
     },
     lrConfig: {
@@ -73,6 +75,8 @@ export const DEFAULT_EXPERIMENT: Config = {
     episodeFrames: Math.round(40 * 1000 / TICK_TIME_SIMULATION),
     // Workers
     workerCount: isMac ? 3 : 9,
+    // perturbWeights
+    perturbWeightsScale: 0.02,
     // Training control
     savePath: isMac ? 'PPO_MHA' : 'PPO_MHA_V1',
     // fsModelPath: 'v20',
