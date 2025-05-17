@@ -4,12 +4,12 @@ import { isNil } from 'lodash-es';
 import { getMatrixTranslation, LocalTransform } from '../../../../../../src/ECS/Components/Transform.ts';
 import { Tank } from '../Components/Tank.ts';
 import { PlayerEnvDI } from '../../DI/PlayerEnvDI.ts';
+import { RenderDI } from '../../DI/RenderDI.ts';
 
 export function createPlayerTankPositionSystem({ document } = PlayerEnvDI) {
     let move = 0;
     let rotation = 0;
-
-    document.addEventListener('keydown', (event) => {
+    const onKeyDown = (event: KeyboardEvent) => {
         switch (event.key) {
             case 'w':
             case 'ArrowUp': {
@@ -36,9 +36,8 @@ export function createPlayerTankPositionSystem({ document } = PlayerEnvDI) {
                 break;
             }
         }
-    });
-
-    document.addEventListener('keyup', (event) => {
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
         switch (event.key) {
             case 'w':
             case 's':
@@ -55,62 +54,91 @@ export function createPlayerTankPositionSystem({ document } = PlayerEnvDI) {
                 break;
             }
         }
-    });
+    };
 
-    return () => {
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp);
+
+    const tick = () => {
         if (PLAYER_REFS.tankPid) {
             TankController.setMove$(PLAYER_REFS.tankPid, move);
             TankController.setRotate$(PLAYER_REFS.tankPid, rotation);
         }
     };
+    const destroy = () => {
+        document.removeEventListener('keydown', onKeyDown);
+        document.removeEventListener('keyup', onKeyUp);
+    };
+
+    return { tick, destroy };
 }
 
 export function createPlayerTankTurretRotationSystem({ document } = PlayerEnvDI) {
     let lastEvent: undefined | MouseEvent;
-    document.addEventListener('mousemove', (event) => {
+    let callback = (event: MouseEvent) => {
         lastEvent = event;
-    });
+    };
+    document.addEventListener('mousemove', callback);
 
-    return () => {
+    const tick = () => {
         if (PLAYER_REFS.tankPid && lastEvent) {
             const currentPosition = getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[PLAYER_REFS.tankPid]));
             TankController.setTurretDir$(PLAYER_REFS.tankPid, lastEvent.clientX - currentPosition[0], lastEvent.clientY - currentPosition[1]);
         }
     };
+    const destroy = () => {
+        document.removeEventListener('mousemove', callback);
+        lastEvent = undefined;
+    };
+
+    return { tick, destroy };
 }
 
-export function createPlayerTankBulletSystem({ document, container } = PlayerEnvDI) {
-    let shooting = false;
-    document.addEventListener('keydown', (event) => {
+export function createPlayerTankBulletSystem({ document } = PlayerEnvDI, { canvas } = RenderDI,
+) {
+    let shooting = 0;
+    const onKeyDown = (event: KeyboardEvent) => {
         event.preventDefault();
         switch (event.code) {
             case 'Space': {
-                shooting = true;
+                shooting = 1;
                 break;
             }
         }
-    });
-    document.addEventListener('keyup', (event) => {
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
         event.preventDefault();
         switch (event.code) {
             case 'Space': {
-                shooting = false;
+                shooting = -1;
                 break;
             }
         }
-    });
-
-    container.addEventListener('mousedown', (event) => {
+    };
+    const onMouseDown = (event: MouseEvent) => {
         event.preventDefault();
-        shooting = true;
-    });
-
-    container.addEventListener('mouseup', (event) => {
+        shooting = 1;
+    };
+    const onMouseUp = (event: MouseEvent) => {
         event.preventDefault();
-        shooting = false;
-    });
+        shooting = -1;
+    };
 
-    return () => {
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp);
+    canvas.addEventListener('mousedown', onMouseDown);
+    canvas.addEventListener('mouseup', onMouseUp);
+
+    const tick = () => {
         !isNil(PLAYER_REFS.tankPid) && TankController.setShooting$(PLAYER_REFS.tankPid, shooting);
     };
+
+    const destroy = () => {
+        document.removeEventListener('keydown', onKeyDown);
+        document.removeEventListener('keyup', onKeyUp);
+        canvas.removeEventListener('mousedown', onMouseDown);
+        canvas.removeEventListener('mouseup', onMouseUp);
+    };
+
+    return { tick, destroy };
 }

@@ -26,7 +26,6 @@ import { createDrawGrassSystem } from './ECS/Systems/Render/Grass/createDrawGras
 import { createRigidBodyStateSystem } from './ECS/Systems/createRigidBodyStateSystem.ts';
 import { createDestroySystem } from './ECS/Systems/createDestroySystem.ts';
 import { RenderDI } from './DI/RenderDI.ts';
-import { noop } from 'lodash-es';
 import { PlayerEnvDI } from './DI/PlayerEnvDI.ts';
 import { TenserFlowDI } from './DI/TenserFlowDI.ts';
 import { createVisualizationTracksSystem } from './ECS/Systems/Tank/createVisualizationTracksSystem.ts';
@@ -54,11 +53,9 @@ export function createGame({ width, height, withPlayer }: {
             return;
         }
 
+        RenderDI.destroy?.();
+
         if (canvas == null) {
-            RenderDI.renderFrame = null!;
-            RenderDI.canvas = null!;
-            RenderDI.device = null!;
-            RenderDI.context = null!;
             return;
         }
 
@@ -87,13 +84,42 @@ export function createGame({ width, height, withPlayer }: {
             postEffectFrame(commandEncoder);
             device.queue.submit([commandEncoder.finish()]);
         };
-    };
 
-    if (withPlayer) {
-        PlayerEnvDI.container = RenderDI.canvas;
-        PlayerEnvDI.document = document;
-        PlayerEnvDI.window = window;
-    }
+        RenderDI.destroy = () => {
+            RenderDI.canvas = null!;
+            RenderDI.device = null!;
+            RenderDI.context = null!;
+            RenderDI.renderFrame = null!;
+        };
+
+        if (withPlayer) {
+            PlayerEnvDI.destroy?.();
+
+            PlayerEnvDI.document = document;
+            PlayerEnvDI.window = window;
+
+            const updatePlayerBullet = createPlayerTankBulletSystem();
+            const updatePlayerTankPosition = createPlayerTankPositionSystem();
+            const updatePlayerTankTurretRotation = createPlayerTankTurretRotationSystem();
+
+            PlayerEnvDI.inputFrame = () => {
+                updatePlayerBullet.tick();
+                updatePlayerTankPosition.tick();
+                updatePlayerTankTurretRotation.tick();
+            };
+
+            PlayerEnvDI.destroy = () => {
+                updatePlayerBullet.destroy();
+                updatePlayerTankPosition.destroy();
+                updatePlayerTankTurretRotation.destroy();
+
+                PlayerEnvDI.document = null!;
+                PlayerEnvDI.window = null!;
+                PlayerEnvDI.destroy = null!;
+                PlayerEnvDI.inputFrame = null!;
+            };
+        }
+    };
 
     // const updateMap = createMapSystem();
     const execTransformSystem = createTransformSystem(world);
@@ -106,18 +132,6 @@ export function createGame({ width, height, withPlayer }: {
 
     const updateHitableSystem = createHitableSystem();
     const updateTankAliveSystem = createTankAliveSystem();
-
-    const inputFrame = withPlayer ? (() => {
-        const updatePlayerBullet = createPlayerTankBulletSystem();
-        const updatePlayerTankPosition = createPlayerTankPositionSystem();
-        const updatePlayerTankTurretRotation = createPlayerTankTurretRotationSystem();
-
-        return () => {
-            updatePlayerBullet();
-            updatePlayerTankPosition();
-            updatePlayerTankTurretRotation();
-        };
-    })() : noop;
 
     const eventQueue = new EventQueue(true);
     const physicalFrame = (delta: number) => {
@@ -196,7 +210,7 @@ export function createGame({ width, height, withPlayer }: {
 
         destroyFrame(delta);
 
-        inputFrame();
+        PlayerEnvDI.inputFrame?.();
     };
 
     GameDI.destroy = () => {
@@ -216,14 +230,8 @@ export function createGame({ width, height, withPlayer }: {
         GameDI.gameTick = null!;
         GameDI.destroy = null!;
 
-        RenderDI.canvas = null!;
-        RenderDI.device = null!;
-        RenderDI.context = null!;
-        RenderDI.renderFrame = null!;
-
-        PlayerEnvDI.window = null!;
-        PlayerEnvDI.document = null!;
-        PlayerEnvDI.container = null!;
+        RenderDI.destroy?.();
+        PlayerEnvDI.destroy?.();
 
         TenserFlowDI.enabled = false;
         TenserFlowDI.shouldCollectState = false;
