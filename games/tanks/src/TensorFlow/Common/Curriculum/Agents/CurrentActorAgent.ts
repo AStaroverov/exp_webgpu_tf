@@ -10,6 +10,8 @@ import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
 import { getTankHealth } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { clamp } from 'lodash-es';
 import { Model } from '../../../Models/def.ts';
+import { random } from '../../../../../../../lib/random.ts';
+import { CONFIG } from '../../../PPO/config.ts';
 
 export type TankAgent = {
     tankEid: number;
@@ -108,9 +110,9 @@ export class CurrentActorAgent implements TankAgent {
 
     private async load() {
         this.policyNetwork = await getNetwork(Model.Policy);
-        // if (random() > Math.pow(1 - 0.5, 1 / CONFIG.workerCount)) { // 50% for N workers
-        //     perturbWeights(this.policyNetwork, 0.02);
-        // }
+        if (CONFIG.perturbWeightsScale > 0 && random() > Math.pow(1 - 0.5, 1 / CONFIG.workerCount)) { // 50% for N workers
+            perturbWeights(this.policyNetwork, CONFIG.perturbWeightsScale);
+        }
     }
 }
 
