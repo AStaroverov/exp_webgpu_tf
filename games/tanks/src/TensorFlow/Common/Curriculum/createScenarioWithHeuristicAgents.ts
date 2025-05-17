@@ -14,7 +14,7 @@ export async function createScenarioWithHeuristicAgents(options: Parameters<type
     fillWithSimpleHeuristicAgents(episode, {
         move: randomRangeFloat(0.8, 1),
         aim: {
-            aimError: randomRangeFloat(1, 3),
+            aimError: randomRangeFloat(0.5, 2),
             shootChance: randomRangeFloat(0.2, 0.4),
         },
     });

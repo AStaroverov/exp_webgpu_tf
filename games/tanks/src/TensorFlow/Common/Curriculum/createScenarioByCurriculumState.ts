@@ -17,7 +17,7 @@ import {
     createScenarioWithHistoricalAgents,
     indexScenarioWithHistoricalAgents,
 } from './createScenarioWithHistoricalAgents.ts';
-import { min } from '../../../../../../lib/math.ts';
+import { max, min } from '../../../../../../lib/math.ts';
 
 type ScenarioOptions = Parameters<typeof createBattlefield>[0];
 
@@ -48,7 +48,8 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
             break;
         }
 
-        const weight = 1 - successRatio;
+        // don't learn scenarios with success ratio > 0.95
+        const weight = max(0, 0.95 - successRatio);
 
         weights.push(weight);
         totalWeight += weight;

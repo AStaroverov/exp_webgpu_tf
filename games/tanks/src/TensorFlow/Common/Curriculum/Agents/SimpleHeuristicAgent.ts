@@ -1,12 +1,12 @@
 import { RigidBodyState } from '../../../../Game/ECS/Components/Physical';
-import { hypot } from '../../../../../../../lib/math.ts';
+import { abs, hypot, min } from '../../../../../../../lib/math.ts';
 import { TankController } from '../../../../Game/ECS/Components/TankController.ts';
 import { getAimPosition, getTankHealth } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { findTankEnemiesEids } from '../../../../Game/ECS/Utils/snapshotTankInputTensor.ts';
 import { Actions, applyActionToTank } from '../../applyActionToTank.ts';
 import { TankAgent } from './CurrentActorAgent.ts';
 import { random, randomRangeFloat, randomSign } from '../../../../../../../lib/random.ts';
-import { clamp } from 'lodash-es';
+import { OrnsteinUhlenbeckNoise } from '../../../../../../../lib/OrnsteinUhlenbeckNoise.ts';
 
 export type SimpleHeuristicAgentFeatures = {
     move?: number;
@@ -18,6 +18,8 @@ export type SimpleHeuristicAgentFeatures = {
 
 export class SimpleHeuristicAgent implements TankAgent {
     private waypoint?: { x: number; y: number };
+    private ouNoiseX = new OrnsteinUhlenbeckNoise(0, 0.15, 0.3);
+    private ouNoiseY = new OrnsteinUhlenbeckNoise(0, 0.15, 0.3);
 
     constructor(
         public readonly tankEid: number,
@@ -34,7 +36,7 @@ export class SimpleHeuristicAgent implements TankAgent {
         const rotation = this.withMove() ? this.getRotationAction() : 0;
 
         const action: Actions = [
-            aim.shoot ? 1 : 0,
+            aim.shoot,
             move,
             rotation,
             aim.aimX,
@@ -93,25 +95,30 @@ export class SimpleHeuristicAgent implements TankAgent {
         const aimError = this.features.aim?.aimError ?? 0;
         const shootChance = this.features.aim?.shootChance ?? 0;
 
-        // --- вектор «к цели» ---
-        const [aimX, aimY] = getAimPosition(this.tankEid);
-        const targetX = RigidBodyState.position.get(targetId, 0);
-        const targetY = RigidBodyState.position.get(targetId, 1);
+        const [x0, y0] = getAimPosition(this.tankEid);
+        const x1 = RigidBodyState.position.get(targetId, 0);
+        const y1 = RigidBodyState.position.get(targetId, 1);
 
-        // --- дельта по компонентам ---
-        const dx = targetX - aimX;
-        const dy = targetY - aimY;
-
-        // --- стрельба, если почти соосно ---
-        const misalign = Math.abs(dx) + Math.abs(dy);  // L1-норма расхождения
+        const dx = x1 - x0;
+        const dy = y1 - y0;
+        const misalign = abs(dx) + abs(dy);
         const shoot = ((misalign < 100 && shootChance > random()) || random() > 0.9) ? 1 : -1;
+
+        const dist = hypot(dx, dy);
+        const step = min(dist, 1);
+        const baseX = dx / dist * step;
+        const baseY = dy / dist * step;
+
+        const noiseX = this.ouNoiseX.next() * aimError;
+        const noiseY = this.ouNoiseY.next() * aimError;
 
         return {
             shoot,
-            aimX: clamp(dx, -2, 2) * randomRangeFloat(1 - aimError / 10, 1 + aimError),
-            aimY: clamp(dy, -2, 2) * randomRangeFloat(1 - aimError / 10, 1 + aimError),
+            aimX: baseX + noiseX,
+            aimY: baseY + noiseY,
         };
     }
+
 
     private getMoveAction(): number {
         let move = TankController.move[this.tankEid];

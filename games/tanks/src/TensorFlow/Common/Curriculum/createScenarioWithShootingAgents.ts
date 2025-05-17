@@ -13,7 +13,7 @@ export async function createScenarioWithShootingAgents(options: Parameters<typeo
 
     fillWithSimpleHeuristicAgents(episode, {
         aim: {
-            aimError: randomRangeFloat(1, 3),
+            aimError: randomRangeFloat(0.5, 2),
             shootChance: randomRangeFloat(0.2, 0.4),
         },
     });
