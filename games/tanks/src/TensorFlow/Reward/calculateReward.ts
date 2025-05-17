@@ -19,7 +19,7 @@ const WEIGHTS = Object.freeze({
 
     COMMON: {
         SCORE: 2,
-        HEALTH: 20,
+        HEALTH: 100,
     },
     COMMON_MULTIPLIER: 2,
 
