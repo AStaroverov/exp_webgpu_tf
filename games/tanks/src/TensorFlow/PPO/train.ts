@@ -38,7 +38,7 @@ export function trainPolicyNetwork(
             const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
 
             const c = 0.5 * Math.log(2 * Math.PI * Math.E);
-            const entropyEachDim = logStd.add(c); // [batchSize,ACTION_DIM]
+            const entropyEachDim = logStd.add(c);
             const totalEntropy = entropyEachDim.sum(1).mean();
             const totalLoss = policyLoss.sub(totalEntropy.mul(entropyCoeff));
 

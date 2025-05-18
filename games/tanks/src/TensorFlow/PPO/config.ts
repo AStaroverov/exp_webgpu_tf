@@ -9,6 +9,7 @@ export type Config = {
     policyEpochs: number;                // Number of epochs to train on policy network
     policyClipRatio: number;             // Clipping ratio for PPO
     policyEntropyCoeff: number;           // Entropy coefficient for encouraging exploration
+    policyEntropyLimit: number;           // Entropy limit for encouraging exploration
 
     valueEpochs: number;                  // Number of epochs to train the value network
     valueClipRatio: number;             // Clipping ratio for PPO
@@ -49,6 +50,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     policyEpochs: 2,
     policyClipRatio: 0.2,
     policyEntropyCoeff: 0.01,
+    policyEntropyLimit: 800_000,
 
     valueEpochs: 2,
     valueClipRatio: 0.4,
@@ -74,7 +76,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
     episodeFrames: Math.round(40 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: isMac ? 3 : 9,
+    workerCount: isMac ? 0 : 9,
     // perturbWeights
     perturbWeightsScale: 0.02,
     // Training control

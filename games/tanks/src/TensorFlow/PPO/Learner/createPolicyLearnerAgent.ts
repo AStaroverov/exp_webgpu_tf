@@ -51,6 +51,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const klSize = floor(mbs * ceil(mbc / 3));
     const klList: tf.Tensor[] = [];
     const policyLossList: tf.Tensor[] = [];
+    const entropyCoeff = CONFIG.policyEntropyCoeff * max(0, 1 - network.optimizer.iterations / CONFIG.policyEntropyLimit);
 
     for (let i = 0; i < CONFIG.policyEpochs; i++) {
         for (let j = 0; j < mbc; j++) {
@@ -67,7 +68,9 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
                 tActions,
                 tOldLogProbs,
                 tAdvantages,
-                CONFIG.policyClipRatio, CONFIG.policyEntropyCoeff, CONFIG.clipNorm,
+                CONFIG.policyClipRatio,
+                entropyCoeff,
+                CONFIG.clipNorm,
                 j === mbc - 1,
             );
             policyLoss && policyLossList.push(policyLoss);
