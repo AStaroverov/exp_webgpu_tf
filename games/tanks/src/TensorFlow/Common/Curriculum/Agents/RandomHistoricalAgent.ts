@@ -36,7 +36,7 @@ export class RandomHistoricalAgent implements TankAgent {
             this.tankEid,
             // because of max noise equal MAX_STD_DEV, and we want have max noise influence 0.5
             result.actions.map((v) => v / (2 * MAX_STD_DEV)),
-            result.logStd.map((v) => clamp(1 - Math.exp(v) / MAX_STD_DEV, 0.05, 0.95)),
+            result.logStd.map((v) => clamp(1 - Math.exp(v) / MAX_STD_DEV, 0.3, 0.9)),
         );
     }
 
