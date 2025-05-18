@@ -8,10 +8,10 @@ import { applyActionToTank } from '../../applyActionToTank.ts';
 import { calculateReward } from '../../../Reward/calculateReward.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
 import { getTankHealth } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { clamp } from 'lodash-es';
 import { Model } from '../../../Models/def.ts';
 import { random } from '../../../../../../../lib/random.ts';
 import { CONFIG } from '../../../PPO/config.ts';
+import { lerp } from '../../../../../../../lib/math.ts';
 
 export type TankAgent = {
     tankEid: number;
@@ -67,7 +67,7 @@ export class CurrentActorAgent implements TankAgent {
         applyActionToTank(
             this.tankEid,
             result.actions.map((v) => v / (2 * MAX_STD_DEV)),
-            result.logStd.map((v) => clamp(1 - Math.exp(v) / MAX_STD_DEV, 0.3, 0.9)),
+            result.logStd.map((v) => lerp(0.3, 0.9, 1 - Math.exp(v) / MAX_STD_DEV)),
         );
 
         if (!this.train) return;
