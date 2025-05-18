@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
-import { act } from '../../../PPO/train.ts';
+import { act, MAX_STD_DEV } from '../../../PPO/train.ts';
 import { prepareInputArrays } from '../../InputArrays.ts';
 import { disposeNetwork, getRandomHistoricalNetwork } from '../../../Models/Utils.ts';
 import { patientAction } from '../../utils.ts';
@@ -34,8 +34,9 @@ export class RandomHistoricalAgent implements TankAgent {
 
         applyActionToTank(
             this.tankEid,
-            result.actions,
-            result.logStd.map((v) => clamp(1 - Math.exp(v) / Math.exp(0.2), 0.1, 0.9)),
+            // because of max noise equal MAX_STD_DEV, and we want have max noise influence 0.5
+            result.actions.map((v) => v / (2 * MAX_STD_DEV)),
+            result.logStd.map((v) => clamp(1 - Math.exp(v) / MAX_STD_DEV, 0.05, 0.95)),
         );
     }
 

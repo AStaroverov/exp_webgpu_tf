@@ -14,6 +14,11 @@ import { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
 
 const PREDICT_OPTIONS = { batchSize: CONFIG.miniBatchSize };
 
+export const MIN_LOG_STD_DEV = -5;
+export const MAX_LOG_STD_DEV = 2;
+export const MIN_STD_DEV = Math.exp(MIN_LOG_STD_DEV); // 0.0067
+export const MAX_STD_DEV = Math.exp(MAX_LOG_STD_DEV); // 7.389
+
 export function trainPolicyNetwork(
     network: tf.LayersModel,
     states: tf.Tensor[],
@@ -293,7 +298,7 @@ export function computeVTrace(
 function parsePredict(predict: tf.Tensor) {
     const outMean = predict.slice([0, 0], [-1, ACTION_DIM]);
     const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
-    const clippedLogStd = outLogStd.clipByValue(-5, 0.2);
+    const clippedLogStd = outLogStd.clipByValue(MIN_LOG_STD_DEV, MAX_LOG_STD_DEV);
 
     return { mean: outMean, logStd: clippedLogStd };
 }

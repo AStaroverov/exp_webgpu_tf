@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { Variable } from '@tensorflow/tfjs';
-import { act } from '../../../PPO/train.ts';
+import { act, MAX_STD_DEV } from '../../../PPO/train.ts';
 import { prepareInputArrays } from '../../InputArrays.ts';
 import { disposeNetwork, getNetwork } from '../../../Models/Utils.ts';
 import { getNetworkVersion, patientAction } from '../../utils.ts';
@@ -66,10 +66,8 @@ export class CurrentActorAgent implements TankAgent {
 
         applyActionToTank(
             this.tankEid,
-            result.actions,
-            result.logStd.map((v) => clamp(
-                1 - Math.exp(v) / Math.exp(0.2), 0.1, 0.9),
-            ),
+            result.actions.map((v) => v / (2 * MAX_STD_DEV)),
+            result.logStd.map((v) => clamp(1 - Math.exp(v) / MAX_STD_DEV, 0.05, 0.95)),
         );
 
         if (!this.train) return;
