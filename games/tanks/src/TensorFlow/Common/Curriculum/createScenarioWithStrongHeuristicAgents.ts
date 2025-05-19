@@ -1,21 +1,20 @@
 import { Scenario } from './types.ts';
 import { createBattlefield } from './createBattlefield.ts';
-import { randomRangeFloat } from '../../../../../../lib/random.ts';
 import { createScenarioStaticWithCoop } from './createScenarioStaticWithCoop.ts';
 import { getScenarioIndex } from './utils.ts';
 import { fillWithSimpleHeuristicAgents } from './Utils/fillWithSimpleHeuristicAgents.ts';
 
-export const indexScenarioWithHeuristicAgents = getScenarioIndex();
+export const indexScenarioWithStrongHeuristicAgents = getScenarioIndex();
 
-export async function createScenarioWithHeuristicAgents(options: Parameters<typeof createBattlefield>[0]): Promise<Scenario> {
+export async function createScenarioWithStrongHeuristicAgents(options: Parameters<typeof createBattlefield>[0]): Promise<Scenario> {
     const episode = await createScenarioStaticWithCoop(options);
-    episode.index = indexScenarioWithHeuristicAgents;
+    episode.index = indexScenarioWithStrongHeuristicAgents;
 
     fillWithSimpleHeuristicAgents(episode, {
-        move: randomRangeFloat(0.4, 0.8),
+        move: 1,
         aim: {
-            aimError: randomRangeFloat(0.5, 2),
-            shootChance: randomRangeFloat(0.2, 0.4),
+            aimError: 0.2,
+            shootChance: 0.8,
         },
     });
 

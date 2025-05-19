@@ -1,11 +1,10 @@
 import { RigidBodyState } from '../../../../Game/ECS/Components/Physical';
 import { abs, hypot, min } from '../../../../../../../lib/math.ts';
-import { TankController } from '../../../../Game/ECS/Components/TankController.ts';
 import { getAimPosition, getTankHealth } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { findTankEnemiesEids } from '../../../../Game/ECS/Utils/snapshotTankInputTensor.ts';
 import { Actions, applyActionToTank } from '../../applyActionToTank.ts';
 import { TankAgent } from './CurrentActorAgent.ts';
-import { random, randomRangeFloat, randomSign } from '../../../../../../../lib/random.ts';
+import { random, randomRangeFloat } from '../../../../../../../lib/random.ts';
 import { OrnsteinUhlenbeckNoise } from '../../../../../../../lib/OrnsteinUhlenbeckNoise.ts';
 
 export type SimpleHeuristicAgentFeatures = {
@@ -121,12 +120,7 @@ export class SimpleHeuristicAgent implements TankAgent {
 
 
     private getMoveAction(): number {
-        let move = TankController.move[this.tankEid];
-        let velocity = randomRangeFloat(0, 1);
-
-        if (velocity < move) {
-            velocity *= randomSign();
-        }
+        let velocity = randomRangeFloat(this.features.move ?? 0, 1);
 
         return velocity;
     }

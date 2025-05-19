@@ -18,6 +18,10 @@ import {
     indexScenarioWithHistoricalAgents,
 } from './createScenarioWithHistoricalAgents.ts';
 import { max, min } from '../../../../../../lib/math.ts';
+import {
+    createScenarioWithStrongHeuristicAgents,
+    indexScenarioWithStrongHeuristicAgents,
+} from './createScenarioWithStrongHeuristicAgents.ts';
 
 type ScenarioOptions = Parameters<typeof createBattlefield>[0];
 
@@ -27,6 +31,7 @@ const mapEntries = [
     [indexScenarioWithMovingAgents, createScenarioWithMovingAgents],
     [indexScenarioWithShootingAgents, createScenarioWithShootingAgents],
     [indexScenarioWithHeuristicAgents, createScenarioWithHeuristicAgents],
+    [indexScenarioWithStrongHeuristicAgents, createScenarioWithStrongHeuristicAgents],
     [indexScenarioWithHistoricalAgents, createScenarioWithHistoricalAgents],
 ] as const;
 const mapIndexToConstructor = new Map(mapEntries);
@@ -48,8 +53,7 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
             break;
         }
 
-        // don't learn scenarios with success ratio > 0.95
-        const weight = max(0, 0.95 - successRatio);
+        const weight = max(0.01, 0.95 - successRatio);
 
         weights.push(weight);
         totalWeight += weight;
