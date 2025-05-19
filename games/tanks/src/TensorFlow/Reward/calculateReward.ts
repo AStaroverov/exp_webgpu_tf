@@ -33,6 +33,13 @@ const WEIGHTS = Object.freeze({
     },
     AIM_MULTIPLIER: 30,
 
+    MOVING: {
+        BASE_SPEED: 1,
+        PENALTY_SPEED: -1,
+        DANGEROUS_MULTIPLIER: 3,
+    },
+    MOVING_MULTIPLIER: 30,
+
     MAP_BORDER: {
         BASE: 0.2,
         PENALTY: -1.0,
@@ -71,6 +78,11 @@ export type ComponentRewards = {
         total: number;           // Суммарная награда для головы прицеливания
     };
 
+    moving: {
+        speed: number;          // Скорость движения
+        total: number;           // Суммарная награда для головы движения
+    }
+
     // Награды для головы движения
     positioning: {
         enemiesPositioning: number;     // Позиционирование относительно врагов
@@ -89,6 +101,7 @@ function initializeRewards(): ComponentRewards {
         team: { score: 0, total: 0 },
         common: { score: 0, health: 0, total: 0 },
         aim: { accuracy: 0, total: 0, shootDecision: 0 },
+        moving: { speed: 0, total: 0 },
         positioning: {
             enemiesPositioning: 0,
             alliesPositioning: 0,
@@ -112,6 +125,7 @@ export function calculateReward(
     const currentBattleState = getBattleState(tankEid);
 
     const isShooting = TankController.shoot[tankEid] > 0;
+    const moveDir = TankController.move[tankEid];
     const [currentTankX, currentTankY] = RigidBodyState.position.getBatch(tankEid);
     // const [currentTankSpeedX, currentTankSpeedY] = RigidBodyState.linvel.getBatche(tankEid);
     const [currentTurretTargetX, currentTurretTargetY] = getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[tankEid]));
@@ -143,6 +157,8 @@ export function calculateReward(
 
     rewards.common.score = WEIGHTS.COMMON.SCORE * currentScore;
     rewards.common.health = WEIGHTS.COMMON.HEALTH * currentHealth;
+
+    rewards.moving.speed = calculateMovingReward(moveDir, beforePredictBulletsEids.length > 0);
 
     rewards.positioning.mapAwareness = calculateTankMapAwarenessReward(
         width,
@@ -195,6 +211,8 @@ export function calculateReward(
         * (rewards.common.health + rewards.common.score);
     rewards.aim.total = WEIGHTS.AIM_MULTIPLIER
         * (rewards.aim.accuracy + rewards.aim.shootDecision);
+    rewards.moving.total = WEIGHTS.MOVING_MULTIPLIER
+        * (rewards.moving.speed);
     rewards.positioning.total =
         (rewards.positioning.enemiesPositioning * WEIGHTS.DISTANCE_KEEPING_MULTIPLIER
             + rewards.positioning.alliesPositioning * WEIGHTS.DISTANCE_KEEPING_MULTIPLIER
@@ -202,7 +220,12 @@ export function calculateReward(
             + rewards.positioning.mapAwareness * WEIGHTS.MAP_BORDER_MULTIPLIER);
 
     // Общая итоговая награда
-    rewards.totalReward = rewards.team.total + rewards.common.total + rewards.aim.total + rewards.positioning.total;
+    rewards.totalReward =
+        rewards.team.total
+        + rewards.common.total
+        + rewards.aim.total
+        + rewards.moving.total
+        + rewards.positioning.total;
 
     // console.log('>>', `
     //     team: ${ rewards.team.total.toFixed(2) },
@@ -222,6 +245,18 @@ export function calculateReward(
     }
 
     return rewards.totalReward;
+}
+
+function calculateMovingReward(moveDir: number, hasDangerousBullets: boolean): number {
+    const absMoveDir = abs(moveDir);
+    const minLimit = hasDangerousBullets ? 0.7 : 0.3;
+    const multiplier = hasDangerousBullets ? WEIGHTS.MOVING.DANGEROUS_MULTIPLIER : 1;
+
+    if (absMoveDir > minLimit) {
+        return WEIGHTS.MOVING.BASE_SPEED * multiplier * (absMoveDir - minLimit) / (1 - minLimit);
+    } else {
+        return WEIGHTS.MOVING.PENALTY_SPEED * multiplier * (minLimit - absMoveDir) / minLimit;
+    }
 }
 
 export function getTeamAdvantageScore(state: BattleState): number {
