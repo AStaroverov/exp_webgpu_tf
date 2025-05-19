@@ -1,11 +1,5 @@
 import { getTankHealth, getTankTeamId } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
 
-let index = 0;
-
-export function getScenarioIndex() {
-    return index++;
-}
-
 export function getTeamHealth(tanks: number[]) {
     return tanks.reduce((acc, tankEid) => {
         const team = getTankTeamId(tankEid);

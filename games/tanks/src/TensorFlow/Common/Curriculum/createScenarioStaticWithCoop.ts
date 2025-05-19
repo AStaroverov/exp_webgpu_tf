@@ -1,10 +1,9 @@
 import { createScenarioStatic } from './createScenarioStatic.ts';
 import { Scenario } from './types.ts';
 import { createBattlefield } from './createBattlefield.ts';
-import { getScenarioIndex } from './utils.ts';
 import { fillAlliesWithActorAgents } from './Utils/fillAlliesWithActorAgents.ts';
 
-export const indexScenarioStaticWithCoop = getScenarioIndex();
+export const indexScenarioStaticWithCoop = 1;
 
 export async function createScenarioStaticWithCoop(options: Parameters<typeof createBattlefield>[0]): Promise<Scenario> {
     const episode = await createScenarioStatic(options);

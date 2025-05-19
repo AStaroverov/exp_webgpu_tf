@@ -14,14 +14,14 @@ import {
     indexScenarioWithHeuristicAgents,
 } from './createScenarioWithHeuristicAgents.ts';
 import {
+    createScenarioWithStrongHeuristicAgents,
+    indexScenarioWithStrongHeuristicAgents,
+} from './createScenarioWithStrongHeuristicAgents.ts';
+import {
     createScenarioWithHistoricalAgents,
     indexScenarioWithHistoricalAgents,
 } from './createScenarioWithHistoricalAgents.ts';
 import { max, min } from '../../../../../../lib/math.ts';
-import {
-    createScenarioWithStrongHeuristicAgents,
-    indexScenarioWithStrongHeuristicAgents,
-} from './createScenarioWithStrongHeuristicAgents.ts';
 
 type ScenarioOptions = Parameters<typeof createBattlefield>[0];
 
@@ -34,7 +34,7 @@ const mapEntries = [
     [indexScenarioWithStrongHeuristicAgents, createScenarioWithStrongHeuristicAgents],
     [indexScenarioWithHistoricalAgents, createScenarioWithHistoricalAgents],
 ] as const;
-const mapIndexToConstructor = new Map(mapEntries);
+const mapIndexToConstructor = new Map<number, (options: ScenarioOptions) => Promise<Scenario>>(mapEntries);
 
 if (mapIndexToConstructor.size !== mapEntries.length) {
     throw new Error('Scenario index is not unique');
