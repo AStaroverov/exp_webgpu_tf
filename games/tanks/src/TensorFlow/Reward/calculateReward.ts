@@ -1,5 +1,5 @@
 import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
-import { BattleState, BULLET_DANGER_SPEED, getBattleState } from '../../Game/ECS/Utils/snapshotTankInputTensor.ts';
+import { BattleState, getBattleState } from '../../Game/ECS/Utils/snapshotTankInputTensor.ts';
 import { abs, acos, centerStep, hypot, max, min, PI, sin, smoothstep } from '../../../../../lib/math.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 import { Tank } from '../../Game/ECS/Components/Tank.ts';
@@ -51,12 +51,6 @@ const WEIGHTS = Object.freeze({
         PENALTY: -3,
     },
     DISTANCE_KEEPING_MULTIPLIER: 1,
-
-    BULLET_AVOIDANCE: {
-        PENALTY: -1,
-        AVOID_QUALITY: 1,
-    },
-    BULLET_AVOIDANCE_MULTIPLIER: 0.4,
 });
 
 function initializeStateRewards() {
@@ -66,7 +60,6 @@ function initializeStateRewards() {
         positioning: {
             enemiesPositioning: 0,
             alliesPositioning: 0,
-            bulletAvoidance: 0,
             mapAwareness: 0,
             total: 0,
         },
@@ -89,7 +82,6 @@ export function calculateStateReward(
     // const currentEnemies = findTankEnemiesEids(tankEid);
     // const currentAllies = findTankAlliesEids(tankEid);
     // const currentDangerBullets = findTankDangerBullets(tankEid);
-    const tankColliderRadius = HeuristicsData.approxColliderRadius[tankEid];
 
     const beforePredictEnemiesData = TankInputTensor.enemiesData.getBatch(tankEid);
     const beforePredictEnemiesEids = beforePredictEnemiesData.reduce((acc, v, i) => {
@@ -135,14 +127,6 @@ export function calculateStateReward(
         aimingResult.bestAlliesAimQuality,
     );
 
-    const bulletAvoidanceResult = calculateBulletAvoidanceReward(
-        currentTankX,
-        currentTankY,
-        tankColliderRadius,
-        beforePredictBulletsEids,
-    );
-    rewards.positioning.bulletAvoidance = bulletAvoidanceResult.reward;
-
     rewards.positioning.enemiesPositioning = calculateEnemyDistanceReward(
         currentTankX,
         currentTankY,
@@ -163,7 +147,6 @@ export function calculateStateReward(
     rewards.positioning.total =
         (rewards.positioning.enemiesPositioning * WEIGHTS.DISTANCE_KEEPING_MULTIPLIER
             + rewards.positioning.alliesPositioning * WEIGHTS.DISTANCE_KEEPING_MULTIPLIER
-            + rewards.positioning.bulletAvoidance * WEIGHTS.BULLET_AVOIDANCE_MULTIPLIER
             + rewards.positioning.mapAwareness * WEIGHTS.MAP_BORDER_MULTIPLIER);
 
     // Общая итоговая награда
@@ -501,80 +484,4 @@ function calculateAllyDistanceReward(
     }
 
     return positioningReward / max(1, beforePredictAlliesEids.length);
-}
-
-function calculateBulletAvoidanceReward(
-    tankX: number,
-    tankY: number,
-    tankColliderRadius: number,
-    beforePredictBulletsEids: number[],
-): { reward: number; maxDangerLevel: number } {
-    let reward = 0;
-    let maxDangerLevel = 0;
-
-    for (let i = 0; i < beforePredictBulletsEids.length; i++) {
-        const bulletId = beforePredictBulletsEids[i];
-        const bulletX = RigidBodyState.position.get(bulletId, 0);
-        const bulletY = RigidBodyState.position.get(bulletId, 1);
-        const bulletVx = RigidBodyState.linvel.get(bulletId, 0);
-        const bulletVy = RigidBodyState.linvel.get(bulletId, 1);
-
-        const bulletResult = analyzeBullet(
-            tankX,
-            tankY,
-            tankColliderRadius,
-            bulletX,
-            bulletY,
-            bulletVx,
-            bulletVy,
-        );
-
-        // Обновляем статистику
-        reward += bulletResult.reward;
-        maxDangerLevel = max(maxDangerLevel, bulletResult.dangerLevel);
-    }
-
-    return { reward, maxDangerLevel };
-}
-
-function analyzeBullet(
-    tankX: number,
-    tankY: number,
-    tankColliderRadius: number,
-    bulletX: number,
-    bulletY: number,
-    bulletVx: number,
-    bulletVy: number,
-): { reward: number; dangerLevel: number } {
-    // Анализируем текущую опасность пули
-    const bulletSpeed = hypot(bulletVx, bulletVy);
-
-    if (bulletSpeed < BULLET_DANGER_SPEED) return { reward: 0, dangerLevel: 0 };
-
-    const bulletDirectionX = bulletVx / bulletSpeed;
-    const bulletDirectionY = bulletVy / bulletSpeed;
-
-    // Вектор от пули к танку
-    const toTankX = tankX - bulletX;
-    const toTankY = tankY - bulletY;
-
-    // Определяем, движется ли пуля к танку
-    const dotProduct = toTankX * bulletDirectionX + toTankY * bulletDirectionY;
-
-    if (dotProduct < 0) return { reward: 0, dangerLevel: 0 };
-
-    // Точка ближайшего прохождения пули к танку
-    const closestPointX = bulletX + bulletDirectionX * dotProduct;
-    const closestPointY = bulletY + bulletDirectionY * dotProduct;
-
-    // Расстояние в точке наибольшего сближения
-    const minDist = hypot(closestPointX - tankX, closestPointY - tankY);
-
-    const dangerLevel = smoothstep(tankColliderRadius * 1.5, tankColliderRadius / 2, minDist);
-
-    const reward = dangerLevel < 0.2
-        ? (1 - dangerLevel) * WEIGHTS.BULLET_AVOIDANCE.AVOID_QUALITY
-        : dangerLevel * WEIGHTS.BULLET_AVOIDANCE.PENALTY;
-
-    return { reward, dangerLevel };
 }

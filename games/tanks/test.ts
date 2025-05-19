@@ -7,6 +7,7 @@ import { calculateActionReward, calculateStateReward } from './src/TensorFlow/Re
 import { createTank } from './src/Game/ECS/Entities/Tank/CreateTank.ts';
 import { createPlayer } from './src/Game/ECS/Entities/Player.ts';
 import { snapshotTankInputTensor } from './src/Game/ECS/Utils/snapshotTankInputTensor.ts';
+import { TankController } from './src/Game/ECS/Components/TankController.ts';
 
 TenserFlowDI.enabled = true;
 
@@ -67,6 +68,9 @@ PLAYER_REFS.tankPid = tanks[0];
 
 console.log('>> PLAYER ', PLAYER_REFS.tankPid);
 console.log('>> TANKS ', tanks);
+
+TankController.setShooting$(tanks[1], 1);
+TankController.setTurretDir$(tanks[1], 0.1, 0.1);
 
 // TankController.setMove$(enemyEid, 1);
 let i = 0;
