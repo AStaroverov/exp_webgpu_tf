@@ -11,95 +11,56 @@ import { getTankHealth, getTankScore } from '../../Game/ECS/Entities/Tank/TankUt
 import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
 
 const WEIGHTS = Object.freeze({
-    // Rear rewards, huge size in delta view
+    // ACTION REWARD
     TEAM: {
         SCORE: 2,
     },
-    TEAM_MULTIPLIER: 2,
+    TEAM_MULTIPLIER: 1,
 
     COMMON: {
         SCORE: 2,
-        HEALTH: 100,
+        HEALTH: 1,
     },
-    COMMON_MULTIPLIER: 2,
+    COMMON_MULTIPLIER: 1,
 
-    // Permament rewards, small size in delta view
+    // STATE REWARD
     AIM: {
-        QUALITY: 1.0,
-        SHOOTING_ENEMIES: 1.0,
-        SHOOTING_ALLIES_PENALTY: -0.4,
-        SHOOTING_BAD_AIM: -0.1,
-        SHOOTING_GOOD_AIM_PENALTY: -0.2,
+        QUALITY: 1,
+        SHOOTING_ENEMIES: 1,
+        SHOOTING_ALLIES_PENALTY: -3,
+        SHOOTING_BAD_AIM: -3,
+        SHOOTING_GOOD_AIM_PENALTY: -1,
     },
-    AIM_MULTIPLIER: 30,
+    AIM_MULTIPLIER: 1,
 
     MOVING: {
         BASE_SPEED: 1,
-        PENALTY_SPEED: -1,
-        DANGEROUS_MULTIPLIER: 3,
+        PENALTY_SPEED: -3,
+        DANGEROUS_MULTIPLIER: 2,
     },
-    MOVING_MULTIPLIER: 30,
+    MOVING_MULTIPLIER: 1,
 
     MAP_BORDER: {
-        BASE: 0.2,
-        PENALTY: -1.0,
+        BASE: 1,
+        PENALTY: -3,
     },
-    MAP_BORDER_MULTIPLIER: 30,
+    MAP_BORDER_MULTIPLIER: 1,
 
     DISTANCE_KEEPING: {
-        BASE: 0.2,
-        PENALTY: -1.0,
+        BASE: 1,
+        PENALTY: -3,
     },
-    DISTANCE_KEEPING_MULTIPLIER: 30,
+    DISTANCE_KEEPING_MULTIPLIER: 1,
 
-    // Dynamic rewards, small size in delta view
     BULLET_AVOIDANCE: {
-        PENALTY: -0.2,
-        AVOID_QUALITY: 0.2,
+        PENALTY: -1,
+        AVOID_QUALITY: 1,
     },
-    BULLET_AVOIDANCE_MULTIPLIER: 8,
+    BULLET_AVOIDANCE_MULTIPLIER: 0.4,
 });
 
-export type ComponentRewards = {
-    team: {
-        score: number;
-        total: number;
-    }
-
-    common: {
-        score: number;
-        health: number;
-        total: number;
-    };
-
-    aim: {
-        accuracy: number;        // Точность прицеливания
-        shootDecision: number;   // Решение о стрельбе
-        total: number;           // Суммарная награда для головы прицеливания
-    };
-
-    moving: {
-        speed: number;          // Скорость движения
-        total: number;           // Суммарная награда для головы движения
-    }
-
-    // Награды для головы движения
-    positioning: {
-        enemiesPositioning: number;     // Позиционирование относительно врагов
-        alliesPositioning: number;      // Позиционирование относительно союзников
-        bulletAvoidance: number;       // Избегание опасности
-        mapAwareness: number;    // Нахождение в пределах карты
-        total: number;           // Суммарная награда для головы движения
-    };
-
-    // Общая суммарная награда
-    totalReward: number;
-}
-
-function initializeRewards(): ComponentRewards {
+function initializeStateRewards() {
     return {
-        team: { score: 0, total: 0 },
-        common: { score: 0, health: 0, total: 0 },
         aim: { accuracy: 0, total: 0, shootDecision: 0 },
         moving: { speed: 0, total: 0 },
         positioning: {
@@ -109,21 +70,16 @@ function initializeRewards(): ComponentRewards {
             mapAwareness: 0,
             total: 0,
         },
-        totalReward: 0,
     };
 }
 
 const EPSILON = 1e-6; // Для избежания деления на ноль
 
-export function calculateReward(
+export function calculateStateReward(
     tankEid: number,
     width: number,
     height: number,
 ): number {
-    const currentScore = getTankScore(tankEid);
-    const currentHealth = getTankHealth(tankEid);
-    const currentBattleState = getBattleState(tankEid);
-
     const isShooting = TankController.shoot[tankEid] > 0;
     const moveDir = TankController.move[tankEid];
     const [currentTankX, currentTankY] = RigidBodyState.position.getBatch(tankEid);
@@ -151,12 +107,7 @@ export function calculateReward(
         return acc;
     }, [] as EntityId[]);
 
-    const rewards = initializeRewards();
-
-    rewards.team.score = getTeamAdvantageScore(currentBattleState);
-
-    rewards.common.score = WEIGHTS.COMMON.SCORE * currentScore;
-    rewards.common.health = WEIGHTS.COMMON.HEALTH * currentHealth;
+    const rewards = initializeStateRewards();
 
     rewards.moving.speed = calculateMovingReward(moveDir, beforePredictBulletsEids.length > 0);
 
@@ -205,10 +156,6 @@ export function calculateReward(
     );
 
     // Рассчитываем итоговые значения
-    rewards.team.total = WEIGHTS.TEAM_MULTIPLIER
-        * (rewards.team.score);
-    rewards.common.total = WEIGHTS.COMMON_MULTIPLIER
-        * (rewards.common.health + rewards.common.score);
     rewards.aim.total = WEIGHTS.AIM_MULTIPLIER
         * (rewards.aim.accuracy + rewards.aim.shootDecision);
     rewards.moving.total = WEIGHTS.MOVING_MULTIPLIER
@@ -220,10 +167,8 @@ export function calculateReward(
             + rewards.positioning.mapAwareness * WEIGHTS.MAP_BORDER_MULTIPLIER);
 
     // Общая итоговая награда
-    rewards.totalReward =
-        rewards.team.total
-        + rewards.common.total
-        + rewards.aim.total
+    const totalReward =
+        rewards.aim.total
         + rewards.moving.total
         + rewards.positioning.total;
 
@@ -231,21 +176,70 @@ export function calculateReward(
     //     team: ${ rewards.team.total.toFixed(2) },
     //     common: ${ rewards.common.total.toFixed(2) },
     //     aim: ${ rewards.aim.total.toFixed(2) },
+    //     moving: ${ rewards.moving.total.toFixed(2) },
     //     positioning: ${ rewards.positioning.total.toFixed(2) },
     // `);
 
-    if (!Number.isFinite(rewards.totalReward)) {
+    if (!Number.isFinite(totalReward)) {
         console.error(`
-            team: ${ rewards.team.total.toFixed(2) },
-            common: ${ rewards.common.total.toFixed(2) },
             aim: ${ rewards.aim.total.toFixed(2) },
+            moving: ${ rewards.moving.total.toFixed(2) },
             positioning: ${ rewards.positioning.total.toFixed(2) },
         `);
         throw new Error('Rewards are not finite:');
     }
 
-    return rewards.totalReward;
+    return totalReward;
 }
+
+
+function initializeActionRewards() {
+    return {
+        team: { score: 0, total: 0 },
+        common: { score: 0, health: 0, total: 0 },
+    };
+}
+
+export function calculateActionReward(
+    tankEid: number,
+): number {
+    const currentScore = getTankScore(tankEid);
+    const currentHealth = getTankHealth(tankEid);
+    const currentBattleState = getBattleState(tankEid);
+
+    const rewards = initializeActionRewards();
+
+    rewards.team.score = getTeamAdvantageScore(currentBattleState);
+    rewards.common.score = WEIGHTS.COMMON.SCORE * currentScore;
+    rewards.common.health = WEIGHTS.COMMON.HEALTH * (currentHealth * 100);
+
+    // Рассчитываем итоговые значения
+    rewards.team.total = WEIGHTS.TEAM_MULTIPLIER
+        * (rewards.team.score);
+    rewards.common.total = WEIGHTS.COMMON_MULTIPLIER
+        * (rewards.common.health + rewards.common.score);
+
+    const totalReward = rewards.team.total + rewards.common.total;
+
+    // console.log('>>', `
+    //     team: ${ rewards.team.total.toFixed(2) },
+    //     common: ${ rewards.common.total.toFixed(2) },
+    //     aim: ${ rewards.aim.total.toFixed(2) },
+    //     moving: ${ rewards.moving.total.toFixed(2) },
+    //     positioning: ${ rewards.positioning.total.toFixed(2) },
+    // `);
+
+    if (!Number.isFinite(totalReward)) {
+        console.error(`
+            team: ${ rewards.team.total.toFixed(2) },
+            common: ${ rewards.common.total.toFixed(2) },
+        `);
+        throw new Error('Rewards are not finite:');
+    }
+
+    return totalReward;
+}
+
 
 function calculateMovingReward(moveDir: number, hasDangerousBullets: boolean): number {
     const absMoveDir = abs(moveDir);

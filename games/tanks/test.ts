@@ -3,9 +3,10 @@ import { PLAYER_REFS } from './src/Game/consts.ts';
 import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
 import { GameDI } from './src/Game/DI/GameDI.ts';
 import { TenserFlowDI } from './src/Game/DI/TenserFlowDI.ts';
-import { calculateReward } from './src/TensorFlow/Reward/calculateReward.ts';
+import { calculateActionReward, calculateStateReward } from './src/TensorFlow/Reward/calculateReward.ts';
 import { createTank } from './src/Game/ECS/Entities/Tank/CreateTank.ts';
 import { createPlayer } from './src/Game/ECS/Entities/Player.ts';
+import { snapshotTankInputTensor } from './src/Game/ECS/Utils/snapshotTankInputTensor.ts';
 
 TenserFlowDI.enabled = true;
 
@@ -69,15 +70,21 @@ console.log('>> TANKS ', tanks);
 
 // TankController.setMove$(enemyEid, 1);
 let i = 0;
+let actionReward: undefined | number = undefined;
 frameTasks.addInterval(() => {
     i++;
 
-    TenserFlowDI.shouldCollectState = i % 10 === 0;
-
     gameTick(16.66);
 
-    if (i > 10 && i % 10 === 6) {
-        console.log(calculateReward(tanks[0], GameDI.width, GameDI.height));
+    if (i > 10 && i % 3 === 0) {
+        const deltaAction = (actionReward ? calculateActionReward(tanks[0]) - actionReward : 0);
+        const stateReward = calculateStateReward(tanks[0], GameDI.width, GameDI.height);
+        const reward = stateReward + deltaAction;
+
+        console.log('>>', stateReward, deltaAction, reward);
+
+        snapshotTankInputTensor();
+        actionReward = calculateActionReward(tanks[0]);
     }
 
     // const enemyTankPosition = getMatrixTranslation(GlobalTransform.matrix.getBatch(enemyEid));

@@ -5,7 +5,7 @@ import { prepareInputArrays } from '../../InputArrays.ts';
 import { disposeNetwork, getNetwork } from '../../../Models/Utils.ts';
 import { getNetworkVersion, patientAction } from '../../utils.ts';
 import { applyActionToTank } from '../../applyActionToTank.ts';
-import { calculateReward } from '../../../Reward/calculateReward.ts';
+import { calculateActionReward, calculateStateReward } from '../../../Reward/calculateReward.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
 import { getTankHealth } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { Model } from '../../../Models/def.ts';
@@ -32,6 +32,8 @@ export class CurrentActorAgent implements TankAgent {
     private memory = new AgentMemory();
     private policyNetwork?: tf.LayersModel;
 
+    private stateReward: undefined | number;
+
     constructor(public readonly tankEid: number, private train: boolean) {
     }
 
@@ -48,6 +50,7 @@ export class CurrentActorAgent implements TankAgent {
     }
 
     public dispose() {
+        this.stateReward = undefined;
         this.policyNetwork && disposeNetwork(this.policyNetwork);
         this.policyNetwork = undefined;
         this.memory.dispose();
@@ -73,15 +76,10 @@ export class CurrentActorAgent implements TankAgent {
 
         if (!this.train) return;
 
-        const stateReward = calculateReward(
-            this.tankEid,
-            width,
-            height,
-        );
+        this.stateReward = calculateActionReward(this.tankEid);
 
         this.memory.addFirstPart(
             state,
-            stateReward,
             result.actions,
             result.mean,
             result.logStd,
@@ -98,13 +96,16 @@ export class CurrentActorAgent implements TankAgent {
 
         const isDead = getTankHealth(this.tankEid) <= 0;
         const isDone = gameOver || isDead;
-        const reward = calculateReward(
+        const reward = calculateStateReward(
             this.tankEid,
             width,
             height,
         );
+        const deltaStateReward = this.stateReward === undefined
+            ? 0
+            : calculateActionReward(this.tankEid) - this.stateReward;
 
-        this.memory.updateSecondPart(reward, isDone);
+        this.memory.updateSecondPart(reward + deltaStateReward, isDone);
     }
 
     private async load() {

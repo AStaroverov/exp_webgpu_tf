@@ -234,7 +234,6 @@ export function createGame({ width, height, withPlayer }: {
         PlayerEnvDI.destroy?.();
 
         TenserFlowDI.enabled = false;
-        TenserFlowDI.shouldCollectState = false;
     };
 
     return GameDI;

@@ -29,15 +29,11 @@ export class VisTestEpisodeManager extends EpisodeManager {
     public getReward(tankEid: EntityId) {
         const memory = this.currentScenario?.getAgent(tankEid)?.getMemory?.();
 
-        if (memory == null || memory.actionRewards.length === 0) return 0;
+        if (memory == null || memory.rewards.length === 0) return 0;
 
         let sum = 0;
-        const len = memory.actionRewards.length - 1;
-        for (let i = 0; i < len; i++) {
-            const lastStateReward = memory.stateRewards[i];
-            const lastActionReward = memory.actionRewards[i];
-
-            sum += lastActionReward - lastStateReward;
+        for (let i = 0; i < (memory.rewards.length - 1); i++) {
+            sum += memory.rewards[i];
         }
         return sum;
     }
@@ -53,7 +49,7 @@ export class VisTestEpisodeManager extends EpisodeManager {
 
     protected beforeEpisode() {
         return createScenarioByCurriculumState(this.curriculumState, {
-            // return createScenarioWithHeuristicAgents({
+            // return createScenarioWithStrongHeuristicAgents({
             withPlayer: false,
         }).then((scenario) => {
             (this.currentScenario = scenario);
