@@ -1,5 +1,5 @@
 import { RigidBodyState } from '../../../../Game/ECS/Components/Physical';
-import { abs, hypot, min } from '../../../../../../../lib/math.ts';
+import { abs, hypot, lerp, min } from '../../../../../../../lib/math.ts';
 import { getAimPosition, getTankHealth } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { findTankEnemiesEids } from '../../../../Game/ECS/Utils/snapshotTankInputTensor.ts';
 import { Actions, applyActionToTank } from '../../applyActionToTank.ts';
@@ -31,8 +31,8 @@ export class SimpleHeuristicAgent implements TankAgent {
 
         const targetId = this.withAim() ? this.getTarget() : undefined;
         const aim = targetId !== undefined ? this.getAimAction(targetId) : { aimX: 0, aimY: 0, shoot: -1 };
-        const move = this.withMove() ? this.getMoveAction() : 0;
         const rotation = this.withMove() ? this.getRotationAction() : 0;
+        const move = this.withMove() ? this.getMoveAction(rotation) : 0;
 
         const action: Actions = [
             aim.shoot,
@@ -119,10 +119,10 @@ export class SimpleHeuristicAgent implements TankAgent {
     }
 
 
-    private getMoveAction(): number {
-        let velocity = randomRangeFloat(this.features.move ?? 0, 1);
+    private getMoveAction(rotation: number): number {
+        let move = randomRangeFloat(this.features.move ?? 0, 1);
 
-        return velocity;
+        return move * lerp(0.3, 1, 1 - abs(rotation));
     }
 
     private getRotationAction(): number {
@@ -141,7 +141,7 @@ export class SimpleHeuristicAgent implements TankAgent {
         const bodyAngle = RigidBodyState.rotation[this.tankEid];
 
         // --- разница углов, нормализованная к [-π, π] ---
-        const delta = -wrapPi((targetAngle - bodyAngle) - Math.PI / 2);    // -π … π
+        const delta = wrapPi(targetAngle - bodyAngle + Math.PI / 2);    // -π … π
 
         // --- преобразуем в диапазон [-1; 1] ---
         return (delta / Math.PI);                // -1 … 1
