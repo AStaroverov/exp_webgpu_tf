@@ -32,7 +32,7 @@ export class CurrentActorAgent implements TankAgent {
     private memory = new AgentMemory();
     private policyNetwork?: tf.LayersModel;
 
-    private stateReward: undefined | number;
+    private initialActionReward: undefined | number;
 
     constructor(public readonly tankEid: number, private train: boolean) {
     }
@@ -50,7 +50,7 @@ export class CurrentActorAgent implements TankAgent {
     }
 
     public dispose() {
-        this.stateReward = undefined;
+        this.initialActionReward = undefined;
         this.policyNetwork && disposeNetwork(this.policyNetwork);
         this.policyNetwork = undefined;
         this.memory.dispose();
@@ -76,7 +76,7 @@ export class CurrentActorAgent implements TankAgent {
 
         if (!this.train) return;
 
-        this.stateReward = calculateActionReward(this.tankEid);
+        this.initialActionReward = calculateActionReward(this.tankEid);
 
         this.memory.addFirstPart(
             state,
@@ -101,9 +101,9 @@ export class CurrentActorAgent implements TankAgent {
             width,
             height,
         );
-        const deltaStateReward = this.stateReward === undefined
+        const deltaStateReward = this.initialActionReward === undefined
             ? 0
-            : calculateActionReward(this.tankEid) - this.stateReward;
+            : calculateActionReward(this.tankEid) - this.initialActionReward;
 
         this.memory.updateSecondPart(reward + deltaStateReward, isDone);
     }
