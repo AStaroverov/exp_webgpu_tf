@@ -9,16 +9,15 @@ export function getTeamHealth(tanks: number[]) {
     }, {} as Record<number, number>);
 }
 
-export function getSuccessRatio(activeTeam: number, initialTeamHealth: Record<number, number>, currentTeamHealth: Record<number, number>) {
-    const teamCount = Object.keys(initialTeamHealth).length;
-    const successRatio = Object.entries(currentTeamHealth)
-        .map(([k, v]) => [Number(k), v])
-        .reduce((acc, [teamId, health]) => {
-            const delta = activeTeam === Number(teamId)
-                ? (health / initialTeamHealth[teamId])
-                : 1 - (health / initialTeamHealth[teamId]);
-            return acc + delta;
-        }, 0);
+export function getSuccessRatio(
+    activeTeam: number,
+    initialHealth: Record<number, number>,
+    currentHealth: Record<number, number>,
+): number {
+    const teamIds = Object.keys(initialHealth).map(Number);
+    const opponentIds = teamIds.filter(id => id !== activeTeam);
+    const activeRatio = currentHealth[activeTeam] / initialHealth[activeTeam];
+    const opponentAvg = opponentIds.reduce((sum, id) => sum + currentHealth[id] / initialHealth[id], 0) / opponentIds.length;
 
-    return successRatio / teamCount;
+    return activeRatio - opponentAvg;
 }
