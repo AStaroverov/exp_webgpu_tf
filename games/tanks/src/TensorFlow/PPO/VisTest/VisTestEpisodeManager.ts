@@ -53,7 +53,10 @@ export class VisTestEpisodeManager extends EpisodeManager {
             withPlayer: false,
         }).then((scenario) => {
             (this.currentScenario = scenario);
-            scenario.setRenderTarget(document.querySelector('canvas'));
+            const canvas = document.querySelector('canvas')!;
+            scenario.setRenderTarget(canvas);
+            canvas.style.width = scenario.width + 'px';
+            canvas.style.height = scenario.height + 'px';
             return scenario;
         });
     }

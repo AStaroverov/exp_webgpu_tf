@@ -3,11 +3,13 @@ import { createGame } from '../../../Game/createGame.ts';
 import { query } from 'bitecs';
 import { Tank } from '../../../Game/ECS/Components/Tank.ts';
 import { TeamRef } from '../../../Game/ECS/Components/TeamRef.ts';
+import { randomRangeInt } from '../../../../../../lib/random.ts';
 
 export function createBattlefield(options: { withPlayer: boolean }) {
     TenserFlowDI.enabled = true;
 
-    const game = createGame({ width: 1400, height: 1200, ...options });
+    const size = randomRangeInt(1000, 2000);
+    const game = createGame({ width: size, height: size, ...options });
 
     const getTankEids = () => {
         return [...query(game.world, [Tank])];
