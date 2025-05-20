@@ -67,7 +67,7 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
         if (r < weight) {
             constructor = mapIndexToConstructor.get(i) ?? (() => {
                 console.warn(`Scenario ${ i } not found, using default scenario static`);
-                return createScenarioWithAlliesStatic;
+                return createScenarioSoloStatic;
             })();
             break;
         }
