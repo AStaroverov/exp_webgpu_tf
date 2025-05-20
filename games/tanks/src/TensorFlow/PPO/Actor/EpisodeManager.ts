@@ -7,7 +7,6 @@ import { CurriculumState, curriculumStateChannel, episodeSampleChannel, queueSiz
 import { Scenario } from '../../Common/Curriculum/types.ts';
 import { createScenarioByCurriculumState } from '../../Common/Curriculum/createScenarioByCurriculumState.ts';
 import { snapshotTankInputTensor } from '../../../Game/ECS/Utils/snapshotTankInputTensor.ts';
-import { abs, max, min } from '../../../../../../lib/math.ts';
 import { filter, first, firstValueFrom, race, shareReplay, startWith, timer } from 'rxjs';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
@@ -53,18 +52,9 @@ export class EpisodeManager {
                 return;
             }
 
-            const memoryBatch = agent.getMemoryBatch();
-            const minReward = min(...memoryBatch.rewards);
-            const maxReward = max(...memoryBatch.rewards);
-
-            if (abs(minReward) < 2 && abs(maxReward) < 2) {
-                // Skip if the rewards are too small, indicating no significant learning
-                return;
-            }
-
             episodeSampleChannel.emit({
                 networkVersion: agent.getVersion(),
-                memoryBatch,
+                memoryBatch: agent.getMemoryBatch(),
                 successRatio: episode.getSuccessRatio(),
                 scenarioIndex: episode.index,
             });
