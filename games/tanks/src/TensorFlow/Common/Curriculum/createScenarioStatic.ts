@@ -42,7 +42,6 @@ export async function createScenarioStatic(options: Parameters<typeof createBatt
         getSuccessRatio() {
             return getSuccessRatio(activeTeam, initialTeamHealth, getTeamHealth(tanks));
         },
-
         addAgent(tankEid: EntityId, agent: TankAgent) {
             mapTankIdToAgent.set(tankEid, agent);
         },

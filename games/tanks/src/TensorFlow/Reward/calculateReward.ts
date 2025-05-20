@@ -250,12 +250,13 @@ function calculateTankMapAwarenessReward(
     x: number,
     y: number,
 ): number {
-    const isInBounds = x >= 0 && x <= width && y >= 0 && y <= height;
+    const gap = max(width, height) * 0.1;
+    const isInBounds = x >= gap && x <= (width - gap) && y >= gap && y <= (height - gap);
 
     if (isInBounds) {
         return 0;
     } else {
-        const dist = distanceToMap(width, height, x, y);
+        const dist = distanceToMap(width - gap, height - gap, x, y);
         return 0.8 * WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, 200, dist)
             + 0.2 * WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, 500, dist);
     }
