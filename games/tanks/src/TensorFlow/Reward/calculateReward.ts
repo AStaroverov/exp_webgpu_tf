@@ -75,6 +75,7 @@ export function calculateStateReward(
 ): number {
     const isShooting = TankController.shoot[tankEid] > 0;
     const moveDir = TankController.move[tankEid];
+    const rotationDir = TankController.rotation[tankEid];
     const [currentTankX, currentTankY] = RigidBodyState.position.getBatch(tankEid);
     // const [currentTankSpeedX, currentTankSpeedY] = RigidBodyState.linvel.getBatche(tankEid);
     const [currentTurretTargetX, currentTurretTargetY] = getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[tankEid]));
@@ -101,7 +102,7 @@ export function calculateStateReward(
 
     const rewards = initializeStateRewards();
 
-    rewards.moving.speed = calculateMovingReward(moveDir, beforePredictBulletsEids.length > 0);
+    rewards.moving.speed = calculateMovingReward(moveDir, rotationDir, beforePredictBulletsEids.length > 0);
 
     rewards.positioning.mapAwareness = calculateTankMapAwarenessReward(
         width,
@@ -224,15 +225,15 @@ export function calculateActionReward(
 }
 
 
-function calculateMovingReward(moveDir: number, hasDangerousBullets: boolean): number {
-    const absMoveDir = abs(moveDir);
+function calculateMovingReward(moveDir: number, rotationDir: number, hasDangerousBullets: boolean): number {
+    const absSumDir = min(abs(moveDir) + abs(rotationDir) / 2, 1);
     const minLimit = hasDangerousBullets ? 0.7 : 0.3;
     const multiplier = hasDangerousBullets ? WEIGHTS.MOVING.DANGEROUS_MULTIPLIER : 1;
 
-    if (absMoveDir > minLimit) {
-        return WEIGHTS.MOVING.BASE_SPEED * multiplier * (absMoveDir - minLimit) / (1 - minLimit);
+    if (absSumDir > minLimit) {
+        return WEIGHTS.MOVING.BASE_SPEED * multiplier * (absSumDir - minLimit) / (1 - minLimit);
     } else {
-        return WEIGHTS.MOVING.PENALTY_SPEED * multiplier * (minLimit - absMoveDir) / minLimit;
+        return WEIGHTS.MOVING.PENALTY_SPEED * multiplier * (minLimit - absSumDir) / minLimit;
     }
 }
 
@@ -444,15 +445,12 @@ function calculateEnemyDistanceReward(
         const maxDist = 600;
 
         if (distToEnemy < minDist) {
-            // Штраф за слишком близкое расстояние
             const tooClosePenalty = smoothstep(minDist, 0, distToEnemy);
             positioningReward += tooClosePenalty * WEIGHTS.DISTANCE_KEEPING.PENALTY;
         } else if (distToEnemy <= maxDist) {
-            // Награда за оптимальную дистанцию
             const optimalDistanceReward = centerStep(minDist, maxDist, distToEnemy);
             positioningReward += optimalDistanceReward * WEIGHTS.DISTANCE_KEEPING.BASE;
         } else {
-            // Мягкий штраф за слишком большую дистанцию
             const tooFarPenalty = smoothstep(maxDist, maxDist * 1.5, distToEnemy) * WEIGHTS.DISTANCE_KEEPING.PENALTY;
             positioningReward += tooFarPenalty;
         }
