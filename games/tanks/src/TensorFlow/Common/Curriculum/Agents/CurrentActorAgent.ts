@@ -11,7 +11,6 @@ import { getTankHealth } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { Model } from '../../../Models/def.ts';
 import { random } from '../../../../../../../lib/random.ts';
 import { CONFIG } from '../../../PPO/config.ts';
-import { lerp } from '../../../../../../../lib/math.ts';
 import { clamp } from 'lodash-es';
 
 export type TankAgent = {
@@ -71,7 +70,7 @@ export class CurrentActorAgent implements TankAgent {
         applyActionToTank(
             this.tankEid,
             result.actions.map((v) => clamp(v / MAX_STD_DEV, -1, 1)),
-            result.logStd.map((v) => lerp(0.3, 0.9, 1 - Math.exp(v) / MAX_STD_DEV)),
+            // result.logStd.map((v) => lerp(0.3, 0.9, 1 - Math.exp(v) / MAX_STD_DEV)),
         );
 
         if (!this.train) return;
