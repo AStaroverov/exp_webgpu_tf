@@ -4,7 +4,7 @@ import { randomRangeFloat } from '../../../../../../lib/random.ts';
 import { createScenarioStaticWithCoop } from './createScenarioStaticWithCoop.ts';
 import { fillWithSimpleHeuristicAgents } from './Utils/fillWithSimpleHeuristicAgents.ts';
 
-export const indexScenarioWithHeuristicAgents = 4;
+export const indexScenarioWithHeuristicAgents = 5;
 
 export async function createScenarioWithHeuristicAgents(options: Parameters<typeof createBattlefield>[0]): Promise<Scenario> {
     const episode = await createScenarioStaticWithCoop(options);

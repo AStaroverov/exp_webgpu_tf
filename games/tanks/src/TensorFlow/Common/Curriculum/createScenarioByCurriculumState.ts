@@ -1,6 +1,6 @@
 import { Scenario } from './types.ts';
 import { CurriculumState } from '../../PPO/channels.ts';
-import { createScenarioStatic, indexScenarioStatic } from './createScenarioStatic.ts';
+import { createScenarioWithAlliesStatic, indexScenarioWithAlliesStatic } from './createScenarioWithAlliesStatic.ts';
 import { random } from '../../../../../../lib/random.ts';
 import { createScenarioStaticWithCoop, indexScenarioStaticWithCoop } from './createScenarioStaticWithCoop.ts';
 import { createBattlefield } from './createBattlefield.ts';
@@ -22,11 +22,13 @@ import {
     indexScenarioWithHistoricalAgents,
 } from './createScenarioWithHistoricalAgents.ts';
 import { max, min } from '../../../../../../lib/math.ts';
+import { createScenarioSoloStatic, indexScenarioSoloStatic } from './createScenarioSoloStatic.ts';
 
 type ScenarioOptions = Parameters<typeof createBattlefield>[0];
 
 const mapEntries = [
-    [indexScenarioStatic, createScenarioStatic],
+    [indexScenarioSoloStatic, createScenarioSoloStatic],
+    [indexScenarioWithAlliesStatic, createScenarioWithAlliesStatic],
     [indexScenarioStaticWithCoop, createScenarioStaticWithCoop],
     [indexScenarioWithMovingAgents, createScenarioWithMovingAgents],
     [indexScenarioWithShootingAgents, createScenarioWithShootingAgents],
@@ -43,7 +45,7 @@ if (mapIndexToConstructor.size !== mapEntries.length) {
 export const scenariosCount = mapIndexToConstructor.size;
 
 export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: ScenarioOptions): Promise<Scenario> {
-    let constructor = createScenarioStatic;
+    let constructor = createScenarioSoloStatic;
 
     let weights = [];
     let totalWeight = 0;
@@ -65,7 +67,7 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
         if (r < weight) {
             constructor = mapIndexToConstructor.get(i) ?? (() => {
                 console.warn(`Scenario ${ i } not found, using default scenario static`);
-                return createScenarioStatic;
+                return createScenarioWithAlliesStatic;
             })();
             break;
         }

@@ -8,12 +8,16 @@ import { getSuccessRatio, getTeamHealth } from './utils.ts';
 import { Scenario } from './types.ts';
 import { max } from '../../../../../../lib/math.ts';
 
-export const indexScenarioStatic = 0;
+export const indexScenarioWithAlliesStatic = 1;
 
-export async function createScenarioStatic(options: Parameters<typeof createBattlefield>[0]): Promise<Scenario> {
+export async function createScenarioWithAlliesStatic(options: Parameters<typeof createBattlefield>[0] & {
+    alliesCount?: number;
+    enemiesCount?: number;
+}): Promise<Scenario> {
     const game = createBattlefield(options);
-    const count = randomRangeInt(1, 3);
-    const tanks = addRandomTanks([[0, count], [1, max(1, count + randomRangeInt(-1, 1))]]);
+    const alliesCount = options.alliesCount ?? randomRangeInt(1, 3);
+    const enemiesCount = options.enemiesCount ?? max(1, alliesCount + randomRangeInt(-1, 1));
+    const tanks = addRandomTanks([[0, alliesCount], [1, enemiesCount]]);
     const activeTeam = getTankTeamId(tanks[0]);
     const initialTeamHealth = getTeamHealth(tanks);
 
@@ -24,7 +28,7 @@ export async function createScenarioStatic(options: Parameters<typeof createBatt
 
     return {
         ...game,
-        index: indexScenarioStatic,
+        index: indexScenarioWithAlliesStatic,
         destroy: () => {
             game.destroy();
             mapTankIdToAgent.forEach(agent => agent.dispose?.());
