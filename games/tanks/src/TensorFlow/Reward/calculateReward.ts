@@ -27,28 +27,28 @@ const WEIGHTS = Object.freeze({
     AIM: {
         QUALITY: 1,
         SHOOTING_ENEMIES: 1,
-        SHOOTING_ALLIES_PENALTY: -3,
-        SHOOTING_BAD_AIM: -3,
+        SHOOTING_ALLIES_PENALTY: -5,
+        SHOOTING_BAD_AIM: -2,
         SHOOTING_GOOD_AIM_PENALTY: -1,
     },
     AIM_MULTIPLIER: 1,
 
     MOVING: {
         BASE_SPEED: 1,
-        PENALTY_SPEED: -3,
-        DANGEROUS_MULTIPLIER: 2,
+        PENALTY_SPEED: -2,
+        DANGEROUS_MULTIPLIER: 3,
     },
     MOVING_MULTIPLIER: 1,
 
     MAP_BORDER: {
         BASE: 1,
-        PENALTY: -3,
+        PENALTY: -5,
     },
     MAP_BORDER_MULTIPLIER: 1,
 
     DISTANCE_KEEPING: {
         BASE: 1,
-        PENALTY: -3,
+        PENALTY: -2,
     },
     DISTANCE_KEEPING_MULTIPLIER: 1,
 });
