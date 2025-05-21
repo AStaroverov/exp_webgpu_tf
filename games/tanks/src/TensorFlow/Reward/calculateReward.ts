@@ -1,6 +1,6 @@
 import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
 import { BattleState, getBattleState } from '../../Game/ECS/Utils/snapshotTankInputTensor.ts';
-import { abs, acos, centerStep, hypot, max, min, PI, sin, smoothstep } from '../../../../../lib/math.ts';
+import { abs, acos, hypot, max, min, PI, sin, smoothstep } from '../../../../../lib/math.ts';
 import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
 import { Tank } from '../../Game/ECS/Components/Tank.ts';
 import { TankController } from '../../Game/ECS/Components/TankController.ts';
@@ -13,50 +13,44 @@ import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
 // Very important that Action rewards must be rear and huge relatively state rewards
 const WEIGHTS = Object.freeze({
     // ACTION REWARD
-    TEAM: {
-        SCORE: 2,
-    },
-    TEAM_MULTIPLIER: 1,
-
     COMMON: {
         SCORE: 2,
         HEALTH: 1,
     },
     COMMON_MULTIPLIER: 2,
 
+    TEAM: {
+        SCORE: 2,
+    },
+    TEAM_MULTIPLIER: 1,
+
     // STATE REWARD
     AIM: {
-        QUALITY: 1,
-        SHOOTING_ENEMIES: 1,
-        SHOOTING_ALLIES_PENALTY: -5,
-        SHOOTING_BAD_AIM: -2,
-        SHOOTING_GOOD_AIM_PENALTY: -1,
+        SHOOTING_BAD_AIM: -1,
+        SHOOTING_ALLIES_PENALTY: -1,
     },
-    AIM_MULTIPLIER: 0.1,
+    AIM_MULTIPLIER: 0.5,
 
     MOVING: {
-        BASE_SPEED: 1,
-        PENALTY_SPEED: -2,
-        DANGEROUS_MULTIPLIER: 3,
+        PENALTY_SPEED: -1,
+        DANGEROUS_MULTIPLIER: 2,
     },
-    MOVING_MULTIPLIER: 0.1,
+    MOVING_MULTIPLIER: 0.5,
 
     MAP_BORDER: {
-        BASE: 1,
-        PENALTY: -5,
+        PENALTY: -1,
     },
-    MAP_BORDER_MULTIPLIER: 0.1,
+    MAP_BORDER_MULTIPLIER: 0.5,
 
     DISTANCE_KEEPING: {
-        BASE: 1,
-        PENALTY: -2,
+        PENALTY: -1,
     },
-    DISTANCE_KEEPING_MULTIPLIER: 0.1,
+    DISTANCE_KEEPING_MULTIPLIER: 0.2,
 });
 
 function initializeStateRewards() {
     return {
-        aim: { accuracy: 0, total: 0, shootDecision: 0 },
+        aim: { shootDecision: 0, total: 0 },
         moving: { speed: 0, total: 0 },
         positioning: {
             enemiesPositioning: 0,
@@ -122,7 +116,6 @@ export function calculateStateReward(
         beforePredictAlliesEids,
     );
 
-    rewards.aim.accuracy = aimingResult.aimQualityReward;
     rewards.aim.shootDecision = calculateShootingReward(
         isShooting,
         aimingResult.bestEnemyAimQuality,
@@ -143,13 +136,13 @@ export function calculateStateReward(
 
     // Рассчитываем итоговые значения
     rewards.aim.total = WEIGHTS.AIM_MULTIPLIER
-        * (rewards.aim.accuracy + rewards.aim.shootDecision);
+        * (rewards.aim.shootDecision);
     rewards.moving.total = WEIGHTS.MOVING_MULTIPLIER
         * (rewards.moving.speed);
     rewards.positioning.total =
-        (rewards.positioning.enemiesPositioning * WEIGHTS.DISTANCE_KEEPING_MULTIPLIER
+        (rewards.positioning.mapAwareness * WEIGHTS.MAP_BORDER_MULTIPLIER
             + rewards.positioning.alliesPositioning * WEIGHTS.DISTANCE_KEEPING_MULTIPLIER
-            + rewards.positioning.mapAwareness * WEIGHTS.MAP_BORDER_MULTIPLIER);
+            + rewards.positioning.enemiesPositioning * WEIGHTS.DISTANCE_KEEPING_MULTIPLIER);
 
     // Общая итоговая награда
     const totalReward =
@@ -225,17 +218,14 @@ export function calculateActionReward(
     return totalReward;
 }
 
-
 function calculateMovingReward(moveDir: number, rotationDir: number, hasDangerousBullets: boolean): number {
     const absSumDir = min(abs(moveDir) + abs(rotationDir) / 2, 1);
-    const minLimit = hasDangerousBullets ? 0.7 : 0.3;
+    const minLimit = hasDangerousBullets ? 0.5 : 0.2;
     const multiplier = hasDangerousBullets ? WEIGHTS.MOVING.DANGEROUS_MULTIPLIER : 1;
 
-    if (absSumDir > minLimit) {
-        return WEIGHTS.MOVING.BASE_SPEED * multiplier * (absSumDir - minLimit) / (1 - minLimit);
-    } else {
-        return WEIGHTS.MOVING.PENALTY_SPEED * multiplier * (minLimit - absSumDir) / minLimit;
-    }
+    return absSumDir > minLimit
+        ? 0
+        : WEIGHTS.MOVING.PENALTY_SPEED * multiplier * (minLimit - absSumDir) / minLimit;
 }
 
 export function getTeamAdvantageScore(state: BattleState): number {
@@ -252,13 +242,12 @@ function calculateTankMapAwarenessReward(
     x: number,
     y: number,
 ): number {
-    const gap = min(50, max(width, height) * 0.1);
-    const isInBounds = x >= gap && x <= (width - gap) && y >= gap && y <= (height - gap);
+    const isInBounds = x >= 0 && x <= width && y >= 0 && y <= height;
 
     if (isInBounds) {
         return 0;
     } else {
-        const dist = distanceToMap(width - gap, height - gap, x, y);
+        const dist = distanceToMap(width, height, x, y);
         return 0.8 * WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, 200, dist)
             + 0.2 * WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, 500, dist);
     }
@@ -288,7 +277,6 @@ function analyzeAiming(
     bestEnemyAimQuality: number;
     bestEnemyAimTargetId: number;
     bestAlliesAimQuality: number;
-    aimQualityReward: number;
 } {
     let bestEnemyAimQuality = 0;
     let bestEnemyAimTargetId = 0;
@@ -342,14 +330,10 @@ function analyzeAiming(
         bestAlliesAimQuality = max(bestAlliesAimQuality, aimQuality);
     }
 
-    // Награда за качество прицеливания и дистанцию до цели
-    const aimQualityReward = (bestEnemyAimQuality * WEIGHTS.AIM.QUALITY);
-
     return {
         bestEnemyAimQuality,
         bestEnemyAimTargetId,
         bestAlliesAimQuality,
-        aimQualityReward,
     };
 }
 
@@ -414,14 +398,8 @@ function calculateShootingReward(
         return WEIGHTS.AIM.SHOOTING_ALLIES_PENALTY;
     }
 
-    const enoughAimQuality = 0.35;
-
-    if (isShooting) {
-        return bestEnemyAimQuality > enoughAimQuality
-            ? WEIGHTS.AIM.SHOOTING_ENEMIES * bestEnemyAimQuality
-            : WEIGHTS.AIM.SHOOTING_BAD_AIM * (1 - bestEnemyAimQuality);
-    } else if (bestEnemyAimQuality > enoughAimQuality) {
-        return WEIGHTS.AIM.SHOOTING_GOOD_AIM_PENALTY * smoothstep(0.8, 1.0, bestEnemyAimQuality);
+    if (isShooting && bestEnemyAimQuality < 0.35) {
+        return WEIGHTS.AIM.SHOOTING_BAD_AIM * (1 - bestEnemyAimQuality);
     }
 
     return 0;
@@ -434,7 +412,6 @@ function calculateEnemyDistanceReward(
 ): number {
     let positioningReward = 0;
 
-    // Анализируем всех видимых врагов для текущего состояния
     for (let i = 0; i < beforePredictEnemiesEids.length; i++) {
         const enemyId = beforePredictEnemiesEids[i];
         const enemyX = RigidBodyState.position.get(enemyId, 0);
@@ -448,10 +425,7 @@ function calculateEnemyDistanceReward(
         if (distToEnemy < minDist) {
             const tooClosePenalty = smoothstep(minDist, 0, distToEnemy);
             positioningReward += tooClosePenalty * WEIGHTS.DISTANCE_KEEPING.PENALTY;
-        } else if (distToEnemy <= maxDist) {
-            const optimalDistanceReward = centerStep(minDist, maxDist, distToEnemy);
-            positioningReward += optimalDistanceReward * WEIGHTS.DISTANCE_KEEPING.BASE;
-        } else {
+        } else if (distToEnemy > maxDist) {
             const tooFarPenalty = smoothstep(maxDist, maxDist * 1.5, distToEnemy) * WEIGHTS.DISTANCE_KEEPING.PENALTY;
             positioningReward += tooFarPenalty;
         }
