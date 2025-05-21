@@ -8,7 +8,7 @@ export const indexScenarioSoloStatic = 0;
 export async function createScenarioSoloStatic(options: Parameters<typeof createBattlefield>[0]): Promise<Scenario> {
     const scenario = await createScenarioWithAlliesStatic({
         ...options,
-        size: randomRangeInt(300, 700),
+        size: randomRangeInt(600, 1000),
         alliesCount: 1,
         enemiesCount: randomRangeInt(1, 3),
     });
