@@ -4,12 +4,14 @@ import { first, firstValueFrom, interval } from 'rxjs';
 import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { EpisodeManager } from '../Actor/EpisodeManager.ts';
 import { Scenario } from '../../Common/Curriculum/types.ts';
-import { max } from '../../../../../../lib/math.ts';
+import { log, max, min, round } from '../../../../../../lib/math.ts';
 import { TankAgent } from '../../Common/Curriculum/Agents/CurrentActorAgent.ts';
 import { SNAPSHOT_EVERY } from '../../Common/consts.ts';
 import { CONFIG } from '../config.ts';
 import { frameTasks } from '../../../../../../lib/TasksScheduler/frameTasks.ts';
 import { createScenarioByCurriculumState } from '../../Common/Curriculum/createScenarioByCurriculumState.ts';
+
+const discounterLen = round(log(0.01) / log(CONFIG.gamma));
 
 export class VisTestEpisodeManager extends EpisodeManager {
     private currentScenario?: Scenario;
@@ -32,7 +34,14 @@ export class VisTestEpisodeManager extends EpisodeManager {
         if (memory == null || memory.rewards.length === 0) return 0;
 
         let sum = 0;
-        for (let i = 0; i < (memory.rewards.length - 1); i++) {
+        let len = min(memory.rewards.length - 1, discounterLen);
+        let i = 1;
+        while (len > 0) {
+            sum += memory.rewards[memory.rewards.length - i];
+            len--;
+            i++;
+        }
+        for (let i = 0; i < len; i++) {
             sum += memory.rewards[i];
         }
         return sum;
