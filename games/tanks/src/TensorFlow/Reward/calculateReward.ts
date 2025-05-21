@@ -10,12 +10,13 @@ import { BULLET_SPEED } from '../../Game/ECS/Components/Bullet.ts';
 import { getTankHealth, getTankScore } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
 
+// Very important that Action rewards must be rear and huge relatively state rewards
 const WEIGHTS = Object.freeze({
     // ACTION REWARD
     TEAM: {
         SCORE: 2,
     },
-    TEAM_MULTIPLIER: 2,
+    TEAM_MULTIPLIER: 1,
 
     COMMON: {
         SCORE: 2,
@@ -31,26 +32,26 @@ const WEIGHTS = Object.freeze({
         SHOOTING_BAD_AIM: -2,
         SHOOTING_GOOD_AIM_PENALTY: -1,
     },
-    AIM_MULTIPLIER: 1,
+    AIM_MULTIPLIER: 0.1,
 
     MOVING: {
         BASE_SPEED: 1,
         PENALTY_SPEED: -2,
         DANGEROUS_MULTIPLIER: 3,
     },
-    MOVING_MULTIPLIER: 1,
+    MOVING_MULTIPLIER: 0.1,
 
     MAP_BORDER: {
         BASE: 1,
         PENALTY: -5,
     },
-    MAP_BORDER_MULTIPLIER: 1,
+    MAP_BORDER_MULTIPLIER: 0.1,
 
     DISTANCE_KEEPING: {
         BASE: 1,
         PENALTY: -2,
     },
-    DISTANCE_KEEPING_MULTIPLIER: 0.5,
+    DISTANCE_KEEPING_MULTIPLIER: 0.1,
 });
 
 function initializeStateRewards() {
@@ -66,7 +67,7 @@ function initializeStateRewards() {
     };
 }
 
-const EPSILON = 1e-6; // Для избежания деления на ноль
+const EPSILON = 1e-6;
 
 export function calculateStateReward(
     tankEid: number,
