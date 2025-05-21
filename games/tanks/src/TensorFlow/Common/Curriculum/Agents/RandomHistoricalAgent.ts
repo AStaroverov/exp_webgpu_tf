@@ -8,6 +8,7 @@ import { applyActionToTank } from '../../applyActionToTank.ts';
 import { Model } from '../../../Models/def.ts';
 import { TankAgent } from './CurrentActorAgent.ts';
 import { clamp } from 'lodash-es';
+import { lerp } from '../../../../../../../lib/math.ts';
 
 export class RandomHistoricalAgent implements TankAgent {
     private policyNetwork?: tf.LayersModel;
@@ -35,7 +36,7 @@ export class RandomHistoricalAgent implements TankAgent {
         applyActionToTank(
             this.tankEid,
             result.actions.map((v) => clamp(v / MAX_STD_DEV, -1, 1)),
-            // result.logStd.map((v) => lerp(0.3, 0.9, 1 - Math.exp(v) / MAX_STD_DEV)),
+            result.logStd.map((v) => lerp(0.3, 0.9, 1 - Math.exp(v) / MAX_STD_DEV)),
         );
     }
 

@@ -57,9 +57,9 @@ export const DEFAULT_EXPERIMENT: Config = {
     valueLossCoeff: 0.5,
 
     klConfig: {
-        target: 0.01,
-        high: 0.02,
-        low: 0.0075,
+        target: 0.02,
+        high: 0.03,
+        low: 0.015,
         max: 0.5,
     },
     lrConfig: {
@@ -74,7 +74,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     miniBatchSize: isMac ? 128 : 128,
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
-    episodeFrames: Math.round(40 * 1000 / TICK_TIME_SIMULATION),
+    episodeFrames: Math.round(10 * 1000 / TICK_TIME_SIMULATION),
     // Workers
     workerCount: isMac ? 0 : 9,
     // perturbWeights

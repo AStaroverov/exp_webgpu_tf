@@ -251,7 +251,7 @@ function calculateTankMapAwarenessReward(
     x: number,
     y: number,
 ): number {
-    const gap = max(width, height) * 0.1;
+    const gap = min(50, max(width, height) * 0.1);
     const isInBounds = x >= gap && x <= (width - gap) && y >= gap && y <= (height - gap);
 
     if (isInBounds) {

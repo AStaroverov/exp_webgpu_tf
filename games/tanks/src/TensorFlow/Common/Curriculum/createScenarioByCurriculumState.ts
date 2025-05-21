@@ -50,10 +50,13 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
     let weights = [];
     let totalWeight = 0;
     for (let i = 0, minSuccessRatio = 1; i < mapIndexToConstructor.size; i++) {
-        const successRatio = curriculumState.mapScenarioIndexToSuccessRatio[i] ?? 0;
-        if (successRatio === 0 && minSuccessRatio < 0.75) {
+        let successRatio: number | undefined = curriculumState.mapScenarioIndexToSuccessRatio[i];
+
+        if (successRatio === undefined && minSuccessRatio < 0.75) {
             break;
         }
+
+        successRatio ??= 0;
 
         const weight = max(0.01, 0.95 - successRatio);
 
