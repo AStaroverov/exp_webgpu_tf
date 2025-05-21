@@ -107,7 +107,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
         .then(([policyLossList, klList]) => {
             console.info(`[Train Policy]: Finish`);
 
-            if (policyLossList.some((v) => isLossDangerous(v, 2))) {
+            if (policyLossList.some((v) => isLossDangerous(v, 10))) {
                 throw new Error(`Policy loss too dangerous: ${ min(...policyLossList) }, ${ max(...policyLossList) }`);
             }
 

@@ -17,6 +17,7 @@ export function applyActionToTank(
         TankController.shoot[tankEid],
         actions[0],
         probability[0],
+        1,
     );
     const move = blendLinear(
         TankController.move[tankEid],
@@ -48,7 +49,7 @@ export function applyActionToTank(
     TankController.setTurretDir$(tankEid, aimX, aimY);
 }
 
-function blendLinear(prev: number, raw: number, p: number, limit = 1) {
+function blendLinear(prev: number, raw: number, p: number, limit: number) {
     const next = prev * (1 - p) + raw * limit * p;
     return clamp(next, -limit, limit);
 }

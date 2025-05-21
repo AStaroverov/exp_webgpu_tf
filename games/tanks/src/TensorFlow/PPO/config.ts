@@ -76,7 +76,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
     episodeFrames: Math.round(30 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: isMac ? 0 : 9,
+    workerCount: isMac ? 3 : 9,
     // perturbWeights
     perturbWeightsScale: 0,
     // Training control

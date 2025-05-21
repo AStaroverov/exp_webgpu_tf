@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { ACTION_DIM } from '../Common/consts.ts';
-import { computeLogProb } from '../Common/computeLogProb.ts';
+import { computeLogProbTanh } from '../Common/computeLogProb.ts';
 import { InputArrays, prepareRandomInputArrays } from '../Common/InputArrays.ts';
 import { createInputTensors } from '../Common/InputTensors.ts';
 import { Scalar } from '@tensorflow/tfjs-core/dist/tensor';
@@ -34,8 +34,7 @@ export function trainPolicyNetwork(
         return optimize(network.optimizer, () => {
             const predicted = network.predict(states, PREDICT_OPTIONS) as tf.Tensor;
             const { mean, logStd } = parsePredict(predicted);
-            const std = logStd.exp();
-            const newLogProbs = computeLogProb(actions, mean, std);
+            const newLogProbs = computeLogProbTanh(actions, mean, logStd);
             const ratio = tf.exp(newLogProbs.sub(oldLogProbs));
             const clippedRatio = ratio.clipByValue(1 - clipRatio, 1 + clipRatio);
             const surr1 = ratio.mul(advantages);
@@ -87,8 +86,7 @@ export function computeKullbackLeiblerAprox(
     return tf.tidy(() => {
         const predicted = policyNetwork.predict(states, PREDICT_OPTIONS) as tf.Tensor;
         const { mean, logStd } = parsePredict(predicted);
-        const std = logStd.exp();
-        const newLogProbs = computeLogProb(actions, mean, std);
+        const newLogProbs = computeLogProbTanh(actions, mean, logStd);
         const diff = oldLogProb.sub(newLogProbs);
         const kl = diff.mean();
         return kl.dataSync()[0];
@@ -131,11 +129,9 @@ export function act(
     return tf.tidy(() => {
         const predicted = policyNetwork.predict(createInputTensors([state]), PREDICT_OPTIONS) as tf.Tensor;
         const { mean, logStd } = parsePredict(predicted);
-        const std = logStd.exp();
-
-        const noise = tf.randomNormal([ACTION_DIM]).mul(std);
-        const actions = mean.add(noise);
-        const logProb = computeLogProb(actions, mean, std);
+        const noise = tf.randomNormal([ACTION_DIM]).mul(logStd.exp());
+        const actions = mean.add(noise).tanh();
+        const logProb = computeLogProbTanh(actions, mean, logStd);
 
         return {
             actions: syncUnwrapTensor(actions) as Float32Array,
@@ -204,7 +200,7 @@ export function computeVTraceTargets(
         const { mean: meanCurrent, logStd: logStdCurrent } = parsePredict(predicted);
         const actions = tf.tensor2d(flatTypedArray(batch.actions), [batch.size, ACTION_DIM]);
 
-        const logProbCurrentTensor = computeLogProb(actions, meanCurrent, logStdCurrent.exp());
+        const logProbCurrentTensor = computeLogProbTanh(actions, meanCurrent, logStdCurrent);
         const logProbBehaviorTensor = tf.tensor1d(batch.logProbs);
         const rhosTensor = computeRho(logProbBehaviorTensor, logProbCurrentTensor);
         const valuesTensor = (valueNetwork.predict(input, PREDICT_OPTIONS) as tf.Tensor).squeeze();
