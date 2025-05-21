@@ -122,7 +122,7 @@ export class EpisodeManager {
         maxFrames: number,
         shouldEvery: number,
     ) {
-        const actors = scenario.getActors();
+        const actors = scenario.getAliveActors();
         const currentTanks = scenario.getTankEids();
         const gameOverByActorCount = actors.length <= 0;
         const gameOverByTankCount = currentTanks.length <= 1;
@@ -144,7 +144,7 @@ export class EpisodeManager {
         if (shouldAction) {
             snapshotTankInputTensor();
 
-            currentAgents = scenario.getAgents();
+            currentAgents = scenario.getAliveAgents();
 
             for (const agent of currentAgents) {
                 agent.updateTankBehaviour(GameDI.width, GameDI.height);

@@ -39,7 +39,7 @@ export class VisTestEpisodeManager extends EpisodeManager {
     }
 
     public getVersion() {
-        return this.currentScenario?.getAgents()
+        return this.currentScenario?.getAliveAgents()
             .reduce((acc, agent) => max(acc, agent.getVersion?.() ?? 0), 0) ?? 0;
     }
 

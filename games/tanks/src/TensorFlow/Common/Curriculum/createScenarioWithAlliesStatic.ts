@@ -33,12 +33,12 @@ export async function createScenarioWithAlliesStatic(options: Parameters<typeof 
             game.destroy();
             mapTankIdToAgent.forEach(agent => agent.dispose?.());
         },
-        getActors() {
+        getAliveActors() {
             return game.getTankEids()
                 .filter((eid) => mapTankIdToAgent.has(eid) && mapTankIdToAgent.get(eid) instanceof CurrentActorAgent)
                 .map((eid) => mapTankIdToAgent.get(eid) as CurrentActorAgent);
         },
-        getAgents() {
+        getAliveAgents() {
             return game.getTankEids()
                 .filter((eid) => mapTankIdToAgent.has(eid))
                 .map((eid) => mapTankIdToAgent.get(eid) as TankAgent);
@@ -51,6 +51,9 @@ export async function createScenarioWithAlliesStatic(options: Parameters<typeof 
         },
         getAgent(tankEid: EntityId) {
             return mapTankIdToAgent.get(tankEid);
+        },
+        getAgents() {
+            return Array.from(mapTankIdToAgent.values());
         },
         getFreeTankEids() {
             return game.getTankEids().filter((eid) => !mapTankIdToAgent.has(eid));

@@ -4,7 +4,7 @@ import { CurrentActorAgent, TankAgent } from '../Agents/CurrentActorAgent.ts';
 
 export async function fillAlliesWithActorAgents(episode: Scenario) {
     const tankEids = episode.getFreeTankEids();
-    const firstAgent = episode.getAgents();
+    const firstAgent = episode.getAliveAgents();
     const activeTeam = getTankTeamId(firstAgent[0].tankEid);
 
     const newAgents: TankAgent[] = [];
