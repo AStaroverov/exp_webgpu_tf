@@ -70,8 +70,8 @@ export class CurrentActorAgent implements TankAgent {
 
         applyActionToTank(
             this.tankEid,
-            result.actions.map((v) => clamp(v / MAX_STD_DEV, -1, 1)),
-            result.logStd.map((v) => lerp(0.3, 0.9, 1 - Math.exp(v) / MAX_STD_DEV)),
+            result.actions.map((v) => clamp(v / (2 * MAX_STD_DEV), -1, 1)),
+            result.logStd.map((v) => lerp(0.2, 0.9, 1 - Math.exp(v) / MAX_STD_DEV)),
         );
 
         if (!this.train) return;

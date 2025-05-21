@@ -24,8 +24,8 @@ export function createTankAimSystem({ world } = GameDI) {
             const tankPos = RigidBodyState.position.getBatch(tankEid);
             const aimLocal = LocalTransform.matrix.getBatch(aimEid);
             const aimDir = TankController.turretDir.getBatch(tankEid);
-            let aimX = getMatrixTranslationX(aimLocal) + aimDir[0] * delta * 0.1;
-            let aimY = getMatrixTranslationY(aimLocal) + aimDir[1] * delta * 0.1;
+            let aimX = getMatrixTranslationX(aimLocal) + aimDir[0] * delta * 0.3;
+            let aimY = getMatrixTranslationY(aimLocal) + aimDir[1] * delta * 0.3;
 
             if (dist2(tankPos[0], tankPos[1], aimX, aimY) > MAX_DIST) {
                 const dX = aimX - tankPos[0];
