@@ -36,7 +36,7 @@ export class RandomHistoricalAgent implements TankAgent {
         applyActionToTank(
             this.tankEid,
             result.actions.map((v) => clamp(v, -1, 1)),
-            result.logStd.map((v) => lerp(0.3, 1, 1 - Math.exp(v) / MAX_STD_DEV)),
+            result.logStd.map((v) => lerp(0.1, 1, 1 - Math.exp(v) / MAX_STD_DEV)),
         );
     }
 
