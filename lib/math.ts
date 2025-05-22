@@ -41,7 +41,7 @@ export function smoothstep(a: number, b: number, x: number): number {
 export function centerStep(a: number, b: number, x: number): number {
     let t = (x - a) / (b - a);
     t = 2 * t - 1;
-    return Math.max(0, 1 - t * t);
+    return max(0, 1 - t * t);
 }
 
 export function lerp(a: number, b: number, x: number): number {
@@ -63,7 +63,7 @@ export function std(args: number[] | Float32Array | Float64Array, mean: number):
         val += diff * diff;
     }
     val /= args.length;
-    return Math.sqrt(val);
+    return sqrt(val);
 }
 
 export function normalize<T extends number[] | Float32Array | Float64Array>(args: T): T {
