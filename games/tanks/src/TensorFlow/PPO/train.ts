@@ -1,7 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
 import { ACTION_DIM } from '../Common/consts.ts';
 import { computeLogProb } from '../Common/computeLogProb.ts';
-import { InputArrays, prepareRandomInputArrays } from '../Common/InputArrays.ts';
+import { InputArrays, prepareRandomInputArrays } from '../Common/InputArrays/prepareInputArrays.ts';
 import { createInputTensors } from '../Common/InputTensors.ts';
 import { Scalar } from '@tensorflow/tfjs-core/dist/tensor';
 import { random } from '../../../../../lib/random.ts';

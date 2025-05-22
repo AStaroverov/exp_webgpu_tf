@@ -1,4 +1,4 @@
-import { InputArrays } from './InputArrays.ts';
+import { InputArrays } from './InputArrays/prepareInputArrays.ts';
 
 export type AgentMemoryBatch = {
     size: number,

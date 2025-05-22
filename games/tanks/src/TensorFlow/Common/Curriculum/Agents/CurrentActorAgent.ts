@@ -1,10 +1,10 @@
 import * as tf from '@tensorflow/tfjs';
 import { Variable } from '@tensorflow/tfjs';
 import { act, MAX_STD_DEV } from '../../../PPO/train.ts';
-import { prepareInputArrays } from '../../InputArrays.ts';
+import { prepareInputArrays } from '../../InputArrays/prepareInputArrays.ts';
 import { disposeNetwork, getNetwork } from '../../../Models/Utils.ts';
 import { getNetworkVersion, patientAction } from '../../utils.ts';
-import { applyActionToTank } from '../../applyActionToTank.ts';
+import { applyActionsToTank } from '../../Actions/applyActionsToTank.ts';
 import { calculateActionReward, calculateStateReward } from '../../../Reward/calculateReward.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
 import { getTankHealth } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
@@ -68,7 +68,7 @@ export class CurrentActorAgent implements TankAgent {
         const state = prepareInputArrays(this.tankEid, width, height);
         const result = act(this.policyNetwork!, state);
 
-        applyActionToTank(
+        applyActionsToTank(
             this.tankEid,
             result.actions.map((v) => clamp(v, -1, 1)),
             result.logStd.map((v) => lerp(0.1, 1, 1 - Math.exp(v) / MAX_STD_DEV)),

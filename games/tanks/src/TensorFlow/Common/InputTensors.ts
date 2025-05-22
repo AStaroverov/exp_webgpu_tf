@@ -1,5 +1,5 @@
 import * as tf from '@tensorflow/tfjs';
-import { InputArrays } from './InputArrays.ts';
+import { InputArrays } from './InputArrays/prepareInputArrays.ts';
 import { flatTypedArray } from './flat.ts';
 import {
     ALLY_FEATURES_DIM,

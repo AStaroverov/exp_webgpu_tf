@@ -1,11 +1,12 @@
-import { TankController } from '../../Game/ECS/Components/TankController.ts';
+import { TankController } from '../../../Game/ECS/Components/TankController.ts';
 import { clamp } from 'lodash-es';
 
+// [shoot, move, rotate, aimX, aimY]
 export type Actions = Float32Array | [number, number, number, number, number];
 
 const defaultProbability = [1, 1, 1, 1, 1] as Actions;
 
-export function applyActionToTank(
+export function applyActionsToTank(
     tankEid: number,
     actions: Actions,
     probability = defaultProbability, // 0..1, 0 - not sure, 1 - sure

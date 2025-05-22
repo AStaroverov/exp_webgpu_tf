@@ -17,6 +17,10 @@ import { LearnData } from './createLearnerManager.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
 import { isLossDangerous } from './isLossDangerous.ts';
 import { Model } from '../../Models/def.ts';
+import { InputArrays } from '../../Common/InputArrays/prepareInputArrays.ts';
+import { flipInputArrays, FlipMode } from '../../Common/InputArrays/flipInputArrays.ts';
+import { flipActions } from '../../Common/Actions/flipActions.ts';
+import { random } from '../../../../../../lib/random.ts';
 
 export function createPolicyLearnerAgent() {
     return createLearnerAgent({
@@ -27,6 +31,8 @@ export function createPolicyLearnerAgent() {
 }
 
 const klHistory = new RingBuffer<number>(25);
+
+const ALL_FLIP_MODES = ['none', 'x', 'y', 'xy'] as FlipMode[];
 
 function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const version = getNetworkVersion(network);
@@ -39,11 +45,11 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
          Sum batch size: ${ batch.size },
          Mini batch count: ${ mbc } by ${ mbs }`);
 
-    const getPolicyBatch = (batchSize: number, index: number) => {
+    const getPolicyBatch = (batch: LearnData, batchSize: number, index: number) => {
         const indices = rb.getSample(batchSize, index * batchSize, (index + 1) * batchSize);
         return createPolicyBatch(batch, indices);
     };
-    const getKLBatch = (size: number) => {
+    const getKLBatch = (batch: LearnData, size: number) => {
         const indices = rb.getSample(batch.size).slice(0, size);
         return createKlBatch(batch, indices);
     };
@@ -54,49 +60,56 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const entropyCoeff = getEntropyCoeff(network.optimizer.iterations);
 
     for (let i = 0; i < CONFIG.policyEpochs; i++) {
-        for (let j = 0; j < mbc; j++) {
-            const mBatch = getPolicyBatch(mbs, j);
+        const flipModes = ALL_FLIP_MODES.filter((v) => v === 'none' || random() > 0.5);
 
-            const tStates = createInputTensors(mBatch.states);
-            const tActions = tf.tensor2d(flatTypedArray(mBatch.actions), [mBatch.actions.length, mBatch.actions[0].length]);
-            const tOldLogProbs = tf.tensor1d(mBatch.logProbs);
-            const tAdvantages = tf.tensor1d(mBatch.advantages);
+        for (const mode of flipModes) {
+            const flippedBatch = flipBatch(batch, mode);
 
-            const policyLoss = trainPolicyNetwork(
+            for (let j = 0; j < mbc; j++) {
+                const mBatch = getPolicyBatch(flippedBatch, mbs, j);
+
+                const tStates = createInputTensors(mBatch.states);
+                const tActions = tf.tensor2d(flatTypedArray(mBatch.actions), [mBatch.actions.length, mBatch.actions[0].length]);
+                const tOldLogProbs = tf.tensor1d(mBatch.logProbs);
+                const tAdvantages = tf.tensor1d(mBatch.advantages);
+
+                const policyLoss = trainPolicyNetwork(
+                    network,
+                    tStates,
+                    tActions,
+                    tOldLogProbs,
+                    tAdvantages,
+                    CONFIG.policyClipRatio,
+                    entropyCoeff,
+                    CONFIG.clipNorm,
+                    j === mbc - 1,
+                );
+                policyLoss && policyLossList.push(policyLoss);
+
+                tf.dispose(tStates);
+                tActions.dispose();
+                tOldLogProbs.dispose();
+                tAdvantages.dispose();
+            }
+
+            // KL
+            const lkBatch = getKLBatch(flippedBatch, klSize);
+            const tStates = createInputTensors(lkBatch.states);
+            const tMean = tf.tensor2d(flatTypedArray(lkBatch.mean), [lkBatch.mean.length, lkBatch.mean[0].length]);
+            const tLogStd = tf.tensor2d(flatTypedArray(lkBatch.logStd), [lkBatch.logStd.length, lkBatch.logStd[0].length]);
+
+            klList.push(computeKullbackLeiblerExact(
                 network,
                 tStates,
-                tActions,
-                tOldLogProbs,
-                tAdvantages,
-                CONFIG.policyClipRatio,
-                entropyCoeff,
-                CONFIG.clipNorm,
-                j === mbc - 1,
-            );
-            policyLoss && policyLossList.push(policyLoss);
+                tMean,
+                tLogStd,
+            ));
 
             tf.dispose(tStates);
-            tActions.dispose();
-            tOldLogProbs.dispose();
-            tAdvantages.dispose();
+            tMean.dispose();
+            tLogStd.dispose();
         }
 
-        // KL
-        const lkBatch = getKLBatch(klSize);
-        const tStates = createInputTensors(lkBatch.states);
-        const tMean = tf.tensor2d(flatTypedArray(lkBatch.mean), [lkBatch.mean.length, lkBatch.mean[0].length]);
-        const tLogStd = tf.tensor2d(flatTypedArray(lkBatch.logStd), [lkBatch.logStd.length, lkBatch.logStd[0].length]);
-
-        klList.push(computeKullbackLeiblerExact(
-            network,
-            tStates,
-            tMean,
-            tLogStd,
-        ));
-
-        tf.dispose(tStates);
-        tMean.dispose();
-        tLogStd.dispose();
     }
 
     return onReadyRead()
@@ -159,5 +172,19 @@ function createKlBatch(batch: LearnData, indices: number[]) {
         actions: actions,
         mean: (mean),
         logStd: (logStd),
+    };
+}
+
+
+function flipBatch<T extends { states: InputArrays[], actions: Float32Array[] }>(
+    batch: T,
+    mode: FlipMode,
+): T {
+    const flippedStates = batch.states.map((state) => flipInputArrays(state, mode));
+    const flippedActions = batch.actions.map((action) => flipActions(action, mode));
+    return {
+        ...batch,
+        states: flippedStates,
+        actions: flippedActions,
     };
 }

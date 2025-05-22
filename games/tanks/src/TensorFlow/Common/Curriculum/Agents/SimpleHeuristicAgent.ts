@@ -2,7 +2,7 @@ import { RigidBodyState } from '../../../../Game/ECS/Components/Physical';
 import { abs, hypot, lerp, min } from '../../../../../../../lib/math.ts';
 import { getAimPosition, getTankHealth } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { findTankEnemiesEids } from '../../../../Game/ECS/Utils/snapshotTankInputTensor.ts';
-import { Actions, applyActionToTank } from '../../applyActionToTank.ts';
+import { Actions, applyActionsToTank } from '../../Actions/applyActionsToTank.ts';
 import { TankAgent } from './CurrentActorAgent.ts';
 import { random, randomRangeFloat } from '../../../../../../../lib/random.ts';
 import { OrnsteinUhlenbeckNoise } from '../../../../../../../lib/OrnsteinUhlenbeckNoise.ts';
@@ -42,7 +42,7 @@ export class SimpleHeuristicAgent implements TankAgent {
             aim.aimY,
         ];
 
-        applyActionToTank(this.tankEid, action);
+        applyActionsToTank(this.tankEid, action);
     }
 
     private withMove() {

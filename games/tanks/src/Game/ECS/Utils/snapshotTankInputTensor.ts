@@ -339,4 +339,3 @@ function hasSimilarTrajectory(
 
     return false;
 }
-
