@@ -8,8 +8,11 @@ export type Config = {
     // PPO-specific parameters
     policyEpochs: number;                // Number of epochs to train on policy network
     policyClipRatio: number;             // Clipping ratio for PPO
-    policyEntropyCoeff: number;           // Entropy coefficient for encouraging exploration
-    policyEntropyLimit: number;           // Entropy limit for encouraging exploration
+    policyEntropy: {
+        coeff: number;
+        limit: number;
+        reset: number;
+    }
 
     valueEpochs: number;                  // Number of epochs to train the value network
     valueClipRatio: number;             // Clipping ratio for PPO
@@ -49,8 +52,11 @@ export const DEFAULT_EXPERIMENT: Config = {
     gamma: 0.92,
     policyEpochs: 2,
     policyClipRatio: 0.2,
-    policyEntropyCoeff: 0.01,
-    policyEntropyLimit: 20_000,
+    policyEntropy: {
+        coeff: 0.005,
+        limit: 8000,
+        reset: 10000,
+    },
 
     valueEpochs: 2,
     valueClipRatio: 0.4,
