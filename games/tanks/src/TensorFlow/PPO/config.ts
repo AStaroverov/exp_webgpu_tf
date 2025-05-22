@@ -50,7 +50,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     policyEpochs: 2,
     policyClipRatio: 0.2,
     policyEntropyCoeff: 0.01,
-    policyEntropyLimit: 20_000,
+    policyEntropyLimit: 1_000_000,
 
     valueEpochs: 2,
     valueClipRatio: 0.4,
@@ -70,7 +70,7 @@ export const DEFAULT_EXPERIMENT: Config = {
         max: 1e-3,
     },
 
-    batchSize: isMac ? 200 : 2_000,
+    batchSize: isMac ? 200 : 3_000,
     miniBatchSize: isMac ? 128 : 128,
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
