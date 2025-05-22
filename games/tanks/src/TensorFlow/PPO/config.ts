@@ -50,7 +50,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     clipNorm: 20,
     // PPO-specific parameters
     gamma: 0.92,
-    policyEpochs: 2,
+    policyEpochs: 1,
     policyClipRatio: 0.2,
     policyEntropy: {
         coeff: 0.005,
@@ -58,7 +58,7 @@ export const DEFAULT_EXPERIMENT: Config = {
         reset: 10000,
     },
 
-    valueEpochs: 2,
+    valueEpochs: 1,
     valueClipRatio: 0.4,
     valueLossCoeff: 0.5,
 
@@ -76,7 +76,7 @@ export const DEFAULT_EXPERIMENT: Config = {
         max: 1e-3,
     },
 
-    batchSize: isMac ? 200 : 2_000,
+    batchSize: isMac ? 200 : 4_000,
     miniBatchSize: isMac ? 128 : 128,
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
