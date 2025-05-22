@@ -54,7 +54,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     policyClipRatio: 0.2,
     policyEntropy: {
         coeff: 0.005,
-        limit: 8000,
+        limit: 5000,
         reset: 10000,
     },
 
