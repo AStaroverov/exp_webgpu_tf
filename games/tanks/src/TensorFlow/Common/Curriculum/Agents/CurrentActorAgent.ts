@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { Variable } from '@tensorflow/tfjs';
-import { act, MAX_STD_DEV } from '../../../PPO/train.ts';
+import { act } from '../../../PPO/train.ts';
 import { prepareInputArrays } from '../../InputArrays.ts';
 import { disposeNetwork, getNetwork } from '../../../Models/Utils.ts';
 import { getNetworkVersion, patientAction } from '../../utils.ts';
@@ -11,8 +11,6 @@ import { getTankHealth } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { Model } from '../../../Models/def.ts';
 import { random } from '../../../../../../../lib/random.ts';
 import { CONFIG } from '../../../PPO/config.ts';
-import { clamp } from 'lodash-es';
-import { lerp } from '../../../../../../../lib/math.ts';
 
 export type TankAgent = {
     tankEid: number;
@@ -68,11 +66,7 @@ export class CurrentActorAgent implements TankAgent {
         const state = prepareInputArrays(this.tankEid, width, height);
         const result = act(this.policyNetwork!, state);
 
-        applyActionToTank(
-            this.tankEid,
-            result.actions.map((v) => clamp(v / (2 * MAX_STD_DEV), -1, 1)),
-            result.logStd.map((v) => lerp(0.2, 0.9, 1 - Math.exp(v) / MAX_STD_DEV)),
-        );
+        applyActionToTank(this.tankEid, result.actions);
 
         if (!this.train) return;
 

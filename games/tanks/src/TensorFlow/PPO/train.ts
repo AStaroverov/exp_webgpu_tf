@@ -15,9 +15,7 @@ import { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
 const PREDICT_OPTIONS = { batchSize: CONFIG.miniBatchSize };
 
 export const MIN_LOG_STD_DEV = -5;
-export const MAX_LOG_STD_DEV = 2;
-export const MIN_STD_DEV = Math.exp(MIN_LOG_STD_DEV); // 0.0067
-export const MAX_STD_DEV = Math.exp(MAX_LOG_STD_DEV); // 54.
+export const MAX_LOG_STD_DEV = 0.2;
 
 export function trainPolicyNetwork(
     network: tf.LayersModel,
