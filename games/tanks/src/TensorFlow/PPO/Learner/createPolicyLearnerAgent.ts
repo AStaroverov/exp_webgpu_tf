@@ -176,15 +176,17 @@ function createKlBatch(batch: LearnData, indices: number[]) {
 }
 
 
-function flipBatch<T extends { states: InputArrays[], actions: Float32Array[] }>(
+function flipBatch<T extends { states: InputArrays[], actions: Float32Array[], mean: Float32Array[] }>(
     batch: T,
     mode: FlipMode,
 ): T {
     const flippedStates = batch.states.map((state) => flipInputArrays(state, mode));
     const flippedActions = batch.actions.map((action) => flipActions(action, mode));
+    const flippedMean = batch.mean.map((mean) => flipActions(mean, mode));
     return {
         ...batch,
         states: flippedStates,
         actions: flippedActions,
+        mean: flippedMean,
     };
 }
