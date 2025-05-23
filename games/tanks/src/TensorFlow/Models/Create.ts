@@ -21,9 +21,9 @@ import { Model } from './def.ts';
 import { PatchedAdamOptimizer } from './PatchedAdamOptimizer.ts';
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 
-export const CONTROLLER_FEATURES_DIM = 5;
+export const CONTROLLER_FEATURES_DIM = 4;
 export const BATTLE_FEATURES_DIM = 6;
-export const TANK_FEATURES_DIM = 8;
+export const TANK_FEATURES_DIM = 7;
 export const ENEMY_SLOTS = MAX_ENEMIES;
 export const ENEMY_FEATURES_DIM = ENEMY_BUFFER - 1; // -1 потому что id не считаем
 export const ALLY_SLOTS = MAX_ALLIES;

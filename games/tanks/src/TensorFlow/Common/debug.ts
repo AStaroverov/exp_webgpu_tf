@@ -83,9 +83,8 @@ export function createTanksDebug(manager: VisTestEpisodeManager) {
         for (let i = 0; i < tanksEids.length; i++) {
 
             const tankEid = tanksEids[i];
-            const aim = Tank.aimEid[tankEid];
             const teamId = TeamRef.id[tankEid];
-            const color = `rgba(${ Color.r[aim] * 255 }, ${ Color.g[aim] * 255 }, ${ Color.b[aim] * 255 }, ${ Color.a[aim] })`;
+            const color = `rgba(${ Color.r[tankEid] * 255 }, ${ Color.g[tankEid] * 255 }, ${ Color.b[tankEid] * 255 }, ${ Color.a[tankEid] })`;
 
             result += `
                 <div style="background: ${ color }; padding: 4px;">

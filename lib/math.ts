@@ -141,3 +141,10 @@ export function winsorize(
 
     return winsorized;
 }
+
+// Функция нормализации угла в диапазоне [-π, π]
+export function normalizeAngle(angle: number): number {
+    while (angle < -Math.PI) angle += 2 * Math.PI;
+    while (angle > Math.PI) angle -= 2 * Math.PI;
+    return angle;
+}

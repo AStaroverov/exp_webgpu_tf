@@ -12,7 +12,7 @@ export async function createScenarioWithStrongHeuristicAgents(options: Parameter
     fillWithSimpleHeuristicAgents(episode, {
         move: 1,
         aim: {
-            aimError: 0.2,
+            aimError: 0,
             shootChance: 0.8,
         },
     });

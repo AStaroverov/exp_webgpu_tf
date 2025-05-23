@@ -13,12 +13,12 @@ import {
     GlobalTransform,
 } from '../../../../../../src/ECS/Components/Transform.ts';
 import { Tank } from '../Components/Tank.ts';
-import { Color } from '../../../../../../src/ECS/Components/Common.ts';
 import { ZIndex } from '../../consts.ts';
 import { ActiveEvents, RigidBodyType } from '@dimforge/rapier2d-simd';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { Bullet, BULLET_SPEED } from '../Components/Bullet.ts';
 import { TeamRef } from '../Components/TeamRef.ts';
+import { Color } from '../../../../../../src/ECS/Components/Common.ts';
 
 type Options = Parameters<typeof createCircleRR>[0];
 const optionsBulletRR: Options = {
@@ -83,14 +83,13 @@ const tmpPosition = vec3.create() as Float32Array;
 export function spawnBullet(tankEid: number) {
     const globalTransform = GlobalTransform.matrix.getBatch(Tank.turretEId[tankEid]);
     const bulletDelta = Tank.bulletStartPosition.getBatch(tankEid);
-    const aimEid = Tank.aimEid[tankEid];
 
     tmpPosition.set(bulletDelta);
     mat4.identity(tmpMatrix);
     mat4.translate(tmpMatrix, tmpMatrix, tmpPosition);
     mat4.multiply(tmpMatrix, globalTransform, tmpMatrix);
 
-    Color.applyColorToArray(aimEid, optionsSpawnBullet.color);
+    Color.applyColorToArray(tankEid, optionsSpawnBullet.color);
     optionsSpawnBullet.x = getMatrixTranslationX(tmpMatrix);
     optionsSpawnBullet.y = getMatrixTranslationY(tmpMatrix);
     optionsSpawnBullet.rotation = getMatrixRotationZ(tmpMatrix);

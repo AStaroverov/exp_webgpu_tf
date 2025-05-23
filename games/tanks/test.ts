@@ -70,7 +70,6 @@ console.log('>> PLAYER ', PLAYER_REFS.tankPid);
 console.log('>> TANKS ', tanks);
 
 TankController.setShooting$(tanks[1], 1);
-TankController.setTurretDir$(tanks[1], 0.1, 0.1);
 
 // TankController.setMove$(enemyEid, 1);
 let i = 0;

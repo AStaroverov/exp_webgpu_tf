@@ -58,10 +58,9 @@ export function prepareInputArrays(
     let ci = 0;
 
     controllerFeatures[ci++] = norm(TankInputTensor.shoot[tankEid], 1);
-    controllerFeatures[ci++] = norm(TankInputTensor.move[tankEid], 1);
-    controllerFeatures[ci++] = norm(TankInputTensor.rotate[tankEid], 1);
-    controllerFeatures[ci++] = norm(TankInputTensor.turretDir.get(tankEid, 0), 2);
-    controllerFeatures[ci++] = norm(TankInputTensor.turretDir.get(tankEid, 1), 2);
+    controllerFeatures[ci++] = norm(TankInputTensor.moveDir[tankEid], 1);
+    controllerFeatures[ci++] = norm(TankInputTensor.rotDir[tankEid], 1);
+    controllerFeatures[ci++] = norm(TankInputTensor.turretRotDir[tankEid], 1);
 
     // ---- Tank features ----
     const tankFeatures = new Float32Array(TANK_FEATURES_DIM);
@@ -72,8 +71,7 @@ export function prepareInputArrays(
     const rotation = TankInputTensor.rotation[tankEid];
     const speedX = TankInputTensor.speed.get(tankEid, 0);
     const speedY = TankInputTensor.speed.get(tankEid, 1);
-    const turretTargetX = TankInputTensor.turretTarget.get(tankEid, 0);
-    const turretTargetY = TankInputTensor.turretTarget.get(tankEid, 1);
+    const turretRot = TankInputTensor.turretRotation[tankEid];
     const colliderRadius = TankInputTensor.colliderRadius[tankEid];
 
     tankFeatures[ti++] = TankInputTensor.health[tankEid];
@@ -82,8 +80,7 @@ export function prepareInputArrays(
     tankFeatures[ti++] = norm(rotation, Math.PI);
     tankFeatures[ti++] = norm(speedX, width);
     tankFeatures[ti++] = norm(speedY, height);
-    tankFeatures[ti++] = norm(turretTargetX - tankX, width);
-    tankFeatures[ti++] = norm(turretTargetY - tankY, height);
+    tankFeatures[ti++] = norm(turretRot, Math.PI);
     tankFeatures[ti++] = norm(colliderRadius, MAX_APPROXIMATE_COLLIDER_RADIUS);
 
     // ---- Enemies features ----
@@ -106,10 +103,10 @@ export function prepareInputArrays(
         enemiesFeatures[dstOffset + 0] = enemiesBuffer[srcOffset + 1];
         enemiesFeatures[dstOffset + 1] = norm(enemiesBuffer[srcOffset + 2] - tankX, width);
         enemiesFeatures[dstOffset + 2] = norm(enemiesBuffer[srcOffset + 3] - tankY, height);
-        enemiesFeatures[dstOffset + 3] = norm(enemiesBuffer[srcOffset + 4], width);
-        enemiesFeatures[dstOffset + 4] = norm(enemiesBuffer[srcOffset + 5], height);
-        enemiesFeatures[dstOffset + 5] = norm(enemiesBuffer[srcOffset + 6] - tankX, width);
-        enemiesFeatures[dstOffset + 6] = norm(enemiesBuffer[srcOffset + 7] - tankY, height);
+        enemiesFeatures[dstOffset + 5] = norm(enemiesBuffer[srcOffset + 4], Math.PI);
+        enemiesFeatures[dstOffset + 3] = norm(enemiesBuffer[srcOffset + 5], width);
+        enemiesFeatures[dstOffset + 4] = norm(enemiesBuffer[srcOffset + 6], height);
+        enemiesFeatures[dstOffset + 5] = norm(enemiesBuffer[srcOffset + 7], Math.PI);
         enemiesFeatures[dstOffset + 7] = norm(enemiesBuffer[srcOffset + 8], MAX_APPROXIMATE_COLLIDER_RADIUS);
     }
 
@@ -133,10 +130,10 @@ export function prepareInputArrays(
         alliesFeatures[dstOffset + 0] = alliesBuffer[srcOffset + 1]; // hp
         alliesFeatures[dstOffset + 1] = norm(alliesBuffer[srcOffset + 2] - tankX, width);
         alliesFeatures[dstOffset + 2] = norm(alliesBuffer[srcOffset + 3] - tankY, height);
-        alliesFeatures[dstOffset + 3] = norm(alliesBuffer[srcOffset + 4], width);
-        alliesFeatures[dstOffset + 4] = norm(alliesBuffer[srcOffset + 5], height);
-        alliesFeatures[dstOffset + 5] = norm(alliesBuffer[srcOffset + 6] - tankX, width);
-        alliesFeatures[dstOffset + 6] = norm(alliesBuffer[srcOffset + 7] - tankY, height);
+        alliesFeatures[dstOffset + 5] = norm(alliesBuffer[srcOffset + 4], Math.PI);
+        alliesFeatures[dstOffset + 3] = norm(alliesBuffer[srcOffset + 5], width);
+        alliesFeatures[dstOffset + 4] = norm(alliesBuffer[srcOffset + 6], height);
+        alliesFeatures[dstOffset + 5] = norm(alliesBuffer[srcOffset + 7], Math.PI);
         alliesFeatures[dstOffset + 7] = norm(alliesBuffer[srcOffset + 8], MAX_APPROXIMATE_COLLIDER_RADIUS);
     }
 

@@ -1,7 +1,6 @@
 import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
 import { BattleState, getBattleState } from '../../Game/ECS/Utils/snapshotTankInputTensor.ts';
-import { abs, acos, hypot, max, min, PI, sin, smoothstep } from '../../../../../lib/math.ts';
-import { getMatrixTranslation, LocalTransform } from '../../../../../src/ECS/Components/Transform.ts';
+import { abs, acos, cos, hypot, max, min, normalizeAngle, PI, sin, smoothstep } from '../../../../../lib/math.ts';
 import { Tank } from '../../Game/ECS/Components/Tank.ts';
 import { TankController } from '../../Game/ECS/Components/TankController.ts';
 import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../Game/ECS/Components/TankState.ts';
@@ -73,7 +72,7 @@ export function calculateStateReward(
     const rotationDir = TankController.rotation[tankEid];
     const [currentTankX, currentTankY] = RigidBodyState.position.getBatch(tankEid);
     // const [currentTankSpeedX, currentTankSpeedY] = RigidBodyState.linvel.getBatche(tankEid);
-    const [currentTurretTargetX, currentTurretTargetY] = getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[tankEid]));
+    const turretRotation = RigidBodyState.rotation[Tank.turretEId[tankEid]];
     // const currentShootings = TankController.shoot[tankEid] > 0;
     // const currentEnemies = findTankEnemiesEids(tankEid);
     // const currentAllies = findTankAlliesEids(tankEid);
@@ -110,8 +109,7 @@ export function calculateStateReward(
     const aimingResult = analyzeAiming(
         currentTankX,
         currentTankY,
-        currentTurretTargetX,
-        currentTurretTargetY,
+        turretRotation,
         beforePredictEnemiesEids,
         beforePredictAlliesEids,
     );
@@ -269,8 +267,7 @@ function distanceToMap(width: number, height: number, x: number, y: number): num
 function analyzeAiming(
     tankX: number,
     tankY: number,
-    turretTargetX: number,
-    turretTargetY: number,
+    turretRotation: number,
     beforePredictEnemiesEids: number[],
     beforePredictAlliesEids: number[],
 ): {
@@ -296,7 +293,7 @@ function analyzeAiming(
         const futureEnemyY = enemyY + enemyVY * timeDistToEnemy;
         const enemyColliderRadius = HeuristicsData.approxColliderRadius[enemyId];
 
-        const aimQuality = computeAimQuality(tankX, tankY, turretTargetX, turretTargetY, futureEnemyX, futureEnemyY, enemyColliderRadius);
+        const aimQuality = computeAimQuality(tankX, tankY, turretRotation, futureEnemyX, futureEnemyY, enemyColliderRadius);
 
         // Отслеживаем лучшее прицеливание
         if (aimQuality > bestEnemyAimQuality) {
@@ -320,7 +317,7 @@ function analyzeAiming(
         const futureAllyY = allyY + allyVY * timeDistToAlly;
         const allyColliderRadius = HeuristicsData.approxColliderRadius[allyId];
 
-        let aimQuality = computeAimQuality(tankX, tankY, turretTargetX, turretTargetY, futureAllyX, futureAllyY, allyColliderRadius);
+        let aimQuality = computeAimQuality(tankX, tankY, turretRotation, futureAllyX, futureAllyY, allyColliderRadius);
 
         if (bestEnemyAimQuality > 0 && distToAlly > bestEnemyDistance) {
             const distDiff = 1 - (distToAlly - bestEnemyDistance) / distToAlly;
@@ -340,52 +337,44 @@ function analyzeAiming(
 function computeAimQuality(
     tankX: number,
     tankY: number,
-    turretTargetX: number,
-    turretTargetY: number,
+    turretRotation: number,
     enemyX: number,
     enemyY: number,
     colliderRadius: number,
 ): number {
-    // Вектор от танка к турели
-    const tankToTurretTargetX = turretTargetX - tankX;
-    const tankToTurretTargetY = turretTargetY - tankY;
-
-    // Вектор от танка к противнику
+    // 1. Вектор «танк → враг»
     const tankToEnemyX = enemyX - tankX;
     const tankToEnemyY = enemyY - tankY;
-
-    // Вычисляем длины векторов
     const tankToEnemyDist = hypot(tankToEnemyX, tankToEnemyY);
-    const tankToTurretTargetDist = hypot(tankToTurretTargetX, tankToTurretTargetY);
 
-    // Нормализованные векторы
-    const turretNormX = tankToTurretTargetX / (tankToTurretTargetDist + EPSILON);
-    const turretNormY = tankToTurretTargetY / (tankToTurretTargetDist + EPSILON);
+    // Нормализуем
     const enemyNormX = tankToEnemyX / (tankToEnemyDist + EPSILON);
     const enemyNormY = tankToEnemyY / (tankToEnemyDist + EPSILON);
 
-    // Скалярное произведение нормализованных векторов
+    // 2. Вектор направления ствола
+    //    turretDir = (cos φ, sin φ), φ = tankRot + turretRot
+    const turretAngle = normalizeAngle(turretRotation - Math.PI / 2);
+    const turretNormX = cos(turretAngle);
+    const turretNormY = sin(turretAngle);
+
+    // 3. Сравниваем два норм-вектора
     const dotProduct = turretNormX * enemyNormX + turretNormY * enemyNormY;
+    if (dotProduct < 0) return 0;                 // враг позади ствола
 
-    if (dotProduct < 0) return 0;
+    const angle = acos(max(-1, min(1, dotProduct)));          // |угол| ∈ [0, π]
 
-    // Угол между векторами (в радианах)
-    const angle = acos(max(-1, min(1, dotProduct)));
-
-    // Вычисляем векторное произведение для определения знака (по часовой или против)
+    // знак угла нужен только если вы где-то его используете дальше
     const crossProduct = turretNormX * enemyNormY - turretNormY * enemyNormX;
     const signedAngle = crossProduct >= 0 ? angle : -angle;
-    // Вычисляем качество прицеливания для прямого выстрела
-    // Чем меньше угол, тем лучше прицеливание для прямого выстрела
+
+    // Чем меньше угол, тем лучше прямое прицеливание
     const angleAimQuality = smoothstep(PI / 4, 0, abs(signedAngle));
 
-    // Вычисляем расстояние, на котором линия выстрела пройдет от противника (расстояние касательной)
-    // Вычисляем перпендикулярное расстояние от линии выстрела до противника (это и есть расстояние касательной)
-    const tangentialDistance = sin(angle) * tankToEnemyDist;
-    // Вычисляем качество прицеливания для касательного выстрела
-    // Награда за выстрел, проходящий на оптимальном расстоянии от противника
+    // 4. Оценка «касательного» выстрела
+    const tangentialDistance = sin(angle) * tankToEnemyDist;  // расстояние от луча до центра врага
     const tangentialAimQuality = smoothstep(colliderRadius * 1.5, 0, abs(tangentialDistance));
 
+    // 5. Итог
     return 0.2 * angleAimQuality + 0.8 * tangentialAimQuality;
 }
 

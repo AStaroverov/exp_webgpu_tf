@@ -1,10 +1,11 @@
 import { PLAYER_REFS } from '../../consts.ts';
 import { TankController } from '../Components/TankController.ts';
-import { isNil } from 'lodash-es';
-import { getMatrixTranslation, LocalTransform } from '../../../../../../src/ECS/Components/Transform.ts';
+import { clamp, isNil } from 'lodash-es';
 import { Tank } from '../Components/Tank.ts';
 import { PlayerEnvDI } from '../../DI/PlayerEnvDI.ts';
 import { RenderDI } from '../../DI/RenderDI.ts';
+import { RigidBodyState } from '../Components/Physical.ts';
+import { normalizeAngle } from '../../../../../../lib/math.ts';
 
 export function createPlayerTankPositionSystem({ document } = PlayerEnvDI) {
     let move = 0;
@@ -82,8 +83,17 @@ export function createPlayerTankTurretRotationSystem({ document } = PlayerEnvDI)
 
     const tick = () => {
         if (PLAYER_REFS.tankPid && lastEvent) {
-            const currentPosition = getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[PLAYER_REFS.tankPid]));
-            TankController.setTurretDir$(PLAYER_REFS.tankPid, lastEvent.clientX - currentPosition[0], lastEvent.clientY - currentPosition[1]);
+            const tankRot = RigidBodyState.rotation[PLAYER_REFS.tankPid];
+            const turretRot = RigidBodyState.rotation[Tank.turretEId[PLAYER_REFS.tankPid]];
+            const turretPos = RigidBodyState.position.getBatch(Tank.turretEId[PLAYER_REFS.tankPid]);
+
+            // Глобальный угол от дула к позиции цели
+            const targetRot = Math.atan2(lastEvent.clientY - turretPos[1], lastEvent.clientX - turretPos[0]) + Math.PI / 2;
+            const relTurretRot = normalizeAngle(turretRot - tankRot);
+            const relTargetTurretRot = normalizeAngle(targetRot - tankRot);
+            const deltaRot = normalizeAngle(relTargetTurretRot - relTurretRot);
+
+            TankController.setTurretRotation$(PLAYER_REFS.tankPid, clamp(deltaRot, -1, 1));
         }
     };
     const destroy = () => {
