@@ -25,6 +25,7 @@ export function applyActionToTank(
         actions[2],
         probability[2],
     );
+
     const turretRot = blendLinear(
         TankController.turretRotation[tankEid],
         actions[3],
@@ -37,7 +38,7 @@ export function applyActionToTank(
     TankController.setTurretRotation$(tankEid, turretRot);
 }
 
-function blendLinear(prev: number, raw: number, p: number) {
+function blendLinear(prev: number, raw: number, p: number): number {
     const next = prev * (1 - p) + raw * p;
     return clamp(next, -1, 1);
 }
