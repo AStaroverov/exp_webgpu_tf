@@ -6,7 +6,7 @@ import { RigidBodyRef, RigidBodyState } from '../../Components/Physical.ts';
 import { applyRotationToVector } from '../../../Physical/applyRotationToVector.ts';
 import { query } from 'bitecs';
 import { TankPart } from '../../Components/TankPart.ts';
-import { abs, min, normalizeAngle, sign } from '../../../../../../../lib/math.ts';
+import { normalizeAngle } from '../../../../../../../lib/math.ts';
 
 export function createTankPositionSystem({ world, physicalWorld } = GameDI) {
     const nextLinvel = new Vector2(0, 0);
@@ -66,11 +66,10 @@ function rotateByMotor(delta: number, tankEid: number, { physicalWorld } = GameD
     // Глобальный угол от дула к позиции цели
     const relTurretRot = normalizeAngle(turretRot - tankRot);
     // Ограничиваем изменение угла с учётом влияния мыши
-    const maxAngleChange = maxRotationSpeed * (delta / 1000);
-    const limitedDeltaRot = sign(turretRotDir) * min(abs(turretRotDir), maxAngleChange);
+    const deltaRot = turretRotDir * maxRotationSpeed * (delta / 1000);
     // Применяем новый угол к мотору
     turretJoint.configureMotorPosition(
-        normalizeAngle(relTurretRot + limitedDeltaRot),
+        normalizeAngle(relTurretRot + deltaRot),
         stiffness,
         damping,
     );
