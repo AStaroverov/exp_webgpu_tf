@@ -25,8 +25,10 @@ const WEIGHTS = Object.freeze({
 
     // STATE REWARD
     AIM: {
-        SHOOTING_BAD_AIM: -1,
-        SHOOTING_ALLIES_PENALTY: -1,
+        QUALITY: 1,
+        BAD_QUALITY_PENALTY: -1,
+        BAD_SHOOTING_PENALTY: -1,
+        ALLIES_SHOOTING_PENALTY: -1,
     },
     AIM_MULTIPLIER: 0.5,
 
@@ -49,7 +51,7 @@ const WEIGHTS = Object.freeze({
 
 function initializeStateRewards() {
     return {
-        aim: { shootDecision: 0, total: 0 },
+        aim: { quality: 0, shootDecision: 0, total: 0 },
         moving: { speed: 0, total: 0 },
         positioning: {
             enemiesPositioning: 0,
@@ -114,6 +116,10 @@ export function calculateStateReward(
         beforePredictAlliesEids,
     );
 
+    rewards.aim.quality = aimingResult.bestEnemyAimQuality > 0
+        ? aimingResult.bestEnemyAimQuality * WEIGHTS.AIM.QUALITY
+        : WEIGHTS.AIM.BAD_QUALITY_PENALTY;
+
     rewards.aim.shootDecision = calculateShootingReward(
         isShooting,
         aimingResult.bestEnemyAimQuality,
@@ -134,7 +140,8 @@ export function calculateStateReward(
 
     // Рассчитываем итоговые значения
     rewards.aim.total = WEIGHTS.AIM_MULTIPLIER
-        * (rewards.aim.shootDecision);
+        * (rewards.aim.quality
+            + rewards.aim.shootDecision);
     rewards.moving.total = WEIGHTS.MOVING_MULTIPLIER
         * (rewards.moving.speed);
     rewards.positioning.total =
@@ -384,11 +391,11 @@ function calculateShootingReward(
     bestAlliesAimQuality: number,
 ): number {
     if (isShooting && bestAlliesAimQuality > bestEnemyAimQuality) {
-        return WEIGHTS.AIM.SHOOTING_ALLIES_PENALTY;
+        return WEIGHTS.AIM.ALLIES_SHOOTING_PENALTY;
     }
 
     if (isShooting && bestEnemyAimQuality < 0.35) {
-        return WEIGHTS.AIM.SHOOTING_BAD_AIM * (1 - bestEnemyAimQuality);
+        return WEIGHTS.AIM.BAD_SHOOTING_PENALTY * (1 - bestEnemyAimQuality);
     }
 
     return 0;
