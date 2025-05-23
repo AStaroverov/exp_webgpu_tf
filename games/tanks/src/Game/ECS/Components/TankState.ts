@@ -15,14 +15,14 @@ export const TankInputTensor = component({
     position: NestedArray.f64(2, delegate.defaultSize),
     rotation: TypedArray.f64(delegate.defaultSize),
     speed: NestedArray.f64(2, delegate.defaultSize),
-    turretTarget: NestedArray.f64(2, delegate.defaultSize),
+    turretRotation: TypedArray.f64(delegate.defaultSize),
     colliderRadius: TypedArray.f64(delegate.defaultSize),
 
     // Controller
     shoot: TypedArray.f64(delegate.defaultSize),
-    move: TypedArray.f64(delegate.defaultSize),
-    rotate: TypedArray.f64(delegate.defaultSize),
-    turretDir: NestedArray.f64(2, delegate.defaultSize),
+    moveDir: TypedArray.f64(delegate.defaultSize),
+    rotDir: TypedArray.f64(delegate.defaultSize),
+    turretRotDir: TypedArray.f64(delegate.defaultSize),
 
     // Battlefield
     enemiesCount: TypedArray.i32(delegate.defaultSize),
@@ -30,10 +30,10 @@ export const TankInputTensor = component({
     alliesCount: TypedArray.i32(delegate.defaultSize),
     alliesTotalHealth: TypedArray.f64(delegate.defaultSize),
 
-    // Enemies [id, hp,x,y,vx,vy,ttx,tty,collider]
+    // Enemies [id, hp,x,y,r,vx,vy,tr,collider]
     enemiesData: NestedArray.f64(ENEMY_BUFFER * MAX_ENEMIES, delegate.defaultSize),
 
-    // Allies [id, hp,x,y,vx,vy,ttx,tty,collider]
+    // Allies [id, hp,x,y,r,vx,vy,tr,collider]
     alliesData: NestedArray.f64(ALLY_BUFFER * MAX_ALLIES, delegate.defaultSize),
 
     // Bullets [id, x,y,vx,vy]
@@ -50,14 +50,14 @@ export const TankInputTensor = component({
         position: Float64Array,
         rotation: number,
         speed: Float64Array,
-        turretTarget: Float32Array,
+        turretRotation: number,
         colliderRadius: number,
     ) {
         TankInputTensor.health[eid] = health;
         TankInputTensor.position.setBatch(eid, position);
         TankInputTensor.rotation[eid] = rotation;
         TankInputTensor.speed.setBatch(eid, speed);
-        TankInputTensor.turretTarget.setBatch(eid, turretTarget);
+        TankInputTensor.turretRotation[eid] = turretRotation;
         TankInputTensor.colliderRadius[eid] = colliderRadius;
     },
 
@@ -65,13 +65,13 @@ export const TankInputTensor = component({
         eid: number,
         shoot: number,
         move: number,
-        rotate: number,
-        turretDir: Float64Array,
+        rot: number,
+        turretRot: number,
     ) {
         TankInputTensor.shoot[eid] = shoot;
-        TankInputTensor.move[eid] = move;
-        TankInputTensor.rotate[eid] = rotate;
-        TankInputTensor.turretDir.setBatch(eid, turretDir);
+        TankInputTensor.moveDir[eid] = move;
+        TankInputTensor.rotDir[eid] = rot;
+        TankInputTensor.turretRotDir[eid] = turretRot;
     },
 
     setBattlefieldData(
@@ -93,8 +93,9 @@ export const TankInputTensor = component({
         enemyEid: EntityId,
         hp: number,
         coord: Float64Array,
+        rotation: number,
         speed: Float64Array,
-        turretTarget: Float32Array,
+        turretRotation: number,
         colliderRadius: number,
     ) {
         const offset = index * ENEMY_BUFFER;
@@ -102,10 +103,10 @@ export const TankInputTensor = component({
         TankInputTensor.enemiesData.set(eid, offset + 1, hp);
         TankInputTensor.enemiesData.set(eid, offset + 2, coord[0]);
         TankInputTensor.enemiesData.set(eid, offset + 3, coord[1]);
-        TankInputTensor.enemiesData.set(eid, offset + 4, speed[0]);
-        TankInputTensor.enemiesData.set(eid, offset + 5, speed[1]);
-        TankInputTensor.enemiesData.set(eid, offset + 6, turretTarget[0]);
-        TankInputTensor.enemiesData.set(eid, offset + 7, turretTarget[1]);
+        TankInputTensor.enemiesData.set(eid, offset + 4, rotation);
+        TankInputTensor.enemiesData.set(eid, offset + 5, speed[0]);
+        TankInputTensor.enemiesData.set(eid, offset + 6, speed[1]);
+        TankInputTensor.enemiesData.set(eid, offset + 7, turretRotation);
         TankInputTensor.enemiesData.set(eid, offset + 8, colliderRadius);
     },
     resetEnemiesCoords() {
@@ -118,8 +119,9 @@ export const TankInputTensor = component({
         allyEid: EntityId,
         hp: number,
         coord: Float64Array,
+        rotation: number,
         speed: Float64Array,
-        turretTarget: Float32Array,
+        turretRotation: number,
         colliderRadius: number,
     ) {
         const offset = index * ALLY_BUFFER;
@@ -127,10 +129,10 @@ export const TankInputTensor = component({
         TankInputTensor.alliesData.set(eid, offset + 1, hp);
         TankInputTensor.alliesData.set(eid, offset + 2, coord[0]);
         TankInputTensor.alliesData.set(eid, offset + 3, coord[1]);
-        TankInputTensor.alliesData.set(eid, offset + 4, speed[0]);
-        TankInputTensor.alliesData.set(eid, offset + 5, speed[1]);
-        TankInputTensor.alliesData.set(eid, offset + 6, turretTarget[0]);
-        TankInputTensor.alliesData.set(eid, offset + 7, turretTarget[1]);
+        TankInputTensor.alliesData.set(eid, offset + 4, rotation);
+        TankInputTensor.alliesData.set(eid, offset + 5, speed[0]);
+        TankInputTensor.alliesData.set(eid, offset + 6, speed[1]);
+        TankInputTensor.alliesData.set(eid, offset + 7, turretRotation);
         TankInputTensor.alliesData.set(eid, offset + 8, colliderRadius);
     },
     resetAlliesCoords() {

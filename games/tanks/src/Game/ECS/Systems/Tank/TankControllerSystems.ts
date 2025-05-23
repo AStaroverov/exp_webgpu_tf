@@ -4,10 +4,9 @@ import { RevoluteImpulseJoint, Vector2 } from '@dimforge/rapier2d-simd';
 import { Tank } from '../../Components/Tank.ts';
 import { RigidBodyRef, RigidBodyState } from '../../Components/Physical.ts';
 import { applyRotationToVector } from '../../../Physical/applyRotationToVector.ts';
-import { smoothstep, sqrt } from '../../../../../../../lib/math.ts';
 import { query } from 'bitecs';
-import { getMatrixTranslation, LocalTransform } from '../../../../../../../src/ECS/Components/Transform.ts';
 import { TankPart } from '../../Components/TankPart.ts';
+import { abs, min, normalizeAngle, sign } from '../../../../../../../lib/math.ts';
 
 export function createTankPositionSystem({ world, physicalWorld } = GameDI) {
     const nextLinvel = new Vector2(0, 0);
@@ -62,31 +61,17 @@ function rotateByMotor(delta: number, tankEid: number, { physicalWorld } = GameD
 
     const tankRot = RigidBodyState.rotation[tankEid];
     const turretRot = RigidBodyState.rotation[turretEid];
-    const turretPos = RigidBodyState.position.getBatch(turretEid);
-    const targetPos = getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[tankEid]));
+    const turretRotDir = TankController.turretRotation[tankEid];
+
     // Глобальный угол от дула к позиции цели
-    const targetRot = Math.atan2(targetPos[1] - turretPos[1], targetPos[0] - turretPos[0]) + Math.PI / 2;
     const relTurretRot = normalizeAngle(turretRot - tankRot);
-    const relTargetTurretRot = normalizeAngle(targetRot - tankRot);
-    const deltaRot = normalizeAngle(relTargetTurretRot - relTurretRot);
-    // Расстояние от мыши до дула
-    const distance = sqrt((targetPos[0] - turretPos[0]) ** 2 + (targetPos[1] - turretPos[1]) ** 2);
-    // Плавно интерполируем влияние мыши от 0 до 1
-    const influence = smoothstep(10, 100, distance);
     // Ограничиваем изменение угла с учётом влияния мыши
     const maxAngleChange = maxRotationSpeed * (delta / 1000);
-    const limitedDeltaRot = Math.sign(deltaRot) * Math.min(Math.abs(deltaRot), maxAngleChange) * influence;
+    const limitedDeltaRot = sign(turretRotDir) * min(abs(turretRotDir), maxAngleChange);
     // Применяем новый угол к мотору
     turretJoint.configureMotorPosition(
         normalizeAngle(relTurretRot + limitedDeltaRot),
         stiffness,
         damping,
     );
-}
-
-// Функция нормализации угла в диапазоне [-π, π]
-function normalizeAngle(angle: number): number {
-    while (angle < -Math.PI) angle += 2 * Math.PI;
-    while (angle > Math.PI) angle -= 2 * Math.PI;
-    return angle;
 }

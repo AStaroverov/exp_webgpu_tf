@@ -4,7 +4,6 @@ import { component } from '../../../../../../src/ECS/utils.ts';
 import { addComponent, EntityId, World } from 'bitecs';
 
 export const Tank = component({
-    aimEid: TypedArray.f64(delegate.defaultSize),
     turretEId: TypedArray.f64(delegate.defaultSize),
 
     bulletStartPosition: NestedArray.f64(2, delegate.defaultSize),
@@ -17,9 +16,6 @@ export const Tank = component({
         Tank.initialPartsCount[eid] = initialPartsCount;
     },
 
-    setAimEid(tankEid: number, aimEid: number) {
-        Tank.aimEid[tankEid] = aimEid;
-    },
     setTurretEid(tankEid: number, turretEid: number) {
         Tank.turretEId[tankEid] = turretEid;
     },

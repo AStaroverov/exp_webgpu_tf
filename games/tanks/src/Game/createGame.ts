@@ -21,7 +21,6 @@ import { createTankPositionSystem, createTankTurretRotationSystem } from './ECS/
 import { createDestroyOutOfZoneSystem } from './ECS/Systems/createDestroyOutOfZoneSystem.ts';
 import { destroyChangeDetectorSystem } from '../../../../src/ECS/Systems/ChangedDetectorSystem.ts';
 import { createDestroyByTimeoutSystem } from './ECS/Systems/createDestroyByTimeoutSystem.ts';
-import { createTankAimSystem } from './ECS/Systems/Tank/createTankAimSystem.ts';
 import { createDrawGrassSystem } from './ECS/Systems/Render/Grass/createDrawGrassSystem.ts';
 import { createRigidBodyStateSystem } from './ECS/Systems/createRigidBodyStateSystem.ts';
 import { createDestroySystem } from './ECS/Systems/createDestroySystem.ts';
@@ -191,7 +190,6 @@ export function createGame({ width, height, withPlayer }: {
         destroy();
     };
 
-    const aimUpdate = createTankAimSystem();
     const visTracksUpdate = createVisualizationTracksSystem();
 
     GameDI.gameTick = (delta: number) => {
@@ -199,7 +197,6 @@ export function createGame({ width, height, withPlayer }: {
 
         physicalFrame(delta);
 
-        aimUpdate(delta);
         visTracksUpdate(delta);
         // updateMap();
 

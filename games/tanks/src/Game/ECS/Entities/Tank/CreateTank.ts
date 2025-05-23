@@ -1,4 +1,4 @@
-import { TColor } from '../../../../../../../src/ECS/Components/Common.ts';
+import { Color, TColor } from '../../../../../../../src/ECS/Components/Common.ts';
 import { JointData, Vector2 } from '@dimforge/rapier2d-simd';
 import { GameDI } from '../../../DI/GameDI.ts';
 import { PlayerRef } from '../../Components/PlayerRef.ts';
@@ -11,7 +11,6 @@ import { TankController } from '../../Components/TankController.ts';
 import { TeamRef } from '../../Components/TeamRef.ts';
 import { TenserFlowDI } from '../../../DI/TenserFlowDI.ts';
 import { TankInputTensor } from '../../Components/TankState.ts';
-import { createCircle } from '../../../../../../../src/ECS/Entities/Shapes.ts';
 import { Tank } from '../../Components/Tank.ts';
 import {
     createTankHullParts,
@@ -40,9 +39,6 @@ export function createTank(options: {
 
     // Создание базовой структуры танка
     const [tankEid, tankPid] = createTankBase(tankOptions);
-
-    // Создание прицела
-    createTankAim(tankOptions, tankEid);
 
     // Создание турели
     const [turretEid] = createTankTurret(tankOptions, tankEid, tankPid);
@@ -102,6 +98,7 @@ function createTankBase(options: Options, { world } = GameDI): [number, number] 
     PlayerRef.addComponent(world, tankEid, options.playerId);
     TankController.addComponent(world, tankEid);
     HeuristicsData.addComponent(world, tankEid, TANK_APPROXIMATE_COLLIDER_RADIUS);
+    Color.addComponent(world, tankEid, ...options.color);
 
     // Добавление TensorFlow компонентов, если активировано
     if (TenserFlowDI.enabled) {
@@ -109,21 +106,6 @@ function createTankBase(options: Options, { world } = GameDI): [number, number] 
     }
 
     return [tankEid, tankPid];
-}
-
-/**
- * Создает прицел для танка
- */
-function createTankAim(options: Options, tankEid: number, { world } = GameDI): number {
-    options.radius = 16;
-    const aimEid = createCircle(GameDI.world, options);
-
-    // Связывание прицела с танком
-    Tank.setAimEid(tankEid, aimEid);
-    Parent.addComponent(world, aimEid, tankEid);
-    Children.addChildren(tankEid, aimEid);
-
-    return aimEid;
 }
 
 /**

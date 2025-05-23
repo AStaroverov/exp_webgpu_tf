@@ -7,7 +7,6 @@ import { Ball, Collider } from '@dimforge/rapier2d-simd';
 import { CollisionGroup, createCollisionGroups } from '../../Physical/createRigid.ts';
 import { EntityId, query } from 'bitecs';
 import { PlayerRef } from '../Components/PlayerRef.ts';
-import { getMatrixTranslation, LocalTransform } from '../../../../../../src/ECS/Components/Transform.ts';
 import { hasIntersectionVectorAndCircle } from '../../Utils/intersections.ts';
 import { shuffle } from '../../../../../../lib/shuffle.ts';
 import { TeamRef } from '../Components/TeamRef.ts';
@@ -46,7 +45,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
             TankController.move[tankEid],
             TankController.rotation[tankEid],
             TankController.shoot[tankEid],
-            TankController.turretDir.getBatch(tankEid),
+            TankController.turretRotation[tankEid],
         );
 
         // Set tank data
@@ -54,7 +53,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
         const position = RigidBodyState.position.getBatch(tankEid);
         const rotation = RigidBodyState.rotation[tankEid];
         const linvel = RigidBodyState.linvel.getBatch(tankEid);
-        const aimLocal = LocalTransform.matrix.getBatch(Tank.aimEid[tankEid]);
+        const turretRotation = RigidBodyState.rotation[Tank.turretEId[tankEid]];
 
         TankInputTensor.setTankData(
             tankEid,
@@ -62,7 +61,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
             position,
             rotation,
             linvel,
-            getMatrixTranslation(aimLocal),
+            turretRotation,
             TANK_APPROXIMATE_COLLIDER_RADIUS,
         );
 
@@ -78,8 +77,9 @@ export function snapshotTankInputTensor({ world } = GameDI) {
                 enemyEid,
                 getTankHealth(enemyEid),
                 RigidBodyState.position.getBatch(enemyEid),
+                RigidBodyState.rotation[enemyEid],
                 RigidBodyState.linvel.getBatch(enemyEid),
-                getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[enemyEid])),
+                RigidBodyState.rotation[Tank.turretEId[enemyEid]],
                 TANK_APPROXIMATE_COLLIDER_RADIUS,
             );
         }
@@ -96,8 +96,9 @@ export function snapshotTankInputTensor({ world } = GameDI) {
                 allyEid,
                 getTankHealth(allyEid),
                 RigidBodyState.position.getBatch(allyEid),
+                RigidBodyState.rotation[allyEid],
                 RigidBodyState.linvel.getBatch(allyEid),
-                getMatrixTranslation(LocalTransform.matrix.getBatch(Tank.aimEid[allyEid])),
+                RigidBodyState.rotation[Tank.turretEId[allyEid]],
                 TANK_APPROXIMATE_COLLIDER_RADIUS,
             );
         }

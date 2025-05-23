@@ -1,11 +1,12 @@
 import { RigidBodyState } from '../../../../Game/ECS/Components/Physical';
-import { abs, hypot, lerp, min } from '../../../../../../../lib/math.ts';
-import { getAimPosition, getTankHealth } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
+import { abs, atan2, hypot, lerp, min, normalizeAngle, PI, sign } from '../../../../../../../lib/math.ts';
+import { getTankHealth } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { findTankEnemiesEids } from '../../../../Game/ECS/Utils/snapshotTankInputTensor.ts';
 import { Actions, applyActionToTank } from '../../applyActionToTank.ts';
 import { TankAgent } from './CurrentActorAgent.ts';
-import { random, randomRangeFloat } from '../../../../../../../lib/random.ts';
+import { randomRangeFloat } from '../../../../../../../lib/random.ts';
 import { OrnsteinUhlenbeckNoise } from '../../../../../../../lib/OrnsteinUhlenbeckNoise.ts';
+import { Tank } from '../../../../Game/ECS/Components/Tank.ts';
 
 export type SimpleHeuristicAgentFeatures = {
     move?: number;
@@ -17,8 +18,7 @@ export type SimpleHeuristicAgentFeatures = {
 
 export class SimpleHeuristicAgent implements TankAgent {
     private waypoint?: { x: number; y: number };
-    private ouNoiseX = new OrnsteinUhlenbeckNoise(0, 0.15, 0.3);
-    private ouNoiseY = new OrnsteinUhlenbeckNoise(0, 0.15, 0.3);
+    private ouNoiseRot = new OrnsteinUhlenbeckNoise(0, 0.15, 0.3);
 
     constructor(
         public readonly tankEid: number,
@@ -30,7 +30,7 @@ export class SimpleHeuristicAgent implements TankAgent {
         this.updateWaypoint(width, height);
 
         const targetId = this.withAim() ? this.getTarget() : undefined;
-        const aim = targetId !== undefined ? this.getAimAction(targetId) : { aimX: 0, aimY: 0, shoot: -1 };
+        const aim = targetId !== undefined ? this.getAimAction(targetId) : { shoot: -1, turretRot: 0 };
         const rotation = this.withMove() ? this.getRotationAction() : 0;
         const move = this.withMove() ? this.getMoveAction(rotation) : 0;
 
@@ -38,8 +38,7 @@ export class SimpleHeuristicAgent implements TankAgent {
             aim.shoot,
             move,
             rotation,
-            aim.aimX,
-            aim.aimY,
+            aim.turretRot,
         ];
 
         applyActionToTank(this.tankEid, action);
@@ -90,34 +89,34 @@ export class SimpleHeuristicAgent implements TankAgent {
         return bestId;
     }
 
-    private getAimAction(targetId: number): { aimX: number; aimY: number; shoot: number } {
+    private getAimAction(targetId: number): { shoot: number, turretRot: number; } {
         const aimError = this.features.aim?.aimError ?? 0;
         const shootChance = this.features.aim?.shootChance ?? 0;
 
-        const [x0, y0] = getAimPosition(this.tankEid);
-        const x1 = RigidBodyState.position.get(targetId, 0);
-        const y1 = RigidBodyState.position.get(targetId, 1);
+        const tankX = RigidBodyState.position.get(this.tankEid, 0);
+        const tankY = RigidBodyState.position.get(this.tankEid, 1);
+        const targetX = RigidBodyState.position.get(targetId, 0);
+        const targetY = RigidBodyState.position.get(targetId, 1);
 
-        const dx = x1 - x0;
-        const dy = y1 - y0;
+        const dx = targetX - tankX;
+        const dy = targetY - tankY;
+
+        const currentTurret = RigidBodyState.rotation[Tank.turretEId[this.tankEid]];   // [-π, π]
+        const targetTurret = atan2(dy, dx);                        // [-π, π]
+        const angleDiff = normalizeAngle(targetTurret - currentTurret + PI / 2);
+
+        const MAX_STEP = PI / 90;
+        let turretRot = sign(angleDiff) * min(abs(angleDiff), MAX_STEP);
+        turretRot += this.ouNoiseRot.next() * aimError;
+        turretRot = normalizeAngle(turretRot);
+
         const misalign = abs(dx) + abs(dy);
-        const shoot = ((misalign < 100 && shootChance > random()) || random() > 0.9) ? 1 : -1;
+        const shoot =
+            (misalign < 100 && shootChance > Math.random())
+            || Math.random() > 0.9 ? 1 : -1;
 
-        const dist = hypot(dx, dy);
-        const step = min(dist, 1);
-        const baseX = dx / dist * step;
-        const baseY = dy / dist * step;
-
-        const noiseX = this.ouNoiseX.next() * aimError;
-        const noiseY = this.ouNoiseY.next() * aimError;
-
-        return {
-            shoot,
-            aimX: baseX + noiseX,
-            aimY: baseY + noiseY,
-        };
+        return { turretRot, shoot };
     }
-
 
     private getMoveAction(rotation: number): number {
         let move = randomRangeFloat(this.features.move ?? 0, 1);
@@ -135,22 +134,22 @@ export class SimpleHeuristicAgent implements TankAgent {
         // --- позиция точки ---
         const dx = this.waypoint.x - px;
         const dy = this.waypoint.y - py;
-        const targetAngle = Math.atan2(dy, dx);
+        const targetAngle = atan2(dy, dx);
 
         // --- текущий угол корпуса ---
         const bodyAngle = RigidBodyState.rotation[this.tankEid];
 
         // --- разница углов, нормализованная к [-π, π] ---
-        const delta = wrapPi(targetAngle - bodyAngle + Math.PI / 2);    // -π … π
+        const delta = wrapPi(targetAngle - bodyAngle + PI / 2);    // -π … π
 
         // --- преобразуем в диапазон [-1; 1] ---
-        return (delta / Math.PI);                // -1 … 1
+        return (delta / PI);                // -1 … 1
     }
 }
 
 function wrapPi(a: number): number {
-    while (a > Math.PI) a -= 2 * Math.PI;
-    while (a < -Math.PI) a += 2 * Math.PI;
+    while (a > PI) a -= 2 * PI;
+    while (a < -PI) a += 2 * PI;
     return a;
 }
 
