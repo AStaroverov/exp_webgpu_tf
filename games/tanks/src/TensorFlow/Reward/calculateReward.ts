@@ -30,7 +30,7 @@ const WEIGHTS = Object.freeze({
         BAD_SHOOTING_PENALTY: -1,
         ALLIES_SHOOTING_PENALTY: -1,
     },
-    AIM_MULTIPLIER: 0.5,
+    AIM_MULTIPLIER: 1,
 
     MOVING: {
         PENALTY_SPEED: -1,
@@ -41,7 +41,7 @@ const WEIGHTS = Object.freeze({
     MAP_BORDER: {
         PENALTY: -1,
     },
-    MAP_BORDER_MULTIPLIER: 0.5,
+    MAP_BORDER_MULTIPLIER: 1,
 
     DISTANCE_KEEPING: {
         PENALTY: -1,
