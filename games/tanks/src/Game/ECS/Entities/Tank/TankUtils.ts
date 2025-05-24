@@ -4,14 +4,15 @@ import { TankPart, TankPartTrack } from '../../Components/TankPart.ts';
 import { Tank } from '../../Components/Tank.ts';
 import { GameDI } from '../../../DI/GameDI.ts';
 import { Parent } from '../../Components/Parent.ts';
-import { removePhysicalJoint } from '../../../Physical/joint.ts';
-import { resetCollisionsTo } from '../../../Physical/collision.ts';
+import { removePhysicalJoint } from '../../../Physical/removePhysicalJoint.ts';
+import { setPhysicalCollisionGroup } from '../../../Physical/setPhysicalCollisionGroup.ts';
 import { CollisionGroup } from '../../../Physical/createRigid.ts';
 import { min, smoothstep } from '../../../../../../../lib/math.ts';
 import { PlayerRef } from '../../Components/PlayerRef.ts';
 import { Score } from '../../Components/Score.ts';
 import { EntityId, removeComponent } from 'bitecs';
 import { TeamRef } from '../../Components/TeamRef.ts';
+import { changePhysicalDensity } from '../../../Physical/changePhysicalDensity.ts';
 
 export function destroyTank(tankEid: EntityId) {
     // turret
@@ -49,8 +50,9 @@ export function tearOffTankPart(tankPartEid: number, shouldBreakConnection: bool
     const jointPid = TankPart.jointPid[tankPartEid];
     if (jointPid > 0) {
         resetTankPartJointComponent(tankPartEid);
-        resetCollisionsTo(tankPartEid, CollisionGroup.ALL & ~CollisionGroup.TANK_BASE);
+        setPhysicalCollisionGroup(tankPartEid, CollisionGroup.ALL & ~CollisionGroup.TANK_BASE);
         removePhysicalJoint(jointPid);
+        changePhysicalDensity(tankPartEid, 8);
     }
 }
 
