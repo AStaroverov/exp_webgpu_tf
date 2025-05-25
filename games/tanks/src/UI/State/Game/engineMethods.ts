@@ -1,6 +1,6 @@
 import { TankAgent } from '../../../TensorFlow/Common/Curriculum/Agents/CurrentActorAgent.ts';
 import { GameDI } from '../../../Game/DI/GameDI.ts';
-import { createTank } from '../../../Game/ECS/Entities/Tank/CreateTank.ts';
+import { createMediumTank } from '../../../Game/ECS/Entities/Tank/Medium/MediumTank.ts';
 import { createPlayer } from '../../../Game/ECS/Entities/Player.ts';
 import { PI } from '../../../../../../lib/math.ts';
 import { randomRangeFloat } from '../../../../../../lib/random.ts';
@@ -17,7 +17,7 @@ export const addTank = (index: number, teamId = 0) => {
     const dy = (GameDI.height - GameDI.height * 0.4) / (GAME_MAX_TEAM_TANKS - 1);
     const y = GameDI.height * 0.2 + index * dy;
 
-    createTank({
+    createMediumTank({
         playerId: createPlayer(0),
         teamId,
         x,

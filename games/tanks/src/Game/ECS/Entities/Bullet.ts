@@ -1,7 +1,7 @@
 import { GameDI } from '../../DI/GameDI.ts';
 import { isNumber } from 'lodash-es';
 import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';
-import { createCircleRR } from '../Components/RigidRender.ts';
+import { createRectangleRR } from '../Components/RigidRender.ts';
 import { PlayerRef } from '../Components/PlayerRef.ts';
 import { Hitable } from '../Components/Hitable.ts';
 import { DestroyByTimeout } from '../Components/Destroy.ts';
@@ -16,16 +16,19 @@ import { Tank } from '../Components/Tank.ts';
 import { ZIndex } from '../../consts.ts';
 import { ActiveEvents, RigidBodyType } from '@dimforge/rapier2d-simd';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
-import { Bullet, BULLET_SPEED } from '../Components/Bullet.ts';
+import { Bullet, BulletCaliber, mapBulletCaliber, MAX_BULLET_SPEED } from '../Components/Bullet.ts';
 import { TeamRef } from '../Components/TeamRef.ts';
 import { Color } from '../../../../../../src/ECS/Components/Common.ts';
+import { TankTurret } from '../Components/TankTurret.ts';
+import { min } from '../../../../../../lib/math.ts';
 
-type Options = Parameters<typeof createCircleRR>[0];
+type Options = Parameters<typeof createRectangleRR>[0];
 const optionsBulletRR: Options = {
     x: 0,
     y: 0,
     z: ZIndex.Bullet,
-    radius: 6,
+    width: 0,
+    height: 0,
     speedX: 0,
     speedY: 0,
     rotation: 0,
@@ -37,7 +40,7 @@ const optionsBulletRR: Options = {
     linearDamping: 0.1,
     collisionEvent: ActiveEvents.CONTACT_FORCE_EVENTS,
     belongsCollisionGroup: CollisionGroup.BULLET,
-    interactsCollisionGroup: CollisionGroup.ALL & ~CollisionGroup.TANK_GUN_PARTS,
+    interactsCollisionGroup: CollisionGroup.ALL & ~CollisionGroup.TANK_TURRET_GUN_PARTS,
 };
 const defaultOptionsBulletRR = structuredClone(optionsBulletRR);
 const tmpSpeed = vec2.create();
@@ -58,7 +61,7 @@ export function createBullet(options: Partial<Options> & {
         optionsBulletRR.speedY = tmpSpeed[1];
     }
 
-    const [bulletId] = createCircleRR(optionsBulletRR);
+    const [bulletId] = createRectangleRR(optionsBulletRR);
     Bullet.addComponent(world, bulletId);
     TeamRef.addComponent(world, bulletId, options.teamId);
     PlayerRef.addComponent(world, bulletId, options.playerId);
@@ -71,8 +74,11 @@ export function createBullet(options: Partial<Options> & {
 const optionsSpawnBullet = {
     x: 0,
     y: 0,
+    width: 0,
+    height: 0,
     color: new Float32Array(4).fill(1),
     speed: 0,
+    density: 0,
     rotation: 0,
     playerId: 0,
     teamId: 0,
@@ -81,10 +87,12 @@ const tmpMatrix = mat4.create();
 const tmpPosition = vec3.create() as Float32Array;
 
 export function spawnBullet(tankEid: number) {
-    const globalTransform = GlobalTransform.matrix.getBatch(Tank.turretEId[tankEid]);
-    const bulletDelta = Tank.bulletStartPosition.getBatch(tankEid);
+    const turretEid = Tank.turretEId[tankEid];
+    const globalTransform = GlobalTransform.matrix.getBatch(turretEid);
+    const bulletPosition = TankTurret.bulletStartPosition.getBatch(turretEid);
+    const bulletCaliber = mapBulletCaliber[TankTurret.bulletCaliber[turretEid] as BulletCaliber];
 
-    tmpPosition.set(bulletDelta);
+    tmpPosition.set(bulletPosition);
     mat4.identity(tmpMatrix);
     mat4.translate(tmpMatrix, tmpMatrix, tmpPosition);
     mat4.multiply(tmpMatrix, globalTransform, tmpMatrix);
@@ -92,8 +100,11 @@ export function spawnBullet(tankEid: number) {
     Color.applyColorToArray(tankEid, optionsSpawnBullet.color);
     optionsSpawnBullet.x = getMatrixTranslationX(tmpMatrix);
     optionsSpawnBullet.y = getMatrixTranslationY(tmpMatrix);
+    optionsSpawnBullet.width = bulletCaliber.width;
+    optionsSpawnBullet.height = bulletCaliber.height;
     optionsSpawnBullet.rotation = getMatrixRotationZ(tmpMatrix);
-    optionsSpawnBullet.speed = BULLET_SPEED;
+    optionsSpawnBullet.speed = min(bulletCaliber.speed, MAX_BULLET_SPEED);
+    optionsSpawnBullet.density = bulletCaliber.density;
     optionsSpawnBullet.teamId = TeamRef.id[tankEid];
     optionsSpawnBullet.playerId = PlayerRef.id[tankEid];
 

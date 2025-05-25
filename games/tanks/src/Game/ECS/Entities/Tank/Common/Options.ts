@@ -1,10 +1,8 @@
 import { RigidBodyType } from '@dimforge/rapier2d-simd';
-import { TColor } from '../../../../../../../src/ECS/Components/Common.ts';
-import { createTank } from './CreateTank.ts';
+import { TColor } from '../../../../../../../../src/ECS/Components/Common.ts';
+import { createMediumTank } from '../Medium/MediumTank.ts';
 
 export type Options = typeof mutatedOptions;
-
-export const BASE_DENSITY = 300;
 
 export const mutatedOptions = {
     x: 0,
@@ -27,10 +25,13 @@ export const mutatedOptions = {
 
     teamId: -1,
     playerId: -1,
+
+    size: 0,
+    padding: 0,
 };
 
 export const defaultOptions = structuredClone(mutatedOptions);
-export const resetOptions = (target: Options, source: Parameters<typeof createTank>[0]) => {
+export const resetOptions = (target: Options, source: Parameters<typeof createMediumTank>[0]) => {
     target.x = source?.x ?? defaultOptions.x;
     target.y = source?.y ?? defaultOptions.y;
     target.z = defaultOptions.z;
@@ -50,6 +51,11 @@ export const resetOptions = (target: Options, source: Parameters<typeof createTa
 
     target.teamId = source?.teamId ?? defaultOptions.teamId;
     target.playerId = source?.playerId ?? defaultOptions.playerId;
+
+    target.size = defaultOptions.size;
+    target.padding = defaultOptions.padding;
+
+    return target;
 };
 
 export const updateColorOptions = (target: Options, color: TColor) => {

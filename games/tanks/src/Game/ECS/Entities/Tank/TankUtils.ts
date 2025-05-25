@@ -1,6 +1,6 @@
 import { Children } from '../../Components/Children.ts';
 import { scheduleRemoveEntity } from '../../Utils/typicalRemoveEntity.ts';
-import { TankPart, TankPartTrack } from '../../Components/TankPart.ts';
+import { TankPart, TankPartCaterpillar } from '../../Components/TankPart.ts';
 import { Tank } from '../../Components/Tank.ts';
 import { GameDI } from '../../../DI/GameDI.ts';
 import { Parent } from '../../Components/Parent.ts';
@@ -58,7 +58,7 @@ export function tearOffTankPart(tankPartEid: number, shouldBreakConnection: bool
 
 export function resetTankPartJointComponent(tankPartEid: number, { world } = GameDI) {
     TankPart.resetComponent(tankPartEid);
-    TankPartTrack.removeComponent(world, tankPartEid);
+    TankPartCaterpillar.removeComponent(world, tankPartEid);
 }
 
 export function getTankCurrentPartsCount(tankEid: number) {

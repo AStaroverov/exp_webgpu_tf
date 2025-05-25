@@ -9,9 +9,9 @@ export enum CollisionGroup {
     BULLET = 0b0000010,
     TANK_BASE = 0b0000100,
     TANK_HULL_PARTS = 0b0001000,
-    TANK_TURRET_PARTS = 0b0100000,
-    TANK_GUN_PARTS = 0b1000000,
-    TANK_PARTS = CollisionGroup.TANK_HULL_PARTS | CollisionGroup.TANK_TURRET_PARTS | CollisionGroup.TANK_GUN_PARTS,
+    TANK_TURRET_HEAD_PARTS = 0b0100000,
+    TANK_TURRET_GUN_PARTS = 0b1000000,
+    TANK_PARTS = CollisionGroup.TANK_HULL_PARTS | CollisionGroup.TANK_TURRET_HEAD_PARTS | CollisionGroup.TANK_TURRET_GUN_PARTS,
 }
 
 type CommonRigidOptions = BodyOptions & {
