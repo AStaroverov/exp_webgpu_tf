@@ -5,7 +5,7 @@ import { Tank } from '../../Game/ECS/Components/Tank.ts';
 import { TankController } from '../../Game/ECS/Components/TankController.ts';
 import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../Game/ECS/Components/TankState.ts';
 import { EntityId } from 'bitecs';
-import { BULLET_SPEED } from '../../Game/ECS/Components/Bullet.ts';
+import { MAX_BULLET_SPEED } from '../../Game/ECS/Components/Bullet.ts';
 import { getTankHealth, getTankScore } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
 
@@ -295,7 +295,7 @@ function analyzeAiming(
         const enemyVY = RigidBodyState.linvel.get(enemyId, 1);
 
         const distToEnemy = hypot(tankX - enemyX, tankY - enemyY);
-        const timeDistToEnemy = distToEnemy / BULLET_SPEED;
+        const timeDistToEnemy = distToEnemy / MAX_BULLET_SPEED;
         const futureEnemyX = enemyX + enemyVX * timeDistToEnemy;
         const futureEnemyY = enemyY + enemyVY * timeDistToEnemy;
         const enemyColliderRadius = HeuristicsData.approxColliderRadius[enemyId];
@@ -319,7 +319,7 @@ function analyzeAiming(
         const allyVY = RigidBodyState.linvel.get(allyId, 1);
 
         const distToAlly = hypot(tankX - allyX, tankY - allyY);
-        const timeDistToAlly = distToAlly / BULLET_SPEED;
+        const timeDistToAlly = distToAlly / MAX_BULLET_SPEED;
         const futureAllyX = allyX + allyVX * timeDistToAlly;
         const futureAllyY = allyY + allyVY * timeDistToAlly;
         const allyColliderRadius = HeuristicsData.approxColliderRadius[allyId];

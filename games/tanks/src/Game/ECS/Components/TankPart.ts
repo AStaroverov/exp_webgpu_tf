@@ -22,8 +22,8 @@ export const TankPart = component({
     },
 });
 
-export const TankPartTrack = {
+export const TankPartCaterpillar = {
     removeComponent(world: World, eid: EntityId) {
-        removeComponent(world, eid, TankPartTrack);
+        removeComponent(world, eid, TankPartCaterpillar);
     },
 };

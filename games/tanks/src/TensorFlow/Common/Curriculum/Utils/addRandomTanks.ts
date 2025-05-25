@@ -1,6 +1,6 @@
 import { GameDI } from '../../../../Game/DI/GameDI.ts';
 import { randomRangeFloat } from '../../../../../../../lib/random.ts';
-import { createTank } from '../../../../Game/ECS/Entities/Tank/CreateTank.ts';
+import { createMediumTank } from '../../../../Game/ECS/Entities/Tank/Medium/MediumTank.ts';
 import { createPlayer } from '../../../../Game/ECS/Entities/Player.ts';
 import { PI, pow, sqrt } from '../../../../../../../lib/math.ts';
 import { TANK_APPROXIMATE_COLLIDER_RADIUS } from '../../../../Game/ECS/Components/HeuristicsData.ts';
@@ -32,7 +32,7 @@ export function addRandomTanks(teamIdAndCount: [number, number][]) {
                 y = randomRangeFloat(TANK_APPROXIMATE_COLLIDER_RADIUS, height - TANK_APPROXIMATE_COLLIDER_RADIUS);
             } while (isTooClose(x, y));
 
-            const tank = createTank({
+            const tank = createMediumTank({
                 playerId: createPlayer(teamId),
                 teamId,
                 x,
