@@ -15,6 +15,12 @@ export enum TankEngineType {
     v12
 }
 
+export const mapTankEngineLabel = {
+    [TankEngineType.v6]: 'v6',
+    [TankEngineType.v8]: 'v8',
+    [TankEngineType.v12]: 'v12',
+};
+
 const IMPULSE_FACTOR = 15000000000;
 const ROTATION_IMPULSE_FACTOR = 150000000000;
 const mapTypeToFeatures = {

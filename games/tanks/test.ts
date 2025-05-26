@@ -6,9 +6,7 @@ import { TenserFlowDI } from './src/Game/DI/TenserFlowDI.ts';
 import { calculateActionReward, calculateStateReward } from './src/TensorFlow/Reward/calculateReward.ts';
 import { createPlayer } from './src/Game/ECS/Entities/Player.ts';
 import { snapshotTankInputTensor } from './src/Game/ECS/Utils/snapshotTankInputTensor.ts';
-import { TankController } from './src/Game/ECS/Components/TankController.ts';
 import { createHeavyTank } from './src/Game/ECS/Entities/Tank/Heavy/HeavyTank.ts';
-import { createMediumTank } from './src/Game/ECS/Entities/Tank/Medium/MediumTank.ts';
 import { createLightTank } from './src/Game/ECS/Entities/Tank/Light/LightTank.ts';
 
 TenserFlowDI.enabled = true;
@@ -59,22 +57,22 @@ const tanks = [
     //     rotation: 0,
     //     color: [1, 1, 0, 1],
     // }),
-    createHeavyTank({
-        playerId: createPlayer(1),
-        teamId: 1,
-        x: 700,
-        y: 300,
-        rotation: Math.PI / 1.3,
-        color: [1, 1, 0, 1],
-    }),
-    createMediumTank({
-        playerId: createPlayer(1),
-        teamId: 1,
-        x: 200,
-        y: 300,
-        rotation: Math.PI / 1.3,
-        color: [1, 1, 0, 1],
-    }),
+    // createHeavyTank({
+    //     playerId: createPlayer(1),
+    //     teamId: 1,
+    //     x: 700,
+    //     y: 300,
+    //     rotation: Math.PI / 1.3,
+    //     color: [1, 1, 0, 1],
+    // }),
+    // createMediumTank({
+    //     playerId: createPlayer(1),
+    //     teamId: 1,
+    //     x: 200,
+    //     y: 300,
+    //     rotation: Math.PI / 1.3,
+    //     color: [1, 1, 0, 1],
+    // }),
     createLightTank({
         playerId: createPlayer(1),
         teamId: 1,
@@ -90,7 +88,7 @@ console.log('>> PLAYER ', PLAYER_REFS.tankPid);
 console.log('>> TANKS ', tanks);
 
 tanks.forEach((tank) => {
-    TankController.setShooting$(tank, 1);
+    // TankController.setShooting$(tank, 1);
 });
 // TankController.setShooting$(tanks[1], 1);
 
