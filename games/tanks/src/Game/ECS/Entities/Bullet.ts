@@ -21,6 +21,7 @@ import { TeamRef } from '../Components/TeamRef.ts';
 import { Color } from '../../../../../../src/ECS/Components/Common.ts';
 import { TankTurret } from '../Components/TankTurret.ts';
 import { min } from '../../../../../../lib/math.ts';
+import { Damagable } from '../Components/Damagable.ts';
 
 type Options = Parameters<typeof createRectangleRR>[0];
 const optionsBulletRR: Options = {
@@ -46,26 +47,31 @@ const defaultOptionsBulletRR = structuredClone(optionsBulletRR);
 const tmpSpeed = vec2.create();
 
 export function createBullet(options: Partial<Options> & {
-    speed: number,
+    calibre: BulletCaliber,
     playerId: number,
     teamId: number
 }, { world } = GameDI) {
     Object.assign(optionsBulletRR, defaultOptionsBulletRR);
     Object.assign(optionsBulletRR, options);
 
-    if (isNumber(options.speed) && options.speed > 0) {
+    const bulletCaliber = mapBulletCaliber[options.calibre];
+    const speed = min(bulletCaliber.speed, MAX_BULLET_SPEED);
+
+    if (isNumber(speed) && speed > 0) {
         tmpSpeed[0] = 0;
-        tmpSpeed[1] = -(options.speed ?? 0);
+        tmpSpeed[1] = -speed;
         applyRotationToVector(tmpSpeed, tmpSpeed, options.rotation ?? 0);
         optionsBulletRR.speedX = tmpSpeed[0];
         optionsBulletRR.speedY = tmpSpeed[1];
     }
+    optionsBulletRR.density = bulletCaliber.density;
 
     const [bulletId] = createRectangleRR(optionsBulletRR);
-    Bullet.addComponent(world, bulletId);
+    Bullet.addComponent(world, bulletId, options.calibre);
     TeamRef.addComponent(world, bulletId, options.teamId);
     PlayerRef.addComponent(world, bulletId, options.playerId);
-    Hitable.addComponent(world, bulletId);
+    Hitable.addComponent(world, bulletId, Number.EPSILON);
+    Damagable.addComponent(world, bulletId, bulletCaliber.damage);
     DestroyByTimeout.addComponent(world, bulletId, 8_000);
 
     return bulletId;
@@ -77,8 +83,7 @@ const optionsSpawnBullet = {
     width: 0,
     height: 0,
     color: new Float32Array(4).fill(1),
-    speed: 0,
-    density: 0,
+    calibre: BulletCaliber.Light as BulletCaliber,
     rotation: 0,
     playerId: 0,
     teamId: 0,
@@ -103,8 +108,7 @@ export function spawnBullet(tankEid: number) {
     optionsSpawnBullet.width = bulletCaliber.width;
     optionsSpawnBullet.height = bulletCaliber.height;
     optionsSpawnBullet.rotation = getMatrixRotationZ(tmpMatrix);
-    optionsSpawnBullet.speed = min(bulletCaliber.speed, MAX_BULLET_SPEED);
-    optionsSpawnBullet.density = bulletCaliber.density;
+    optionsSpawnBullet.calibre = TankTurret.bulletCaliber[turretEid] as BulletCaliber;
     optionsSpawnBullet.teamId = TeamRef.id[tankEid];
     optionsSpawnBullet.playerId = PlayerRef.id[tankEid];
 

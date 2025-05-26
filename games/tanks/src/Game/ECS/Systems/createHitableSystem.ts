@@ -1,7 +1,7 @@
 import { GameDI } from '../../DI/GameDI.ts';
 import { Hitable } from '../Components/Hitable.ts';
 import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
-import { hasComponent, onSet, query } from 'bitecs';
+import { EntityId, hasComponent, onSet, query } from 'bitecs';
 import { Bullet } from '../Components/Bullet.ts';
 import { createChangeDetector } from '../../../../../../src/ECS/Systems/ChangedDetectorSystem.ts';
 import { TankPart } from '../Components/TankPart.ts';
@@ -9,6 +9,8 @@ import { tearOffTankPart } from '../Entities/Tank/TankUtils.ts';
 import { Score } from '../Components/Score.ts';
 import { TeamRef } from '../Components/TeamRef.ts';
 import { PlayerRef } from '../Components/PlayerRef.ts';
+import { Damagable } from '../Components/Damagable.ts';
+import { min } from '../../../../../../lib/math.ts';
 
 export function createHitableSystem({ world } = GameDI) {
     const hitableChanges = createChangeDetector(world, [onSet(Hitable)]);
@@ -21,22 +23,12 @@ export function createHitableSystem({ world } = GameDI) {
             const tankPartEid = tankPartEids[i];
             if (!hitableChanges.has(tankPartEid)) continue;
 
-            const damage = Hitable.damage[tankPartEid];
-            if (damage <= 0) continue;
+            const hitEids = Hitable.getHitEids(tankPartEid);
 
-            const secondEid = Hitable.secondEid[tankPartEid];
+            applyDamage(tankPartEid);
+            applyScores(tankPartEid, hitEids);
 
-            if (
-                hasComponent(world, tankPartEid, TeamRef)
-                && hasComponent(world, secondEid, TeamRef)
-                && hasComponent(world, secondEid, PlayerRef)
-            ) {
-                const tankPartTeamId = TeamRef.id[tankPartEid];
-                const secondTeamId = TeamRef.id[secondEid];
-                const playerId = PlayerRef.id[secondEid];
-
-                Score.updateScore(playerId, tankPartTeamId === secondTeamId ? -1 : 1);
-            }
+            if (!Hitable.isDestroyed(tankPartEid)) continue;
 
             tearOffTankPart(tankPartEid, true);
         }
@@ -46,12 +38,48 @@ export function createHitableSystem({ world } = GameDI) {
             const bulletId = bulletIds[i];
             if (!hitableChanges.has(bulletId)) continue;
 
-            const damage = Hitable.damage[bulletId];
-            if (damage <= 0) continue;
+            applyDamage(bulletId);
+
+            if (!Hitable.isDestroyed(bulletId)) continue;
 
             scheduleRemoveEntity(bulletId);
         }
 
         hitableChanges.clear();
     };
+}
+
+const FORCE_TARGET = 10_000_000;
+
+function applyDamage(targetEid: number, { world } = GameDI) {
+    const count = Hitable.hitIndex[targetEid];
+    const hits = Hitable.hits.getBatch(targetEid);
+
+    for (let i = 0; i < count; i++) {
+        const sourceEid = hits[i * 2];
+        const forceCoeff = min(1, hits[i * 2 + 1] / FORCE_TARGET);
+        const damage = hasComponent(world, sourceEid, Damagable)
+            ? forceCoeff * Damagable.damage[sourceEid]
+            : 0;
+
+        Hitable.health[targetEid] -= damage;
+    }
+    Hitable.resetHits(targetEid);
+}
+
+function applyScores(tankPartEid: EntityId, hitEids: Float64Array, { world } = GameDI) {
+    for (const hitEid of hitEids) {
+        if (
+            hasComponent(world, tankPartEid, TeamRef)
+            && hasComponent(world, hitEid, TeamRef)
+            && hasComponent(world, hitEid, PlayerRef)
+        ) {
+            const tankPartTeamId = TeamRef.id[tankPartEid];
+            const secondTeamId = TeamRef.id[hitEid];
+            const playerId = PlayerRef.id[hitEid];
+
+            Score.updateScore(playerId, tankPartTeamId === secondTeamId ? -1 : 1);
+        }
+    }
+
 }

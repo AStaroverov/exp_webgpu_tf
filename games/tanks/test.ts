@@ -4,11 +4,11 @@ import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
 import { GameDI } from './src/Game/DI/GameDI.ts';
 import { TenserFlowDI } from './src/Game/DI/TenserFlowDI.ts';
 import { calculateActionReward, calculateStateReward } from './src/TensorFlow/Reward/calculateReward.ts';
-import { createMediumTank } from './src/Game/ECS/Entities/Tank/Medium/MediumTank.ts';
 import { createPlayer } from './src/Game/ECS/Entities/Player.ts';
 import { snapshotTankInputTensor } from './src/Game/ECS/Utils/snapshotTankInputTensor.ts';
 import { TankController } from './src/Game/ECS/Components/TankController.ts';
 import { createLightTank } from './src/Game/ECS/Entities/Tank/Light/LightTank.ts';
+import { createMediumTank } from './src/Game/ECS/Entities/Tank/Medium/MediumTank.ts';
 
 TenserFlowDI.enabled = true;
 
@@ -16,8 +16,8 @@ const { gameTick, setRenderTarget } = createGame({ width: 1200, height: 1000, wi
 setRenderTarget(document.querySelector('canvas') as HTMLCanvasElement);
 
 const tanks = [
-    // createMediumTank({
-    createLightTank({
+    // createLightTank({
+    createMediumTank({
         playerId: createPlayer(0),
         teamId: 0,
         x: 200,
@@ -57,10 +57,18 @@ const tanks = [
     //     rotation: 0,
     //     color: [1, 1, 0, 1],
     // }),
-    createMediumTank({
+    // createMediumTank({
+    //     playerId: createPlayer(1),
+    //     teamId: 1,
+    //     x: 200,
+    //     y: 300,
+    //     rotation: Math.PI / 1.3,
+    //     color: [1, 1, 0, 1],
+    // }),
+    createLightTank({
         playerId: createPlayer(1),
         teamId: 1,
-        x: 200,
+        x: 400,
         y: 300,
         rotation: Math.PI / 1.3,
         color: [1, 1, 0, 1],

@@ -147,25 +147,22 @@ export function createGame({ width, height, withPlayer }: {
         // });
 
         eventQueue.drainContactForceEvents(event => {
-            let handle1 = event.collider1(); // Handle of the first collider involved in the event.
-            let handle2 = event.collider2(); // Handle of the second collider involved in the event.
-
+            const handle1 = event.collider1(); // Handle of the first collider involved in the event.
+            const handle2 = event.collider2(); // Handle of the second collider involved in the event.
             const rb1 = physicalWorld.getCollider(handle1).parent();
             const rb2 = physicalWorld.getCollider(handle2).parent();
-
-            // TODO: Replace magic number with a constant.
-            if (event.totalForceMagnitude() < 5_000_000) return;
-
             const eid1 = rb1 && getEntityIdByPhysicalId(rb1.handle);
             const eid2 = rb2 && getEntityIdByPhysicalId(rb2.handle);
 
             if (eid1 == null || eid2 == null) return;
 
+            const forceMagnitude = event.totalForceMagnitude();
+
             if (hasComponent(world, eid1, Hitable)) {
-                Hitable.hit$(eid1, eid2, 1);
+                Hitable.hit$(eid1, eid2, forceMagnitude);
             }
             if (hasComponent(world, eid2, Hitable)) {
-                Hitable.hit$(eid2, eid1, 1);
+                Hitable.hit$(eid2, eid1, forceMagnitude);
             }
         });
 

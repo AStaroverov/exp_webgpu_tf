@@ -18,6 +18,8 @@ import { TeamRef } from '../../../Components/TeamRef.ts';
 import { Tank } from '../../../Components/Tank.ts';
 import { TankTurret } from '../../../Components/TankTurret.ts';
 import { BulletCaliber } from '../../../Components/Bullet.ts';
+import { Damagable } from '../../../Components/Damagable.ts';
+import { min } from '../../../../../../../../lib/math.ts';
 
 export type PartsData = [x: number, y: number, w: number, h: number];
 
@@ -145,7 +147,8 @@ function createThingFromParts(
 
         PlayerRef.addComponent(world, eid, options.playerId);
         TeamRef.addComponent(world, eid, options.teamId);
-        Hitable.addComponent(world, eid);
+        Hitable.addComponent(world, eid, min(options.width, options.height));
+        Damagable.addComponent(world, eid, min(options.width, options.height) / 10);
         Parent.addComponent(world, eid, parentEId);
         Children.addChildren(parentEId, eid);
 
