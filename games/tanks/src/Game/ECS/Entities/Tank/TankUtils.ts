@@ -10,7 +10,7 @@ import { CollisionGroup } from '../../../Physical/createRigid.ts';
 import { min, smoothstep } from '../../../../../../../lib/math.ts';
 import { PlayerRef } from '../../Components/PlayerRef.ts';
 import { Score } from '../../Components/Score.ts';
-import { EntityId, removeComponent } from 'bitecs';
+import { EntityId, hasComponent, removeComponent } from 'bitecs';
 import { TeamRef } from '../../Components/TeamRef.ts';
 import { changePhysicalDensity } from '../../../Physical/changePhysicalDensity.ts';
 
@@ -47,8 +47,9 @@ export function tearOffTankPart(tankPartEid: number, shouldBreakConnection: bool
         Children.removeChild(parentEid, tankPartEid);
     }
 
-    const jointPid = TankPart.jointPid[tankPartEid];
+    const jointPid = hasComponent(world, tankPartEid, TankPart) ? TankPart.jointPid[tankPartEid] : 0;
     if (jointPid > 0) {
+        removeComponent(world, tankPartEid, TankPart);
         resetTankPartJointComponent(tankPartEid);
         setPhysicalCollisionGroup(tankPartEid, CollisionGroup.ALL & ~CollisionGroup.TANK_BASE);
         removePhysicalJoint(jointPid);
