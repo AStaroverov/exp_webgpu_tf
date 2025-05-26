@@ -46,7 +46,7 @@ export function createHeavyTank(opts: {
     options.density = DENSITY;
     options.width = PADDING * 8;
     options.height = PADDING * 8;
-    options.turret.rotationSpeed = PI * 0.4;
+    options.turret.rotationSpeed = PI * 0.25;
     options.turret.reloadingDuration = 400;
     options.turret.bulletCaliber = BulletCaliber.Heavy;
     options.turret.bulletStartPosition = [0, -13 * PADDING];

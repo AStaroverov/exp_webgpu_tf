@@ -28,7 +28,7 @@ const mapTypeToFeatures = {
     },
     [TankEngineType.v12]: {
         impulseFactor: IMPULSE_FACTOR * 2,
-        rotationImpulseFactor: ROTATION_IMPULSE_FACTOR * 4,
+        rotationImpulseFactor: ROTATION_IMPULSE_FACTOR * 3,
     },
 };
 
