@@ -18,8 +18,8 @@ setRenderTarget(document.querySelector('canvas') as HTMLCanvasElement);
 
 const tanks = [
     // createLightTank({
-    createMediumTank({
-        // createHeavyTank({
+    // createMediumTank({
+    createHeavyTank({
         playerId: createPlayer(0),
         teamId: 0,
         x: 200,
