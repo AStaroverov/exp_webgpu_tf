@@ -7,8 +7,9 @@ import { calculateActionReward, calculateStateReward } from './src/TensorFlow/Re
 import { createPlayer } from './src/Game/ECS/Entities/Player.ts';
 import { snapshotTankInputTensor } from './src/Game/ECS/Utils/snapshotTankInputTensor.ts';
 import { TankController } from './src/Game/ECS/Components/TankController.ts';
-import { createLightTank } from './src/Game/ECS/Entities/Tank/Light/LightTank.ts';
+import { createHeavyTank } from './src/Game/ECS/Entities/Tank/Heavy/HeavyTank.ts';
 import { createMediumTank } from './src/Game/ECS/Entities/Tank/Medium/MediumTank.ts';
+import { createLightTank } from './src/Game/ECS/Entities/Tank/Light/LightTank.ts';
 
 TenserFlowDI.enabled = true;
 
@@ -18,6 +19,7 @@ setRenderTarget(document.querySelector('canvas') as HTMLCanvasElement);
 const tanks = [
     // createLightTank({
     createMediumTank({
+        // createHeavyTank({
         playerId: createPlayer(0),
         teamId: 0,
         x: 200,
@@ -25,7 +27,7 @@ const tanks = [
         rotation: 0,
         color: [1, 0, 0.5, 1],
     }),
-    // createTank({
+    // createMediumTank({
     //     playerId: createPlayer(0),
     //     teamId: 0,
     //     x: 700,
@@ -33,7 +35,7 @@ const tanks = [
     //     rotation: 0,
     //     color: [1, 0, 0, 1],
     // }),
-    // createTank({
+    // createMediumTank({
     //     playerId: createPlayer(0),
     //     teamId: 0,
     //     x: 300,
@@ -41,7 +43,7 @@ const tanks = [
     //     rotation: Math.PI / 1.3,
     //     color: [1, 0, 0, 1],
     // }),
-    // createTank({
+    // createMediumTank({
     //     playerId: createPlayer(0),
     //     teamId: 0,
     //     x: 150,
@@ -49,7 +51,7 @@ const tanks = [
     //     rotation: Math.PI / 1.3,
     //     color: [1, 0, 0, 1],
     // }),
-    // createTank({
+    // createLightTank({
     //     playerId: createPlayer(1),
     //     teamId: 1,
     //     x: 200,
@@ -57,14 +59,22 @@ const tanks = [
     //     rotation: 0,
     //     color: [1, 1, 0, 1],
     // }),
-    // createMediumTank({
-    //     playerId: createPlayer(1),
-    //     teamId: 1,
-    //     x: 200,
-    //     y: 300,
-    //     rotation: Math.PI / 1.3,
-    //     color: [1, 1, 0, 1],
-    // }),
+    createHeavyTank({
+        playerId: createPlayer(1),
+        teamId: 1,
+        x: 700,
+        y: 300,
+        rotation: Math.PI / 1.3,
+        color: [1, 1, 0, 1],
+    }),
+    createMediumTank({
+        playerId: createPlayer(1),
+        teamId: 1,
+        x: 200,
+        y: 300,
+        rotation: Math.PI / 1.3,
+        color: [1, 1, 0, 1],
+    }),
     createLightTank({
         playerId: createPlayer(1),
         teamId: 1,
@@ -79,7 +89,10 @@ PLAYER_REFS.tankPid = tanks[0];
 console.log('>> PLAYER ', PLAYER_REFS.tankPid);
 console.log('>> TANKS ', tanks);
 
-TankController.setShooting$(tanks[1], 1);
+tanks.forEach((tank) => {
+    TankController.setShooting$(tank, 1);
+});
+// TankController.setShooting$(tanks[1], 1);
 
 // TankController.setMove$(enemyEid, 1);
 let i = 0;
