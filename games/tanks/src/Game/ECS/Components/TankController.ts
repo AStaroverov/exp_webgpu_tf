@@ -5,7 +5,7 @@ import { component, obs } from '../../../../../../src/ECS/utils.ts';
 
 export const TankController = component(({
     shoot: TypedArray.f32(delegate.defaultSize),
-    shootCooldown: TypedArray.f32(delegate.defaultSize),
+
 
     // Control user tank
     move: TypedArray.f64(delegate.defaultSize),
@@ -16,22 +16,15 @@ export const TankController = component(({
     addComponent(world: World, eid: number) {
         addComponent(world, eid, TankController);
         TankController.shoot[eid] = 0;
-        TankController.shootCooldown[eid] = 0;
         TankController.move[eid] = 0;
         TankController.rotation[eid] = 0;
         TankController.turretRotation[eid] = 0;
     },
     shouldShoot(eid: number): boolean {
-        return TankController.shoot[eid] > 0 && TankController.shootCooldown[eid] <= 0;
+        return TankController.shoot[eid] > 0;
     },
     setShooting$: obs((eid: number, v: number): void => {
         TankController.shoot[eid] = v;
-    }),
-    startCooldown: ((eid: number): void => {
-        TankController.shootCooldown[eid] = 100;
-    }),
-    updateCooldown: ((eid: number, dt: number): void => {
-        TankController.shootCooldown[eid] -= dt;
     }),
     setMove$: obs((eid: number, dir: number): void => {
         TankController.move[eid] = dir;
