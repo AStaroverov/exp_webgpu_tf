@@ -70,14 +70,17 @@ export class NestedArray<T extends ArrayLikeConstructor> {
 
     public set(batchIndex: number, index: number, value: number) {
         this.buffer[batchIndex * this.batchLength + index] = value;
+        return this;
     }
 
     public fill(value: number) {
         this.buffer.fill(value);
+        return this;
     }
 
     public setBatch(batchIndex: number, values: ArrayLike<number>) {
         this.buffer.set(values, batchIndex * this.batchLength);
+        return this;
     }
 
     public getBatch(batchStart: number): T['prototype'] {
