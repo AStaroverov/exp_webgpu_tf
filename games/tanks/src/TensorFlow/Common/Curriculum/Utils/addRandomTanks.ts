@@ -3,7 +3,8 @@ import { randomRangeFloat } from '../../../../../../../lib/random.ts';
 import { createMediumTank } from '../../../../Game/ECS/Entities/Tank/Medium/MediumTank.ts';
 import { createPlayer } from '../../../../Game/ECS/Entities/Player.ts';
 import { PI, pow, sqrt } from '../../../../../../../lib/math.ts';
-import { TANK_APPROXIMATE_COLLIDER_RADIUS } from '../../../../Game/ECS/Components/HeuristicsData.ts';
+
+const MIN_RADIUS = 200;
 
 export function addRandomTanks(teamIdAndCount: [number, number][]) {
     const tanks = [];
@@ -16,7 +17,7 @@ export function addRandomTanks(teamIdAndCount: [number, number][]) {
         for (let i = 0; i < tankPositions.length; i++) {
             const tank = tankPositions[i];
             const dist = sqrt(pow(tank.x - x, 2) + pow(tank.y - y, 2));
-            if (dist < TANK_APPROXIMATE_COLLIDER_RADIUS * 2) {
+            if (dist < MIN_RADIUS * 2) {
                 return true;
             }
         }
@@ -28,8 +29,8 @@ export function addRandomTanks(teamIdAndCount: [number, number][]) {
             let x: number, y: number;
 
             do {
-                x = randomRangeFloat(TANK_APPROXIMATE_COLLIDER_RADIUS, width - TANK_APPROXIMATE_COLLIDER_RADIUS);
-                y = randomRangeFloat(TANK_APPROXIMATE_COLLIDER_RADIUS, height - TANK_APPROXIMATE_COLLIDER_RADIUS);
+                x = randomRangeFloat(MIN_RADIUS, width - MIN_RADIUS);
+                y = randomRangeFloat(MIN_RADIUS, height - MIN_RADIUS);
             } while (isTooClose(x, y));
 
             const tank = createMediumTank({

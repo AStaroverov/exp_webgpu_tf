@@ -10,7 +10,7 @@ import {
     SIZE,
     turretGunSet,
     turretHeadSet,
-} from './MediumTankParts.ts';
+} from './HeavyTankParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from '../Common/Options.ts';
 import { createTankBase, createTankTurret } from '../Common/Tank.ts';
 import { createTankCaterpillarsParts, createTankHullParts, createTankTurretParts } from '../Common/TankParts.ts';
@@ -20,9 +20,9 @@ import { TankEngineType } from '../../../Systems/Tank/TankControllerSystems.ts';
 
 const TRACKS_COLOR = new Float32Array([0.5, 0.5, 0.5, 1]);
 const TURRET_COLOR = new Float32Array([0.5, 1, 0.5, 1]);
-const APPROXIMATE_COLLIDER_RADIUS = 80;
+const APPROXIMATE_COLLIDER_RADIUS = 150;
 
-export function createMediumTank(opts: {
+export function createHeavyTank(opts: {
     playerId: number,
     teamId: number,
     x: number,
@@ -35,7 +35,7 @@ export function createMediumTank(opts: {
     options.size = SIZE;
     options.padding = PADDING;
     options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
-    options.engineType = TankEngineType.v8;
+    options.engineType = TankEngineType.v12;
     options.caterpillarLength = caterpillarLength;
 
     options.density = DENSITY * 10;
@@ -46,9 +46,9 @@ export function createMediumTank(opts: {
     options.density = DENSITY;
     options.width = PADDING * 8;
     options.height = PADDING * 8;
-    options.turret.rotationSpeed = PI * 0.6;
-    options.turret.reloadingDuration = 200;
-    options.turret.bulletCaliber = BulletCaliber.Medium;
+    options.turret.rotationSpeed = PI * 0.4;
+    options.turret.reloadingDuration = 400;
+    options.turret.bulletCaliber = BulletCaliber.Heavy;
     options.turret.bulletStartPosition = [0, -13 * PADDING];
     const [turretEid] = createTankTurret(options, tankEid, tankPid);
 

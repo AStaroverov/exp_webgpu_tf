@@ -1,10 +1,15 @@
 import { RigidBodyType } from '@dimforge/rapier2d-simd';
 import { TColor } from '../../../../../../../../src/ECS/Components/Common.ts';
 import { createMediumTank } from '../Medium/MediumTank.ts';
+import { TankEngineType } from '../../../Systems/Tank/TankControllerSystems.ts';
+import { BulletCaliber } from '../../../Components/Bullet.ts';
 
 export type Options = typeof mutatedOptions;
 
 export const mutatedOptions = {
+    teamId: -1,
+    playerId: -1,
+
     x: 0,
     y: 0,
     z: 0,
@@ -23,15 +28,27 @@ export const mutatedOptions = {
     belongsCollisionGroup: 0,
     interactsCollisionGroup: 0,
 
-    teamId: -1,
-    playerId: -1,
-
+    partsCount: 0,
     size: 0,
     padding: 0,
+    approximateColliderRadius: 0,
+
+    engineType: TankEngineType.v6,
+    caterpillarLength: 0,
+
+    turret: {
+        rotationSpeed: 0,
+        reloadingDuration: 0,
+        bulletStartPosition: [0, 0],
+        bulletCaliber: BulletCaliber.Light,
+    },
 };
 
 export const defaultOptions = structuredClone(mutatedOptions);
 export const resetOptions = (target: Options, source: Parameters<typeof createMediumTank>[0]) => {
+    target.teamId = source?.teamId ?? defaultOptions.teamId;
+    target.playerId = source?.playerId ?? defaultOptions.playerId;
+
     target.x = source?.x ?? defaultOptions.x;
     target.y = source?.y ?? defaultOptions.y;
     target.z = defaultOptions.z;
@@ -49,11 +66,16 @@ export const resetOptions = (target: Options, source: Parameters<typeof createMe
     target.belongsCollisionGroup = defaultOptions.belongsCollisionGroup;
     target.interactsCollisionGroup = defaultOptions.interactsCollisionGroup;
 
-    target.teamId = source?.teamId ?? defaultOptions.teamId;
-    target.playerId = source?.playerId ?? defaultOptions.playerId;
-
+    target.partsCount = defaultOptions.partsCount;
     target.size = defaultOptions.size;
     target.padding = defaultOptions.padding;
+    target.approximateColliderRadius = defaultOptions.approximateColliderRadius;
+
+    target.engineType = defaultOptions.engineType;
+    target.caterpillarLength = defaultOptions.caterpillarLength;
+
+    target.turret.bulletStartPosition = defaultOptions.turret.bulletStartPosition;
+    target.turret.bulletCaliber = defaultOptions.turret.bulletCaliber;
 
     return target;
 };
