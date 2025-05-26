@@ -2,14 +2,18 @@ import { delegate } from '../../../../../../src/delegate.ts';
 import { TypedArray } from '../../../../../../src/utils.ts';
 import { component } from '../../../../../../src/ECS/utils.ts';
 import { addComponent, EntityId, World } from 'bitecs';
+import { TankEngineType } from '../Systems/Tank/TankControllerSystems.ts';
 
 export const Tank = component({
     turretEId: TypedArray.f64(delegate.defaultSize),
+
+    engineType: TypedArray.i8(delegate.defaultSize),
     initialPartsCount: TypedArray.f64(delegate.defaultSize),
     caterpillarsLength: TypedArray.f64(delegate.defaultSize),
 
     addComponent(world: World, eid: EntityId, initialPartsCount: number): void {
         Tank.turretEId[eid] = 0;
+        Tank.engineType[eid] = 0;
         Tank.caterpillarsLength[eid] = 0;
 
         addComponent(world, eid, Tank);
@@ -18,6 +22,10 @@ export const Tank = component({
 
     setTurretEid(eid: number, turretEid: number) {
         Tank.turretEId[eid] = turretEid;
+    },
+
+    setEngineType(eid: number, engineType: TankEngineType) {
+        Tank.engineType[eid] = engineType;
     },
 
     setCaterpillarsLength(eid: number, caterpillarsLength: number) {

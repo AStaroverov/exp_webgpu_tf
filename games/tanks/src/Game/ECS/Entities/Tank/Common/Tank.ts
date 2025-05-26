@@ -7,7 +7,7 @@ import { Children } from '../../../Components/Children.ts';
 import { TeamRef } from '../../../Components/TeamRef.ts';
 import { PlayerRef } from '../../../Components/PlayerRef.ts';
 import { TankController } from '../../../Components/TankController.ts';
-import { HeuristicsData, TANK_APPROXIMATE_COLLIDER_RADIUS } from '../../../Components/HeuristicsData.ts';
+import { HeuristicsData } from '../../../Components/HeuristicsData.ts';
 import { TenserFlowDI } from '../../../../DI/TenserFlowDI.ts';
 import { TankInputTensor } from '../../../Components/TankState.ts';
 import { JointData, Vector2 } from '@dimforge/rapier2d-simd';
@@ -17,14 +17,15 @@ import { CollisionGroup } from '../../../../Physical/createRigid.ts';
 import { createRectangleRigidGroup } from '../../../Components/RigidGroup.ts';
 import { TankTurret } from '../../../Components/TankTurret.ts';
 
-export function createTankBase(partsCount: number, options: Options, { world } = GameDI): [number, number] {
+export function createTankBase(options: Options, { world } = GameDI): [number, number] {
     options.belongsCollisionGroup = CollisionGroup.TANK_BASE;
     options.interactsCollisionGroup = CollisionGroup.TANK_BASE;
 
     const [tankEid, tankPid] = createRectangleRigidGroup(options);
     // const [tankEid, tankPid] = createRectangleRR(options);
-
-    Tank.addComponent(world, tankEid, partsCount);
+    Tank.addComponent(world, tankEid, options.partsCount);
+    Tank.setEngineType(tankEid, options.engineType);
+    Tank.setCaterpillarsLength(tankEid, options.caterpillarLength);
 
     // Добавление базовых компонентов
     addTransformComponents(world, tankEid);
@@ -32,7 +33,7 @@ export function createTankBase(partsCount: number, options: Options, { world } =
     TeamRef.addComponent(world, tankEid, options.teamId);
     PlayerRef.addComponent(world, tankEid, options.playerId);
     TankController.addComponent(world, tankEid);
-    HeuristicsData.addComponent(world, tankEid, TANK_APPROXIMATE_COLLIDER_RADIUS);
+    HeuristicsData.addComponent(world, tankEid, options.approximateColliderRadius);
     Color.addComponent(world, tankEid, ...options.color);
 
     // Добавление TensorFlow компонентов, если активировано
@@ -56,8 +57,10 @@ export function createTankTurret(options: Options, tankEid: number, tankPid: num
 
     const [turretEid, turretPid] = createRectangleRigidGroup(options);
     // const [turretEid, turretPid] = createRectangleRR(options);
-
     TankTurret.addComponent(world, turretEid, tankEid);
+    TankTurret.setReloadingDuration(turretEid, options.turret.reloadingDuration);
+    TankTurret.setBulletData(turretEid, options.turret.bulletStartPosition, options.turret.bulletCaliber);
+    TankTurret.setRotationSpeed(turretEid, options.turret.rotationSpeed);
 
     parentVector.x = 0;
     parentVector.y = 0;

@@ -70,7 +70,7 @@ export function createBullet(options: Partial<Options> & {
     Bullet.addComponent(world, bulletId, options.calibre);
     TeamRef.addComponent(world, bulletId, options.teamId);
     PlayerRef.addComponent(world, bulletId, options.playerId);
-    Hitable.addComponent(world, bulletId, Number.EPSILON);
+    Hitable.addComponent(world, bulletId, min(bulletCaliber.width, bulletCaliber.height) / 10);
     Damagable.addComponent(world, bulletId, bulletCaliber.damage);
     DestroyByTimeout.addComponent(world, bulletId, 8_000);
 

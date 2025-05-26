@@ -7,6 +7,8 @@ import { BulletCaliber } from './Bullet.ts';
 export const TankTurret = component({
     tankEId: TypedArray.f64(delegate.defaultSize),
 
+    rotationSpeed: TypedArray.f32(delegate.defaultSize),
+
     bulletCaliber: TypedArray.i8(delegate.defaultSize),
     // [x,y]
     bulletStartPosition: NestedArray.f32(2, delegate.defaultSize),
@@ -19,27 +21,32 @@ export const TankTurret = component({
         TankTurret.bulletReloading.set(eid, 0, 0);
         TankTurret.bulletReloading.set(eid, 1, 0);
         TankTurret.bulletCaliber[eid] = 0;
+        TankTurret.rotationSpeed[eid] = 0;
 
         addComponent(world, eid, TankTurret);
         TankTurret.tankEId[eid] = tankEid;
     },
 
-    setBulletData(eid: number, position: number[], caliber: BulletCaliber): void {
+    setRotationSpeed(eid: EntityId, rotationSpeed: number): void {
+        TankTurret.rotationSpeed[eid] = rotationSpeed; // [0, PI]
+    },
+
+    setBulletData(eid: EntityId, position: number[], caliber: BulletCaliber): void {
         TankTurret.bulletStartPosition.setBatch(eid, position);
         TankTurret.bulletCaliber[eid] = caliber;
     },
 
-    setReloadingDuration(eid: number, duration: number): void {
+    setReloadingDuration(eid: EntityId, duration: number): void {
         TankTurret.bulletReloading.set(eid, 1, duration);
     },
-    isReloading(eid: number): boolean {
+    isReloading(eid: EntityId): boolean {
         return TankTurret.bulletReloading.get(eid, 0) > 0;
     },
-    startReloading: ((eid: number): void => {
+    startReloading: ((eid: EntityId): void => {
         const duration = TankTurret.bulletReloading.get(eid, 1);
         TankTurret.bulletReloading.set(eid, 0, duration);
     }),
-    updateReloading: ((eid: number, dt: number): void => {
+    updateReloading: ((eid: EntityId, dt: number): void => {
         const rest = TankTurret.bulletReloading.get(eid, 0);
         TankTurret.bulletReloading.set(eid, 0, rest - dt);
     }),

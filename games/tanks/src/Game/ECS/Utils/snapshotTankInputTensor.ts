@@ -13,7 +13,7 @@ import { TeamRef } from '../Components/TeamRef.ts';
 
 import { getTankHealth } from '../Entities/Tank/TankUtils.ts';
 import { TankController } from '../Components/TankController.ts';
-import { TANK_APPROXIMATE_COLLIDER_RADIUS } from '../Components/HeuristicsData.ts';
+import { HeuristicsData } from '../Components/HeuristicsData.ts';
 
 export function snapshotTankInputTensor({ world } = GameDI) {
     const tankEids = query(world, [Tank, TankInputTensor, RigidBodyState]);
@@ -54,6 +54,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
         const rotation = RigidBodyState.rotation[tankEid];
         const linvel = RigidBodyState.linvel.getBatch(tankEid);
         const turretRotation = RigidBodyState.rotation[Tank.turretEId[tankEid]];
+        const approximateColliderRadius = HeuristicsData.approxColliderRadius[tankEid];
 
         TankInputTensor.setTankData(
             tankEid,
@@ -62,7 +63,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
             rotation,
             linvel,
             turretRotation,
-            TANK_APPROXIMATE_COLLIDER_RADIUS,
+            approximateColliderRadius,
         );
 
         // Find closest enemies
@@ -80,7 +81,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
                 RigidBodyState.rotation[enemyEid],
                 RigidBodyState.linvel.getBatch(enemyEid),
                 RigidBodyState.rotation[Tank.turretEId[enemyEid]],
-                TANK_APPROXIMATE_COLLIDER_RADIUS,
+                HeuristicsData.approxColliderRadius[enemyEid],
             );
         }
 
@@ -99,7 +100,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
                 RigidBodyState.rotation[allyEid],
                 RigidBodyState.linvel.getBatch(allyEid),
                 RigidBodyState.rotation[Tank.turretEId[allyEid]],
-                TANK_APPROXIMATE_COLLIDER_RADIUS,
+                HeuristicsData.approxColliderRadius[allyEid],
             );
         }
 
@@ -223,6 +224,7 @@ export function findTankDangerBullets(tankEid: number, { physicalWorld } = GameD
                 const dangerSpeed = hypot(bulletPosition[0], bulletPosition[1]) >= BULLET_DANGER_SPEED;
                 if (!dangerSpeed) return true;
 
+                const approximateColliderRadius = HeuristicsData.approxColliderRadius[eid];
                 const dangerTrajectory = hasIntersectionVectorAndCircle(
                     bulletPosition[0],
                     bulletPosition[1],
@@ -230,7 +232,7 @@ export function findTankDangerBullets(tankEid: number, { physicalWorld } = GameD
                     bulletVelocity[1],
                     position.x,
                     position.y,
-                    TANK_APPROXIMATE_COLLIDER_RADIUS * 2,
+                    approximateColliderRadius * 2,
                 );
                 if (!dangerTrajectory) return true;
 
