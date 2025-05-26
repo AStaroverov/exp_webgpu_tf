@@ -15,9 +15,6 @@ import { randomRangeFloat } from '../../../../../../../../lib/random.ts';
 import { clamp } from 'lodash-es';
 import { addComponent } from 'bitecs';
 import { TeamRef } from '../../../Components/TeamRef.ts';
-import { Tank } from '../../../Components/Tank.ts';
-import { TankTurret } from '../../../Components/TankTurret.ts';
-import { BulletCaliber } from '../../../Components/Bullet.ts';
 import { Damagable } from '../../../Components/Damagable.ts';
 import { min } from '../../../../../../../../lib/math.ts';
 
@@ -51,32 +48,26 @@ export function createTankHullParts(tankEid: number, hullSet: PartsData[], optio
     }, options);
 }
 
-export function createTankCaterpillarsParts(tankEid: number, caterpillars: [lineCount: number, PartsData[]][], options: Options): void {
+export function createTankCaterpillarsParts(tankEid: number, caterpillars: PartsData[][], options: Options): void {
     options.z = ZIndex.TankCaterpillar;
     options.belongsSolverGroup = CollisionGroup.ALL;
     options.interactsSolverGroup = CollisionGroup.ALL;
     options.belongsCollisionGroup = CollisionGroup.TANK_HULL_PARTS;
     options.interactsCollisionGroup = CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_HULL_PARTS;
 
-    caterpillars.forEach(([, set]) => {
+    caterpillars.forEach((parts) => {
         createThingFromParts({
             parentEId: tankEid,
-            params: set,
+            params: parts,
             tag: TankPartCaterpillar,
         }, options);
     });
-
-    Tank.setCaterpillarsLength(tankEid, caterpillars[0][0]);
 }
 
 export function createTankTurretParts(
     turretEid: number,
-    { headSet, gunSet, bullet }: {
-        headSet: PartsData[], gunSet: PartsData[], bullet: {
-            position: [number, number],
-            caliber: BulletCaliber,
-        }
-    },
+    headSet: PartsData[],
+    gunSet: PartsData[],
     options: Options,
 ) {
     options.z = ZIndex.TankTurret;
@@ -96,8 +87,6 @@ export function createTankTurretParts(
         parentEId: turretEid,
         params: gunSet,
     }, options);
-
-    TankTurret.setBulletData(turretEid, bullet.position, bullet.caliber);
 }
 
 const parentVector = new Vector2(0, 0);

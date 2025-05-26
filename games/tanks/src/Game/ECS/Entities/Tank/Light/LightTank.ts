@@ -3,18 +3,25 @@ import { TColor } from '../../../../../../../../src/ECS/Components/Common.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from '../Common/Options.ts';
 import { createTankBase, createTankTurret } from '../Common/Tank.ts';
 import {
-    createTankCaterpillarsParts,
-    createTankHullParts,
-    createTankTurretParts,
+    caterpillarLength,
+    caterpillarSetLeft,
+    caterpillarSetRight,
     DENSITY,
+    hullSet,
     PADDING,
     PARTS_COUNT,
+    turretGunSet,
+    turretHeadSet,
 } from './LightTankParts.ts';
+import { Tank } from '../../../Components/Tank.ts';
+import { TankTurret } from '../../../Components/TankTurret.ts';
+import { BulletCaliber } from '../../../Components/Bullet.ts';
+import { createTankCaterpillarsParts, createTankHullParts, createTankTurretParts } from '../Common/TankParts.ts';
 
 const TRACKS_COLOR = new Float32Array([0.6, 0.6, 0.6, 1]);
 const TURRET_COLOR = new Float32Array([0.6, 1, 0.6, 1]);
 
-export function createLightTank(options: {
+export function createLightTank(opts: {
     playerId: number,
     teamId: number,
     x: number,
@@ -22,28 +29,36 @@ export function createLightTank(options: {
     rotation: number,
     color: TColor,
 }) {
-    const tankOps = resetOptions(mutatedOptions, options);
+    const options = resetOptions(mutatedOptions, opts);
 
-    tankOps.density = DENSITY * 10;
-    tankOps.width = PADDING * 12;
-    tankOps.height = PADDING * 12;
-    const [tankEid, tankPid] = createTankBase(PARTS_COUNT, tankOps);
+    options.density = DENSITY * 10;
+    options.width = PADDING * 12;
+    options.height = PADDING * 12;
+    const [tankEid, tankPid] = createTankBase(PARTS_COUNT, options);
 
-    tankOps.density = DENSITY;
-    tankOps.width = PADDING * 6;
-    tankOps.height = PADDING * 6;
-    const [turretEid] = createTankTurret(tankOps, tankEid, tankPid);
-
-    createTankHullParts(tankEid, tankOps);
+    options.density = DENSITY;
+    options.width = PADDING * 6;
+    options.height = PADDING * 6;
+    const [turretEid] = createTankTurret(options, tankEid, tankPid);
 
     {
-        updateColorOptions(tankOps, TRACKS_COLOR);
-        createTankCaterpillarsParts(tankEid, tankOps);
+        options.density = DENSITY * 10;
+        createTankHullParts(tankEid, hullSet, options);
     }
 
     {
-        updateColorOptions(tankOps, TURRET_COLOR);
-        createTankTurretParts(turretEid, tankOps);
+        options.density = DENSITY;
+        updateColorOptions(options, TRACKS_COLOR);
+        createTankCaterpillarsParts(tankEid, [caterpillarSetLeft, caterpillarSetRight], options);
+        Tank.setCaterpillarsLength(tankEid, caterpillarLength);
+    }
+
+    {
+        options.density = DENSITY;
+        updateColorOptions(options, TURRET_COLOR);
+        createTankTurretParts(turretEid, turretHeadSet, turretGunSet, options);
+        TankTurret.setBulletData(turretEid, [0, -9 * PADDING], BulletCaliber.Light);
+        TankTurret.setReloadingDuration(turretEid, 100);
     }
 
     return tankEid;
