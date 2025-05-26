@@ -137,7 +137,7 @@ function createThingFromParts(
         PlayerRef.addComponent(world, eid, options.playerId);
         TeamRef.addComponent(world, eid, options.teamId);
         Hitable.addComponent(world, eid, min(options.width, options.height));
-        Damagable.addComponent(world, eid, min(options.width, options.height) / 10);
+        Damagable.addComponent(world, eid, min(options.width, options.height) / 20);
         Parent.addComponent(world, eid, parentEId);
         Children.addChildren(parentEId, eid);
 
