@@ -13,7 +13,7 @@ export function GarageScreen({ className, style }: {
     const tankEids = useObservable(tankEids$, EMPTY_ARRAY);
 
     return (
-        <div className={ className } style={ style }>
+        <div className={ `${ className } backdrop-blur-2xl bg-amber-100 p-3 rounded-md` } style={ style }>
             <div className="flex flex-col gap-2">
                 { tankEids.map((id) => {
                     return <TankPreview key={ id } className="flex grow" id={ id }/>;

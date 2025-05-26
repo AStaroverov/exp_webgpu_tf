@@ -13,6 +13,7 @@ import { Score } from '../../Components/Score.ts';
 import { EntityId, hasComponent, removeComponent } from 'bitecs';
 import { TeamRef } from '../../Components/TeamRef.ts';
 import { changePhysicalDensity } from '../../../Physical/changePhysicalDensity.ts';
+import { mapTankEngineLabel, TankEngineType } from '../../Systems/Tank/TankControllerSystems.ts';
 
 export function destroyTank(tankEid: EntityId) {
     // turret
@@ -89,3 +90,9 @@ export function getTankTeamId(tankEid: number) {
     const teamId = TeamRef.id[tankEid];
     return teamId;
 }
+
+export function getTankEngineLabel(tankEid: number): string {
+    const engine = Tank.engineType[tankEid] as TankEngineType;
+    return mapTankEngineLabel[engine];
+}
+

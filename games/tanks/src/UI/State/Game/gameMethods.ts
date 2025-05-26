@@ -1,6 +1,6 @@
 import { frameInterval } from '../../../../../../lib/Rx/frameInterval.ts';
 import { distinctUntilChanged, map } from 'rxjs';
-import { destroyTank, getTankHealth } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
+import { destroyTank, getTankEngineLabel, getTankHealth } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { addTank, getTankEids, mapTankIdToAgent } from './engineMethods.ts';
 import { dedobs, DEDOBS_REMOVE_DELAY, DEDOBS_RESET_DELAY } from '../../../../../../lib/Rx/dedobs.ts';
 import { EntityId } from 'bitecs';
@@ -25,6 +25,7 @@ export const getTankState$ = dedobs(
                 return {
                     id,
                     health: (getTankHealth(id) * 100).toFixed(0),
+                    engine: getTankEngineLabel(id),
                 };
             }),
             distinctUntilChanged((a, b) => a.health === b.health && a.id === b.id),
