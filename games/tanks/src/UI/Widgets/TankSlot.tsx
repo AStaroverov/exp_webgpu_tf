@@ -12,12 +12,12 @@ export function TankSlot({ className, slot }: { className: string, slot: number 
     const tankEid = useObservable(getTankEidBySlot$(slot));
 
     return (
-        <div className={ `${ className } gap-2` }>
+        <div className={ `${ className } flex flex-col gap-2` }>
             { !tankEid && <Button onClick={ addTank }>Add tank</Button> }
             { tankEid && <>
-                <div className="w-full gap-2">
-                    <TankSelector slot={ slot }/>
-                    <PilotSelector tankEid={ tankEid }/>
+                <div className="w-full grid grid-cols-2 gap-2">
+                    <TankSelector className="" slot={ slot }/>
+                    <PilotSelector className="" tankEid={ tankEid }/>
                 </div>
                 { tankEid && <TankPreview tankEid={ tankEid }/> }
             </> }
