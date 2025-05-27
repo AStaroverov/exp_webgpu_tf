@@ -1,5 +1,5 @@
 import { BehaviorSubject, map, merge, switchMap, tap } from 'rxjs';
-import { max } from '../../../../../../lib/math.ts';
+import { min } from '../../../../../../lib/math.ts';
 import { frameInterval } from '../../../../../../lib/Rx/frameInterval.ts';
 import { getEngine } from './engine.ts';
 
@@ -19,8 +19,8 @@ export function GameStateEffects() {
         switchMap(({ isStarted }) => {
             const step = isStarted ? 1 : 6;
             return frameInterval(step).pipe(
-                map((d) => max(step * 16.6667, d)),
-                tap((d) => getEngine().gameTick(d)),
+                map((dt) => min(16.6667, dt)),
+                tap((dt) => getEngine().gameTick(step * dt)),
             );
         }),
     );

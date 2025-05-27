@@ -6,7 +6,7 @@ import { random } from '../../../../../../lib/random.ts';
 
 const createReplaceToWall = (chance: number) => (tile: Tile) => {
     return <WallTile>Object.assign(tile, {
-        type: TileType.wall,
+        tankType: TileType.wall,
         last: random() > chance,
     });
 };

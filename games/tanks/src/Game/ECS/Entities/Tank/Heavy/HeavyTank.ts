@@ -17,6 +17,7 @@ import { createTankCaterpillarsParts, createTankHullParts, createTankTurretParts
 import { BulletCaliber } from '../../../Components/Bullet.ts';
 import { PI } from '../../../../../../../../lib/math.ts';
 import { TankEngineType } from '../../../Systems/Tank/TankControllerSystems.ts';
+import { TankType } from '../../../Components/Tank.ts';
 
 const TRACKS_COLOR = new Float32Array([0.5, 0.5, 0.5, 1]);
 const TURRET_COLOR = new Float32Array([0.5, 1, 0.5, 1]);
@@ -35,6 +36,7 @@ export function createHeavyTank(opts: {
     options.size = SIZE;
     options.padding = PADDING;
     options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
+    options.tankType = TankType.Heavy;
     options.engineType = TankEngineType.v12;
     options.caterpillarLength = caterpillarLength;
 

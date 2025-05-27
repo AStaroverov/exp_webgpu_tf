@@ -1,7 +1,13 @@
 import { frameInterval } from '../../../../../../lib/Rx/frameInterval.ts';
-import { distinctUntilChanged, map } from 'rxjs';
-import { destroyTank, getTankEngineLabel, getTankHealth } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { addTank, getTankEids, mapTankIdToAgent } from './engineMethods.ts';
+import { BehaviorSubject, distinctUntilChanged, map } from 'rxjs';
+import {
+    destroyTank,
+    getTankEngineLabel,
+    getTankHealth,
+    getTankHealthAbs,
+    syncRemoveTank,
+} from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
+import { addTank, getTankEids, getTankType, mapTankIdToAgent } from './engineMethods.ts';
 import { dedobs, DEDOBS_REMOVE_DELAY, DEDOBS_RESET_DELAY } from '../../../../../../lib/Rx/dedobs.ts';
 import { EntityId } from 'bitecs';
 import { frameTasks } from '../../../../../../lib/TasksScheduler/frameTasks.ts';
@@ -9,6 +15,15 @@ import { getEngine } from './engine.ts';
 import { initTensorFlow } from '../../../TensorFlow/Common/initTensorFlow.ts';
 import { CurrentActorAgent } from '../../../TensorFlow/Common/Curriculum/Agents/CurrentActorAgent.ts';
 import { hashArray } from '../../../../../../lib/hashArray.ts';
+import { TankType } from '../../../Game/ECS/Components/Tank.ts';
+import { PLAYER_TEAM_ID } from './playerMethods.ts';
+
+export const mapSlotToEid$ = new BehaviorSubject(new Map<number, number>());
+
+export function changeTankType(tankEid: EntityId, slot: number, tankType: TankType) {
+    syncRemoveTank(tankEid);
+    addTank(slot, PLAYER_TEAM_ID, tankType);
+}
 
 export const tankEids$ = frameInterval(10).pipe(
     map(getTankEids),
@@ -20,15 +35,27 @@ export const tankEids$ = frameInterval(10).pipe(
 
 export const getTankState$ = dedobs(
     (id: number) => {
-        return frameInterval(10).pipe(
+        return frameInterval(200).pipe(
             map(() => {
                 return {
                     id,
-                    health: (getTankHealth(id) * 100).toFixed(0),
+                    healthRel: getTankHealth(id),
+                    healthAbs: (getTankHealthAbs(id)).toFixed(0),
                     engine: getTankEngineLabel(id),
                 };
             }),
-            distinctUntilChanged((a, b) => a.health === b.health && a.id === b.id),
+        );
+    },
+    {
+        removeDelay: DEDOBS_REMOVE_DELAY,
+        resetDelay: DEDOBS_RESET_DELAY,
+    },
+);
+
+export const getTankType$ = dedobs(
+    (id: number) => {
+        return frameInterval(200).pipe(
+            map(() => getTankType(id)),
         );
     },
     {
@@ -38,10 +65,10 @@ export const getTankState$ = dedobs(
 );
 
 export const finalizeGameState = async () => {
-    const playerTeam = getTankEids();
+    const playerTeamEids = getTankEids();
 
-    for (let i = 0; i < playerTeam.length; i++) {
-        addTank(i, 1);
+    for (let i = 0; i < playerTeamEids.length; i++) {
+        addTank(i, 1, getTankType(playerTeamEids[i]));
     }
 
     const allTanks = getTankEids();

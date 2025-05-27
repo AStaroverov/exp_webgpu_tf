@@ -18,6 +18,8 @@ import { createTankCaterpillarsParts, createTankHullParts, createTankTurretParts
 import { SIZE } from '../Medium/MediumTankParts.ts';
 import { PI } from '../../../../../../../../lib/math.ts';
 import { TankEngineType } from '../../../Systems/Tank/TankControllerSystems.ts';
+import { TankType } from '../../../Components/Tank.ts';
+import { EntityId } from 'bitecs';
 
 const TRACKS_COLOR = new Float32Array([0.6, 0.6, 0.6, 1]);
 const TURRET_COLOR = new Float32Array([0.6, 1, 0.6, 1]);
@@ -30,12 +32,13 @@ export function createLightTank(opts: {
     y: number,
     rotation: number,
     color: TColor,
-}) {
+}): EntityId {
     const options = resetOptions(mutatedOptions, opts);
     options.partsCount = PARTS_COUNT;
     options.size = SIZE;
     options.padding = PADDING;
     options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
+    options.tankType = TankType.Light;
     options.engineType = TankEngineType.v6;
     options.caterpillarLength = caterpillarLength;
 

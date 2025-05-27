@@ -23,7 +23,7 @@ export function createTankBase(options: Options, { world } = GameDI): [number, n
 
     const [tankEid, tankPid] = createRectangleRigidGroup(options);
     // const [tankEid, tankPid] = createRectangleRR(options);
-    Tank.addComponent(world, tankEid, options.partsCount);
+    Tank.addComponent(world, tankEid, options.tankType, options.partsCount);
     Tank.setEngineType(tankEid, options.engineType);
     Tank.setCaterpillarsLength(tankEid, options.caterpillarLength);
 

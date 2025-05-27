@@ -3,6 +3,7 @@ import { TColor } from '../../../../../../../../src/ECS/Components/Common.ts';
 import { createMediumTank } from '../Medium/MediumTank.ts';
 import { TankEngineType } from '../../../Systems/Tank/TankControllerSystems.ts';
 import { BulletCaliber } from '../../../Components/Bullet.ts';
+import { TankType } from '../../../Components/Tank.ts';
 
 export type Options = typeof mutatedOptions;
 
@@ -33,6 +34,7 @@ export const mutatedOptions = {
     padding: 0,
     approximateColliderRadius: 0,
 
+    tankType: TankType.Light,
     engineType: TankEngineType.v6,
     caterpillarLength: 0,
 
@@ -71,6 +73,7 @@ export const resetOptions = (target: Options, source: Parameters<typeof createMe
     target.padding = defaultOptions.padding;
     target.approximateColliderRadius = defaultOptions.approximateColliderRadius;
 
+    target.tankType = defaultOptions.tankType;
     target.engineType = defaultOptions.engineType;
     target.caterpillarLength = defaultOptions.caterpillarLength;
 

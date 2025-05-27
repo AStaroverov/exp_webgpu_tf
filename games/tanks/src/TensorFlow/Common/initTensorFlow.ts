@@ -3,6 +3,8 @@ import * as tf from '@tensorflow/tfjs';
 tf.enableProdMode();
 
 export async function initTensorFlow(type: 'wasm' | 'webgpu' = 'wasm') {
+    if (tf.getBackend() === type) return;
+
     try {
         if (type === 'wasm') {
             const { setWasmPath } = await import('@tensorflow/tfjs-backend-wasm');
