@@ -9,7 +9,7 @@ export function PilotSelector({ className }: { className?: string, tankEid?: num
         <div className={ `${ className } gap-2` }>
             <Select
                 className="max-w-xs"
-                label="Tank type"
+                label="Pilot"
                 value={ 0 }
             >
                 { pilots.map((item) => <SelectItem key={ item.key }>{ item.label }</SelectItem>) }
