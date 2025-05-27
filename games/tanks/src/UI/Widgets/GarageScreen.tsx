@@ -1,32 +1,31 @@
-import { TankPreview } from './TankPreview.tsx';
 import { CSSProperties } from 'react';
-import { useObservable } from '../../../../../lib/React/useSyncObservable.ts';
+import { startGame } from '../State/Game/playerMethods.ts';
+import { Button } from '../Components/Button.tsx';
+import { Card } from '../Components/Card.tsx';
+import { TankSlot } from './TankSlot.tsx';
+import { range } from 'lodash-es';
 import { GAME_MAX_TEAM_TANKS } from '../State/Game/engineMethods.ts';
-import { addTank, startGame } from '../State/Game/playerMethods.ts';
-import { tankEids$ } from '../State/Game/gameMethods.ts';
-import { EMPTY_ARRAY } from '../../../../../lib/const.ts';
 
 export function GarageScreen({ className, style }: {
     className?: string,
     style?: CSSProperties,
 }) {
-    const tankEids = useObservable(tankEids$, EMPTY_ARRAY);
-
     return (
         <div className={ `${ className } backdrop-blur-2xl bg-amber-100 p-3 rounded-md` } style={ style }>
             <div className="flex flex-col gap-2">
-                { tankEids.map((id) => {
-                    return <TankPreview key={ id } className="flex grow" id={ id }/>;
+                { range(0, GAME_MAX_TEAM_TANKS).map((i) => {
+                    return <Card key={ i } className="p-2">
+                        <div>Tank { i + 1 }</div>
+                        <TankSlot className="flex grow" slot={ i }/>
+                    </Card>;
                 }) }
-                { tankEids.length < GAME_MAX_TEAM_TANKS && <div
+                <Button
                     className="flex grow"
-                    onClick={ addTank }
+                    color="primary"
+                    onClick={ startGame }
                 >
-                    + Add
-                </div> }
-                <div className="flex grow" onClick={ startGame }>
                     Start
-                </div>
+                </Button>
             </div>
         </div>
     );

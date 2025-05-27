@@ -4,19 +4,27 @@ import { component } from '../../../../../../src/ECS/utils.ts';
 import { addComponent, EntityId, World } from 'bitecs';
 import { TankEngineType } from '../Systems/Tank/TankControllerSystems.ts';
 
+export enum TankType {
+    Light = 0,
+    Medium = 1,
+    Heavy = 2,
+}
+
 export const Tank = component({
     turretEId: TypedArray.f64(delegate.defaultSize),
 
+    type: TypedArray.i8(delegate.defaultSize),
     engineType: TypedArray.i8(delegate.defaultSize),
     initialPartsCount: TypedArray.f64(delegate.defaultSize),
     caterpillarsLength: TypedArray.f64(delegate.defaultSize),
 
-    addComponent(world: World, eid: EntityId, initialPartsCount: number): void {
+    addComponent(world: World, eid: EntityId, type: TankType, initialPartsCount: number): void {
         Tank.turretEId[eid] = 0;
         Tank.engineType[eid] = 0;
         Tank.caterpillarsLength[eid] = 0;
 
         addComponent(world, eid, Tank);
+        Tank.type[eid] = type;
         Tank.initialPartsCount[eid] = initialPartsCount;
     },
 

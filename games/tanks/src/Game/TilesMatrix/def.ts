@@ -26,12 +26,12 @@ export const getEmptyTile = (x: number, y: number): Tile => ({
 export const getRoadTile = (x: number, y: number): RoadTile => ({
     x,
     y,
-    type: TileType.road,
+    tankType: TileType.road,
     last: false,
 });
 
 export const getLastRoadTile = (x: number, y: number): RoadTile => ({
     ...getRoadTile(x, y),
-    type: TileType.road,
+    tankType: TileType.road,
     last: true,
 });

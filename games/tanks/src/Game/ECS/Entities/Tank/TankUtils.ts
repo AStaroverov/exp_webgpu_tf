@@ -1,5 +1,5 @@
 import { Children } from '../../Components/Children.ts';
-import { scheduleRemoveEntity } from '../../Utils/typicalRemoveEntity.ts';
+import { recursiveTypicalRemoveEntity, scheduleRemoveEntity } from '../../Utils/typicalRemoveEntity.ts';
 import { TankPart, TankPartCaterpillar } from '../../Components/TankPart.ts';
 import { Tank } from '../../Components/Tank.ts';
 import { GameDI } from '../../../DI/GameDI.ts';
@@ -30,6 +30,14 @@ export function destroyTank(tankEid: EntityId) {
     }
     Children.removeAllChildren(tankEid);
     removeTankComponentsWithoutParts(tankEid);
+}
+
+export function removeTank(tankEid: EntityId) {
+    scheduleRemoveEntity(tankEid, true);
+}
+
+export function syncRemoveTank(tankEid: EntityId) {
+    recursiveTypicalRemoveEntity(tankEid);
 }
 
 export function removeTankComponentsWithoutParts(tankEid: number) {
@@ -70,6 +78,12 @@ export function getTankCurrentPartsCount(tankEid: number) {
 export const HEALTH_THRESHOLD = 0.85;
 
 // return from 0 to 1
+export function getTankHealthAbs(tankEid: number): number {
+    const health = getTankHealth(tankEid);
+    const absHealth = health * Tank.initialPartsCount[tankEid];
+    return absHealth;
+}
+
 export function getTankHealth(tankEid: number): number {
     const initialPartsCount = Tank.initialPartsCount[tankEid];
     const partsCount = getTankCurrentPartsCount(tankEid);
