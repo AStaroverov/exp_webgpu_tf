@@ -5,8 +5,6 @@ import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { EpisodeManager } from '../Actor/EpisodeManager.ts';
 import { Scenario } from '../../Common/Curriculum/types.ts';
 import { log, max, min, round } from '../../../../../../lib/math.ts';
-import { TankAgent } from '../../Common/Curriculum/Agents/CurrentActorAgent.ts';
-import { SNAPSHOT_EVERY } from '../../Common/consts.ts';
 import { CONFIG } from '../config.ts';
 import { frameTasks } from '../../../../../../lib/TasksScheduler/frameTasks.ts';
 import { createScenarioByCurriculumState } from '../../Common/Curriculum/createScenarioByCurriculumState.ts';
@@ -29,7 +27,7 @@ export class VisTestEpisodeManager extends EpisodeManager {
     }
 
     public getReward(tankEid: EntityId) {
-        const memory = this.currentScenario?.getAgent(tankEid)?.getMemory?.();
+        const memory = this.currentScenario?.getPilot(tankEid)?.getMemory?.();
 
         if (memory == null || memory.rewards.length === 0) return 0;
 
@@ -48,7 +46,7 @@ export class VisTestEpisodeManager extends EpisodeManager {
     }
 
     public getVersion() {
-        return this.currentScenario?.getAliveAgents()
+        return this.currentScenario?.getAlivePilots()
             .reduce((acc, agent) => max(acc, agent.getVersion?.() ?? 0), 0) ?? 0;
     }
 
@@ -89,27 +87,19 @@ export class VisTestEpisodeManager extends EpisodeManager {
 
     protected runGameLoop(episode: Scenario) {
         return new Promise(resolve => {
-            const shouldEvery = SNAPSHOT_EVERY;
-            const maxFramesCount = (CONFIG.episodeFrames - (CONFIG.episodeFrames % shouldEvery) + shouldEvery);
-            let regardedAgents: TankAgent[] = [];
             let frame = 0;
 
             const stop = frameTasks.addInterval(() => {
                 frame++;
-                const nextRegardedAgents = this.runGameTick(
+                const gameOver = this.runGameTick(
+                    frame,
                     16.667,
                     episode,
-                    regardedAgents,
-                    frame,
-                    maxFramesCount,
-                    shouldEvery,
                 );
 
-                if (nextRegardedAgents == null || !getDrawState()) {
+                if (gameOver || !getDrawState()) {
                     stop();
                     resolve(null);
-                } else {
-                    regardedAgents = nextRegardedAgents;
                 }
             }, 1);
         });

@@ -1,22 +1,23 @@
-import { GameDI } from '../../DI/GameDI.ts';
-import { Tank } from '../Components/Tank.ts';
+import { GameDI } from '../../Game/DI/GameDI.ts';
+import { Tank } from '../../Game/ECS/Components/Tank.ts';
 import { MAX_ALLIES, MAX_BULLETS, MAX_ENEMIES, TankInputTensor } from '../Components/TankState.ts';
-import { getEntityIdByPhysicalId, RigidBodyState } from '../Components/Physical.ts';
-import { hypot } from '../../../../../../lib/math.ts';
+import { getEntityIdByPhysicalId, RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
+import { hypot } from '../../../../../lib/math.ts';
 import { Ball, Collider } from '@dimforge/rapier2d-simd';
-import { CollisionGroup, createCollisionGroups } from '../../Physical/createRigid.ts';
+import { CollisionGroup, createCollisionGroups } from '../../Game/Physical/createRigid.ts';
 import { EntityId, query } from 'bitecs';
-import { PlayerRef } from '../Components/PlayerRef.ts';
-import { hasIntersectionVectorAndCircle } from '../../Utils/intersections.ts';
-import { shuffle } from '../../../../../../lib/shuffle.ts';
-import { TeamRef } from '../Components/TeamRef.ts';
+import { PlayerRef } from '../../Game/ECS/Components/PlayerRef.ts';
+import { hasIntersectionVectorAndCircle } from '../../Game/Utils/intersections.ts';
+import { shuffle } from '../../../../../lib/shuffle.ts';
+import { TeamRef } from '../../Game/ECS/Components/TeamRef.ts';
 
-import { getTankHealth } from '../Entities/Tank/TankUtils.ts';
-import { TankController } from '../Components/TankController.ts';
-import { HeuristicsData } from '../Components/HeuristicsData.ts';
+import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
+import { TankController } from '../../Game/ECS/Components/TankController.ts';
+import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
+import { Pilot } from '../Components/Pilot.ts';
 
 export function snapshotTankInputTensor({ world } = GameDI) {
-    const tankEids = query(world, [Tank, TankInputTensor, RigidBodyState]);
+    const tankEids = query(world, [Tank, Pilot, TankInputTensor, RigidBodyState]);
 
     TankInputTensor.resetEnemiesCoords();
     TankInputTensor.resetAlliesCoords();

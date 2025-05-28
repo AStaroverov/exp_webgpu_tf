@@ -1,18 +1,18 @@
 import { createGame } from './src/Game/createGame.ts';
 import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
 import { GameDI } from './src/Game/DI/GameDI.ts';
-import { TenserFlowDI } from './src/Game/DI/TenserFlowDI.ts';
 import { calculateActionReward, calculateStateReward } from './src/TensorFlow/Reward/calculateReward.ts';
 import { createPlayer } from './src/Game/ECS/Entities/Player.ts';
-import { snapshotTankInputTensor } from './src/Game/ECS/Utils/snapshotTankInputTensor.ts';
+import { snapshotTankInputTensor } from './src/Pilots/Utils/snapshotTankInputTensor.ts';
 import { createHeavyTank } from './src/Game/ECS/Entities/Tank/Heavy/HeavyTank.ts';
 import { createLightTank } from './src/Game/ECS/Entities/Tank/Light/LightTank.ts';
+import { createPilotsPlugin } from './src/Pilots/createPilotsPlugin.ts';
 
-TenserFlowDI.enabled = true;
+const game = createGame({ width: 1200, height: 1000 });
+const { gameTick, setRenderTarget } = game;
+const { setPlayerPilot } = createPilotsPlugin(game);
 
-const { gameTick, setRenderTarget, setPlayerTank, enablePlayer } = createGame({ width: 1200, height: 1000 });
 setRenderTarget(document.querySelector('canvas') as HTMLCanvasElement);
-enablePlayer();
 
 const tanks = [
     // createLightTank({
@@ -83,7 +83,7 @@ const tanks = [
     }),
 ];
 
-setPlayerTank(tanks[0]);
+setPlayerPilot(tanks[0]);
 
 console.log('>> TANKS ', tanks);
 

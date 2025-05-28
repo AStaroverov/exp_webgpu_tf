@@ -8,8 +8,6 @@ import { TeamRef } from '../../../Components/TeamRef.ts';
 import { PlayerRef } from '../../../Components/PlayerRef.ts';
 import { TankController } from '../../../Components/TankController.ts';
 import { HeuristicsData } from '../../../Components/HeuristicsData.ts';
-import { TenserFlowDI } from '../../../../DI/TenserFlowDI.ts';
-import { TankInputTensor } from '../../../Components/TankState.ts';
 import { JointData, Vector2 } from '@dimforge/rapier2d-simd';
 import { TankPart } from '../../../Components/TankPart.ts';
 import { Parent } from '../../../Components/Parent.ts';
@@ -35,11 +33,6 @@ export function createTankBase(options: Options, { world } = GameDI): [number, n
     TankController.addComponent(world, tankEid);
     HeuristicsData.addComponent(world, tankEid, options.approximateColliderRadius);
     Color.addComponent(world, tankEid, ...options.color);
-
-    // Добавление TensorFlow компонентов, если активировано
-    if (TenserFlowDI.enabled) {
-        TankInputTensor.addComponent(world, tankEid);
-    }
 
     return [tankEid, tankPid];
 }

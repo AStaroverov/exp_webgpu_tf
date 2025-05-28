@@ -9,13 +9,7 @@ export async function createScenarioWithAlliesActive(options: Parameters<typeof 
     const scenario = await createScenarioBase(options);
     scenario.index = indexScenarioWithAlliesActive;
 
-    const destroy = await fillAlliesWithActorAgents(scenario);
+    fillAlliesWithActorAgents(scenario);
 
-    return {
-        ...scenario,
-        destroy: () => {
-            scenario.destroy();
-            destroy();
-        },
-    };
+    return scenario;
 }

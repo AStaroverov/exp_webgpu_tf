@@ -26,11 +26,11 @@ import { createRigidBodyStateSystem } from './ECS/Systems/createRigidBodyStateSy
 import { createDestroySystem } from './ECS/Systems/createDestroySystem.ts';
 import { RenderDI } from './DI/RenderDI.ts';
 import { PlayerEnvDI } from './DI/PlayerEnvDI.ts';
-import { TenserFlowDI } from './DI/TenserFlowDI.ts';
 import { createVisualizationTracksSystem } from './ECS/Systems/Tank/createVisualizationTracksSystem.ts';
 import { createPostEffect } from './ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
 import { createTankDecayOutOfZoneSystem } from './ECS/Systems/Tank/createTankDecayOutOfZoneSystem.ts';
 import { GameSession } from './ECS/Entities/GameSession.ts';
+import { SystemGroup } from './ECS/Plugins/systems.ts';
 
 export type Game = ReturnType<typeof createGame>;
 
@@ -45,6 +45,120 @@ export function createGame({ width, height }: {
     GameDI.height = height;
     GameDI.world = world;
     GameDI.physicalWorld = physicalWorld;
+
+    // const updateMap = createMapSystem();
+    const execTransformSystem = createTransformSystem(world);
+
+    const updateTankPosition = createTankPositionSystem();
+    const updateTankTurretRotation = createTankTurretRotationSystem();
+
+    const syncRigidBodyState = createRigidBodyStateSystem();
+    const applyRigidBodyDeltaToLocalTransform = createApplyRigidBodyToTransformSystem();
+
+    const updateHitableSystem = createHitableSystem();
+    const updateTankAliveSystem = createTankAliveSystem();
+
+    const eventQueue = new EventQueue(true);
+    const physicalFrame = (delta: number) => {
+        updateTankPosition(delta);
+        updateTankTurretRotation(delta);
+
+        execTransformSystem();
+        physicalWorld.step(eventQueue);
+        syncRigidBodyState();
+        applyRigidBodyDeltaToLocalTransform();
+
+        // eventQueue.drainCollisionEvents((handle1, handle2, started) => {
+        //     console.log('Collision event:', handle1, handle2, started);
+        // });
+
+        eventQueue.drainContactForceEvents(event => {
+            const handle1 = event.collider1(); // Handle of the first collider involved in the event.
+            const handle2 = event.collider2(); // Handle of the second collider involved in the event.
+            const rb1 = physicalWorld.getCollider(handle1).parent();
+            const rb2 = physicalWorld.getCollider(handle2).parent();
+            const eid1 = rb1 && getEntityIdByPhysicalId(rb1.handle);
+            const eid2 = rb2 && getEntityIdByPhysicalId(rb2.handle);
+
+            if (eid1 == null || eid2 == null) return;
+
+            const forceMagnitude = event.totalForceMagnitude();
+
+            if (hasComponent(world, eid1, Hitable)) {
+                Hitable.hit$(eid1, eid2, forceMagnitude);
+            }
+            if (hasComponent(world, eid2, Hitable)) {
+                Hitable.hit$(eid2, eid1, forceMagnitude);
+            }
+        });
+
+        updateHitableSystem();
+        updateTankAliveSystem();
+    };
+
+    const spawnBullets = createSpawnerBulletsSystem();
+    const spawnFrame = (delta: number) => {
+        spawnBullets(delta);
+    };
+
+    const destroy = createDestroySystem();
+    const destroyOutOfZone = createDestroyOutOfZoneSystem();
+    const destroyByTimeout = createDestroyByTimeoutSystem();
+    const decayTankOnOutOfZone = createTankDecayOutOfZoneSystem();
+
+    const destroyFrame = (delta: number) => {
+        decayTankOnOutOfZone();
+        destroyByTimeout(delta);
+        destroyOutOfZone();
+        destroy();
+    };
+
+    const visTracksUpdate = createVisualizationTracksSystem();
+
+    GameDI.gameTick = (delta: number) => {
+        GameDI.plugins.systems[SystemGroup.Before].forEach(system => system(delta));
+
+        spawnFrame(delta);
+
+        physicalFrame(delta);
+
+        visTracksUpdate(delta);
+        // updateMap();
+
+        // stats.begin();
+        RenderDI.renderFrame?.(delta);
+        // stats.end();
+        // stats.update();
+
+        destroyFrame(delta);
+
+        PlayerEnvDI.inputFrame?.();
+
+        GameDI.plugins.systems[SystemGroup.After].forEach(system => system(delta));
+    };
+
+    GameDI.destroy = () => {
+        GameDI.plugins.dispose();
+
+        physicalWorld.free();
+        RigidBodyRef.dispose();
+
+        resetWorld(world);
+        deleteWorld(world);
+        destroyChangeDetectorSystem(world);
+
+        GameSession.reset();
+
+        GameDI.width = null!;
+        GameDI.height = null!;
+        GameDI.world = null!;
+        GameDI.physicalWorld = null!;
+        GameDI.gameTick = null!;
+        GameDI.destroy = null!;
+
+        RenderDI.destroy?.();
+        PlayerEnvDI.destroy?.();
+    };
 
     GameDI.setRenderTarget = async (canvas: null | undefined | HTMLCanvasElement) => {
         if (canvas === RenderDI.canvas) {
@@ -121,116 +235,6 @@ export function createGame({ width, height }: {
     };
     GameDI.setPlayerTank = (tankEid: null | EntityId) => {
         PlayerEnvDI.tankEid = tankEid;
-    };
-
-    // const updateMap = createMapSystem();
-    const execTransformSystem = createTransformSystem(world);
-
-    const updateTankPosition = createTankPositionSystem();
-    const updateTankTurretRotation = createTankTurretRotationSystem();
-
-    const syncRigidBodyState = createRigidBodyStateSystem();
-    const applyRigidBodyDeltaToLocalTransform = createApplyRigidBodyToTransformSystem();
-
-    const updateHitableSystem = createHitableSystem();
-    const updateTankAliveSystem = createTankAliveSystem();
-
-    const eventQueue = new EventQueue(true);
-    const physicalFrame = (delta: number) => {
-        updateTankPosition(delta);
-        updateTankTurretRotation(delta);
-
-        execTransformSystem();
-        physicalWorld.step(eventQueue);
-        syncRigidBodyState();
-        applyRigidBodyDeltaToLocalTransform();
-
-        // eventQueue.drainCollisionEvents((handle1, handle2, started) => {
-        //     console.log('Collision event:', handle1, handle2, started);
-        // });
-
-        eventQueue.drainContactForceEvents(event => {
-            const handle1 = event.collider1(); // Handle of the first collider involved in the event.
-            const handle2 = event.collider2(); // Handle of the second collider involved in the event.
-            const rb1 = physicalWorld.getCollider(handle1).parent();
-            const rb2 = physicalWorld.getCollider(handle2).parent();
-            const eid1 = rb1 && getEntityIdByPhysicalId(rb1.handle);
-            const eid2 = rb2 && getEntityIdByPhysicalId(rb2.handle);
-
-            if (eid1 == null || eid2 == null) return;
-
-            const forceMagnitude = event.totalForceMagnitude();
-
-            if (hasComponent(world, eid1, Hitable)) {
-                Hitable.hit$(eid1, eid2, forceMagnitude);
-            }
-            if (hasComponent(world, eid2, Hitable)) {
-                Hitable.hit$(eid2, eid1, forceMagnitude);
-            }
-        });
-
-        updateHitableSystem();
-        updateTankAliveSystem();
-    };
-
-    const spawnBullets = createSpawnerBulletsSystem();
-    const spawnFrame = (delta: number) => {
-        spawnBullets(delta);
-    };
-
-    const destroy = createDestroySystem();
-    const destroyOutOfZone = createDestroyOutOfZoneSystem();
-    const destroyByTimeout = createDestroyByTimeoutSystem();
-    const decayTankOnOutOfZone = createTankDecayOutOfZoneSystem();
-
-    const destroyFrame = (delta: number) => {
-        decayTankOnOutOfZone();
-        destroyByTimeout(delta);
-        destroyOutOfZone();
-        destroy();
-    };
-
-    const visTracksUpdate = createVisualizationTracksSystem();
-
-    GameDI.gameTick = (delta: number) => {
-        spawnFrame(delta);
-
-        physicalFrame(delta);
-
-        visTracksUpdate(delta);
-        // updateMap();
-
-        // stats.begin();
-        RenderDI.renderFrame?.(delta);
-        // stats.end();
-        // stats.update();
-
-        destroyFrame(delta);
-
-        PlayerEnvDI.inputFrame?.();
-    };
-
-    GameDI.destroy = () => {
-        physicalWorld.free();
-        RigidBodyRef.dispose();
-
-        resetWorld(world);
-        deleteWorld(world);
-        destroyChangeDetectorSystem(world);
-
-        GameSession.reset();
-
-        GameDI.width = null!;
-        GameDI.height = null!;
-        GameDI.world = null!;
-        GameDI.physicalWorld = null!;
-        GameDI.gameTick = null!;
-        GameDI.destroy = null!;
-
-        RenderDI.destroy?.();
-        PlayerEnvDI.destroy?.();
-
-        TenserFlowDI.enabled = false;
     };
 
     return GameDI;

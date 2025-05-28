@@ -1,9 +1,9 @@
 import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
-import { BattleState, getBattleState } from '../../Game/ECS/Utils/snapshotTankInputTensor.ts';
+import { BattleState, getBattleState } from '../../Pilots/Utils/snapshotTankInputTensor.ts';
 import { abs, acos, cos, hypot, max, min, normalizeAngle, PI, sin, smoothstep } from '../../../../../lib/math.ts';
 import { Tank } from '../../Game/ECS/Components/Tank.ts';
 import { TankController } from '../../Game/ECS/Components/TankController.ts';
-import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../Game/ECS/Components/TankState.ts';
+import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../Pilots/Components/TankState.ts';
 import { EntityId } from 'bitecs';
 import { MAX_BULLET_SPEED } from '../../Game/ECS/Components/Bullet.ts';
 import { getTankHealth, getTankScore } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
