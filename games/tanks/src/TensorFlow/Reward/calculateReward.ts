@@ -25,12 +25,12 @@ const WEIGHTS = Object.freeze({
 
     // STATE REWARD
     AIM: {
-        QUALITY: 1,
+        QUALITY: 2,
         BAD_QUALITY_PENALTY: -1,
         BAD_SHOOTING_PENALTY: -1,
         ALLIES_SHOOTING_PENALTY: -1,
     },
-    AIM_MULTIPLIER: 1,
+    AIM_MULTIPLIER: 0.5,
 
     MOVING: {
         PENALTY_SPEED: -1,
@@ -46,7 +46,7 @@ const WEIGHTS = Object.freeze({
     DISTANCE_KEEPING: {
         PENALTY: -1,
     },
-    DISTANCE_KEEPING_MULTIPLIER: 0.2,
+    DISTANCE_KEEPING_MULTIPLIER: 1,
 });
 
 function initializeStateRewards() {
