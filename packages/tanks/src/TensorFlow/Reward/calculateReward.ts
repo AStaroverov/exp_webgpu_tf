@@ -21,9 +21,9 @@ const WEIGHTS = Object.freeze({
     COMMON_MULTIPLIER: 4,
 
     TEAM: {
-        SCORE: 2,
+        SCORE: 1,
     },
-    TEAM_MULTIPLIER: 2,
+    TEAM_MULTIPLIER: 1,
 
     // STATE REWARD
     AIM: {
@@ -207,14 +207,6 @@ export function calculateActionReward(
 
     const totalReward = rewards.team.total + rewards.common.total;
 
-    // console.log('>>', `
-    //     team: ${ rewards.team.total.toFixed(2) },
-    //     common: ${ rewards.common.total.toFixed(2) },
-    //     aim: ${ rewards.aim.total.toFixed(2) },
-    //     moving: ${ rewards.moving.total.toFixed(2) },
-    //     positioning: ${ rewards.positioning.total.toFixed(2) },
-    // `);
-
     if (!Number.isFinite(totalReward)) {
         console.error(`
             team: ${ rewards.team.total.toFixed(2) },
@@ -240,7 +232,6 @@ export function getTeamAdvantageScore(state: BattleState): number {
     const normCount = (state.alliesCount - state.enemiesCount);
     const normHP = (state.alliesTotalHealth - state.enemiesTotalHealth);
 
-    // Combine the two normalised components
     return WEIGHTS.TEAM.SCORE * (normCount + normHP);
 }
 
