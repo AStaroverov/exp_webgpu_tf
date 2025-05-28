@@ -8,7 +8,7 @@ import { randomRangeInt } from '../../../../../../lib/random.ts';
 export function createBattlefield(options?: { size?: number }) {
     TenserFlowDI.enabled = true;
 
-    const size = options?.size ?? randomRangeInt(1200, 2000);
+    const size = options?.size ?? randomRangeInt(1400, 2000);
     const game = createGame({ width: size, height: size });
 
     const getTankEids = () => {

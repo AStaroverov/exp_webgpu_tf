@@ -2,7 +2,7 @@ import { Scenario } from './types.ts';
 import { CurriculumState } from '../../PPO/channels.ts';
 import { createScenarioWithAlliesStatic, indexScenarioWithAlliesStatic } from './createScenarioWithAlliesStatic.ts';
 import { random } from '../../../../../../lib/random.ts';
-import { createScenarioStaticWithCoop, indexScenarioStaticWithCoop } from './createScenarioStaticWithCoop.ts';
+import { createScenarioWithAlliesActive, indexScenarioWithAlliesActive } from './createScenarioWithAlliesActive.ts';
 import { createBattlefield } from './createBattlefield.ts';
 import { createScenarioWithMovingAgents, indexScenarioWithMovingAgents } from './createScenarioWithMovingAgents.ts';
 import {
@@ -29,7 +29,7 @@ type ScenarioOptions = Parameters<typeof createBattlefield>[0];
 const mapEntries = [
     [indexScenarioSoloStatic, createScenarioSoloStatic],
     [indexScenarioWithAlliesStatic, createScenarioWithAlliesStatic],
-    [indexScenarioStaticWithCoop, createScenarioStaticWithCoop],
+    [indexScenarioWithAlliesActive, createScenarioWithAlliesActive],
     [indexScenarioWithMovingAgents, createScenarioWithMovingAgents],
     [indexScenarioWithShootingAgents, createScenarioWithShootingAgents],
     [indexScenarioWithHeuristicAgents, createScenarioWithHeuristicAgents],
