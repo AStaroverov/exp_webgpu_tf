@@ -1,4 +1,4 @@
-@import "../../../../node_modules/tailwindcss/dist/lib.d.mts";
+@import "tailwindcss";
 
 @plugin './hero.ts';
 @source '../../../../node_modules/@heroui/theme/dist/**/*.{js,ts,jsx,tsx}';
