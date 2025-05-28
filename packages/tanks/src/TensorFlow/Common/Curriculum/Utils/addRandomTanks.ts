@@ -4,7 +4,7 @@ import { createMediumTank } from '../../../../Game/ECS/Entities/Tank/Medium/Medi
 import { createPlayer } from '../../../../Game/ECS/Entities/Player.ts';
 import { PI, pow, sqrt } from '../../../../../../../lib/math.ts';
 
-const MIN_RADIUS = 200;
+const MIN_RADIUS = 150;
 
 export function addRandomTanks(teamIdAndCount: [number, number][]) {
     const tanks = [];
