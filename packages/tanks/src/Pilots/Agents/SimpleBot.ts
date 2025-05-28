@@ -1,14 +1,14 @@
-import { RigidBodyState } from '../../../../Game/ECS/Components/Physical.ts';
-import { abs, atan2, hypot, lerp, min, normalizeAngle, PI, sign } from '../../../../../../../lib/math.ts';
-import { getTankHealth } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { findTankEnemiesEids } from '../../../../Game/ECS/Utils/snapshotTankInputTensor.ts';
-import { Actions, applyActionToTank } from '../../applyActionToTank.ts';
 import { TankAgent } from './CurrentActorAgent.ts';
-import { randomRangeFloat } from '../../../../../../../lib/random.ts';
-import { OrnsteinUhlenbeckNoise } from '../../../../../../../lib/OrnsteinUhlenbeckNoise.ts';
-import { Tank } from '../../../../Game/ECS/Components/Tank.ts';
+import { OrnsteinUhlenbeckNoise } from '../../../../../lib/OrnsteinUhlenbeckNoise.ts';
+import { Actions, applyActionToTank } from '../../TensorFlow/Common/applyActionToTank.ts';
+import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
+import { abs, atan2, hypot, lerp, normalizeAngle, PI } from '../../../../../lib/math.ts';
+import { findTankEnemiesEids } from '../Utils/snapshotTankInputTensor.ts';
+import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
+import { Tank } from '../../Game/ECS/Components/Tank.ts';
+import { randomRangeFloat } from '../../../../../lib/random.ts';
 
-export type SimpleHeuristicAgentFeatures = {
+export type SimpleBotFeatures = {
     move?: number;
     aim?: {
         aimError: number;
@@ -16,13 +16,13 @@ export type SimpleHeuristicAgentFeatures = {
     };
 }
 
-export class SimpleHeuristicAgent implements TankAgent {
+export class SimpleBot implements TankAgent {
     private waypoint?: { x: number; y: number };
     private ouNoiseRot = new OrnsteinUhlenbeckNoise(0, 0.15, 0.3);
 
     constructor(
         public readonly tankEid: number,
-        private readonly features: SimpleHeuristicAgentFeatures = {},
+        private readonly features: SimpleBotFeatures = {},
     ) {
     }
 
@@ -103,10 +103,8 @@ export class SimpleHeuristicAgent implements TankAgent {
 
         const currentTurret = RigidBodyState.rotation[Tank.turretEId[this.tankEid]];   // [-π, π]
         const targetTurret = atan2(dy, dx);                        // [-π, π]
-        const angleDiff = normalizeAngle(targetTurret - currentTurret + PI / 2);
 
-        const MAX_STEP = PI / 90;
-        let turretRot = sign(angleDiff) * min(abs(angleDiff), MAX_STEP);
+        let turretRot = normalizeAngle(targetTurret - currentTurret + PI / 2);
         turretRot += this.ouNoiseRot.next() * aimError;
         turretRot = normalizeAngle(turretRot);
 

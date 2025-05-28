@@ -6,7 +6,7 @@ import {
     MAX_ALLIES,
     MAX_BULLETS,
     MAX_ENEMIES,
-} from '../../Game/ECS/Components/TankState.ts';
+} from '../../Pilots/Components/TankState.ts';
 import { ACTION_DIM } from '../Common/consts.ts';
 import { CONFIG } from '../PPO/config.ts';
 import {

@@ -1,10 +1,8 @@
-import { TankAgent } from '../../../TensorFlow/Common/Curriculum/Agents/CurrentActorAgent.ts';
 import { GameDI } from '../../../Game/DI/GameDI.ts';
 import { PI } from '../../../../../../lib/math.ts';
 import { randomRangeFloat } from '../../../../../../lib/random.ts';
-import { EntityId, query } from 'bitecs';
+import { EntityId, innerQuery } from 'bitecs';
 import { Tank, TankType } from '../../../Game/ECS/Components/Tank.ts';
-import { TeamRef } from '../../../Game/ECS/Components/TeamRef.ts';
 import { engine$, getEngine } from './engine.ts';
 import { createTank } from '../../../Game/ECS/Entities/Tank/createTank.ts';
 import { createPlayer } from '../../../Game/ECS/Entities/Player.ts';
@@ -12,7 +10,6 @@ import { map, shareReplay } from 'rxjs';
 import { getValue } from '../../../../../../lib/Rx/getValue.ts';
 
 export const GAME_MAX_TEAM_TANKS = 5;
-export const mapTankIdToAgent = new Map<number, TankAgent>();
 
 export const playerId$ = engine$.pipe(
     map((e) => createPlayer(0, e)),
@@ -36,13 +33,7 @@ export function addTank(slot: number, teamId: number, tankType: TankType) {
 }
 
 export function getTankEids() {
-    return [...query(getEngine().world, [Tank])];
-}
-
-export function getTeamsCount() {
-    const tanks = getTankEids();
-    const teamsCount = new Set(tanks.map(tankId => TeamRef.id[tankId]));
-    return teamsCount.size;
+    return innerQuery(getEngine().world, [Tank]);
 }
 
 export function getTankType(tankEid: EntityId) {

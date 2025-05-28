@@ -9,14 +9,8 @@ export async function createScenarioWithHistoricalAgents(options: Parameters<typ
     const episode = await createScenarioWithAlliesActive(options);
     episode.index = indexScenarioWithHistoricalAgents;
 
-    const destroy = await fillWithRandomHistoricalAgents(episode);
+    fillWithRandomHistoricalAgents(episode);
 
-    return {
-        ...episode,
-        destroy: () => {
-            destroy();
-            episode.destroy();
-        },
-    };
+    return episode;
 }
 

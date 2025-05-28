@@ -1,10 +1,11 @@
 import { addTank } from './engineMethods.ts';
 import { toggleGame } from './GameState.ts';
 import { destroyEngine } from './engine.ts';
-import { activateBots, destroyBots, finalizeGameState, mapSlotToEid$ } from './gameMethods.ts';
+import { activateBots, deactivateBots, finalizeGameState, mapSlotToEid$ } from './gameMethods.ts';
 import { TankType } from '../../../Game/ECS/Components/Tank.ts';
 import { dedobs, DEDOBS_REMOVE_DELAY, DEDOBS_RESET_DELAY } from '../../../../../../lib/Rx/dedobs.ts';
 import { map } from 'rxjs';
+import { initTensorFlow } from '../../../TensorFlow/Common/initTensorFlow.ts';
 
 export const PLAYER_TEAM_ID = 0;
 
@@ -29,20 +30,15 @@ export const getTankEidBySlot$ = dedobs(
     },
 );
 
-export const mapAddTank = {
-    [TankType.Light]: addTankToSlot.bind(null, TankType.Light),
-    [TankType.Medium]: addTankToSlot.bind(null, TankType.Medium),
-    [TankType.Heavy]: addTankToSlot.bind(null, TankType.Heavy),
-};
-
 export const startGame = async () => {
+    await initTensorFlow('wasm');
     await finalizeGameState();
     activateBots();
     toggleGame(true);
 };
 
 export const exitGame = () => {
-    destroyBots();
+    deactivateBots();
     destroyEngine();
     toggleGame(false);
 };

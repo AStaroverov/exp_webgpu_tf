@@ -4,12 +4,16 @@ import { EntityId } from 'bitecs';
 
 export type Scenario = Awaited<ReturnType<typeof createBattlefield>> & {
     index: number;
-    getAliveAgents(): TankAgent[];
-    getAliveActors(): TankAgent[];
+
+    getTankEids(): readonly EntityId[];
+    getTeamsCount(): number;
+
+    getAlivePilots(): readonly TankAgent[];
+    getAliveActors(): readonly TankAgent[];
     getSuccessRatio(): number;
 
-    addAgent(tankEid: EntityId, agent: TankAgent): void;
-    getAgent(tankEid: EntityId): TankAgent | undefined;
-    getAgents(): TankAgent[];
-    getFreeTankEids(): EntityId[];
+    setPilot(tankEid: EntityId, agent: TankAgent): void;
+    getPilot(tankEid: EntityId): TankAgent | undefined;
+    getPilots(): readonly TankAgent[];
+    getFreeTankEids(): readonly EntityId[];
 }

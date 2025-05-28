@@ -1,18 +1,18 @@
 import * as tf from '@tensorflow/tfjs';
 import { Variable } from '@tensorflow/tfjs';
-import { act, MAX_STD_DEV } from '../../../PPO/train.ts';
-import { prepareInputArrays } from '../../InputArrays.ts';
-import { disposeNetwork, getNetwork } from '../../../Models/Utils.ts';
-import { getNetworkVersion, patientAction } from '../../utils.ts';
-import { applyActionToTank } from '../../applyActionToTank.ts';
-import { calculateActionReward, calculateStateReward } from '../../../Reward/calculateReward.ts';
-import { AgentMemory, AgentMemoryBatch } from '../../Memory.ts';
-import { getTankHealth } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { Model } from '../../../Models/def.ts';
-import { random } from '../../../../../../../lib/random.ts';
-import { CONFIG } from '../../../PPO/config.ts';
+import { AgentMemory, AgentMemoryBatch } from '../../TensorFlow/Common/Memory.ts';
+import { getNetworkVersion, patientAction } from '../../TensorFlow/Common/utils.ts';
+import { disposeNetwork, getNetwork } from '../../TensorFlow/Models/Utils.ts';
+import { prepareInputArrays } from '../../TensorFlow/Common/InputArrays.ts';
+import { act, MAX_STD_DEV } from '../../TensorFlow/PPO/train.ts';
+import { applyActionToTank } from '../../TensorFlow/Common/applyActionToTank.ts';
 import { clamp } from 'lodash-es';
-import { lerp } from '../../../../../../../lib/math.ts';
+import { lerp } from '../../../../../lib/math.ts';
+import { calculateActionReward, calculateStateReward } from '../../TensorFlow/Reward/calculateReward.ts';
+import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
+import { Model } from '../../TensorFlow/Models/def.ts';
+import { CONFIG } from '../../TensorFlow/PPO/config.ts';
+import { random } from '../../../../../lib/random.ts';
 
 export type TankAgent = {
     tankEid: number;
@@ -25,7 +25,7 @@ export type TankAgent = {
     getMemoryBatch?(): AgentMemoryBatch;
 
     updateTankBehaviour(width: number, height: number): void;
-    evaluateTankBehaviour?(width: number, height: number, gameOver: boolean): void;
+    evaluateTankBehaviour?(width: number, height: number): void;
 }
 
 export class CurrentActorAgent implements TankAgent {
@@ -90,12 +90,10 @@ export class CurrentActorAgent implements TankAgent {
     public evaluateTankBehaviour(
         width: number,
         height: number,
-        gameOver: boolean,
     ) {
         if (!this.train) return;
 
         const isDead = getTankHealth(this.tankEid) <= 0;
-        const isDone = gameOver || isDead;
         const stateReward = calculateStateReward(
             this.tankEid,
             width,
@@ -105,7 +103,7 @@ export class CurrentActorAgent implements TankAgent {
             ? 0
             : calculateActionReward(this.tankEid) - this.initialActionReward;
 
-        this.memory.updateSecondPart(clamp(stateReward + actionReward, -200, 200), isDone);
+        this.memory.updateSecondPart(stateReward + actionReward, isDead);
     }
 
     private async load() {

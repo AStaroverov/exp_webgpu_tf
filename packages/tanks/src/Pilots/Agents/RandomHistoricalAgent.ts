@@ -1,14 +1,13 @@
 import * as tf from '@tensorflow/tfjs';
-import '@tensorflow/tfjs-backend-wasm';
-import { act, MAX_STD_DEV } from '../../../PPO/train.ts';
-import { prepareInputArrays } from '../../InputArrays.ts';
-import { disposeNetwork, getRandomHistoricalNetwork } from '../../../Models/Utils.ts';
-import { patientAction } from '../../utils.ts';
-import { applyActionToTank } from '../../applyActionToTank.ts';
-import { Model } from '../../../Models/def.ts';
-import { TankAgent } from './CurrentActorAgent.ts';
 import { clamp } from 'lodash-es';
-import { lerp } from '../../../../../../../lib/math.ts';
+import { TankAgent } from './CurrentActorAgent.ts';
+import { disposeNetwork, getRandomHistoricalNetwork } from '../../TensorFlow/Models/Utils.ts';
+import { patientAction } from '../../TensorFlow/Common/utils.ts';
+import { prepareInputArrays } from '../../TensorFlow/Common/InputArrays.ts';
+import { act, MAX_STD_DEV } from '../../TensorFlow/PPO/train.ts';
+import { applyActionToTank } from '../../TensorFlow/Common/applyActionToTank.ts';
+import { lerp } from '../../../../../lib/math.ts';
+import { Model } from '../../TensorFlow/Models/def.ts';
 
 export class RandomHistoricalAgent implements TankAgent {
     private policyNetwork?: tf.LayersModel;

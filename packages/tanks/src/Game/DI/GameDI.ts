@@ -1,6 +1,7 @@
 import { PhysicalWorld } from '../Physical/initPhysicalWorld.ts';
 import { World } from '../../../../renderer/src/ECS/world.ts';
 import { EntityId } from 'bitecs';
+import { PluginDI } from './PluginDI.ts';
 
 export const GameDI: {
     width: number;
@@ -12,6 +13,8 @@ export const GameDI: {
     setRenderTarget: (canvas: undefined | null | HTMLCanvasElement) => void;
     enablePlayer: () => void
     setPlayerTank: (tankEid: null | EntityId) => void
+
+    plugins: typeof PluginDI
 } = {
     width: null as any,
     height: null as any,
@@ -22,4 +25,6 @@ export const GameDI: {
     setRenderTarget: null as any,
     enablePlayer: null as any,
     setPlayerTank: null as any,
+
+    plugins: PluginDI,
 };
