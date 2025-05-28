@@ -61,7 +61,7 @@ export class EpisodeManager {
 
             episodeSampleChannel.emit({
                 networkVersion: agent.getVersion(),
-                memoryBatch: agent.getMemoryBatch(),
+                memoryBatch: memoryBatch,
                 successRatio: episode.getSuccessRatio(),
                 scenarioIndex: episode.index,
             });
