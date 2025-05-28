@@ -38,7 +38,7 @@ export async function loadLastNetworkFromDB(name: Model) {
 
 export async function loadNetworkFromFS(path: string, name: Model) {
     if (isBrowser) {
-        const modelPath = `src/TensorFlow/Models/Trained/${ path }/${ name }.json`;
+        const modelPath = `${ path }/${ name }.json`;
         const model = await tf.loadLayersModel(modelPath);
 
         return model;
