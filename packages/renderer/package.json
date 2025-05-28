@@ -1,0 +1,22 @@
+{
+  "name": "renderer",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config config.vite.ts",
+    "build": "tsc && vite build --config config.vite.ts",
+    "preview": "vite preview --config config.vite.ts"
+  },
+  "dependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vite-plugin-top-level-await": "^1.5.0",
+    "vite-plugin-wasm": "^3.4.1",
+    "@webgpu/types": "^0.1.31",
+    "bitecs": "github:NateTheGreatt/bitECS#rc-0-4-0",
+    "gl-matrix": "^3.4.3",
+    "ring-buffer-ts": "^1.2.0",
+    "stats-gl": "^3.6.0"
+  }
+}
