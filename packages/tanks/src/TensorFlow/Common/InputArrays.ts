@@ -19,6 +19,7 @@ function norm(v: number, size: number): number {
     return v / size;
 }
 
+const QUANT = 1000;
 const ENEMIES_INDEXES = new Uint32Array(Array.from({ length: ENEMY_SLOTS }, (_, i) => i));
 const ALLIES_INDEXES = new Uint32Array(Array.from({ length: ALLY_SLOTS }, (_, i) => i));
 const BULLETS_INDEXES = new Uint32Array(Array.from({ length: BULLET_SLOTS }, (_, i) => i));
@@ -78,8 +79,8 @@ export function prepareInputArrays(
     tankFeatures[ti++] = norm(tankX - width / 2, width / 2);
     tankFeatures[ti++] = norm(tankY - height / 2, height / 2);
     tankFeatures[ti++] = norm(rotation, Math.PI);
-    tankFeatures[ti++] = norm(speedX, width);
-    tankFeatures[ti++] = norm(speedY, height);
+    tankFeatures[ti++] = norm(speedX, QUANT);
+    tankFeatures[ti++] = norm(speedY, QUANT);
     tankFeatures[ti++] = norm(turretRot, Math.PI);
     tankFeatures[ti++] = norm(colliderRadius, MAX_APPROXIMATE_COLLIDER_RADIUS);
 
@@ -101,11 +102,11 @@ export function prepareInputArrays(
 
         enemiesMask[w] = 1;
         enemiesFeatures[dstOffset + 0] = enemiesBuffer[srcOffset + 1];
-        enemiesFeatures[dstOffset + 1] = norm(enemiesBuffer[srcOffset + 2] - tankX, width);
-        enemiesFeatures[dstOffset + 2] = norm(enemiesBuffer[srcOffset + 3] - tankY, height);
+        enemiesFeatures[dstOffset + 1] = norm(enemiesBuffer[srcOffset + 2] - tankX, QUANT);
+        enemiesFeatures[dstOffset + 2] = norm(enemiesBuffer[srcOffset + 3] - tankY, QUANT);
         enemiesFeatures[dstOffset + 5] = norm(enemiesBuffer[srcOffset + 4], Math.PI);
-        enemiesFeatures[dstOffset + 3] = norm(enemiesBuffer[srcOffset + 5], width);
-        enemiesFeatures[dstOffset + 4] = norm(enemiesBuffer[srcOffset + 6], height);
+        enemiesFeatures[dstOffset + 3] = norm(enemiesBuffer[srcOffset + 5], QUANT);
+        enemiesFeatures[dstOffset + 4] = norm(enemiesBuffer[srcOffset + 6], QUANT);
         enemiesFeatures[dstOffset + 5] = norm(enemiesBuffer[srcOffset + 7], Math.PI);
         enemiesFeatures[dstOffset + 7] = norm(enemiesBuffer[srcOffset + 8], MAX_APPROXIMATE_COLLIDER_RADIUS);
     }
@@ -128,11 +129,11 @@ export function prepareInputArrays(
 
         alliesMask[w] = 1;
         alliesFeatures[dstOffset + 0] = alliesBuffer[srcOffset + 1]; // hp
-        alliesFeatures[dstOffset + 1] = norm(alliesBuffer[srcOffset + 2] - tankX, width);
-        alliesFeatures[dstOffset + 2] = norm(alliesBuffer[srcOffset + 3] - tankY, height);
+        alliesFeatures[dstOffset + 1] = norm(alliesBuffer[srcOffset + 2] - tankX, QUANT);
+        alliesFeatures[dstOffset + 2] = norm(alliesBuffer[srcOffset + 3] - tankY, QUANT);
         alliesFeatures[dstOffset + 5] = norm(alliesBuffer[srcOffset + 4], Math.PI);
-        alliesFeatures[dstOffset + 3] = norm(alliesBuffer[srcOffset + 5], width);
-        alliesFeatures[dstOffset + 4] = norm(alliesBuffer[srcOffset + 6], height);
+        alliesFeatures[dstOffset + 3] = norm(alliesBuffer[srcOffset + 5], QUANT);
+        alliesFeatures[dstOffset + 4] = norm(alliesBuffer[srcOffset + 6], QUANT);
         alliesFeatures[dstOffset + 5] = norm(alliesBuffer[srcOffset + 7], Math.PI);
         alliesFeatures[dstOffset + 7] = norm(alliesBuffer[srcOffset + 8], MAX_APPROXIMATE_COLLIDER_RADIUS);
     }
@@ -154,10 +155,10 @@ export function prepareInputArrays(
         }
 
         bulletsMask[w] = 1;
-        bulletsFeatures[dstOffset + 0] = norm(bulletsBuffer[srcOffset + 1] - tankX, width);
-        bulletsFeatures[dstOffset + 1] = norm(bulletsBuffer[srcOffset + 2] - tankY, height);
-        bulletsFeatures[dstOffset + 2] = norm(bulletsBuffer[srcOffset + 3], width);
-        bulletsFeatures[dstOffset + 3] = norm(bulletsBuffer[srcOffset + 4], height);
+        bulletsFeatures[dstOffset + 0] = norm(bulletsBuffer[srcOffset + 1] - tankX, QUANT);
+        bulletsFeatures[dstOffset + 1] = norm(bulletsBuffer[srcOffset + 2] - tankY, QUANT);
+        bulletsFeatures[dstOffset + 2] = norm(bulletsBuffer[srcOffset + 3], QUANT);
+        bulletsFeatures[dstOffset + 3] = norm(bulletsBuffer[srcOffset + 4], QUANT);
     }
 
     const result = {
