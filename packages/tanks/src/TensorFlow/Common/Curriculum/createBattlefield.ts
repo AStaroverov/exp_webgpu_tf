@@ -5,11 +5,11 @@ import { Tank } from '../../../Game/ECS/Components/Tank.ts';
 import { TeamRef } from '../../../Game/ECS/Components/TeamRef.ts';
 import { randomRangeInt } from '../../../../../../lib/random.ts';
 
-export function createBattlefield(options: { size?: number, withPlayer: boolean }) {
+export function createBattlefield(options?: { size?: number }) {
     TenserFlowDI.enabled = true;
 
     const size = options?.size ?? randomRangeInt(1200, 2000);
-    const game = createGame({ width: size, height: size, ...options });
+    const game = createGame({ width: size, height: size });
 
     const getTankEids = () => {
         return [...query(game.world, [Tank])];
