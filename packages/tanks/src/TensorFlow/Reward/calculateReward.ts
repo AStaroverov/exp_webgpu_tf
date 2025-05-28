@@ -11,6 +11,8 @@ import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
 
 // Very important that Action rewards must be rear and huge relatively state rewards
 const WEIGHTS = Object.freeze({
+    STEP_PRICE: -0.1,
+
     // ACTION REWARD
     COMMON: {
         SCORE: 2,
@@ -151,7 +153,8 @@ export function calculateStateReward(
 
     // Общая итоговая награда
     const totalReward =
-        rewards.aim.total
+        WEIGHTS.STEP_PRICE
+        + rewards.aim.total
         + rewards.moving.total
         + rewards.positioning.total;
 

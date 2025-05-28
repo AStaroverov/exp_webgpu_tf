@@ -96,16 +96,16 @@ export class CurrentActorAgent implements TankAgent {
 
         const isDead = getTankHealth(this.tankEid) <= 0;
         const isDone = gameOver || isDead;
-        const reward = calculateStateReward(
+        const stateReward = calculateStateReward(
             this.tankEid,
             width,
             height,
         );
-        const deltaStateReward = this.initialActionReward === undefined
+        const actionReward = this.initialActionReward === undefined
             ? 0
             : calculateActionReward(this.tankEid) - this.initialActionReward;
 
-        this.memory.updateSecondPart(reward + deltaStateReward, isDone);
+        this.memory.updateSecondPart(stateReward + actionReward, isDone);
     }
 
     private async load() {
