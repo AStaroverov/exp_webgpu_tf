@@ -8,7 +8,7 @@ export async function initTensorFlow(type: 'wasm' | 'webgpu' = 'wasm') {
     try {
         if (type === 'wasm') {
             const { setWasmPath } = await import('@tensorflow/tfjs-backend-wasm');
-            setWasmPath('/node_modules/@tensorflow/tfjs-backend-wasm/dist/tfjs-backend-wasm-simd.wasm');
+            setWasmPath('/assets/wasm/tfjs-backend-wasm-simd.wasm');
             await tf.setBackend('wasm');
         }
         if (type === 'webgpu') {

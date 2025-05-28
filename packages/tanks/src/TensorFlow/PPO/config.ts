@@ -82,12 +82,12 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
     episodeFrames: Math.round(60 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: isMac ? 0 : 8,
+    workerCount: isMac ? 2 : 8,
     // perturbWeights
     perturbWeightsScale: 0,
     // Training control
     savePath: isMac ? 'PPO_MHA' : 'PPO_MHA_V1',
-    // fsModelPath: 'v20',
+    fsModelPath: '/assets/models/v32',
 };
 
 // Current active experiment
