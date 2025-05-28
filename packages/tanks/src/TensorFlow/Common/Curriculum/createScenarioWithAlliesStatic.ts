@@ -10,13 +10,13 @@ import { max } from '../../../../../../lib/math.ts';
 
 export const indexScenarioWithAlliesStatic = 1;
 
-export async function createScenarioWithAlliesStatic(options: Parameters<typeof createBattlefield>[0] & {
+export async function createScenarioWithAlliesStatic(options?: Parameters<typeof createBattlefield>[0] & {
     alliesCount?: number;
     enemiesCount?: number;
 }): Promise<Scenario> {
     const game = createBattlefield(options);
-    const alliesCount = options.alliesCount ?? randomRangeInt(1, 3);
-    const enemiesCount = options.enemiesCount ?? max(1, alliesCount + randomRangeInt(-1, 1));
+    const alliesCount = options?.alliesCount ?? randomRangeInt(1, 3);
+    const enemiesCount = options?.enemiesCount ?? max(1, alliesCount + randomRangeInt(-1, 1));
     const tanks = addRandomTanks([[0, alliesCount], [1, enemiesCount]]);
     const activeTeam = getTankTeamId(tanks[0]);
     const initialTeamHealth = getTeamHealth(tanks);

@@ -1,5 +1,4 @@
 import { createGame } from './src/Game/createGame.ts';
-import { PLAYER_REFS } from './src/Game/consts.ts';
 import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
 import { GameDI } from './src/Game/DI/GameDI.ts';
 import { TenserFlowDI } from './src/Game/DI/TenserFlowDI.ts';
@@ -11,8 +10,9 @@ import { createLightTank } from './src/Game/ECS/Entities/Tank/Light/LightTank.ts
 
 TenserFlowDI.enabled = true;
 
-const { gameTick, setRenderTarget } = createGame({ width: 1200, height: 1000, withPlayer: true });
+const { gameTick, setRenderTarget, setPlayerTank, enablePlayer } = createGame({ width: 1200, height: 1000 });
 setRenderTarget(document.querySelector('canvas') as HTMLCanvasElement);
+enablePlayer();
 
 const tanks = [
     // createLightTank({
@@ -82,9 +82,9 @@ const tanks = [
         color: [1, 1, 0, 1],
     }),
 ];
-PLAYER_REFS.tankPid = tanks[0];
 
-console.log('>> PLAYER ', PLAYER_REFS.tankPid);
+setPlayerTank(tanks[0]);
+
 console.log('>> TANKS ', tanks);
 
 tanks.forEach((tank) => {

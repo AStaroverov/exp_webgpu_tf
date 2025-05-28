@@ -13,7 +13,7 @@ import {
 } from './ECS/Systems/PlayerTankControllerSystems.ts';
 import { createSpawnerBulletsSystem } from './ECS/Systems/createBulletSystem.ts';
 import { getEntityIdByPhysicalId, RigidBodyRef } from './ECS/Components/Physical.ts';
-import { createWorld, deleteWorld, hasComponent, resetWorld } from 'bitecs';
+import { createWorld, deleteWorld, EntityId, hasComponent, resetWorld } from 'bitecs';
 import { Hitable } from './ECS/Components/Hitable.ts';
 import { createHitableSystem } from './ECS/Systems/createHitableSystem.ts';
 import { createTankAliveSystem } from './ECS/Systems/Tank/createTankAliveSystem.ts';
@@ -34,10 +34,9 @@ import { GameSession } from './ECS/Entities/GameSession.ts';
 
 export type Game = ReturnType<typeof createGame>;
 
-export function createGame({ width, height, withPlayer }: {
+export function createGame({ width, height }: {
     width: number,
     height: number,
-    withPlayer: boolean
 }) {
     const world = createWorld();
     const physicalWorld = initPhysicalWorld();
@@ -58,8 +57,9 @@ export function createGame({ width, height, withPlayer }: {
             return;
         }
 
-        const { device, context } = await initWebGPU(canvas);
         RenderDI.canvas = canvas;
+
+        const { device, context } = await initWebGPU(canvas);
         RenderDI.device = device;
         RenderDI.context = context;
 
@@ -90,34 +90,37 @@ export function createGame({ width, height, withPlayer }: {
             RenderDI.context = null!;
             RenderDI.renderFrame = null!;
         };
+    };
 
-        if (withPlayer) {
-            PlayerEnvDI.destroy?.();
+    GameDI.enablePlayer = () => {
+        PlayerEnvDI.destroy?.();
+        PlayerEnvDI.document = document;
+        PlayerEnvDI.window = window;
 
-            PlayerEnvDI.document = document;
-            PlayerEnvDI.window = window;
+        const updatePlayerBullet = createPlayerTankBulletSystem();
+        const updatePlayerTankPosition = createPlayerTankPositionSystem();
+        const updatePlayerTankTurretRotation = createPlayerTankTurretRotationSystem();
 
-            const updatePlayerBullet = createPlayerTankBulletSystem();
-            const updatePlayerTankPosition = createPlayerTankPositionSystem();
-            const updatePlayerTankTurretRotation = createPlayerTankTurretRotationSystem();
+        PlayerEnvDI.inputFrame = () => {
+            updatePlayerBullet.tick();
+            updatePlayerTankPosition.tick();
+            updatePlayerTankTurretRotation.tick();
+        };
 
-            PlayerEnvDI.inputFrame = () => {
-                updatePlayerBullet.tick();
-                updatePlayerTankPosition.tick();
-                updatePlayerTankTurretRotation.tick();
-            };
+        PlayerEnvDI.destroy = () => {
+            updatePlayerBullet.destroy();
+            updatePlayerTankPosition.destroy();
+            updatePlayerTankTurretRotation.destroy();
 
-            PlayerEnvDI.destroy = () => {
-                updatePlayerBullet.destroy();
-                updatePlayerTankPosition.destroy();
-                updatePlayerTankTurretRotation.destroy();
-
-                PlayerEnvDI.document = null!;
-                PlayerEnvDI.window = null!;
-                PlayerEnvDI.destroy = null!;
-                PlayerEnvDI.inputFrame = null!;
-            };
-        }
+            PlayerEnvDI.tankEid = null;
+            PlayerEnvDI.document = null!;
+            PlayerEnvDI.window = null!;
+            PlayerEnvDI.destroy = null!;
+            PlayerEnvDI.inputFrame = null!;
+        };
+    };
+    GameDI.setPlayerTank = (tankEid: null | EntityId) => {
+        PlayerEnvDI.tankEid = tankEid;
     };
 
     // const updateMap = createMapSystem();
