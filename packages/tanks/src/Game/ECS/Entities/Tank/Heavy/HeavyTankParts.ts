@@ -31,5 +31,5 @@ export const caterpillarSetRight: PartsData[] = caterpillarSet.map((set) => {
     return set;
 });
 
-export const PARTS_COUNT = hullSet.length + turretHeadSet.length + turretGunSet.length + CATERPILLAR_LINE_COUNT * 2;
+export const PARTS_COUNT = hullSet.length + turretHeadSet.length + turretGunSet.length + CATERPILLAR_LINE_COUNT * 2 * 2;
 
