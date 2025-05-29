@@ -91,7 +91,7 @@ export class CurrentActorAgent implements TankAgent {
         width: number,
         height: number,
     ) {
-        if (!this.train) return;
+        if (!this.train || this.memory.size() === 0) return;
 
         const isDead = getTankHealth(this.tankEid) <= 0;
         const stateReward = calculateStateReward(

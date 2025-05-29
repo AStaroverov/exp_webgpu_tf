@@ -16,7 +16,7 @@ export function getSuccessRatio(
 ): number {
     const teamIds = Object.keys(initialHealth).map(Number);
     const opponentIds = teamIds.filter(id => id !== activeTeam);
-    const activeRatio = currentHealth[activeTeam] / initialHealth[activeTeam];
+    const activeRatio = (currentHealth[activeTeam] ?? 0) / initialHealth[activeTeam];
     const opponentAvg = opponentIds.reduce((sum, id) => sum + (currentHealth[id] ?? 0) / initialHealth[id], 0) / opponentIds.length;
 
     if (Number.isNaN(activeRatio) || Number.isNaN(opponentAvg)) {
