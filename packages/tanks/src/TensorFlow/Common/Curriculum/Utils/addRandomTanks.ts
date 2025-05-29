@@ -2,7 +2,7 @@ import { GameDI } from '../../../../Game/DI/GameDI.ts';
 import { randomRangeFloat } from '../../../../../../../lib/random.ts';
 import { createMediumTank } from '../../../../Game/ECS/Entities/Tank/Medium/MediumTank.ts';
 import { createPlayer } from '../../../../Game/ECS/Entities/Player.ts';
-import { PI, pow, sqrt } from '../../../../../../../lib/math.ts';
+import { min, PI, pow, sqrt } from '../../../../../../../lib/math.ts';
 
 const MIN_RADIUS = 150;
 
@@ -13,26 +13,36 @@ export function addRandomTanks(teamIdAndCount: [number, number][]) {
 
     let tankPositions: { x: number, y: number }[] = [];
 
-    const isTooClose = (x: number, y: number): boolean => {
+    const getMinDist = (x: number, y: number): number => {
+        let minDist = Infinity;
         for (let i = 0; i < tankPositions.length; i++) {
             const tank = tankPositions[i];
             const dist = sqrt(pow(tank.x - x, 2) + pow(tank.y - y, 2));
-            if (dist < MIN_RADIUS * 2) {
-                return true;
-            }
+            minDist = min(minDist, dist);
         }
-        return false;
+        return minDist;
+    };
+    const findSpawnPosition = () => {
+        let x: number, y: number, dist = Infinity, j = 0;
+
+        do {
+            j++;
+            const rx = randomRangeFloat(50, width - 50);
+            const ry = randomRangeFloat(50, height - 50);
+            const d = getMinDist(rx, ry);
+            if (dist === Infinity || d > dist) {
+                dist = d;
+                x = rx;
+                y = ry;
+            }
+        } while (dist < MIN_RADIUS * 2 && j < 100);
+
+        return { x: x!, y: y! };
     };
 
     for (const [teamId, count] of teamIdAndCount) {
         for (let i = 0; i < count; i++) {
-            let x: number, y: number;
-
-            do {
-                x = randomRangeFloat(MIN_RADIUS, width - MIN_RADIUS);
-                y = randomRangeFloat(MIN_RADIUS, height - MIN_RADIUS);
-            } while (isTooClose(x, y));
-
+            const { x, y } = findSpawnPosition();
             const tank = createMediumTank({
                 playerId: createPlayer(teamId),
                 teamId,
