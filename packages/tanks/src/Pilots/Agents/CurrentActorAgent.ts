@@ -103,7 +103,7 @@ export class CurrentActorAgent implements TankAgent {
             ? 0
             : calculateActionReward(this.tankEid) - this.initialActionReward;
 
-        this.memory.updateSecondPart(stateReward + actionReward, isDead);
+        this.memory.updateSecondPart(clamp(stateReward + actionReward, -100, 100), isDead);
     }
 
     private async load() {
