@@ -37,6 +37,10 @@ export function addRandomTanks(teamIdAndCount: [number, number][]) {
             }
         } while (dist < MIN_RADIUS * 2 && j < 100);
 
+        if (j >= 100) {
+            console.warn('[addRandomTanks] Could not find spawn position');
+        }
+
         return { x: x!, y: y! };
     };
 
