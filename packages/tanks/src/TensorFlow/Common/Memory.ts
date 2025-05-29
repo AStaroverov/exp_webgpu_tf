@@ -38,9 +38,9 @@ export class AgentMemory {
         logStd: Float32Array,
         logProb: number,
     ) {
-        if (this.isDone()) {
-            return;
-        }
+        if (this.isDone()) return;
+        if (this.states.length !== this.rewards.length) return;
+
         this.states.push(state);
         this.actions.push(action);
         this.mean.push(mean);
@@ -49,9 +49,9 @@ export class AgentMemory {
     }
 
     updateSecondPart(reward: number, done: boolean) {
-        if (this.isDone()) {
-            return;
-        }
+        if (this.isDone()) return;
+        if ((this.states.length - 1) !== this.rewards.length) return;
+
         this.rewards.push(reward);
         this.dones.push(done);
     }
