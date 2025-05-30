@@ -206,8 +206,19 @@ export function createGame({ width, height }: {
         };
     };
 
-    GameDI.enablePlayer = () => {
+    GameDI.setPlayerTank = (tankEid: null | EntityId) => {
+        if (tankEid == null) {
+            PlayerEnvDI.destroy?.();
+            return;
+        }
+
+        if (PlayerEnvDI.tankEid != null) {
+            PlayerEnvDI.tankEid = tankEid;
+            return;
+        }
+
         PlayerEnvDI.destroy?.();
+        PlayerEnvDI.tankEid = tankEid;
         PlayerEnvDI.document = document;
         PlayerEnvDI.window = window;
 
@@ -232,9 +243,6 @@ export function createGame({ width, height }: {
             PlayerEnvDI.destroy = null!;
             PlayerEnvDI.inputFrame = null!;
         };
-    };
-    GameDI.setPlayerTank = (tankEid: null | EntityId) => {
-        PlayerEnvDI.tankEid = tankEid;
     };
 
     return GameDI;

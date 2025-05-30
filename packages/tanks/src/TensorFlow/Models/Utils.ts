@@ -1,7 +1,7 @@
 import { CONFIG } from '../PPO/config.ts';
 import * as tf from '@tensorflow/tfjs';
 import { LayersModel } from '@tensorflow/tfjs';
-import { loadLastNetworkFromDB, loadNetworkFromDB } from './Transfer.ts';
+import { loadLastModelFromDB, loadModelFromDB, loadModelFromFS } from './Transfer.ts';
 import { patientAction } from '../Common/utils.ts';
 import { isFunction } from 'lodash-es';
 import { random, randomRangeInt } from '../../../../../lib/random.ts';
@@ -27,28 +27,32 @@ export function getIndexedDBModelPath(name: string, version: number): string {
     return `indexeddb://${ getStorePath(name, version) }`;
 }
 
-export async function getNetwork(modelName: Model, getInitial?: () => tf.LayersModel) {
-    let network: undefined | tf.LayersModel;
+export async function getModelFromDB(modelName: Model, getInitial?: () => tf.LayersModel) {
+    let model: undefined | tf.LayersModel;
 
     try {
-        network = await patientAction(() => loadLastNetworkFromDB(modelName), isFunction(getInitial) ? 1 : 10);
+        model = await patientAction(() => loadLastModelFromDB(modelName), isFunction(getInitial) ? 1 : 10);
     } catch (error) {
-        console.warn(`[getNetwork] Could not load model ${ modelName } from DB:`, error);
-        network = getInitial?.();
+        console.warn(`[getModelFromDB] Could not load model ${ modelName } from DB:`, error);
+        model = getInitial?.();
     }
 
-    if (!network) {
+    if (!model) {
         throw new Error(`Failed to load model ${ modelName }`);
     }
 
-    return network;
+    return model;
 }
 
-export async function getRandomHistoricalNetwork(modelName: Model) {
+export async function getModelFromFS(modelName: Model, path: string) {
+    return patientAction(() => loadModelFromFS(path, modelName), 10);
+}
+
+export async function getRandomHistoricalModel(modelName: Model) {
     const randomInfo = await getRandomNetworkInfo(modelName);
     let version = getVersionFromStorePath(randomInfo.name);
     version = Number.isNaN(version) ? LAST_NETWORK_VERSION : version;
-    return patientAction(() => loadNetworkFromDB(modelName, version), 10);
+    return patientAction(() => loadModelFromDB(modelName, version), 10);
 }
 
 const defaultSubNames = {
@@ -56,7 +60,7 @@ const defaultSubNames = {
     [Model.Value]: getStorePath(Model.Value, LAST_NETWORK_VERSION),
 };
 
-export async function getNetworkInfoList(model: Model) {
+export async function getModelsInfoList(model: Model) {
     return tf.io.listModels().then((v) => Object.entries(v).reduce((acc, [name, info]) => {
         if (name.includes(defaultSubNames[model])) {
             acc.push({
@@ -70,13 +74,13 @@ export async function getNetworkInfoList(model: Model) {
 }
 
 export async function getRandomNetworkInfo(model: Model) {
-    const list = await getNetworkInfoList(model);
+    const list = await getModelsInfoList(model);
     return list[randomRangeInt(0, list.length - 1)];
 }
 
 export async function getPenultimateNetworkVersion(name: Model): Promise<number | undefined> {
     const defaultSubName = defaultSubNames[name];
-    const penultimate = (await getNetworkInfoList(name)).reduce((acc, info) => {
+    const penultimate = (await getModelsInfoList(name)).reduce((acc, info) => {
         if (info.name !== defaultSubName && (acc === undefined || acc.dateSaved < info.dateSaved)) {
             return info;
         }
@@ -105,7 +109,7 @@ export async function shouldSaveHistoricalVersion(name: Model, version: number) 
 const NETWORKS_LIMIT_COUNT = 20;
 
 export async function removeOutLimitNetworks(name: Model) {
-    const list = await getNetworkInfoList(name);
+    const list = await getModelsInfoList(name);
 
     if (list.length > NETWORKS_LIMIT_COUNT) {
         const forRemove = list

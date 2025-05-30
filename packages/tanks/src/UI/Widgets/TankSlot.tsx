@@ -17,7 +17,7 @@ export function TankSlot({ className, slot }: { className: string, slot: number 
             { tankEid && <>
                 <div className="w-full grid grid-cols-2 gap-2">
                     <TankSelector className="" slot={ slot }/>
-                    <PilotSelector className="" tankEid={ tankEid }/>
+                    <PilotSelector className="" slot={ slot }/>
                 </div>
                 { tankEid && <TankPreview tankEid={ tankEid }/> }
             </> }

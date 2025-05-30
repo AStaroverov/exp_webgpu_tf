@@ -1,8 +1,8 @@
 import { Scenario } from '../types.ts';
 import { getTankTeamId } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { CurrentActorAgent } from '../../../../Pilots/Agents/CurrentActorAgent.ts';
+import { PilotType } from '../../../../Pilots/Components/Pilot.ts';
 
-export function fillAlliesWithActorAgents(scenario: Scenario) {
+export function fillAlliesWithLearnableAgents(scenario: Scenario) {
     const tankEids = scenario.getFreeTankEids();
     const firstAgent = scenario.getAlivePilots();
     const activeTeam = getTankTeamId(firstAgent[0].tankEid);
@@ -12,8 +12,7 @@ export function fillAlliesWithActorAgents(scenario: Scenario) {
 
         if (getTankTeamId(tankEid) !== activeTeam) continue;
 
-        const agent = new CurrentActorAgent(tankEid, true);
-        scenario.setPilot(tankEid, agent);
+        scenario.setPilot(tankEid, PilotType.AgentLearnable);
     }
 }
 

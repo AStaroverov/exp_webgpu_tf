@@ -85,16 +85,19 @@ export class VisTestEpisodeManager extends EpisodeManager {
         ));
     }
 
-    protected runGameLoop(episode: Scenario) {
+    protected runGameLoop(scenario: Scenario) {
         return new Promise(resolve => {
             let frame = 0;
+
+            // warmup tick
+            scenario.gameTick(16.667);
 
             const stop = frameTasks.addInterval(() => {
                 frame++;
                 const gameOver = this.runGameTick(
                     frame,
                     16.667,
-                    episode,
+                    scenario,
                 );
 
                 if (gameOver || !getDrawState()) {

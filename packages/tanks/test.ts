@@ -107,7 +107,7 @@ frameTasks.addInterval(() => {
 
         // console.log('>>', stateReward, deltaAction, reward);
 
-        snapshotTankInputTensor();
+        snapshotTankInputTensor(tanks[0]);
         actionReward = calculateActionReward(tanks[0]);
     }
 

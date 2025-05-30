@@ -26,6 +26,10 @@ export class SimpleBot implements TankAgent {
     ) {
     }
 
+    isReady() {
+        return true;
+    }
+
     updateTankBehaviour(width: number, height: number): void {
         this.updateWaypoint(width, height);
 

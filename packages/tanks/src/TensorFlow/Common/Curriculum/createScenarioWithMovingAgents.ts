@@ -1,8 +1,8 @@
 import { Scenario } from './types.ts';
 import { createBattlefield } from './createBattlefield.ts';
-import { randomRangeFloat } from '../../../../../../lib/random.ts';
 import { createScenarioWithAlliesActive } from './createScenarioWithAlliesActive.ts';
-import { fillWithSimpleHeuristicAgents } from './Utils/fillWithSimpleHeuristicAgents.ts';
+import { fillWithBots } from './Utils/fillWithBots.ts';
+import { PilotType } from '../../../Pilots/Components/Pilot.ts';
 
 export const indexScenarioWithMovingAgents = 3;
 
@@ -10,9 +10,7 @@ export async function createScenarioWithMovingAgents(options: Parameters<typeof 
     const episode = await createScenarioWithAlliesActive(options);
     episode.index = indexScenarioWithMovingAgents;
 
-    fillWithSimpleHeuristicAgents(episode, {
-        move: randomRangeFloat(0.4, 1),
-    });
+    fillWithBots(episode, PilotType.BotOnlyMoving);
 
     return episode;
 }

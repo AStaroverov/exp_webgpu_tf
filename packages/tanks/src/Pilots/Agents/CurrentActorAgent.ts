@@ -2,7 +2,7 @@ import * as tf from '@tensorflow/tfjs';
 import { Variable } from '@tensorflow/tfjs';
 import { AgentMemory, AgentMemoryBatch } from '../../TensorFlow/Common/Memory.ts';
 import { getNetworkVersion, patientAction } from '../../TensorFlow/Common/utils.ts';
-import { disposeNetwork, getNetwork } from '../../TensorFlow/Models/Utils.ts';
+import { disposeNetwork, getModelFromDB } from '../../TensorFlow/Models/Utils.ts';
 import { prepareInputArrays } from '../../TensorFlow/Common/InputArrays.ts';
 import { act, MAX_STD_DEV } from '../../TensorFlow/PPO/train.ts';
 import { applyActionToTank } from '../../TensorFlow/Common/applyActionToTank.ts';
@@ -17,7 +17,8 @@ import { random } from '../../../../../lib/random.ts';
 export type TankAgent = {
     tankEid: number;
 
-    sync?(): Promise<void>;
+    isReady(): boolean;
+
     dispose?(): void;
     getVersion?(): number;
 
@@ -35,6 +36,11 @@ export class CurrentActorAgent implements TankAgent {
     private initialActionReward: undefined | number;
 
     constructor(public readonly tankEid: number, private train: boolean) {
+        void this.sync();
+    }
+
+    public isReady() {
+        return this.policyNetwork != null;
     }
 
     public getVersion() {
@@ -54,11 +60,6 @@ export class CurrentActorAgent implements TankAgent {
         this.policyNetwork && disposeNetwork(this.policyNetwork);
         this.policyNetwork = undefined;
         this.memory.dispose();
-    }
-
-    public sync() {
-        this.dispose();
-        return patientAction(() => this.load());
     }
 
     public updateTankBehaviour(
@@ -106,9 +107,18 @@ export class CurrentActorAgent implements TankAgent {
         this.memory.updateSecondPart(clamp(stateReward + actionReward, -100, 100), isDead);
     }
 
+    private async sync() {
+        this.dispose();
+        await patientAction(() => this.load());
+    }
+
     private async load() {
-        this.policyNetwork = await getNetwork(Model.Policy);
-        if (CONFIG.perturbWeightsScale > 0 && random() > Math.pow(1 - 0.5, 1 / CONFIG.workerCount)) { // 50% for N workers
+        this.policyNetwork = await getModelFromDB(Model.Policy);
+        if (
+            this.train
+            && CONFIG.perturbWeightsScale > 0
+            && random() > Math.pow(1 - 0.5, 1 / CONFIG.workerCount) // 50% for N workers
+        ) {
             perturbWeights(this.policyNetwork, CONFIG.perturbWeightsScale);
         }
     }

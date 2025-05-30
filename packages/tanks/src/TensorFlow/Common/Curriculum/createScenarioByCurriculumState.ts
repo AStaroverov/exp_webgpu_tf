@@ -9,10 +9,7 @@ import {
     createScenarioWithShootingAgents,
     indexScenarioWithShootingAgents,
 } from './createScenarioWithShootingAgents.ts';
-import {
-    createScenarioWithHeuristicAgents,
-    indexScenarioWithHeuristicAgents,
-} from './createScenarioWithHeuristicAgents.ts';
+import { createScenarioWithHeuristicAgents, indexScenarioWithBots } from './createScenarioWithHeuristicAgents.ts';
 import {
     createScenarioWithStrongHeuristicAgents,
     indexScenarioWithStrongHeuristicAgents,
@@ -32,7 +29,7 @@ const mapEntries = [
     [indexScenarioWithAlliesActive, createScenarioWithAlliesActive],
     [indexScenarioWithMovingAgents, createScenarioWithMovingAgents],
     [indexScenarioWithShootingAgents, createScenarioWithShootingAgents],
-    [indexScenarioWithHeuristicAgents, createScenarioWithHeuristicAgents],
+    [indexScenarioWithBots, createScenarioWithHeuristicAgents],
     [indexScenarioWithStrongHeuristicAgents, createScenarioWithStrongHeuristicAgents],
     [indexScenarioWithHistoricalAgents, createScenarioWithHistoricalAgents],
 ] as const;

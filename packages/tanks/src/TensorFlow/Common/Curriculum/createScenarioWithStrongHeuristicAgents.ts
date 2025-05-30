@@ -1,7 +1,8 @@
 import { Scenario } from './types.ts';
 import { createBattlefield } from './createBattlefield.ts';
 import { createScenarioWithAlliesActive } from './createScenarioWithAlliesActive.ts';
-import { fillWithSimpleHeuristicAgents } from './Utils/fillWithSimpleHeuristicAgents.ts';
+import { fillWithBots } from './Utils/fillWithBots.ts';
+import { PilotType } from '../../../Pilots/Components/Pilot.ts';
 
 export const indexScenarioWithStrongHeuristicAgents = 6;
 
@@ -9,13 +10,7 @@ export async function createScenarioWithStrongHeuristicAgents(options: Parameter
     const episode = await createScenarioWithAlliesActive(options);
     episode.index = indexScenarioWithStrongHeuristicAgents;
 
-    fillWithSimpleHeuristicAgents(episode, {
-        move: 1,
-        aim: {
-            aimError: 0,
-            shootChance: 0.8,
-        },
-    });
+    fillWithBots(episode, PilotType.BotStrong);
 
     return episode;
 }

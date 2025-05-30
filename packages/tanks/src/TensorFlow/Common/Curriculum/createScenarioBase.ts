@@ -6,10 +6,10 @@ import { getSuccessRatio, getTeamHealth } from './utils.ts';
 import { Scenario } from './types.ts';
 import { max } from '../../../../../../lib/math.ts';
 import { createPilotsPlugin } from '../../../Pilots/createPilotsPlugin.ts';
-import { CurrentActorAgent } from '../../../Pilots/Agents/CurrentActorAgent.ts';
 import { query } from 'bitecs';
 import { Tank } from '../../../Game/ECS/Components/Tank.ts';
 import { getTeamsCount } from '../../../Game/ECS/Components/TeamRef.ts';
+import { PilotType } from '../../../Pilots/Components/Pilot.ts';
 
 export const indexScenarioWithAlliesStatic = 1;
 
@@ -26,7 +26,7 @@ export async function createScenarioBase(options?: Parameters<typeof createBattl
     const activeTeam = getTankTeamId(tanks[0]);
     const initialTeamHealth = getTeamHealth(tanks);
 
-    pilots.setPilot(tanks[0], new CurrentActorAgent(tanks[0], true), game);
+    pilots.setPilot(tanks[0], PilotType.AgentLearnable, game);
     pilots.toggle(true);
 
     return {

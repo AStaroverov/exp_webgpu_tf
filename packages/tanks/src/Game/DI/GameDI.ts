@@ -11,7 +11,6 @@ export const GameDI: {
     gameTick: (delta: number) => void;
     destroy: () => void;
     setRenderTarget: (canvas: undefined | null | HTMLCanvasElement) => void;
-    enablePlayer: () => void
     setPlayerTank: (tankEid: null | EntityId) => void
 
     plugins: typeof PluginDI
@@ -23,7 +22,6 @@ export const GameDI: {
     gameTick: null as any,
     destroy: null as any,
     setRenderTarget: null as any,
-    enablePlayer: null as any,
     setPlayerTank: null as any,
 
     plugins: PluginDI,

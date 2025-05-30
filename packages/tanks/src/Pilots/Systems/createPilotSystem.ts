@@ -1,33 +1,33 @@
 import { GameDI } from '../../Game/DI/GameDI.ts';
-import { getAlivePilots, Pilot } from '../Components/Pilot.ts';
-import { TankAgent } from '../Agents/CurrentActorAgent.ts';
+import { getAlivePilots } from '../Components/Pilot.ts';
 import { SNAPSHOT_EVERY } from '../../TensorFlow/Common/consts.ts';
 import { snapshotTankInputTensor } from '../Utils/snapshotTankInputTensor.ts';
 import { PilotsState } from '../Singelton/PilotsState.ts';
+import { max } from '../../../../../lib/math.ts';
 
-export function createPilotSystem() {
+export function createPilotSystem(game = GameDI) {
     let frame = 0;
-    let currentPilots = [] as TankAgent[];
 
     return () => {
-        if (!PilotsState.enabled || !Pilot.isSynced()) return;
+        if (!PilotsState.enabled) return;
 
-        const shouldAction = frame++ % SNAPSHOT_EVERY === 0;
+        frame++;
 
-        if (shouldAction) {
-            for (const agent of currentPilots) {
-                agent.evaluateTankBehaviour?.(GameDI.width, GameDI.height);
-            }
-        }
+        const alivePilots = getAlivePilots();
 
-        if (shouldAction) {
-            snapshotTankInputTensor();
+        if (!alivePilots.every(a => a.isReady())) return;
 
-            currentPilots = getAlivePilots();
+        const snapshotEvery = max(SNAPSHOT_EVERY, alivePilots.length);
 
-            for (const agent of currentPilots) {
-                agent.updateTankBehaviour(GameDI.width, GameDI.height);
-            }
+        for (let i = 0; i < alivePilots.length; i++) {
+            const pilot = alivePilots[i];
+            const shouldAction = (i + frame) % snapshotEvery === 0;
+
+            if (!shouldAction || !pilot.isReady()) continue;
+
+            pilot.evaluateTankBehaviour?.(game.width, game.height);
+            snapshotTankInputTensor(pilot.tankEid);
+            pilot.updateTankBehaviour(game.width, game.height);
         }
     };
 }

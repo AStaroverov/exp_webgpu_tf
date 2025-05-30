@@ -14,7 +14,7 @@ import { computeVTraceTargets } from '../train.ts';
 import { bufferWhile } from '../../../../../../lib/Rx/bufferWhile.ts';
 import { CONFIG } from '../config.ts';
 import { getNetworkVersion } from '../../Common/utils.ts';
-import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
+import { disposeNetwork, getModelFromDB } from '../../Models/Utils.ts';
 import { RingBuffer } from 'ring-buffer-ts';
 import { pick } from 'lodash-es';
 import { Model } from '../../Models/def.ts';
@@ -67,8 +67,8 @@ export function createLearnerManager() {
             metricsChannels.successRatio.postMessage(samples.map(b => pick(b, 'scenarioIndex', 'successRatio')));
 
             return forkJoin([
-                getNetwork(Model.Policy),
-                getNetwork(Model.Value),
+                getModelFromDB(Model.Policy),
+                getModelFromDB(Model.Value),
             ]).pipe(
                 map(([policyNetwork, valueNetwork]): LearnData => {
                     const batch = squeezeBatches(samples.map(b => b.memoryBatch));

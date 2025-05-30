@@ -30,7 +30,8 @@ export function BaseScreen({ className, style }: { className?: string, style?: C
                     transform: `scale(${ isStarted ? canvasScale : '50%' })`,
                 } }
             />
-            <GarageScreen className={ `absolute transition-all ${ isStarted ? 'left-0 opacity-0 ' : 'right-60' }` }/>
+            { !isStarted && <GarageScreen
+                className={ `absolute transition-all ${ isStarted ? 'left-0 opacity-0 ' : 'right-60' }` }/> }
             <EscMenu/>
         </div>
     );

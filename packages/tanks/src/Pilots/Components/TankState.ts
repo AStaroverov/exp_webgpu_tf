@@ -87,6 +87,9 @@ export const TankInputTensor = component({
         TankInputTensor.enemiesTotalHealth[eid] = enemiesTotalHealth;
     },
 
+    resetEnemiesData(tankEid: EntityId) {
+        TankInputTensor.enemiesData.getBatch(tankEid).fill(0);
+    },
     setEnemiesData(
         eid: number,
         index: number,
@@ -109,10 +112,10 @@ export const TankInputTensor = component({
         TankInputTensor.enemiesData.set(eid, offset + 7, turretRotation);
         TankInputTensor.enemiesData.set(eid, offset + 8, colliderRadius);
     },
-    resetEnemiesCoords() {
-        TankInputTensor.enemiesData.fill(0);
-    },
 
+    resetAlliesData(tankEid: EntityId) {
+        TankInputTensor.alliesData.getBatch(tankEid).fill(0);
+    },
     setAlliesData(
         eid: number,
         index: number,
@@ -135,10 +138,10 @@ export const TankInputTensor = component({
         TankInputTensor.alliesData.set(eid, offset + 7, turretRotation);
         TankInputTensor.alliesData.set(eid, offset + 8, colliderRadius);
     },
-    resetAlliesCoords() {
-        TankInputTensor.alliesData.fill(0);
-    },
 
+    resetBulletsData(tankEid: EntityId) {
+        TankInputTensor.bulletsData.getBatch(tankEid).fill(0);
+    },
     setBulletsData(eid: number, index: number, bulletEId: EntityId, coord: Float64Array, speed: Float64Array) {
         const offset = index * BULLET_BUFFER;
         TankInputTensor.bulletsData.set(eid, offset, bulletEId);
@@ -146,8 +149,5 @@ export const TankInputTensor = component({
         TankInputTensor.bulletsData.set(eid, offset + 2, coord[1]);
         TankInputTensor.bulletsData.set(eid, offset + 3, speed[0]);
         TankInputTensor.bulletsData.set(eid, offset + 4, speed[1]);
-    },
-    resetBulletsCoords() {
-        TankInputTensor.bulletsData.fill(0);
     },
 });

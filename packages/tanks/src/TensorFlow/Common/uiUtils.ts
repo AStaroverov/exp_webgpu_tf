@@ -1,6 +1,6 @@
 import Dexie from 'dexie';
 import { forceExitChannel } from './channels.ts';
-import { downloadNetwork } from '../Models/Transfer.ts';
+import { downloadModel } from '../Models/Transfer.ts';
 import { Model } from '../Models/def.ts';
 
 // Инициализируем базу Dexie с таблицей settings
@@ -51,8 +51,8 @@ if (globalThis && globalThis.document) {
 
     document.getElementById('downloadModel')?.addEventListener('click', () => {
         Promise.all([
-            downloadNetwork(Model.Policy),
-            downloadNetwork(Model.Value),
+            downloadModel(Model.Policy),
+            downloadModel(Model.Value),
         ]);
     });
 }

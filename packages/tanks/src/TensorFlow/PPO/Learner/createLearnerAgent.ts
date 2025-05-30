@@ -5,7 +5,7 @@ import { networkHealthCheck } from '../train.ts';
 import { get } from 'lodash';
 import { getNetworkVersion, patientAction } from '../../Common/utils.ts';
 import { LearnData } from './createLearnerManager.ts';
-import { getNetwork } from '../../Models/Utils.ts';
+import { getModelFromDB } from '../../Models/Utils.ts';
 import { Model } from '../../Models/def.ts';
 
 export async function createLearnerAgent({ modelName, createNetwork, trainNetwork }: {
@@ -13,7 +13,7 @@ export async function createLearnerAgent({ modelName, createNetwork, trainNetwor
     createNetwork: () => tf.LayersModel,
     trainNetwork: (network: tf.LayersModel, batch: LearnData) => unknown | Promise<unknown>,
 }) {
-    let network = await getNetwork(modelName, () => {
+    let network = await getModelFromDB(modelName, () => {
         const newNetwork = createNetwork();
         patientAction(() => saveNetworkToDB(newNetwork, modelName));
         return newNetwork;

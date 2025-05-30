@@ -24,7 +24,7 @@ export async function saveNetworkToDB(network: tf.LayersModel, name: Model) {
     throw new Error('Unsupported environment for saving model');
 }
 
-export function loadNetworkFromDB(name: Model, version: number) {
+export function loadModelFromDB(name: Model, version: number) {
     if (isBrowser) {
         return tf.loadLayersModel(getIndexedDBModelPath(name, version));
     }
@@ -32,11 +32,11 @@ export function loadNetworkFromDB(name: Model, version: number) {
     throw new Error('Unsupported environment for loading model');
 }
 
-export async function loadLastNetworkFromDB(name: Model) {
-    return loadNetworkFromDB(name, LAST_NETWORK_VERSION);
+export async function loadLastModelFromDB(name: Model) {
+    return loadModelFromDB(name, LAST_NETWORK_VERSION);
 }
 
-export async function loadNetworkFromFS(path: string, name: Model) {
+export async function loadModelFromFS(path: string, name: Model) {
     if (isBrowser) {
         const modelPath = `${ path }/${ name }.json`;
         const model = await tf.loadLayersModel(modelPath);
@@ -47,7 +47,7 @@ export async function loadNetworkFromFS(path: string, name: Model) {
     throw new Error('Unsupported environment for loading model');
 }
 
-export function downloadNetwork(name: Model) {
-    return loadNetworkFromDB(name, LAST_NETWORK_VERSION)
+export function downloadModel(name: Model) {
+    return loadModelFromDB(name, LAST_NETWORK_VERSION)
         .then((network) => network.save(`downloads://${ name }`, { includeOptimizer: true }));
 }

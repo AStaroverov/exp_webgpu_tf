@@ -85,9 +85,12 @@ export class EpisodeManager {
         }
     }
 
-    protected runGameLoop(episode: Scenario) {
+    protected runGameLoop(scenario: Scenario) {
         return new Promise((resolve, reject) => {
             let frame = 0;
+
+            // warmup tick
+            scenario.gameTick(16.667);
 
             const stop = macroTasks.addInterval(() => {
                 try {
@@ -95,7 +98,7 @@ export class EpisodeManager {
                         const gameOver = this.runGameTick(
                             frame,
                             TICK_TIME_SIMULATION,
-                            episode,
+                            scenario,
                         );
 
                         if (gameOver) {

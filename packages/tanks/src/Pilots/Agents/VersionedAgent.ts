@@ -1,33 +1,37 @@
 import * as tf from '@tensorflow/tfjs';
-import { clamp } from 'lodash-es';
-import { TankAgent } from './CurrentActorAgent.ts';
-import { disposeNetwork, getRandomHistoricalModel } from '../../TensorFlow/Models/Utils.ts';
-import { patientAction } from '../../TensorFlow/Common/utils.ts';
+import { getNetworkVersion, patientAction } from '../../TensorFlow/Common/utils.ts';
+import { disposeNetwork, getModelFromFS } from '../../TensorFlow/Models/Utils.ts';
 import { prepareInputArrays } from '../../TensorFlow/Common/InputArrays.ts';
 import { act, MAX_STD_DEV } from '../../TensorFlow/PPO/train.ts';
 import { applyActionToTank } from '../../TensorFlow/Common/applyActionToTank.ts';
+import { clamp } from 'lodash-es';
 import { lerp } from '../../../../../lib/math.ts';
 import { Model } from '../../TensorFlow/Models/def.ts';
+import { TankAgent } from './CurrentActorAgent.ts';
 
-export class RandomHistoricalAgent implements TankAgent {
+export class VersionedAgent implements TankAgent {
+    public readonly tankEid: number;
+    public readonly path: string;
     private policyNetwork?: tf.LayersModel;
 
-    constructor(public readonly tankEid: number) {
+    constructor(tankEid: number, path: string) {
+        this.path = path;
+        this.tankEid = tankEid;
+
         void this.sync();
     }
 
-    isReady() {
+    public isReady() {
         return this.policyNetwork != null;
+    }
+
+    public getVersion() {
+        return this.policyNetwork != null ? getNetworkVersion(this.policyNetwork) : 0;
     }
 
     public dispose() {
         this.policyNetwork && disposeNetwork(this.policyNetwork);
         this.policyNetwork = undefined;
-    }
-
-    public sync() {
-        this.dispose();
-        return patientAction(() => this.load());
     }
 
     public updateTankBehaviour(
@@ -44,7 +48,12 @@ export class RandomHistoricalAgent implements TankAgent {
         );
     }
 
+    private async sync(): Promise<void> {
+        this.dispose();
+        await patientAction(() => this.load());
+    }
+
     private async load() {
-        this.policyNetwork = await getRandomHistoricalModel(Model.Policy);
+        this.policyNetwork = await getModelFromFS(Model.Policy, this.path);
     }
 }

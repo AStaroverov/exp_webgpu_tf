@@ -1,6 +1,8 @@
 import { createBattlefield } from './createBattlefield.ts';
 import { EntityId } from 'bitecs';
 import { TankAgent } from '../../../Pilots/Agents/CurrentActorAgent.ts';
+import { ValueOf } from '../../../../../../lib/Types';
+import { PilotType } from '../../../Pilots/Components/Pilot.ts';
 
 export type Scenario = Awaited<ReturnType<typeof createBattlefield>> & {
     index: number;
@@ -12,7 +14,7 @@ export type Scenario = Awaited<ReturnType<typeof createBattlefield>> & {
     getAliveActors(): readonly TankAgent[];
     getSuccessRatio(): number;
 
-    setPilot(tankEid: EntityId, agent: TankAgent): void;
+    setPilot(tankEid: EntityId, type: ValueOf<typeof PilotType>): void;
     getPilot(tankEid: EntityId): TankAgent | undefined;
     getPilots(): readonly TankAgent[];
     getFreeTankEids(): readonly EntityId[];

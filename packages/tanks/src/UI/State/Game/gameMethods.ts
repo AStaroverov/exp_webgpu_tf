@@ -13,19 +13,16 @@ import { getEngine } from './engine.ts';
 import { hashArray } from '../../../../../../lib/hashArray.ts';
 import { TankType } from '../../../Game/ECS/Components/Tank.ts';
 import { PLAYER_TEAM_ID } from './playerMethods.ts';
-import { CurrentActorAgent } from '../../../Pilots/Agents/CurrentActorAgent.ts';
+import { removeTankPilot } from './pilotsMethods.ts';
+import { PilotType } from '../../../Pilots/Components/Pilot.ts';
 
 export const mapSlotToEid$ = new BehaviorSubject(new Map<number, number>());
 
 export function changeTankType(tankEid: EntityId, slot: number, tankType: TankType) {
     syncRemoveTank(tankEid);
+    removeTankPilot(tankEid);
     addTank(slot, PLAYER_TEAM_ID, tankType);
 }
-
-// export function changeTankPilot(tankEid: EntityId, slot: number, pilot: number) {
-//     const tankEid = mapSlotToEid$.value.get(slot);
-//
-// }
 
 export const tankEids$ = frameInterval(10).pipe(
     map(() => Array.from(getTankEids())),
@@ -66,17 +63,18 @@ export const getTankType$ = dedobs(
     },
 );
 
-export const finalizeGameState = async () => {
+export const finalizeGameState = () => {
     const playerTeamEids = Array.from(getTankEids());
 
     for (let i = 0; i < playerTeamEids.length; i++) {
-        addTank(i, 1, getTankType(playerTeamEids[i]));
+        const tankEid = addTank(i, 1, getTankType(playerTeamEids[i]));
+        getEngine().pilots.setPilot(tankEid, PilotType.Agent);
     }
+};
 
-    for (const tankEid of getTankEids()) {
-        const agent = new CurrentActorAgent(tankEid, false);
-        getEngine().pilots.setPilot(tankEid, agent);
-    }
+export const resetGameState = () => {
+    mapSlotToEid$.value.clear();
+    mapSlotToEid$.next(mapSlotToEid$.value);
 };
 
 export function activateBots() {
