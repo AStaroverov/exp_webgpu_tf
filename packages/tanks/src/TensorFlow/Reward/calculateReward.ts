@@ -10,8 +10,8 @@ import { getTankHealth, getTankScore } from '../../Game/ECS/Entities/Tank/TankUt
 import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
 
 // Very important that Action rewards must be rear and huge relatively state rewards
-const WEIGHTS = Object.freeze({
-    STEP_PRICE: -0.1,
+const WEIGHTS = ({
+    STEP_PRICE: -0.5,
 
     // ACTION REWARD
     COMMON: {
@@ -45,8 +45,8 @@ const WEIGHTS = Object.freeze({
     },
     MAP_BORDER_MULTIPLIER: 1,
 
-    DISTANCE_KEEPING: {
-        PENALTY: -1,
+    DISTANCE: {
+        MIN_PENALTY: -1,
     },
     DISTANCE_KEEPING_MULTIPLIER: 1,
 });
@@ -410,18 +410,14 @@ function calculateEnemyDistanceReward(
 
         const distToEnemy = hypot(tankX - enemyX, tankY - enemyY);
         const minDist = colliderRadius * 2;
-        const maxDist = 600;
 
         if (distToEnemy < minDist) {
             const tooClosePenalty = smoothstep(minDist, 0, distToEnemy);
-            positioningReward += tooClosePenalty * WEIGHTS.DISTANCE_KEEPING.PENALTY;
-        } else if (distToEnemy > maxDist) {
-            const tooFarPenalty = smoothstep(maxDist, maxDist * 1.5, distToEnemy) * WEIGHTS.DISTANCE_KEEPING.PENALTY;
-            positioningReward += tooFarPenalty;
+            positioningReward += tooClosePenalty * WEIGHTS.DISTANCE.MIN_PENALTY;
         }
     }
 
-    return positioningReward / max(1, beforePredictEnemiesEids.length);
+    return positioningReward;
 }
 
 function calculateAllyDistanceReward(
@@ -441,11 +437,10 @@ function calculateAllyDistanceReward(
         const minDist = colliderRadius * 2;
 
         if (distToAlly < minDist) {
-            // Штраф за слишком близкое расстояние
             const tooClosePenalty = smoothstep(minDist, 0, distToAlly);
-            positioningReward += tooClosePenalty * WEIGHTS.DISTANCE_KEEPING.PENALTY;
+            positioningReward += tooClosePenalty * WEIGHTS.DISTANCE.MIN_PENALTY;
         }
     }
 
-    return positioningReward / max(1, beforePredictAlliesEids.length);
+    return positioningReward;
 }
