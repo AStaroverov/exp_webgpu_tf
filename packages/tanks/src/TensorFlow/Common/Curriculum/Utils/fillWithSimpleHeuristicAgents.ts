@@ -9,4 +9,3 @@ export function fillWithSimpleHeuristicAgents(episode: Scenario, features: Simpl
         episode.setPilot(tankEid, agent);
     }
 }
-

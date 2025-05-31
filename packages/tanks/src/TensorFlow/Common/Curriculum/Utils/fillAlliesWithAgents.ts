@@ -2,7 +2,7 @@ import { Scenario } from '../types.ts';
 import { getTankTeamId } from '../../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { CurrentActorAgent } from '../../../../Pilots/Agents/CurrentActorAgent.ts';
 
-export function fillAlliesWithActorAgents(scenario: Scenario) {
+export function fillAlliesWithAgents(scenario: Scenario) {
     const tankEids = scenario.getFreeTankEids();
     const firstAgent = scenario.getAlivePilots();
     const activeTeam = getTankTeamId(firstAgent[0].tankEid);
