@@ -1,39 +1,24 @@
 import { Scenario } from './types.ts';
 import { CurriculumState } from '../../PPO/channels.ts';
-import { createScenarioWithAlliesStatic, indexScenarioWithAlliesStatic } from './createScenarioWithAlliesStatic.ts';
+import { createScenarioWithBots, indexScenarioWithBots } from './createScenarioWithBots.ts';
 import { random } from '../../../../../../lib/random.ts';
-import { createScenarioWithAlliesActive, indexScenarioWithAlliesActive } from './createScenarioWithAlliesActive.ts';
+import { createScenarioAgentsVsBots, indexScenarioAgentsVsBots } from './createScenarioAgentsVsBots.ts';
 import { createBattlefield } from './createBattlefield.ts';
-import { createScenarioWithMovingAgents, indexScenarioWithMovingAgents } from './createScenarioWithMovingAgents.ts';
-import {
-    createScenarioWithShootingAgents,
-    indexScenarioWithShootingAgents,
-} from './createScenarioWithShootingAgents.ts';
-import {
-    createScenarioWithHeuristicAgents,
-    indexScenarioWithHeuristicAgents,
-} from './createScenarioWithHeuristicAgents.ts';
-import {
-    createScenarioWithStrongHeuristicAgents,
-    indexScenarioWithStrongHeuristicAgents,
-} from './createScenarioWithStrongHeuristicAgents.ts';
+import { createScenarioAgentsVsBots1, indexScenarioAgentsVsBots1 } from './createScenarioAgentsVsBots1.ts';
 import {
     createScenarioWithHistoricalAgents,
     indexScenarioWithHistoricalAgents,
 } from './createScenarioWithHistoricalAgents.ts';
 import { max, min } from '../../../../../../lib/math.ts';
-import { createScenarioSoloStatic, indexScenarioSoloStatic } from './createScenarioSoloStatic.ts';
+import { createScenarioAgentsVsBots2, indexScenarioAgentsVsBots2 } from './createScenarioAgentsVsBots2.ts';
 
 type ScenarioOptions = Parameters<typeof createBattlefield>[0];
 
 const mapEntries = [
-    [indexScenarioSoloStatic, createScenarioSoloStatic],
-    [indexScenarioWithAlliesStatic, createScenarioWithAlliesStatic],
-    [indexScenarioWithAlliesActive, createScenarioWithAlliesActive],
-    [indexScenarioWithMovingAgents, createScenarioWithMovingAgents],
-    [indexScenarioWithShootingAgents, createScenarioWithShootingAgents],
-    [indexScenarioWithHeuristicAgents, createScenarioWithHeuristicAgents],
-    [indexScenarioWithStrongHeuristicAgents, createScenarioWithStrongHeuristicAgents],
+    [indexScenarioWithBots, createScenarioWithBots],
+    [indexScenarioAgentsVsBots, createScenarioAgentsVsBots.bind(null, 0)],
+    [indexScenarioAgentsVsBots1, createScenarioAgentsVsBots1],
+    [indexScenarioAgentsVsBots2, createScenarioAgentsVsBots2],
     [indexScenarioWithHistoricalAgents, createScenarioWithHistoricalAgents],
 ] as const;
 const mapIndexToConstructor = new Map<number, (options: ScenarioOptions) => Promise<Scenario>>(mapEntries);
@@ -45,7 +30,7 @@ if (mapIndexToConstructor.size !== mapEntries.length) {
 export const scenariosCount = mapIndexToConstructor.size;
 
 export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: ScenarioOptions): Promise<Scenario> {
-    let constructor = createScenarioSoloStatic;
+    let constructor = createScenarioWithBots;
 
     let weights = [];
     let totalWeight = 0;
@@ -70,7 +55,7 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
         if (r < weight) {
             constructor = mapIndexToConstructor.get(i) ?? (() => {
                 console.warn(`Scenario ${ i } not found, using default scenario static`);
-                return createScenarioSoloStatic;
+                return createScenarioWithBots;
             })();
             break;
         }
