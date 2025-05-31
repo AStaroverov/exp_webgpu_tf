@@ -204,6 +204,7 @@ export function findTankDangerBullets(tankEid: number, { physicalWorld } = GameD
         y: RigidBodyState.position.get(tankEid, 1),
     };
     const rotation = RigidBodyState.rotation[tankEid];
+    const approximateColliderRadius = HeuristicsData.approxColliderRadius[tankEid];
     const tested = new Set<EntityId>();
     const result: EntityId[] = [];
 
@@ -225,7 +226,6 @@ export function findTankDangerBullets(tankEid: number, { physicalWorld } = GameD
                 const dangerSpeed = hypot(bulletPosition[0], bulletPosition[1]) >= BULLET_DANGER_SPEED;
                 if (!dangerSpeed) return true;
 
-                const approximateColliderRadius = HeuristicsData.approxColliderRadius[eid];
                 const dangerTrajectory = hasIntersectionVectorAndCircle(
                     bulletPosition[0],
                     bulletPosition[1],
