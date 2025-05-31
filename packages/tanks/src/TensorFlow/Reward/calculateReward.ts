@@ -34,21 +34,21 @@ const WEIGHTS = ({
     },
     AIM_MULTIPLIER: 0.5,
 
-    MOVING: {
-        PENALTY_SPEED: -1,
-        DANGEROUS_MULTIPLIER: 2,
-    },
-    MOVING_MULTIPLIER: 0.5,
-
     MAP_BORDER: {
         PENALTY: -1,
     },
-    MAP_BORDER_MULTIPLIER: 1,
+    MAP_BORDER_MULTIPLIER: 3,
 
     DISTANCE: {
         MIN_PENALTY: -1,
     },
     DISTANCE_KEEPING_MULTIPLIER: 1,
+
+    MOVING: {
+        PENALTY_SPEED: -1,
+        DANGEROUS_MULTIPLIER: 2,
+    },
+    MOVING_MULTIPLIER: 0.5,
 });
 
 function initializeStateRewards() {
