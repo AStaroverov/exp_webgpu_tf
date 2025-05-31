@@ -36,8 +36,8 @@ export class SimpleBot implements TankAgent {
 
         const action: Actions = [
             aim.shoot,
-            move,
-            rotation,
+            move * (this.features.move ?? 0),
+            rotation * (this.features.move ?? 0),
             aim.turretRot,
         ];
 
@@ -105,21 +105,18 @@ export class SimpleBot implements TankAgent {
         const targetTurret = atan2(dy, dx);                        // [-π, π]
 
         let turretRot = normalizeAngle(targetTurret - currentTurret + PI / 2);
+        const misalign = abs(turretRot) < 0.2;
+
         turretRot += this.ouNoiseRot.next() * aimError;
         turretRot = normalizeAngle(turretRot);
 
-        const misalign = abs(dx) + abs(dy);
-        const shoot =
-            (misalign < 100 && shootChance > Math.random())
-            || Math.random() > 0.9 ? 1 : -1;
+        const shoot = (misalign && shootChance > Math.random()) ? 1 : -1;
 
         return { turretRot, shoot };
     }
 
     private getMoveAction(rotation: number): number {
-        let move = randomRangeFloat(this.features.move ?? 0, 1);
-
-        return move * lerp(0.3, 1, 1 - abs(rotation));
+        return lerp(0.3, 1, 1 - abs(rotation));
     }
 
     private getRotationAction(): number {
