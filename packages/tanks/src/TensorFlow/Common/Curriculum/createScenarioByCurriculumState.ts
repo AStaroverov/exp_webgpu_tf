@@ -54,7 +54,7 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
         const weight = weights[i];
         if (r < weight) {
             constructor = mapIndexToConstructor.get(i) ?? (() => {
-                console.warn(`Scenario ${ i } not found, using default scenario static`);
+                console.warn(`Scenario ${i} not found, using default scenario static`);
                 return createScenarioWithBots;
             })();
             break;

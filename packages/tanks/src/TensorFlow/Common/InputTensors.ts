@@ -1,6 +1,4 @@
 import * as tf from '@tensorflow/tfjs';
-import { InputArrays } from './InputArrays.ts';
-import { flatTypedArray } from './flat.ts';
 import {
     ALLY_FEATURES_DIM,
     ALLY_SLOTS,
@@ -12,6 +10,8 @@ import {
     ENEMY_SLOTS,
     TANK_FEATURES_DIM,
 } from '../Models/Create.ts';
+import { InputArrays } from './InputArrays.ts';
+import { flatTypedArray } from './flat.ts';
 
 export function createInputTensors(
     state: InputArrays[],
@@ -55,25 +55,25 @@ export function createInputTensors(
 }
 
 export function sliceInputTensors(tensors: tf.Tensor[], start: number, size: number): tf.Tensor[] {
-    if (tensors.length !== 8) {
+    if (tensors.length !== 9) {
         throw new Error('Invalid input tensors length');
     }
 
     return [
         // controller
         tensors[0].slice([start, 0], [size, -1]),
-        // battlefield
-        tensors[0].slice([start, 0], [size, -1]),
-        // tank
+        // battle
         tensors[1].slice([start, 0], [size, -1]),
+        // tank
+        tensors[2].slice([start, 0], [size, -1]),
         // enemies + mask
-        tensors[2].slice([start, 0, 0], [size, -1, -1]),
-        tensors[3].slice([start, 0], [size, -1]),
+        tensors[3].slice([start, 0, 0], [size, -1, -1]),
+        tensors[4].slice([start, 0], [size, -1]),
         // allies + mask
-        tensors[4].slice([start, 0, 0], [size, -1, -1]),
-        tensors[5].slice([start, 0], [size, -1]),
+        tensors[5].slice([start, 0, 0], [size, -1, -1]),
+        tensors[6].slice([start, 0], [size, -1]),
         // bullets + mask
-        tensors[6].slice([start, 0, 0], [size, -1, -1]),
-        tensors[7].slice([start, 0], [size, -1]),
+        tensors[7].slice([start, 0, 0], [size, -1, -1]),
+        tensors[8].slice([start, 0], [size, -1]),
     ];
 }
