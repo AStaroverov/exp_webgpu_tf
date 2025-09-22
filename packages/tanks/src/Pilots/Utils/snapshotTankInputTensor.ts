@@ -1,19 +1,19 @@
-import { GameDI } from '../../Game/DI/GameDI.ts';
-import { Tank } from '../../Game/ECS/Components/Tank.ts';
-import { MAX_ALLIES, MAX_BULLETS, MAX_ENEMIES, TankInputTensor } from '../Components/TankState.ts';
-import { getEntityIdByPhysicalId, RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
-import { hypot } from '../../../../../lib/math.ts';
 import { Ball, Collider } from '@dimforge/rapier2d-simd';
-import { CollisionGroup, createCollisionGroups } from '../../Game/Physical/createRigid.ts';
 import { EntityId, query } from 'bitecs';
-import { PlayerRef } from '../../Game/ECS/Components/PlayerRef.ts';
-import { hasIntersectionVectorAndCircle } from '../../Game/Utils/intersections.ts';
+import { hypot } from '../../../../../lib/math.ts';
 import { shuffle } from '../../../../../lib/shuffle.ts';
+import { GameDI } from '../../Game/DI/GameDI.ts';
+import { getEntityIdByPhysicalId, RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
+import { PlayerRef } from '../../Game/ECS/Components/PlayerRef.ts';
+import { Tank } from '../../Game/ECS/Components/Tank.ts';
 import { TeamRef } from '../../Game/ECS/Components/TeamRef.ts';
+import { CollisionGroup, createCollisionGroups } from '../../Game/Physical/createRigid.ts';
+import { hasIntersectionVectorAndCircle } from '../../Game/Utils/intersections.ts';
+import { MAX_ALLIES, MAX_BULLETS, MAX_ENEMIES, TankInputTensor } from '../Components/TankState.ts';
 
-import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { TankController } from '../../Game/ECS/Components/TankController.ts';
 import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
+import { TankController } from '../../Game/ECS/Components/TankController.ts';
+import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { Pilot } from '../Components/Pilot.ts';
 
 export function snapshotTankInputTensor({ world } = GameDI) {
@@ -223,7 +223,7 @@ export function findTankDangerBullets(tankEid: number, { physicalWorld } = GameD
 
                 const bulletPosition = RigidBodyState.position.getBatch(eid);
                 const bulletVelocity = RigidBodyState.linvel.getBatch(eid);
-                const dangerSpeed = hypot(bulletPosition[0], bulletPosition[1]) >= BULLET_DANGER_SPEED;
+                const dangerSpeed = hypot(bulletVelocity[0], bulletVelocity[1]) >= BULLET_DANGER_SPEED;
                 if (!dangerSpeed) return true;
 
                 const dangerTrajectory = hasIntersectionVectorAndCircle(

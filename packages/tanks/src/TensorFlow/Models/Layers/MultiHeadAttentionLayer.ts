@@ -31,8 +31,8 @@ export class MultiHeadAttentionLayer extends tf.layers.Layer {
 
         if (dModel !== this.numHeads * this.keyDim) {
             throw new Error(
-                `The input feature dimension (dModel=${ dModel }) must be equal to numHeads (${ this.numHeads }) * keyDim (${ this.keyDim }). ` +
-                `Currently, numHeads * keyDim = ${ this.numHeads * this.keyDim }.`,
+                `The input feature dimension (dModel=${dModel}) must be equal to numHeads (${this.numHeads}) * keyDim (${this.keyDim}). ` +
+                `Currently, numHeads * keyDim = ${this.numHeads * this.keyDim}.`,
             );
         }
 

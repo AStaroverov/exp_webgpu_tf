@@ -76,18 +76,18 @@ export const DEFAULT_EXPERIMENT: Config = {
         max: 1e-3,
     },
 
-    batchSize: isMac ? 200 : 3_000,
+    batchSize: 3_000, // isMac ? 200 : 3_000,
     miniBatchSize: isMac ? 128 : 128,
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
     episodeFrames: Math.round(60 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: isMac ? 2 : 8,
+    workerCount: 6, //isMac ? 2 : 8,
     // perturbWeights
     perturbWeightsScale: 0,
     // Training control
-    savePath: isMac ? 'PPO_MHA' : 'PPO_MHA_V1',
-    fsModelPath: '/assets/models/v32',
+    savePath: 'PPO_MHA', // isMac ? 'PPO_MHA' : 'PPO_MHA_V1',
+    // fsModelPath: '/assets/models/v32',
 };
 
 // Current active experiment

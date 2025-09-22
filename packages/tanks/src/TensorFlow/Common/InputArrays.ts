@@ -1,4 +1,7 @@
+import { max } from '../../../../../lib/math.ts';
+import { random, randomRangeInt } from '../../../../../lib/random.ts';
 import { shuffle } from '../../../../../lib/shuffle.ts';
+import { MAX_APPROXIMATE_COLLIDER_RADIUS } from '../../Game/ECS/Components/HeuristicsData.ts';
 import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../Pilots/Components/TankState.ts';
 import {
     ALLY_FEATURES_DIM,
@@ -11,9 +14,6 @@ import {
     ENEMY_SLOTS,
     TANK_FEATURES_DIM,
 } from '../Models/Create.ts';
-import { max } from '../../../../../lib/math.ts';
-import { random, randomRangeInt } from '../../../../../lib/random.ts';
-import { MAX_APPROXIMATE_COLLIDER_RADIUS } from '../../Game/ECS/Components/HeuristicsData.ts';
 
 function norm(v: number, size: number): number {
     return v / size;
@@ -104,10 +104,10 @@ export function prepareInputArrays(
         enemiesFeatures[dstOffset + 0] = enemiesBuffer[srcOffset + 1];
         enemiesFeatures[dstOffset + 1] = norm(enemiesBuffer[srcOffset + 2] - tankX, QUANT);
         enemiesFeatures[dstOffset + 2] = norm(enemiesBuffer[srcOffset + 3] - tankY, QUANT);
-        enemiesFeatures[dstOffset + 5] = norm(enemiesBuffer[srcOffset + 4], Math.PI);
-        enemiesFeatures[dstOffset + 3] = norm(enemiesBuffer[srcOffset + 5], QUANT);
-        enemiesFeatures[dstOffset + 4] = norm(enemiesBuffer[srcOffset + 6], QUANT);
-        enemiesFeatures[dstOffset + 5] = norm(enemiesBuffer[srcOffset + 7], Math.PI);
+        enemiesFeatures[dstOffset + 3] = norm(enemiesBuffer[srcOffset + 4], Math.PI);
+        enemiesFeatures[dstOffset + 4] = norm(enemiesBuffer[srcOffset + 5], QUANT);
+        enemiesFeatures[dstOffset + 5] = norm(enemiesBuffer[srcOffset + 6], QUANT);
+        enemiesFeatures[dstOffset + 6] = norm(enemiesBuffer[srcOffset + 7], Math.PI);
         enemiesFeatures[dstOffset + 7] = norm(enemiesBuffer[srcOffset + 8], MAX_APPROXIMATE_COLLIDER_RADIUS);
     }
 
@@ -131,10 +131,10 @@ export function prepareInputArrays(
         alliesFeatures[dstOffset + 0] = alliesBuffer[srcOffset + 1]; // hp
         alliesFeatures[dstOffset + 1] = norm(alliesBuffer[srcOffset + 2] - tankX, QUANT);
         alliesFeatures[dstOffset + 2] = norm(alliesBuffer[srcOffset + 3] - tankY, QUANT);
-        alliesFeatures[dstOffset + 5] = norm(alliesBuffer[srcOffset + 4], Math.PI);
-        alliesFeatures[dstOffset + 3] = norm(alliesBuffer[srcOffset + 5], QUANT);
-        alliesFeatures[dstOffset + 4] = norm(alliesBuffer[srcOffset + 6], QUANT);
-        alliesFeatures[dstOffset + 5] = norm(alliesBuffer[srcOffset + 7], Math.PI);
+        alliesFeatures[dstOffset + 3] = norm(alliesBuffer[srcOffset + 4], Math.PI);
+        alliesFeatures[dstOffset + 4] = norm(alliesBuffer[srcOffset + 5], QUANT);
+        alliesFeatures[dstOffset + 5] = norm(alliesBuffer[srcOffset + 6], QUANT);
+        alliesFeatures[dstOffset + 6] = norm(alliesBuffer[srcOffset + 7], Math.PI);
         alliesFeatures[dstOffset + 7] = norm(alliesBuffer[srcOffset + 8], MAX_APPROXIMATE_COLLIDER_RADIUS);
     }
 
