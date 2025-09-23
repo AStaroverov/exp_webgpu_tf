@@ -53,9 +53,9 @@ export const DEFAULT_EXPERIMENT: Config = {
     policyEpochs: 2,
     policyClipRatio: 0.2,
     policyEntropy: {
-        coeff: 0.01,
-        limit: 130_000,
-        reset: 100_000,
+        coeff: 0.025,
+        limit: 1_300_000,
+        reset: 1_000_000,
     },
 
     valueEpochs: 2,
