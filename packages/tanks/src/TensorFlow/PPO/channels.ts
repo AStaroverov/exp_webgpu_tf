@@ -1,5 +1,5 @@
-import { AgentMemoryBatch } from '../Common/Memory.ts';
 import { createChannel } from '../../../../../lib/channles.ts';
+import { AgentMemoryBatch } from '../Common/Memory.ts';
 import { LearnData } from './Learner/createLearnerManager.ts';
 
 import { Model } from '../Models/def.ts';
@@ -23,6 +23,7 @@ export const queueSizeChannel = createChannel<number>('queueSizeChannel');
 export const learningRateChannel = createChannel<number>('learningRateChannel');
 
 export type CurriculumState = {
+    currentVersion: number,
     mapScenarioIndexToSuccessRatio: Record<number, number>,
 }
 

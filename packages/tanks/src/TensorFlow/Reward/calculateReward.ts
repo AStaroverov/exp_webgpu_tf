@@ -1,13 +1,14 @@
-import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
-import { BattleState, getBattleState } from '../../Pilots/Utils/snapshotTankInputTensor.ts';
+import { EntityId } from 'bitecs';
+import { clamp } from 'lodash';
 import { abs, acos, cos, hypot, max, min, normalizeAngle, PI, sin, smoothstep } from '../../../../../lib/math.ts';
+import { MAX_BULLET_SPEED } from '../../Game/ECS/Components/Bullet.ts';
+import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
+import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
 import { Tank } from '../../Game/ECS/Components/Tank.ts';
 import { TankController } from '../../Game/ECS/Components/TankController.ts';
-import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../Pilots/Components/TankState.ts';
-import { EntityId } from 'bitecs';
-import { MAX_BULLET_SPEED } from '../../Game/ECS/Components/Bullet.ts';
 import { getTankHealth, getTankScore } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
+import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../Pilots/Components/TankState.ts';
+import { BattleState, getBattleState } from '../../Pilots/Utils/snapshotTankInputTensor.ts';
 
 // Very important that Action rewards must be rear and huge relatively state rewards
 const WEIGHTS = ({
@@ -33,6 +34,7 @@ const WEIGHTS = ({
         ALLIES_SHOOTING_PENALTY: -1,
     },
     AIM_MULTIPLIER: 0.5,
+    AIM_PENALTY_BOUNDARY: 100_000,
 
     MAP_BORDER: {
         PENALTY: -1,
@@ -70,6 +72,7 @@ export function calculateStateReward(
     tankEid: number,
     width: number,
     height: number,
+    version: number,
 ): number {
     const isShooting = TankController.shoot[tankEid] > 0;
     const moveDir = TankController.move[tankEid];
@@ -117,12 +120,13 @@ export function calculateStateReward(
         beforePredictEnemiesEids,
         beforePredictAlliesEids,
     );
+    const aimPenaltyMultiplier = clamp((version - WEIGHTS.AIM_PENALTY_BOUNDARY) / WEIGHTS.AIM_PENALTY_BOUNDARY, 0, 1);
 
     rewards.aim.quality = aimingResult.bestEnemyAimQuality > 0
         ? aimingResult.bestEnemyAimQuality * WEIGHTS.AIM.QUALITY
-        : WEIGHTS.AIM.BAD_QUALITY_PENALTY;
+        : WEIGHTS.AIM.BAD_QUALITY_PENALTY * aimPenaltyMultiplier;
 
-    rewards.aim.shootDecision = calculateShootingReward(
+    rewards.aim.shootDecision = aimPenaltyMultiplier * calculateShootingPenalty(
         isShooting,
         aimingResult.bestEnemyAimQuality,
         aimingResult.bestAlliesAimQuality,
@@ -168,9 +172,9 @@ export function calculateStateReward(
 
     if (!Number.isFinite(totalReward)) {
         console.error(`
-            aim: ${ rewards.aim.total.toFixed(2) },
-            moving: ${ rewards.moving.total.toFixed(2) },
-            positioning: ${ rewards.positioning.total.toFixed(2) },
+            aim: ${rewards.aim.total.toFixed(2)},
+            moving: ${rewards.moving.total.toFixed(2)},
+            positioning: ${rewards.positioning.total.toFixed(2)},
         `);
         throw new Error('Rewards are not finite:');
     }
@@ -209,8 +213,8 @@ export function calculateActionReward(
 
     if (!Number.isFinite(totalReward)) {
         console.error(`
-            team: ${ rewards.team.total.toFixed(2) },
-            common: ${ rewards.common.total.toFixed(2) },
+            team: ${rewards.team.total.toFixed(2)},
+            common: ${rewards.common.total.toFixed(2)},
         `);
         throw new Error('Rewards are not finite:');
     }
@@ -379,7 +383,7 @@ function computeAimQuality(
     return 0.2 * angleAimQuality + 0.8 * tangentialAimQuality;
 }
 
-function calculateShootingReward(
+function calculateShootingPenalty(
     isShooting: boolean,
     bestEnemyAimQuality: number,
     bestAlliesAimQuality: number,

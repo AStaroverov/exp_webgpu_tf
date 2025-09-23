@@ -1,28 +1,31 @@
 import * as tf from '@tensorflow/tfjs';
 import { Variable } from '@tensorflow/tfjs';
-import { AgentMemory, AgentMemoryBatch } from '../../TensorFlow/Common/Memory.ts';
-import { getNetworkVersion, patientAction } from '../../TensorFlow/Common/utils.ts';
-import { disposeNetwork, getNetwork } from '../../TensorFlow/Models/Utils.ts';
-import { prepareInputArrays } from '../../TensorFlow/Common/InputArrays.ts';
-import { act, MAX_STD_DEV } from '../../TensorFlow/PPO/train.ts';
-import { applyActionToTank } from '../../TensorFlow/Common/applyActionToTank.ts';
 import { clamp } from 'lodash-es';
 import { lerp } from '../../../../../lib/math.ts';
-import { calculateActionReward, calculateStateReward } from '../../TensorFlow/Reward/calculateReward.ts';
-import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { Model } from '../../TensorFlow/Models/def.ts';
-import { CONFIG } from '../../TensorFlow/PPO/config.ts';
 import { random } from '../../../../../lib/random.ts';
+import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
+import { applyActionToTank } from '../../TensorFlow/Common/applyActionToTank.ts';
+import { prepareInputArrays } from '../../TensorFlow/Common/InputArrays.ts';
+import { AgentMemory, AgentMemoryBatch } from '../../TensorFlow/Common/Memory.ts';
+import { getNetworkVersion, patientAction } from '../../TensorFlow/Common/utils.ts';
+import { Model } from '../../TensorFlow/Models/def.ts';
+import { disposeNetwork, getNetwork } from '../../TensorFlow/Models/Utils.ts';
+import { CONFIG } from '../../TensorFlow/PPO/config.ts';
+import { act, MAX_STD_DEV } from '../../TensorFlow/PPO/train.ts';
+import { calculateActionReward, calculateStateReward } from '../../TensorFlow/Reward/calculateReward.ts';
 
 export type TankAgent = {
     tankEid: number;
 
-    sync?(): Promise<void>;
+    sync?(): unknown;
+    isSynced?(): boolean;
+
     dispose?(): void;
+
     getVersion?(): number;
 
     getMemory?(): AgentMemory;
-    getMemoryBatch?(): AgentMemoryBatch;
+    getMemoryBatch?(): undefined | AgentMemoryBatch;
 
     updateTankBehaviour(width: number, height: number): void;
     evaluateTankBehaviour?(width: number, height: number): void;
@@ -56,17 +59,23 @@ export class CurrentActorAgent implements TankAgent {
         this.memory.dispose();
     }
 
-    public sync() {
+    public async sync() {
         this.dispose();
-        return patientAction(() => this.load());
+        await patientAction(() => this.load());
+    }
+
+    public isSynced() {
+        return this.policyNetwork != null;
     }
 
     public updateTankBehaviour(
         width: number,
         height: number,
     ) {
+        if (this.policyNetwork == null) return;
+
         const state = prepareInputArrays(this.tankEid, width, height);
-        const result = act(this.policyNetwork!, state);
+        const result = act(this.policyNetwork, state);
 
         applyActionToTank(
             this.tankEid,
@@ -98,6 +107,7 @@ export class CurrentActorAgent implements TankAgent {
             this.tankEid,
             width,
             height,
+            this.getVersion() || 0
         );
         const actionReward = this.initialActionReward === undefined
             ? 0

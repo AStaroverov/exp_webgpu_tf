@@ -1,21 +1,21 @@
-import { Scenario } from './types.ts';
-import { CurriculumState } from '../../PPO/channels.ts';
-import { createScenarioWithBots, indexScenarioWithBots } from './createScenarioWithBots.ts';
+import { max, min } from '../../../../../../lib/math.ts';
 import { random } from '../../../../../../lib/random.ts';
-import { createScenarioAgentsVsBots, indexScenarioAgentsVsBots } from './createScenarioAgentsVsBots.ts';
+import { CurriculumState } from '../../PPO/channels.ts';
 import { createBattlefield } from './createBattlefield.ts';
+import { createScenarioAgentsVsBots, indexScenarioAgentsVsBots } from './createScenarioAgentsVsBots.ts';
 import { createScenarioAgentsVsBots1, indexScenarioAgentsVsBots1 } from './createScenarioAgentsVsBots1.ts';
+import { createScenarioAgentsVsBots2, indexScenarioAgentsVsBots2 } from './createScenarioAgentsVsBots2.ts';
 import {
     createScenarioWithHistoricalAgents,
     indexScenarioWithHistoricalAgents,
 } from './createScenarioWithHistoricalAgents.ts';
-import { max, min } from '../../../../../../lib/math.ts';
-import { createScenarioAgentsVsBots2, indexScenarioAgentsVsBots2 } from './createScenarioAgentsVsBots2.ts';
+import { createStaticScenarioWithBots, indexStaticScenarioWithBots } from './createStaticScenarioWithBots.ts';
+import { Scenario } from './types.ts';
 
 type ScenarioOptions = Parameters<typeof createBattlefield>[0];
 
 const mapEntries = [
-    [indexScenarioWithBots, createScenarioWithBots],
+    [indexStaticScenarioWithBots, createStaticScenarioWithBots],
     [indexScenarioAgentsVsBots, createScenarioAgentsVsBots.bind(null, 0)],
     [indexScenarioAgentsVsBots1, createScenarioAgentsVsBots1],
     [indexScenarioAgentsVsBots2, createScenarioAgentsVsBots2],
@@ -30,14 +30,15 @@ if (mapIndexToConstructor.size !== mapEntries.length) {
 export const scenariosCount = mapIndexToConstructor.size;
 
 export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: ScenarioOptions): Promise<Scenario> {
-    let constructor = createScenarioWithBots;
+    let constructor = createStaticScenarioWithBots;
 
     let weights = [];
     let totalWeight = 0;
     for (let i = 0, minSuccessRatio = 1; i < mapIndexToConstructor.size; i++) {
         let successRatio: number | undefined = curriculumState.mapScenarioIndexToSuccessRatio[i];
 
-        if (successRatio === undefined && minSuccessRatio < 0.65) {
+        // Unlock next scenarios when all previous reach at least 0.5 avg success
+        if (successRatio === undefined && minSuccessRatio < 0.5) {
             break;
         }
 
@@ -55,7 +56,7 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
         if (r < weight) {
             constructor = mapIndexToConstructor.get(i) ?? (() => {
                 console.warn(`Scenario ${i} not found, using default scenario static`);
-                return createScenarioWithBots;
+                return createStaticScenarioWithBots;
             })();
             break;
         }

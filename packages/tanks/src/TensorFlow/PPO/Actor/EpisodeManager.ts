@@ -1,11 +1,11 @@
-import { SNAPSHOT_EVERY, TICK_TIME_SIMULATION } from '../../Common/consts.ts';
-import { CONFIG } from '../config.ts';
-import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
-import { CurriculumState, curriculumStateChannel, episodeSampleChannel, queueSizeChannel } from '../channels.ts';
-import { Scenario } from '../../Common/Curriculum/types.ts';
-import { createScenarioByCurriculumState } from '../../Common/Curriculum/createScenarioByCurriculumState.ts';
 import { filter, first, firstValueFrom, race, shareReplay, startWith, timer } from 'rxjs';
 import { abs, max, min } from '../../../../../../lib/math.ts';
+import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
+import { SNAPSHOT_EVERY, TICK_TIME_SIMULATION } from '../../Common/consts.ts';
+import { createScenarioByCurriculumState } from '../../Common/Curriculum/createScenarioByCurriculumState.ts';
+import { Scenario } from '../../Common/Curriculum/types.ts';
+import { CurriculumState, curriculumStateChannel, episodeSampleChannel, queueSizeChannel } from '../channels.ts';
+import { CONFIG } from '../config.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -20,6 +20,7 @@ const maxFramesCount = (CONFIG.episodeFrames - (CONFIG.episodeFrames % SNAPSHOT_
 
 export class EpisodeManager {
     protected curriculumState: CurriculumState = {
+        currentVersion: 0,
         mapScenarioIndexToSuccessRatio: {},
     };
 
@@ -41,7 +42,9 @@ export class EpisodeManager {
     }
 
     protected beforeEpisode() {
-        return createScenarioByCurriculumState(this.curriculumState, {});
+        return createScenarioByCurriculumState(this.curriculumState, {
+            iteration: this.curriculumState.currentVersion,
+        });
     }
 
     protected afterEpisode(episode: Scenario) {
@@ -51,11 +54,17 @@ export class EpisodeManager {
             }
 
             const memoryBatch = agent.getMemoryBatch();
+
+            if (memoryBatch == null) {
+                return;
+            }
+
             const minReward = min(...memoryBatch.rewards);
             const maxReward = max(...memoryBatch.rewards);
 
             if (abs(minReward) < 5 && abs(maxReward) < 5) {
                 // Skip if the rewards are too small, indicating no significant learning
+                console.info('Skipping episode sample due to low reward magnitude:', { minReward, maxReward });
                 return;
             }
 
@@ -93,7 +102,7 @@ export class EpisodeManager {
                 try {
                     for (let i = 0; i < 100; i++) {
                         const gameOver = this.runGameTick(
-                            frame,
+                            frame++,
                             TICK_TIME_SIMULATION,
                             episode,
                         );

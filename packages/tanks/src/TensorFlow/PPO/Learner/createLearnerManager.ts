@@ -1,4 +1,14 @@
+import { pick } from 'lodash-es';
+import { RingBuffer } from 'ring-buffer-ts';
+import { concatMap, first, forkJoin, map, mergeMap, scan, tap } from 'rxjs';
+import { max } from '../../../../../../lib/math.ts';
+import { bufferWhile } from '../../../../../../lib/Rx/bufferWhile.ts';
 import { forceExitChannel, metricsChannels } from '../../Common/channels.ts';
+import { flatTypedArray } from '../../Common/flat.ts';
+import { AgentMemoryBatch } from '../../Common/Memory.ts';
+import { getNetworkVersion } from '../../Common/utils.ts';
+import { Model } from '../../Models/def.ts';
+import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
 import {
     CurriculumState,
     curriculumStateChannel,
@@ -7,17 +17,8 @@ import {
     learnProcessChannel,
     queueSizeChannel,
 } from '../channels.ts';
-import { concatMap, first, forkJoin, map, mergeMap, scan, tap } from 'rxjs';
-import { flatTypedArray } from '../../Common/flat.ts';
-import { AgentMemoryBatch } from '../../Common/Memory.ts';
-import { computeVTraceTargets } from '../train.ts';
-import { bufferWhile } from '../../../../../../lib/Rx/bufferWhile.ts';
 import { CONFIG } from '../config.ts';
-import { getNetworkVersion } from '../../Common/utils.ts';
-import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
-import { RingBuffer } from 'ring-buffer-ts';
-import { pick } from 'lodash-es';
-import { Model } from '../../Models/def.ts';
+import { computeVTraceTargets } from '../train.ts';
 
 export type LearnData = AgentMemoryBatch & {
     values: Float32Array,
@@ -50,6 +51,7 @@ export function createLearnerManager() {
         }
 
         return {
+            currentVersion: max(...samples.map(s => s.networkVersion), 0),
             mapScenarioIndexToSuccessRatio: Object.fromEntries(mapScenarioIndexToAvgSuccessRatio),
         };
     };
@@ -94,7 +96,7 @@ export function createLearnerManager() {
                                 return acc;
                             }
 
-                            throw new Error(`Model ${ envelope.modelName } error: ${ envelope.error }`);
+                            throw new Error(`Model ${envelope.modelName} error: ${envelope.error}`);
                         }, { [Model.Policy]: false, [Model.Value]: false }),
                         first((state) => state[Model.Policy] && state[Model.Value]),
                         tap(() => {
