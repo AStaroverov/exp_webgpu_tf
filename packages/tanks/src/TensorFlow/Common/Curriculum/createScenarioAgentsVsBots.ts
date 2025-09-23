@@ -1,19 +1,15 @@
-import { Scenario } from './types.ts';
-import { createBattlefield } from './createBattlefield.ts';
-import { fillAlliesWithAgents } from './Utils/fillAlliesWithAgents.ts';
-import { createScenarioBase } from './createScenarioBase.ts';
-import { fillWithSimpleHeuristicAgents } from './Utils/fillWithSimpleHeuristicAgents.ts';
 import { randomRangeFloat } from '../../../../../../lib/random.ts';
+import { createBattlefield } from './createBattlefield.ts';
+import { createScenarioBase } from './createScenarioBase.ts';
+import { Scenario } from './types.ts';
+import { fillWithSimpleHeuristicAgents } from './Utils/fillWithSimpleHeuristicAgents.ts';
 
 export const indexScenarioAgentsVsBots = 1;
 
 export async function createScenarioAgentsVsBots(level: 0 | 1 | 2, options: Parameters<typeof createBattlefield>[0]): Promise<Scenario> {
     const scenario = await createScenarioBase(options);
     scenario.index = indexScenarioAgentsVsBots;
-
-    fillAlliesWithAgents(scenario);
     fillWithSimpleHeuristicAgents(scenario, createBotFeatures(level));
-
     return scenario;
 }
 

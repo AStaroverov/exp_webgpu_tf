@@ -203,7 +203,6 @@ export function calculateActionReward(
     rewards.common.score = WEIGHTS.COMMON.SCORE * currentScore;
     rewards.common.health = WEIGHTS.COMMON.HEALTH * (currentHealth * 100);
 
-    // Рассчитываем итоговые значения
     rewards.team.total = WEIGHTS.TEAM_MULTIPLIER
         * (rewards.team.score);
     rewards.common.total = WEIGHTS.COMMON_MULTIPLIER
