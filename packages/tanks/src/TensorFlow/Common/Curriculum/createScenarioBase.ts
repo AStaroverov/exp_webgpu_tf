@@ -1,15 +1,16 @@
-import { createBattlefield } from './createBattlefield.ts';
-import { addRandomTanks } from './Utils/addRandomTanks.ts';
-import { randomRangeInt } from '../../../../../../lib/random.ts';
-import { getTankTeamId } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { getSuccessRatio, getTeamHealth } from './utils.ts';
-import { Scenario } from './types.ts';
-import { max } from '../../../../../../lib/math.ts';
-import { createPilotsPlugin } from '../../../Pilots/createPilotsPlugin.ts';
-import { CurrentActorAgent } from '../../../Pilots/Agents/CurrentActorAgent.ts';
 import { query } from 'bitecs';
+import { max } from '../../../../../../lib/math.ts';
+import { randomRangeInt } from '../../../../../../lib/random.ts';
 import { Tank } from '../../../Game/ECS/Components/Tank.ts';
 import { getTeamsCount } from '../../../Game/ECS/Components/TeamRef.ts';
+import { getTankTeamId } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
+import { CurrentActorAgent } from '../../../Pilots/Agents/CurrentActorAgent.ts';
+import { createPilotsPlugin } from '../../../Pilots/createPilotsPlugin.ts';
+import { createBattlefield } from './createBattlefield.ts';
+import { Scenario } from './types.ts';
+import { getSuccessRatio, getTeamHealth } from './utils.ts';
+import { addRandomTanks } from './Utils/addRandomTanks.ts';
+import { fillAlliesWithAgents } from './Utils/fillAlliesWithAgents.ts';
 
 export const indexScenarioWithAlliesStatic = 1;
 
@@ -29,7 +30,7 @@ export async function createScenarioBase(options?: Parameters<typeof createBattl
     pilots.setPilot(tanks[0], new CurrentActorAgent(tanks[0], true), game);
     pilots.toggle(true);
 
-    return {
+    const scenario: Scenario = {
         ...game,
         ...pilots,
 
@@ -46,5 +47,9 @@ export async function createScenarioBase(options?: Parameters<typeof createBattl
         getSuccessRatio() {
             return getSuccessRatio(activeTeam, initialTeamHealth, getTeamHealth(tanks));
         },
-    };
+    }
+
+    fillAlliesWithAgents(scenario);
+
+    return scenario;
 }

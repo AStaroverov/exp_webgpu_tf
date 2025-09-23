@@ -113,6 +113,10 @@ export class CurrentActorAgent implements TankAgent {
             ? 0
             : calculateActionReward(this.tankEid) - this.initialActionReward;
 
+        // @TODO: calculateActionReward - по факту это win probability.
+        // со временем мы должны смещать внимание с reward shaping(stateReward) на шанс победы
+        // это необходимо делать когда агент уже разобраллся с базовыми вещами
+
         this.memory.updateSecondPart(clamp(stateReward + actionReward, -100, 100), isDead);
     }
 
