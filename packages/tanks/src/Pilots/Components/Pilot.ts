@@ -1,17 +1,14 @@
 import { addComponent, EntityId, Not, query, World } from 'bitecs';
-import { CurrentActorAgent, TankAgent } from '../Agents/CurrentActorAgent.ts';
+import { isFunction } from 'lodash-es';
 import { GameDI } from '../../Game/DI/GameDI.ts';
 import { Tank } from '../../Game/ECS/Components/Tank.ts';
-import { isFunction } from 'lodash-es';
+import { CurrentActorAgent, TankAgent } from '../Agents/CurrentActorAgent.ts';
 
 export const Pilot = {
     agent: [] as TankAgent[],
 
-    sincCount: 0,
-
     dispose() {
         getPilots().forEach(agent => agent?.dispose?.());
-        Pilot.sincCount = 0;
         Pilot.agent.length = 0;
     },
 
@@ -19,15 +16,11 @@ export const Pilot = {
         addComponent(world, eid, Pilot);
 
         Pilot.agent[eid] = agent;
-
-        if (isFunction(agent.sync)) {
-            Pilot.sincCount++;
-            agent.sync().finally(() => Pilot.sincCount--);
-        }
+        if (isFunction(agent.sync)) agent.sync();
     },
 
     isSynced() {
-        return Pilot.sincCount === 0;
+        return getPilots().every(pilot => isFunction(pilot.isSynced) ? pilot.isSynced() : true);
     },
 };
 

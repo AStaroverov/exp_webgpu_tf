@@ -1,22 +1,22 @@
 import { getNetworkLearningRate, getNetworkVersion } from '../../Common/utils.ts';
 
-import { createLearnerAgent } from './createLearnerAgent.ts';
-import { createPolicyNetwork } from '../../Models/Create.ts';
-import { CONFIG } from '../config.ts';
 import * as tf from '@tensorflow/tfjs';
-import { computeKullbackLeiblerExact, trainPolicyNetwork } from '../train.ts';
-import { createInputTensors } from '../../Common/InputTensors.ts';
-import { ReplayBuffer } from '../../Common/ReplayBuffer.ts';
+import { RingBuffer } from 'ring-buffer-ts';
 import { ceil, floor, max, mean, min } from '../../../../../../lib/math.ts';
 import { metricsChannels } from '../../Common/channels.ts';
 import { flatTypedArray } from '../../Common/flat.ts';
 import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
-import { RingBuffer } from 'ring-buffer-ts';
-import { learningRateChannel } from '../channels.ts';
-import { LearnData } from './createLearnerManager.ts';
+import { createInputTensors } from '../../Common/InputTensors.ts';
+import { ReplayBuffer } from '../../Common/ReplayBuffer.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
-import { isLossDangerous } from './isLossDangerous.ts';
+import { createPolicyNetwork } from '../../Models/Create.ts';
 import { Model } from '../../Models/def.ts';
+import { learningRateChannel } from '../channels.ts';
+import { CONFIG } from '../config.ts';
+import { computeKullbackLeiblerExact, trainPolicyNetwork } from '../train.ts';
+import { createLearnerAgent } from './createLearnerAgent.ts';
+import { LearnData } from './createLearnerManager.ts';
+import { isLossDangerous } from './isLossDangerous.ts';
 
 export function createPolicyLearnerAgent() {
     return createLearnerAgent({
@@ -35,9 +35,9 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const mbc = ceil(batch.size / mbs);
 
     console.info(`[Train Policy]: Stating..
-         Iteration ${ version },
-         Sum batch size: ${ batch.size },
-         Mini batch count: ${ mbc } by ${ mbs }`);
+         Iteration ${version},
+         Sum batch size: ${batch.size},
+         Mini batch count: ${mbc} by ${mbs}`);
 
     const getPolicyBatch = (batchSize: number, index: number) => {
         const indices = rb.getSample(batchSize, index * batchSize, (index + 1) * batchSize);
@@ -107,21 +107,22 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
         .then(([policyLossList, klList]) => {
             console.info(`[Train Policy]: Finish`);
 
-            if (policyLossList.some((v) => isLossDangerous(v, 2))) {
-                throw new Error(`Policy loss too dangerous: ${ min(...policyLossList) }, ${ max(...policyLossList) }`);
-            }
-
-            if (klList.some(kl => kl > CONFIG.klConfig.max)) {
-                throw new Error(`KL divergence too high ${ max(...klList) }`);
-            }
-            klHistory.add(...klList);
-
             const lr = getDynamicLearningRate(
                 mean(klHistory.toArray()),
                 getNetworkLearningRate(network),
             );
 
             learningRateChannel.emit(lr);
+
+            if (policyLossList.some((v) => isLossDangerous(v, 2))) {
+                throw new Error(`Policy loss too dangerous: ${min(...policyLossList)}, ${max(...policyLossList)}`);
+            }
+
+            if (klList.some(kl => kl > CONFIG.klConfig.max)) {
+                throw new Error(`KL divergence too high ${max(...klList)}`);
+            }
+
+            klHistory.add(...klList);
 
             metricsChannels.lr.postMessage([lr]);
             metricsChannels.kl.postMessage(klList);

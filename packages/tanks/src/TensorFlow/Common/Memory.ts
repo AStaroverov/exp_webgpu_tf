@@ -56,9 +56,9 @@ export class AgentMemory {
         this.dones.push(done);
     }
 
-    getBatch(): AgentMemoryBatch {
+    getBatch(): undefined | AgentMemoryBatch {
         if (this.states.length === 0) {
-            throw new Error('Memory is empty');
+            return undefined;
         }
 
         this.setMinLength();

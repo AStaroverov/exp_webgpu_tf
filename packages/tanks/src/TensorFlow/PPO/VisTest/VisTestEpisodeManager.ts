@@ -1,13 +1,13 @@
-import { getDrawState } from '../../Common/uiUtils.ts';
 import { EntityId } from 'bitecs';
 import { first, firstValueFrom, interval } from 'rxjs';
-import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
-import { EpisodeManager } from '../Actor/EpisodeManager.ts';
-import { Scenario } from '../../Common/Curriculum/types.ts';
 import { log, max, min, round } from '../../../../../../lib/math.ts';
-import { CONFIG } from '../config.ts';
 import { frameTasks } from '../../../../../../lib/TasksScheduler/frameTasks.ts';
+import { macroTasks } from '../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { createScenarioByCurriculumState } from '../../Common/Curriculum/createScenarioByCurriculumState.ts';
+import { Scenario } from '../../Common/Curriculum/types.ts';
+import { getDrawState } from '../../Common/uiUtils.ts';
+import { EpisodeManager } from '../Actor/EpisodeManager.ts';
+import { CONFIG } from '../config.ts';
 
 const discounterLen = round(log(0.01) / log(CONFIG.gamma));
 
@@ -55,7 +55,9 @@ export class VisTestEpisodeManager extends EpisodeManager {
     }
 
     protected beforeEpisode() {
-        return createScenarioByCurriculumState(this.curriculumState, {})
+        return createScenarioByCurriculumState(this.curriculumState, {
+            iteration: this.curriculumState.currentVersion,
+        })
             // return createScenarioWithHeuristicAgents({})
             .then((scenario) => {
                 (this.currentScenario = scenario);
@@ -90,9 +92,8 @@ export class VisTestEpisodeManager extends EpisodeManager {
             let frame = 0;
 
             const stop = frameTasks.addInterval(() => {
-                frame++;
                 const gameOver = this.runGameTick(
-                    frame,
+                    frame++,
                     16.667,
                     episode,
                 );

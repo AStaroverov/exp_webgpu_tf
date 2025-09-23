@@ -1,12 +1,14 @@
-import { Scenario } from './types.ts';
 import { createScenarioBase } from './createScenarioBase.ts';
+import { Scenario } from './types.ts';
 import { fillWithSimpleHeuristicAgents } from './Utils/fillWithSimpleHeuristicAgents.ts';
 
-export const indexScenarioWithBots = 0;
+export const indexStaticScenarioWithBots = 0;
 
-export async function createScenarioWithBots(options: Parameters<typeof createScenarioBase>[0]): Promise<Scenario> {
+export async function createStaticScenarioWithBots(options: Parameters<typeof createScenarioBase>[0]): Promise<Scenario> {
     const scenario = await createScenarioBase({
         ...options,
+        alliesCount: 3,
+        enemiesCount: 3,
     });
 
     fillWithSimpleHeuristicAgents(scenario, {
@@ -17,6 +19,6 @@ export async function createScenarioWithBots(options: Parameters<typeof createSc
         },
     });
 
-    scenario.index = indexScenarioWithBots;
+    scenario.index = indexStaticScenarioWithBots;
     return scenario;
 }
