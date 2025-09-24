@@ -1,17 +1,17 @@
-import { createLearnerAgent } from './createLearnerAgent.ts';
-import { createValueNetwork } from '../../Models/Create.ts';
-import { CONFIG } from '../config.ts';
 import * as tf from '@tensorflow/tfjs';
-import { trainValueNetwork } from '../train.ts';
-import { createInputTensors } from '../../Common/InputTensors.ts';
-import { ReplayBuffer } from '../../Common/ReplayBuffer.ts';
 import { ceil, max, min } from '../../../../../../lib/math.ts';
 import { metricsChannels } from '../../Common/channels.ts';
-import { getNetworkVersion } from '../../Common/utils.ts';
-import { LearnData } from './createLearnerManager.ts';
+import { createInputTensors } from '../../Common/InputTensors.ts';
+import { ReplayBuffer } from '../../Common/ReplayBuffer.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
-import { isLossDangerous } from './isLossDangerous.ts';
+import { getNetworkVersion } from '../../Common/utils.ts';
+import { createValueNetwork } from '../../Models/Create.ts';
 import { Model } from '../../Models/def.ts';
+import { CONFIG } from '../config.ts';
+import { trainValueNetwork } from '../train.ts';
+import { createLearnerAgent } from './createLearnerAgent.ts';
+import { LearnData } from './createLearnerManager.ts';
+import { isLossDangerous } from './isLossDangerous.ts';
 
 export function createValueLearnerAgent() {
     return createLearnerAgent({
@@ -28,9 +28,9 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
     const version = getNetworkVersion(network);
 
     console.info(`[Train Value]: Starting...
-         Iteration ${ version },
-         Sum batch size: ${ batch.size },
-         Mini batch count: ${ mbc } by ${ mbs }`);
+         Iteration ${version},
+         Sum batch size: ${batch.size},
+         Mini batch count: ${mbc} by ${mbs}`);
 
     const valueLossList: tf.Tensor[] = [];
 
@@ -68,8 +68,8 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
         .then((valueLossList) => {
             console.info(`[Train Value]: Finish`);
 
-            if (valueLossList.some((v) => isLossDangerous(v, 1000))) {
-                throw new Error(`Value loss too dangerous: ${ min(...valueLossList) } ${ max(...valueLossList) }`);
+            if (valueLossList.some((v) => isLossDangerous(v, 2000))) {
+                throw new Error(`Value loss too dangerous: ${min(...valueLossList)} ${max(...valueLossList)}`);
             }
 
             metricsChannels.valueLoss.postMessage(valueLossList);

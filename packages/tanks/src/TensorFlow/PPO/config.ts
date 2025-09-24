@@ -1,5 +1,4 @@
-import { isMac } from '../../../../../lib/detect.ts';
-import { TICK_TIME_SIMULATION } from '../Common/consts.ts';
+import { LEARNING_STEPS, TICK_TIME_SIMULATION } from '../Common/consts.ts';
 
 export type Config = {
     // Learning parameters
@@ -49,13 +48,13 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Learning parameters
     clipNorm: 20,
     // PPO-specific parameters
-    gamma: 0.92,
+    gamma: 0.93,
     policyEpochs: 2,
     policyClipRatio: 0.2,
     policyEntropy: {
         coeff: 0.025,
-        limit: 1_300_000,
-        reset: 1_000_000,
+        limit: (LEARNING_STEPS * 0.3) / 4,
+        reset: LEARNING_STEPS / 4,
     },
 
     valueEpochs: 2,
@@ -63,9 +62,9 @@ export const DEFAULT_EXPERIMENT: Config = {
     valueLossCoeff: 0.5,
 
     klConfig: {
-        target: 0.02,
-        high: 0.03,
-        low: 0.015,
+        target: 0.01,
+        high: 0.02,
+        low: 0.005,
         max: 0.5,
     },
     lrConfig: {
@@ -76,15 +75,15 @@ export const DEFAULT_EXPERIMENT: Config = {
         max: 1e-3,
     },
 
-    batchSize: 3_000, // isMac ? 200 : 3_000,
-    miniBatchSize: isMac ? 128 : 128,
+    batchSize: 1280, // isMac ? 200 : 3_000,
+    miniBatchSize: 128, // isMac ? 128 : 128,
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
     episodeFrames: Math.round(60 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: 6, //isMac ? 2 : 8,
+    workerCount: 4, //isMac ? 2 : 8,
     // perturbWeights
-    perturbWeightsScale: 0,
+    perturbWeightsScale: 0.02,
     // Training control
     savePath: 'PPO_MHA', // isMac ? 'PPO_MHA' : 'PPO_MHA_V1',
     // fsModelPath: '/assets/models/v32',

@@ -9,6 +9,7 @@ import { TankController } from '../../Game/ECS/Components/TankController.ts';
 import { getTankHealth, getTankScore } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../Pilots/Components/TankState.ts';
 import { BattleState, getBattleState } from '../../Pilots/Utils/snapshotTankInputTensor.ts';
+import { LEARNING_STEPS } from '../Common/consts.ts';
 
 // Very important that Action rewards must be rear and huge relatively state rewards
 const WEIGHTS = ({
@@ -29,12 +30,12 @@ const WEIGHTS = ({
     // STATE REWARD
     AIM: {
         QUALITY: 2,
-        BAD_QUALITY_PENALTY: -1,
+        BAD_QUALITY_PENALTY: -0.25,
         BAD_SHOOTING_PENALTY: -1,
         ALLIES_SHOOTING_PENALTY: -1,
+        SHOOTING_PENALTY_CURVE: LEARNING_STEPS,
     },
     AIM_MULTIPLIER: 0.5,
-    AIM_PENALTY_BOUNDARY: 100_000,
 
     MAP_BORDER: {
         PENALTY: -1,
@@ -120,17 +121,17 @@ export function calculateStateReward(
         beforePredictEnemiesEids,
         beforePredictAlliesEids,
     );
-    const aimPenaltyMultiplier = clamp((version - WEIGHTS.AIM_PENALTY_BOUNDARY) / WEIGHTS.AIM_PENALTY_BOUNDARY, 0, 1);
 
     rewards.aim.quality = aimingResult.bestEnemyAimQuality > 0
         ? aimingResult.bestEnemyAimQuality * WEIGHTS.AIM.QUALITY
-        : WEIGHTS.AIM.BAD_QUALITY_PENALTY * aimPenaltyMultiplier;
+        : WEIGHTS.AIM.BAD_QUALITY_PENALTY;
 
-    rewards.aim.shootDecision = aimPenaltyMultiplier * calculateShootingPenalty(
-        isShooting,
-        aimingResult.bestEnemyAimQuality,
-        aimingResult.bestAlliesAimQuality,
-    );
+    rewards.aim.shootDecision = clamp(version / WEIGHTS.AIM.SHOOTING_PENALTY_CURVE, 0, 1)
+        * calculateShootingPenalty(
+            isShooting,
+            aimingResult.bestEnemyAimQuality,
+            aimingResult.bestAlliesAimQuality,
+        );
 
     rewards.positioning.enemiesPositioning = calculateEnemyDistanceReward(
         currentTankX,

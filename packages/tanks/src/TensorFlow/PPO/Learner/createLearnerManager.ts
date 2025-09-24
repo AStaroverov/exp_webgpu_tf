@@ -62,7 +62,7 @@ export function createLearnerManager() {
         concatMap((samples) => {
             console.info('Start processing batch');
             const startTime = Date.now();
-            const waitTime = lastEndTime === 0 ? 0 : startTime - lastEndTime;
+            const waitTime = lastEndTime === 0 ? undefined : startTime - lastEndTime;
 
             curriculumStateChannel.emit(computeCurriculumState(samples));
             metricsChannels.batchSize.postMessage(samples.map(b => b.memoryBatch.size));
@@ -111,7 +111,7 @@ export function createLearnerManager() {
                             metricsChannels.tdErrors.postMessage(batch.tdErrors);
                             metricsChannels.advantages.postMessage(batch.advantages);
 
-                            waitTime > 0 && metricsChannels.waitTime.postMessage([waitTime / 1000]);
+                            waitTime !== undefined && metricsChannels.waitTime.postMessage([waitTime / 1000]);
                             metricsChannels.trainTime.postMessage([(lastEndTime - startTime) / 1000]);
                         }),
                     );
