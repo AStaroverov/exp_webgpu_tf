@@ -13,7 +13,7 @@ const queueSize$ = queueSizeChannel.obs.pipe(
 );
 const backpressure$ = race([
     timer(60_000),
-    queueSize$.pipe(filter((queueSize) => queueSize < 3)),
+    queueSize$.pipe(filter((queueSize) => queueSize < 4)),
 ]).pipe(first());
 
 const maxFramesCount = (CONFIG.episodeFrames - (CONFIG.episodeFrames % SNAPSHOT_EVERY) + SNAPSHOT_EVERY);
