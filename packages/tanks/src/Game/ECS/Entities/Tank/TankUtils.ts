@@ -1,19 +1,19 @@
-import { Children } from '../../Components/Children.ts';
-import { recursiveTypicalRemoveEntity, scheduleRemoveEntity } from '../../Utils/typicalRemoveEntity.ts';
-import { TankPart, TankPartCaterpillar } from '../../Components/TankPart.ts';
-import { Tank } from '../../Components/Tank.ts';
+import { EntityId, hasComponent, removeComponent } from 'bitecs';
+import { min, smoothstep } from '../../../../../../../lib/math.ts';
 import { GameDI } from '../../../DI/GameDI.ts';
-import { Parent } from '../../Components/Parent.ts';
+import { changePhysicalDensity } from '../../../Physical/changePhysicalDensity.ts';
+import { CollisionGroup } from '../../../Physical/createRigid.ts';
 import { removePhysicalJoint } from '../../../Physical/removePhysicalJoint.ts';
 import { setPhysicalCollisionGroup } from '../../../Physical/setPhysicalCollisionGroup.ts';
-import { CollisionGroup } from '../../../Physical/createRigid.ts';
-import { min, smoothstep } from '../../../../../../../lib/math.ts';
+import { Children } from '../../Components/Children.ts';
+import { Parent } from '../../Components/Parent.ts';
 import { PlayerRef } from '../../Components/PlayerRef.ts';
 import { Score } from '../../Components/Score.ts';
-import { EntityId, hasComponent, removeComponent } from 'bitecs';
+import { Tank } from '../../Components/Tank.ts';
+import { TankPart, TankPartCaterpillar } from '../../Components/TankPart.ts';
 import { TeamRef } from '../../Components/TeamRef.ts';
-import { changePhysicalDensity } from '../../../Physical/changePhysicalDensity.ts';
 import { mapTankEngineLabel, TankEngineType } from '../../Systems/Tank/TankControllerSystems.ts';
+import { recursiveTypicalRemoveEntity, scheduleRemoveEntity } from '../../Utils/typicalRemoveEntity.ts';
 
 export function destroyTank(tankEid: EntityId) {
     // turret
@@ -89,14 +89,12 @@ export function getTankHealth(tankEid: number): number {
     const partsCount = getTankCurrentPartsCount(tankEid);
     const absHealth = min(1, partsCount / initialPartsCount);
     const health = smoothstep(HEALTH_THRESHOLD, 1, absHealth);
-
     return health;
 }
 
 export function getTankScore(tankEid: number): number {
     const playerId = PlayerRef.id[tankEid];
     const score = Score.negativeScore[playerId] + Score.positiveScore[playerId];
-
     return score;
 }
 

@@ -1,5 +1,4 @@
 import { EntityId } from 'bitecs';
-import { clamp } from 'lodash';
 import { abs, acos, cos, hypot, max, min, normalizeAngle, PI, sin, smoothstep } from '../../../../../lib/math.ts';
 import { MAX_BULLET_SPEED } from '../../Game/ECS/Components/Bullet.ts';
 import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
@@ -11,16 +10,16 @@ import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../..
 import { BattleState, getBattleState } from '../../Pilots/Utils/snapshotTankInputTensor.ts';
 import { LEARNING_STEPS } from '../Common/consts.ts';
 
-// Very important that Action rewards must be rear and huge relatively state rewards
 const WEIGHTS = ({
-    STEP_PRICE: -0.5,
+    STATE_MULTIPLIER: 1,
+    ACTION_MULTIPLIER: 2,
 
     // ACTION REWARD
     COMMON: {
         SCORE: 2,
         HEALTH: 1,
     },
-    COMMON_MULTIPLIER: 4,
+    COMMON_MULTIPLIER: 1,
 
     TEAM: {
         SCORE: 1,
@@ -28,6 +27,7 @@ const WEIGHTS = ({
     TEAM_MULTIPLIER: 1,
 
     // STATE REWARD
+    DEATH_PENALTY: -5,
     AIM: {
         QUALITY: 2,
         BAD_QUALITY_PENALTY: -0.25,
@@ -35,7 +35,7 @@ const WEIGHTS = ({
         ALLIES_SHOOTING_PENALTY: -1,
         SHOOTING_PENALTY_CURVE: LEARNING_STEPS,
     },
-    AIM_MULTIPLIER: 0.5,
+    AIM_MULTIPLIER: 1,
 
     MAP_BORDER: {
         PENALTY: -1,
@@ -51,7 +51,7 @@ const WEIGHTS = ({
         PENALTY_SPEED: -1,
         DANGEROUS_MULTIPLIER: 2,
     },
-    MOVING_MULTIPLIER: 0.5,
+    MOVING_MULTIPLIER: 1,
 });
 
 function initializeStateRewards() {
@@ -73,8 +73,9 @@ export function calculateStateReward(
     tankEid: number,
     width: number,
     height: number,
-    version: number,
+    strictness: number,
 ): number {
+    const isDead = getTankHealth(tankEid) <= 0;
     const isShooting = TankController.shoot[tankEid] > 0;
     const moveDir = TankController.move[tankEid];
     const rotationDir = TankController.rotation[tankEid];
@@ -126,7 +127,7 @@ export function calculateStateReward(
         ? aimingResult.bestEnemyAimQuality * WEIGHTS.AIM.QUALITY
         : WEIGHTS.AIM.BAD_QUALITY_PENALTY;
 
-    rewards.aim.shootDecision = clamp(version / WEIGHTS.AIM.SHOOTING_PENALTY_CURVE, 0, 1)
+    rewards.aim.shootDecision = strictness
         * calculateShootingPenalty(
             isShooting,
             aimingResult.bestEnemyAimQuality,
@@ -145,7 +146,8 @@ export function calculateStateReward(
         beforePredictAlliesEids,
     );
 
-    // Рассчитываем итоговые значения
+    const deathReward = isDead ? WEIGHTS.DEATH_PENALTY : 0;
+
     rewards.aim.total = WEIGHTS.AIM_MULTIPLIER
         * (rewards.aim.quality
             + rewards.aim.shootDecision);
@@ -156,12 +158,11 @@ export function calculateStateReward(
             + rewards.positioning.alliesPositioning * WEIGHTS.DISTANCE_KEEPING_MULTIPLIER
             + rewards.positioning.enemiesPositioning * WEIGHTS.DISTANCE_KEEPING_MULTIPLIER);
 
-    // Общая итоговая награда
-    const totalReward =
-        WEIGHTS.STEP_PRICE
+    const totalReward = (
+        + deathReward
         + rewards.aim.total
         + rewards.moving.total
-        + rewards.positioning.total;
+        + rewards.positioning.total);
 
     // console.log('>>', `
     //     team: ${ rewards.team.total.toFixed(2) },
@@ -180,7 +181,7 @@ export function calculateStateReward(
         throw new Error('Rewards are not finite:');
     }
 
-    return totalReward;
+    return WEIGHTS.STATE_MULTIPLIER * totalReward;
 }
 
 
@@ -191,9 +192,7 @@ function initializeActionRewards() {
     };
 }
 
-export function calculateActionReward(
-    tankEid: number,
-): number {
+export function calculateActionReward(tankEid: number): number {
     const currentScore = getTankScore(tankEid);
     const currentHealth = getTankHealth(tankEid);
     const currentBattleState = getBattleState(tankEid);
@@ -201,8 +200,8 @@ export function calculateActionReward(
     const rewards = initializeActionRewards();
 
     rewards.team.score = getTeamAdvantageScore(currentBattleState);
-    rewards.common.score = WEIGHTS.COMMON.SCORE * currentScore;
-    rewards.common.health = WEIGHTS.COMMON.HEALTH * (currentHealth * 100);
+    rewards.common.score = WEIGHTS.COMMON.SCORE * currentScore / 10;
+    rewards.common.health = WEIGHTS.COMMON.HEALTH * currentHealth;
 
     rewards.team.total = WEIGHTS.TEAM_MULTIPLIER
         * (rewards.team.score);
@@ -219,7 +218,7 @@ export function calculateActionReward(
         throw new Error('Rewards are not finite:');
     }
 
-    return totalReward;
+    return WEIGHTS.ACTION_MULTIPLIER * totalReward;
 }
 
 function calculateMovingReward(moveDir: number, rotationDir: number, hasDangerousBullets: boolean): number {

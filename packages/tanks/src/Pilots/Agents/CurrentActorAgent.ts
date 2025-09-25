@@ -1,10 +1,12 @@
 import * as tf from '@tensorflow/tfjs';
 import { Variable } from '@tensorflow/tfjs';
 import { clamp } from 'lodash-es';
+import { RingBuffer } from 'ring-buffer-ts';
 import { lerp } from '../../../../../lib/math.ts';
 import { random } from '../../../../../lib/random.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { applyActionToTank } from '../../TensorFlow/Common/applyActionToTank.ts';
+import { LEARNING_STEPS } from '../../TensorFlow/Common/consts.ts';
 import { prepareInputArrays } from '../../TensorFlow/Common/InputArrays.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../TensorFlow/Common/Memory.ts';
 import { getNetworkVersion, patientAction } from '../../TensorFlow/Common/utils.ts';
@@ -13,6 +15,34 @@ import { disposeNetwork, getNetwork } from '../../TensorFlow/Models/Utils.ts';
 import { CONFIG } from '../../TensorFlow/PPO/config.ts';
 import { act, MAX_STD_DEV } from '../../TensorFlow/PPO/train.ts';
 import { calculateActionReward, calculateStateReward } from '../../TensorFlow/Reward/calculateReward.ts';
+
+
+let stateRewardHistory = new RingBuffer<number>(1000);
+let actionRewardHistory = new RingBuffer<number>(1000);
+
+setInterval(() => {
+    const stateRewards = stateRewardHistory.toArray();
+    const actionRewards = actionRewardHistory.toArray();
+
+    let stateMin = Infinity;
+    let stateMax = -Infinity;
+    for (const v of stateRewards) {
+        if (v < stateMin) stateMin = v;
+        if (v > stateMax) stateMax = v;
+    }
+
+    let actionMin = Infinity;
+    let actionMax = -Infinity;
+    for (const v of actionRewards) {
+        if (v < actionMin) actionMin = v;
+        if (v > actionMax) actionMax = v;
+    }
+
+    console.log('Avg rewards:', `
+        state min=${stateMin.toFixed(2)} max=${stateMax.toFixed(2)}
+        action min=${actionMin.toFixed(2)} max=${actionMax.toFixed(2)}
+    `);
+}, 60 * 1000)
 
 export type TankAgent = {
     tankEid: number;
@@ -27,8 +57,8 @@ export type TankAgent = {
     getMemory?(): AgentMemory;
     getMemoryBatch?(): undefined | AgentMemoryBatch;
 
-    updateTankBehaviour(width: number, height: number): void;
-    evaluateTankBehaviour?(width: number, height: number): void;
+    updateTankBehaviour(width: number, height: number, frame: number): void;
+    evaluateTankBehaviour?(width: number, height: number, frame: number): void;
 }
 
 export class CurrentActorAgent implements TankAgent {
@@ -40,11 +70,11 @@ export class CurrentActorAgent implements TankAgent {
     constructor(public readonly tankEid: number, private train: boolean) {
     }
 
-    public getVersion() {
+    public getVersion(): number {
         return this.policyNetwork != null ? getNetworkVersion(this.policyNetwork) : 0;
     }
 
-    public getMemory() {
+    public getMemory(): AgentMemory {
         return this.memory;
     }
 
@@ -71,6 +101,7 @@ export class CurrentActorAgent implements TankAgent {
     public updateTankBehaviour(
         width: number,
         height: number,
+        _frame: number,
     ) {
         if (this.policyNetwork == null) return;
 
@@ -99,25 +130,31 @@ export class CurrentActorAgent implements TankAgent {
     public evaluateTankBehaviour(
         width: number,
         height: number,
+        _frame: number,
     ) {
         if (!this.train || this.memory.size() === 0) return;
-
         const isDead = getTankHealth(this.tankEid) <= 0;
+        const version = this.getVersion();
         const stateReward = calculateStateReward(
             this.tankEid,
             width,
             height,
-            this.getVersion() || 0
+            clamp(version / LEARNING_STEPS, 0, 1)
         );
         const actionReward = this.initialActionReward === undefined
             ? 0
             : calculateActionReward(this.tankEid) - this.initialActionReward;
 
-        // @TODO: calculateActionReward - по факту это win probability.
-        // со временем мы должны смещать внимание с reward shaping(stateReward) на шанс победы
-        // это необходимо делать когда агент уже разобраллся с базовыми вещами
+        stateRewardHistory.add(stateReward);
+        actionRewardHistory.add(actionReward);
 
-        this.memory.updateSecondPart(clamp(stateReward + actionReward, -100, 100), isDead);
+        const stateRewardMultiplier = clamp(1 - (version / LEARNING_STEPS), 0.2, 1);
+        const actionRewardMultiplier = clamp(version / LEARNING_STEPS, 0.1, 1);
+
+        this.memory.updateSecondPart(
+            clamp(stateReward * stateRewardMultiplier + actionReward * actionRewardMultiplier, -100, 100),
+            isDead
+        );
     }
 
     private async load() {

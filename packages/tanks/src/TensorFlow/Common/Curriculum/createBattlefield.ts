@@ -7,7 +7,13 @@ const MAX_SIZE = 2000;
 const MIN_SIZE = 800;
 
 export function createBattlefield(options?: { size?: number, iteration?: number }) {
-    const size = options?.size ?? lerp(MIN_SIZE, MAX_SIZE, isNumber(options?.iteration) ? clamp(options.iteration / LEARNING_STEPS, 0, 1) : 1);
+    const size = options?.size ?? lerp(
+        MIN_SIZE,
+        MAX_SIZE,
+        isNumber(options?.iteration)
+            ? clamp((options.iteration - (LEARNING_STEPS / 2)) / LEARNING_STEPS, 0, 1)
+            : 1
+    );
     const game = createGame({ width: size, height: size });
 
     return game;

@@ -60,9 +60,10 @@ export function createLearnerManager() {
         bufferWhile((batches) => batches.reduce((acc, b) => acc + b.memoryBatch.size, 0) < CONFIG.batchSize),
         tap(() => queueSizeChannel.emit(queueSize++)),
         concatMap((samples) => {
-            console.info('Start processing batch');
             const startTime = Date.now();
             const waitTime = lastEndTime === 0 ? undefined : startTime - lastEndTime;
+
+            console.info('Start processing batch', waitTime !== undefined ? `(waited ${waitTime} ms)` : '');
 
             curriculumStateChannel.emit(computeCurriculumState(samples));
             metricsChannels.batchSize.postMessage(samples.map(b => b.memoryBatch.size));
