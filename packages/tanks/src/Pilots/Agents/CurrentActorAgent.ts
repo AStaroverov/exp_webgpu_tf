@@ -149,7 +149,7 @@ export class CurrentActorAgent implements TankAgent {
         actionRewardHistory.add(actionReward);
 
         const stateRewardMultiplier = clamp(1 - (version / LEARNING_STEPS), 0.2, 1);
-        const actionRewardMultiplier = clamp(version / LEARNING_STEPS, 0.1, 1);
+        const actionRewardMultiplier = clamp(version / LEARNING_STEPS, 0.2, 1);
 
         this.memory.updateSecondPart(
             clamp(stateReward * stateRewardMultiplier + actionReward * actionRewardMultiplier, -100, 100),
