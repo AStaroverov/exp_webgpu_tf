@@ -2,80 +2,40 @@ import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
 import { createGame } from './src/Game/createGame.ts';
 import { GameDI } from './src/Game/DI/GameDI.ts';
 import { createPlayer } from './src/Game/ECS/Entities/Player.ts';
-import { createHeavyTank } from './src/Game/ECS/Entities/Tank/Heavy/HeavyTank.ts';
-import { createLightTank } from './src/Game/ECS/Entities/Tank/Light/LightTank.ts';
+import { createMediumTank } from './src/Game/ECS/Entities/Tank/Medium/MediumTank.ts';
 import { createPilotsPlugin } from './src/Pilots/createPilotsPlugin.ts';
 import { snapshotTankInputTensor } from './src/Pilots/Utils/snapshotTankInputTensor.ts';
 import { calculateActionReward, calculateStateReward } from './src/TensorFlow/Reward/calculateReward.ts';
 
 const game = createGame({ width: 1200, height: 1000 });
 const { gameTick, setRenderTarget } = game;
-const { setPlayerPilot } = createPilotsPlugin(game);
+const pilotsPlugin = createPilotsPlugin(game);
+pilotsPlugin.toggle(true);
 
 setRenderTarget(document.querySelector('canvas') as HTMLCanvasElement);
 
 const tanks = [
     // createLightTank({
     // createMediumTank({
-    createHeavyTank({
+    createMediumTank({
         playerId: createPlayer(0),
         teamId: 0,
-        x: 200,
+        x: 300,
         y: 100,
         rotation: 0,
         color: [1, 0, 0.5, 1],
     }),
-    // createMediumTank({
-    //     playerId: createPlayer(0),
-    //     teamId: 0,
-    //     x: 700,
-    //     y: 500,
-    //     rotation: 0,
-    //     color: [1, 0, 0, 1],
-    // }),
-    // createMediumTank({
-    //     playerId: createPlayer(0),
-    //     teamId: 0,
-    //     x: 300,
-    //     y: 500,
-    //     rotation: Math.PI / 1.3,
-    //     color: [1, 0, 0, 1],
-    // }),
-    // createMediumTank({
-    //     playerId: createPlayer(0),
-    //     teamId: 0,
-    //     x: 150,
-    //     y: 700,
-    //     rotation: Math.PI / 1.3,
-    //     color: [1, 0, 0, 1],
-    // }),
-    // createLightTank({
-    //     playerId: createPlayer(1),
-    //     teamId: 1,
-    //     x: 200,
-    //     y: 900,
-    //     rotation: 0,
-    //     color: [1, 1, 0, 1],
-    // }),
-    // createHeavyTank({
-    //     playerId: createPlayer(1),
-    //     teamId: 1,
-    //     x: 700,
-    //     y: 300,
-    //     rotation: Math.PI / 1.3,
-    //     color: [1, 1, 0, 1],
-    // }),
-    // createMediumTank({
-    //     playerId: createPlayer(1),
-    //     teamId: 1,
-    //     x: 200,
-    //     y: 300,
-    //     rotation: Math.PI / 1.3,
-    //     color: [1, 1, 0, 1],
-    // }),
-    createLightTank({
+    createMediumTank({
         playerId: createPlayer(1),
         teamId: 1,
+        x: 200,
+        y: 300,
+        rotation: 0,
+        color: [1, 0, 0, 1],
+    }),
+    createMediumTank({
+        playerId: createPlayer(1),
+        teamId: 0,
         x: 400,
         y: 300,
         rotation: Math.PI / 1.3,
@@ -83,7 +43,7 @@ const tanks = [
     }),
 ];
 
-setPlayerPilot(tanks[0]);
+pilotsPlugin.setPlayerPilot(tanks[0]);
 
 console.log('>> TANKS ', tanks);
 
@@ -102,10 +62,8 @@ frameTasks.addInterval(() => {
 
     if (i > 10 && i % 3 === 0) {
         const deltaAction = (actionReward ? calculateActionReward(tanks[0]) - actionReward : 0);
-        const stateReward = calculateStateReward(tanks[0], GameDI.width, GameDI.height, 0);
+        const stateReward = calculateStateReward(tanks[0], GameDI.width, GameDI.height, 1);
         const reward = stateReward + deltaAction;
-
-        // console.log('>>', stateReward, deltaAction, reward);
 
         snapshotTankInputTensor();
         actionReward = calculateActionReward(tanks[0]);

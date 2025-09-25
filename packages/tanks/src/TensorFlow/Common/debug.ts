@@ -1,15 +1,15 @@
 // DebugInfo singleton to track statistics
 import { query } from 'bitecs';
-import { GameDI } from '../../Game/DI/GameDI.ts';
-import { Tank } from '../../Game/ECS/Components/Tank.ts';
-import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
-import { Color } from '../../../../renderer/src/ECS/Components/Common.ts';
-import { getDrawState } from './uiUtils.ts';
 import { frameTasks } from '../../../../../lib/TasksScheduler/frameTasks.ts';
-import { CONFIG } from '../PPO/config.ts';
+import { Color } from '../../../../renderer/src/ECS/Components/Common.ts';
+import { GameDI } from '../../Game/DI/GameDI.ts';
+import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
+import { Tank } from '../../Game/ECS/Components/Tank.ts';
 import { TeamRef } from '../../Game/ECS/Components/TeamRef.ts';
 import { drawMetrics } from '../Metrics/Browser';
+import { CONFIG } from '../PPO/config.ts';
 import { VisTestEpisodeManager } from '../PPO/VisTest/VisTestEpisodeManager.ts';
+import { getDrawState } from './uiUtils.ts';
 
 // Generate debug visualization using HTML and CSS
 export function createDebugVisualization(container: HTMLElement, manager: VisTestEpisodeManager) {
@@ -66,16 +66,16 @@ export function createDebugVisualization(container: HTMLElement, manager: VisTes
 export function createCommonDebug(manager: VisTestEpisodeManager) {
     return () => {
         return `
-            <div>Workers: ${ CONFIG.workerCount }</div>
-            <div>Version: ${ manager.getVersion() }</div>
-            <div>Success: ${ manager.getSuccessRatio().toFixed(2) }</div>
+            <div>Workers: ${CONFIG.workerCount}</div>
+            <div>Version: ${manager.getVersion()}</div>
+            <div>Success: ${manager.getSuccessRatio().toFixed(2)}</div>
         `;
     };
 }
 
 export function createTanksDebug(manager: VisTestEpisodeManager) {
     return () => {
-        if (!getDrawState() || !GameDI.world) return '';
+        if (!GameDI.world) return '';
 
         let result = '';
         const tanksEids = query(GameDI.world, [Tank, RigidBodyState]);
@@ -84,13 +84,13 @@ export function createTanksDebug(manager: VisTestEpisodeManager) {
 
             const tankEid = tanksEids[i];
             const teamId = TeamRef.id[tankEid];
-            const color = `rgba(${ Color.r[tankEid] * 255 }, ${ Color.g[tankEid] * 255 }, ${ Color.b[tankEid] * 255 }, ${ Color.a[tankEid] })`;
+            const color = `rgba(${Color.r[tankEid] * 255}, ${Color.g[tankEid] * 255}, ${Color.b[tankEid] * 255}, ${Color.a[tankEid]})`;
 
             result += `
-                <div style="background: ${ color }; padding: 4px;">
-                    <div>Tank ${ tankEid }</div>
-                    <div>Team: ${ teamId }</div>
-                    <div>Reward: ${ manager.getReward(tankEid).toFixed(2) }</div>
+                <div style="background: ${color}; padding: 4px;">
+                    <div>Tank ${tankEid}</div>
+                    <div>Team: ${teamId}</div>
+                    <div>Reward: ${manager.getRecentReward(tankEid).toFixed(2)} / ${manager.getDiscounterReward(tankEid).toFixed(2)}</div>
                 </div>
                 <br>
             `;
