@@ -1,19 +1,20 @@
-import { Color } from '../../../../../../../renderer/src/ECS/Components/Common.ts';
-import { Options } from './Options.ts';
-import { GameDI } from '../../../../DI/GameDI.ts';
-import { Tank } from '../../../Components/Tank.ts';
-import { addTransformComponents } from '../../../../../../../renderer/src/ECS/Components/Transform.ts';
-import { Children } from '../../../Components/Children.ts';
-import { TeamRef } from '../../../Components/TeamRef.ts';
-import { PlayerRef } from '../../../Components/PlayerRef.ts';
-import { TankController } from '../../../Components/TankController.ts';
-import { HeuristicsData } from '../../../Components/HeuristicsData.ts';
 import { JointData, Vector2 } from '@dimforge/rapier2d-simd';
-import { TankPart } from '../../../Components/TankPart.ts';
-import { Parent } from '../../../Components/Parent.ts';
+import { Color } from '../../../../../../../renderer/src/ECS/Components/Common.ts';
+import { addTransformComponents } from '../../../../../../../renderer/src/ECS/Components/Transform.ts';
+import { TankInputTensor } from '../../../../../Pilots/Components/TankState.ts';
+import { GameDI } from '../../../../DI/GameDI.ts';
 import { CollisionGroup } from '../../../../Physical/createRigid.ts';
+import { Children } from '../../../Components/Children.ts';
+import { HeuristicsData } from '../../../Components/HeuristicsData.ts';
+import { Parent } from '../../../Components/Parent.ts';
+import { PlayerRef } from '../../../Components/PlayerRef.ts';
 import { createRectangleRigidGroup } from '../../../Components/RigidGroup.ts';
+import { Tank } from '../../../Components/Tank.ts';
+import { TankController } from '../../../Components/TankController.ts';
+import { TankPart } from '../../../Components/TankPart.ts';
 import { TankTurret } from '../../../Components/TankTurret.ts';
+import { TeamRef } from '../../../Components/TeamRef.ts';
+import { Options } from './Options.ts';
 
 export function createTankBase(options: Options, { world } = GameDI): [number, number] {
     options.belongsCollisionGroup = CollisionGroup.TANK_BASE;
@@ -33,6 +34,8 @@ export function createTankBase(options: Options, { world } = GameDI): [number, n
     TankController.addComponent(world, tankEid);
     HeuristicsData.addComponent(world, tankEid, options.approximateColliderRadius);
     Color.addComponent(world, tankEid, ...options.color);
+
+    TankInputTensor.addComponent(world, tankEid);
 
     return [tankEid, tankPid];
 }

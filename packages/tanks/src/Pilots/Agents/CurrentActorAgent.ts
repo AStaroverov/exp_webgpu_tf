@@ -139,7 +139,7 @@ export class CurrentActorAgent implements TankAgent {
             this.tankEid,
             width,
             height,
-            clamp(version / LEARNING_STEPS, 0, 1)
+            clamp(version / LEARNING_STEPS / 10, 0, 1)
         );
         const actionReward = this.initialActionReward === undefined
             ? 0

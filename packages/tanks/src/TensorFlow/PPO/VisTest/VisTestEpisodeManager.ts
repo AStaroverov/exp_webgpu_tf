@@ -26,23 +26,12 @@ export class VisTestEpisodeManager extends EpisodeManager {
         }
     }
 
-    public getReward(tankEid: EntityId) {
-        const memory = this.currentScenario?.getPilot(tankEid)?.getMemory?.();
+    public getDiscounterReward(tankEid: EntityId) {
+        return this.getReward(tankEid, discounterLen);
+    }
 
-        if (memory == null || memory.rewards.length === 0) return 0;
-
-        let sum = 0;
-        let len = min(memory.rewards.length - 1, discounterLen);
-        let i = 1;
-        while (len > 0) {
-            sum += memory.rewards[memory.rewards.length - i];
-            len--;
-            i++;
-        }
-        for (let i = 0; i < len; i++) {
-            sum += memory.rewards[i];
-        }
-        return sum;
+    public getRecentReward(tankEid: EntityId) {
+        return this.getReward(tankEid, 10);
     }
 
     public getVersion() {
@@ -92,17 +81,38 @@ export class VisTestEpisodeManager extends EpisodeManager {
             let frame = 0;
 
             const stop = frameTasks.addInterval(() => {
+                if (!getDrawState()) return;
+
                 const gameOver = this.runGameTick(
                     frame++,
                     16.667,
                     episode,
                 );
 
-                if (gameOver || !getDrawState()) {
+                if (gameOver) {
                     stop();
                     resolve(null);
                 }
             }, 1);
         });
+    }
+
+    private getReward(tankEid: EntityId, maxLen: number) {
+        const memory = this.currentScenario?.getPilot(tankEid)?.getMemory?.();
+
+        if (memory == null || memory.rewards.length === 0) return 0;
+
+        let sum = 0;
+        let len = min(memory.rewards.length - 1, maxLen);
+        let i = 1;
+        while (len > 0) {
+            sum += memory.rewards[memory.rewards.length - i];
+            len--;
+            i++;
+        }
+        for (let i = 0; i < len; i++) {
+            sum += memory.rewards[i];
+        }
+        return sum;
     }
 }

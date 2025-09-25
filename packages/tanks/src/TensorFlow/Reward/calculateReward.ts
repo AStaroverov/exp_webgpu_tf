@@ -8,7 +8,6 @@ import { TankController } from '../../Game/ECS/Components/TankController.ts';
 import { getTankHealth, getTankScore } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../Pilots/Components/TankState.ts';
 import { BattleState, getBattleState } from '../../Pilots/Utils/snapshotTankInputTensor.ts';
-import { LEARNING_STEPS } from '../Common/consts.ts';
 
 const WEIGHTS = ({
     STATE_MULTIPLIER: 1,
@@ -33,7 +32,6 @@ const WEIGHTS = ({
         BAD_QUALITY_PENALTY: -0.25,
         BAD_SHOOTING_PENALTY: -1,
         ALLIES_SHOOTING_PENALTY: -1,
-        SHOOTING_PENALTY_CURVE: LEARNING_STEPS,
     },
     AIM_MULTIPLIER: 1,
 

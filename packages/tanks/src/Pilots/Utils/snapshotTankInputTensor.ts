@@ -14,10 +14,9 @@ import { MAX_ALLIES, MAX_BULLETS, MAX_ENEMIES, TankInputTensor } from '../Compon
 import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
 import { TankController } from '../../Game/ECS/Components/TankController.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { Pilot } from '../Components/Pilot.ts';
 
 export function snapshotTankInputTensor({ world } = GameDI) {
-    const tankEids = query(world, [Tank, Pilot, TankInputTensor, RigidBodyState]);
+    const tankEids = query(world, [Tank, TankInputTensor, RigidBodyState]);
 
     TankInputTensor.resetEnemiesCoords();
     TankInputTensor.resetAlliesCoords();

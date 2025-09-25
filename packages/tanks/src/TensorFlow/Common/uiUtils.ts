@@ -29,7 +29,7 @@ if (globalThis && globalThis.document) {
         await db.table('settings').put({ key: 'shouldDraw', value: shouldDraw.toString() });
     });
     document.addEventListener('keypress', async (event) => {
-        if (event.code === 'Space') {
+        if (event.code === 'KeyP') {
             shouldDraw = !shouldDraw;
             await db.table('settings').put({ key: 'shouldDraw', value: shouldDraw.toString() });
         }
@@ -62,8 +62,6 @@ if (globalThis && globalThis.document) {
         ]);
     });
 }
-
-// Экспортируем функции для получения состояния отрисовки и логирования
 
 export function getDrawState(): boolean {
     return shouldDraw;
