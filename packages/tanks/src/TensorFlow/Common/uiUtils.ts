@@ -1,7 +1,7 @@
 import Dexie from 'dexie';
-import { forceExitChannel } from './channels.ts';
 import { downloadNetwork } from '../Models/Transfer.ts';
 import { Model } from '../Models/def.ts';
+import { forceExitChannel } from './channels.ts';
 
 // Инициализируем базу Dexie с таблицей settings
 const db = new Dexie('ui-tank-rl');
@@ -27,6 +27,12 @@ if (globalThis && globalThis.document) {
         // Переключаем состояние отрисовки
         shouldDraw = !shouldDraw;
         await db.table('settings').put({ key: 'shouldDraw', value: shouldDraw.toString() });
+    });
+    document.addEventListener('keypress', async (event) => {
+        if (event.code === 'Space') {
+            shouldDraw = !shouldDraw;
+            await db.table('settings').put({ key: 'shouldDraw', value: shouldDraw.toString() });
+        }
     });
 
     document.getElementById('toggleVerbose')?.addEventListener('click', async () => {

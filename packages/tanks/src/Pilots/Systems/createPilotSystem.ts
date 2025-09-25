@@ -1,9 +1,9 @@
 import { GameDI } from '../../Game/DI/GameDI.ts';
-import { getAlivePilots, Pilot } from '../Components/Pilot.ts';
-import { TankAgent } from '../Agents/CurrentActorAgent.ts';
 import { SNAPSHOT_EVERY } from '../../TensorFlow/Common/consts.ts';
-import { snapshotTankInputTensor } from '../Utils/snapshotTankInputTensor.ts';
+import { TankAgent } from '../Agents/CurrentActorAgent.ts';
+import { getAlivePilots, Pilot } from '../Components/Pilot.ts';
 import { PilotsState } from '../Singelton/PilotsState.ts';
+import { snapshotTankInputTensor } from '../Utils/snapshotTankInputTensor.ts';
 
 export function createPilotSystem() {
     let frame = 0;
@@ -16,7 +16,7 @@ export function createPilotSystem() {
 
         if (shouldAction) {
             for (const agent of currentPilots) {
-                agent.evaluateTankBehaviour?.(GameDI.width, GameDI.height);
+                agent.evaluateTankBehaviour?.(GameDI.width, GameDI.height, frame);
             }
         }
 
@@ -26,7 +26,7 @@ export function createPilotSystem() {
             currentPilots = getAlivePilots();
 
             for (const agent of currentPilots) {
-                agent.updateTankBehaviour(GameDI.width, GameDI.height);
+                agent.updateTankBehaviour(GameDI.width, GameDI.height, frame);
             }
         }
     };

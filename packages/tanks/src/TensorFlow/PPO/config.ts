@@ -36,6 +36,7 @@ export type Config = {
     episodeFrames: number;              // Maximum number of frames to train on
     // Workers
     workerCount: number;                // Number of parallel workers
+    backpressureQueueSize: number;          // Number of batches in the queue before applying backpressure
     // perturbWeights
     perturbWeightsScale: number;
     // Training control
@@ -48,7 +49,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Learning parameters
     clipNorm: 20,
     // PPO-specific parameters
-    gamma: 0.93,
+    gamma: 0.95,
     policyEpochs: 2,
     policyClipRatio: 0.2,
     policyEntropy: {
@@ -75,13 +76,14 @@ export const DEFAULT_EXPERIMENT: Config = {
         max: 1e-3,
     },
 
-    batchSize: 1280, // isMac ? 200 : 3_000,
+    batchSize: 128 * 28, // isMac ? 200 : 3_000,
     miniBatchSize: 128, // isMac ? 128 : 128,
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
     episodeFrames: Math.round(60 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: 4, //isMac ? 2 : 8,
+    workerCount: 6, //isMac ? 2 : 8,
+    backpressureQueueSize: 2,
     // perturbWeights
     perturbWeightsScale: 0.02,
     // Training control

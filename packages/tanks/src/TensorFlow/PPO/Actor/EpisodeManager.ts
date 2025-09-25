@@ -13,7 +13,7 @@ const queueSize$ = queueSizeChannel.obs.pipe(
 );
 const backpressure$ = race([
     timer(60_000),
-    queueSize$.pipe(filter((queueSize) => queueSize < 4)),
+    queueSize$.pipe(filter((queueSize) => queueSize <= CONFIG.backpressureQueueSize)),
 ]).pipe(first());
 
 const maxFramesCount = (CONFIG.episodeFrames - (CONFIG.episodeFrames % SNAPSHOT_EVERY) + SNAPSHOT_EVERY);
@@ -62,7 +62,7 @@ export class EpisodeManager {
             const minReward = min(...memoryBatch.rewards);
             const maxReward = max(...memoryBatch.rewards);
 
-            if (abs(minReward) < 5 && abs(maxReward) < 5) {
+            if (abs(minReward) < 1 && abs(maxReward) < 1) {
                 // Skip if the rewards are too small, indicating no significant learning
                 console.info('Skipping episode sample due to low reward magnitude:', { minReward, maxReward });
                 return;

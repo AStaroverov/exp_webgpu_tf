@@ -2,6 +2,7 @@ import { addComponent, EntityId, Not, query, World } from 'bitecs';
 import { isFunction } from 'lodash-es';
 import { GameDI } from '../../Game/DI/GameDI.ts';
 import { Tank } from '../../Game/ECS/Components/Tank.ts';
+import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { CurrentActorAgent, TankAgent } from '../Agents/CurrentActorAgent.ts';
 
 export const Pilot = {
@@ -37,7 +38,7 @@ export function getAliveActors({ world } = GameDI) {
 export function getAlivePilots({ world } = GameDI) {
     return query(world, [Pilot])
         .map((eid) => Pilot.agent[eid])
-        .filter((agent) => agent != null);
+        .filter((agent) => agent != null && getTankHealth(agent.tankEid) > 0);
 }
 
 export function getPilots(): readonly TankAgent[] {
