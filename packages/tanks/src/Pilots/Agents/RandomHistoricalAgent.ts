@@ -1,15 +1,15 @@
 import * as tf from '@tensorflow/tfjs';
 import { clamp } from 'lodash-es';
-import { TankAgent } from './CurrentActorAgent.ts';
-import { disposeNetwork, getRandomHistoricalNetwork } from '../../TensorFlow/Models/Utils.ts';
-import { patientAction } from '../../TensorFlow/Common/utils.ts';
-import { prepareInputArrays } from '../../TensorFlow/Common/InputArrays.ts';
-import { act, MAX_STD_DEV } from '../../TensorFlow/PPO/train.ts';
-import { applyActionToTank } from '../../TensorFlow/Common/applyActionToTank.ts';
 import { lerp } from '../../../../../lib/math.ts';
+import { applyActionToTank } from '../../TensorFlow/Common/applyActionToTank.ts';
+import { prepareInputArrays } from '../../TensorFlow/Common/InputArrays.ts';
+import { patientAction } from '../../TensorFlow/Common/utils.ts';
 import { Model } from '../../TensorFlow/Models/def.ts';
+import { disposeNetwork, getRandomHistoricalNetwork } from '../../TensorFlow/Models/Utils.ts';
+import { act, MAX_STD_DEV } from '../../TensorFlow/PPO/train.ts';
+import { DownloableAgent, TankAgent } from './CurrentActorAgent.ts';
 
-export class RandomHistoricalAgent implements TankAgent {
+export class RandomHistoricalAgent implements TankAgent<DownloableAgent> {
     private policyNetwork?: tf.LayersModel;
 
     constructor(public readonly tankEid: number) {
@@ -23,6 +23,10 @@ export class RandomHistoricalAgent implements TankAgent {
     public sync() {
         this.dispose();
         return patientAction(() => this.load());
+    }
+
+    public isSynced() {
+        return this.policyNetwork != null;
     }
 
     public updateTankBehaviour(

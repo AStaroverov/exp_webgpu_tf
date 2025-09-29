@@ -1,12 +1,12 @@
-import { TankAgent } from './CurrentActorAgent.ts';
-import { OrnsteinUhlenbeckNoise } from '../../../../../lib/OrnsteinUhlenbeckNoise.ts';
-import { Actions, applyActionToTank } from '../../TensorFlow/Common/applyActionToTank.ts';
-import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
 import { abs, atan2, hypot, lerp, normalizeAngle, PI } from '../../../../../lib/math.ts';
-import { findTankEnemiesEids } from '../Utils/snapshotTankInputTensor.ts';
-import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { Tank } from '../../Game/ECS/Components/Tank.ts';
+import { OrnsteinUhlenbeckNoise } from '../../../../../lib/OrnsteinUhlenbeckNoise.ts';
 import { randomRangeFloat } from '../../../../../lib/random.ts';
+import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
+import { Tank } from '../../Game/ECS/Components/Tank.ts';
+import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
+import { Actions, applyActionToTank } from '../../TensorFlow/Common/applyActionToTank.ts';
+import { findTankEnemiesEids } from '../Utils/snapshotTankInputTensor.ts';
+import { TankAgent } from './CurrentActorAgent.ts';
 
 export type SimpleBotFeatures = {
     move?: number;
@@ -16,7 +16,7 @@ export type SimpleBotFeatures = {
     };
 }
 
-export class SimpleBot implements TankAgent {
+export class SimpleBot implements TankAgent<{}> {
     private waypoint?: { x: number; y: number };
     private ouNoiseRot = new OrnsteinUhlenbeckNoise(0, 0.15, 0.3);
 

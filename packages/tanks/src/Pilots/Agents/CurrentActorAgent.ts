@@ -44,24 +44,26 @@ setInterval(() => {
     `);
 }, 60 * 1000)
 
-export type TankAgent = {
+export type TankAgent<A = Partial<DownloableAgent> & Partial<LearnableAgent>> = A & {
     tankEid: number;
-
-    sync?(): unknown;
-    isSynced?(): boolean;
-
-    dispose?(): void;
-
-    getVersion?(): number;
-
-    getMemory?(): AgentMemory;
-    getMemoryBatch?(gameOverReward: number): undefined | AgentMemoryBatch;
-
     updateTankBehaviour(width: number, height: number, frame: number): void;
-    evaluateTankBehaviour?(width: number, height: number, frame: number): void;
 }
 
-export class CurrentActorAgent implements TankAgent {
+export type DownloableAgent = {
+    dispose(): void;
+    sync(): Promise<void>;
+    isSynced(): boolean;
+}
+
+export type LearnableAgent = {
+    dispose(): void;
+    getVersion(): number;
+    getMemory(): AgentMemory;
+    getMemoryBatch(gameOverReward: number): undefined | AgentMemoryBatch;
+    evaluateTankBehaviour(width: number, height: number, frame: number): void;
+}
+
+export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableAgent> {
     private memory = new AgentMemory();
     private policyNetwork?: tf.LayersModel;
 

@@ -1,12 +1,12 @@
-import { CONFIG } from '../PPO/config.ts';
 import * as tf from '@tensorflow/tfjs';
 import { LayersModel } from '@tensorflow/tfjs';
-import { loadLastNetworkFromDB, loadNetworkFromDB } from './Transfer.ts';
-import { patientAction } from '../Common/utils.ts';
 import { isFunction } from 'lodash-es';
-import { random, randomRangeInt } from '../../../../../lib/random.ts';
-import { LAST_NETWORK_VERSION, Model, NetworkInfo } from './def.ts';
 import { isBrowser } from '../../../../../lib/detect.ts';
+import { random, randomRangeInt } from '../../../../../lib/random.ts';
+import { patientAction } from '../Common/utils.ts';
+import { CONFIG } from '../PPO/config.ts';
+import { LAST_NETWORK_VERSION, Model, NetworkInfo } from './def.ts';
+import { loadLastNetworkFromDB, loadNetworkFromDB } from './Transfer.ts';
 
 export function disposeNetwork(network: LayersModel) {
     network.optimizer?.dispose();
@@ -14,8 +14,8 @@ export function disposeNetwork(network: LayersModel) {
 }
 
 export function getStorePath(name: string, version: number): string {
-    const postfix = version === LAST_NETWORK_VERSION ? '' : `|version:${ version }`;
-    return `${ CONFIG.savePath }-${ name }${ postfix }`;
+    const postfix = version === LAST_NETWORK_VERSION ? '' : `|version:${version}`;
+    return `${CONFIG.savePath}-${name}${postfix}`;
 }
 
 export function getVersionFromStorePath(path: string): number {
@@ -24,7 +24,7 @@ export function getVersionFromStorePath(path: string): number {
 }
 
 export function getIndexedDBModelPath(name: string, version: number): string {
-    return `indexeddb://${ getStorePath(name, version) }`;
+    return `indexeddb://${getStorePath(name, version)}`;
 }
 
 export async function getNetwork(modelName: Model, getInitial?: () => tf.LayersModel) {
@@ -33,12 +33,12 @@ export async function getNetwork(modelName: Model, getInitial?: () => tf.LayersM
     try {
         network = await patientAction(() => loadLastNetworkFromDB(modelName), isFunction(getInitial) ? 1 : 10);
     } catch (error) {
-        console.warn(`[getNetwork] Could not load model ${ modelName } from DB:`, error);
+        console.warn(`[getNetwork] Could not load model ${modelName} from DB:`, error);
         network = getInitial?.();
     }
 
     if (!network) {
-        throw new Error(`Failed to load model ${ modelName }`);
+        throw new Error(`Failed to load model ${modelName}`);
     }
 
     return network;

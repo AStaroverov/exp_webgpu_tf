@@ -88,7 +88,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     },
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
-    episodeFrames: Math.round(60 * 1000 / TICK_TIME_SIMULATION),
+    episodeFrames: Math.round(2 * 60 * 1000 / TICK_TIME_SIMULATION),
     // Workers
     workerCount: 6,
     backpressureQueueSize: 2,
