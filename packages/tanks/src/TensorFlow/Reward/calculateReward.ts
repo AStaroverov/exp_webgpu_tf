@@ -6,7 +6,7 @@ import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
 import { Tank } from '../../Game/ECS/Components/Tank.ts';
 import { TankController } from '../../Game/ECS/Components/TankController.ts';
 import { getTankHealth, getTankScore } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../Pilots/Components/TankState.ts';
+import { ALLY_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../Pilots/Components/TankState.ts';
 import { BattleState, getBattleState } from '../../Pilots/Utils/snapshotTankInputTensor.ts';
 
 const WEIGHTS = ({
@@ -47,7 +47,6 @@ const WEIGHTS = ({
 
     MOVING: {
         PENALTY_SPEED: -1,
-        DANGEROUS_MULTIPLIER: 2,
     },
     MOVING_MULTIPLIER: 1,
 });
@@ -95,15 +94,15 @@ export function calculateStateReward(
         if (i % ALLY_BUFFER === 0 && v !== 0) acc.push(v);
         return acc;
     }, [] as EntityId[]);
-    const beforePredictBulletsData = TankInputTensor.bulletsData.getBatch(tankEid);
-    const beforePredictBulletsEids = beforePredictBulletsData.reduce((acc, v, i) => {
-        if (i % BULLET_BUFFER === 0 && v !== 0) acc.push(v);
-        return acc;
-    }, [] as EntityId[]);
+    // const beforePredictBulletsData = TankInputTensor.bulletsData.getBatch(tankEid);
+    // const beforePredictBulletsEids = beforePredictBulletsData.reduce((acc, v, i) => {
+    //     if (i % BULLET_BUFFER === 0 && v !== 0) acc.push(v);
+    //     return acc;
+    // }, [] as EntityId[]);
 
     const rewards = initializeStateRewards();
 
-    rewards.moving.speed = calculateMovingReward(moveDir, rotationDir, beforePredictBulletsEids.length > 0);
+    rewards.moving.speed = calculateMovingReward(moveDir, rotationDir);
 
     rewards.positioning.mapAwareness = calculateTankMapAwarenessReward(
         width,
@@ -219,14 +218,13 @@ export function calculateActionReward(tankEid: number): number {
     return WEIGHTS.ACTION_MULTIPLIER * totalReward;
 }
 
-function calculateMovingReward(moveDir: number, rotationDir: number, hasDangerousBullets: boolean): number {
+function calculateMovingReward(moveDir: number, rotationDir: number): number {
     const absSumDir = min(abs(moveDir) + abs(rotationDir) / 2, 1);
-    const minLimit = hasDangerousBullets ? 0.5 : 0.2;
-    const multiplier = hasDangerousBullets ? WEIGHTS.MOVING.DANGEROUS_MULTIPLIER : 1;
+    const minLimit = 0.2;
 
     return absSumDir > minLimit
         ? 0
-        : WEIGHTS.MOVING.PENALTY_SPEED * multiplier * (minLimit - absSumDir) / minLimit;
+        : WEIGHTS.MOVING.PENALTY_SPEED * (minLimit - absSumDir) / minLimit;
 }
 
 export function getTeamAdvantageScore(state: BattleState): number {

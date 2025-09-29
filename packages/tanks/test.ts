@@ -27,7 +27,7 @@ const tanks = [
     }),
     createMediumTank({
         playerId: createPlayer(1),
-        teamId: 1,
+        teamId: 0,
         x: 200,
         y: 300,
         rotation: 0,
@@ -35,7 +35,7 @@ const tanks = [
     }),
     createMediumTank({
         playerId: createPlayer(1),
-        teamId: 0,
+        teamId: 1,
         x: 400,
         y: 300,
         rotation: Math.PI / 1.3,
@@ -61,12 +61,12 @@ frameTasks.addInterval(() => {
     gameTick(16.66);
 
     if (i > 10 && i % 3 === 0) {
-        const deltaAction = (actionReward ? calculateActionReward(tanks[0]) - actionReward : 0);
-        const stateReward = calculateStateReward(tanks[0], GameDI.width, GameDI.height, 1);
+        const deltaAction = (actionReward ? calculateActionReward(tanks[2]) - actionReward : 0);
+        const stateReward = calculateStateReward(tanks[2], GameDI.width, GameDI.height, 1);
         const reward = stateReward + deltaAction;
 
         snapshotTankInputTensor();
-        actionReward = calculateActionReward(tanks[0]);
+        actionReward = calculateActionReward(tanks[2]);
     }
 
     // const enemyTankPosition = getMatrixTranslation(GlobalTransform.matrix.getBatch(enemyEid));

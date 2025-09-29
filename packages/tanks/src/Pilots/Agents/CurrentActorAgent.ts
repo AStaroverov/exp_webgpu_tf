@@ -151,10 +151,9 @@ export class CurrentActorAgent implements TankAgent {
         const stateRewardMultiplier = clamp(1 - (version / LEARNING_STEPS), 0.2, 1);
         const actionRewardMultiplier = clamp(version / LEARNING_STEPS, 0.2, 1);
 
-        this.memory.updateSecondPart(
-            clamp(stateReward * stateRewardMultiplier + actionReward * actionRewardMultiplier, -100, 100),
-            isDead
-        );
+        const reward = clamp(stateReward * stateRewardMultiplier + actionReward * actionRewardMultiplier, -100, 100);
+
+        this.memory.updateSecondPart(reward, isDead);
     }
 
     private async load() {
