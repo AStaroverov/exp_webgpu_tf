@@ -49,7 +49,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Learning parameters
     clipNorm: 20,
     // PPO-specific parameters
-    gamma: 0.92,
+    gamma: 0.97,
     policyEpochs: 2,
     policyClipRatio: 0.2,
     policyEntropy: {
@@ -72,17 +72,17 @@ export const DEFAULT_EXPERIMENT: Config = {
         initial: 1e-5,
         multHigh: 0.95,
         multLow: 1.05,
-        min: 1e-5,
+        min: 5e-6,
         max: 1e-3,
     },
 
-    batchSize: 128 * 28, // isMac ? 200 : 3_000,
-    miniBatchSize: 128, // isMac ? 128 : 128,
+    batchSize: 128 * 64, // isMac ? 200 : 3_000,
+    miniBatchSize: 256, // isMac ? 128 : 128,
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
     episodeFrames: Math.round(60 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: 6, //isMac ? 2 : 8,
+    workerCount: 10, //isMac ? 2 : 8,
     backpressureQueueSize: 2,
     // perturbWeights
     perturbWeightsScale: 0.02,

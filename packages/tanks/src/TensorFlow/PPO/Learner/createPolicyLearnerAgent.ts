@@ -107,13 +107,6 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
         .then(([policyLossList, klList]) => {
             console.info(`[Train Policy]: Finish`);
 
-            const lr = getDynamicLearningRate(
-                mean(klHistory.toArray()),
-                getNetworkLearningRate(network),
-            );
-
-            learningRateChannel.emit(lr);
-
             if (policyLossList.some((v) => isLossDangerous(v, 2))) {
                 throw new Error(`Policy loss too dangerous: ${min(...policyLossList)}, ${max(...policyLossList)}`);
             }
@@ -123,6 +116,13 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             }
 
             klHistory.add(...klList);
+
+            const lr = getDynamicLearningRate(
+                mean(klHistory.toArray()),
+                getNetworkLearningRate(network),
+            );
+
+            learningRateChannel.emit(lr);
 
             metricsChannels.lr.postMessage([lr]);
             metricsChannels.kl.postMessage(klList);
