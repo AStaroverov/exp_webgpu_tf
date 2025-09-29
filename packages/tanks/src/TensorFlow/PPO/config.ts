@@ -76,7 +76,7 @@ export const DEFAULT_EXPERIMENT: Config = {
         initial: 1e-5,
         multHigh: 0.95,
         multLow: 1.05,
-        min: 5e-6,
+        min: 1e-6,
         max: 1e-3,
     },
 
