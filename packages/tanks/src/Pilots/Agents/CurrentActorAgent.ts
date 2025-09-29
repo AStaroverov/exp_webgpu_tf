@@ -14,7 +14,7 @@ import { Model } from '../../TensorFlow/Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../TensorFlow/Models/Utils.ts';
 import { CONFIG } from '../../TensorFlow/PPO/config.ts';
 import { act, MAX_STD_DEV } from '../../TensorFlow/PPO/train.ts';
-import { calculateActionReward, calculateStateReward, GAME_OVER_REWARD_MULTIPLIER } from '../../TensorFlow/Reward/calculateReward.ts';
+import { calculateActionReward, calculateStateReward, GAME_OVER_REWARD_MULTIPLIER, GET_FRAME_REWARD } from '../../TensorFlow/Reward/calculateReward.ts';
 
 
 let stateRewardHistory = new RingBuffer<number>(1000);
@@ -101,7 +101,6 @@ export class CurrentActorAgent implements TankAgent {
     public updateTankBehaviour(
         width: number,
         height: number,
-        _frame: number,
     ) {
         if (this.policyNetwork == null) return;
 
@@ -130,7 +129,7 @@ export class CurrentActorAgent implements TankAgent {
     public evaluateTankBehaviour(
         width: number,
         height: number,
-        _frame: number,
+        frame: number,
     ) {
         if (!this.train || this.memory.size() === 0) return;
         const isDead = getTankHealth(this.tankEid) <= 0;
@@ -144,12 +143,14 @@ export class CurrentActorAgent implements TankAgent {
         const actionReward = this.initialActionReward === undefined
             ? 0
             : calculateActionReward(this.tankEid) - this.initialActionReward;
-        const deathReward = isDead ? -GAME_OVER_REWARD_MULTIPLIER : 0;
         const stateRewardMultiplier = clamp(1 - (version / LEARNING_STEPS), 0, 1);
         const actionRewardMultiplier = clamp(version / LEARNING_STEPS, 0, 1);
+        const frameReward = GET_FRAME_REWARD(frame);
+        const deathReward = isDead ? -GAME_OVER_REWARD_MULTIPLIER : 0;
         const reward = clamp(
             stateReward * stateRewardMultiplier
             + actionReward * actionRewardMultiplier
+            + frameReward
             + deathReward,
             -100,
             100

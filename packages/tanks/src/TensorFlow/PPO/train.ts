@@ -123,7 +123,6 @@ export function computeKullbackLeiblerExact(
 export function act(
     policyNetwork: tf.LayersModel,
     state: InputArrays,
-    batchSize: number
 ): {
     actions: Float32Array,
     mean: Float32Array,
@@ -131,7 +130,7 @@ export function act(
     logProb: number
 } {
     return tf.tidy(() => {
-        const predicted = policyNetwork.predict(createInputTensors([state]), { batchSize }) as tf.Tensor;
+        const predicted = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
         const { mean, logStd } = parsePredict(predicted);
         const std = logStd.exp();
 

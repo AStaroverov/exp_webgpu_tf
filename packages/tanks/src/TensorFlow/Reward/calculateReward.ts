@@ -1,4 +1,5 @@
 import { EntityId } from 'bitecs';
+import { clamp } from 'lodash';
 import { abs, acos, cos, hypot, max, min, normalizeAngle, PI, sin, smoothstep } from '../../../../../lib/math.ts';
 import { MAX_BULLET_SPEED } from '../../Game/ECS/Components/Bullet.ts';
 import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
@@ -10,6 +11,7 @@ import { ALLY_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../Pilots/Compone
 import { BattleState, getBattleState } from '../../Pilots/Utils/snapshotTankInputTensor.ts';
 
 export const GAME_OVER_REWARD_MULTIPLIER = 5;
+export const GET_FRAME_REWARD = (frame: number) => -clamp(Math.log10(1 + frame / 15), 0, 3);
 
 const WEIGHTS = ({
     STATE_MULTIPLIER: 1,
@@ -73,7 +75,6 @@ export function calculateStateReward(
     height: number,
     strictness: number,
 ): number {
-    const isDead = getTankHealth(tankEid) <= 0;
     const isShooting = TankController.shoot[tankEid] > 0;
     const moveDir = TankController.move[tankEid];
     const rotationDir = TankController.rotation[tankEid];
