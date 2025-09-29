@@ -31,7 +31,7 @@ const klHistory = new RingBuffer<number>(25);
 function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const version = getNetworkVersion(network);
     const rb = new ReplayBuffer(batch.states.length);
-    const mbs = CONFIG.miniBatchSize;
+    const mbs = CONFIG.miniBatchSize(version);
     const mbc = ceil(batch.size / mbs);
 
     console.info(`[Train Policy]: Stating..
@@ -68,6 +68,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
                 tActions,
                 tOldLogProbs,
                 tAdvantages,
+                mbs,
                 CONFIG.policyClipRatio,
                 entropyCoeff,
                 CONFIG.clipNorm,
@@ -92,6 +93,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             tStates,
             tMean,
             tLogStd,
+            mbs,
         ));
 
         tf.dispose(tStates);

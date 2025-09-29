@@ -9,7 +9,6 @@ import { getDrawState } from '../../Common/uiUtils.ts';
 import { EpisodeManager } from '../Actor/EpisodeManager.ts';
 import { CONFIG } from '../config.ts';
 
-const discounterLen = round(log(0.01) / log(CONFIG.gamma));
 
 export class VisTestEpisodeManager extends EpisodeManager {
     private currentScenario?: Scenario;
@@ -27,6 +26,7 @@ export class VisTestEpisodeManager extends EpisodeManager {
     }
 
     public getDiscounterReward(tankEid: EntityId) {
+        const discounterLen = round(log(0.01) / log(CONFIG.gamma(this.getVersion())));
         return this.getReward(tankEid, discounterLen);
     }
 

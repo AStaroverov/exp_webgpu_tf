@@ -1,9 +1,11 @@
+import { clamp } from 'lodash';
+import { ceil, lerp, smoothstep } from '../../../../../lib/math.ts';
 import { LEARNING_STEPS, TICK_TIME_SIMULATION } from '../Common/consts.ts';
 
 export type Config = {
     // Learning parameters
     clipNorm: number;
-    gamma: number;                  // Discount factor
+    gamma: (iteration: number) => number;                  // Discount factor
     // PPO-specific parameters
     policyEpochs: number;                // Number of epochs to train on policy network
     policyClipRatio: number;             // Clipping ratio for PPO
@@ -31,11 +33,11 @@ export type Config = {
         max: number,
     },
 
-    batchSize: number;              // Batch size for worker
-    miniBatchSize: number,
+    batchSize: (iteration: number) => number;              // Batch size for worker
+    miniBatchSize: (iteration: number) => number,
     episodeFrames: number;              // Maximum number of frames to train on
     // Workers
-    workerCount: number;                // Number of parallel workers
+    workerCount: number;
     backpressureQueueSize: number;          // Number of batches in the queue before applying backpressure
     // perturbWeights
     perturbWeightsScale: number;
@@ -49,7 +51,9 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Learning parameters
     clipNorm: 20,
     // PPO-specific parameters
-    gamma: 0.97,
+    gamma: (iteration) => {
+        return lerp(0.92, 0.9999, smoothstep(0, 1, iteration / (LEARNING_STEPS * 5)))
+    },
     policyEpochs: 2,
     policyClipRatio: 0.2,
     policyEntropy: {
@@ -76,18 +80,22 @@ export const DEFAULT_EXPERIMENT: Config = {
         max: 1e-3,
     },
 
-    batchSize: 128 * 64, // isMac ? 200 : 3_000,
-    miniBatchSize: 256, // isMac ? 128 : 128,
+    batchSize: (iteration) => {
+        return 128 * 32 * clamp(ceil(iteration / (LEARNING_STEPS / 4)), 1, 4);
+    },
+    miniBatchSize: (iteration) => {
+        return 64 * clamp(ceil(iteration / (LEARNING_STEPS / 4)), 1, 4);
+    },
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
     episodeFrames: Math.round(60 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: 10, //isMac ? 2 : 8,
+    workerCount: 6,
     backpressureQueueSize: 2,
     // perturbWeights
     perturbWeightsScale: 0.02,
     // Training control
-    savePath: 'PPO_MHA', // isMac ? 'PPO_MHA' : 'PPO_MHA_V1',
+    savePath: 'PPO_MHA',
     // fsModelPath: '/assets/models/v32',
 };
 

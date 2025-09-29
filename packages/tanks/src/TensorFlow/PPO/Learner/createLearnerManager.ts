@@ -6,7 +6,6 @@ import { bufferWhile } from '../../../../../../lib/Rx/bufferWhile.ts';
 import { forceExitChannel, metricsChannels } from '../../Common/channels.ts';
 import { flatTypedArray } from '../../Common/flat.ts';
 import { AgentMemoryBatch } from '../../Common/Memory.ts';
-import { getNetworkVersion } from '../../Common/utils.ts';
 import { Model } from '../../Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
 import {
@@ -57,7 +56,9 @@ export function createLearnerManager() {
     };
 
     episodeSampleChannel.obs.pipe(
-        bufferWhile((batches) => batches.reduce((acc, b) => acc + b.memoryBatch.size, 0) < CONFIG.batchSize),
+        bufferWhile((batches) => {
+            return batches.reduce((acc, b) => acc + b.memoryBatch.size, 0) < CONFIG.batchSize(max(...batches.map(s => s.networkVersion), 0));
+        }),
         tap(() => queueSizeChannel.emit(queueSize++)),
         concatMap((samples) => {
             const startTime = Date.now();
@@ -65,7 +66,9 @@ export function createLearnerManager() {
 
             console.info('Start processing batch', waitTime !== undefined ? `(waited ${waitTime} ms)` : '');
 
-            curriculumStateChannel.emit(computeCurriculumState(samples));
+            const curriculumState = computeCurriculumState(samples);
+
+            curriculumStateChannel.emit(curriculumState);
             metricsChannels.batchSize.postMessage(samples.map(b => b.memoryBatch.size));
             metricsChannels.successRatio.postMessage(samples.map(b => pick(b, 'scenarioIndex', 'successRatio')));
 
@@ -77,14 +80,20 @@ export function createLearnerManager() {
                     const batch = squeezeBatches(samples.map(b => b.memoryBatch));
                     const learnData = {
                         ...batch,
-                        ...computeVTraceTargets(policyNetwork, valueNetwork, batch),
+                        ...computeVTraceTargets(
+                            policyNetwork,
+                            valueNetwork,
+                            batch,
+                            CONFIG.batchSize(curriculumState.currentVersion),
+                            CONFIG.gamma(curriculumState.currentVersion)
+                        ),
                     };
 
                     disposeNetwork(policyNetwork);
                     disposeNetwork(valueNetwork);
 
                     metricsChannels.versionDelta.postMessage(
-                        samples.map(b => getNetworkVersion(policyNetwork) - b.networkVersion),
+                        samples.map(b => curriculumState.currentVersion - b.networkVersion),
                     );
 
                     return learnData;

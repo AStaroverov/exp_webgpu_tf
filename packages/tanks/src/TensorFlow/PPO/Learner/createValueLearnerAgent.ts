@@ -23,7 +23,7 @@ export function createValueLearnerAgent() {
 
 function trainValue(network: tf.LayersModel, batch: LearnData) {
     const rb = new ReplayBuffer(batch.states.length);
-    const mbs = CONFIG.miniBatchSize;
+    const mbs = CONFIG.miniBatchSize(getNetworkVersion(network));
     const mbc = ceil(batch.size / mbs);
     const version = getNetworkVersion(network);
 
@@ -48,6 +48,7 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
                 tStates,
                 tReturns,
                 tValues,
+                mbs,
                 CONFIG.valueClipRatio, CONFIG.valueLossCoeff, CONFIG.clipNorm,
                 j === mbc - 1,
             );
