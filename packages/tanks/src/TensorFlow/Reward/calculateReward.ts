@@ -11,7 +11,7 @@ import { ALLY_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../Pilots/Compone
 import { BattleState, getBattleState } from '../../Pilots/Utils/snapshotTankInputTensor.ts';
 
 export const GAME_OVER_REWARD_MULTIPLIER = 5;
-export const GET_FRAME_REWARD = (frame: number) => -clamp(Math.log10(1 + frame / 15), 0, 3);
+export const getFramePenalty = (frame: number) => -clamp(Math.log10(1 + frame / 15), 0, 3) / 30;
 
 const WEIGHTS = ({
     STATE_MULTIPLIER: 1,
