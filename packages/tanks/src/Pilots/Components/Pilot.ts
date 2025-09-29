@@ -32,7 +32,7 @@ export function getPilot(tankEid: EntityId) {
 export function getAliveActors({ world } = GameDI) {
     return query(world, [Pilot])
         .map((eid) => Pilot.agent[eid])
-        .filter((agent) => agent instanceof CurrentActorAgent);
+        .filter((agent) => agent instanceof CurrentActorAgent && getTankHealth(agent.tankEid) > 0);
 }
 
 export function getAlivePilots({ world } = GameDI) {

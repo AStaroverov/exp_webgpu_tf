@@ -29,6 +29,8 @@ if (mapIndexToConstructor.size !== mapEntries.length) {
 
 export const scenariosCount = mapIndexToConstructor.size;
 
+const edge = 0.3; // 0.3 success ratio to unlock next scenario
+
 export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: ScenarioOptions): Promise<Scenario> {
     let constructor = createStaticScenarioWithBots;
 
@@ -37,14 +39,14 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
     for (let i = 0, minSuccessRatio = 1; i < mapIndexToConstructor.size; i++) {
         let successRatio: number | undefined = curriculumState.mapScenarioIndexToSuccessRatio[i];
 
-        // Unlock next scenarios when all previous reach at least 0.5 avg success
-        if (successRatio === undefined && minSuccessRatio < 0.5) {
+        // Unlock next scenarios when all previous reach at least 0.3 avg success
+        if (successRatio === undefined && minSuccessRatio < edge) {
             break;
         }
 
         successRatio ??= 0;
 
-        const weight = max(0.01, 0.95 - successRatio);
+        const weight = max(0.03, (edge + 0.15) - successRatio);
 
         weights.push(weight);
         totalWeight += weight;

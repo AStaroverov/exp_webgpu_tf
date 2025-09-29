@@ -6,6 +6,7 @@ import { createScenarioByCurriculumState } from '../../Common/Curriculum/createS
 import { Scenario } from '../../Common/Curriculum/types.ts';
 import { CurriculumState, curriculumStateChannel, episodeSampleChannel, queueSizeChannel } from '../channels.ts';
 import { CONFIG } from '../config.ts';
+import { GAME_OVER_REWARD_MULTIPLIER } from '../../Reward/calculateReward.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -53,7 +54,8 @@ export class EpisodeManager {
                 return;
             }
 
-            const memoryBatch = agent.getMemoryBatch();
+            const successRatio = episode.getSuccessRatio();
+            const memoryBatch = agent.getMemoryBatch(successRatio * GAME_OVER_REWARD_MULTIPLIER);
 
             if (memoryBatch == null) {
                 return;
@@ -71,7 +73,7 @@ export class EpisodeManager {
             episodeSampleChannel.emit({
                 networkVersion: agent.getVersion(),
                 memoryBatch: memoryBatch,
-                successRatio: episode.getSuccessRatio(),
+                successRatio,
                 scenarioIndex: episode.index,
             });
         });

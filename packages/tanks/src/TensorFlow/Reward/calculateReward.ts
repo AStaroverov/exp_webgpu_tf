@@ -9,6 +9,8 @@ import { getTankHealth, getTankScore } from '../../Game/ECS/Entities/Tank/TankUt
 import { ALLY_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../Pilots/Components/TankState.ts';
 import { BattleState, getBattleState } from '../../Pilots/Utils/snapshotTankInputTensor.ts';
 
+export const GAME_OVER_REWARD_MULTIPLIER = 5;
+
 const WEIGHTS = ({
     STATE_MULTIPLIER: 1,
     ACTION_MULTIPLIER: 2,
@@ -26,7 +28,6 @@ const WEIGHTS = ({
     TEAM_MULTIPLIER: 1,
 
     // STATE REWARD
-    DEATH_PENALTY: -5,
     AIM: {
         QUALITY: 2,
         BAD_QUALITY_PENALTY: -0.25,
@@ -143,8 +144,6 @@ export function calculateStateReward(
         beforePredictAlliesEids,
     );
 
-    const deathReward = isDead ? WEIGHTS.DEATH_PENALTY : 0;
-
     rewards.aim.total = WEIGHTS.AIM_MULTIPLIER
         * (rewards.aim.quality
             + rewards.aim.shootDecision);
@@ -156,7 +155,6 @@ export function calculateStateReward(
             + rewards.positioning.enemiesPositioning * WEIGHTS.DISTANCE_KEEPING_MULTIPLIER);
 
     const totalReward = (
-        + deathReward
         + rewards.aim.total
         + rewards.moving.total
         + rewards.positioning.total);
@@ -228,7 +226,7 @@ function calculateMovingReward(moveDir: number, rotationDir: number): number {
 }
 
 export function getTeamAdvantageScore(state: BattleState): number {
-    const normCount = (state.alliesCount - state.enemiesCount);
+    const normCount = (state.alliesCount - state.enemiesCount) / 2;
     const normHP = (state.alliesTotalHealth - state.enemiesTotalHealth);
 
     return WEIGHTS.TEAM.SCORE * (normCount + normHP);

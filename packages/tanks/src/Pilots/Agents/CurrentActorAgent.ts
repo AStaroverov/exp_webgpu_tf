@@ -14,7 +14,7 @@ import { Model } from '../../TensorFlow/Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../TensorFlow/Models/Utils.ts';
 import { CONFIG } from '../../TensorFlow/PPO/config.ts';
 import { act, MAX_STD_DEV } from '../../TensorFlow/PPO/train.ts';
-import { calculateActionReward, calculateStateReward } from '../../TensorFlow/Reward/calculateReward.ts';
+import { calculateActionReward, calculateStateReward, GAME_OVER_REWARD_MULTIPLIER } from '../../TensorFlow/Reward/calculateReward.ts';
 
 
 let stateRewardHistory = new RingBuffer<number>(1000);
@@ -55,7 +55,7 @@ export type TankAgent = {
     getVersion?(): number;
 
     getMemory?(): AgentMemory;
-    getMemoryBatch?(): undefined | AgentMemoryBatch;
+    getMemoryBatch?(gameOverReward: number): undefined | AgentMemoryBatch;
 
     updateTankBehaviour(width: number, height: number, frame: number): void;
     evaluateTankBehaviour?(width: number, height: number, frame: number): void;
@@ -78,8 +78,8 @@ export class CurrentActorAgent implements TankAgent {
         return this.memory;
     }
 
-    public getMemoryBatch() {
-        return this.memory.getBatch();
+    public getMemoryBatch(gameOverReward: number): undefined | AgentMemoryBatch {
+        return this.memory.getBatch(gameOverReward);
     }
 
     public dispose() {
@@ -144,16 +144,21 @@ export class CurrentActorAgent implements TankAgent {
         const actionReward = this.initialActionReward === undefined
             ? 0
             : calculateActionReward(this.tankEid) - this.initialActionReward;
+        const deathReward = isDead ? -GAME_OVER_REWARD_MULTIPLIER : 0;
+        const stateRewardMultiplier = clamp(1 - (version / LEARNING_STEPS), 0, 1);
+        const actionRewardMultiplier = clamp(version / LEARNING_STEPS, 0, 1);
+        const reward = clamp(
+            stateReward * stateRewardMultiplier
+            + actionReward * actionRewardMultiplier
+            + deathReward,
+            -100,
+            100
+        );
+
+        this.memory.updateSecondPart(reward, isDead);
 
         stateRewardHistory.add(stateReward);
         actionRewardHistory.add(actionReward);
-
-        const stateRewardMultiplier = clamp(1 - (version / LEARNING_STEPS), 0.2, 1);
-        const actionRewardMultiplier = clamp(version / LEARNING_STEPS, 0.2, 1);
-
-        const reward = clamp(stateReward * stateRewardMultiplier + actionReward * actionRewardMultiplier, -100, 100);
-
-        this.memory.updateSecondPart(reward, isDead);
     }
 
     private async load() {

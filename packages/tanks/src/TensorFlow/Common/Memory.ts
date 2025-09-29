@@ -56,14 +56,18 @@ export class AgentMemory {
         this.dones.push(done);
     }
 
-    getBatch(): undefined | AgentMemoryBatch {
+    getBatch(gameOverReward = 0): undefined | AgentMemoryBatch {
+        this.setMinLength();
+
         if (this.states.length === 0) {
             return undefined;
         }
 
-        this.setMinLength();
+        const rewards = new Float32Array(this.rewards)
+        rewards[rewards.length - 1] += gameOverReward;
 
-        const dones = this.dones.map(done => done ? 1.0 : 0.0);
+        // @ts-expect-error - js convertion
+        const dones = new Float32Array(this.dones);
         dones[dones.length - 1] = 1.0;
 
         return {
@@ -73,8 +77,8 @@ export class AgentMemory {
             mean: (this.mean),
             logStd: (this.logStd),
             logProbs: new Float32Array(this.logProbs),
-            rewards: new Float32Array(this.rewards),
-            dones: new Float32Array(dones),
+            rewards: rewards,
+            dones: dones,
         };
     }
 
