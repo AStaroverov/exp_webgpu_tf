@@ -6,6 +6,7 @@ import { bufferWhile } from '../../../../../../lib/Rx/bufferWhile.ts';
 import { forceExitChannel, metricsChannels } from '../../Common/channels.ts';
 import { flatTypedArray } from '../../Common/flat.ts';
 import { AgentMemoryBatch } from '../../Common/Memory.ts';
+import { getNetworkVersion } from '../../Common/utils.ts';
 import { Model } from '../../Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
 import {
@@ -66,9 +67,7 @@ export function createLearnerManager() {
 
             console.info('Start processing batch', waitTime !== undefined ? `(waited ${waitTime} ms)` : '');
 
-            const curriculumState = computeCurriculumState(samples);
-
-            curriculumStateChannel.emit(curriculumState);
+            curriculumStateChannel.emit(computeCurriculumState(samples));
             metricsChannels.batchSize.postMessage(samples.map(b => b.memoryBatch.size));
             metricsChannels.successRatio.postMessage(samples.map(b => pick(b, 'scenarioIndex', 'successRatio')));
 
@@ -77,6 +76,7 @@ export function createLearnerManager() {
                 getNetwork(Model.Value),
             ]).pipe(
                 map(([policyNetwork, valueNetwork]): LearnData => {
+                    const version = getNetworkVersion(policyNetwork);
                     const batch = squeezeBatches(samples.map(b => b.memoryBatch));
                     const learnData = {
                         ...batch,
@@ -84,8 +84,8 @@ export function createLearnerManager() {
                             policyNetwork,
                             valueNetwork,
                             batch,
-                            CONFIG.batchSize(curriculumState.currentVersion),
-                            CONFIG.gamma(curriculumState.currentVersion)
+                            CONFIG.miniBatchSize(version),
+                            CONFIG.gamma(version)
                         ),
                     };
 
@@ -93,7 +93,7 @@ export function createLearnerManager() {
                     disposeNetwork(valueNetwork);
 
                     metricsChannels.versionDelta.postMessage(
-                        samples.map(b => curriculumState.currentVersion - b.networkVersion),
+                        samples.map(b => version - b.networkVersion),
                     );
 
                     return learnData;
