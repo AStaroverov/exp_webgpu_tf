@@ -1,10 +1,12 @@
-import { max, min } from '../../../../../../lib/math.ts';
+import { clamp } from 'lodash';
+import { min } from '../../../../../../lib/math.ts';
 import { random } from '../../../../../../lib/random.ts';
 import { CurriculumState } from '../../PPO/channels.ts';
 import { createBattlefield } from './createBattlefield.ts';
 import { createScenarioAgentsVsBots, indexScenarioAgentsVsBots } from './createScenarioAgentsVsBots.ts';
 import { createScenarioAgentsVsBots1, indexScenarioAgentsVsBots1 } from './createScenarioAgentsVsBots1.ts';
 import { createScenarioAgentsVsBots2, indexScenarioAgentsVsBots2 } from './createScenarioAgentsVsBots2.ts';
+import { createScenarioWithCurrentAgents, indexScenarioWithCurrentAgents } from './createScenarioWithCurrentAgents.ts';
 import {
     createScenarioWithHistoricalAgents,
     indexScenarioWithHistoricalAgents,
@@ -20,7 +22,7 @@ const mapEntries = [
     [indexScenarioAgentsVsBots1, createScenarioAgentsVsBots1],
     [indexScenarioAgentsVsBots2, createScenarioAgentsVsBots2],
     [indexScenarioWithHistoricalAgents, createScenarioWithHistoricalAgents],
-    // [indexScenarioWithCurrentAgents, createScensarioWithCurrentAgents],
+    [indexScenarioWithCurrentAgents, createScenarioWithCurrentAgents],
 ] as const;
 const mapIndexToConstructor = new Map<number, (options: ScenarioOptions) => Promise<Scenario>>(mapEntries);
 
@@ -47,7 +49,7 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
 
         successRatio ??= 0;
 
-        const weight = max(0.03, (edge + 0.15) - successRatio);
+        const weight = clamp((edge + 0.15) - successRatio, 0.03, 1);
 
         weights.push(weight);
         totalWeight += weight;

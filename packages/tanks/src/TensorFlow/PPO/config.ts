@@ -98,7 +98,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     perturbWeightsScale: (iteration) => clamp(1 - iteration / LEARNING_STEPS, 0.005, 0.02),
     // Training control
     savePath: 'PPO_MHA',
-    // fsModelPath: '/assets/models/v32',
+    fsModelPath: '/assets/models/v1',
 };
 
 // Current active experiment
