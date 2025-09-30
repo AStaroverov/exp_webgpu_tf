@@ -53,9 +53,9 @@ export const DEFAULT_EXPERIMENT: Config = {
     clipNorm: 20,
     // PPO-specific parameters
     gamma: (iteration) => {
-        return lerp(0.92, 0.9999, smoothstep(0, 1, iteration / (LEARNING_STEPS * 2)))
+        return lerp(0.92, 0.9999, smoothstep(0, 1, iteration / (LEARNING_STEPS * 2.5)))
     },
-    policyEpochs: 2,
+    policyEpochs: 1,
     policyClipRatio: 0.2,
     policyEntropy: {
         coeff: 0.025,
@@ -63,7 +63,7 @@ export const DEFAULT_EXPERIMENT: Config = {
         reset: Infinity,
     },
 
-    valueEpochs: 2,
+    valueEpochs: 1,
     valueClipRatio: 0.4,
     valueLossCoeff: 0.5,
 
@@ -91,7 +91,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
     episodeFrames: Math.round(2 * 60 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: 6,
+    workerCount: 8,
     backpressureQueueSize: 2,
     // Perturbation of weights
     perturbChance: (iteration) => clamp(1 - iteration / LEARNING_STEPS, 0.01, 0.10),

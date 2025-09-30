@@ -146,9 +146,11 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
             ? 0
             : calculateActionReward(this.tankEid) - this.initialActionReward;
         const stateRewardMultiplier = clamp(1 - (version / LEARNING_STEPS), 0, 1);
-        const actionRewardMultiplier = clamp(version / LEARNING_STEPS, 0, 1);
+        const actionRewardMultiplier = clamp(version / LEARNING_STEPS, 0, 1) - clamp((version - LEARNING_STEPS * 1.5) / LEARNING_STEPS, 0, 1);
+
         const frameReward = getFramePenalty(frame);
         const deathReward = isDead ? -GAME_OVER_REWARD_MULTIPLIER : 0;
+        // it's not all reward, also we have final reward for lose/win in the end of episode
         const reward = clamp(
             stateReward * stateRewardMultiplier
             + actionReward * actionRewardMultiplier
