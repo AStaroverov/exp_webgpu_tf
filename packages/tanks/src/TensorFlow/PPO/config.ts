@@ -39,8 +39,9 @@ export type Config = {
     // Workers
     workerCount: number;
     backpressureQueueSize: number;          // Number of batches in the queue before applying backpressure
-    // perturbWeights
-    perturbWeightsScale: number;
+    // Perturbation of weights
+    perturbChance: (iteration: number) => number;
+    perturbWeightsScale: (iteration: number) => number;
     // Training control
     savePath: string;
     fsModelPath?: string;
@@ -81,7 +82,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     },
 
     batchSize: (iteration) => {
-        return 2048 * clamp(ceil(iteration / (LEARNING_STEPS / 2)), 1, 4);
+        return (4 * 1024) * clamp(ceil(iteration / (LEARNING_STEPS / 2)), 1, 4);
     },
     miniBatchSize: (iteration) => {
         return 64 * clamp(ceil(iteration / (LEARNING_STEPS / 2)), 1, 4);
@@ -92,8 +93,9 @@ export const DEFAULT_EXPERIMENT: Config = {
     // Workers
     workerCount: 6,
     backpressureQueueSize: 2,
-    // perturbWeights
-    perturbWeightsScale: 0.02,
+    // Perturbation of weights
+    perturbChance: (iteration) => clamp(1 - iteration / LEARNING_STEPS, 0.01, 0.10),
+    perturbWeightsScale: (iteration) => clamp(1 - iteration / LEARNING_STEPS, 0.005, 0.02),
     // Training control
     savePath: 'PPO_MHA',
     // fsModelPath: '/assets/models/v32',

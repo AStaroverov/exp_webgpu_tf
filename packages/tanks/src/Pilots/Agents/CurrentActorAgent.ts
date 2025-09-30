@@ -166,8 +166,10 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
 
     private async load() {
         this.policyNetwork = await getNetwork(Model.Policy);
-        if (CONFIG.perturbWeightsScale > 0 && random() > Math.pow(1 - 0.5, 1 / CONFIG.workerCount)) { // 50% for N workers
-            perturbWeights(this.policyNetwork, CONFIG.perturbWeightsScale);
+        const version = getNetworkVersion(this.policyNetwork);
+        const chance = CONFIG.perturbChance(version);
+        if (chance > random()) {
+            perturbWeights(this.policyNetwork, CONFIG.perturbWeightsScale(version));
         }
     }
 }
