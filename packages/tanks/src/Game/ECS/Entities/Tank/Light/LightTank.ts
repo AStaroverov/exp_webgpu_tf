@@ -1,7 +1,14 @@
 import { TColor } from '../../../../../../../renderer/src/ECS/Components/Common.ts';
 
+import { EntityId } from 'bitecs';
+import { PI } from '../../../../../../../../lib/math.ts';
+import { BulletCaliber } from '../../../Components/Bullet.ts';
+import { TankType } from '../../../Components/Tank.ts';
+import { TankEngineType } from '../../../Systems/Tank/TankControllerSystems.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from '../Common/Options.ts';
 import { createTankBase, createTankTurret } from '../Common/Tank.ts';
+import { createTankCaterpillarsParts, createTankHullParts, createTankTurretParts } from '../Common/TankParts.ts';
+import { SIZE } from '../Medium/MediumTankParts.ts';
 import {
     caterpillarLength,
     caterpillarSetLeft,
@@ -13,13 +20,6 @@ import {
     turretGunSet,
     turretHeadSet,
 } from './LightTankParts.ts';
-import { BulletCaliber } from '../../../Components/Bullet.ts';
-import { createTankCaterpillarsParts, createTankHullParts, createTankTurretParts } from '../Common/TankParts.ts';
-import { SIZE } from '../Medium/MediumTankParts.ts';
-import { PI } from '../../../../../../../../lib/math.ts';
-import { TankEngineType } from '../../../Systems/Tank/TankControllerSystems.ts';
-import { TankType } from '../../../Components/Tank.ts';
-import { EntityId } from 'bitecs';
 
 const TRACKS_COLOR = new Float32Array([0.6, 0.6, 0.6, 1]);
 const TURRET_COLOR = new Float32Array([0.6, 1, 0.6, 1]);
@@ -51,7 +51,7 @@ export function createLightTank(opts: {
     options.width = PADDING * 6;
     options.height = PADDING * 6;
     options.turret.rotationSpeed = PI * 0.8;
-    options.turret.reloadingDuration = 100;
+    options.turret.reloadingDuration = 300;
     options.turret.bulletCaliber = BulletCaliber.Light;
     options.turret.bulletStartPosition = [0, -9 * PADDING];
     const [turretEid] = createTankTurret(options, tankEid, tankPid);

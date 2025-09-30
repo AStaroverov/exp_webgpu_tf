@@ -1,9 +1,9 @@
 import { RigidBodyType } from '@dimforge/rapier2d-simd';
 import { TColor } from '../../../../../../../renderer/src/ECS/Components/Common.ts';
-import { createMediumTank } from '../Medium/MediumTank.ts';
-import { TankEngineType } from '../../../Systems/Tank/TankControllerSystems.ts';
 import { BulletCaliber } from '../../../Components/Bullet.ts';
 import { TankType } from '../../../Components/Tank.ts';
+import { TankEngineType } from '../../../Systems/Tank/TankControllerSystems.ts';
+import { createMediumTank } from '../Medium/MediumTank.ts';
 
 export type Options = typeof mutatedOptions;
 

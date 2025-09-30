@@ -1,12 +1,12 @@
+import { query } from 'bitecs';
+import { GlobalTransform } from '../../../../../renderer/src/ECS/Components/Transform.ts';
 import { GameDI } from '../../DI/GameDI.ts';
+import { PlayerRef } from '../Components/PlayerRef.ts';
 import { Tank } from '../Components/Tank.ts';
 import { TankController } from '../Components/TankController.ts';
-import { query } from 'bitecs';
-import { PlayerRef } from '../Components/PlayerRef.ts';
-import { GlobalTransform } from '../../../../../renderer/src/ECS/Components/Transform.ts';
 
-import { spawnBullet } from '../Entities/Bullet.ts';
 import { TankTurret } from '../Components/TankTurret.ts';
+import { spawnBullet } from '../Entities/Bullet.ts';
 
 export function createSpawnerBulletsSystem({ world } = GameDI) {
     return ((delta: number) => {
