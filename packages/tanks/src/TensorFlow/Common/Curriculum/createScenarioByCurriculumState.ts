@@ -2,6 +2,7 @@ import { clamp } from 'lodash';
 import { min } from '../../../../../../lib/math.ts';
 import { random } from '../../../../../../lib/random.ts';
 import { CurriculumState } from '../../PPO/channels.ts';
+import { LEARNING_STEPS } from '../consts.ts';
 import { createBattlefield } from './createBattlefield.ts';
 import { createScenarioAgentsVsBots, indexScenarioAgentsVsBots } from './createScenarioAgentsVsBots.ts';
 import { createScenarioAgentsVsBots1, indexScenarioAgentsVsBots1 } from './createScenarioAgentsVsBots1.ts';
@@ -35,6 +36,12 @@ export const scenariosCount = mapIndexToConstructor.size;
 const edge = 0.3; // 0.3 success ratio to unlock next scenario
 
 export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: ScenarioOptions): Promise<Scenario> {
+    const progress = curriculumState.currentVersion / LEARNING_STEPS;
+    const selfPlayProb = clamp(progress - 0.2, 0, 0.5);
+    if (random() < selfPlayProb) {
+        return createScenarioWithCurrentAgents(options);
+    }
+
     let constructor = createStaticScenarioWithBots;
 
     let weights = [];
