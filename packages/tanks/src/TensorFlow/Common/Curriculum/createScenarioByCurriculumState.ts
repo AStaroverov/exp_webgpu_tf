@@ -37,7 +37,8 @@ const edge = 0.3; // 0.3 success ratio to unlock next scenario
 
 export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: ScenarioOptions): Promise<Scenario> {
     const progress = curriculumState.currentVersion / LEARNING_STEPS;
-    const selfPlayProb = clamp(progress - 0.2, 0, 0.5);
+    // first 50% steps - no self-play
+    const selfPlayProb = clamp(progress - 0.5, 0, 0.5);
     if (random() < selfPlayProb) {
         return createScenarioWithCurrentAgents(options);
     }
