@@ -20,6 +20,7 @@ const mapEntries = [
     [indexScenarioAgentsVsBots1, createScenarioAgentsVsBots1],
     [indexScenarioAgentsVsBots2, createScenarioAgentsVsBots2],
     [indexScenarioWithHistoricalAgents, createScenarioWithHistoricalAgents],
+    // [indexScenarioWithCurrentAgents, createScensarioWithCurrentAgents],
 ] as const;
 const mapIndexToConstructor = new Map<number, (options: ScenarioOptions) => Promise<Scenario>>(mapEntries);
 

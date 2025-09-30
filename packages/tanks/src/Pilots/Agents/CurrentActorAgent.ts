@@ -58,7 +58,7 @@ export type DownloableAgent = {
 export type LearnableAgent = {
     dispose(): void;
     getVersion(): number;
-    getMemory(): AgentMemory;
+    getMemory(): undefined | AgentMemory;
     getMemoryBatch(gameOverReward: number): undefined | AgentMemoryBatch;
     evaluateTankBehaviour(width: number, height: number, frame: number): void;
 }
@@ -76,12 +76,12 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         return this.policyNetwork != null ? getNetworkVersion(this.policyNetwork) : 0;
     }
 
-    public getMemory(): AgentMemory {
-        return this.memory;
+    public getMemory(): undefined | AgentMemory {
+        return this.train ? this.memory : undefined;
     }
 
     public getMemoryBatch(gameOverReward: number): undefined | AgentMemoryBatch {
-        return this.memory.getBatch(gameOverReward);
+        return this.train ? this.memory.getBatch(gameOverReward) : undefined;
     }
 
     public dispose() {
@@ -134,6 +134,7 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         frame: number,
     ) {
         if (!this.train || this.memory.size() === 0) return;
+
         const isDead = getTankHealth(this.tankEid) <= 0;
         const version = this.getVersion();
         const stateReward = calculateStateReward(
