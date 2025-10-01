@@ -49,12 +49,13 @@ export const DEFAULT_EXPERIMENT: Config = {
     clipNorm: 20,
     // PPO-specific parameters
     gamma: (iteration) => {
-        return lerp(0.92, 0.9999, clamp(iteration / (LEARNING_STEPS * 2.5), 0, 1))
+        return lerp(0.92, 0.997, clamp(iteration / (LEARNING_STEPS * 2.5), 0, 1))
     },
     policyEpochs: 1,
     policyClipRatio: 0.2,
-    policyEntropy: (iteration) => {
-        return lerp(0.01, 0.05, clamp(1 - iteration / LEARNING_STEPS * 2, 0, 1))
+    policyEntropy: (iteration, min = 0.01, max = 0.05, totalIterations = LEARNING_STEPS * 2.5) => {
+        const k = Math.log((max - min) / 1e-3) / totalIterations;
+        return min + (max - min) * Math.exp(-k * iteration);
     },
 
     valueEpochs: 1,
