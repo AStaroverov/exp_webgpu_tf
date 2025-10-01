@@ -3,9 +3,8 @@ import { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
 
 interface MHAConfig extends LayerArgs {
     numHeads: number;
-    keyDim: number;      // обычно dModel/numHeads
+    keyDim: number;
 }
-
 
 export class MultiHeadAttentionLayer extends tf.layers.Layer {
     static readonly className = 'MultiHeadAttention';
