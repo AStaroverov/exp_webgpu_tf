@@ -4,18 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "start": "node dist/server.js",
-    "dev": "nodemon --watch 'src/**/*.ts' --exec 'ts-node' src/server.ts",
-    "build": "tsc"
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts"
   },
   "dependencies": {
-    "ably": "^2.0.4",
-    "@tensorflow/tfjs-node": "^4.22.0"
+    "@tensorflow/tfjs-node": "^4.22.0",
+    "ably": "^2.0.4"
   },
   "devDependencies": {
-    "typescript": "^5.8.3",
-    "ts-node": "^10.9.2",
-    "nodemon": "^3.1.4",
     "@dimforge/rapier2d": "^0.14.0",
     "@dimforge/rapier2d-simd": "^0.15.0",
     "@tensorflow/tfjs": "^4.22.0",
@@ -27,7 +23,11 @@
     "events": "^3.3.0",
     "lodash": "^4.17.21",
     "lodash-es": "^4.17.21",
+    "nodemon": "^3.1.4",
     "ring-buffer-ts": "^1.2.0",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.8.3"
   }
 }

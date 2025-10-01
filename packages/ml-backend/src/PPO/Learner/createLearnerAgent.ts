@@ -1,5 +1,5 @@
 import * as tf from '@tensorflow/tfjs';
-import { get } from 'lodash';
+import { get } from 'lodash-es';
 import { getNetworkVersion, patientAction } from '../../Common/utils.ts';
 import { saveNetworkToDB } from '../../Models/Transfer.ts';
 import { getNetwork } from '../../Models/Utils.ts';

@@ -1,9 +1,29 @@
 import * as tf from '@tensorflow/tfjs';
-import { isBrowser } from '../../../../lib/detect.ts';
 import { onReadyRead } from '../Common/Tensor.ts';
 import { getNetworkVersion } from '../Common/utils.ts';
 import { LAST_NETWORK_VERSION, Model } from './def.ts';
-import { getIndexedDBModelPath, removeOutLimitNetworks, shouldSaveHistoricalVersion } from './Utils.ts';
+import { shouldSaveHistoricalVersion } from './Utils.ts';
+
+// Node.js file system paths for models
+import { mkdirSync } from 'fs';
+import { resolve } from 'path';
+const MODELS_DIR = process.env.MODELS_DIR || './models';
+
+function getNodeModelSavePath(version: number) {
+    const absPath = resolve(MODELS_DIR, `v${version}`);
+    try {
+        mkdirSync(absPath, { recursive: true });
+    } catch (e) {
+        // Directory might already exist
+    }
+    return `file://${absPath}`;
+}
+
+function getNodeModelLoadPath(name: Model, version: number) {
+    // For loading: models/v{version}/{model-name}.json
+    const absPath = resolve(MODELS_DIR, `v${version}/${name}.json`);
+    return `file://${absPath}`;
+}
 
 export async function saveNetworkToDB(network: tf.LayersModel, name: Model) {
     await onReadyRead();
@@ -11,25 +31,16 @@ export async function saveNetworkToDB(network: tf.LayersModel, name: Model) {
     const networkVersion = getNetworkVersion(network);
     const shouldSaveHistorical = await shouldSaveHistoricalVersion(name, networkVersion);
 
-    if (isBrowser) {
-        if (shouldSaveHistorical) {
-            console.info('Saving historical version of network:', name, networkVersion);
-            void network.save(getIndexedDBModelPath(name, networkVersion), { includeOptimizer: true });
-            void removeOutLimitNetworks(name);
-        }
-
-        return network.save(getIndexedDBModelPath(name, LAST_NETWORK_VERSION), { includeOptimizer: true });
+    if (shouldSaveHistorical) {
+        console.info('Saving historical version of network:', name, networkVersion);
+        await network.save(getNodeModelSavePath(networkVersion), { includeOptimizer: true });
     }
 
-    throw new Error('Unsupported environment for saving model');
+    return network.save(getNodeModelSavePath(LAST_NETWORK_VERSION), { includeOptimizer: true });
 }
 
 export function loadNetworkFromDB(name: Model, version: number) {
-    if (isBrowser) {
-        return tf.loadLayersModel(getIndexedDBModelPath(name, version));
-    }
-
-    throw new Error('Unsupported environment for loading model');
+    return tf.loadLayersModel(getNodeModelLoadPath(name, version));
 }
 
 export async function loadLastNetworkFromDB(name: Model) {
@@ -37,14 +48,9 @@ export async function loadLastNetworkFromDB(name: Model) {
 }
 
 export async function loadNetworkFromFS(path: string, name: Model) {
-    if (isBrowser) {
-        const modelPath = `${path}/${name}.json`;
-        const model = await tf.loadLayersModel(modelPath);
-
-        return model;
-    }
-
-    throw new Error('Unsupported environment for loading model');
+    const modelPath = path.startsWith('file://') ? path : `file://${path}/${name}.json`;
+    const model = await tf.loadLayersModel(modelPath);
+    return model;
 }
 
 export function downloadNetwork(name: Model) {

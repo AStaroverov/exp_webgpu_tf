@@ -1,8 +1,10 @@
 import { getNetworkLearningRate, getNetworkVersion } from '../../Common/utils.ts';
 
 import * as tf from '@tensorflow/tfjs';
-import { RingBuffer } from 'ring-buffer-ts';
+import { createRequire } from 'module';
 import { ceil, floor, max, mean, min } from '../../../../../lib/math.ts';
+const require = createRequire(import.meta.url);
+const { RingBuffer } = require('ring-buffer-ts');
 // import { metricsChannels } from '../../Common/channels.ts'; // metrics disabled
 import { flatTypedArray } from '../../Common/flat.ts';
 import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';

@@ -1,4 +1,4 @@
-import { clamp } from 'lodash';
+import { clamp } from 'lodash-es';
 import { ceil, lerp, smoothstep } from '../../../../lib/math.ts';
 import { LEARNING_STEPS, TICK_TIME_SIMULATION } from '../Common/consts.ts';
 
