@@ -1,5 +1,5 @@
 import { clamp } from 'lodash';
-import { ceil, lerp, smoothstep } from '../../../../lib/math.ts';
+import { ceil, lerp } from '../../../../../lib/math.ts';
 import { LEARNING_STEPS, TICK_TIME_SIMULATION } from '../Common/consts.ts';
 
 export type Config = {
@@ -9,11 +9,7 @@ export type Config = {
     // PPO-specific parameters
     policyEpochs: number;                // Number of epochs to train on policy network
     policyClipRatio: number;             // Clipping ratio for PPO
-    policyEntropy: {
-        coeff: number;
-        limit: number;
-        reset: number;
-    }
+    policyEntropy: (iteration: number) => number
 
     valueEpochs: number;                  // Number of epochs to train the value network
     valueClipRatio: number;             // Clipping ratio for PPO
@@ -53,14 +49,12 @@ export const DEFAULT_EXPERIMENT: Config = {
     clipNorm: 20,
     // PPO-specific parameters
     gamma: (iteration) => {
-        return lerp(0.92, 0.9999, smoothstep(0, 1, iteration / (LEARNING_STEPS * 2.5)))
+        return lerp(0.92, 0.9999, clamp(iteration / (LEARNING_STEPS * 2.5), 0, 1))
     },
     policyEpochs: 1,
     policyClipRatio: 0.2,
-    policyEntropy: {
-        coeff: 0.025,
-        limit: LEARNING_STEPS * 2,
-        reset: Infinity,
+    policyEntropy: (iteration) => {
+        return lerp(0.01, 0.05, clamp(1 - iteration / LEARNING_STEPS * 2, 0, 1))
     },
 
     valueEpochs: 1,
