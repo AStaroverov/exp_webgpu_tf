@@ -42,22 +42,11 @@ export function createSupabaseIOHandler(
             }
 
             try {
-                // Prepare model.json content
-                const modelJSON = {
-                    modelTopology: modelArtifacts.modelTopology,
-                    weightsManifest: [
-                        {
-                            paths: [`${modelName}.weights.bin`],
-                            weights: modelArtifacts.weightSpecs,
-                        },
-                    ],
-                    format: modelArtifacts.format,
-                    generatedBy: modelArtifacts.generatedBy,
-                    convertedBy: modelArtifacts.convertedBy,
-                };
+                // Prepare model.json content (everything except weightData)
+                const { weightData, ...modelJSON } = modelArtifacts;
 
                 // Convert weights to ArrayBuffer
-                const weightsBuffer = tf.io.CompositeArrayBuffer.join(modelArtifacts.weightData);
+                const weightsBuffer = tf.io.CompositeArrayBuffer.join(weightData);
 
                 // Upload to Supabase: v{version}/{modelName}.json and .weights.bin
                 const basePath = `v${version}`;

@@ -1,6 +1,6 @@
-import { loadLastNetwork, loadNetworkByPath, saveNetwork } from '../Transfer.ts';
-import { disposeNetwork } from '../Utils.ts';
-import { Model } from '../def.ts';
+import { loadLastNetwork, loadNetworkByPath, saveNetwork } from './Transfer.ts';
+import { disposeNetwork } from './Utils.ts';
+import { Model } from './def.ts';
 
 /**
  * Restore models from DB or filesystem
