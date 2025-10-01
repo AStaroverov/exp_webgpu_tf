@@ -1,5 +1,5 @@
+import { get } from 'lodash-es';
 import { fromEvent, map, merge, Subject } from 'rxjs';
-import { get } from 'lodash';
 
 export function createChannel<Req, Res = unknown>(name: string) {
     const request = new Subject<Req>();
