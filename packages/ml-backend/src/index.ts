@@ -13,7 +13,7 @@ import 'dotenv/config';
 
 import { forceExitChannel } from './Common/channels.ts';
 import { initTensorFlow } from './Common/initTensorFlow.ts';
-import { restoreModels } from './Models/Trained/restore.ts';
+import { restoreModels } from './Models/restore.ts';
 import { createLearnerManager } from './PPO/Learner/createLearnerManager.ts';
 import { createPolicyLearnerAgent } from './PPO/Learner/createPolicyLearnerAgent.ts';
 import { createValueLearnerAgent } from './PPO/Learner/createValueLearnerAgent.ts';
