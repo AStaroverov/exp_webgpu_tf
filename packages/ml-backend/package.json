@@ -8,6 +8,7 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.58.0",
     "@tensorflow/tfjs-node": "^4.22.0",
     "ably": "^2.0.4"
   },

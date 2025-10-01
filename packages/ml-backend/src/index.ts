@@ -13,6 +13,7 @@ import 'dotenv/config';
 
 import { forceExitChannel } from './Common/channels.ts';
 import { initTensorFlow } from './Common/initTensorFlow.ts';
+import { restoreModels } from './Models/Trained/restore.ts';
 import { createLearnerManager } from './PPO/Learner/createLearnerManager.ts';
 import { createPolicyLearnerAgent } from './PPO/Learner/createPolicyLearnerAgent.ts';
 import { createValueLearnerAgent } from './PPO/Learner/createValueLearnerAgent.ts';
@@ -20,24 +21,32 @@ import { createValueLearnerAgent } from './PPO/Learner/createValueLearnerAgent.t
 console.info('🚀 ML Backend starting...');
 
 // Initialize TensorFlow with Node.js backend
-initTensorFlow().then(() => {
-    console.info('✅ TensorFlow initialized');
+initTensorFlow()
+    .then(() => {
+        console.info('✅ TensorFlow initialized');
 
-    // Start learner agents (policy and value)
-    createPolicyLearnerAgent();
-    createValueLearnerAgent();
-    console.info('✅ Learner agents started');
+        // Restore models from DB or fallback path
+        return restoreModels('./assets/models/v1');
+    })
+    .then(() => {
+        console.info('✅ Models restored');
 
-    // Start learner manager (batch processing)
-    createLearnerManager();
-    console.info('✅ Learner manager started');
+        // Start learner agents (policy and value)
+        createPolicyLearnerAgent();
+        createValueLearnerAgent();
+        console.info('✅ Learner agents started');
 
-    console.info('🎯 Ready to receive experience batches via episodeSampleChannel');
-    console.info('   To test: emit data to episodeSampleChannel with memoryBatch, networkVersion, scenarioIndex, successRatio');
-}).catch((error) => {
-    console.error('❌ Failed to initialize:', error);
-    process.exit(1);
-});
+        // Start learner manager (batch processing)
+        createLearnerManager();
+        console.info('✅ Learner manager started');
+
+        console.info('🎯 Ready to receive experience batches via episodeSampleChannel');
+        console.info('   Models will be synced to Supabase automatically');
+    })
+    .catch((error) => {
+        console.error('❌ Failed to initialize:', error);
+        process.exit(1);
+    });
 
 // Handle force exit signal
 forceExitChannel.obs.subscribe(() => {
