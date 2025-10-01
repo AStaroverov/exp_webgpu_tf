@@ -53,7 +53,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     },
     policyEpochs: 1,
     policyClipRatio: 0.2,
-    policyEntropy: (iteration, min = 0.01, max = 0.05, totalIterations = LEARNING_STEPS * 2.5) => {
+    policyEntropy: (iteration, min = 0.01, max = 0.05, totalIterations = LEARNING_STEPS * 5) => {
         const k = Math.log((max - min) / 1e-3) / totalIterations;
         return min + (max - min) * Math.exp(-k * iteration);
     },
