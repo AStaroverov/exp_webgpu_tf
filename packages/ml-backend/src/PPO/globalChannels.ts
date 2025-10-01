@@ -46,4 +46,4 @@ export const episodeSampleChannel = createAblyChannel<EpisodeSample>('ml:experie
 export const queueSizeChannel = createAblyChannel<number>('ml:queue-size.v1');
 export const curriculumStateChannel = createAblyChannel<CurriculumState>('ml:curriculum.v1');
 
-export const modselVersionChannel = createAblyChannel<{ model: string, version: number }>('ml:model.weights.v1');
+export const modelVersionChannel = createAblyChannel<{ model: string, version: number }>('ml:model.weights.v1');

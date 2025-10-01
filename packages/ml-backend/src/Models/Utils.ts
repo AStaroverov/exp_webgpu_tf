@@ -1,12 +1,11 @@
 import * as tf from '@tensorflow/tfjs';
 import { LayersModel } from '@tensorflow/tfjs';
 import { isFunction } from 'lodash-es';
-import { isBrowser } from '../../../../lib/detect.ts';
-import { random, randomRangeInt } from '../../../../lib/random.ts';
+import { random } from '../../../../lib/random.ts';
 import { patientAction } from '../Common/utils.ts';
 import { CONFIG } from '../PPO/config.ts';
 import { LAST_NETWORK_VERSION, Model, NetworkInfo } from './def.ts';
-import { loadLastNetworkFromDB, loadNetworkFromDB } from './Transfer.ts';
+import { loadLastNetwork } from './Transfer.ts';
 
 export function disposeNetwork(network: LayersModel) {
     network.optimizer?.dispose();
@@ -23,15 +22,11 @@ export function getVersionFromStorePath(path: string): number {
     return splitted.length == 2 ? Number(splitted[1]) : LAST_NETWORK_VERSION;
 }
 
-export function getIndexedDBModelPath(name: string, version: number): string {
-    return `indexeddb://${getStorePath(name, version)}`;
-}
-
 export async function getNetwork(modelName: Model, getInitial?: () => tf.LayersModel) {
     let network: undefined | tf.LayersModel;
 
     try {
-        network = await patientAction(() => loadLastNetworkFromDB(modelName), isFunction(getInitial) ? 1 : 10);
+        network = await patientAction(() => loadLastNetwork(modelName), isFunction(getInitial) ? 1 : 10);
     } catch (error) {
         console.warn(`[getNetwork] Could not load model ${modelName} from DB:`, error);
         network = getInitial?.();
@@ -44,14 +39,7 @@ export async function getNetwork(modelName: Model, getInitial?: () => tf.LayersM
     return network;
 }
 
-export async function getRandomHistoricalNetwork(modelName: Model) {
-    const randomInfo = await getRandomNetworkInfo(modelName);
-    let version = getVersionFromStorePath(randomInfo.name);
-    version = Number.isNaN(version) ? LAST_NETWORK_VERSION : version;
-    return patientAction(() => loadNetworkFromDB(modelName, version), 10);
-}
-
-const defaultSubNames = {
+export const defaultSubNames = {
     [Model.Policy]: getStorePath(Model.Policy, LAST_NETWORK_VERSION),
     [Model.Value]: getStorePath(Model.Value, LAST_NETWORK_VERSION),
 };
@@ -67,11 +55,6 @@ export async function getNetworkInfoList(model: Model) {
         }
         return acc;
     }, [] as NetworkInfo[]));
-}
-
-export async function getRandomNetworkInfo(model: Model) {
-    const list = await getNetworkInfoList(model);
-    return list[randomRangeInt(0, list.length - 1)];
 }
 
 export async function getPenultimateNetworkVersion(name: Model): Promise<number | undefined> {
@@ -100,25 +83,4 @@ export async function shouldSaveHistoricalVersion(name: Model, version: number) 
     }
 
     return version - penultimateNetworkVersion > step;
-}
-
-const NETWORKS_LIMIT_COUNT = 20;
-
-export async function removeOutLimitNetworks(name: Model) {
-    const list = await getNetworkInfoList(name);
-
-    if (list.length > NETWORKS_LIMIT_COUNT) {
-        const forRemove = list
-            .sort((a, b) => a.dateSaved.getTime() - b.dateSaved.getTime())
-            .slice(0, list.length - NETWORKS_LIMIT_COUNT);
-
-
-        if (isBrowser) {
-            for (const networkInfo of forRemove) {
-                tf.io.removeModel(networkInfo.path);
-            }
-        } else {
-            throw new Error('Unsupported environment for removing model');
-        }
-    }
 }
