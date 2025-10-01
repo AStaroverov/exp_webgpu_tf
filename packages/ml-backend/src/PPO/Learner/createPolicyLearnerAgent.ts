@@ -3,7 +3,7 @@ import { getNetworkLearningRate, getNetworkVersion } from '../../Common/utils.ts
 import * as tf from '@tensorflow/tfjs';
 import { RingBuffer } from 'ring-buffer-ts';
 import { ceil, floor, max, mean, min } from '../../../../../lib/math.ts';
-import { metricsChannels } from '../../Common/channels.ts';
+// import { metricsChannels } from '../../Common/channels.ts'; // metrics disabled
 import { flatTypedArray } from '../../Common/flat.ts';
 import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
 import { createInputTensors } from '../../Common/InputTensors.ts';
@@ -126,9 +126,9 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
 
             learningRateChannel.emit(lr);
 
-            metricsChannels.lr.postMessage([lr]);
-            metricsChannels.kl.postMessage(klList);
-            metricsChannels.policyLoss.postMessage(policyLossList);
+            // metricsChannels.lr.postMessage([lr]);
+            // metricsChannels.kl.postMessage(klList);
+            // metricsChannels.policyLoss.postMessage(policyLossList);
         });
 }
 
