@@ -26,7 +26,7 @@ export function createPolicyLearnerAgent() {
     });
 }
 
-const klHistory = new RingBuffer<number>(25);
+const klHistory = new RingBuffer<number>(10 * CONFIG.policyEpochs);
 
 function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const version = getNetworkVersion(network);
