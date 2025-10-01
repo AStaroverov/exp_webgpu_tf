@@ -2,6 +2,41 @@
 
 Минимальный сервис обучения (Node.js + tfjs) для игры: принимает опыт, обучает модель, раздаёт веса. Цель — быстро получить рабочий цикл, без продакшен-избыточности.
 
+## Текущий статус ✅
+### Выполнено:
+- ✅ Удалены все клиентские части: Actor, VisTest, Curriculum, Reward, UI utilities
+- ✅ Удалены воркеры: ActorWorker, LearnerPolicyWorker, LearnerValueWorker, старый PPO/index.ts
+- ✅ Заменён BroadcastChannel на RxJS Subject shim с совместимым API (postMessage, onmessage, obs)
+- ✅ Метрики закомментированы во всех learner файлах (легко восстановить)
+- ✅ Curriculum logic закомментирован в createLearnerManager (successRatio tracking)
+- ✅ Создана точка входа: `src/index.ts` инициализирует TF, запускает learner agents и manager
+- ✅ Проект компилируется без ошибок
+
+### Структура кода:
+```
+src/
+  index.ts                    # Entry point (TF init, agents start)
+  Common/
+    channels.ts               # RxJS Subject shim (forceExitChannel, metricsChannels stubs)
+    <training utils>          # Memory, Tensor, computeLogProb, flat, etc.
+  Models/
+    <network definitions>     # Policy/Value architecture, layers
+  PPO/
+    channels.ts               # episodeSampleChannel, learnProcessChannel, queueSizeChannel
+    config.ts                 # Training hyperparameters
+    train.ts                  # V-trace, advantages computation
+    Learner/
+      createLearnerManager.ts       # Batch accumulation & V-trace
+      createPolicyLearnerAgent.ts   # PPO policy training
+      createValueLearnerAgent.ts    # Value function training
+```
+
+### Что осталось:
+- ⏳ Подключить Ably для приёма `ml:experience.v1` → `episodeSampleChannel`
+- ⏳ Публиковать веса в `ml:model.weights.v1` после каждого checkpoint
+- ⏳ Настроить .env для секретов (ABLY_API_KEY)
+- ⏳ Локальный тест: синтетическая генерация данных для проверки цикла
+
 ## Текущее упрощение
 - Один поток: убраны воркеры и BroadcastChannel → заменено на простой RxJS Subject shim.
 - Метрики (визуализация/каналы) отключены: код отправки закомментирован, чтобы можно было легко включить снова.

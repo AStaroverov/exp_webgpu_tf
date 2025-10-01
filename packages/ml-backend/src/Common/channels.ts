@@ -1,10 +1,11 @@
 // Single-thread refactor: BroadcastChannel заменён на лёгкий RxJS Subject-шим.
 // Сохраняем похожий интерфейс (postMessage, onmessage) для минимальных правок.
-import { Subject } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
 
 type ShimChannel<T = any> = {
     postMessage: (data: T) => void,
-    onmessage: ((e: { data: T }) => void) | null
+    onmessage: ((e: { data: T }) => void) | null,
+    obs: Observable<T>
 };
 
 function createChannel<T = any>(): ShimChannel<T> {
@@ -15,6 +16,7 @@ function createChannel<T = any>(): ShimChannel<T> {
         postMessage: (data: T) => subj.next(data),
         get onmessage() { return handler; },
         set onmessage(fn) { handler = fn; },
+        obs: subj.asObservable()
     } as ShimChannel<T>;
 }
 
