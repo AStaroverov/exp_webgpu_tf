@@ -6,19 +6,19 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import * as tf from '@tensorflow/tfjs';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const SUPABASE_KEY = process.env.SUPABASE_KEY || '';
 const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET || 'Models';
 
 let supabase: SupabaseClient | null = null;
 
 function getSupabaseClient(): SupabaseClient | null {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
         console.warn('⚠️  Supabase credentials not set, model sync disabled');
         return null;
     }
 
     if (!supabase) {
-        supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         console.info('✅ Supabase client initialized');
     }
 
@@ -49,18 +49,18 @@ export function createSupabaseIOHandler(
                 const weightsBuffer = tf.io.CompositeArrayBuffer.join(weightData);
 
                 // Upload to Supabase: v{version}/{modelName}.json and .weights.bin
-                const basePath = `v${version}`;
+                const basePath = `v${version}-${modelName}`;
 
                 const [jsonResult, weightsResult] = await Promise.all([
                     client.storage
                         .from(SUPABASE_BUCKET)
-                        .upload(`${basePath}/${modelName}.json`, JSON.stringify(modelJSON), {
+                        .upload(`${basePath}/model.json`, JSON.stringify(modelJSON), {
                             contentType: 'application/json',
                             upsert: true,
                         }),
                     client.storage
                         .from(SUPABASE_BUCKET)
-                        .upload(`${basePath}/${modelName}.weights.bin`, weightsBuffer, {
+                        .upload(`${basePath}/weights.bin`, weightsBuffer, {
                             contentType: 'application/octet-stream',
                             upsert: true,
                         }),
@@ -103,5 +103,5 @@ export function getModelPublicUrl(modelName: string, version: number): string | 
  * Check if Supabase is configured
  */
 export function isSupabaseConfigured(): boolean {
-    return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+    return Boolean(SUPABASE_URL && SUPABASE_KEY);
 }
