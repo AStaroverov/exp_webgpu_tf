@@ -26,7 +26,7 @@ initTensorFlow()
         console.info('✅ TensorFlow initialized');
 
         // Restore models from DB or fallback path
-        return restoreModels('./assets/models/v1');
+        return restoreModels('./models/downloaded/v0');
     })
     .then(() => {
         console.info('✅ Models restored');

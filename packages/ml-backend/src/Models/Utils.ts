@@ -1,20 +1,18 @@
 import * as tf from '@tensorflow/tfjs';
 import { LayersModel } from '@tensorflow/tfjs';
+import { existsSync, readdirSync, statSync } from 'fs';
 import { isFunction } from 'lodash-es';
+import { resolve } from 'path';
 import { random } from '../../../../lib/random.ts';
 import { patientAction } from '../Common/utils.ts';
-import { CONFIG } from '../PPO/config.ts';
 import { LAST_NETWORK_VERSION, Model, NetworkInfo } from './def.ts';
 import { loadLastNetwork } from './Transfer.ts';
+
+const MODELS_DIR = process.env.MODELS_DIR || './models';
 
 export function disposeNetwork(network: LayersModel) {
     network.optimizer?.dispose();
     network.dispose();
-}
-
-export function getStorePath(name: string, version: number): string {
-    const postfix = version === LAST_NETWORK_VERSION ? '' : `|version:${version}`;
-    return `${CONFIG.savePath}-${name}${postfix}`;
 }
 
 export function getVersionFromStorePath(path: string): number {
@@ -39,38 +37,84 @@ export async function getNetwork(modelName: Model, getInitial?: () => tf.LayersM
     return network;
 }
 
-export const defaultSubNames = {
-    [Model.Policy]: getStorePath(Model.Policy, LAST_NETWORK_VERSION),
-    [Model.Value]: getStorePath(Model.Value, LAST_NETWORK_VERSION),
-};
+/**
+ * Get list of saved model versions from filesystem
+ */
+export async function getNetworkInfoList(model: Model): Promise<NetworkInfo[]> {
+    const networkInfoList: NetworkInfo[] = [];
 
-export async function getNetworkInfoList(model: Model) {
-    return tf.io.listModels().then((v) => Object.entries(v).reduce((acc, [name, info]) => {
-        if (name.includes(defaultSubNames[model])) {
-            acc.push({
-                name: name.split('://')[1],
-                path: name,
-                dateSaved: info.dateSaved,
+    if (!existsSync(MODELS_DIR)) {
+        return networkInfoList;
+    }
+
+    try {
+        const entries = readdirSync(MODELS_DIR, { withFileTypes: true });
+
+        for (const entry of entries) {
+            if (!entry.isDirectory()) {
+                continue;
+            }
+
+            // Parse v{version}-{model} format
+            const match = entry.name.match(/^v(\d+)-(.+)$/);
+            if (!match) {
+                continue;
+            }
+
+            const [, versionStr, modelName] = match;
+            const version = parseInt(versionStr);
+
+            // Filter by model name (e.g., 'policy-model' or 'value-model')
+            if (isNaN(version) || modelName !== model) {
+                continue;
+            }
+
+            const modelPath = resolve(MODELS_DIR, entry.name, 'model.json');
+            if (!existsSync(modelPath)) {
+                continue;
+            }
+
+            const stats = statSync(modelPath);
+            networkInfoList.push({
+                name: `v${version}`,
+                path: modelPath,
+                dateSaved: stats.mtime,
             });
         }
-        return acc;
-    }, [] as NetworkInfo[]));
+
+        // Sort by date descending (newest first)
+        networkInfoList.sort((a, b) => b.dateSaved.getTime() - a.dateSaved.getTime());
+
+        return networkInfoList;
+    } catch (error) {
+        console.error('Error reading model directories:', error);
+        return [];
+    }
 }
 
+/**
+ * Get the second newest (penultimate) network version
+ */
 export async function getPenultimateNetworkVersion(name: Model): Promise<number | undefined> {
-    const defaultSubName = defaultSubNames[name];
-    const penultimate = (await getNetworkInfoList(name)).reduce((acc, info) => {
-        if (info.name !== defaultSubName && (acc === undefined || acc.dateSaved < info.dateSaved)) {
-            return info;
-        }
-        return acc;
-    }, undefined as undefined | NetworkInfo);
+    const networkList = await getNetworkInfoList(name);
 
-    return penultimate === undefined ? undefined : getVersionFromStorePath(penultimate.name);
+    // Filter out LAST_NETWORK_VERSION (v0) and get the second item
+    const historicalVersions = networkList.filter((info) => {
+        const version = parseInt(info.name.slice(1));
+        return version !== LAST_NETWORK_VERSION;
+    });
+
+    if (historicalVersions.length === 0) {
+        return undefined;
+    }
+
+    // Already sorted by date descending, so first item is the latest historical version
+    const version = parseInt(historicalVersions[0].name.slice(1));
+    return isNaN(version) ? undefined : version;
 }
 
-export async function shouldSaveHistoricalVersion(name: Model, version: number) {
-    const step = 100_000; // 100_000 / epoch * batch/mini_batch == 625 learns steps
+export async function shouldSaveHistoricalVersion(name: Model, version: number): Promise<boolean> {
+    const step = 100_000;
     const penultimateNetworkVersion = await getPenultimateNetworkVersion(name);
 
     if (penultimateNetworkVersion == null) {
@@ -82,5 +126,5 @@ export async function shouldSaveHistoricalVersion(name: Model, version: number) 
         return random() > 0.9;
     }
 
-    return version - penultimateNetworkVersion > step;
+    return (version - penultimateNetworkVersion) > step;
 }
