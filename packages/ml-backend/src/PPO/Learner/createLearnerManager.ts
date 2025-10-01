@@ -1,4 +1,3 @@
-import { RingBuffer } from 'ring-buffer-ts';
 import { concatMap, first, forkJoin, map, mergeMap, scan, tap } from 'rxjs';
 import { max } from '../../../../../lib/math.ts';
 import { bufferWhile } from '../../../../../lib/Rx/bufferWhile.ts';
@@ -9,9 +8,6 @@ import { getNetworkVersion } from '../../Common/utils.ts';
 import { Model } from '../../Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
 import {
-    CurriculumState,
-    curriculumStateChannel,
-    EpisodeSample,
     episodeSampleChannel,
     learnProcessChannel,
     queueSizeChannel,
@@ -29,31 +25,32 @@ export type LearnData = AgentMemoryBatch & {
 export function createLearnerManager() {
     let lastEndTime = 0;
     let queueSize = 0;
-    const mapScenarioIndexToSuccessRatio = new Map<number, RingBuffer<number>>;
-    const mapScenarioIndexToAvgSuccessRatio = new Map<number, number>;
-    const computeCurriculumState = (samples: EpisodeSample[]): CurriculumState => {
-        for (const sample of samples) {
-            if (!mapScenarioIndexToSuccessRatio.has(sample.scenarioIndex)) {
-                mapScenarioIndexToSuccessRatio.set(sample.scenarioIndex, new RingBuffer(30));
-            }
-            mapScenarioIndexToSuccessRatio.get(sample.scenarioIndex)!.add(sample.successRatio);
-        }
+    // Curriculum disabled (no client-side scenarios)
+    // const mapScenarioIndexToSuccessRatio = new Map<number, RingBuffer<number>>;
+    // const mapScenarioIndexToAvgSuccessRatio = new Map<number, number>;
+    // const computeCurriculumState = (samples: EpisodeSample[]): CurriculumState => {
+    //     for (const sample of samples) {
+    //         if (!mapScenarioIndexToSuccessRatio.has(sample.scenarioIndex)) {
+    //             mapScenarioIndexToSuccessRatio.set(sample.scenarioIndex, new RingBuffer(30));
+    //         }
+    //         mapScenarioIndexToSuccessRatio.get(sample.scenarioIndex)!.add(sample.successRatio);
+    //     }
 
-        for (const [scenarioIndex, successRatioHistory] of mapScenarioIndexToSuccessRatio) {
-            const length = successRatioHistory.getBufferLength();
-            const size = successRatioHistory.getSize();
-            const ratio = length > size / 2
-                ? successRatioHistory.toArray().reduce((acc, v) => acc + v, 0) / length
-                : 0;
+    //     for (const [scenarioIndex, successRatioHistory] of mapScenarioIndexToSuccessRatio) {
+    //         const length = successRatioHistory.getBufferLength();
+    //         const size = successRatioHistory.getSize();
+    //         const ratio = length > size / 2
+    //             ? successRatioHistory.toArray().reduce((acc, v) => acc + v, 0) / length
+    //             : 0;
 
-            mapScenarioIndexToAvgSuccessRatio.set(scenarioIndex, ratio);
-        }
+    //         mapScenarioIndexToAvgSuccessRatio.set(scenarioIndex, ratio);
+    //     }
 
-        return {
-            currentVersion: max(...samples.map(s => s.networkVersion), 0),
-            mapScenarioIndexToSuccessRatio: Object.fromEntries(mapScenarioIndexToAvgSuccessRatio),
-        };
-    };
+    //     return {
+    //         currentVersion: max(...samples.map(s => s.networkVersion), 0),
+    //         mapScenarioIndexToSuccessRatio: Object.fromEntries(mapScenarioIndexToAvgSuccessRatio),
+    //     };
+    // };
 
     episodeSampleChannel.obs.pipe(
         bufferWhile((batches) => {
@@ -66,7 +63,7 @@ export function createLearnerManager() {
 
             console.info('Start processing batch', waitTime !== undefined ? `(waited ${waitTime} ms)` : '');
 
-            curriculumStateChannel.emit(computeCurriculumState(samples));
+            // curriculumStateChannel.emit(computeCurriculumState(samples)); // disabled: no client scenarios
             // metrics disabled: batchSize, successRatio
 
             return forkJoin([
