@@ -1,25 +1,39 @@
-export const forceExitChannel = new BroadcastChannel('exit');
+// Single-thread refactor: BroadcastChannel заменён на лёгкий RxJS Subject-шим.
+// Сохраняем похожий интерфейс (postMessage, onmessage) для минимальных правок.
+import { Subject } from 'rxjs';
 
-if (globalThis.document != null) {
-    // we cannot listen forceExitChannel, because don't send message at the same thread
-    new BroadcastChannel('exit').onmessage = () => {
-        globalThis.location.reload();
-    };
+type ShimChannel<T = any> = {
+    postMessage: (data: T) => void,
+    onmessage: ((e: { data: T }) => void) | null
+};
+
+function createChannel<T = any>(): ShimChannel<T> {
+    const subj = new Subject<T>();
+    let handler: ((e: { data: T }) => void) | null = null;
+    subj.subscribe((data) => handler && handler({ data }));
+    return {
+        postMessage: (data: T) => subj.next(data),
+        get onmessage() { return handler; },
+        set onmessage(fn) { handler = fn; },
+    } as ShimChannel<T>;
 }
 
+export const forceExitChannel = createChannel<null>();
+
+// Метрики временно отключены (см. требование) — каналы оставлены как заглушки.
 export const metricsChannels = {
-    rewards: new BroadcastChannel('rewards'),
-    values: new BroadcastChannel('value'),
-    returns: new BroadcastChannel('returns'),
-    tdErrors: new BroadcastChannel('tdErrors'),
-    advantages: new BroadcastChannel('advantages'),
-    kl: new BroadcastChannel('kl'),
-    lr: new BroadcastChannel('lr'),
-    valueLoss: new BroadcastChannel('valueLoss'),
-    policyLoss: new BroadcastChannel('policyLoss'),
-    trainTime: new BroadcastChannel('trainTime'),
-    waitTime: new BroadcastChannel('waitTime'),
-    batchSize: new BroadcastChannel('batchSize'),
-    versionDelta: new BroadcastChannel('versionDelta'),
-    successRatio: new BroadcastChannel('successRatio'),
+    rewards: createChannel<number[] | Float32Array>(),
+    values: createChannel<number[] | Float32Array>(),
+    returns: createChannel<number[] | Float32Array>(),
+    tdErrors: createChannel<number[] | Float32Array>(),
+    advantages: createChannel<number[] | Float32Array>(),
+    kl: createChannel<number[] | Float32Array>(),
+    lr: createChannel<number[] | Float32Array>(),
+    valueLoss: createChannel<number[] | Float32Array>(),
+    policyLoss: createChannel<number[] | Float32Array>(),
+    trainTime: createChannel<number[]>(),
+    waitTime: createChannel<number[]>(),
+    batchSize: createChannel<number[]>(),
+    versionDelta: createChannel<number[]>(),
+    successRatio: createChannel<any>(),
 };

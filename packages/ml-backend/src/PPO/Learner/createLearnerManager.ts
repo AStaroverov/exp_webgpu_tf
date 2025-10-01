@@ -1,9 +1,8 @@
-import { pick } from 'lodash-es';
 import { RingBuffer } from 'ring-buffer-ts';
 import { concatMap, first, forkJoin, map, mergeMap, scan, tap } from 'rxjs';
 import { max } from '../../../../../lib/math.ts';
 import { bufferWhile } from '../../../../../lib/Rx/bufferWhile.ts';
-import { forceExitChannel, metricsChannels } from '../../Common/channels.ts';
+import { forceExitChannel } from '../../Common/channels.ts'; // metrics disabled
 import { flatTypedArray } from '../../Common/flat.ts';
 import { AgentMemoryBatch } from '../../Common/Memory.ts';
 import { getNetworkVersion } from '../../Common/utils.ts';
@@ -68,8 +67,7 @@ export function createLearnerManager() {
             console.info('Start processing batch', waitTime !== undefined ? `(waited ${waitTime} ms)` : '');
 
             curriculumStateChannel.emit(computeCurriculumState(samples));
-            metricsChannels.batchSize.postMessage(samples.map(b => b.memoryBatch.size));
-            metricsChannels.successRatio.postMessage(samples.map(b => pick(b, 'scenarioIndex', 'successRatio')));
+            // metrics disabled: batchSize, successRatio
 
             return forkJoin([
                 getNetwork(Model.Policy),
@@ -92,9 +90,9 @@ export function createLearnerManager() {
                     disposeNetwork(policyNetwork);
                     disposeNetwork(valueNetwork);
 
-                    metricsChannels.versionDelta.postMessage(
-                        samples.map(b => version - b.networkVersion),
-                    );
+                    // metricsChannels.versionDelta.postMessage(
+                    //     samples.map(b => version - b.networkVersion),
+                    // ); // disabled metrics
 
                     return learnData;
                 }),
@@ -115,14 +113,14 @@ export function createLearnerManager() {
 
                             lastEndTime = Date.now();
 
-                            metricsChannels.rewards.postMessage(batch.rewards);
-                            metricsChannels.values.postMessage(batch.values);
-                            metricsChannels.returns.postMessage(batch.returns);
-                            metricsChannels.tdErrors.postMessage(batch.tdErrors);
-                            metricsChannels.advantages.postMessage(batch.advantages);
+                            // metricsChannels.rewards.postMessage(batch.rewards);
+                            // metricsChannels.values.postMessage(batch.values);
+                            // metricsChannels.returns.postMessage(batch.returns);
+                            // metricsChannels.tdErrors.postMessage(batch.tdErrors);
+                            // metricsChannels.advantages.postMessage(batch.advantages);
 
-                            waitTime !== undefined && metricsChannels.waitTime.postMessage([waitTime / 1000]);
-                            metricsChannels.trainTime.postMessage([(lastEndTime - startTime) / 1000]);
+                            // waitTime !== undefined && metricsChannels.waitTime.postMessage([waitTime / 1000]);
+                            // metricsChannels.trainTime.postMessage([(lastEndTime - startTime) / 1000]);
                         }),
                     );
                 }),

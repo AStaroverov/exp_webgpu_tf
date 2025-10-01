@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { ceil, max, min } from '../../../../../lib/math.ts';
-import { metricsChannels } from '../../Common/channels.ts';
+// import { metricsChannels } from '../../Common/channels.ts'; // metrics disabled
 import { createInputTensors } from '../../Common/InputTensors.ts';
 import { ReplayBuffer } from '../../Common/ReplayBuffer.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
@@ -73,7 +73,7 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
                 throw new Error(`Value loss too dangerous: ${min(...valueLossList)} ${max(...valueLossList)}`);
             }
 
-            metricsChannels.valueLoss.postMessage(valueLossList);
+            // metricsChannels.valueLoss.postMessage(valueLossList); // disabled
         });
 }
 

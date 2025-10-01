@@ -1,10 +1,10 @@
 import * as tfvis from '@tensorflow/tfjs-vis';
 import { isObject, mapValues, throttle } from 'lodash-es';
-import { metricsChannels } from '../../Common/channels.ts';
-import { getAgentLog, setAgentLog } from './store.ts';
-import { CompressedBuffer } from './CompressedBuffer.ts';
+// import { metricsChannels } from '../../Common/channels.ts'; // metrics disabled
 import { get } from 'lodash';
 import { scenariosCount } from '../../Common/Curriculum/createScenarioByCurriculumState.ts';
+import { CompressedBuffer } from './CompressedBuffer.ts';
+import { getAgentLog, setAgentLog } from './store.ts';
 
 type SuccessRatioIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
@@ -24,9 +24,9 @@ const store = {
     versionDelta: new CompressedBuffer(1_000, 5),
     // successRatioN
     ...Array.from({ length: scenariosCount }, (_, i) => i).reduce((acc, i) => {
-        acc[`successRatio${ i as SuccessRatioIndex }`] = new CompressedBuffer(500, 5);
+        acc[`successRatio${i as SuccessRatioIndex}`] = new CompressedBuffer(500, 5);
         return acc;
-    }, {} as Record<`successRatio${ SuccessRatioIndex }`, CompressedBuffer>),
+    }, {} as Record<`successRatio${SuccessRatioIndex}`, CompressedBuffer>),
 };
 
 getAgentLog().then((data) => {
@@ -37,7 +37,7 @@ getAgentLog().then((data) => {
         });
     }
 
-    subscribeOnMetrics();
+    // subscribeOnMetrics(); // metrics disabled
 });
 
 export function drawMetrics() {
@@ -54,36 +54,12 @@ export const saveMetrics = throttle(() => {
     });
 }, 10_000);
 
-export function subscribeOnMetrics() {
-    const w = (callback: (event: MessageEvent) => void) => {
-        return (event: MessageEvent) => {
-            callback(event);
-            saveMetrics();
-        };
-    };
-    Object.keys(metricsChannels).forEach((key) => {
-        const channel = metricsChannels[key as keyof typeof metricsChannels];
-        if (key === 'successRatio') {
-            channel.onmessage = w((event) => {
-                (event.data as {
-                    scenarioIndex: SuccessRatioIndex,
-                    successRatio: number
-                }[]).forEach(({ scenarioIndex, successRatio }) => {
-                    store[`successRatio${ scenarioIndex }` as keyof typeof store].add(successRatio);
-                });
-            });
-        } else {
-            channel.onmessage = w((event) => {
-                store[key as keyof typeof store].add(...event.data);
-            });
-        }
-    });
-}
+export function subscribeOnMetrics() { /* disabled */ }
 
 function drawTab0() {
     const tab = 'Tab 0';
     const renderSuccessRatio = (index: SuccessRatioIndex) => {
-        const successRatio = store[`successRatio${ index }`].toArray();
+        const successRatio = store[`successRatio${index}`].toArray();
         const successRatioMA = calculateMovingAverage(successRatio, 100);
         tfvis.render.scatterplot({ name: 'Success Ratio ' + index, tab }, {
             values: [successRatio, successRatioMA],
