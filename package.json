@@ -8,6 +8,7 @@
   "dependencies": {},
   "workspaces": [
     "packages/renderer",
-    "packages/tanks"
+    "packages/tanks",
+    "packages/ml"
   ]
 }

@@ -1,11 +1,11 @@
 import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
+import { calculateActionReward, calculateStateReward } from '../ml/src/Reward/calculateReward.ts';
 import { createGame } from './src/Game/createGame.ts';
 import { GameDI } from './src/Game/DI/GameDI.ts';
 import { createPlayer } from './src/Game/ECS/Entities/Player.ts';
 import { createMediumTank } from './src/Game/ECS/Entities/Tank/Medium/MediumTank.ts';
 import { createPilotsPlugin } from './src/Pilots/createPilotsPlugin.ts';
 import { snapshotTankInputTensor } from './src/Pilots/Utils/snapshotTankInputTensor.ts';
-import { calculateActionReward, calculateStateReward } from './src/TensorFlow/Reward/calculateReward.ts';
 
 const game = createGame({ width: 1200, height: 1000 });
 const { gameTick, setRenderTarget } = game;

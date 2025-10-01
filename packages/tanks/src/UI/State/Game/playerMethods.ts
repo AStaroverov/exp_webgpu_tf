@@ -1,11 +1,11 @@
-import { addTank } from './engineMethods.ts';
-import { toggleGame } from './GameState.ts';
-import { destroyEngine } from './engine.ts';
-import { activateBots, deactivateBots, finalizeGameState, mapSlotToEid$ } from './gameMethods.ts';
-import { TankType } from '../../../Game/ECS/Components/Tank.ts';
-import { dedobs, DEDOBS_REMOVE_DELAY, DEDOBS_RESET_DELAY } from '../../../../../../lib/Rx/dedobs.ts';
 import { map } from 'rxjs';
-import { initTensorFlow } from '../../../TensorFlow/Common/initTensorFlow.ts';
+import { dedobs, DEDOBS_REMOVE_DELAY, DEDOBS_RESET_DELAY } from '../../../../../../lib/Rx/dedobs.ts';
+import { initTensorFlow } from '../../../../../ml/src/Common/initTensorFlow.ts';
+import { TankType } from '../../../Game/ECS/Components/Tank.ts';
+import { destroyEngine } from './engine.ts';
+import { addTank } from './engineMethods.ts';
+import { activateBots, deactivateBots, finalizeGameState, mapSlotToEid$ } from './gameMethods.ts';
+import { toggleGame } from './GameState.ts';
 
 export const PLAYER_TEAM_ID = 0;
 

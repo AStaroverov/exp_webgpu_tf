@@ -4,17 +4,17 @@ import { clamp } from 'lodash-es';
 import { RingBuffer } from 'ring-buffer-ts';
 import { lerp } from '../../../../../lib/math.ts';
 import { random } from '../../../../../lib/random.ts';
+import { applyActionToTank } from '../../../../ml/src/Common/applyActionToTank.ts';
+import { LEARNING_STEPS } from '../../../../ml/src/Common/consts.ts';
+import { prepareInputArrays } from '../../../../ml/src/Common/InputArrays.ts';
+import { AgentMemory, AgentMemoryBatch } from '../../../../ml/src/Common/Memory.ts';
+import { getNetworkVersion, patientAction } from '../../../../ml/src/Common/utils.ts';
+import { Model } from '../../../../ml/src/Models/def.ts';
+import { disposeNetwork, getNetwork } from '../../../../ml/src/Models/Utils.ts';
+import { CONFIG } from '../../../../ml/src/PPO/config.ts';
+import { act, MAX_STD_DEV } from '../../../../ml/src/PPO/train.ts';
+import { calculateActionReward, calculateStateReward, GAME_OVER_REWARD_MULTIPLIER, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { applyActionToTank } from '../../TensorFlow/Common/applyActionToTank.ts';
-import { LEARNING_STEPS } from '../../TensorFlow/Common/consts.ts';
-import { prepareInputArrays } from '../../TensorFlow/Common/InputArrays.ts';
-import { AgentMemory, AgentMemoryBatch } from '../../TensorFlow/Common/Memory.ts';
-import { getNetworkVersion, patientAction } from '../../TensorFlow/Common/utils.ts';
-import { Model } from '../../TensorFlow/Models/def.ts';
-import { disposeNetwork, getNetwork } from '../../TensorFlow/Models/Utils.ts';
-import { CONFIG } from '../../TensorFlow/PPO/config.ts';
-import { act, MAX_STD_DEV } from '../../TensorFlow/PPO/train.ts';
-import { calculateActionReward, calculateStateReward, GAME_OVER_REWARD_MULTIPLIER, getFramePenalty } from '../../TensorFlow/Reward/calculateReward.ts';
 
 
 let stateRewardHistory = new RingBuffer<number>(1000);

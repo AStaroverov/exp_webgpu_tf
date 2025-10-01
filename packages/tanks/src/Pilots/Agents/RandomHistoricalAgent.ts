@@ -1,12 +1,12 @@
 import * as tf from '@tensorflow/tfjs';
 import { clamp } from 'lodash-es';
 import { lerp } from '../../../../../lib/math.ts';
-import { applyActionToTank } from '../../TensorFlow/Common/applyActionToTank.ts';
-import { prepareInputArrays } from '../../TensorFlow/Common/InputArrays.ts';
-import { patientAction } from '../../TensorFlow/Common/utils.ts';
-import { Model } from '../../TensorFlow/Models/def.ts';
-import { disposeNetwork, getRandomHistoricalNetwork } from '../../TensorFlow/Models/Utils.ts';
-import { act, MAX_STD_DEV } from '../../TensorFlow/PPO/train.ts';
+import { applyActionToTank } from '../../../../ml/src/Common/applyActionToTank.ts';
+import { prepareInputArrays } from '../../../../ml/src/Common/InputArrays.ts';
+import { patientAction } from '../../../../ml/src/Common/utils.ts';
+import { Model } from '../../../../ml/src/Models/def.ts';
+import { disposeNetwork, getRandomHistoricalNetwork } from '../../../../ml/src/Models/Utils.ts';
+import { act, MAX_STD_DEV } from '../../../../ml/src/PPO/train.ts';
 import { DownloableAgent, TankAgent } from './CurrentActorAgent.ts';
 
 export class RandomHistoricalAgent implements TankAgent<DownloableAgent> {
