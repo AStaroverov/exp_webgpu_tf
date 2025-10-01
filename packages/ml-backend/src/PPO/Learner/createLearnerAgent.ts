@@ -4,7 +4,8 @@ import { getNetworkVersion, patientAction } from '../../Common/utils.ts';
 import { saveNetworkToDB } from '../../Models/Transfer.ts';
 import { getNetwork } from '../../Models/Utils.ts';
 import { Model } from '../../Models/def.ts';
-import { learningRateChannel, learnProcessChannel } from '../channels.ts';
+import { modelVersionChannel } from '../globalChannels.ts';
+import { learningRateChannel, learnProcessChannel } from '../localChannels.ts';
 import { networkHealthCheck } from '../train.ts';
 import { LearnData } from './createLearnerManager.ts';
 
@@ -29,7 +30,12 @@ export async function createLearnerAgent({ modelName, createNetwork, trainNetwor
             await patientAction(() => networkHealthCheck(network));
             await patientAction(() => saveNetworkToDB(network, modelName));
 
-            return { modelName: modelName, version: getNetworkVersion(network) };
+            const version = getNetworkVersion(network);
+
+            modelVersionChannel.emit({ model: modelName, version });
+            console.info(`📤 Published ${modelName} version ${version} to global channel`);
+
+            return { modelName: modelName, version };
         } catch (e) {
             console.error(e);
             return { modelName: modelName, error: get(e, 'message') ?? 'Unknown error' };

@@ -7,12 +7,14 @@ import { AgentMemoryBatch } from '../../Common/Memory.ts';
 import { getNetworkVersion } from '../../Common/utils.ts';
 import { Model } from '../../Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
+import { CONFIG } from '../config.ts';
 import {
     episodeSampleChannel,
-    learnProcessChannel,
     queueSizeChannel,
-} from '../channels.ts';
-import { CONFIG } from '../config.ts';
+} from '../globalChannels.ts';
+import {
+    learnProcessChannel,
+} from '../localChannels.ts';
 import { computeVTraceTargets } from '../train.ts';
 
 export type LearnData = AgentMemoryBatch & {

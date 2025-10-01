@@ -8,6 +8,9 @@
  * 4. Trains models and publishes weights
  */
 
+// Load environment variables first
+import 'dotenv/config';
+
 import { forceExitChannel } from './Common/channels.ts';
 import { initTensorFlow } from './Common/initTensorFlow.ts';
 import { createLearnerManager } from './PPO/Learner/createLearnerManager.ts';
