@@ -89,8 +89,8 @@ export const DEFAULT_EXPERIMENT: Config = {
     workerCount: 8,
     backpressureQueueSize: 2,
     // Perturbation of weights
-    perturbChance: (iteration) => clamp(1 - iteration / LEARNING_STEPS, 0.01, 0.10),
-    perturbWeightsScale: (iteration) => clamp(1 - iteration / LEARNING_STEPS, 0.005, 0.02),
+    perturbChance: (iteration) => lerp(0.01, 0.10, clamp(1 - iteration / LEARNING_STEPS, 0, 1)),
+    perturbWeightsScale: (iteration) => lerp(0.005, 0.02, clamp(1 - iteration / LEARNING_STEPS, 0, 1)),
     // Training control
     savePath: 'PPO_MHA',
     fsModelPath: '/assets/models/v1',
