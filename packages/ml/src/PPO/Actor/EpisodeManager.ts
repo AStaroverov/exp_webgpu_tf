@@ -1,11 +1,10 @@
-import { clamp } from 'lodash';
 import { filter, first, firstValueFrom, race, shareReplay, startWith, timer } from 'rxjs';
 import { abs, max, min } from '../../../../../lib/math.ts';
 import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
-import { LEARNING_STEPS, SNAPSHOT_EVERY, TICK_TIME_SIMULATION } from '../../Common/consts.ts';
+import { SNAPSHOT_EVERY, TICK_TIME_SIMULATION } from '../../Common/consts.ts';
 import { createScenarioByCurriculumState } from '../../Common/Curriculum/createScenarioByCurriculumState.ts';
 import { Scenario } from '../../Common/Curriculum/types.ts';
-import { GAME_OVER_REWARD_MULTIPLIER } from '../../Reward/calculateReward.ts';
+import { getGameOverReward } from '../../Reward/calculateReward.ts';
 import { CurriculumState, curriculumStateChannel, episodeSampleChannel, queueSizeChannel } from '../channels.ts';
 import { CONFIG } from '../config.ts';
 
@@ -57,7 +56,7 @@ export class EpisodeManager {
 
             const networkVersion = agent.getVersion();
             const successRatio = episode.getSuccessRatio();
-            const finalReward = successRatio * GAME_OVER_REWARD_MULTIPLIER * clamp((networkVersion - LEARNING_STEPS / 5) / LEARNING_STEPS, 0, 1);
+            const finalReward = getGameOverReward(networkVersion, successRatio);
             const memoryBatch = agent.getMemoryBatch(finalReward);
 
             if (memoryBatch == null) {

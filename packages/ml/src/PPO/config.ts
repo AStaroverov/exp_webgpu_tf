@@ -49,7 +49,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     clipNorm: 20,
     // PPO-specific parameters
     gamma: (iteration) => {
-        return lerp(0.92, 0.997, clamp(iteration / (LEARNING_STEPS * 2.5), 0, 1))
+        return lerp(0.92, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
     },
     policyEpochs: 1,
     policyClipRatio: 0.2,
@@ -76,7 +76,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     },
 
     batchSize: (iteration) => {
-        return (4 * 1024) * clamp(ceil(iteration / (LEARNING_STEPS / 2)), 1, 4);
+        return (4 * 1024) * clamp(ceil(iteration / (LEARNING_STEPS / 2)), 2, 4);
     },
     miniBatchSize: (iteration) => {
         return 64 * clamp(ceil(iteration / (LEARNING_STEPS / 2)), 1, 4);

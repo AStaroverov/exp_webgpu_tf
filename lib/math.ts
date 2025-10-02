@@ -44,8 +44,14 @@ export function centerStep(a: number, b: number, x: number): number {
     return max(0, 1 - t * t);
 }
 
+// lerp(200, 400, 0.5) = 300
 export function lerp(a: number, b: number, x: number): number {
     return a + (b - a) * x;
+}
+
+// unlerp(200, 400, 300) = 0.5
+export function unlerp(a: number, b: number, x: number): number {
+    return (x - a) / (b - a);
 }
 
 export function mean(args: number[] | Float32Array | Float64Array): number {

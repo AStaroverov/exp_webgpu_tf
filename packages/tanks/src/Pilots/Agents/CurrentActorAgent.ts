@@ -1,8 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
-import { Variable } from '@tensorflow/tfjs';
 import { clamp } from 'lodash-es';
 import { RingBuffer } from 'ring-buffer-ts';
-import { lerp } from '../../../../../lib/math.ts';
+import { lerp, unlerp } from '../../../../../lib/math.ts';
 import { random } from '../../../../../lib/random.ts';
 import { applyActionToTank } from '../../../../ml/src/Common/applyActionToTank.ts';
 import { LEARNING_STEPS } from '../../../../ml/src/Common/consts.ts';
@@ -13,7 +12,7 @@ import { Model } from '../../../../ml/src/Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../../../ml/src/Models/Utils.ts';
 import { CONFIG } from '../../../../ml/src/PPO/config.ts';
 import { act, MAX_STD_DEV } from '../../../../ml/src/PPO/train.ts';
-import { calculateActionReward, calculateStateReward, GAME_OVER_REWARD_MULTIPLIER, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
+import { calculateActionReward, calculateStateReward, getDeathPenalty, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 
 
@@ -141,16 +140,17 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
             this.tankEid,
             width,
             height,
-            clamp(version / LEARNING_STEPS / 10, 0, 1)
+            clamp(version / (LEARNING_STEPS / 10), 0, 1)
         );
         const actionReward = this.initialActionReward === undefined
             ? 0
             : calculateActionReward(this.tankEid) - this.initialActionReward;
-        const stateRewardMultiplier = clamp(1 - (version / LEARNING_STEPS), 0, 1);
-        const actionRewardMultiplier = clamp(version / LEARNING_STEPS, 0, 1) - clamp((version - LEARNING_STEPS * 1.5) / LEARNING_STEPS, 0, 1);
+        const stateRewardMultiplier = clamp(1 - unlerp(0, LEARNING_STEPS * 0.2, version), 0, 1);
+        const actionRewardMultiplier = clamp(unlerp(0, LEARNING_STEPS * 0.2, version), 0.2, 1) - clamp(unlerp(LEARNING_STEPS * 0.6, LEARNING_STEPS, version), 0, 1);
+
 
         const frameReward = getFramePenalty(frame);
-        const deathReward = isDead ? -GAME_OVER_REWARD_MULTIPLIER : 0;
+        const deathReward = getDeathPenalty(isDead);
         // it's not all reward, also we have final reward for lose/win in the end of episode
         const reward = clamp(
             stateReward * stateRewardMultiplier
@@ -182,27 +182,35 @@ export function perturbWeights(model: tf.LayersModel, scale: number) {
         model.trainableWeights.forEach(v => {
             if (!isPerturbable(v)) return;
 
-            const val = v.read() as Variable;
-            const std = tf.moments(val).variance.sqrt();
-            const eps = tf.randomNormal(val.shape).mul(std).mul(scale);
-            val.assign(val.add(eps));
+            const val = v.read() as tf.Tensor; // веса (или bias)
+            let eps: tf.Tensor;
+
+            if (val.shape.length === 2) {
+                // === Матрица весов [out_dim, in_dim] ===
+                const [outDim, inDim] = val.shape;
+                const epsOut = tf.randomNormal([outDim, 1]); // шум для строк
+                const epsIn = tf.randomNormal([1, inDim]);   // шум для столбцов
+                eps = epsOut.mul(epsIn).mul(scale);
+            } else {
+                eps = tf.randomNormal(val.shape).mul(scale);
+            }
+
+            const perturbed = val.add(eps);
+            (val as tf.Variable).assign(perturbed);
         });
     });
 }
 
 function isPerturbable(v: tf.LayerVariable) {
-    // 1. работаем только с float-весами
+    // 1. только float32-параметры
     if (v.dtype !== 'float32') return false;
 
-    // 2. не трогаем BatchNorm-параметры
+    // 2. исключаем BatchNorm параметры
     if (v.name.includes('batch_normalization') ||
         v.name.includes('batchnorm') ||
         v.name.includes('/gamma') ||  // scale
         v.name.includes('/beta'))     // shift
         return false;
-
-    // 3. (опционально) пропускаем bias-векторы
-    if (v.name.endsWith('/bias')) return false;
 
     return true;
 }

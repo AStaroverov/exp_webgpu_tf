@@ -1,6 +1,6 @@
 import { EntityId } from 'bitecs';
 import { clamp } from 'lodash';
-import { abs, acos, cos, hypot, max, min, normalizeAngle, PI, sin, smoothstep } from '../../../../lib/math.ts';
+import { abs, acos, cos, hypot, max, min, normalizeAngle, PI, sin, smoothstep, unlerp } from '../../../../lib/math.ts';
 import { MAX_BULLET_SPEED } from '../../../tanks/src/Game/ECS/Components/Bullet.ts';
 import { HeuristicsData } from '../../../tanks/src/Game/ECS/Components/HeuristicsData.ts';
 import { RigidBodyState } from '../../../tanks/src/Game/ECS/Components/Physical.ts';
@@ -9,9 +9,18 @@ import { TankController } from '../../../tanks/src/Game/ECS/Components/TankContr
 import { getTankHealth, getTankScore } from '../../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
 import { ALLY_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../../tanks/src/Pilots/Components/TankState.ts';
 import { BattleState, getBattleState } from '../../../tanks/src/Pilots/Utils/snapshotTankInputTensor.ts';
+import { LEARNING_STEPS } from '../Common/consts.ts';
 
 export const GAME_OVER_REWARD_MULTIPLIER = 5;
-export const getFramePenalty = (frame: number) => -clamp(Math.log10(1 + frame), 0, 3) / 100;
+
+export const getFramePenalty = (frame: number) =>
+    -clamp(Math.log10(1 + frame), 0, 3) / 100;
+
+export const getDeathPenalty = (isDead: boolean) =>
+    isDead ? -GAME_OVER_REWARD_MULTIPLIER : 0;
+
+export const getGameOverReward = (iteration: number, successRatio: number) =>
+    GAME_OVER_REWARD_MULTIPLIER * successRatio * clamp(unlerp(LEARNING_STEPS * 0.2, LEARNING_STEPS, iteration), 0, 1);
 
 const WEIGHTS = ({
     STATE_MULTIPLIER: 1,
@@ -31,10 +40,13 @@ const WEIGHTS = ({
 
     // STATE REWARD
     AIM: {
-        QUALITY: 2,
+        QUALITY: 1,
         BAD_QUALITY_PENALTY: -0.25,
-        BAD_SHOOTING_PENALTY: -1,
-        ALLIES_SHOOTING_PENALTY: -1,
+
+        SHOOTING_REWARD: 1,
+        NO_SHOOTING_PENALTY: -0.5,
+        MISS_SHOOTING_PENALTY: -0.5,
+        ALLIES_SHOOTING_PENALTY: -0.5,
     },
     AIM_MULTIPLIER: 1,
 
@@ -126,12 +138,12 @@ export function calculateStateReward(
         ? aimingResult.bestEnemyAimQuality * WEIGHTS.AIM.QUALITY
         : WEIGHTS.AIM.BAD_QUALITY_PENALTY;
 
-    rewards.aim.shootDecision = strictness
-        * calculateShootingPenalty(
-            isShooting,
-            aimingResult.bestEnemyAimQuality,
-            aimingResult.bestAlliesAimQuality,
-        );
+    rewards.aim.shootDecision = calculateShootingReward(
+        isShooting,
+        aimingResult.bestEnemyAimQuality,
+        aimingResult.bestAlliesAimQuality,
+        strictness
+    );
 
     rewards.positioning.enemiesPositioning = calculateEnemyDistanceReward(
         currentTankX,
@@ -377,17 +389,26 @@ function computeAimQuality(
     return 0.2 * angleAimQuality + 0.8 * tangentialAimQuality;
 }
 
-function calculateShootingPenalty(
+function calculateShootingReward(
     isShooting: boolean,
     bestEnemyAimQuality: number,
     bestAlliesAimQuality: number,
+    strictness: number
 ): number {
     if (isShooting && bestAlliesAimQuality > bestEnemyAimQuality) {
-        return WEIGHTS.AIM.ALLIES_SHOOTING_PENALTY;
+        return strictness * WEIGHTS.AIM.ALLIES_SHOOTING_PENALTY;
     }
 
     if (isShooting && bestEnemyAimQuality < 0.35) {
-        return WEIGHTS.AIM.BAD_SHOOTING_PENALTY * (1 - bestEnemyAimQuality);
+        return strictness * WEIGHTS.AIM.MISS_SHOOTING_PENALTY * (1 - bestEnemyAimQuality);
+    }
+
+    if (!isShooting && bestEnemyAimQuality > 0.7) {
+        return strictness * WEIGHTS.AIM.NO_SHOOTING_PENALTY * bestEnemyAimQuality;
+    }
+
+    if (isShooting && bestEnemyAimQuality > 0.5) {
+        return WEIGHTS.AIM.SHOOTING_REWARD * bestEnemyAimQuality;
     }
 
     return 0;
