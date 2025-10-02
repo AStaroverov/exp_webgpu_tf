@@ -1,14 +1,14 @@
-import { getNetworkExpIteration, getNetworkLearningRate } from '../../Common/utils.ts';
+import { getNetworkExpIteration, getNetworkLearningRate } from '../../../../ml-common/utils.ts';
 
 import * as tf from '@tensorflow/tfjs';
 import { RingBuffer } from 'ring-buffer-ts';
 import { ceil, floor, max, mean, min } from '../../../../../lib/math.ts';
-import { metricsChannels } from '../../Common/channels.ts';
-import { flatTypedArray } from '../../Common/flat.ts';
-import { getDynamicLearningRate } from '../../Common/getDynamicLearningRate.ts';
-import { createInputTensors } from '../../Common/InputTensors.ts';
-import { ReplayBuffer } from '../../Common/ReplayBuffer.ts';
-import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
+import { metricsChannels } from '../../../../ml-common/channels.ts';
+import { flatTypedArray } from '../../../../ml-common/flat.ts';
+import { getDynamicLearningRate } from '../../../../ml-common/getDynamicLearningRate.ts';
+import { createInputTensors } from '../../../../ml-common/InputTensors.ts';
+import { ReplayBuffer } from '../../../../ml-common/ReplayBuffer.ts';
+import { asyncUnwrapTensor, onReadyRead } from '../../../../ml-common/Tensor.ts';
 import { createPolicyNetwork } from '../../Models/Create.ts';
 import { Model } from '../../Models/def.ts';
 import { modelSettingsChannel } from '../channels.ts';

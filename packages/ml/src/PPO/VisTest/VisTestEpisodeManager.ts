@@ -3,9 +3,9 @@ import { first, firstValueFrom, interval } from 'rxjs';
 import { log, max, min, round } from '../../../../../lib/math.ts';
 import { frameTasks } from '../../../../../lib/TasksScheduler/frameTasks.ts';
 import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
-import { createScenarioByCurriculumState } from '../../Common/Curriculum/createScenarioByCurriculumState.ts';
-import { Scenario } from '../../Common/Curriculum/types.ts';
-import { getDrawState } from '../../Common/uiUtils.ts';
+import { createScenarioByCurriculumState } from '../../../../ml-common/Curriculum/createScenarioByCurriculumState.ts';
+import { Scenario } from '../../../../ml-common/Curriculum/types.ts';
+import { getDrawState } from '../../../../ml-common/uiUtils.ts';
 import { EpisodeManager } from '../Actor/EpisodeManager.ts';
 import { CONFIG } from '../config.ts';
 

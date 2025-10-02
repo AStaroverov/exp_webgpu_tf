@@ -3,10 +3,10 @@ import { RingBuffer } from 'ring-buffer-ts';
 import { concatMap, first, forkJoin, map, mergeMap, scan, tap } from 'rxjs';
 import { max } from '../../../../../lib/math.ts';
 import { bufferWhile } from '../../../../../lib/Rx/bufferWhile.ts';
-import { forceExitChannel, metricsChannels } from '../../Common/channels.ts';
-import { flatTypedArray } from '../../Common/flat.ts';
-import { AgentMemoryBatch } from '../../Common/Memory.ts';
-import { getNetworkExpIteration } from '../../Common/utils.ts';
+import { forceExitChannel, metricsChannels } from '../../../../ml-common/channels.ts';
+import { flatTypedArray } from '../../../../ml-common/flat.ts';
+import { AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
+import { getNetworkExpIteration } from '../../../../ml-common/utils.ts';
 import { Model } from '../../Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
 import {

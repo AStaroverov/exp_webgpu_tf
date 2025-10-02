@@ -1,4 +1,4 @@
-import { SNAPSHOT_EVERY } from '../../../../ml/src/Common/consts.ts';
+import { SNAPSHOT_EVERY } from '../../../../ml-common/consts.ts';
 import { GameDI } from '../../Game/DI/GameDI.ts';
 import { TankAgent } from '../Agents/CurrentActorAgent.ts';
 import { getAlivePilots, Pilot } from '../Components/Pilot.ts';

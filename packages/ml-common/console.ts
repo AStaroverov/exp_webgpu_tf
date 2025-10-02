@@ -1,5 +1,5 @@
-import { isMac } from '../../../../lib/detect.ts';
-import { devtools } from '../../../../lib/devtools-detect.ts';
+import { isMac } from '../../lib/detect.ts';
+import { devtools } from '../../lib/devtools-detect.ts';
 
 type ConsoleMethod = (...args: any[]) => void;
 type ConsoleMethods = 'log' | 'warn' | 'error' | 'info' | 'debug';

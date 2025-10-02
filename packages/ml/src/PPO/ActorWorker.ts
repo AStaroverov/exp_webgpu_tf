@@ -1,7 +1,7 @@
 import '@tensorflow/tfjs-backend-wasm';
 import { randomShortId } from '../../../../lib/random.ts';
-import { setConsolePrefix } from '../Common/console.ts';
-import { initTensorFlow } from '../Common/initTensorFlow.ts';
+import { setConsolePrefix } from '../../../ml-common/console.ts';
+import { initTensorFlow } from '../../../ml-common/initTensorFlow.ts';
 import { EpisodeManager } from './Actor/EpisodeManager.ts';
 
 setConsolePrefix(`[ACTOR|${randomShortId()}]`);

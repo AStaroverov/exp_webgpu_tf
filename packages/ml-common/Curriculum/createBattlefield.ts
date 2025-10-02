@@ -1,6 +1,6 @@
 import { clamp, isNumber } from 'lodash';
-import { lerp } from '../../../../../lib/math.ts';
-import { createGame } from '../../../../tanks/src/Game/createGame.ts';
+import { lerp } from '../../../lib/math.ts';
+import { createGame } from '../../tanks/src/Game/createGame.ts';
 import { LEARNING_STEPS } from '../consts.ts';
 
 const MAX_SIZE = 1600;

@@ -1,14 +1,14 @@
 // DebugInfo singleton to track statistics
 import { query } from 'bitecs';
 import { Color } from 'renderer/src/ECS/Components/Common.ts';
-import { frameTasks } from '../../../../lib/TasksScheduler/frameTasks.ts';
-import { GameDI } from '../../../tanks/src/Game/DI/GameDI.ts';
-import { RigidBodyState } from '../../../tanks/src/Game/ECS/Components/Physical.ts';
-import { Tank } from '../../../tanks/src/Game/ECS/Components/Tank.ts';
-import { TeamRef } from '../../../tanks/src/Game/ECS/Components/TeamRef.ts';
-import { drawMetrics } from '../Metrics/Browser';
-import { CONFIG } from '../PPO/config.ts';
-import { VisTestEpisodeManager } from '../PPO/VisTest/VisTestEpisodeManager.ts';
+import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
+import { CONFIG } from '../ml/src/PPO/config.ts';
+import { VisTestEpisodeManager } from '../ml/src/PPO/VisTest/VisTestEpisodeManager.ts';
+import { GameDI } from '../tanks/src/Game/DI/GameDI.ts';
+import { RigidBodyState } from '../tanks/src/Game/ECS/Components/Physical.ts';
+import { Tank } from '../tanks/src/Game/ECS/Components/Tank.ts';
+import { TeamRef } from '../tanks/src/Game/ECS/Components/TeamRef.ts';
+import { drawMetrics } from './Metrics/Browser/index.ts';
 import { getDrawState } from './uiUtils.ts';
 
 // Generate debug visualization using HTML and CSS

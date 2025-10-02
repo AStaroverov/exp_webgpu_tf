@@ -1,6 +1,6 @@
 import { map } from 'rxjs';
 import { dedobs, DEDOBS_REMOVE_DELAY, DEDOBS_RESET_DELAY } from '../../../../../../lib/Rx/dedobs.ts';
-import { initTensorFlow } from '../../../../../ml/src/Common/initTensorFlow.ts';
+import { initTensorFlow } from '../../../../../ml-common/initTensorFlow.ts';
 import { TankType } from '../../../Game/ECS/Components/Tank.ts';
 import { destroyEngine } from './engine.ts';
 import { addTank } from './engineMethods.ts';

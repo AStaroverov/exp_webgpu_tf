@@ -1,7 +1,7 @@
 import '@tensorflow/tfjs-backend-wasm';
-import { initTensorFlow } from '../Common/initTensorFlow.ts';
-import { setConsolePrefix } from '../Common/console.ts';
-import '../Common/uiUtils.ts';
+import { setConsolePrefix } from '../../../ml-common/console.ts';
+import { initTensorFlow } from '../../../ml-common/initTensorFlow.ts';
+import '../../../ml-common/uiUtils.ts';
 import { createValueLearnerAgent } from './Learner/createValueLearnerAgent.ts';
 
 setConsolePrefix(`[LEARNER_VALUE]`);

@@ -1,4 +1,4 @@
-import { RandomHistoricalAgent } from '../../../../../tanks/src/Pilots/Agents/RandomHistoricalAgent.ts';
+import { RandomHistoricalAgent } from '../../../tanks/src/Pilots/Agents/RandomHistoricalAgent.ts';
 import { Scenario } from '../types.ts';
 
 export function fillWithRandomHistoricalAgents(episode: Scenario) {

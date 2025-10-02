@@ -1,7 +1,7 @@
 import { clamp } from 'lodash';
-import { min } from '../../../../../lib/math.ts';
-import { random } from '../../../../../lib/random.ts';
-import { CurriculumState } from '../../PPO/channels.ts';
+import { min } from '../../../lib/math.ts';
+import { random } from '../../../lib/random.ts';
+import { CurriculumState } from '../../ml/src/PPO/channels.ts';
 import { LEARNING_STEPS } from '../consts.ts';
 import { createBattlefield } from './createBattlefield.ts';
 import { createScenarioAgentsVsBots, indexScenarioAgentsVsBots } from './createScenarioAgentsVsBots.ts';

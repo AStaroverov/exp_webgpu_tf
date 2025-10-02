@@ -1,5 +1,5 @@
-import { abs, floor, max } from '../../../../lib/math.ts';
-import { random, randomRangeInt } from '../../../../lib/random.ts';
+import { abs, floor, max } from '../../lib/math.ts';
+import { random, randomRangeInt } from '../../lib/random.ts';
 import { ReplayBuffer } from './ReplayBuffer.ts';
 
 export class PrioritizedReplayBuffer extends ReplayBuffer {

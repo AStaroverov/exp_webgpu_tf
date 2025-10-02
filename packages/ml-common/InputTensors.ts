@@ -9,7 +9,7 @@ import {
     ENEMY_FEATURES_DIM,
     ENEMY_SLOTS,
     TANK_FEATURES_DIM,
-} from '../Models/Create.ts';
+} from '../ml/src/Models/Create.ts';
 import { InputArrays } from './InputArrays.ts';
 import { flatTypedArray } from './flat.ts';
 

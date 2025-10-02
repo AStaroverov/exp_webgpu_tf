@@ -1,5 +1,5 @@
 import { clamp } from 'lodash-es';
-import { TankController } from '../../../tanks/src/Game/ECS/Components/TankController.ts';
+import { TankController } from '../tanks/src/Game/ECS/Components/TankController.ts';
 
 export type Actions = Float32Array | [number, number, number, number];
 

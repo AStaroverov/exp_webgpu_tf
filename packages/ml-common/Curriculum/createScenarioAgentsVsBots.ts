@@ -1,4 +1,4 @@
-import { randomRangeFloat } from '../../../../../lib/random.ts';
+import { randomRangeFloat } from '../../../lib/random.ts';
 import { createBattlefield } from './createBattlefield.ts';
 import { createScenarioBase } from './createScenarioBase.ts';
 import { Scenario } from './types.ts';

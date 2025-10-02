@@ -1,6 +1,6 @@
 import { clamp } from 'lodash';
 import { ceil, lerp } from '../../../../lib/math.ts';
-import { LEARNING_STEPS, TICK_TIME_SIMULATION } from '../Common/consts.ts';
+import { LEARNING_STEPS, TICK_TIME_SIMULATION } from '../../../ml-common/consts.ts';
 
 export type Config = {
     // Learning parameters

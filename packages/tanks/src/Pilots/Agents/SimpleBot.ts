@@ -1,7 +1,7 @@
 import { abs, atan2, hypot, lerp, normalizeAngle, PI } from '../../../../../lib/math.ts';
 import { OrnsteinUhlenbeckNoise } from '../../../../../lib/OrnsteinUhlenbeckNoise.ts';
 import { randomRangeFloat } from '../../../../../lib/random.ts';
-import { Actions, applyActionToTank } from '../../../../ml/src/Common/applyActionToTank.ts';
+import { Actions, applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
 import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
 import { Tank } from '../../Game/ECS/Components/Tank.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';

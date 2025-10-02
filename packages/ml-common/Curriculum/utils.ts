@@ -1,4 +1,4 @@
-import { getTankHealth, getTankTeamId } from '../../../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
+import { getTankHealth, getTankTeamId } from '../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
 
 export function getTeamHealth(tanks: number[]) {
     return tanks.reduce((acc, tankEid) => {

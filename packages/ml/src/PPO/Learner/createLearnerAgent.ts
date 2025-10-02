@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { get } from 'lodash';
-import { getNetworkExpIteration, patientAction, setNetworkExpIteration, setNetworkLearningRate } from '../../Common/utils.ts';
+import { getNetworkExpIteration, patientAction, setNetworkExpIteration, setNetworkLearningRate } from '../../../../ml-common/utils.ts';
 import { saveNetworkToDB } from '../../Models/Transfer.ts';
 import { getNetwork } from '../../Models/Utils.ts';
 import { Model } from '../../Models/def.ts';

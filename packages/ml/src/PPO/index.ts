@@ -1,9 +1,9 @@
 import '@tensorflow/tfjs-backend-wasm';
 import { macroTasks } from '../../../../lib/TasksScheduler/macroTasks.ts';
-import { setConsolePrefix } from '../Common/console.ts';
-import { createDebugVisualization } from '../Common/debug.ts';
-import { initTensorFlow } from '../Common/initTensorFlow.ts';
-import '../Common/uiUtils.ts';
+import { setConsolePrefix } from '../../../ml-common/console.ts';
+import { createDebugVisualization } from '../../../ml-common/debug.ts';
+import { initTensorFlow } from '../../../ml-common/initTensorFlow.ts';
+import '../../../ml-common/uiUtils.ts';
 import { restoreModels } from '../Models/Trained/restore.ts';
 import { CONFIG } from './config.ts';
 import { VisTestEpisodeManager } from './VisTest/VisTestEpisodeManager.ts';

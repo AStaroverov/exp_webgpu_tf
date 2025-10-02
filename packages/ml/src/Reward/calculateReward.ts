@@ -1,6 +1,7 @@
 import { EntityId } from 'bitecs';
 import { clamp } from 'lodash';
 import { abs, acos, cos, hypot, max, min, normalizeAngle, PI, sin, smoothstep, unlerp } from '../../../../lib/math.ts';
+import { LEARNING_STEPS } from '../../../ml-common/consts.ts';
 import { MAX_BULLET_SPEED } from '../../../tanks/src/Game/ECS/Components/Bullet.ts';
 import { HeuristicsData } from '../../../tanks/src/Game/ECS/Components/HeuristicsData.ts';
 import { RigidBodyState } from '../../../tanks/src/Game/ECS/Components/Physical.ts';
@@ -9,7 +10,6 @@ import { TankController } from '../../../tanks/src/Game/ECS/Components/TankContr
 import { getTankHealth, getTankScore } from '../../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
 import { ALLY_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../../tanks/src/Pilots/Components/TankState.ts';
 import { BattleState, getBattleState } from '../../../tanks/src/Pilots/Utils/snapshotTankInputTensor.ts';
-import { LEARNING_STEPS } from '../Common/consts.ts';
 
 export const GAME_OVER_REWARD_MULTIPLIER = 5;
 

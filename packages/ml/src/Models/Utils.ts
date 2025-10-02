@@ -3,7 +3,7 @@ import { LayersModel } from '@tensorflow/tfjs';
 import { isFunction } from 'lodash-es';
 import { isBrowser } from '../../../../lib/detect.ts';
 import { random, randomRangeInt } from '../../../../lib/random.ts';
-import { patientAction } from '../Common/utils.ts';
+import { patientAction } from '../../../ml-common/utils.ts';
 import { CONFIG } from '../PPO/config.ts';
 import { LAST_NETWORK_VERSION, Model, NetworkInfo } from './def.ts';
 import { loadLastNetworkFromDB, loadNetworkFromDB } from './Transfer.ts';

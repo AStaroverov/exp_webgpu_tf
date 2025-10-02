@@ -1,7 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
 import { isBrowser } from '../../../../lib/detect.ts';
-import { onReadyRead } from '../Common/Tensor.ts';
-import { getNetworkExpIteration } from '../Common/utils.ts';
+import { onReadyRead } from '../../../ml-common/Tensor.ts';
+import { getNetworkExpIteration } from '../../../ml-common/utils.ts';
 import { LAST_NETWORK_VERSION, Model } from './def.ts';
 import { getIndexedDBModelPath, removeOutLimitNetworks, shouldSaveHistoricalVersion } from './Utils.ts';
 

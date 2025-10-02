@@ -1,6 +1,6 @@
-import { floor, max, min } from '../../../../lib/math.ts';
-import { random } from '../../../../lib/random.ts';
-import { shuffle } from '../../../../lib/shuffle.ts';
+import { floor, max, min } from '../../lib/math.ts';
+import { random } from '../../lib/random.ts';
+import { shuffle } from '../../lib/shuffle.ts';
 
 export class ReplayBuffer {
     protected indices: number[];

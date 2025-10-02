@@ -1,8 +1,6 @@
-import { max } from '../../../../lib/math.ts';
-import { random, randomRangeInt } from '../../../../lib/random.ts';
-import { shuffle } from '../../../../lib/shuffle.ts';
-import { MAX_APPROXIMATE_COLLIDER_RADIUS } from '../../../tanks/src/Game/ECS/Components/HeuristicsData.ts';
-import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../../tanks/src/Pilots/Components/TankState.ts';
+import { max } from '../../lib/math.ts';
+import { random, randomRangeInt } from '../../lib/random.ts';
+import { shuffle } from '../../lib/shuffle.ts';
 import {
     ALLY_FEATURES_DIM,
     ALLY_SLOTS,
@@ -13,7 +11,9 @@ import {
     ENEMY_FEATURES_DIM,
     ENEMY_SLOTS,
     TANK_FEATURES_DIM,
-} from '../Models/Create.ts';
+} from '../ml/src/Models/Create.ts';
+import { MAX_APPROXIMATE_COLLIDER_RADIUS } from '../tanks/src/Game/ECS/Components/HeuristicsData.ts';
+import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../tanks/src/Pilots/Components/TankState.ts';
 
 function norm(v: number, size: number): number {
     return v / size;

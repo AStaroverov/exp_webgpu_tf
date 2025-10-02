@@ -1,6 +1,6 @@
 import Dexie from 'dexie';
-import { downloadNetwork } from '../Models/Transfer.ts';
-import { Model } from '../Models/def.ts';
+import { downloadNetwork } from '../ml/src/Models/Transfer.ts';
+import { Model } from '../ml/src/Models/def.ts';
 import { forceExitChannel } from './channels.ts';
 
 // Инициализируем базу Dexie с таблицей settings

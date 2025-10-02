@@ -1,8 +1,8 @@
-import { min, PI, pow, sqrt } from '../../../../../../lib/math.ts';
-import { randomRangeFloat } from '../../../../../../lib/random.ts';
-import { GameDI } from '../../../../../tanks/src/Game/DI/GameDI.ts';
-import { createPlayer } from '../../../../../tanks/src/Game/ECS/Entities/Player.ts';
-import { createMediumTank } from '../../../../../tanks/src/Game/ECS/Entities/Tank/Medium/MediumTank.ts';
+import { min, PI, pow, sqrt } from '../../../../lib/math.ts';
+import { randomRangeFloat } from '../../../../lib/random.ts';
+import { GameDI } from '../../../tanks/src/Game/DI/GameDI.ts';
+import { createPlayer } from '../../../tanks/src/Game/ECS/Entities/Player.ts';
+import { createMediumTank } from '../../../tanks/src/Game/ECS/Entities/Tank/Medium/MediumTank.ts';
 
 const MIN_RADIUS = 150;
 

@@ -1,11 +1,11 @@
 import { query } from 'bitecs';
-import { max } from '../../../../../lib/math.ts';
-import { randomRangeInt } from '../../../../../lib/random.ts';
-import { Tank } from '../../../../tanks/src/Game/ECS/Components/Tank.ts';
-import { getTeamsCount } from '../../../../tanks/src/Game/ECS/Components/TeamRef.ts';
-import { getTankTeamId } from '../../../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
-import { CurrentActorAgent } from '../../../../tanks/src/Pilots/Agents/CurrentActorAgent.ts';
-import { createPilotsPlugin } from '../../../../tanks/src/Pilots/createPilotsPlugin.ts';
+import { max } from '../../../lib/math.ts';
+import { randomRangeInt } from '../../../lib/random.ts';
+import { Tank } from '../../tanks/src/Game/ECS/Components/Tank.ts';
+import { getTeamsCount } from '../../tanks/src/Game/ECS/Components/TeamRef.ts';
+import { getTankTeamId } from '../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
+import { CurrentActorAgent } from '../../tanks/src/Pilots/Agents/CurrentActorAgent.ts';
+import { createPilotsPlugin } from '../../tanks/src/Pilots/createPilotsPlugin.ts';
 import { createBattlefield } from './createBattlefield.ts';
 import { Scenario } from './types.ts';
 import { getSuccessRatio, getTeamHealth } from './utils.ts';

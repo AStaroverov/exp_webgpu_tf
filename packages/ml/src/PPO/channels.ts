@@ -1,5 +1,5 @@
 import { createChannel } from '../../../../lib/channles.ts';
-import { AgentMemoryBatch } from '../Common/Memory.ts';
+import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
 import { LearnData } from './Learner/createLearnerManager.ts';
 
 import { Model } from '../Models/def.ts';

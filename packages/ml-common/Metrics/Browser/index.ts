@@ -1,10 +1,10 @@
 import * as tfvis from '@tensorflow/tfjs-vis';
-import { isObject, mapValues, throttle } from 'lodash-es';
-import { metricsChannels } from '../../Common/channels.ts';
-import { getAgentLog, setAgentLog } from './store.ts';
-import { CompressedBuffer } from './CompressedBuffer.ts';
 import { get } from 'lodash';
-import { scenariosCount } from '../../Common/Curriculum/createScenarioByCurriculumState.ts';
+import { isObject, mapValues, throttle } from 'lodash-es';
+import { metricsChannels } from '../../channels.ts';
+import { scenariosCount } from '../../Curriculum/createScenarioByCurriculumState.ts';
+import { CompressedBuffer } from './CompressedBuffer.ts';
+import { getAgentLog, setAgentLog } from './store.ts';
 
 type SuccessRatioIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
@@ -24,9 +24,9 @@ const store = {
     versionDelta: new CompressedBuffer(1_000, 5),
     // successRatioN
     ...Array.from({ length: scenariosCount }, (_, i) => i).reduce((acc, i) => {
-        acc[`successRatio${ i as SuccessRatioIndex }`] = new CompressedBuffer(500, 5);
+        acc[`successRatio${i as SuccessRatioIndex}`] = new CompressedBuffer(500, 5);
         return acc;
-    }, {} as Record<`successRatio${ SuccessRatioIndex }`, CompressedBuffer>),
+    }, {} as Record<`successRatio${SuccessRatioIndex}`, CompressedBuffer>),
 };
 
 getAgentLog().then((data) => {
@@ -69,7 +69,7 @@ export function subscribeOnMetrics() {
                     scenarioIndex: SuccessRatioIndex,
                     successRatio: number
                 }[]).forEach(({ scenarioIndex, successRatio }) => {
-                    store[`successRatio${ scenarioIndex }` as keyof typeof store].add(successRatio);
+                    store[`successRatio${scenarioIndex}` as keyof typeof store].add(successRatio);
                 });
             });
         } else {
@@ -83,7 +83,7 @@ export function subscribeOnMetrics() {
 function drawTab0() {
     const tab = 'Tab 0';
     const renderSuccessRatio = (index: SuccessRatioIndex) => {
-        const successRatio = store[`successRatio${ index }`].toArray();
+        const successRatio = store[`successRatio${index}`].toArray();
         const successRatioMA = calculateMovingAverage(successRatio, 100);
         tfvis.render.scatterplot({ name: 'Success Ratio ' + index, tab }, {
             values: [successRatio, successRatioMA],
