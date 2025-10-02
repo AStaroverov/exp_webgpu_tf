@@ -1,10 +1,10 @@
 import * as tf from '@tensorflow/tfjs';
 import { ceil, max, min } from '../../../../../lib/math.ts';
 // import { metricsChannels } from '../../Common/channels.ts'; // metrics disabled
-import { createInputTensors } from '../../Common/InputTensors.ts';
-import { ReplayBuffer } from '../../Common/ReplayBuffer.ts';
-import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
-import { getNetworkVersion } from '../../Common/utils.ts';
+import { createInputTensors } from '../../../../ml-common/InputTensors.ts';
+import { ReplayBuffer } from '../../../../ml-common/ReplayBuffer.ts';
+import { asyncUnwrapTensor, onReadyRead } from '../../../../ml-common/Tensor.ts';
+import { getNetworkExpIteration } from '../../../../ml-common/utils.ts';
 import { createValueNetwork } from '../../Models/Create.ts';
 import { Model } from '../../Models/def.ts';
 import { CONFIG } from '../config.ts';
@@ -22,10 +22,10 @@ export function createValueLearnerAgent() {
 }
 
 function trainValue(network: tf.LayersModel, batch: LearnData) {
+    const version = getNetworkExpIteration(network);
     const rb = new ReplayBuffer(batch.states.length);
-    const mbs = CONFIG.miniBatchSize(getNetworkVersion(network));
+    const mbs = CONFIG.miniBatchSize(version);
     const mbc = ceil(batch.size / mbs);
-    const version = getNetworkVersion(network);
 
     console.info(`[Train Value]: Starting...
          Iteration ${version},

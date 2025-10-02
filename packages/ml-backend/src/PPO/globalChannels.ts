@@ -1,6 +1,6 @@
 import Ably from 'ably';
 import { Observable, Subject } from 'rxjs';
-import { AgentMemoryBatch } from '../Common/Memory.ts';
+import { AgentMemoryBatch } from '../../../ml-common/Memory';
 
 const ABLY_API_KEY = process.env.ABLY_API_KEY || '';
 

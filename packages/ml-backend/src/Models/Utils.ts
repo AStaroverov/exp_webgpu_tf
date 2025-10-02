@@ -4,7 +4,7 @@ import { existsSync, readdirSync, statSync } from 'fs';
 import { isFunction } from 'lodash-es';
 import { resolve } from 'path';
 import { random } from '../../../../lib/random.ts';
-import { patientAction } from '../Common/utils.ts';
+import { patientAction } from '../../../ml-common/utils.ts';
 import { LAST_NETWORK_VERSION, Model, NetworkInfo } from './def.ts';
 import { loadLastNetwork } from './Transfer.ts';
 

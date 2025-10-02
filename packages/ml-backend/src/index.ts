@@ -11,12 +11,12 @@
 // Load environment variables first
 import 'dotenv/config';
 
-import { forceExitChannel } from './Common/channels.ts';
-import { initTensorFlow } from './Common/initTensorFlow.ts';
 import { restoreModels } from './Models/restore.ts';
 import { createLearnerManager } from './PPO/Learner/createLearnerManager.ts';
 import { createPolicyLearnerAgent } from './PPO/Learner/createPolicyLearnerAgent.ts';
 import { createValueLearnerAgent } from './PPO/Learner/createValueLearnerAgent.ts';
+import { forceExitChannel } from './Utils/channels.ts';
+import { initTensorFlow } from './Utils/initTensorFlow.ts';
 
 console.info('🚀 ML Backend starting...');
 
