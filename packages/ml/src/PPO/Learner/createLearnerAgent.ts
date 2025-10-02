@@ -1,10 +1,10 @@
 import * as tf from '@tensorflow/tfjs';
 import { get } from 'lodash';
-import { getNetworkVersion, patientAction } from '../../Common/utils.ts';
+import { getNetworkExpIteration, incNetworkExpIteration, patientAction, setNetworkLearningRate } from '../../Common/utils.ts';
 import { saveNetworkToDB } from '../../Models/Transfer.ts';
 import { getNetwork } from '../../Models/Utils.ts';
 import { Model } from '../../Models/def.ts';
-import { learningRateChannel, learnProcessChannel } from '../channels.ts';
+import { learnProcessChannel, modelSettingsChannel } from '../channels.ts';
 import { networkHealthCheck } from '../train.ts';
 import { LearnData } from './createLearnerManager.ts';
 
@@ -19,8 +19,9 @@ export async function createLearnerAgent({ modelName, createNetwork, trainNetwor
         return newNetwork;
     });
 
-    learningRateChannel.obs.subscribe((lr) => {
-        setLR(network, lr);
+    modelSettingsChannel.obs.subscribe(({ lr, steps }) => {
+        lr && setNetworkLearningRate(network, lr);
+        steps && incNetworkExpIteration(network, steps);
     });
 
     learnProcessChannel.response(async (batch: LearnData) => {
@@ -29,15 +30,10 @@ export async function createLearnerAgent({ modelName, createNetwork, trainNetwor
             await patientAction(() => networkHealthCheck(network));
             await patientAction(() => saveNetworkToDB(network, modelName));
 
-            return { modelName: modelName, version: getNetworkVersion(network) };
+            return { modelName: modelName, version: getNetworkExpIteration(network) };
         } catch (e) {
             console.error(e);
             return { modelName: modelName, error: get(e, 'message') ?? 'Unknown error' };
         }
     });
-}
-
-function setLR(o: tf.LayersModel, lr: number) {
-    // @ts-expect-error
-    o.optimizer.learningRate = lr;
 }

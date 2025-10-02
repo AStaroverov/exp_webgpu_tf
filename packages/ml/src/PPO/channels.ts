@@ -20,7 +20,7 @@ export const learnProcessChannel = createChannel<
 
 export const queueSizeChannel = createChannel<number>('queueSizeChannel');
 
-export const learningRateChannel = createChannel<number>('learningRateChannel');
+export const modelSettingsChannel = createChannel<{ lr?: number, steps?: number }>('modelSettingsChannel');
 
 export type CurriculumState = {
     currentVersion: number,

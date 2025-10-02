@@ -6,7 +6,7 @@ import { bufferWhile } from '../../../../../lib/Rx/bufferWhile.ts';
 import { forceExitChannel, metricsChannels } from '../../Common/channels.ts';
 import { flatTypedArray } from '../../Common/flat.ts';
 import { AgentMemoryBatch } from '../../Common/Memory.ts';
-import { getNetworkVersion } from '../../Common/utils.ts';
+import { getNetworkExpIteration } from '../../Common/utils.ts';
 import { Model } from '../../Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
 import {
@@ -76,7 +76,7 @@ export function createLearnerManager() {
                 getNetwork(Model.Value),
             ]).pipe(
                 map(([policyNetwork, valueNetwork]): LearnData => {
-                    const version = getNetworkVersion(policyNetwork);
+                    const version = getNetworkExpIteration(policyNetwork);
                     const batch = squeezeBatches(samples.map(b => b.memoryBatch));
                     const learnData = {
                         ...batch,

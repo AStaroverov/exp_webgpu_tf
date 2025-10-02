@@ -7,7 +7,7 @@ import { applyActionToTank } from '../../../../ml/src/Common/applyActionToTank.t
 import { LEARNING_STEPS } from '../../../../ml/src/Common/consts.ts';
 import { prepareInputArrays } from '../../../../ml/src/Common/InputArrays.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../../../ml/src/Common/Memory.ts';
-import { getNetworkVersion, patientAction } from '../../../../ml/src/Common/utils.ts';
+import { getNetworkExpIteration, patientAction } from '../../../../ml/src/Common/utils.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../../../ml/src/Models/Utils.ts';
 import { CONFIG } from '../../../../ml/src/PPO/config.ts';
@@ -72,7 +72,7 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
     }
 
     public getVersion(): number {
-        return this.policyNetwork != null ? getNetworkVersion(this.policyNetwork) : 0;
+        return this.policyNetwork != null ? getNetworkExpIteration(this.policyNetwork) : 0;
     }
 
     public getMemory(): undefined | AgentMemory {
@@ -169,7 +169,7 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
 
     private async load() {
         this.policyNetwork = await getNetwork(Model.Policy);
-        const version = getNetworkVersion(this.policyNetwork);
+        const version = getNetworkExpIteration(this.policyNetwork);
         const chance = CONFIG.perturbChance(version);
         if (chance > random()) {
             perturbWeights(this.policyNetwork, CONFIG.perturbWeightsScale(version));

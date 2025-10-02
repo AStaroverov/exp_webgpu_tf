@@ -4,7 +4,7 @@ import { metricsChannels } from '../../Common/channels.ts';
 import { createInputTensors } from '../../Common/InputTensors.ts';
 import { ReplayBuffer } from '../../Common/ReplayBuffer.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
-import { getNetworkVersion } from '../../Common/utils.ts';
+import { getNetworkExpIteration } from '../../Common/utils.ts';
 import { createValueNetwork } from '../../Models/Create.ts';
 import { Model } from '../../Models/def.ts';
 import { CONFIG } from '../config.ts';
@@ -22,13 +22,13 @@ export function createValueLearnerAgent() {
 }
 
 function trainValue(network: tf.LayersModel, batch: LearnData) {
+    const iteration = getNetworkExpIteration(network);
     const rb = new ReplayBuffer(batch.states.length);
-    const mbs = CONFIG.miniBatchSize(getNetworkVersion(network));
+    const mbs = CONFIG.miniBatchSize(iteration);
     const mbc = ceil(batch.size / mbs);
-    const version = getNetworkVersion(network);
 
     console.info(`[Train Value]: Starting...
-         Iteration ${version},
+         Iteration ${iteration},
          Sum batch size: ${batch.size},
          Mini batch count: ${mbc} by ${mbs}`);
 

@@ -1,14 +1,14 @@
 import * as tf from '@tensorflow/tfjs';
 import { isBrowser } from '../../../../lib/detect.ts';
 import { onReadyRead } from '../Common/Tensor.ts';
-import { getNetworkVersion } from '../Common/utils.ts';
+import { getNetworkExpIteration } from '../Common/utils.ts';
 import { LAST_NETWORK_VERSION, Model } from './def.ts';
 import { getIndexedDBModelPath, removeOutLimitNetworks, shouldSaveHistoricalVersion } from './Utils.ts';
 
 export async function saveNetworkToDB(network: tf.LayersModel, name: Model) {
     await onReadyRead();
 
-    const networkVersion = getNetworkVersion(network);
+    const networkVersion = getNetworkExpIteration(network);
     const shouldSaveHistorical = await shouldSaveHistoricalVersion(name, networkVersion);
 
     if (isBrowser) {

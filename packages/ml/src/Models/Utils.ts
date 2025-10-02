@@ -87,7 +87,7 @@ export async function getPenultimateNetworkVersion(name: Model): Promise<number 
 }
 
 export async function shouldSaveHistoricalVersion(name: Model, version: number) {
-    const step = 100_000; // 100_000 / epoch * batch/mini_batch == 625 learns steps
+    const step = 500_000;
     const penultimateNetworkVersion = await getPenultimateNetworkVersion(name);
 
     if (penultimateNetworkVersion == null) {

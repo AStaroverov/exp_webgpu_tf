@@ -1,4 +1,4 @@
-import { getNetworkLearningRate, getNetworkVersion } from '../../Common/utils.ts';
+import { getNetworkExpIteration, getNetworkLearningRate } from '../../Common/utils.ts';
 
 import * as tf from '@tensorflow/tfjs';
 import { RingBuffer } from 'ring-buffer-ts';
@@ -11,7 +11,7 @@ import { ReplayBuffer } from '../../Common/ReplayBuffer.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../Common/Tensor.ts';
 import { createPolicyNetwork } from '../../Models/Create.ts';
 import { Model } from '../../Models/def.ts';
-import { learningRateChannel } from '../channels.ts';
+import { modelSettingsChannel } from '../channels.ts';
 import { CONFIG } from '../config.ts';
 import { computeKullbackLeiblerExact, trainPolicyNetwork } from '../train.ts';
 import { createLearnerAgent } from './createLearnerAgent.ts';
@@ -29,13 +29,13 @@ export function createPolicyLearnerAgent() {
 const klHistory = new RingBuffer<number>(10 * CONFIG.policyEpochs);
 
 function trainPolicy(network: tf.LayersModel, batch: LearnData) {
-    const version = getNetworkVersion(network);
+    const iteration = getNetworkExpIteration(network);
     const rb = new ReplayBuffer(batch.states.length);
-    const mbs = CONFIG.miniBatchSize(version);
+    const mbs = CONFIG.miniBatchSize(iteration);
     const mbc = ceil(batch.size / mbs);
 
     console.info(`[Train Policy]: Stating..
-         Iteration ${version},
+         Iteration ${iteration},
          Sum batch size: ${batch.size},
          Mini batch count: ${mbc} by ${mbs}`);
 
@@ -51,7 +51,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const klSize = floor(mbs * ceil(mbc / 3));
     const klList: tf.Tensor[] = [];
     const policyLossList: tf.Tensor[] = [];
-    const entropyCoeff = CONFIG.policyEntropy(network.optimizer.iterations);
+    const entropyCoeff = CONFIG.policyEntropy(iteration);
 
     for (let i = 0; i < CONFIG.policyEpochs; i++) {
         for (let j = 0; j < mbc; j++) {
@@ -124,7 +124,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
                 getNetworkLearningRate(network),
             );
 
-            learningRateChannel.emit(lr);
+            modelSettingsChannel.emit({ lr, steps: batch.size });
 
             metricsChannels.lr.postMessage([lr]);
             metricsChannels.kl.postMessage(klList);
