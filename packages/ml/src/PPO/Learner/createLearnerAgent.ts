@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { get } from 'lodash';
-import { getNetworkExpIteration, incNetworkExpIteration, patientAction, setNetworkLearningRate } from '../../Common/utils.ts';
+import { getNetworkExpIteration, patientAction, setNetworkExpIteration, setNetworkLearningRate } from '../../Common/utils.ts';
 import { saveNetworkToDB } from '../../Models/Transfer.ts';
 import { getNetwork } from '../../Models/Utils.ts';
 import { Model } from '../../Models/def.ts';
@@ -19,9 +19,9 @@ export async function createLearnerAgent({ modelName, createNetwork, trainNetwor
         return newNetwork;
     });
 
-    modelSettingsChannel.obs.subscribe(({ lr, steps }) => {
+    modelSettingsChannel.obs.subscribe(({ lr, expIteration }) => {
         lr && setNetworkLearningRate(network, lr);
-        steps && incNetworkExpIteration(network, steps);
+        expIteration && setNetworkExpIteration(network, expIteration);
     });
 
     learnProcessChannel.response(async (batch: LearnData) => {

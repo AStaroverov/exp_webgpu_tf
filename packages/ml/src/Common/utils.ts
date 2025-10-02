@@ -2,10 +2,8 @@ import * as tf from '@tensorflow/tfjs';
 import { macroTasks } from '../../../../lib/TasksScheduler/macroTasks.ts';
 import { CONFIG } from '../PPO/config.ts';
 
-export function incNetworkExpIteration(o: tf.LayersModel, steps: number) {
-    const meta = o.getUserDefinedMetadata() as { expIteration?: number } ?? { expIteration: 0 };
-    const current = meta.expIteration ?? 0;
-    o.setUserDefinedMetadata({ ...meta, expIteration: current + steps });
+export function setNetworkExpIteration(o: tf.LayersModel, it: number) {
+    o.setUserDefinedMetadata({ ...o.getUserDefinedMetadata(), expIteration: it });
 }
 
 export function getNetworkExpIteration(network: tf.LayersModel): number {

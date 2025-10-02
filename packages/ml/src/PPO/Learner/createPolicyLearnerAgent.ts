@@ -29,13 +29,13 @@ export function createPolicyLearnerAgent() {
 const klHistory = new RingBuffer<number>(10 * CONFIG.policyEpochs);
 
 function trainPolicy(network: tf.LayersModel, batch: LearnData) {
-    const iteration = getNetworkExpIteration(network);
+    const expIteration = getNetworkExpIteration(network);
     const rb = new ReplayBuffer(batch.states.length);
-    const mbs = CONFIG.miniBatchSize(iteration);
+    const mbs = CONFIG.miniBatchSize(expIteration);
     const mbc = ceil(batch.size / mbs);
 
     console.info(`[Train Policy]: Stating..
-         Iteration ${iteration},
+         Iteration ${expIteration},
          Sum batch size: ${batch.size},
          Mini batch count: ${mbc} by ${mbs}`);
 
@@ -51,7 +51,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const klSize = floor(mbs * ceil(mbc / 3));
     const klList: tf.Tensor[] = [];
     const policyLossList: tf.Tensor[] = [];
-    const entropyCoeff = CONFIG.policyEntropy(iteration);
+    const entropyCoeff = CONFIG.policyEntropy(expIteration);
 
     for (let i = 0; i < CONFIG.policyEpochs; i++) {
         for (let j = 0; j < mbc; j++) {
@@ -124,7 +124,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
                 getNetworkLearningRate(network),
             );
 
-            modelSettingsChannel.emit({ lr, steps: batch.size });
+            modelSettingsChannel.emit({ lr, expIteration: expIteration + batch.size });
 
             metricsChannels.lr.postMessage([lr]);
             metricsChannels.kl.postMessage(klList);
