@@ -53,9 +53,8 @@ export const DEFAULT_EXPERIMENT: Config = {
     },
     policyEpochs: 1,
     policyClipRatio: 0.2,
-    policyEntropy: (iteration, min = 0.01, max = 0.05, totalIterations = LEARNING_STEPS * 5) => {
-        const k = Math.log((max - min) / 1e-3) / totalIterations;
-        return min + (max - min) * Math.exp(-k * iteration);
+    policyEntropy: (iteration) => {
+        return lerp(0.005, 0.05, clamp(1 - iteration / LEARNING_STEPS, 0, 1))
     },
 
     valueEpochs: 1,
@@ -89,8 +88,8 @@ export const DEFAULT_EXPERIMENT: Config = {
     workerCount: 8,
     backpressureQueueSize: 2,
     // Perturbation of weights
-    perturbChance: (iteration) => lerp(0.01, 0.10, clamp(1 - iteration / LEARNING_STEPS, 0, 1)),
-    perturbWeightsScale: (iteration) => lerp(0.005, 0.02, clamp(1 - iteration / LEARNING_STEPS, 0, 1)),
+    perturbChance: (iteration) => lerp(0.01, 0.10, clamp(iteration / LEARNING_STEPS, 0, 1)),
+    perturbWeightsScale: (iteration) => lerp(0.005, 0.01, clamp(iteration / LEARNING_STEPS, 0, 1)),
     // Training control
     savePath: 'PPO_MHA',
     fsModelPath: '/assets/models/v1',
