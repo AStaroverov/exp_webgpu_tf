@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { get } from 'lodash-es';
-import { getNetworkVersion, patientAction } from '../../Common/utils.ts';
+import { getNetworkExpIteration, patientAction } from '../../../../ml-common/utils.ts';
 import { saveNetwork } from '../../Models/Transfer.ts';
 import { getNetwork } from '../../Models/Utils.ts';
 import { Model } from '../../Models/def.ts';
@@ -29,7 +29,7 @@ export async function createLearnerAgent({ modelName, createNetwork, trainNetwor
             await patientAction(() => networkHealthCheck(network));
             await patientAction(() => saveNetwork(network, modelName));
 
-            const version = getNetworkVersion(network);
+            const version = getNetworkExpIteration(network);
             console.info(`✅ ${modelName} v${version} trained and saved (Supabase sync included)`);
 
             return { modelName: modelName, version };

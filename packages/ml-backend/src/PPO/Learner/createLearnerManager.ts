@@ -1,12 +1,12 @@
 import { concatMap, first, forkJoin, map, mergeMap, scan, tap } from 'rxjs';
 import { max } from '../../../../../lib/math.ts';
 import { bufferWhile } from '../../../../../lib/Rx/bufferWhile.ts';
-import { forceExitChannel } from '../../Common/channels.ts'; // metrics disabled
-import { flatTypedArray } from '../../Common/flat.ts';
-import { AgentMemoryBatch } from '../../Common/Memory.ts';
-import { getNetworkVersion } from '../../Common/utils.ts';
+import { flatTypedArray } from '../../../../ml-common/flat.ts';
+import { AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
+import { getNetworkExpIteration } from '../../../../ml-common/utils.ts';
 import { Model } from '../../Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
+import { forceExitChannel } from '../../Utils/channels.ts'; // metrics disabled
 import { CONFIG } from '../config.ts';
 import {
     episodeSampleChannel,
@@ -73,7 +73,7 @@ export function createLearnerManager() {
                 getNetwork(Model.Value),
             ]).pipe(
                 map(([policyNetwork, valueNetwork]): LearnData => {
-                    const version = getNetworkVersion(policyNetwork);
+                    const version = getNetworkExpIteration(policyNetwork);
                     const batch = squeezeBatches(samples.map(b => b.memoryBatch));
                     const learnData = {
                         ...batch,

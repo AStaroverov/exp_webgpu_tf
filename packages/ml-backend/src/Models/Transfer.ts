@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
-import { onReadyRead } from '../Common/Tensor.ts';
-import { getNetworkVersion } from '../Common/utils.ts';
+import { onReadyRead } from '../../../ml-common/Tensor.ts';
+import { getNetworkExpIteration } from '../../../ml-common/utils.ts';
 import { LAST_NETWORK_VERSION, Model } from './def.ts';
 import { createSupabaseIOHandler } from './supabaseStorage.ts';
 import { shouldSaveHistoricalVersion } from './Utils.ts';
@@ -24,7 +24,7 @@ function getModelLoadPath(name: Model, version: number) {
 export async function saveNetwork(network: tf.LayersModel, name: Model) {
     await onReadyRead();
 
-    const networkVersion = getNetworkVersion(network);
+    const networkVersion = getNetworkExpIteration(network);
     const shouldSaveHistorical = await shouldSaveHistoricalVersion(name, networkVersion);
 
     // Save historical version
