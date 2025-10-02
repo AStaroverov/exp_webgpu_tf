@@ -29,8 +29,6 @@ initTensorFlow()
         return restoreModels('./models/downloaded/v0');
     })
     .then(() => {
-        console.info('✅ Models restored');
-
         // Start learner agents (policy and value)
         createPolicyLearnerAgent();
         createValueLearnerAgent();
