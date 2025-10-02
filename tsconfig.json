@@ -1,12 +1,11 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
-    "useDefineForClassFields": true,
-    "module": "ESNext",
+    "target": "esnext",
+    "module": "esnext",
     "lib": [
-      "ES2020",
-      "DOM",
-      "DOM.Iterable"
+      "esnext",
+      "dom",
+      "dom.iterable"
     ],
     "skipLibCheck": true,
     /* Bundler mode */
@@ -25,5 +24,11 @@
       "./node_modules/@types",
       "./node_modules/"
     ]
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "**/node_modules",
+    "dist",
+    "**/dist"
+  ]
 }

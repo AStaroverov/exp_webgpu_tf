@@ -4,6 +4,7 @@ import { concatMap, first, forkJoin, map, mergeMap, scan, tap } from 'rxjs';
 import { max } from '../../../../../lib/math.ts';
 import { bufferWhile } from '../../../../../lib/Rx/bufferWhile.ts';
 import { forceExitChannel, metricsChannels } from '../../../../ml-common/channels.ts';
+import { CONFIG } from '../../../../ml-common/config.ts';
 import { flatTypedArray } from '../../../../ml-common/flat.ts';
 import { AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
 import { getNetworkExpIteration } from '../../../../ml-common/utils.ts';
@@ -17,7 +18,6 @@ import {
     learnProcessChannel,
     queueSizeChannel,
 } from '../channels.ts';
-import { CONFIG } from '../config.ts';
 import { computeVTraceTargets } from '../train.ts';
 
 export type LearnData = AgentMemoryBatch & {

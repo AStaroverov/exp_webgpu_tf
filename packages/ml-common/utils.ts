@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { macroTasks } from '../../lib/TasksScheduler/macroTasks.ts';
-import { CONFIG } from '../ml/src/PPO/config.ts';
+import { CONFIG } from './config.ts';
 
 export function setNetworkExpIteration(o: tf.LayersModel, it: number) {
     o.setUserDefinedMetadata({ ...o.getUserDefinedMetadata(), expIteration: it });

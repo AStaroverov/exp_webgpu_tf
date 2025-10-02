@@ -4,6 +4,7 @@ import * as tf from '@tensorflow/tfjs';
 import { RingBuffer } from 'ring-buffer-ts';
 import { ceil, floor, max, mean, min } from '../../../../../lib/math.ts';
 import { metricsChannels } from '../../../../ml-common/channels.ts';
+import { CONFIG } from '../../../../ml-common/config.ts';
 import { flatTypedArray } from '../../../../ml-common/flat.ts';
 import { getDynamicLearningRate } from '../../../../ml-common/getDynamicLearningRate.ts';
 import { createInputTensors } from '../../../../ml-common/InputTensors.ts';
@@ -12,7 +13,6 @@ import { asyncUnwrapTensor, onReadyRead } from '../../../../ml-common/Tensor.ts'
 import { createPolicyNetwork } from '../../Models/Create.ts';
 import { Model } from '../../Models/def.ts';
 import { modelSettingsChannel } from '../channels.ts';
-import { CONFIG } from '../config.ts';
 import { computeKullbackLeiblerExact, trainPolicyNetwork } from '../train.ts';
 import { createLearnerAgent } from './createLearnerAgent.ts';
 import { LearnData } from './createLearnerManager.ts';

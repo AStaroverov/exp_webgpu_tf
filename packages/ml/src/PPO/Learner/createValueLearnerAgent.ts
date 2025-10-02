@@ -1,13 +1,13 @@
 import * as tf from '@tensorflow/tfjs';
 import { ceil, max, min } from '../../../../../lib/math.ts';
 import { metricsChannels } from '../../../../ml-common/channels.ts';
+import { CONFIG } from '../../../../ml-common/config.ts';
 import { createInputTensors } from '../../../../ml-common/InputTensors.ts';
 import { ReplayBuffer } from '../../../../ml-common/ReplayBuffer.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../../../ml-common/Tensor.ts';
 import { getNetworkExpIteration } from '../../../../ml-common/utils.ts';
 import { createValueNetwork } from '../../Models/Create.ts';
 import { Model } from '../../Models/def.ts';
-import { CONFIG } from '../config.ts';
 import { trainValueNetwork } from '../train.ts';
 import { createLearnerAgent } from './createLearnerAgent.ts';
 import { LearnData } from './createLearnerManager.ts';

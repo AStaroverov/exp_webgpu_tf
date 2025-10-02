@@ -1,4 +1,5 @@
 import * as tf from '@tensorflow/tfjs';
+import { CONFIG } from '../../../ml-common/config.ts';
 import { ACTION_DIM } from '../../../ml-common/consts.ts';
 import {
     ALLY_BUFFER,
@@ -8,7 +9,6 @@ import {
     MAX_BULLETS,
     MAX_ENEMIES,
 } from '../../../tanks/src/Pilots/Components/TankState.ts';
-import { CONFIG } from '../PPO/config.ts';
 import {
     applyCrossTransformerLayer,
     applyDenseLayers,

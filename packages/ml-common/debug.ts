@@ -2,12 +2,12 @@
 import { query } from 'bitecs';
 import { Color } from 'renderer/src/ECS/Components/Common.ts';
 import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
-import { CONFIG } from '../ml/src/PPO/config.ts';
 import { VisTestEpisodeManager } from '../ml/src/PPO/VisTest/VisTestEpisodeManager.ts';
 import { GameDI } from '../tanks/src/Game/DI/GameDI.ts';
 import { RigidBodyState } from '../tanks/src/Game/ECS/Components/Physical.ts';
 import { Tank } from '../tanks/src/Game/ECS/Components/Tank.ts';
 import { TeamRef } from '../tanks/src/Game/ECS/Components/TeamRef.ts';
+import { CONFIG } from './config.ts';
 import { drawMetrics } from './Metrics/Browser/index.ts';
 import { getDrawState } from './uiUtils.ts';
 
