@@ -10,13 +10,13 @@ export const DEFAULT_EXPERIMENT = {
     gamma: (iteration: number) => {
         return lerp(0.95, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
     },
-    policyEpochs: 1,
+    policyEpochs: 3,
     policyClipRatio: 0.2,
     policyEntropy: (iteration: number) => {
         return lerp(0.005, 0.05, clamp(1 - iteration / (LEARNING_STEPS * 0.5), 0, 1))
     },
 
-    valueEpochs: 1,
+    valueEpochs: 3,
     valueClipRatio: 0.2,
     valueLossCoeff: 0.5,
 
@@ -35,7 +35,7 @@ export const DEFAULT_EXPERIMENT = {
     },
 
     batchSize: (iteration: number) => {
-        return (4 * 1024) * clamp(ceil(iteration / (LEARNING_STEPS * 0.5)), 2, 4);
+        return (1024 * 4) * clamp(ceil(iteration / (LEARNING_STEPS * 0.5)), 1, 4);
     },
     miniBatchSize: (iteration: number) => {
         return 64 * clamp(ceil(iteration / (LEARNING_STEPS * 0.5)), 1, 4);
