@@ -1,7 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
 import { clamp } from 'lodash-es';
 import { RingBuffer } from 'ring-buffer-ts';
-import { unlerp } from '../../../../../lib/math.ts';
+import { abs, unlerp } from '../../../../../lib/math.ts';
 import { random } from '../../../../../lib/random.ts';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
@@ -29,7 +29,7 @@ setInterval(() => {
     for (const v of stateRewards) {
         if (v < stateMin) stateMin = v;
         if (v > stateMax) stateMax = v;
-        stateAvg += v;
+        stateAvg += abs(v);
     }
     stateAvg /= stateRewards.length;
 
@@ -39,7 +39,7 @@ setInterval(() => {
     for (const v of actionRewards) {
         if (v < actionMin) actionMin = v;
         if (v > actionMax) actionMax = v;
-        actionAvg += v;
+        actionAvg += abs(v);
     }
     actionAvg /= actionRewards.length;
 
