@@ -1,12 +1,12 @@
 import { filter, first, firstValueFrom, race, shareReplay, startWith, timer } from 'rxjs';
-import { abs, max, min } from '../../../../../lib/math.ts';
-import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
-import { CONFIG } from '../../../../ml-common/config.ts';
-import { SNAPSHOT_EVERY, TICK_TIME_SIMULATION } from '../../../../ml-common/consts.ts';
-import { createScenarioByCurriculumState } from '../../../../ml-common/Curriculum/createScenarioByCurriculumState.ts';
-import { Scenario } from '../../../../ml-common/Curriculum/types.ts';
-import { getGameOverReward } from '../../Reward/calculateReward.ts';
+import { abs, max, min } from '../../../../lib/math.ts';
+import { macroTasks } from '../../../../lib/TasksScheduler/macroTasks.ts';
+import { CONFIG } from '../../../ml-common/config.ts';
+import { SNAPSHOT_EVERY, TICK_TIME_SIMULATION } from '../../../ml-common/consts.ts';
+import { createScenarioByCurriculumState } from '../../../ml-common/Curriculum/createScenarioByCurriculumState.ts';
+import { Scenario } from '../../../ml-common/Curriculum/types.ts';
 import { CurriculumState, curriculumStateChannel, episodeSampleChannel, queueSizeChannel } from '../channels.ts';
+import { getGameOverReward } from '../Reward/calculateReward.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
