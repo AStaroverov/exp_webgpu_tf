@@ -10,10 +10,10 @@ export const DEFAULT_EXPERIMENT = {
     gamma: (iteration: number) => {
         return lerp(0.95, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
     },
-    policyEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
+    policyEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1) * 2),
     policyClipRatio: 0.2,
     policyEntropy: (iteration: number) => {
-        return lerp(0.005, 0.05, clamp(1 - iteration / (LEARNING_STEPS * 0.5), 0, 1))
+        return lerp(0.005, 0.05, clamp(1 - iteration / (LEARNING_STEPS * 0.2), 0, 1))
     },
 
     valueEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
@@ -30,7 +30,7 @@ export const DEFAULT_EXPERIMENT = {
         initial: 1e-5,
         multHigh: 0.95,
         multLow: 1.05,
-        min: 1e-6,
+        min: 1e-5,
         max: 1e-3,
     },
 
@@ -47,8 +47,8 @@ export const DEFAULT_EXPERIMENT = {
     workerCount: 8,
     backpressureQueueSize: 2,
     // Perturbation of weights
-    perturbChance: (iteration: number) => lerp(0.01, 0.10, clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1)),
-    perturbWeightsScale: (iteration: number) => lerp(0.005, 0.01, clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1)),
+    perturbChance: (iteration: number) => lerp(0.01, 0.10, clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1)),
+    perturbWeightsScale: (iteration: number) => lerp(0.005, 0.01, clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1)),
     // Training control
     savePath: 'PPO_MHA',
     // fsModelPath: '/assets/models/v1',

@@ -25,21 +25,27 @@ setInterval(() => {
 
     let stateMin = Infinity;
     let stateMax = -Infinity;
+    let stateAvg = 0;
     for (const v of stateRewards) {
         if (v < stateMin) stateMin = v;
         if (v > stateMax) stateMax = v;
+        stateAvg += v;
     }
+    stateAvg /= stateRewards.length;
 
     let actionMin = Infinity;
     let actionMax = -Infinity;
+    let actionAvg = 0;
     for (const v of actionRewards) {
         if (v < actionMin) actionMin = v;
         if (v > actionMax) actionMax = v;
+        actionAvg += v;
     }
+    actionAvg /= actionRewards.length;
 
     console.log('Avg rewards:', `
-        state min=${stateMin.toFixed(2)} max=${stateMax.toFixed(2)}
-        action min=${actionMin.toFixed(2)} max=${actionMax.toFixed(2)}
+        state min=${stateMin.toFixed(2)} max=${stateMax.toFixed(2)} avg=${stateAvg.toFixed(2)}
+        action min=${actionMin.toFixed(2)} max=${actionMax.toFixed(2)} avg=${actionAvg.toFixed(2)}
     `);
 }, 60 * 1000)
 
