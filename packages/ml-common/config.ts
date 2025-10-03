@@ -49,16 +49,16 @@ export const DEFAULT_EXPERIMENT: Config = {
     clipNorm: 20,
     // PPO-specific parameters
     gamma: (iteration) => {
-        return lerp(0.92, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
+        return lerp(0.95, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
     },
     policyEpochs: 1,
     policyClipRatio: 0.2,
     policyEntropy: (iteration) => {
-        return lerp(0.005, 0.05, clamp(1 - iteration / LEARNING_STEPS, 0, 1))
+        return lerp(0.005, 0.05, clamp(1 - iteration / (LEARNING_STEPS / 2), 0, 1))
     },
 
     valueEpochs: 1,
-    valueClipRatio: 0.4,
+    valueClipRatio: 0.2,
     valueLossCoeff: 0.5,
 
     klConfig: {
@@ -88,11 +88,11 @@ export const DEFAULT_EXPERIMENT: Config = {
     workerCount: 8,
     backpressureQueueSize: 2,
     // Perturbation of weights
-    perturbChance: (iteration) => lerp(0.01, 0.10, clamp(iteration / LEARNING_STEPS, 0, 1)),
-    perturbWeightsScale: (iteration) => lerp(0.005, 0.01, clamp(iteration / LEARNING_STEPS, 0, 1)),
+    perturbChance: (iteration) => lerp(0.01, 0.10, clamp(iteration / (LEARNING_STEPS / 2), 0, 1)),
+    perturbWeightsScale: (iteration) => lerp(0.005, 0.01, clamp(iteration / (LEARNING_STEPS / 2), 0, 1)),
     // Training control
     savePath: 'PPO_MHA',
-    fsModelPath: '/assets/models/v1',
+    // fsModelPath: '/assets/models/v1',
 };
 
 // Current active experiment

@@ -208,7 +208,7 @@ export function calculateActionReward(tankEid: number): number {
     const rewards = initializeActionRewards();
 
     rewards.team.score = getTeamAdvantageScore(currentBattleState);
-    rewards.common.score = WEIGHTS.COMMON.SCORE * currentScore / 10;
+    rewards.common.score = WEIGHTS.COMMON.SCORE * currentScore / 2;
     rewards.common.health = WEIGHTS.COMMON.HEALTH * currentHealth;
 
     rewards.team.total = WEIGHTS.TEAM_MULTIPLIER
@@ -239,7 +239,7 @@ function calculateMovingReward(moveDir: number, rotationDir: number): number {
 }
 
 export function getTeamAdvantageScore(state: BattleState): number {
-    const normCount = (state.alliesCount - state.enemiesCount) / 2;
+    const normCount = (state.alliesCount - state.enemiesCount) / 3;
     const normHP = (state.alliesTotalHealth - state.enemiesTotalHealth);
 
     return WEIGHTS.TEAM.SCORE * (normCount + normHP);
