@@ -17,14 +17,14 @@ export const getFramePenalty = (frame: number) =>
     -clamp(Math.log10(1 + frame), 0, 3) / 100;
 
 export const getDeathPenalty = (isDead: boolean) =>
-    isDead ? -GAME_OVER_REWARD_MULTIPLIER : 0;
+    GAME_OVER_REWARD_MULTIPLIER * Number(isDead);
 
 export const getGameOverReward = (iteration: number, successRatio: number) =>
-    GAME_OVER_REWARD_MULTIPLIER * successRatio * clamp(unlerp(LEARNING_STEPS * 0.2, LEARNING_STEPS, iteration), 0, 1);
+    GAME_OVER_REWARD_MULTIPLIER * successRatio * clamp(unlerp(LEARNING_STEPS * 0.2, LEARNING_STEPS * 0.6, iteration), 0, 1);
 
 const WEIGHTS = ({
     STATE_MULTIPLIER: 1,
-    ACTION_MULTIPLIER: 2,
+    ACTION_MULTIPLIER: 1,
 
     // ACTION REWARD
     COMMON: {
@@ -208,8 +208,8 @@ export function calculateActionReward(tankEid: number): number {
     const rewards = initializeActionRewards();
 
     rewards.team.score = getTeamAdvantageScore(currentBattleState);
-    rewards.common.score = WEIGHTS.COMMON.SCORE * currentScore / 2;
-    rewards.common.health = WEIGHTS.COMMON.HEALTH * currentHealth;
+    rewards.common.score = WEIGHTS.COMMON.SCORE * currentScore * 0.33;
+    rewards.common.health = WEIGHTS.COMMON.HEALTH * currentHealth * 33;
 
     rewards.team.total = WEIGHTS.TEAM_MULTIPLIER
         * (rewards.team.score);

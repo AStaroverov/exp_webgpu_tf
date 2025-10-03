@@ -54,7 +54,7 @@ export const DEFAULT_EXPERIMENT: Config = {
     policyEpochs: 1,
     policyClipRatio: 0.2,
     policyEntropy: (iteration) => {
-        return lerp(0.005, 0.05, clamp(1 - iteration / (LEARNING_STEPS / 2), 0, 1))
+        return lerp(0.005, 0.05, clamp(1 - iteration / (LEARNING_STEPS * 0.5), 0, 1))
     },
 
     valueEpochs: 1,
@@ -76,10 +76,10 @@ export const DEFAULT_EXPERIMENT: Config = {
     },
 
     batchSize: (iteration) => {
-        return (4 * 1024) * clamp(ceil(iteration / (LEARNING_STEPS / 2)), 2, 4);
+        return (4 * 1024) * clamp(ceil(iteration / (LEARNING_STEPS * 0.5)), 2, 4);
     },
     miniBatchSize: (iteration) => {
-        return 64 * clamp(ceil(iteration / (LEARNING_STEPS / 2)), 1, 4);
+        return 64 * clamp(ceil(iteration / (LEARNING_STEPS * 0.5)), 1, 4);
     },
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
@@ -88,8 +88,8 @@ export const DEFAULT_EXPERIMENT: Config = {
     workerCount: 8,
     backpressureQueueSize: 2,
     // Perturbation of weights
-    perturbChance: (iteration) => lerp(0.01, 0.10, clamp(iteration / (LEARNING_STEPS / 2), 0, 1)),
-    perturbWeightsScale: (iteration) => lerp(0.005, 0.01, clamp(iteration / (LEARNING_STEPS / 2), 0, 1)),
+    perturbChance: (iteration) => lerp(0.01, 0.10, clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1)),
+    perturbWeightsScale: (iteration) => lerp(0.005, 0.01, clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1)),
     // Training control
     savePath: 'PPO_MHA',
     // fsModelPath: '/assets/models/v1',
