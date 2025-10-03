@@ -1,7 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
 import { clamp } from 'lodash-es';
 import { RingBuffer } from 'ring-buffer-ts';
-import { lerp, unlerp } from '../../../../../lib/math.ts';
+import { unlerp } from '../../../../../lib/math.ts';
 import { random } from '../../../../../lib/random.ts';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
@@ -11,7 +11,7 @@ import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
 import { getNetworkExpIteration, patientAction } from '../../../../ml-common/utils.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../../../ml/src/Models/Utils.ts';
-import { act, MAX_STD_DEV } from '../../../../ml/src/PPO/train.ts';
+import { act } from '../../../../ml/src/PPO/train.ts';
 import { calculateActionReward, calculateStateReward, getDeathPenalty, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 
@@ -111,7 +111,7 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         applyActionToTank(
             this.tankEid,
             result.actions.map((v) => clamp(v, -1, 1)),
-            result.logStd.map((v) => lerp(0.1, 1, 1 - Math.exp(v) / MAX_STD_DEV)),
+            // result.logStd.map((v) => lerp(0.1, 1, 1 - Math.exp(v) / MAX_STD_DEV)),
         );
 
         if (!this.train) return;
