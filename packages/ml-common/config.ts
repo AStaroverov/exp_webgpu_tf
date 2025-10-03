@@ -1,4 +1,4 @@
-import { clamp } from 'lodash';
+import { clamp, floor } from 'lodash';
 import { ceil, lerp } from '../../lib/math.ts';
 import { LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
 
@@ -10,13 +10,13 @@ export const DEFAULT_EXPERIMENT = {
     gamma: (iteration: number) => {
         return lerp(0.95, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
     },
-    policyEpochs: 3,
+    policyEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
     policyClipRatio: 0.2,
     policyEntropy: (iteration: number) => {
         return lerp(0.005, 0.05, clamp(1 - iteration / (LEARNING_STEPS * 0.5), 0, 1))
     },
 
-    valueEpochs: 3,
+    valueEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
     valueClipRatio: 0.2,
     valueLossCoeff: 0.5,
 

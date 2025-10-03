@@ -26,7 +26,7 @@ export function createPolicyLearnerAgent() {
     });
 }
 
-const klHistory = new RingBuffer<number>(10 * CONFIG.policyEpochs);
+const klHistory = new RingBuffer<number>(25);
 
 function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const expIteration = getNetworkExpIteration(network);
@@ -53,7 +53,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const policyLossList: tf.Tensor[] = [];
     const entropyCoeff = CONFIG.policyEntropy(expIteration);
 
-    for (let i = 0; i < CONFIG.policyEpochs; i++) {
+    for (let i = 0; i < CONFIG.policyEpochs(expIteration); i++) {
         for (let j = 0; j < mbc; j++) {
             const mBatch = getPolicyBatch(mbs, j);
 
