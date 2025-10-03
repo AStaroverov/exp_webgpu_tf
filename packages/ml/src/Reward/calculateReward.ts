@@ -23,8 +23,8 @@ export const getGameOverReward = (iteration: number, successRatio: number) =>
     GAME_OVER_REWARD_MULTIPLIER * successRatio * clamp(unlerp(LEARNING_STEPS * 0.2, LEARNING_STEPS * 0.6, iteration), 0, 1);
 
 const WEIGHTS = ({
-    STATE_MULTIPLIER: 1,
-    ACTION_MULTIPLIER: 1,
+    STATE_MULTIPLIER: 1, // it's often reward and work as learning base principle
+    ACTION_MULTIPLIER: 3, // it's rare reward and work as path to win
 
     // ACTION REWARD
     COMMON: {
