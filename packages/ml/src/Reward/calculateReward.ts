@@ -17,7 +17,7 @@ export const getFramePenalty = (frame: number) =>
     -clamp(Math.log10(1 + frame), 0, 3) / 100;
 
 export const getDeathPenalty = (isDead: boolean) =>
-    GAME_OVER_REWARD_MULTIPLIER * Number(isDead);
+    -GAME_OVER_REWARD_MULTIPLIER * Number(isDead);
 
 export const getGameOverReward = (iteration: number, successRatio: number) =>
     GAME_OVER_REWARD_MULTIPLIER * successRatio * clamp(unlerp(LEARNING_STEPS * 0.2, LEARNING_STEPS * 0.6, iteration), 0, 1);
