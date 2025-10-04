@@ -37,9 +37,6 @@ initTensorFlow()
         // Start learner manager (batch processing)
         createLearnerManager();
         console.info('✅ Learner manager started');
-
-        console.info('🎯 Ready to receive experience batches via episodeSampleChannel');
-        console.info('   Models will be synced to Supabase automatically');
     })
     .catch((error) => {
         console.error('❌ Failed to initialize:', error);

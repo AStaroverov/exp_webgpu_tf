@@ -85,7 +85,11 @@ export function createLearnerManager() {
 
     merge(newSamples, recentSamples).pipe(
         bufferWhile((batches) => {
-            return batches.reduce((acc, b) => acc + b.memoryBatch.size, 0) < CONFIG.batchSize(max(...batches.map(s => s.networkVersion), 0));
+            const size = batches.reduce((acc, b) => acc + b.memoryBatch.size, 0);
+            const requiredSize = CONFIG.batchSize(max(...batches.map(s => s.networkVersion), 0));
+            console.log(`Current buffered size: ${size}, required size: ${requiredSize}`);
+
+            return size < requiredSize;
         }),
         tap(() => queueSizeChannel.emit(queueSize++)),
         concatMap((samples) => {

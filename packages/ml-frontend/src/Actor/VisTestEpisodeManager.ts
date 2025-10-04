@@ -13,15 +13,15 @@ export class VisTestEpisodeManager extends EpisodeManager {
     private currentScenario?: Scenario;
 
     public async start() {
-        // while (true) {
-        try {
-            await this.waitEnabling();
-            await this.runEpisode();
-        } catch (error) {
-            console.error('Error during episode:', error);
-            await new Promise(resolve => macroTasks.addTimeout(resolve, 1000));
+        while (true) {
+            try {
+                await this.waitEnabling();
+                await this.runEpisode();
+            } catch (error) {
+                console.error('Error during episode:', error);
+                await new Promise(resolve => macroTasks.addTimeout(resolve, 1000));
+            }
         }
-        // }
     }
 
     public getDiscounterReward(tankEid: EntityId) {

@@ -11,10 +11,11 @@ setConsolePrefix(`[TAB]`);
 await initTensorFlow('wasm');
 
 // Main experience collection: spawn multiple ActorWorkers for fast headless generation
-// Array.from(
-//     { length: CONFIG.workerCount },
-//     () => new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
-// );
+Array.from(
+    // { length: CONFIG.workerCount },
+    { length: 1 },
+    () => new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
+);
 
 // Visual debug mode: single VisTestEpisodeManager for visualization
 const manager = new VisTestEpisodeManager();

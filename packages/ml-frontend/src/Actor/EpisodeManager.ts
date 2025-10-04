@@ -62,8 +62,6 @@ export class EpisodeManager {
                 return;
             }
 
-            debugger
-
             // Upload to Supabase Storage + send notification via Realtime
             uploadEpisodeSample({
                 memoryBatch: memoryBatch,

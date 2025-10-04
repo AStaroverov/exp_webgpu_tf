@@ -1,5 +1,5 @@
+import { disposeNetwork } from '../../../ml-common/utils.ts';
 import { loadLastNetwork, loadNetworkByPath, saveNetwork } from './Transfer.ts';
-import { disposeNetwork } from './Utils.ts';
 import { Model } from './def.ts';
 
 /**

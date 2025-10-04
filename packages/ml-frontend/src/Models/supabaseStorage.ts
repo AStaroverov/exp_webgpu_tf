@@ -65,7 +65,6 @@ export function createSupabaseIOHandler(
 
                 console.info(`✅ Loaded ${modelName} v${version} from Supabase`);
 
-                debugger;
                 return {
                     ...modelJSON,
                     weightData: weightsBuffer,
