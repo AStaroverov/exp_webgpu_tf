@@ -1,35 +1,28 @@
-/**
- * Supabase Storage integration for loading models
- */
-
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import * as tf from '@tensorflow/tfjs';
+import { throwingError } from '../../../../lib/throwingError.ts';
+import { LAST_NETWORK_VERSION } from '../../../ml-backend/src/Models/def.ts';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const SUPABASE_BUCKET = import.meta.env.VITE_SUPABASE_BUCKET || 'models';
+const SUPABASE_URL = import.meta.env.SUPABASE_URL || throwingError('SUPABASE_URL not set');
+const SUPABASE_PUBLICK_KEY = import.meta.env.SUPABASE_PUBLICK_KEY || throwingError('SUPABASE_KEY not set');
+const SUPABASE_BUCKET_MODELS = import.meta.env.SUPABASE_BUCKET_MODELS || throwingError('SUPABASE_MODELS_BUCKET not set');
 
 let supabase: SupabaseClient | null = null;
 
 function getSupabaseClient(): SupabaseClient | null {
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_PUBLICK_KEY) {
         console.warn('⚠️  Supabase credentials not set, model loading disabled');
         return null;
     }
 
     if (!supabase) {
-        supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+        supabase = createClient(SUPABASE_URL, SUPABASE_PUBLICK_KEY);
         console.info('✅ Supabase client initialized');
     }
 
     return supabase;
 }
 
-/**
- * Create TensorFlow.js IOHandler for loading models from Supabase Storage
- * @param modelName - name of the model (e.g., 'policy-model', 'value-model')
- * @param version - version number
- */
 export function createSupabaseIOHandler(
     modelName: string,
     version: number
@@ -46,11 +39,11 @@ export function createSupabaseIOHandler(
 
                 // Get public URLs for model files
                 const { data: modelJsonData } = client.storage
-                    .from(SUPABASE_BUCKET)
+                    .from(SUPABASE_BUCKET_MODELS)
                     .getPublicUrl(`${basePath}/model.json`);
 
                 const { data: weightsData } = client.storage
-                    .from(SUPABASE_BUCKET)
+                    .from(SUPABASE_BUCKET_MODELS)
                     .getPublicUrl(`${basePath}/weights.bin`);
 
                 const modelJsonUrl = modelJsonData.publicUrl;
@@ -72,16 +65,10 @@ export function createSupabaseIOHandler(
 
                 console.info(`✅ Loaded ${modelName} v${version} from Supabase`);
 
-                // Return ModelArtifacts
+                debugger;
                 return {
-                    modelTopology: modelJSON.modelTopology,
-                    weightSpecs: modelJSON.weightsManifest[0].weights,
+                    ...modelJSON,
                     weightData: weightsBuffer,
-                    format: modelJSON.format,
-                    generatedBy: modelJSON.generatedBy,
-                    convertedBy: modelJSON.convertedBy,
-                    trainingConfig: modelJSON.trainingConfig,
-                    userDefinedMetadata: modelJSON.userDefinedMetadata,
                 };
             } catch (error) {
                 console.error(`❌ Failed to load ${modelName} v${version} from Supabase:`, error);
@@ -91,11 +78,6 @@ export function createSupabaseIOHandler(
     };
 }
 
-/**
- * Load model from Supabase Storage
- * @param modelName - name of the model
- * @param version - version number (default: 0 for latest)
- */
 export async function loadModelFromSupabase(
     modelName: string,
     version: number = 0
@@ -104,34 +86,52 @@ export async function loadModelFromSupabase(
     return tf.loadLayersModel(handler);
 }
 
-/**
- * Get public URL for model in Supabase Storage
- */
-export function getModelPublicUrl(modelName: string, version: number): string | null {
-    const client = getSupabaseClient();
-    if (!client) return null;
-
-    const { data } = client.storage
-        .from(SUPABASE_BUCKET)
-        .getPublicUrl(`v${version}-${modelName}/model.json`);
-
-    return data.publicUrl;
-}
-
-/**
- * Check if Supabase is configured
- */
 export function isSupabaseConfigured(): boolean {
-    return Boolean(SUPABASE_URL && SUPABASE_KEY);
+    return Boolean(SUPABASE_URL && SUPABASE_PUBLICK_KEY);
 }
 
-/**
- * Check latest version available in Supabase (simplified)
- * For now, always returns 0 (latest)
- * TODO: Implement proper version checking via Supabase Storage list
- */
-export async function getLatestModelVersion(modelName: string): Promise<number> {
-    // For MVP, we always use v0 (LAST_NETWORK_VERSION)
-    // Later can implement listing bucket to find latest version
-    return 0;
+export async function getAvailableVersions(modelName: string): Promise<number[]> {
+    const client = getSupabaseClient();
+    if (!client) {
+        return [LAST_NETWORK_VERSION];
+    }
+
+    try {
+        const { data, error } = await client.storage
+            .from(SUPABASE_BUCKET_MODELS)
+            .list('', {
+                limit: 5,
+                offset: 0,
+                sortBy: { column: 'created_at', order: 'desc' },
+            });
+
+        if (error) {
+            console.error('Failed to list models:', error);
+            return [LAST_NETWORK_VERSION];
+        }
+
+        // Find all directories matching v{number}-{modelName}
+        const versions: number[] = [];
+        const prefix = `-${modelName}`;
+
+        for (const item of data) {
+            if (item.name.startsWith('v') && item.name.endsWith(prefix)) {
+                const versionStr = item.name.slice(1, item.name.indexOf('-'));
+                const version = parseInt(versionStr);
+                if (!isNaN(version) && version !== LAST_NETWORK_VERSION) {
+                    versions.push(version);
+                }
+            }
+        }
+
+        // Always include latest version
+        if (!versions.includes(LAST_NETWORK_VERSION)) {
+            versions.push(LAST_NETWORK_VERSION);
+        }
+
+        return versions.sort((a, b) => b - a); // Sort descending (newest first)
+    } catch (error) {
+        console.error('Error getting available versions:', error);
+        return [LAST_NETWORK_VERSION];
+    }
 }

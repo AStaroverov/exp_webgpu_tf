@@ -1,4 +1,4 @@
 {
   "extends": "../../tsconfig.json",
-  "include": ["src/**/*", "appo.ts", "../ml-common/**/*" ],
+  "include": ["src/**/*", "appo.ts", "../ml-common/**/*"],
 }
