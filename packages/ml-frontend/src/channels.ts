@@ -67,6 +67,16 @@ function createSupabaseChannel<T>(channelName: string): {
 // Channel to receive queue size from ml-backend (for adaptive generation)
 export const queueSizeChannel = createSupabaseChannel<number>('queue-size');
 
+// Channel to send new batch notifications to ml-backend
+export const newBatchChannel = createSupabaseChannel<{
+    batchId: string;
+    fileName: string;
+    networkVersion: number;
+    scenarioIndex: number;
+    successRatio: number;
+    timestamp: string;
+}>('new-batch');
+
 /**
  * Upload curriculum state to Supabase Storage
  * @param curriculumState - curriculum state data
@@ -184,18 +194,13 @@ export async function uploadEpisodeSample(episodeSample: EpisodeSample): Promise
         console.info(`✅ Uploaded experience batch: ${batchId}`);
 
         // Send notification via Realtime
-        const channel = client.channel('new-batch');
-        await channel.send({
-            type: 'broadcast',
-            event: 'message',
-            payload: {
-                batchId,
-                fileName,
-                networkVersion: episodeSample.networkVersion,
-                scenarioIndex: episodeSample.scenarioIndex,
-                successRatio: episodeSample.successRatio,
-                timestamp: data.timestamp,
-            },
+        await newBatchChannel.emit({
+            batchId,
+            fileName,
+            networkVersion: episodeSample.networkVersion,
+            scenarioIndex: episodeSample.scenarioIndex,
+            successRatio: episodeSample.successRatio,
+            timestamp: data.timestamp,
         });
 
         return batchId;
