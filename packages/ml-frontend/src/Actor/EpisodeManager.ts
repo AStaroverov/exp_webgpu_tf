@@ -5,8 +5,8 @@ import { CONFIG } from '../../../ml-common/config.ts';
 import { SNAPSHOT_EVERY, TICK_TIME_SIMULATION } from '../../../ml-common/consts.ts';
 import { createScenarioByCurriculumState } from '../../../ml-common/Curriculum/createScenarioByCurriculumState.ts';
 import { Scenario } from '../../../ml-common/Curriculum/types.ts';
-import { CurriculumState, curriculumStateChannel, episodeSampleChannel, queueSizeChannel } from '../channels.ts';
-import { getGameOverReward } from '../Reward/calculateReward.ts';
+import { getGameOverReward } from '../../../ml-common/Reward/calculateReward.ts';
+import { downloadCurriculumState, queueSizeChannel, uploadEpisodeSample } from '../channels.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -20,17 +20,6 @@ const backpressure$ = race([
 const maxFramesCount = (CONFIG.episodeFrames - (CONFIG.episodeFrames % SNAPSHOT_EVERY) + SNAPSHOT_EVERY);
 
 export class EpisodeManager {
-    protected curriculumState: CurriculumState = {
-        currentVersion: 0,
-        mapScenarioIndexToSuccessRatio: {},
-    };
-
-    constructor() {
-        curriculumStateChannel.obs.subscribe((state) => {
-            this.curriculumState = state;
-        });
-    }
-
     public async start() {
         while (true) {
             try {
@@ -42,9 +31,10 @@ export class EpisodeManager {
         }
     }
 
-    protected beforeEpisode() {
-        return createScenarioByCurriculumState(this.curriculumState, {
-            iteration: this.curriculumState.currentVersion,
+    protected async beforeEpisode() {
+        const curriculumState = await downloadCurriculumState();
+        return createScenarioByCurriculumState(curriculumState, {
+            iteration: curriculumState.currentVersion,
         });
     }
 
@@ -72,11 +62,16 @@ export class EpisodeManager {
                 return;
             }
 
-            episodeSampleChannel.emit({
+            debugger
+
+            // Upload to Supabase Storage + send notification via Realtime
+            uploadEpisodeSample({
                 memoryBatch: memoryBatch,
                 successRatio,
                 scenarioIndex: episode.index,
                 networkVersion,
+            }).catch((error: unknown) => {
+                console.error('Failed to upload episode sample:', error);
             });
         });
     }

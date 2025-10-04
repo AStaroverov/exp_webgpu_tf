@@ -1,28 +1,27 @@
 import { EntityId } from 'bitecs';
 import { first, firstValueFrom, interval } from 'rxjs';
-import { log, max, min, round } from '../../../../../lib/math.ts';
-import { frameTasks } from '../../../../../lib/TasksScheduler/frameTasks.ts';
-import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
-import { CONFIG } from '../../../../ml-common/config.ts';
-import { createScenarioByCurriculumState } from '../../../../ml-common/Curriculum/createScenarioByCurriculumState.ts';
-import { Scenario } from '../../../../ml-common/Curriculum/types.ts';
-import { getDrawState } from '../../../../ml-common/uiUtils.ts';
-import { EpisodeManager } from '../Actor/EpisodeManager.ts';
+import { log, max, min, round } from '../../../../lib/math.ts';
+import { frameTasks } from '../../../../lib/TasksScheduler/frameTasks.ts';
+import { macroTasks } from '../../../../lib/TasksScheduler/macroTasks.ts';
+import { CONFIG } from '../../../ml-common/config.ts';
+import { Scenario } from '../../../ml-common/Curriculum/types.ts';
+import { getDrawState } from '../../../ml-common/uiUtils.ts';
+import { EpisodeManager } from './EpisodeManager.ts';
 
 
 export class VisTestEpisodeManager extends EpisodeManager {
     private currentScenario?: Scenario;
 
     public async start() {
-        while (true) {
-            try {
-                await this.waitEnabling();
-                await this.runEpisode();
-            } catch (error) {
-                console.error('Error during episode:', error);
-                await new Promise(resolve => macroTasks.addTimeout(resolve, 1000));
-            }
+        // while (true) {
+        try {
+            await this.waitEnabling();
+            await this.runEpisode();
+        } catch (error) {
+            console.error('Error during episode:', error);
+            await new Promise(resolve => macroTasks.addTimeout(resolve, 1000));
         }
+        // }
     }
 
     public getDiscounterReward(tankEid: EntityId) {
@@ -43,11 +42,8 @@ export class VisTestEpisodeManager extends EpisodeManager {
         return this.currentScenario?.getSuccessRatio() ?? 0;
     }
 
-    protected beforeEpisode() {
-        return createScenarioByCurriculumState(this.curriculumState, {
-            iteration: this.curriculumState.currentVersion,
-        })
-            // return createScenarioWithHeuristicAgents({})
+    protected async beforeEpisode() {
+        return super.beforeEpisode()
             .then((scenario) => {
                 (this.currentScenario = scenario);
                 const canvas = document.querySelector('canvas')!;

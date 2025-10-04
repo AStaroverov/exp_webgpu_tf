@@ -1,14 +1,23 @@
-import Ably from 'ably';
+import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import { Observable, Subject } from 'rxjs';
 import { AgentMemoryBatch } from '../../../ml-common/Memory';
 
-const ABLY_API_KEY = process.env.ABLY_API_KEY || '';
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const SUPABASE_KEY = process.env.SUPABASE_KEY || '';
 
-if (!ABLY_API_KEY) {
-    console.warn('⚠️  ABLY_API_KEY not set, global channels will not work');
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+    console.warn('⚠️  Supabase credentials not set, global channels will not work');
 }
 
-const ably = new Ably.Realtime(ABLY_API_KEY);
+let supabase: SupabaseClient | null = null;
+
+function getSupabaseClient(): SupabaseClient {
+    if (!supabase) {
+        supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+        console.info('✅ Supabase client initialized for backend channels');
+    }
+    return supabase;
+}
 
 export type EpisodeSample = {
     memoryBatch: AgentMemoryBatch,
@@ -22,28 +31,49 @@ export type CurriculumState = {
     mapScenarioIndexToSuccessRatio: Record<number, number>,
 }
 
-function createAblyChannel<T>(channelName: string): {
+function createSupabaseChannel<T>(channelName: string): {
     obs: Observable<T>,
-    emit: (data: T) => void
+    emit: (data: T) => Promise<void>
 } {
-    const channel = ably.channels.get(channelName);
+    const client = getSupabaseClient();
+    const channel: RealtimeChannel = client.channel(channelName);
     const subject = new Subject<T>();
 
-
-    channel.subscribe((message) => {
-        subject.next(message.data as T);
-    });
+    // Subscribe to broadcasts
+    channel
+        .on('broadcast', { event: 'message' }, (payload) => {
+            subject.next(payload.payload as T);
+        })
+        .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                console.info(`✅ [Backend] Subscribed to ${channelName}`);
+            }
+        });
 
     return {
         obs: subject.asObservable(),
-        emit: (data: T) => {
-            channel.publish('message', data);
+        emit: async (data: T) => {
+            await channel.send({
+                type: 'broadcast',
+                event: 'message',
+                payload: data,
+            });
         }
     };
 }
 
-export const episodeSampleChannel = createAblyChannel<EpisodeSample>('ml:experience.v1');
-export const queueSizeChannel = createAblyChannel<number>('ml:queue-size.v1');
-export const curriculumStateChannel = createAblyChannel<CurriculumState>('ml:curriculum.v1');
+// Receive new batch notifications from frontend
+export const episodeSampleChannel = createSupabaseChannel<{
+    batchId: string;
+    fileName: string;
+    networkVersion: number;
+    scenarioIndex: number;
+    successRatio: number;
+    timestamp: string;
+}>('new-batch');
 
-export const modelVersionChannel = createAblyChannel<{ model: string, version: number }>('ml:model.weights.v1');
+// Send queue size to frontend
+export const queueSizeChannel = createSupabaseChannel<number>('queue-size');
+
+// Send model version updates
+export const modelVersionChannel = createSupabaseChannel<{ model: string, version: number }>('model-version');

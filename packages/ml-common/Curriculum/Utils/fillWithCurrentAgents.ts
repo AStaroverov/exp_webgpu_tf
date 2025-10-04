@@ -1,4 +1,4 @@
-import { CurrentActorAgent } from '../../../tanks/src/Pilots/Agents/CurrentActorAgent.ts';
+import { CurrentActorAgent } from '../../Agents/CurrentActorAgent.ts';
 import { Scenario } from '../types.ts';
 
 export function fillWithCurrentAgents(episode: Scenario) {

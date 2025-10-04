@@ -10,10 +10,6 @@ import { loadLastNetwork } from './Transfer.ts';
 
 const MODELS_DIR = process.env.MODELS_DIR || './models';
 
-export function disposeNetwork(network: LayersModel) {
-    network.optimizer?.dispose();
-    network.dispose();
-}
 
 export function getVersionFromStorePath(path: string): number {
     const splitted = path.split('|version:');
