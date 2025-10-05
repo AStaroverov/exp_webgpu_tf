@@ -47,7 +47,7 @@ export const DEFAULT_EXPERIMENT = {
     workerCount: 8,
     backpressureQueueSize: 2,
     // Perturbation of weights
-    perturbChance: (iteration: number) => lerp(0.01, 0.10, clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1)),
+    perturbChance: (iteration: number) => lerp(0.01, 0.05, clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1)),
     perturbWeightsScale: (iteration: number) => lerp(0.005, 0.01, clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1)),
     // Training control
     savePath: 'PPO_MHA',

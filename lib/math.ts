@@ -62,6 +62,14 @@ export function mean(args: number[] | Float32Array | Float64Array): number {
     return sum / args.length;
 }
 
+export function median(args: number[] | Float32Array | Float64Array): number {
+    const sorted = args.toSorted((a, b) => a - b);
+    const mid = floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+        ? (sorted[mid - 1] + sorted[mid]) / 2
+        : sorted[mid];
+}
+
 export function std(args: number[] | Float32Array | Float64Array, mean: number): number {
     let val = 0;
     for (let i = 0; i < args.length; i++) {
