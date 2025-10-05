@@ -1,7 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
-import { Layer } from '@tensorflow/tfjs-layers/dist/engine/topology';
 
-export class RoleEmbeddingLayer extends Layer {
+export class RoleEmbeddingLayer extends tf.layers.Layer {
     static readonly className = 'RoleEmbeddingLayer';
 
     private roleVec!: tf.LayerVariable;

@@ -1,4 +1,3 @@
-import '@tensorflow/tfjs-backend-wasm';
 import '../../ml-common/uiUtils.ts';
 
 import { setConsolePrefix } from '../../ml-common/console.ts';

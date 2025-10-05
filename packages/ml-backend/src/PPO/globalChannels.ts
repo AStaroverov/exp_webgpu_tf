@@ -1,23 +1,7 @@
-import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
+import { RealtimeChannel } from '@supabase/supabase-js';
 import { Observable, Subject } from 'rxjs';
 import { AgentMemoryBatch } from '../../../ml-common/Memory';
-
-const SUPABASE_URL = process.env.SUPABASE_URL || '';
-const SUPABASE_KEY = process.env.SUPABASE_KEY || '';
-
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.warn('⚠️  Supabase credentials not set, global channels will not work');
-}
-
-let supabase: SupabaseClient | null = null;
-
-function getSupabaseClient(): SupabaseClient {
-    if (!supabase) {
-        supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-        console.info('✅ Supabase client initialized for backend channels');
-    }
-    return supabase;
-}
+import { getSupabaseClient } from '../Models/supabaseStorage.ts';
 
 export type EpisodeSample = {
     memoryBatch: AgentMemoryBatch,
@@ -46,7 +30,7 @@ function createSupabaseChannel<T>(channelName: string): {
         })
         .subscribe((status) => {
             if (status === 'SUBSCRIBED') {
-                console.info(`✅ [Backend] Subscribed to ${channelName}`);
+                console.info(`✅ Subscribed to ${channelName}`);
             }
         });
 

@@ -1,14 +1,3 @@
-/**
- * ML Backend Entry Point
- * 
- * Node.js backend that:
- * 1. Initializes TensorFlow.js
- * 2. Starts learner agents
- * 3. Receives experience batches via episodeSampleChannel
- * 4. Trains models and publishes weights
- */
-
-// Load environment variables first
 import 'dotenv/config';
 
 import { restoreModels } from './Models/restore.ts';

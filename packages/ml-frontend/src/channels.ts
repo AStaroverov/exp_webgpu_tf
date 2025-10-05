@@ -1,7 +1,9 @@
 import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
+import { stringify } from 'devalue';
 import { Observable, Subject } from 'rxjs';
 import { throwingError } from '../../../lib/throwingError.ts';
 import { AgentMemoryBatch } from '../../ml-common/Memory.ts';
+import { DEFAULT_EXPERIMENT } from '../../ml-common/config.ts';
 
 const SUPABASE_URL = import.meta.env.SUPABASE_URL || throwingError('SUPABASE_URL not set');
 const SUPABASE_PUBLICK_KEY = import.meta.env.SUPABASE_PUBLICK_KEY || throwingError('SUPABASE_KEY not set');
@@ -85,7 +87,7 @@ export async function uploadCurriculumState(curriculumState: CurriculumState): P
     const client = getSupabaseClient();
 
     try {
-        const fileName = 'curriculumState.json';
+        const fileName = `${DEFAULT_EXPERIMENT.expName}/curriculumState.json`;
         const data = JSON.stringify(curriculumState);
 
         // Upload to Supabase Storage (upsert to overwrite existing file)
@@ -119,7 +121,7 @@ export async function downloadCurriculumState(): Promise<CurriculumState> {
     };
 
     try {
-        const fileName = 'curriculumState.json';
+        const fileName = `${DEFAULT_EXPERIMENT.expName}/curriculumState.json`;
 
         // Download from Supabase Storage
         const { data, error } = await client.storage
@@ -159,30 +161,23 @@ export async function uploadEpisodeSample(episodeSample: EpisodeSample): Promise
         // Generate unique batch ID
         const batchId = crypto.randomUUID();
         const fileName = `${batchId}.json`;
+        const path = `${DEFAULT_EXPERIMENT.expName}/${fileName}`;
 
         // Prepare data for upload
+        const timestamp = new Date().toISOString();
         const data = {
             batchId,
-            networkVersion: episodeSample.networkVersion,
-            scenarioIndex: episodeSample.scenarioIndex,
-            successRatio: episodeSample.successRatio,
-            memoryBatch: {
-                size: episodeSample.memoryBatch.size,
-                states: episodeSample.memoryBatch.states,
-                actions: episodeSample.memoryBatch.actions.map(a => Array.from(a)),
-                mean: episodeSample.memoryBatch.mean.map(m => Array.from(m)),
-                logStd: episodeSample.memoryBatch.logStd.map(ls => Array.from(ls)),
-                logProbs: Array.from(episodeSample.memoryBatch.logProbs),
-                rewards: Array.from(episodeSample.memoryBatch.rewards),
-                dones: Array.from(episodeSample.memoryBatch.dones),
-            },
-            timestamp: new Date().toISOString(),
+            timestamp,
+            ...episodeSample,
         };
+        const text = stringify(data);
+
+        debugger;
 
         // Upload to Supabase Storage
         const { error: uploadError } = await client.storage
             .from(SUPABASE_BUCKET_EXP_BATCHES)
-            .upload(fileName, JSON.stringify(data), {
+            .upload(path, text, {
                 contentType: 'application/json',
                 upsert: false,
             });
@@ -197,10 +192,10 @@ export async function uploadEpisodeSample(episodeSample: EpisodeSample): Promise
         await newBatchChannel.emit({
             batchId,
             fileName,
+            timestamp,
             networkVersion: episodeSample.networkVersion,
             scenarioIndex: episodeSample.scenarioIndex,
             successRatio: episodeSample.successRatio,
-            timestamp: data.timestamp,
         });
 
         return batchId;

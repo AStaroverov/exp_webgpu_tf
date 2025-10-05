@@ -4,8 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {},
-  "devDependencies": {},
-  "dependencies": {},
+  "dependencies": {
+    "devalue": "^5.3.2"
+  },
   "workspaces": [
     "packages/renderer",
     "packages/tanks",

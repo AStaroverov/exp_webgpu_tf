@@ -1,5 +1,4 @@
 import * as tf from '@tensorflow/tfjs';
-import { LayersModel } from '@tensorflow/tfjs';
 import { existsSync, readdirSync, statSync } from 'fs';
 import { isFunction } from 'lodash-es';
 import { resolve } from 'path';

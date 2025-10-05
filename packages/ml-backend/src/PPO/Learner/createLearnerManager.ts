@@ -72,18 +72,17 @@ export function createLearnerManager() {
     const newSamples = episodeSampleChannel.obs.pipe(
         mergeMap((batchInfo) => {
             console.info(`📥 Downloading batch: ${batchInfo.batchId}`);
-            return downloadExperienceBatch(batchInfo.fileName)
-        }),
-        catchError((error) => {
-            console.error('Error downloading batch:', error);
-            return EMPTY;
+            return from(downloadExperienceBatch(batchInfo.fileName)).pipe(
+                catchError(() => EMPTY)
+            )
         }),
     )
-    const recentSamples = from(downloadRecentExperienceBatches()).pipe(
+    const recentSamples = from(downloadRecentExperienceBatches(20)).pipe(
         mergeMap(batches => from(batches)),
     );
 
     merge(newSamples, recentSamples).pipe(
+        // merge(newSamples).pipe(
         bufferWhile((batches) => {
             const size = batches.reduce((acc, b) => acc + b.memoryBatch.size, 0);
             const requiredSize = CONFIG.batchSize(max(...batches.map(s => s.networkVersion), 0));

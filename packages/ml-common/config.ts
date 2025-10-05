@@ -4,6 +4,8 @@ import { LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
 
 // Default experiment configuration for PPO
 export const DEFAULT_EXPERIMENT = {
+    expName: 'PPO_MHA',
+
     // Learning parameters
     clipNorm: 20,
     // PPO-specific parameters

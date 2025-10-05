@@ -34,7 +34,7 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
 
     const valueLossList: tf.Tensor[] = [];
 
-    for (let i = 0; i < CONFIG.valueEpochs; i++) {
+    for (let i = 0; i < CONFIG.valueEpochs(version); i++) {
         for (let j = 0; j < mbc; j++) {
             const indices = rb.getSample(mbs, j * mbs, (j + 1) * mbs);
             const mBatch = createValueBatch(batch, indices);

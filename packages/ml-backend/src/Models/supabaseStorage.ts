@@ -1,11 +1,9 @@
-/**
- * Supabase Storage integration for model files
- */
-
-import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import * as tf from '@tensorflow/tfjs';
+import { parse } from 'devalue';
 import { throwingError } from '../../../../lib/throwingError.ts';
 import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
+import { DEFAULT_EXPERIMENT } from '../../../ml-common/config.ts';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || throwingError('SUPABASE_URL not set');
 const SUPABASE_KEY = process.env.SUPABASE_KEY || throwingError('SUPABASE_KEY not set');
@@ -14,20 +12,27 @@ const SUPABASE_BUCKET_EXP_BATCHES = process.env.SUPABASE_BUCKET_EXP_BATCHES || t
 
 let supabase: SupabaseClient | null = null;
 
-function getSupabaseClient(): SupabaseClient {
+export function getSupabaseClient(): SupabaseClient {
     if (!supabase) {
-        supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+        supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+            global: {
+                headers: {
+                    apikey: SUPABASE_KEY,
+                    Authorization: `Bearer ${SUPABASE_KEY}`,
+                },
+            },
+            realtime: {
+                params: {
+                    apikey: SUPABASE_KEY,
+                },
+            },
+        });
         console.info('✅ Supabase client initialized');
     }
 
     return supabase;
 }
 
-/**
- * Create TensorFlow.js IOHandler for saving models to Supabase Storage
- * @param modelName - name of the model (e.g., 'policy-model', 'value-model')
- * @param version - version number
- */
 export function createSupabaseIOHandler(
     modelName: string,
     version: number
@@ -35,9 +40,6 @@ export function createSupabaseIOHandler(
     return {
         async save(modelArtifacts: tf.io.ModelArtifacts): Promise<tf.io.SaveResult> {
             const client = getSupabaseClient();
-            if (!client) {
-                throw new Error('Supabase client not configured');
-            }
 
             try {
                 // Prepare model.json content (everything except weightData)
@@ -46,8 +48,8 @@ export function createSupabaseIOHandler(
                 // Convert weights to ArrayBuffer
                 const weightsBuffer = tf.io.CompositeArrayBuffer.join(weightData);
 
-                // Upload to Supabase: v{version}/{modelName}.json and .weights.bin
-                const basePath = `v${version}-${modelName}`;
+                // Upload to Supabase: {expName}/v{version}/{modelName}.json and .weights.bin
+                const basePath = `${DEFAULT_EXPERIMENT.expName}/v${version}-${modelName}`;
 
                 const [jsonResult, weightsResult] = await Promise.all([
                     client.storage
@@ -83,42 +85,7 @@ export function createSupabaseIOHandler(
     };
 }
 
-export function subscribeToExperienceBatches(
-    onBatch: (batchInfo: {
-        batchId: string;
-        fileName: string;
-        networkVersion: number;
-        scenarioIndex: number;
-        successRatio: number;
-        timestamp: string;
-    }) => void
-): () => void {
-    const client = getSupabaseClient();
-    if (!client) {
-        console.warn('⚠️  Cannot subscribe to experience batches - Supabase not configured');
-        return () => { };
-    }
-
-    const channel: RealtimeChannel = client.channel('experience-notifications');
-
-    channel
-        .on('broadcast', { event: 'new-batch' }, (payload) => {
-            console.info('📥 New experience batch notification:', payload.payload);
-            onBatch(payload.payload);
-        })
-        .subscribe((status) => {
-            if (status === 'SUBSCRIBED') {
-                console.info('✅ Subscribed to experience batch notifications');
-            }
-        });
-
-    return () => {
-        channel.unsubscribe();
-        console.info('❌ Unsubscribed from experience batch notifications');
-    };
-}
-
-export async function downloadRecentExperienceBatches(count: number = 5): Promise<{
+export async function downloadRecentExperienceBatches(count: number): Promise<{
     batchId: string;
     networkVersion: number;
     scenarioIndex: number;
@@ -127,15 +94,11 @@ export async function downloadRecentExperienceBatches(count: number = 5): Promis
     timestamp: string;
 }[]> {
     const client = getSupabaseClient();
-    if (!client) {
-        console.warn('⚠️  Cannot download experience batches - Supabase not configured');
-        return [];
-    }
 
     try {
         const { data, error } = await client.storage
             .from(SUPABASE_BUCKET_EXP_BATCHES)
-            .list('', { limit: count, sortBy: { column: 'created_at', order: 'desc' } });
+            .list(DEFAULT_EXPERIMENT.expName, { limit: count, sortBy: { column: 'created_at', order: 'desc' } });
 
         if (error) {
             throw error;
@@ -172,37 +135,18 @@ export async function downloadExperienceBatch(fileName: string): Promise<{
     try {
         const { data, error } = await client.storage
             .from(SUPABASE_BUCKET_EXP_BATCHES)
-            .download(fileName);
+            .download(`${DEFAULT_EXPERIMENT.expName}/${fileName}`);
 
         if (error) {
             throw error;
         }
 
         const text = await data.text();
-        const batchData = JSON.parse(text);
-
-        // Convert arrays back to typed arrays
-        const memoryBatch: AgentMemoryBatch = {
-            size: batchData.memoryBatch.size,
-            states: batchData.memoryBatch.states,
-            actions: batchData.memoryBatch.actions.map((a: number[]) => new Float32Array(a)),
-            mean: batchData.memoryBatch.mean.map((m: number[]) => new Float32Array(m)),
-            logStd: batchData.memoryBatch.logStd.map((ls: number[]) => new Float32Array(ls)),
-            logProbs: new Float32Array(batchData.memoryBatch.logProbs),
-            rewards: new Float32Array(batchData.memoryBatch.rewards),
-            dones: new Float32Array(batchData.memoryBatch.dones),
-        };
+        const batchData = parse(text);
 
         console.info(`✅ Downloaded experience batch: ${batchData.batchId}`);
 
-        return {
-            memoryBatch,
-            batchId: batchData.batchId,
-            networkVersion: batchData.networkVersion,
-            scenarioIndex: batchData.scenarioIndex,
-            successRatio: batchData.successRatio,
-            timestamp: batchData.timestamp,
-        };
+        return batchData;
     } catch (error) {
         console.error(`❌ Failed to download batch ${fileName}:`, error);
         throw error;
@@ -213,9 +157,10 @@ export async function deleteExperienceBatch(fileNames: string[]): Promise<void> 
     const client = getSupabaseClient();
 
     try {
+        const filePathsWithPrefix = fileNames.map(name => `${DEFAULT_EXPERIMENT.expName}/${name}`);
         const { error } = await client.storage
             .from(SUPABASE_BUCKET_EXP_BATCHES)
-            .remove(fileNames);
+            .remove(filePathsWithPrefix);
 
         if (error) {
             throw error;
@@ -227,10 +172,6 @@ export async function deleteExperienceBatch(fileNames: string[]): Promise<void> 
     }
 }
 
-/**
- * Upload curriculum state to Supabase Storage
- * @param curriculumState - curriculum state data
- */
 export async function uploadCurriculumState(curriculumState: {
     currentVersion: number;
     mapScenarioIndexToSuccessRatio: Record<number, number>;
@@ -238,7 +179,7 @@ export async function uploadCurriculumState(curriculumState: {
     const client = getSupabaseClient();
 
     try {
-        const fileName = 'curriculumState.json';
+        const fileName = `${DEFAULT_EXPERIMENT.expName}/curriculumState.json`;
         const data = JSON.stringify(curriculumState);
 
         // Upload to Supabase Storage (upsert to overwrite existing file)
@@ -260,10 +201,6 @@ export async function uploadCurriculumState(curriculumState: {
     }
 }
 
-/**
- * Download curriculum state from Supabase Storage
- * @returns curriculum state or default if not found
- */
 export async function downloadCurriculumState(): Promise<{
     currentVersion: number;
     mapScenarioIndexToSuccessRatio: Record<number, number>;
@@ -275,7 +212,7 @@ export async function downloadCurriculumState(): Promise<{
     };
 
     try {
-        const fileName = 'curriculumState.json';
+        const fileName = `${DEFAULT_EXPERIMENT.expName}/curriculumState.json`;
 
         // Download from Supabase Storage
         const { data, error } = await client.storage

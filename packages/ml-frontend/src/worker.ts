@@ -1,4 +1,3 @@
-import '@tensorflow/tfjs-backend-wasm';
 import { randomShortId } from '../../../lib/random.ts';
 import { setConsolePrefix } from '../../ml-common/console.ts';
 import { initTensorFlow } from '../../ml-common/initTensorFlow.ts';

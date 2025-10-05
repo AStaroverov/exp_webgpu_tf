@@ -1,14 +1,5 @@
 import * as tf from '@tensorflow/tfjs';
 import { AdamOptimizer, NamedTensorMap, Variable } from '@tensorflow/tfjs';
-import { tidy } from '@tensorflow/tfjs-core/dist/globals';
-import { sub } from '@tensorflow/tfjs-core/dist/ops/sub';
-import { ENGINE } from '@tensorflow/tfjs-core/dist/engine';
-import { zerosLike } from '@tensorflow/tfjs-core/dist/ops/zeros_like';
-import { add } from '@tensorflow/tfjs-core/dist/ops/add';
-import { mul } from '@tensorflow/tfjs-core/dist/ops/mul';
-import { square } from '@tensorflow/tfjs-core/dist/ops/square';
-import { div } from '@tensorflow/tfjs-core/dist/ops/div';
-import { sqrt } from '@tensorflow/tfjs-core/dist/ops/sqrt';
 import { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
 
 const FM_POSTFIX = '/m';
@@ -36,30 +27,30 @@ export class PatchedAdamOptimizer extends AdamOptimizer {
         const varNames = Array.isArray(variableGradients) ?
             variableGradients.map(v => v.name) :
             Object.keys(variableGradients);
-        tidy(() => {
-            const oneMinusAccBeta1 = sub(1, accBeta1);
-            const oneMinusAccBeta2 = sub(1, accBeta2);
+        tf.tidy(() => {
+            const oneMinusAccBeta1 = tf.sub(1, accBeta1);
+            const oneMinusAccBeta2 = tf.sub(1, accBeta2);
             varNames.forEach((name, i) => {
-                const value = ENGINE.registeredVariables[name];
+                const value = tf.engine().registeredVariables[name];
                 const trainable = false;
 
                 let firstMomentIndex = accumulatedFirstMoment
-                    .findIndex(({ originalName }) => originalName === `${ name }${ FM_POSTFIX }`);
+                    .findIndex(({ originalName }) => originalName === `${name}${FM_POSTFIX}`);
                 let secondMomentIndex = accumulatedSecondMoment
-                    .findIndex(({ originalName }) => originalName === `${ name }${ SM_POSTFIX }`);
+                    .findIndex(({ originalName }) => originalName === `${name}${SM_POSTFIX}`);
 
                 if (firstMomentIndex === -1) {
                     firstMomentIndex = accumulatedFirstMoment.length;
                     accumulatedFirstMoment.push({
-                        originalName: `${ name }${ FM_POSTFIX }`,
-                        variable: tidy(() => zerosLike(value).variable(trainable)),
+                        originalName: `${name}${FM_POSTFIX}`,
+                        variable: tf.tidy(() => tf.zerosLike(value).variable(trainable)),
                     });
                 }
                 if (secondMomentIndex === -1) {
                     secondMomentIndex = accumulatedSecondMoment.length;
                     accumulatedSecondMoment.push({
-                        originalName: `${ name }${ SM_POSTFIX }`,
-                        variable: tidy(() => zerosLike(value).variable(trainable)),
+                        originalName: `${name}${SM_POSTFIX}`,
+                        variable: tf.tidy(() => tf.zerosLike(value).variable(trainable)),
                     });
                 }
 
@@ -73,17 +64,17 @@ export class PatchedAdamOptimizer extends AdamOptimizer {
 
                 const firstMoment = accumulatedFirstMoment[firstMomentIndex].variable;
                 const secondMoment = accumulatedSecondMoment[secondMomentIndex].variable;
-                const newFirstMoment = add(mul(firstMoment, this.beta1), mul(gradient, 1 - this.beta1));
-                const newSecondMoment = add(mul(secondMoment, this.beta2), mul(square(gradient), 1 - this.beta2));
-                const biasCorrectedFirstMoment = div(newFirstMoment, oneMinusAccBeta1);
-                const biasCorrectedSecondMoment = div(newSecondMoment, oneMinusAccBeta2);
+                const newFirstMoment = tf.add(tf.mul(firstMoment, this.beta1), tf.mul(gradient, 1 - this.beta1));
+                const newSecondMoment = tf.add(tf.mul(secondMoment, this.beta2), tf.mul(tf.square(gradient), 1 - this.beta2));
+                const biasCorrectedFirstMoment = tf.div(newFirstMoment, oneMinusAccBeta1);
+                const biasCorrectedSecondMoment = tf.div(newSecondMoment, oneMinusAccBeta2);
                 firstMoment.assign(newFirstMoment);
                 secondMoment.assign(newSecondMoment);
-                const newValue = add(mul(div(biasCorrectedFirstMoment, add(sqrt(biasCorrectedSecondMoment), this.epsilon)), -this.learningRate), value);
+                const newValue = tf.add(tf.mul(tf.div(biasCorrectedFirstMoment, tf.add(tf.sqrt(biasCorrectedSecondMoment), this.epsilon)), -this.learningRate), value);
                 value.assign(newValue);
             });
-            accBeta1.assign(mul(accBeta1, this.beta1));
-            accBeta2.assign(mul(accBeta2, this.beta2));
+            accBeta1.assign(tf.mul(accBeta1, this.beta1));
+            accBeta2.assign(tf.mul(accBeta2, this.beta2));
         });
         this.incrementIterations();
     }

@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import * as tf from '@tensorflow/tfjs';
 import { throwingError } from '../../../../lib/throwingError.ts';
 import { LAST_NETWORK_VERSION } from '../../../ml-backend/src/Models/def.ts';
+import { DEFAULT_EXPERIMENT } from '../../../ml-common/config.ts';
 
 const SUPABASE_URL = import.meta.env.SUPABASE_URL || throwingError('SUPABASE_URL not set');
 const SUPABASE_PUBLICK_KEY = import.meta.env.SUPABASE_PUBLICK_KEY || throwingError('SUPABASE_KEY not set');
@@ -35,7 +36,7 @@ export function createSupabaseIOHandler(
             }
 
             try {
-                const basePath = `v${version}-${modelName}`;
+                const basePath = `${DEFAULT_EXPERIMENT.expName}/v${version}-${modelName}`;
 
                 // Get public URLs for model files
                 const { data: modelJsonData } = client.storage
@@ -98,7 +99,7 @@ export async function getAvailableVersions(modelName: string): Promise<number[]>
     try {
         const { data, error } = await client.storage
             .from(SUPABASE_BUCKET_MODELS)
-            .list('', {
+            .list(DEFAULT_EXPERIMENT.expName, {
                 limit: 5,
                 offset: 0,
                 sortBy: { column: 'created_at', order: 'desc' },

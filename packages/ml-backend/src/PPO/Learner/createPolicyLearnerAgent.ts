@@ -57,9 +57,9 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const klSize = floor(mbs * ceil(mbc / 3));
     const klList: tf.Tensor[] = [];
     const policyLossList: tf.Tensor[] = [];
-    const entropyCoeff = getEntropyCoeff(network.optimizer.iterations);
+    const entropyCoeff = CONFIG.policyEntropy(version);
 
-    for (let i = 0; i < CONFIG.policyEpochs; i++) {
+    for (let i = 0; i < CONFIG.policyEpochs(version); i++) {
         for (let j = 0; j < mbc; j++) {
             const mBatch = getPolicyBatch(mbs, j);
 
@@ -136,11 +136,6 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             // metricsChannels.kl.postMessage(klList);
             // metricsChannels.policyLoss.postMessage(policyLossList);
         });
-}
-
-function getEntropyCoeff(iteration: number) {
-    iteration = iteration % CONFIG.policyEntropy.reset;
-    return CONFIG.policyEntropy.coeff * max(0, 1 - iteration / CONFIG.policyEntropy.limit);
 }
 
 function createPolicyBatch(batch: LearnData, indices: number[]) {
