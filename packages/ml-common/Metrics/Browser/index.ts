@@ -120,7 +120,7 @@ function drawTab1() {
 
     const avgKL = store.kl.toArray();
     tfvis.render.scatterplot({ name: 'KL', tab }, {
-        values: [avgKL, calculateMovingAverage(avgKL, 25)],
+        values: [avgKL, calculateMovingMedianAverage(avgKL, 25)],
         series: ['Avg', 'MA'],
     }, {
         xLabel: 'Version',
@@ -279,4 +279,42 @@ function calculateMovingAverage(data: RenderPoint[], windowSize: number): Render
     }
 
     return averaged;
+}
+
+function calculateMovingMedian(data: RenderPoint[], windowSize: number): RenderPoint[] {
+    if (data.length === 0) return [];
+    if (windowSize <= 0) throw new Error('Window size must be positive');
+
+    const averaged: RenderPoint[] = [];
+    const window: number[] = [];
+
+    for (let i = 0; i < data.length; i++) {
+        const val = data[i].y;
+        if (!isFinite(val)) continue;
+
+        window.push(val);
+        if (window.length > windowSize) {
+            window.shift();
+        }
+
+        const sortedWindow = window.toSorted((a, b) => a - b);
+        const mid = Math.floor(sortedWindow.length / 2);
+        const median = sortedWindow.length % 2 !== 0
+            ? sortedWindow[mid]
+            : (sortedWindow[mid - 1] + sortedWindow[mid]) / 2;
+
+        averaged.push({ x: data[i].x, y: median });
+    }
+
+    return averaged;
+}
+
+function calculateMovingMedianAverage(data: RenderPoint[], windowSize: number): RenderPoint[] {
+    const average = calculateMovingAverage(data, windowSize);
+    const median = calculateMovingMedian(data, windowSize);
+
+    return average.map((point, index) => ({
+        x: point.x,
+        y: (point.y + median[index].y) / 2,
+    }));
 }
