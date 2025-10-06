@@ -14,6 +14,7 @@ export const metricsChannels = {
     tdErrors: new BroadcastChannel('tdErrors'),
     advantages: new BroadcastChannel('advantages'),
     kl: new BroadcastChannel('kl'),
+    klPerturbed: new BroadcastChannel('klPerturbed'),
     lr: new BroadcastChannel('lr'),
     valueLoss: new BroadcastChannel('valueLoss'),
     policyLoss: new BroadcastChannel('policyLoss'),

@@ -9,6 +9,7 @@ export type AgentMemoryBatch = {
     mean: Float32Array[],
     logStd: Float32Array[],
     logProbs: Float32Array,
+    perturbed: Float32Array, // 0 = not perturbed, 1 = perturbed
 }
 
 export class AgentMemory {
@@ -19,6 +20,7 @@ export class AgentMemory {
     public logProbs: number[] = [];
     public rewards: number[] = [];
     public dones: boolean[] = [];
+    public perturbed: boolean = false;
 
     constructor() {
     }
@@ -70,6 +72,10 @@ export class AgentMemory {
         const dones = new Float32Array(this.dones);
         dones[dones.length - 1] = 1.0;
 
+        // Создаем массив perturbed для каждого сэмпла
+        const perturbedArray = new Float32Array(this.states.length);
+        perturbedArray.fill(this.perturbed ? 1.0 : 0.0);
+
         return {
             size: this.states.length,
             states: (this.states),
@@ -79,6 +85,7 @@ export class AgentMemory {
             logProbs: new Float32Array(this.logProbs),
             rewards: rewards,
             dones: dones,
+            perturbed: perturbedArray,
         };
     }
 
@@ -90,6 +97,7 @@ export class AgentMemory {
         this.logProbs.length = 0;
         this.rewards.length = 0;
         this.dones.length = 0;
+        this.perturbed = false;
     }
 
     private setMinLength() {

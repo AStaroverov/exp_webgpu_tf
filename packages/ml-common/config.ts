@@ -25,7 +25,8 @@ export const DEFAULT_EXPERIMENT = {
         target: 0.01,
         high: 0.02,
         low: 0.005,
-        max: 5,
+        max: 0.5,
+        maxPerturbed: 5.0,
     },
     lrConfig: {
         initial: 1e-5,

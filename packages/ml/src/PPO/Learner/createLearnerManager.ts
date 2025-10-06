@@ -1,6 +1,6 @@
 import { pick } from 'lodash-es';
 import { RingBuffer } from 'ring-buffer-ts';
-import { concatMap, first, forkJoin, map, mergeMap, scan, tap } from 'rxjs';
+import { catchError, concatMap, EMPTY, first, forkJoin, map, mergeMap, scan, tap } from 'rxjs';
 import { max } from '../../../../../lib/math.ts';
 import { bufferWhile } from '../../../../../lib/Rx/bufferWhile.ts';
 import { forceExitChannel, metricsChannels } from '../../../../ml-common/channels.ts';
@@ -124,7 +124,13 @@ export function createLearnerManager() {
                             waitTime !== undefined && metricsChannels.waitTime.postMessage([waitTime / 1000]);
                             metricsChannels.trainTime.postMessage([(lastEndTime - startTime) / 1000]);
                         }),
-                    );
+                        catchError((error) => {
+                            queueSizeChannel.emit(queueSize--);
+                            console.error('Batch processing failed', error);
+
+                            return EMPTY;
+                        })
+                    )
                 }),
             );
         }),
@@ -146,5 +152,6 @@ function squeezeBatches(batches: AgentMemoryBatch[]): AgentMemoryBatch {
         dones: flatTypedArray(batches.map(b => b.dones)),
         rewards: flatTypedArray(batches.map(b => b.rewards)),
         logProbs: flatTypedArray(batches.map(b => b.logProbs)),
+        perturbed: flatTypedArray(batches.map(b => b.perturbed)),
     };
 }

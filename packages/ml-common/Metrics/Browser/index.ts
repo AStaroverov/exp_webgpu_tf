@@ -15,6 +15,7 @@ const store = {
     tdErrors: new CompressedBuffer(10_000, 5),
     advantages: new CompressedBuffer(10_000, 5),
     kl: new CompressedBuffer(1_000, 5),
+    klPerturbed: new CompressedBuffer(1_000, 5),
     lr: new CompressedBuffer(1_000, 5),
     valueLoss: new CompressedBuffer(1_000, 5),
     policyLoss: new CompressedBuffer(1_000, 5),
@@ -119,9 +120,23 @@ function drawTab1() {
     });
 
     const avgKL = store.kl.toArray();
+    const avgKLPerturbed = store.klPerturbed.toArray();
     tfvis.render.scatterplot({ name: 'KL', tab }, {
-        values: [avgKL, calculateMovingMedian(avgKL, 25)],
+        values: [
+            avgKL,
+            calculateMovingMedian(avgKL, 25),
+        ],
         series: ['Avg', 'MA'],
+    }, {
+        xLabel: 'Version',
+        yLabel: 'KL',
+        width: 500,
+        height: 300,
+    });
+
+    tfvis.render.scatterplot({ name: 'KL - Perturbed', tab }, {
+        values: [avgKLPerturbed],
+        series: ['Avg'],
     }, {
         xLabel: 'Version',
         yLabel: 'KL',

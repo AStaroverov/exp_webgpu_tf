@@ -30,7 +30,6 @@ const klHistory = new RingBuffer<number>(25);
 
 function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const expIteration = getNetworkExpIteration(network);
-    const rb = new ReplayBuffer(batch.states.length);
     const mbs = CONFIG.miniBatchSize(expIteration);
     const mbc = ceil(batch.size / mbs);
 
@@ -39,17 +38,48 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
          Sum batch size: ${batch.size},
          Mini batch count: ${mbc} by ${mbs}`);
 
-    const getPolicyBatch = (batchSize: number, index: number) => {
-        const indices = rb.getSample(batchSize, index * batchSize, (index + 1) * batchSize);
-        return createPolicyBatch(batch, indices);
-    };
-    const getKLBatch = (size: number) => {
-        const indices = rb.getSample(batch.size).slice(0, size);
-        return createKlBatch(batch, indices);
-    };
+    const getPolicyBatch = (() => {
+        const rb = new ReplayBuffer(batch.states.length);
+
+        return (batchSize: number, index: number) => {
+            const indices = rb.getSample(batchSize, index * batchSize, (index + 1) * batchSize);
+            return createPolicyBatch(batch, indices);
+        };
+    })()
+
+    const createKLBatchGetter = (() => {
+        const pureIndices: number[] = [];
+        const perturbedIndices: number[] = [];
+        for (let i = 0; i < batch.size; i++) {
+            if (batch.perturbed[i] === 0) {
+                pureIndices.push(i);
+            } else {
+                perturbedIndices.push(i);
+            }
+        }
+        const pureRb = new ReplayBuffer(pureIndices.length);
+        const perturbedRb = new ReplayBuffer(perturbedIndices.length);
+
+        return (perturbed: boolean) => {
+            return (size: number) => {
+                const filteredIndices = perturbed ? perturbedIndices : pureIndices;
+                if (filteredIndices.length === 0) return createKlBatch(batch, []);
+                const rb = perturbed ? perturbedRb : pureRb;
+                const indices = rb.getSample(min(size, filteredIndices.length));
+                const mappedIndices = indices.map(i => filteredIndices[i]);
+                return createKlBatch(batch, mappedIndices);
+            };
+        }
+    })();
+
+    // KL на данных без пертурбаций (для адаптации learning rate)
+    const getKLBatch = createKLBatchGetter(false);
+    // KL на данных с пертурбациями (только для метрик)
+    const getKLPerturbedBatch = createKLBatchGetter(true);
 
     const klSize = floor(mbs * ceil(mbc / 3));
     const klList: tf.Tensor[] = [];
+    const klPerturbedList: tf.Tensor[] = [];
     const policyLossList: tf.Tensor[] = [];
     const entropyCoeff = CONFIG.policyEntropy(expIteration);
 
@@ -82,31 +112,22 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             tAdvantages.dispose();
         }
 
-        // KL
-        const lkBatch = getKLBatch(klSize);
-        const tStates = createInputTensors(lkBatch.states);
-        const tMean = tf.tensor2d(flatTypedArray(lkBatch.mean), [lkBatch.mean.length, lkBatch.mean[0].length]);
-        const tLogStd = tf.tensor2d(flatTypedArray(lkBatch.logStd), [lkBatch.logStd.length, lkBatch.logStd[0].length]);
+        // KL on non-perturbed data (for learning rate adaptation)
+        const kl = computeKLForBatch(network, getKLBatch(klSize), mbs);
+        kl && klList.push(kl);
 
-        klList.push(computeKullbackLeiblerExact(
-            network,
-            tStates,
-            tMean,
-            tLogStd,
-            mbs,
-        ));
-
-        tf.dispose(tStates);
-        tMean.dispose();
-        tLogStd.dispose();
+        // KL on perturbed data (for metrics only)
+        const klPerturbed = computeKLForBatch(network, getKLPerturbedBatch(klSize), mbs);
+        klPerturbed && klPerturbedList.push(klPerturbed);
     }
 
     return onReadyRead()
         .then(() => Promise.all([
             Promise.all(policyLossList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
             Promise.all(klList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
+            Promise.all(klPerturbedList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
         ]))
-        .then(([policyLossList, klList]) => {
+        .then(([policyLossList, klList, klPerturbedList]) => {
             console.info(`[Train Policy]: Finish`);
 
             if (policyLossList.some((v) => isLossDangerous(v, 2))) {
@@ -115,6 +136,10 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
 
             if (klList.some(kl => kl > CONFIG.klConfig.max)) {
                 throw new Error(`KL divergence too high ${max(...klList)}`);
+            }
+
+            if (klPerturbedList.some(kl => kl > CONFIG.klConfig.maxPerturbed)) {
+                throw new Error(`KL divergence on perturbed data too high ${max(...klPerturbedList)}`);
             }
 
             klHistory.add(...klList);
@@ -128,6 +153,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
 
             metricsChannels.lr.postMessage([lr]);
             metricsChannels.kl.postMessage(klList);
+            metricsChannels.klPerturbed.postMessage(klPerturbedList);
             metricsChannels.policyLoss.postMessage(policyLossList);
         });
 }
@@ -159,3 +185,31 @@ function createKlBatch(batch: LearnData, indices: number[]) {
         logStd: (logStd),
     };
 }
+
+function computeKLForBatch(
+    network: tf.LayersModel,
+    batch: ReturnType<typeof createKlBatch>,
+    mbs: number,
+) {
+    let result: undefined | tf.Tensor;
+
+    if (batch.states.length > 0) {
+        const tStates = createInputTensors(batch.states);
+        const tMean = tf.tensor2d(flatTypedArray(batch.mean), [batch.mean.length, batch.mean[0].length]);
+        const tLogStd = tf.tensor2d(flatTypedArray(batch.logStd), [batch.logStd.length, batch.logStd[0].length]);
+
+        result = computeKullbackLeiblerExact(
+            network,
+            tStates,
+            tMean,
+            tLogStd,
+            mbs,
+        )
+
+        tf.dispose(tStates);
+        tMean.dispose();
+        tLogStd.dispose();
+    }
+
+    return result;
+};
