@@ -1,5 +1,5 @@
-import * as tf from '@tensorflow/tfjs';
 import { WebGPUBackend } from '@tensorflow/tfjs-backend-webgpu';
+import * as tf from './tf';
 
 export function arrayHealthCheck(array: Float32Array | Uint8Array | Int32Array): boolean {
     return array.every(Number.isFinite);

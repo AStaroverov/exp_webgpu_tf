@@ -1,5 +1,5 @@
-import * as tf from '@tensorflow/tfjs';
 import { ceil, max, min } from '../../../../../lib/math.ts';
+import * as tf from '../../../../ml-common/tf';
 // import { metricsChannels } from '../../Common/channels.ts'; // metrics disabled
 import { createInputTensors } from '../../../../ml-common/InputTensors.ts';
 import { ReplayBuffer } from '../../../../ml-common/ReplayBuffer.ts';

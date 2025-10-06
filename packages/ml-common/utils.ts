@@ -1,6 +1,6 @@
-import * as tf from '@tensorflow/tfjs';
 import { macroTasks } from '../../lib/TasksScheduler/macroTasks.ts';
 import { CONFIG } from './config.ts';
+import * as tf from './tf';
 
 export function disposeNetwork(network: tf.LayersModel) {
     network.optimizer?.dispose();

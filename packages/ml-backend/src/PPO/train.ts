@@ -1,4 +1,3 @@
-import * as tf from '@tensorflow/tfjs';
 import { Scalar } from '@tensorflow/tfjs-core/dist/tensor';
 import { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
 import { normalize } from '../../../../lib/math.ts';
@@ -10,6 +9,7 @@ import { InputArrays, prepareRandomInputArrays } from '../../../ml-common/InputA
 import { createInputTensors } from '../../../ml-common/InputTensors.ts';
 import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
+import * as tf from '../../../ml-common/tf';
 
 export const MIN_LOG_STD_DEV = -5;
 export const MAX_LOG_STD_DEV = 0;

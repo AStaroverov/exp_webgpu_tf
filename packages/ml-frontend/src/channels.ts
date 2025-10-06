@@ -7,6 +7,7 @@ import { DEFAULT_EXPERIMENT } from '../../ml-common/config.ts';
 
 const SUPABASE_URL = import.meta.env.SUPABASE_URL || throwingError('SUPABASE_URL not set');
 const SUPABASE_PUBLICK_KEY = import.meta.env.SUPABASE_PUBLICK_KEY || throwingError('SUPABASE_KEY not set');
+const SUPABASE_BUCKET_MODELS = import.meta.env.SUPABASE_BUCKET_MODELS || throwingError('SUPABASE_MODELS_BUCKET not set');
 const SUPABASE_BUCKET_EXP_BATCHES = import.meta.env.SUPABASE_BUCKET_EXP_BATCHES || throwingError('SUPABASE_BUCKET_EXP_BATCHES not set');
 
 if (!SUPABASE_URL || !SUPABASE_PUBLICK_KEY) {
@@ -92,7 +93,7 @@ export async function uploadCurriculumState(curriculumState: CurriculumState): P
 
         // Upload to Supabase Storage (upsert to overwrite existing file)
         const { error: uploadError } = await client.storage
-            .from(SUPABASE_BUCKET_EXP_BATCHES)
+            .from(SUPABASE_BUCKET_MODELS)
             .upload(fileName, data, {
                 contentType: 'application/json',
                 upsert: true,
@@ -125,7 +126,7 @@ export async function downloadCurriculumState(): Promise<CurriculumState> {
 
         // Download from Supabase Storage
         const { data, error } = await client.storage
-            .from(SUPABASE_BUCKET_EXP_BATCHES)
+            .from(SUPABASE_BUCKET_MODELS)
             .download(fileName);
 
         if (error) {
@@ -171,8 +172,6 @@ export async function uploadEpisodeSample(episodeSample: EpisodeSample): Promise
             ...episodeSample,
         };
         const text = stringify(data);
-
-        debugger;
 
         // Upload to Supabase Storage
         const { error: uploadError } = await client.storage

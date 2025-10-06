@@ -1,5 +1,5 @@
-import * as tf from '@tensorflow/tfjs';
 import { onReadyRead } from '../../../ml-common/Tensor.ts';
+import * as tf from '../../../ml-common/tf';
 import { getNetworkExpIteration } from '../../../ml-common/utils.ts';
 import { LAST_NETWORK_VERSION, Model } from './def.ts';
 import { createSupabaseIOHandler } from './supabaseStorage.ts';

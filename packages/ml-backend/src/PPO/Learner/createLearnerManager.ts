@@ -77,7 +77,7 @@ export function createLearnerManager() {
             )
         }),
     )
-    const recentSamples = from(downloadRecentExperienceBatches(20)).pipe(
+    const recentSamples = from(downloadRecentExperienceBatches(40)).pipe(
         mergeMap(batches => from(batches)),
     );
 
@@ -143,13 +143,14 @@ export function createLearnerManager() {
                         }, { [Model.Policy]: false, [Model.Value]: false }),
                         first((state) => state[Model.Policy] && state[Model.Value]),
                         tap(async () => {
+                            lastEndTime = Date.now();
                             queueSizeChannel.emit(queueSize--);
-                            console.info('Batch processed successfully');
+
+                            console.info('Batch processed successfully', ((lastEndTime - startTime) / 1000) + 's');
 
                             // Delete processed batches from Supabase
                             deleteExperienceBatch(samples.map(s => `${s.batchId}.json`));
 
-                            lastEndTime = Date.now();
 
                             // metricsChannels.rewards.postMessage(batch.rewards);
                             // metricsChannels.values.postMessage(batch.values);

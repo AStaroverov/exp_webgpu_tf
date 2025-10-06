@@ -1,8 +1,8 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import * as tf from '@tensorflow/tfjs';
 import { throwingError } from '../../../../lib/throwingError.ts';
 import { LAST_NETWORK_VERSION } from '../../../ml-backend/src/Models/def.ts';
 import { DEFAULT_EXPERIMENT } from '../../../ml-common/config.ts';
+import tf from '../../../ml-common/tf';
 
 const SUPABASE_URL = import.meta.env.SUPABASE_URL || throwingError('SUPABASE_URL not set');
 const SUPABASE_PUBLICK_KEY = import.meta.env.SUPABASE_PUBLICK_KEY || throwingError('SUPABASE_KEY not set');

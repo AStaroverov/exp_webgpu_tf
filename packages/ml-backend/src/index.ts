@@ -1,6 +1,5 @@
 import 'dotenv/config';
 
-import { restoreModels } from './Models/restore.ts';
 import { createLearnerManager } from './PPO/Learner/createLearnerManager.ts';
 import { createPolicyLearnerAgent } from './PPO/Learner/createPolicyLearnerAgent.ts';
 import { createValueLearnerAgent } from './PPO/Learner/createValueLearnerAgent.ts';
@@ -15,7 +14,7 @@ initTensorFlow()
         console.info('✅ TensorFlow initialized');
 
         // Restore models from DB or fallback path
-        return restoreModels('./models/downloaded/v0');
+        return;
     })
     .then(() => {
         // Start learner agents (policy and value)

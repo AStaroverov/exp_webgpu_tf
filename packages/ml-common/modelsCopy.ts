@@ -1,5 +1,5 @@
-import * as tf from '@tensorflow/tfjs';
-import { AdamOptimizer } from '@tensorflow/tfjs';
+import * as tf from './tf';
+import { AdamOptimizer } from './tf';
 
 export async function setModelState(targetModel: tf.LayersModel, sourceModel: tf.LayersModel): Promise<tf.LayersModel> {
     const sourceWeights = sourceModel.getWeights();

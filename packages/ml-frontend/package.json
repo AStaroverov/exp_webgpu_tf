@@ -9,9 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.58.0",
-    "@tensorflow/tfjs": "^4.22.0",
-    "ably": "^2.0.4"
   },
   "devDependencies": {
     "@dimforge/rapier2d": "^0.14.0",

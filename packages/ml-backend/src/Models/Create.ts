@@ -1,5 +1,5 @@
-import * as tf from '@tensorflow/tfjs';
 import { ACTION_DIM } from '../../../ml-common/consts.ts';
+import * as tf from '../../../ml-common/tf';
 import {
     ALLY_BUFFER,
     BULLET_BUFFER,

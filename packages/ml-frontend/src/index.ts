@@ -12,7 +12,7 @@ await initTensorFlow('wasm');
 // Main experience collection: spawn multiple ActorWorkers for fast headless generation
 Array.from(
     // { length: CONFIG.workerCount },
-    { length: 1 },
+    { length: 4 },
     () => new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
 );
 

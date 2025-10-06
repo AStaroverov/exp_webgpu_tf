@@ -1,6 +1,6 @@
-import * as tf from '@tensorflow/tfjs';
 import { isFunction } from 'lodash-es';
 import { LAST_NETWORK_VERSION, Model } from '../../../ml-backend/src/Models/def.ts';
+import * as tf from '../../../ml-common/tf';
 import { patientAction } from '../../../ml-common/utils.ts';
 import { loadModel } from './loader.ts';
 import { getAvailableVersions } from './supabaseStorage.ts';

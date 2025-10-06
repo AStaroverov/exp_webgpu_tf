@@ -1,4 +1,3 @@
-import * as tf from '@tensorflow/tfjs';
 import { clamp } from 'lodash-es';
 import { RingBuffer } from 'ring-buffer-ts';
 import { unlerp } from '../../../lib/math.ts';
@@ -13,6 +12,7 @@ import { LEARNING_STEPS } from '../consts.ts';
 import { prepareInputArrays } from '../InputArrays.ts';
 import { AgentMemory, AgentMemoryBatch } from '../Memory.ts';
 import { calculateActionReward, calculateStateReward, getDeathPenalty, getFramePenalty } from '../Reward/calculateReward.ts';
+import * as tf from '../tf';
 import { disposeNetwork, getNetworkExpIteration, patientAction } from '../utils.ts';
 import { DownloableAgent, LearnableAgent, TankAgent } from './types.ts';
 

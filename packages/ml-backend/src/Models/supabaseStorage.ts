@@ -1,9 +1,9 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import * as tf from '@tensorflow/tfjs';
 import { parse } from 'devalue';
 import { throwingError } from '../../../../lib/throwingError.ts';
 import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
 import { DEFAULT_EXPERIMENT } from '../../../ml-common/config.ts';
+import * as tf from '../../../ml-common/tf';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || throwingError('SUPABASE_URL not set');
 const SUPABASE_KEY = process.env.SUPABASE_KEY || throwingError('SUPABASE_KEY not set');
@@ -157,14 +157,14 @@ export async function deleteExperienceBatch(fileNames: string[]): Promise<void> 
     const client = getSupabaseClient();
 
     try {
-        const filePathsWithPrefix = fileNames.map(name => `${DEFAULT_EXPERIMENT.expName}/${name}`);
-        const { error } = await client.storage
-            .from(SUPABASE_BUCKET_EXP_BATCHES)
-            .remove(filePathsWithPrefix);
+        // const filePathsWithPrefix = fileNames.map(name => `${DEFAULT_EXPERIMENT.expName}/${name}`);
+        // const { error } = await client.storage
+        //     .from(SUPABASE_BUCKET_EXP_BATCHES)
+        //     .remove(filePathsWithPrefix);
 
-        if (error) {
-            throw error;
-        }
+        // if (error) {
+        //     throw error;
+        // }
 
         console.info(`🗑️  Deleted processed batch: ${fileNames.join(', ')}`);
     } catch (error) {
@@ -184,7 +184,7 @@ export async function uploadCurriculumState(curriculumState: {
 
         // Upload to Supabase Storage (upsert to overwrite existing file)
         const { error: uploadError } = await client.storage
-            .from(SUPABASE_BUCKET_EXP_BATCHES)
+            .from(SUPABASE_MODELS_BUCKET)
             .upload(fileName, data, {
                 contentType: 'application/json',
                 upsert: true,
@@ -216,7 +216,7 @@ export async function downloadCurriculumState(): Promise<{
 
         // Download from Supabase Storage
         const { data, error } = await client.storage
-            .from(SUPABASE_BUCKET_EXP_BATCHES)
+            .from(SUPABASE_MODELS_BUCKET)
             .download(fileName);
 
         if (error) {

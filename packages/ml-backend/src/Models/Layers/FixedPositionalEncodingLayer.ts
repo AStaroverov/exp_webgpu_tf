@@ -1,4 +1,4 @@
-import * as tf from '@tensorflow/tfjs';
+import * as tf from '../../../../ml-common/tf';
 
 export class FixedPositionalEncodingLayer extends tf.layers.Layer {
     static readonly className = 'FixedPositionalEncodingLayer';

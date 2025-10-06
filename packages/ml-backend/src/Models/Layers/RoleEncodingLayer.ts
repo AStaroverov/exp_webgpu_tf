@@ -1,4 +1,4 @@
-import * as tf from '@tensorflow/tfjs';
+import * as tf from '../../../../ml-common/tf';
 
 export class RoleEmbeddingLayer extends tf.layers.Layer {
     static readonly className = 'RoleEmbeddingLayer';

@@ -1,4 +1,3 @@
-import * as tf from '@tensorflow/tfjs';
 import {
     ALLY_FEATURES_DIM,
     ALLY_SLOTS,
@@ -12,6 +11,7 @@ import {
 } from '../ml/src/Models/Create.ts';
 import { InputArrays } from './InputArrays.ts';
 import { flatTypedArray } from './flat.ts';
+import * as tf from './tf';
 
 export function createInputTensors(
     state: InputArrays[],

@@ -1,5 +1,5 @@
-import * as tf from '@tensorflow/tfjs';
 import { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
+import * as tf from '../../../../ml-common/tf';
 
 interface MHAConfig extends LayerArgs {
     numHeads: number;

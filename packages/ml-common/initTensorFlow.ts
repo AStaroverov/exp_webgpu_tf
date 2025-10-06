@@ -1,4 +1,4 @@
-import * as tf from '@tensorflow/tfjs';
+import * as tf from './tf';
 
 tf.enableProdMode();
 
@@ -19,8 +19,8 @@ export async function initTensorFlow(type: 'wasm' | 'webgpu' = 'wasm') {
         console.log('TensorFlow.js initialized with WASM backend');
 
         // Log version info for debugging
-        console.log(`TensorFlow.js version: ${ tf.version.tfjs }`);
-        console.log(`Backend: ${ tf.getBackend() }`);
+        console.log(`TensorFlow.js version: ${tf.version.tfjs}`);
+        console.log(`Backend: ${tf.getBackend()}`);
 
         return true;
     } catch (error) {

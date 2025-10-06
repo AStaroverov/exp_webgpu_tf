@@ -1,6 +1,6 @@
-import * as tf from '@tensorflow/tfjs';
-import { AdamOptimizer, NamedTensorMap, Variable } from '@tensorflow/tfjs';
 import { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
+import * as tf from '../../../ml-common/tf';
+import { AdamOptimizer, NamedTensorMap, Variable } from '../../../ml-common/tf';
 
 const FM_POSTFIX = '/m';
 const SM_POSTFIX = '/v';

@@ -1,4 +1,4 @@
-import * as tf from '@tensorflow/tfjs';
+import * as tf from '../../../ml-common/tf';
 import { loadModelFromSupabase } from './supabaseStorage.ts';
 
 export async function loadModel(
