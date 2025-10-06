@@ -11,10 +11,10 @@ import { createInputTensors } from '../../../ml-common/InputTensors.ts';
 import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
 
-export const MIN_LOG_STD_DEV = -5;
-export const MAX_LOG_STD_DEV = 0;
-export const MIN_STD_DEV = Math.exp(MIN_LOG_STD_DEV); // 0.0067
-export const MAX_STD_DEV = Math.exp(MAX_LOG_STD_DEV);
+export const MIN_LOG_STD_DEV = -2;
+export const MAX_LOG_STD_DEV = 1;
+export const MIN_STD_DEV = Math.exp(MIN_LOG_STD_DEV); // ~0.14
+export const MAX_STD_DEV = Math.exp(MAX_LOG_STD_DEV); // ~2.72
 
 export function trainPolicyNetwork(
     network: tf.LayersModel,
