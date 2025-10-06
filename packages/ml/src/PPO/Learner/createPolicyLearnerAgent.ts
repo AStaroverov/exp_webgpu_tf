@@ -2,7 +2,7 @@ import { getNetworkExpIteration, getNetworkLearningRate } from '../../../../ml-c
 
 import * as tf from '@tensorflow/tfjs';
 import { RingBuffer } from 'ring-buffer-ts';
-import { ceil, floor, max, mean, median, min } from '../../../../../lib/math.ts';
+import { ceil, floor, max, median, min } from '../../../../../lib/math.ts';
 import { metricsChannels } from '../../../../ml-common/channels.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
 import { flatTypedArray } from '../../../../ml-common/flat.ts';
@@ -120,7 +120,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             klHistory.add(...klList);
             const klArr = klHistory.toArray();
             const lr = getDynamicLearningRate(
-                (mean(klArr) + median(klArr)) / 2,
+                median(klArr),
                 getNetworkLearningRate(network),
             );
 

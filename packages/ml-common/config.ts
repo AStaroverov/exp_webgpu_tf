@@ -1,5 +1,6 @@
 import { clamp, floor } from 'lodash';
 import { ceil, lerp } from '../../lib/math.ts';
+import { random } from '../../lib/random.ts';
 import { LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
 
 // Default experiment configuration for PPO
@@ -24,13 +25,13 @@ export const DEFAULT_EXPERIMENT = {
         target: 0.01,
         high: 0.02,
         low: 0.005,
-        max: 0.5,
+        max: 5,
     },
     lrConfig: {
         initial: 1e-5,
         multHigh: 0.95,
         multLow: 1.05,
-        min: 1e-5,
+        min: 1e-6,
         max: 1e-3,
     },
 
@@ -47,8 +48,8 @@ export const DEFAULT_EXPERIMENT = {
     workerCount: 8,
     backpressureQueueSize: 2,
     // Perturbation of weights
-    perturbChance: (iteration: number) => lerp(0.01, 0.05, clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1)),
-    perturbWeightsScale: (iteration: number) => lerp(0.005, 0.01, clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1)),
+    perturbChance: (iteration: number) => lerp(0.01, 0.1, clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1)),
+    perturbWeightsScale: (iteration: number) => 0.001 + random() * lerp(0, 0.01, clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1)),
     // Training control
     savePath: 'PPO_MHA',
     // fsModelPath: '/assets/models/v1',
