@@ -1,3 +1,4 @@
+import { clamp } from 'lodash-es';
 import { CONFIG } from './config.ts';
 
 export function getDynamicLearningRate(kl: number, lr: number): number {
@@ -6,13 +7,8 @@ export function getDynamicLearningRate(kl: number, lr: number): number {
         lrConfig: { multHigh: lrMultHigh, multLow: lrMultLow, min: minLR, max: maxLR },
     } = CONFIG;
 
-    if (kl > klHigh) {
-        lr = Math.max(lr * lrMultHigh, minLR);
-    }
-    // Если KL слишком маленькая
-    else if (kl < klLow) {
-        lr = Math.min(lr * lrMultLow, maxLR);
-    }
+    if (kl > klHigh) lr *= lrMultHigh;
+    else if (kl < klLow) lr *= lrMultLow;
 
-    return lr;
+    return clamp(lr, minLR, maxLR);
 }

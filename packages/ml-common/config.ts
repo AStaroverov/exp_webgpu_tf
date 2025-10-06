@@ -32,7 +32,7 @@ export const DEFAULT_EXPERIMENT = {
         initial: 1e-5,
         multHigh: 0.95,
         multLow: 1.05,
-        min: 1e-6,
+        min: 5e-6,
         max: 1e-3,
     },
 
@@ -50,7 +50,7 @@ export const DEFAULT_EXPERIMENT = {
     backpressureQueueSize: 2,
     // Perturbation of weights
     perturbChance: (iteration: number) => lerp(0.01, 0.1, clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1)),
-    perturbWeightsScale: (iteration: number) => 0.001 + random() * lerp(0, 0.01, clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1)),
+    perturbWeightsScale: (iteration: number) => 0.001 + random() * lerp(0, 0.005, clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1)),
     // Training control
     savePath: 'PPO_MHA',
     // fsModelPath: '/assets/models/v1',
