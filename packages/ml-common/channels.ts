@@ -16,6 +16,7 @@ export const metricsChannels = {
     kl: new BroadcastChannel('kl'),
     klPerturbed: new BroadcastChannel('klPerturbed'),
     lr: new BroadcastChannel('lr'),
+    perturbScale: new BroadcastChannel('perturbScale'),
     valueLoss: new BroadcastChannel('valueLoss'),
     policyLoss: new BroadcastChannel('policyLoss'),
     trainTime: new BroadcastChannel('trainTime'),

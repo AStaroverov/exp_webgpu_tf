@@ -1,12 +1,12 @@
-import { getNetworkExpIteration, getNetworkLearningRate } from '../../../../ml-common/utils.ts';
+import { getNetworkExpIteration, getNetworkLearningRate, getNetworkPerturbScale } from '../../../../ml-common/utils.ts';
 
 import * as tf from '@tensorflow/tfjs';
 import { RingBuffer } from 'ring-buffer-ts';
-import { ceil, floor, max, median, min } from '../../../../../lib/math.ts';
+import { ceil, floor, max, mean, median, min } from '../../../../../lib/math.ts';
 import { metricsChannels } from '../../../../ml-common/channels.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
 import { flatTypedArray } from '../../../../ml-common/flat.ts';
-import { getDynamicLearningRate } from '../../../../ml-common/getDynamicLearningRate.ts';
+import { getDynamicLearningRate, getDynamicPerturbScale } from '../../../../ml-common/getDynamicLearningRate.ts';
 import { createInputTensors } from '../../../../ml-common/InputTensors.ts';
 import { ReplayBuffer } from '../../../../ml-common/ReplayBuffer.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../../../ml-common/Tensor.ts';
@@ -27,6 +27,7 @@ export function createPolicyLearnerAgent() {
 }
 
 const klHistory = new RingBuffer<number>(25);
+const klPerturbedHistory = new RingBuffer<number>(25);
 
 function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const expIteration = getNetworkExpIteration(network);
@@ -134,7 +135,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
                 throw new Error(`Policy loss too dangerous: ${min(...policyLossList)}, ${max(...policyLossList)}`);
             }
 
-            if (klList.some(kl => kl > CONFIG.klConfig.max)) {
+            if (klList.some(kl => kl > CONFIG.klConfig.maxPure)) {
                 throw new Error(`KL divergence too high ${max(...klList)}`);
             }
 
@@ -145,13 +146,23 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             klHistory.add(...klList);
             const klArr = klHistory.toArray();
             const lr = getDynamicLearningRate(
-                median(klArr),
+                (mean(klArr) + median(klArr)) / 2,
                 getNetworkLearningRate(network),
             );
 
-            modelSettingsChannel.emit({ lr, expIteration: expIteration + batch.size });
+            klPerturbedHistory.add(...klPerturbedList);
+            const klPerturbedArr = klPerturbedHistory.toArray();
+            const perturbScale = klPerturbedArr.length > 0
+                ? getDynamicPerturbScale(
+                    (mean(klPerturbedArr) + median(klPerturbedArr)) / 2,
+                    getNetworkPerturbScale(network),
+                )
+                : getNetworkPerturbScale(network);
+
+            modelSettingsChannel.emit({ lr, perturbScale, expIteration: expIteration + batch.size });
 
             metricsChannels.lr.postMessage([lr]);
+            metricsChannels.perturbScale.postMessage([perturbScale]);
             metricsChannels.kl.postMessage(klList);
             metricsChannels.klPerturbed.postMessage(klPerturbedList);
             metricsChannels.policyLoss.postMessage(policyLossList);

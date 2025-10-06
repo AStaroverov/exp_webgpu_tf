@@ -8,7 +8,7 @@ import { CONFIG } from '../../../../ml-common/config.ts';
 import { LEARNING_STEPS } from '../../../../ml-common/consts.ts';
 import { prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
-import { getNetworkExpIteration, patientAction } from '../../../../ml-common/utils.ts';
+import { getNetworkExpIteration, getNetworkPerturbScale, patientAction } from '../../../../ml-common/utils.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../../../ml/src/Models/Utils.ts';
 import { act } from '../../../../ml/src/PPO/train.ts';
@@ -162,8 +162,8 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
             + actionReward * actionRewardMultiplier
             + frameReward
             + deathReward,
-            -100,
-            100
+            -30,
+            +30
         );
 
         this.memory.updateSecondPart(reward, isDead);
@@ -179,7 +179,7 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
 
         if (chance > random()) {
             this.memory.perturbed = true;
-            perturbWeights(this.policyNetwork, CONFIG.perturbWeightsScale(version));
+            perturbWeights(this.policyNetwork, getNetworkPerturbScale(this.policyNetwork));
         }
     }
 }

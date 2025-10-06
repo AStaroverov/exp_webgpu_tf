@@ -21,6 +21,15 @@ export function getNetworkLearningRate(network: tf.LayersModel): number {
     return network.optimizer.learningRate ?? CONFIG.lrConfig.initial;
 }
 
+export function setNetworkPerturbScale(o: tf.LayersModel, scale: number) {
+    o.setUserDefinedMetadata({ ...o.getUserDefinedMetadata(), perturbScale: scale });
+}
+
+export function getNetworkPerturbScale(network: tf.LayersModel): number {
+    const meta = network.getUserDefinedMetadata() as { perturbScale?: number } ?? { perturbScale: CONFIG.perturbWeightsConfig.initial };
+    return meta.perturbScale ?? CONFIG.perturbWeightsConfig.initial;
+}
+
 export async function patientAction<T>(action: () => T | Promise<T>, attempts: number = 100): Promise<T> {
     while (true) {
         attempts--;

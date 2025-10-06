@@ -3,12 +3,22 @@ import { CONFIG } from './config.ts';
 
 export function getDynamicLearningRate(kl: number, lr: number): number {
     const {
-        klConfig: { high: klHigh, low: klLow },
-        lrConfig: { multHigh: lrMultHigh, multLow: lrMultLow, min: minLR, max: maxLR },
+        lrConfig: { kl: { high: klHigh, low: klLow }, multHigh: lrMultHigh, multLow: lrMultLow, min: minLR, max: maxLR },
     } = CONFIG;
 
     if (kl > klHigh) lr *= lrMultHigh;
     else if (kl < klLow) lr *= lrMultLow;
 
     return clamp(lr, minLR, maxLR);
+}
+
+export function getDynamicPerturbScale(klNoise: number, scale: number): number {
+    const {
+        perturbWeightsConfig: { kl: { high: klHigh, low: klLow }, multHigh, multLow, min, max },
+    } = CONFIG;
+
+    if (klNoise > klHigh) scale *= multHigh;
+    else if (klNoise < klLow) scale *= multLow;
+
+    return clamp(scale, min, max);
 }

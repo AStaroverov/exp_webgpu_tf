@@ -17,6 +17,7 @@ const store = {
     kl: new CompressedBuffer(1_000, 5),
     klPerturbed: new CompressedBuffer(1_000, 5),
     lr: new CompressedBuffer(1_000, 5),
+    perturbScale: new CompressedBuffer(1_000, 5),
     valueLoss: new CompressedBuffer(1_000, 5),
     policyLoss: new CompressedBuffer(1_000, 5),
     trainTime: new CompressedBuffer(1_000, 5),
@@ -124,19 +125,9 @@ function drawTab1() {
     tfvis.render.scatterplot({ name: 'KL', tab }, {
         values: [
             avgKL,
-            calculateMovingMedian(avgKL, 25),
+            calculateMovingMedianAverage(avgKL, 25),
         ],
         series: ['Avg', 'MA'],
-    }, {
-        xLabel: 'Version',
-        yLabel: 'KL',
-        width: 500,
-        height: 300,
-    });
-
-    tfvis.render.scatterplot({ name: 'KL - Perturbed', tab }, {
-        values: [avgKLPerturbed],
-        series: ['Avg'],
     }, {
         xLabel: 'Version',
         yLabel: 'KL',
@@ -149,6 +140,28 @@ function drawTab1() {
     }, {
         xLabel: 'Version',
         yLabel: 'LR',
+        width: 500,
+        height: 300,
+    });
+
+    tfvis.render.scatterplot({ name: 'KL - Perturbed', tab }, {
+        values: [
+            avgKLPerturbed,
+            calculateMovingMedianAverage(avgKLPerturbed, 25),
+        ],
+        series: ['Avg', 'MA'],
+    }, {
+        xLabel: 'Version',
+        yLabel: 'KL',
+        width: 500,
+        height: 300,
+    });
+
+    tfvis.render.linechart({ name: 'Perturb Scale', tab }, {
+        values: [store.perturbScale.toArray()],
+    }, {
+        xLabel: 'Version',
+        yLabel: 'Perturb Scale',
         width: 500,
         height: 300,
     });
