@@ -4,11 +4,10 @@ import { RingBuffer } from 'ring-buffer-ts';
 import { abs, unlerp } from '../../../../../lib/math.ts';
 import { random } from '../../../../../lib/random.ts';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
-import { CONFIG } from '../../../../ml-common/config.ts';
 import { LEARNING_STEPS } from '../../../../ml-common/consts.ts';
 import { prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
-import { getNetworkExpIteration, getNetworkPerturbScale, patientAction } from '../../../../ml-common/utils.ts';
+import { getNetworkExpIteration, getNetworkPerturbConfig, patientAction } from '../../../../ml-common/utils.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../../../ml/src/Models/Utils.ts';
 import { act } from '../../../../ml/src/PPO/train.ts';
@@ -174,13 +173,11 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
 
     private async load() {
         this.policyNetwork = await getNetwork(Model.Policy);
-        const version = getNetworkExpIteration(this.policyNetwork);
-        const chance = CONFIG.perturbChance(version);
-        const scale = chance > random() ? getNetworkPerturbScale(this.policyNetwork) : 0;
+        const config = getNetworkPerturbConfig(this.policyNetwork);
 
-        if (scale > 0) {
+        if (config.chance > random()) {
             this.memory.perturbed = true;
-            perturbWeights(this.policyNetwork, scale);
+            perturbWeights(this.policyNetwork, config.scale);
         }
     }
 }

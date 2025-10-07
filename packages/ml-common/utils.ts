@@ -7,8 +7,8 @@ export function setNetworkExpIteration(o: tf.LayersModel, it: number) {
 }
 
 export function getNetworkExpIteration(network: tf.LayersModel): number {
-    const meta = network.getUserDefinedMetadata() as { expIteration?: number } ?? { expIteration: 0 };
-    return meta.expIteration ?? 0;
+    const meta = network.getUserDefinedMetadata() as undefined | { expIteration?: number };
+    return meta?.expIteration ?? 0;
 }
 
 export function setNetworkLearningRate(o: tf.LayersModel, lr: number) {
@@ -21,14 +21,15 @@ export function getNetworkLearningRate(network: tf.LayersModel): number {
     return network.optimizer.learningRate ?? CONFIG.lrConfig.initial;
 }
 
-export function setNetworkPerturbScale(o: tf.LayersModel, scale: number) {
-    o.setUserDefinedMetadata({ ...o.getUserDefinedMetadata(), perturbScale: scale });
+export function setNetworkPerturbConfig(o: tf.LayersModel, chance: number, scale: number) {
+    o.setUserDefinedMetadata({ ...o.getUserDefinedMetadata(), perturbScale: scale, perturbChance: chance });
 }
 
-export function getNetworkPerturbScale(network: tf.LayersModel): number {
-    const meta = network.getUserDefinedMetadata() as { perturbScale?: number } ?? { perturbScale: CONFIG.perturbWeightsConfig.initial };
-    return meta.perturbScale ?? CONFIG.perturbWeightsConfig.initial;
+export function getNetworkPerturbConfig(network: tf.LayersModel): { scale: number, chance: number } {
+    const meta = network.getUserDefinedMetadata() as undefined | { perturbScale?: number, perturbChance?: number };
+    return { scale: meta?.perturbScale ?? CONFIG.perturbWeightsConfig.initial, chance: meta?.perturbChance ?? CONFIG.perturbWeightsConfig.initial };
 }
+
 
 export async function patientAction<T>(action: () => T | Promise<T>, attempts: number = 100): Promise<T> {
     while (true) {

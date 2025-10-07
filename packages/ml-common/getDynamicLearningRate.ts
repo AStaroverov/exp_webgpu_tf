@@ -12,15 +12,10 @@ export function getDynamicLearningRate(kl: number, lr: number): number {
     return clamp(lr, minLR, maxLR);
 }
 
-export function getDynamicPerturb(klPure: number, klNoise: number, scale: number): number {
+export function getDynamicPerturb(klNoise: number, scale: number): number {
     const {
-        lrConfig,
         perturbWeightsConfig: { kl: { high: klHigh, low: klLow }, multHigh, multLow, min, max },
     } = CONFIG;
-
-    if (klPure > lrConfig.kl.high) {
-        return 0; // Disable perturbations entirely
-    };
 
     if (klNoise > klHigh) scale *= multHigh;
     else if (klNoise < klLow) scale *= multLow;

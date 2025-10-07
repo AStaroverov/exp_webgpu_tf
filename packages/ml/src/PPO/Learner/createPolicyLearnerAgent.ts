@@ -1,4 +1,4 @@
-import { getNetworkExpIteration, getNetworkLearningRate, getNetworkPerturbScale } from '../../../../ml-common/utils.ts';
+import { getNetworkExpIteration, getNetworkLearningRate, getNetworkPerturbConfig } from '../../../../ml-common/utils.ts';
 
 import * as tf from '@tensorflow/tfjs';
 import { RingBuffer } from 'ring-buffer-ts';
@@ -9,11 +9,11 @@ import { flatTypedArray } from '../../../../ml-common/flat.ts';
 import { getDynamicLearningRate, getDynamicPerturb } from '../../../../ml-common/getDynamicLearningRate.ts';
 import { createInputTensors } from '../../../../ml-common/InputTensors.ts';
 import { ReplayBuffer } from '../../../../ml-common/ReplayBuffer.ts';
-import { asyncUnwrapTensor, onReadyRead } from '../../../../ml-common/Tensor.ts';
+import { asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../../ml-common/Tensor.ts';
 import { createPolicyNetwork } from '../../Models/Create.ts';
 import { Model } from '../../Models/def.ts';
 import { modelSettingsChannel } from '../channels.ts';
-import { computeKullbackLeiblerExact, trainPolicyNetwork } from '../train.ts';
+import { computeKullbackLeiblerAprox, trainPolicyNetwork } from '../train.ts';
 import { createLearnerAgent } from './createLearnerAgent.ts';
 import { LearnData } from './createLearnerManager.ts';
 import { isLossDangerous } from './isLossDangerous.ts';
@@ -79,7 +79,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const getKLPerturbedBatch = createKLBatchGetter(true);
 
     const klSize = floor(mbs * ceil(mbc / 3));
-    const klList: tf.Tensor[] = [];
+    const klList: number[] = [];
     const klPerturbedList: tf.Tensor[] = [];
     const policyLossList: tf.Tensor[] = [];
     const entropyCoeff = CONFIG.policyEntropy(expIteration);
@@ -113,24 +113,28 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             tAdvantages.dispose();
         }
 
-        // KL on non-perturbed data (for learning rate adaptation)
-        const kl = computeKLForBatch(network, getKLBatch(klSize), mbs);
-        kl && klList.push(kl);
-
         // KL on perturbed data (for metrics only)
         const klPerturbed = computeKLForBatch(network, getKLPerturbedBatch(klSize), mbs);
-        klPerturbed && klPerturbedList.push(klPerturbed);
+        if (klPerturbed) klPerturbedList.push(klPerturbed);
+
+        // KL on non-perturbed data (for learning rate adaptation)
+        const tKL = computeKLForBatch(network, getKLBatch(klSize), mbs);
+        const kl = tKL ? syncUnwrapTensor(tKL)[0] : undefined;
+        if (kl) klList.push(kl);
+        if (kl && kl > CONFIG.lrConfig.kl.high) {
+            console.warn(`Stopping policy training early at epoch ${i} due to high KL=${kl}`);
+            break;
+        }
     }
 
     return onReadyRead()
         .then(() => Promise.all([
-            Promise.all(policyLossList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
-            Promise.all(klList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
+            klList,
+            // Promise.all(klList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
             Promise.all(klPerturbedList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
+            Promise.all(policyLossList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
         ]))
-        .then(([policyLossList, klList, klPerturbedList]) => {
-            console.info(`[Train Policy]: Finish`);
-
+        .then(([klList, klPerturbedList, policyLossList]) => {
             if (policyLossList.some((v) => isLossDangerous(v, 2))) {
                 throw new Error(`Policy loss too dangerous: ${min(...policyLossList)}, ${max(...policyLossList)}`);
             }
@@ -145,23 +149,23 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
 
             klHistory.add(...klList);
             const klArr = klHistory.toArray();
-            const kl = (mean(klArr) + median(klArr)) / 2;
-            const lr = getDynamicLearningRate(
-                kl,
-                getNetworkLearningRate(network),
-            );
+            const kl = klArr.length > 0 ? (mean(klArr) + median(klArr)) / 2 : undefined;
+            const lr = kl
+                ? getDynamicLearningRate(kl, getNetworkLearningRate(network))
+                : getNetworkLearningRate(network);
 
             klPerturbedHistory.add(...klPerturbedList);
             const klPerturbedArr = klPerturbedHistory.toArray();
-            const perturbScale = klPerturbedArr.length > 0
-                ? getDynamicPerturb(
-                    kl,
-                    (mean(klPerturbedArr) + median(klPerturbedArr)) / 2,
-                    getNetworkPerturbScale(network),
-                )
-                : getNetworkPerturbScale(network);
+            const klPerturbed = klPerturbedArr.length > 0 ? (mean(klPerturbedArr) + median(klPerturbedArr)) / 2 : undefined;
+            const perturbScale = klPerturbed
+                ? getDynamicPerturb(klPerturbed, getNetworkPerturbConfig(network).scale)
+                : getNetworkPerturbConfig(network).scale;
+            const perturbChance = kl === undefined || kl > CONFIG.lrConfig.kl.target ? 0 : CONFIG.perturbChance(expIteration);
 
-            modelSettingsChannel.emit({ lr, perturbScale, expIteration: expIteration + batch.size });
+            modelSettingsChannel.emit({ lr, perturbChance, perturbScale, expIteration: expIteration + batch.size });
+            console.info(`[Train Policy]: Finish iteration=${expIteration}
+                kl=${kl?.toFixed(3)}, lr=${lr},
+                perturb kl=${klPerturbed?.toFixed(3)}, chance=${perturbChance.toFixed(2)}, scale=${perturbScale.toFixed(2)}`);
 
             metricsChannels.lr.postMessage([lr]);
             metricsChannels.perturbScale.postMessage([perturbScale]);
@@ -189,14 +193,9 @@ function createKlBatch(batch: LearnData, indices: number[]) {
     const states = indices.map(i => batch.states[i]);
     const actions = indices.map(i => batch.actions[i]);
     const mean = indices.map(i => batch.mean[i]);
-    const logStd = indices.map(i => batch.logStd[i]);
+    const logProb = indices.map(i => batch.logProbs[i]);
 
-    return {
-        states: states,
-        actions: actions,
-        mean: (mean),
-        logStd: (logStd),
-    };
+    return { states, actions, mean, logProb, };
 }
 
 function computeKLForBatch(
@@ -208,20 +207,20 @@ function computeKLForBatch(
 
     if (batch.states.length > 0) {
         const tStates = createInputTensors(batch.states);
-        const tMean = tf.tensor2d(flatTypedArray(batch.mean), [batch.mean.length, batch.mean[0].length]);
-        const tLogStd = tf.tensor2d(flatTypedArray(batch.logStd), [batch.logStd.length, batch.logStd[0].length]);
+        const tActions = tf.tensor2d(flatTypedArray(batch.actions), [batch.actions.length, batch.actions[0].length]);
+        const tLogProb = tf.tensor1d(batch.logProb);
 
-        result = computeKullbackLeiblerExact(
+        result = computeKullbackLeiblerAprox(
             network,
             tStates,
-            tMean,
-            tLogStd,
+            tActions,
+            tLogProb,
             mbs,
         )
 
         tf.dispose(tStates);
-        tMean.dispose();
-        tLogStd.dispose();
+        tActions.dispose();
+        tLogProb.dispose();
     }
 
     return result;

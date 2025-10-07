@@ -83,15 +83,15 @@ export function computeKullbackLeiblerAprox(
     actions: tf.Tensor,
     oldLogProb: tf.Tensor,
     batchSize: number
-): number {
+) {
     return tf.tidy(() => {
         const predicted = policyNetwork.predict(states, { batchSize }) as tf.Tensor;
         const { mean, logStd } = parsePredict(predicted);
         const std = logStd.exp();
         const newLogProbs = computeLogProb(actions, mean, std);
         const diff = oldLogProb.sub(newLogProbs);
-        const kl = diff.mean();
-        return kl.dataSync()[0];
+        const kl = diff.mean().abs();
+        return kl;
     });
 }
 

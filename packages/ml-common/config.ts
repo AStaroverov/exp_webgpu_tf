@@ -5,17 +5,17 @@ import { LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
 // Default experiment configuration for PPO
 export const DEFAULT_EXPERIMENT = {
     // Learning parameters
-    clipNorm: 20,
+    clipNorm: 1.0,
     // PPO-specific parameters
     gamma: (iteration: number) => {
         return lerp(0.95, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
     },
+
     policyEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
-    policyClipRatio: 0.2,
+    policyClipRatio: 0.3, // https://arxiv.org/pdf/2202.00079 - interesting idea don't clip at all
     policyEntropy: (iteration: number) => {
         return lerp(0.0004, 0.004, clamp(1 - iteration / (LEARNING_STEPS * 0.2), 0, 1))
     },
-
 
     valueEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
     valueClipRatio: 0.2,
@@ -24,15 +24,15 @@ export const DEFAULT_EXPERIMENT = {
     // KL drop control
     klConfig: {
         maxPure: 0.5,
-        maxPerturbed: 15.0, // Максимальное KL для перетурбированных весов
+        maxPerturbed: 5.0,
     },
 
     // Dynamic learning rate adjustment based on KL
     lrConfig: {
         kl: {
-            target: 0.02,
-            high: 0.025,
-            low: 0.015,
+            target: 0.01,
+            high: 0.02,
+            low: 0.005,
         },
         initial: 1e-5,
         multHigh: 0.95,
@@ -44,11 +44,11 @@ export const DEFAULT_EXPERIMENT = {
     // Dynamic perturbation scale adjustment based on KL_noise
     perturbWeightsConfig: {
         kl: {
-            target: 0.2,
-            high: 0.4,
-            low: 0.1,
+            target: 0.1,
+            high: 0.2,
+            low: 0.05,
         },
-        initial: 0.005,
+        initial: 0.01,
         multHigh: 0.95,
         multLow: 1.05,
         min: 0.003,
