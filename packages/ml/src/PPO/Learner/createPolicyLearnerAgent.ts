@@ -6,7 +6,7 @@ import { ceil, floor, max, mean, median, min } from '../../../../../lib/math.ts'
 import { metricsChannels } from '../../../../ml-common/channels.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
 import { flatTypedArray } from '../../../../ml-common/flat.ts';
-import { getDynamicLearningRate, getDynamicPerturbScale } from '../../../../ml-common/getDynamicLearningRate.ts';
+import { getDynamicLearningRate, getDynamicPerturb } from '../../../../ml-common/getDynamicLearningRate.ts';
 import { createInputTensors } from '../../../../ml-common/InputTensors.ts';
 import { ReplayBuffer } from '../../../../ml-common/ReplayBuffer.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../../../../ml-common/Tensor.ts';
@@ -145,15 +145,17 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
 
             klHistory.add(...klList);
             const klArr = klHistory.toArray();
+            const kl = (mean(klArr) + median(klArr)) / 2;
             const lr = getDynamicLearningRate(
-                (mean(klArr) + median(klArr)) / 2,
+                kl,
                 getNetworkLearningRate(network),
             );
 
             klPerturbedHistory.add(...klPerturbedList);
             const klPerturbedArr = klPerturbedHistory.toArray();
             const perturbScale = klPerturbedArr.length > 0
-                ? getDynamicPerturbScale(
+                ? getDynamicPerturb(
+                    kl,
                     (mean(klPerturbedArr) + median(klPerturbedArr)) / 2,
                     getNetworkPerturbScale(network),
                 )

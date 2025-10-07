@@ -30,14 +30,14 @@ export const DEFAULT_EXPERIMENT = {
     // Dynamic learning rate adjustment based on KL
     lrConfig: {
         kl: {
-            target: 0.01,
-            high: 0.02,
-            low: 0.005,
+            target: 0.02,
+            high: 0.025,
+            low: 0.015,
         },
         initial: 1e-5,
         multHigh: 0.95,
         multLow: 1.05,
-        min: 1e-6,
+        min: 5e-6,
         max: 1e-3,
     },
 

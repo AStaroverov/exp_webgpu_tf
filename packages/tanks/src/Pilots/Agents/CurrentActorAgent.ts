@@ -176,10 +176,11 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         this.policyNetwork = await getNetwork(Model.Policy);
         const version = getNetworkExpIteration(this.policyNetwork);
         const chance = CONFIG.perturbChance(version);
+        const scale = chance > random() ? getNetworkPerturbScale(this.policyNetwork) : 0;
 
-        if (chance > random()) {
+        if (scale > 0) {
             this.memory.perturbed = true;
-            perturbWeights(this.policyNetwork, getNetworkPerturbScale(this.policyNetwork));
+            perturbWeights(this.policyNetwork, scale);
         }
     }
 }
