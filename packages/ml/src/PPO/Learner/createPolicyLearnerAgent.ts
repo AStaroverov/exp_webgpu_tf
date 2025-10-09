@@ -118,9 +118,9 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
 
         const tKL = computeKLForBatch(network, getKLBatch(klSize), mbs);
         const kl = tKL ? syncUnwrapTensor(tKL)[0] : undefined;
-        if (kl) klList.push(kl);
+        if (kl != null) klList.push(kl);
         const tPerturbedKL = computeKLForBatch(network, getKLPerturbedBatch(klSize), mbs);
-        if (tPerturbedKL) klPerturbedList.push(tPerturbedKL);
+        if (tPerturbedKL != null) klPerturbedList.push(tPerturbedKL);
 
         if (kl && kl > CONFIG.klConfig.stopPure) {
             console.info(`Stopping policy training early at epoch ${i} due to high kl=${kl}`);

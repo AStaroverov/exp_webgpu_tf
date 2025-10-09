@@ -4,6 +4,7 @@ import { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
 import { normalize } from '../../../../lib/math.ts';
 import { random } from '../../../../lib/random.ts';
 import { computeLogProb } from '../../../ml-common/computeLogProb.ts';
+import { CONFIG } from '../../../ml-common/config.ts';
 import { ACTION_DIM, LOG_STD_DIM } from '../../../ml-common/consts.ts';
 import { flatTypedArray } from '../../../ml-common/flat.ts';
 import { InputArrays, prepareRandomInputArrays } from '../../../ml-common/InputArrays.ts';
@@ -12,9 +13,9 @@ import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
 
 export const MIN_LOG_STD_DEV = -3;
-export const MAX_LOG_STD_DEV = 1;
+export const MAX_LOG_STD_DEV = 2;
 export const MIN_STD_DEV = Math.exp(MIN_LOG_STD_DEV); // ~0.0498
-export const MAX_STD_DEV = Math.exp(MAX_LOG_STD_DEV); // ~2.718
+export const MAX_STD_DEV = Math.exp(MAX_LOG_STD_DEV); // ~7.389
 
 export function trainPolicyNetwork(
     network: tf.LayersModel,
@@ -223,6 +224,7 @@ export function computeVTraceTargets(
     gamma: number,
     clipRho: number = 1.0,
     clipC: number = 1.0,
+    clipRhoPG: number = CONFIG.clipRhoPG,
 ): {
     advantages: Float32Array,
     tdErrors: Float32Array,
@@ -251,6 +253,7 @@ export function computeVTraceTargets(
             gamma,
             clipRho,
             clipC,
+            clipRhoPG
         );
 
         if (!arrayHealthCheck(advantages)) {
@@ -288,18 +291,20 @@ export function computeVTrace(
     gamma: number,
     clipRho: number,
     clipC: number,
-): { vTraces: Float32Array, tdErrors: Float32Array, advantages: Float32Array } {
+    clipRhoPG: number,
+): { vTraces: Float32Array; tdErrors: Float32Array; advantages: Float32Array } {
     const T = rewards.length;
     const vTraces = new Float32Array(T);
     const tdErrors = new Float32Array(T);
     const advantages = new Float32Array(T);
 
-    // bootstrap v̂_{T} = values[T]
+    // bootstrap: v̂_T = done ? 0 : V(s_T)
     let vtp1 = dones[T - 1] ? 0 : values[T];
-
     if (vtp1 === undefined) {
-        throw new Error('Implementation required last state as terminal');
+        throw new Error('computeVTrace expects values.length === rewards.length + 1');
     }
+
+    let nextAdv = 0; // A_{t+1}
 
     for (let t = T - 1; t >= 0; --t) {
         const discount = dones[t] ? 0 : gamma;
@@ -308,17 +313,24 @@ export function computeVTrace(
 
         const rho = Math.min(rhos[t], clipRho);
         const c = Math.min(rhos[t], clipC);
+        const rhoPG = Math.min(rhos[t], clipRhoPG);
 
-        const tdError = (rewards[t] + discount * nextValue - value);
+        // δ_t^V = r_t + γ V(s_{t+1}) - V(s_t)
+        const tdError = rewards[t] + discount * nextValue - value;
         tdErrors[t] = tdError;
+
+        // V-trace target:
+        // v̂_t = V(s_t) + ρ̄_t δ_t^V + γ c̄_t (v̂_{t+1} - V(s_{t+1}))
         const delta = rho * tdError;
         vTraces[t] = value + delta + discount * c * (vtp1 - nextValue);
 
-        // policy-gradient advantage: A_t^{vtrace} = ρ̄_t * δ_t^V + γ * c̄_{t+1} * A_{t+1}^{vtrace}
-        // Simplified for IMPALA: A_t ≈ v̂_t - V(s_t)
-        advantages[t] = vTraces[t] - value;
+        // Policy-gradient advantage (IMPALA, V-trace):
+        // A_t = ρ̄_t^{PG} δ_t^V + γ c̄_t A_{t+1}
+        const adv = rhoPG * tdError + discount * c * nextAdv;
+        advantages[t] = adv;
 
         vtp1 = vTraces[t];
+        nextAdv = adv;
     }
 
     return { vTraces, advantages, tdErrors };

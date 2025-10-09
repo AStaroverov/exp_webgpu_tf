@@ -65,7 +65,7 @@ export function createPolicyNetwork(): tf.LayersModel {
     const meanOutput = tf.layers.dense({
         name: Model.Policy + '_mean',
         units: ACTION_DIM,
-        activation: 'linear', // Linear output, actions будут клипироваться после sampling
+        activation: 'linear',
     }).apply(network) as tf.SymbolicTensor;
     // const model = tf.model({
     //     name: Model.Policy,
