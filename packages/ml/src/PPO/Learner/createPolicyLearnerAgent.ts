@@ -2,7 +2,7 @@ import { getNetworkExpIteration, getNetworkLearningRate, getNetworkPerturbConfig
 
 import * as tf from '@tensorflow/tfjs';
 import { RingBuffer } from 'ring-buffer-ts';
-import { ceil, floor, max, mean, median, min } from '../../../../../lib/math.ts';
+import { ceil, floor, mean, median, min } from '../../../../../lib/math.ts';
 import { metricsChannels } from '../../../../ml-common/channels.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
 import { flatTypedArray } from '../../../../ml-common/flat.ts';
@@ -13,10 +13,9 @@ import { asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../../ml
 import { createPolicyNetwork } from '../../Models/Create.ts';
 import { Model } from '../../Models/def.ts';
 import { modelSettingsChannel } from '../channels.ts';
-import { computeKullbackLeiblerAprox, trainPolicyNetwork } from '../train.ts';
+import { computeKullbackLeiblerExact, trainPolicyNetwork } from '../train.ts';
 import { createLearnerAgent } from './createLearnerAgent.ts';
 import { LearnData } from './createLearnerManager.ts';
-import { isLossDangerous } from './isLossDangerous.ts';
 
 export function createPolicyLearnerAgent() {
     return createLearnerAgent({
@@ -104,9 +103,9 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
                 tOldLogProbs,
                 tAdvantages,
                 mbs,
-                CONFIG.policyClipRatio,
                 entropyCoeff,
                 CONFIG.clipNorm,
+                CONFIG.clipRhoPG,
                 j === mbc - 1,
             );
             policyLoss && policyLossList.push(policyLoss);
@@ -117,13 +116,13 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             tAdvantages.dispose();
         }
 
-        const [tKL] = computeKLForBatch(network, getKLBatch(klSize), mbs);
+        const tKL = computeKLForBatch(network, getKLBatch(klSize), mbs);
         const kl = tKL ? syncUnwrapTensor(tKL)[0] : undefined;
         if (kl) klList.push(kl);
-        const [tPerturbedKL] = computeKLForBatch(network, getKLPerturbedBatch(klSize), mbs);
+        const tPerturbedKL = computeKLForBatch(network, getKLPerturbedBatch(klSize), mbs);
         if (tPerturbedKL) klPerturbedList.push(tPerturbedKL);
 
-        if (kl && kl > 0.05) {
+        if (kl && kl > CONFIG.klConfig.stopPure) {
             console.info(`Stopping policy training early at epoch ${i} due to high kl=${kl}`);
             break;
         }
@@ -136,17 +135,17 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             Promise.all(policyLossList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
         ]))
         .then(([klList, klPerturbedList, policyLossList]) => {
-            if (policyLossList.some((v) => isLossDangerous(v, 2))) {
-                throw new Error(`Policy loss too dangerous: ${min(...policyLossList)}, ${max(...policyLossList)}`);
-            }
+            // if (policyLossList.some((v) => isLossDangerous(v, 2))) {
+            //     throw new Error(`Policy loss too dangerous: ${min(...policyLossList)}, ${max(...policyLossList)}`);
+            // }
 
-            if (klList.some(kl => kl > CONFIG.klConfig.maxPure)) {
-                throw new Error(`KL divergence too high ${max(...klList)}`);
-            }
+            // if (klList.some(kl => kl > CONFIG.klConfig.maxPure)) {
+            //     throw new Error(`KL divergence too high ${max(...klList)}`);
+            // }
 
-            if (klPerturbedList.some(kl => kl > CONFIG.klConfig.maxPerturbed)) {
-                throw new Error(`KL divergence on perturbed data too high ${max(...klPerturbedList)}`);
-            }
+            // if (klPerturbedList.some(kl => kl > CONFIG.klConfig.maxPerturbed)) {
+            //     throw new Error(`KL divergence on perturbed data too high ${max(...klPerturbedList)}`);
+            // }
 
             klHistory.add(...klList);
             const klArr = klHistory.toArray();
@@ -191,11 +190,10 @@ function createPolicyBatch(batch: LearnData, indices: number[]) {
 
 function createKlBatch(batch: LearnData, indices: number[]) {
     const states = indices.map(i => batch.states[i]);
-    const actions = indices.map(i => batch.actions[i]);
     const mean = indices.map(i => batch.mean[i]);
-    const logProb = indices.map(i => batch.logProbs[i]);
+    const logStd = indices.map(i => batch.logStd[i]);
 
-    return { states, actions, mean, logProb, };
+    return { states, mean, logStd };
 }
 
 function computeKLForBatch(
@@ -204,40 +202,24 @@ function computeKLForBatch(
     mbs: number,
 ) {
     let result: undefined | tf.Tensor;
-    // let result2: undefined | tf.Tensor;
-    // let result3: undefined | tf.Tensor;
 
     if (batch.states.length > 0) {
         const tStates = createInputTensors(batch.states);
-        const tActions = tf.tensor2d(flatTypedArray(batch.actions), [batch.actions.length, batch.actions[0].length]);
-        // const tMean = tf.tensor2d(flatTypedArray(batch.mean), [batch.mean.length, batch.mean[0].length]);
-        const tLogProb = tf.tensor1d(batch.logProb);
+        const tMean = tf.tensor2d(flatTypedArray(batch.mean), [batch.mean.length, batch.mean[0].length]);
+        const tLogStd = tf.tensor2d(flatTypedArray(batch.logStd), [batch.logStd.length, batch.logStd[0].length]);
 
-        result = computeKullbackLeiblerAprox(
+        result = computeKullbackLeiblerExact(
             network,
             tStates,
-            tActions,
-            tLogProb,
+            tMean,
+            tLogStd,
             mbs,
         )
-        // result2 = computeDeviation(
-        //     network,
-        //     tStates,
-        //     tActions,
-        //     tLogProb,
-        //     mbs,
-        // )
-        // result3 = computeActionDiff(
-        //     network,
-        //     tStates,
-        //     tMean,
-        //     mbs,
-        // )
 
         tf.dispose(tStates);
-        tActions.dispose();
-        tLogProb.dispose();
+        tMean.dispose();
+        tLogStd.dispose();
     }
 
-    return [result]; //, result2, result3
+    return result;
 };

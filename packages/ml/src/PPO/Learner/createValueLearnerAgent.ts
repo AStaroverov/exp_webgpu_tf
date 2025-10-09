@@ -41,22 +41,20 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
 
             const tStates = createInputTensors(mBatch.states);
             const tReturns = tf.tensor1d(mBatch.returns);
-            const tValues = tf.tensor1d(mBatch.values);
 
             const loss = trainValueNetwork(
                 network,
                 tStates,
                 tReturns,
-                tValues,
                 mbs,
-                CONFIG.valueClipRatio, CONFIG.valueLossCoeff, CONFIG.clipNorm,
+                CONFIG.valueLossCoeff, 
+                CONFIG.clipNorm,
                 j === mbc - 1,
             );
             loss && valueLossList.push(loss);
 
             tf.dispose(tStates);
             tReturns.dispose();
-            tValues.dispose();
         }
     }
 
@@ -79,12 +77,10 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
 
 function createValueBatch(batch: LearnData, indices: number[]) {
     const states = indices.map(i => batch.states[i]);
-    const values = indices.map(i => batch.values[i]);
     const returns = indices.map(i => batch.returns[i]);
 
     return {
         states: states,
-        values: (values),
         returns: (returns),
     };
 }

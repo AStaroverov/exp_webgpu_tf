@@ -23,9 +23,9 @@ export function trainPolicyNetwork(
     oldLogProbs: tf.Tensor,  // [batchSize]
     advantages: tf.Tensor,   // [batchSize]
     batchSize: number,
-    clipRatio: number,
     entropyCoeff: number,
     clipNorm: number,
+    clipRhoPG: number,
     returnCost: boolean,
 ): undefined | tf.Tensor {
     return tf.tidy(() => {
@@ -36,15 +36,21 @@ export function trainPolicyNetwork(
 
             const newLogProbs = computeLogProb(actions, mean, std);
             const ratio = tf.exp(newLogProbs.sub(oldLogProbs));
-            const clippedRatio = ratio.clipByValue(1 - clipRatio, 1 + clipRatio);
-            const surr1 = ratio.mul(advantages);
-            const surr2 = clippedRatio.mul(advantages);
-            const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
+
+            // const clippedRatio = ratio.clipByValue(1 - clipRatio, 1 + clipRatio);
+            // const surr1 = ratio.mul(advantages);
+            // const surr2 = clippedRatio.mul(advantages);
+            // const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
+
+            // ρ = π/μ
+            const rhoPG = ratio.clipByValue(0, clipRhoPG);
+            // PG-loss: −E[ ρ̄_pg * A_vtrace ]
+            const pgLoss = tf.mul(rhoPG, advantages).mean().mul(-1);
 
             const c = 0.5 * Math.log(2 * Math.PI * Math.E);
             const entropyEachDim = logStd.add(c);
             const totalEntropy = entropyEachDim.sum(1).mean();
-            const totalLoss = policyLoss.sub(totalEntropy.mul(entropyCoeff));
+            const totalLoss = pgLoss.sub(totalEntropy.mul(entropyCoeff));
 
             return totalLoss as tf.Scalar;
         }, { clipNorm, returnCost });
@@ -55,25 +61,17 @@ export function trainValueNetwork(
     network: tf.LayersModel,
     states: tf.Tensor[],
     returns: tf.Tensor,
-    oldValues: tf.Tensor,
     batchSize: number,
-    clipRatio: number,
     lossCoeff: number,
     clipNorm: number,
     returnCost: boolean,
 ): undefined | tf.Tensor {
     return tf.tidy(() => {
         return optimize(network.optimizer, () => {
-            const newValues = (network.predict(states, { batchSize }) as tf.Tensor).squeeze();
-            const newValuesClipped = oldValues.add(
-                newValues.sub(oldValues).clipByValue(-clipRatio, clipRatio),
-            );
-
-            const vfLoss1 = returns.sub(newValues).square();
-            const vfLoss2 = returns.sub(newValuesClipped).square();
-            const finalValueLoss = tf.maximum(vfLoss1, vfLoss2).mean().mul(lossCoeff);
-
-            return finalValueLoss as tf.Scalar;
+            const values = (network.predict(states, { batchSize }) as tf.Tensor).squeeze(); // [T]
+            const mse = returns.sub(values).square().mean();
+            const loss = mse.mul(lossCoeff);
+            return loss as tf.Scalar;
         }, { clipNorm, returnCost });
     });
 }
@@ -225,7 +223,6 @@ export function computeVTraceTargets(
     gamma: number,
     clipRho: number = 1.0,
     clipC: number = 1.0,
-    clipRhoPG: number = 1.0,
 ): {
     advantages: Float32Array,
     tdErrors: Float32Array,
@@ -254,7 +251,6 @@ export function computeVTraceTargets(
             gamma,
             clipRho,
             clipC,
-            clipRhoPG,
         );
 
         if (!arrayHealthCheck(advantages)) {
@@ -292,7 +288,6 @@ export function computeVTrace(
     gamma: number,
     clipRho: number,
     clipC: number,
-    clipRhoPG: number,
 ): { vTraces: Float32Array, tdErrors: Float32Array, advantages: Float32Array } {
     const T = rewards.length;
     const vTraces = new Float32Array(T);
@@ -319,9 +314,9 @@ export function computeVTrace(
         const delta = rho * tdError;
         vTraces[t] = value + delta + discount * c * (vtp1 - nextValue);
 
-        // policy-gradient advantage
-        const rhoPG = Math.min(rhos[t], clipRhoPG);
-        advantages[t] = rhoPG * (rewards[t] + discount * vtp1 - value);
+        // policy-gradient advantage: A_t^{vtrace} = ρ̄_t * δ_t^V + γ * c̄_{t+1} * A_{t+1}^{vtrace}
+        // Simplified for IMPALA: A_t ≈ v̂_t - V(s_t)
+        advantages[t] = vTraces[t] - value;
 
         vtp1 = vTraces[t];
     }
