@@ -2,12 +2,11 @@ import * as tf from '@tensorflow/tfjs';
 import { clamp } from 'lodash-es';
 import { RingBuffer } from 'ring-buffer-ts';
 import { abs, unlerp } from '../../../../../lib/math.ts';
-import { random } from '../../../../../lib/random.ts';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
 import { LEARNING_STEPS } from '../../../../ml-common/consts.ts';
 import { prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
-import { getNetworkExpIteration, getNetworkPerturbConfig, patientAction } from '../../../../ml-common/utils.ts';
+import { getNetworkExpIteration, patientAction } from '../../../../ml-common/utils.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../../../ml/src/Models/Utils.ts';
 import { act } from '../../../../ml/src/PPO/train.ts';
@@ -173,12 +172,12 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
 
     private async load() {
         this.policyNetwork = await getNetwork(Model.Policy);
-        const config = getNetworkPerturbConfig(this.policyNetwork);
+        // const config = getNetworkPerturbConfig(this.policyNetwork);
 
-        if (config.chance > random()) {
-            this.memory.perturbed = true;
-            perturbWeights(this.policyNetwork, config.scale);
-        }
+        // if (config.chance > random()) {
+        //     this.memory.perturbed = true;
+        //     perturbWeights(this.policyNetwork, config.scale);
+        // }
     }
 }
 
@@ -191,11 +190,9 @@ export function perturbWeights(model: tf.LayersModel, scale: number) {
 
             let eps: tf.Tensor;
             if (val.shape.length === 2) {
-                // Матрица весов [out_dim, in_dim]
                 const [outDim, inDim] = val.shape;
                 const epsOut = tf.randomNormal([outDim, 1]);
                 const epsIn = tf.randomNormal([1, inDim]);
-                // Двухфакторный шум (снижает рандом до более "структурированного" уровня)
                 eps = epsOut.mul(epsIn);
             } else {
                 eps = tf.randomNormal(val.shape);
@@ -209,12 +206,11 @@ export function perturbWeights(model: tf.LayersModel, scale: number) {
 }
 
 function isPerturbable(v: tf.LayerVariable) {
-    // 1. Только float32 параметры
     if (v.dtype !== 'float32') return false;
 
-    // 2. Исключаем BatchNorm (они чувствительны к шуму)
     const name = v.name.toLowerCase();
     if (
+        name.includes('logstd') ||
         name.includes('batchnorm') ||
         name.includes('batch_normalization') ||
         name.includes('layernorm') ||
@@ -227,5 +223,6 @@ function isPerturbable(v: tf.LayerVariable) {
         return false;
     }
 
-    return true;
+    return name.includes('mlp');
+    // return true;
 }

@@ -4,6 +4,7 @@ import { log, max, min, round } from '../../../../../lib/math.ts';
 import { frameTasks } from '../../../../../lib/TasksScheduler/frameTasks.ts';
 import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
+import { SNAPSHOT_EVERY } from '../../../../ml-common/consts.ts';
 import { createScenarioByCurriculumState } from '../../../../ml-common/Curriculum/createScenarioByCurriculumState.ts';
 import { Scenario } from '../../../../ml-common/Curriculum/types.ts';
 import { getDrawState } from '../../../../ml-common/uiUtils.ts';
@@ -77,6 +78,9 @@ export class VisTestEpisodeManager extends EpisodeManager {
     }
 
     protected runGameLoop(episode: Scenario) {
+        const iteration = this.curriculumState.currentVersion;
+        const maxFrame = (CONFIG.episodeFrames(iteration) - (CONFIG.episodeFrames(iteration) % SNAPSHOT_EVERY) + SNAPSHOT_EVERY);
+
         return new Promise(resolve => {
             let frame = 0;
 
@@ -85,6 +89,7 @@ export class VisTestEpisodeManager extends EpisodeManager {
 
                 const gameOver = this.runGameTick(
                     frame++,
+                    maxFrame,
                     16.667,
                     episode,
                 );

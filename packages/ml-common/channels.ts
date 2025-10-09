@@ -13,10 +13,13 @@ export const metricsChannels = {
     returns: new BroadcastChannel('returns'),
     tdErrors: new BroadcastChannel('tdErrors'),
     advantages: new BroadcastChannel('advantages'),
+
     kl: new BroadcastChannel('kl'),
     klPerturbed: new BroadcastChannel('klPerturbed'),
     lr: new BroadcastChannel('lr'),
-    perturbScale: new BroadcastChannel('perturbScale'),
+    deviation: new BroadcastChannel('deviation'),
+    actionDiff: new BroadcastChannel('actionDiff'),
+
     valueLoss: new BroadcastChannel('valueLoss'),
     policyLoss: new BroadcastChannel('policyLoss'),
     trainTime: new BroadcastChannel('trainTime'),

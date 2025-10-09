@@ -79,8 +79,12 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const getKLPerturbedBatch = createKLBatchGetter(true);
 
     const klSize = floor(mbs * ceil(mbc / 3));
+
     const klList: number[] = [];
     const klPerturbedList: tf.Tensor[] = [];
+    // const deviationList: tf.Tensor[] = [];
+    // const actionDiffList: tf.Tensor[] = [];
+
     const policyLossList: tf.Tensor[] = [];
     const entropyCoeff = CONFIG.policyEntropy(expIteration);
 
@@ -113,16 +117,14 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             tAdvantages.dispose();
         }
 
-        // KL on perturbed data (for metrics only)
-        const klPerturbed = computeKLForBatch(network, getKLPerturbedBatch(klSize), mbs);
-        if (klPerturbed) klPerturbedList.push(klPerturbed);
-
-        // KL on non-perturbed data (for learning rate adaptation)
-        const tKL = computeKLForBatch(network, getKLBatch(klSize), mbs);
+        const [tKL] = computeKLForBatch(network, getKLBatch(klSize), mbs);
         const kl = tKL ? syncUnwrapTensor(tKL)[0] : undefined;
         if (kl) klList.push(kl);
-        if (kl && kl > CONFIG.lrConfig.kl.high) {
-            console.warn(`Stopping policy training early at epoch ${i} due to high KL=${kl}`);
+        const [tPerturbedKL] = computeKLForBatch(network, getKLPerturbedBatch(klSize), mbs);
+        if (tPerturbedKL) klPerturbedList.push(tPerturbedKL);
+
+        if (kl && kl > 0.05) {
+            console.info(`Stopping policy training early at epoch ${i} due to high kl=${kl}`);
             break;
         }
     }
@@ -130,7 +132,6 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     return onReadyRead()
         .then(() => Promise.all([
             klList,
-            // Promise.all(klList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
             Promise.all(klPerturbedList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
             Promise.all(policyLossList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
         ]))
@@ -160,7 +161,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             const perturbScale = klPerturbed
                 ? getDynamicPerturb(klPerturbed, getNetworkPerturbConfig(network).scale)
                 : getNetworkPerturbConfig(network).scale;
-            const perturbChance = kl === undefined || kl > CONFIG.lrConfig.kl.target ? 0 : CONFIG.perturbChance(expIteration);
+            const perturbChance = 0;// kl === undefined || kl > CONFIG.lrConfig.kl.target ? 0 : CONFIG.perturbChance(expIteration);
 
             modelSettingsChannel.emit({ lr, perturbChance, perturbScale, expIteration: expIteration + batch.size });
             console.info(`[Train Policy]: Finish iteration=${expIteration}
@@ -168,7 +169,6 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
                 perturb kl=${klPerturbed?.toFixed(3)}, chance=${perturbChance.toFixed(2)}, scale=${perturbScale.toFixed(2)}`);
 
             metricsChannels.lr.postMessage([lr]);
-            metricsChannels.perturbScale.postMessage([perturbScale]);
             metricsChannels.kl.postMessage(klList);
             metricsChannels.klPerturbed.postMessage(klPerturbedList);
             metricsChannels.policyLoss.postMessage(policyLossList);
@@ -204,10 +204,13 @@ function computeKLForBatch(
     mbs: number,
 ) {
     let result: undefined | tf.Tensor;
+    // let result2: undefined | tf.Tensor;
+    // let result3: undefined | tf.Tensor;
 
     if (batch.states.length > 0) {
         const tStates = createInputTensors(batch.states);
         const tActions = tf.tensor2d(flatTypedArray(batch.actions), [batch.actions.length, batch.actions[0].length]);
+        // const tMean = tf.tensor2d(flatTypedArray(batch.mean), [batch.mean.length, batch.mean[0].length]);
         const tLogProb = tf.tensor1d(batch.logProb);
 
         result = computeKullbackLeiblerAprox(
@@ -217,11 +220,24 @@ function computeKLForBatch(
             tLogProb,
             mbs,
         )
+        // result2 = computeDeviation(
+        //     network,
+        //     tStates,
+        //     tActions,
+        //     tLogProb,
+        //     mbs,
+        // )
+        // result3 = computeActionDiff(
+        //     network,
+        //     tStates,
+        //     tMean,
+        //     mbs,
+        // )
 
         tf.dispose(tStates);
         tActions.dispose();
         tLogProb.dispose();
     }
 
-    return result;
+    return [result]; //, result2, result3
 };

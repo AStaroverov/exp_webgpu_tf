@@ -4,17 +4,17 @@ import { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
 import { normalize } from '../../../../lib/math.ts';
 import { random } from '../../../../lib/random.ts';
 import { computeLogProb } from '../../../ml-common/computeLogProb.ts';
-import { ACTION_DIM } from '../../../ml-common/consts.ts';
+import { ACTION_DIM, LOG_STD_DIM } from '../../../ml-common/consts.ts';
 import { flatTypedArray } from '../../../ml-common/flat.ts';
 import { InputArrays, prepareRandomInputArrays } from '../../../ml-common/InputArrays.ts';
 import { createInputTensors } from '../../../ml-common/InputTensors.ts';
 import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
 
-export const MIN_LOG_STD_DEV = -2;
+export const MIN_LOG_STD_DEV = -3;
 export const MAX_LOG_STD_DEV = 1;
-export const MIN_STD_DEV = Math.exp(MIN_LOG_STD_DEV); // ~0.14
-export const MAX_STD_DEV = Math.exp(MAX_LOG_STD_DEV); // ~2.72
+export const MIN_STD_DEV = Math.exp(MIN_LOG_STD_DEV); // ~0.0498
+export const MAX_STD_DEV = Math.exp(MAX_LOG_STD_DEV); // ~2.718
 
 export function trainPolicyNetwork(
     network: tf.LayersModel,
@@ -33,6 +33,7 @@ export function trainPolicyNetwork(
             const predicted = network.predict(states, { batchSize }) as tf.Tensor;
             const { mean, logStd } = parsePredict(predicted);
             const std = logStd.exp();
+
             const newLogProbs = computeLogProb(actions, mean, std);
             const ratio = tf.exp(newLogProbs.sub(oldLogProbs));
             const clippedRatio = ratio.clipByValue(1 - clipRatio, 1 + clipRatio);
@@ -74,6 +75,37 @@ export function trainValueNetwork(
 
             return finalValueLoss as tf.Scalar;
         }, { clipNorm, returnCost });
+    });
+}
+
+export function computeActionDiff(
+    policyNetwork: tf.LayersModel,
+    expStates: tf.Tensor[],
+    expMean: tf.Tensor,
+    batchSize: number
+): tf.Tensor {
+    return tf.tidy(() => {
+        const predicted = policyNetwork.predict(expStates, { batchSize }) as tf.Tensor;
+        const { mean } = parsePredict(predicted);
+        return (expMean.sub(mean)).square().sum(-1).mean();
+    });
+}
+
+export function computeDeviation(
+    policyNetwork: tf.LayersModel,
+    expStates: tf.Tensor[],
+    expActions: tf.Tensor,
+    expLogProb: tf.Tensor,
+    batchSize: number
+): tf.Tensor {
+    return tf.tidy(() => {
+        const predicted = policyNetwork.predict(expStates, { batchSize }) as tf.Tensor;
+        const { mean, logStd } = parsePredict(predicted);
+        const std = logStd.exp();
+        const newLogProb = computeLogProb(expActions, mean, std);
+        const ratio = newLogProb.sub(expLogProb).exp()
+        const deviation = ratio.sub(1).abs().mean();
+        return deviation;
     });
 }
 
@@ -299,7 +331,7 @@ export function computeVTrace(
 
 function parsePredict(predict: tf.Tensor) {
     const outMean = predict.slice([0, 0], [-1, ACTION_DIM]);
-    const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
+    const outLogStd = predict.slice([0, ACTION_DIM], [-1, LOG_STD_DIM]);
     const clippedLogStd = outLogStd.clipByValue(MIN_LOG_STD_DEV, MAX_LOG_STD_DEV);
 
     return { mean: outMean, logStd: clippedLogStd };

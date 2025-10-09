@@ -2,6 +2,11 @@ import * as tf from '@tensorflow/tfjs';
 import { macroTasks } from '../../lib/TasksScheduler/macroTasks.ts';
 import { CONFIG } from './config.ts';
 
+export function getNetworkLogStd(network: tf.LayersModel): number {
+    const logStd = network.weights.findLast(v => v.name.toLowerCase().includes('logstd'))?.read().dataSync()[0];
+    return logStd ?? 0;
+}
+
 export function setNetworkExpIteration(o: tf.LayersModel, it: number) {
     o.setUserDefinedMetadata({ ...o.getUserDefinedMetadata(), expIteration: it });
 }

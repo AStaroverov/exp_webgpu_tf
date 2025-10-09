@@ -12,9 +12,9 @@ export const DEFAULT_EXPERIMENT = {
     },
 
     policyEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
-    policyClipRatio: 0.3, // https://arxiv.org/pdf/2202.00079 - interesting idea don't clip at all
+    policyClipRatio: 0.2, // https://arxiv.org/pdf/2202.00079 - interesting idea don't clip at all
     policyEntropy: (iteration: number) => {
-        return lerp(0.0004, 0.004, clamp(1 - iteration / (LEARNING_STEPS * 0.2), 0, 1))
+        return lerp(0.0001, 0.01, clamp(1 - iteration / (LEARNING_STEPS * 0.2), 0, 1))
     },
 
     valueEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
@@ -37,8 +37,8 @@ export const DEFAULT_EXPERIMENT = {
         initial: 1e-5,
         multHigh: 0.95,
         multLow: 1.05,
-        min: 5e-6,
-        max: 1e-3,
+        min: 1e-5,
+        max: 1e-4,
     },
 
     // Dynamic perturbation scale adjustment based on KL_noise
@@ -57,14 +57,14 @@ export const DEFAULT_EXPERIMENT = {
     perturbChance: (iteration: number) => lerp(0.01, 0.1, clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1)),
 
     batchSize: (iteration: number) => {
-        return (1024 * 4) * clamp(ceil(iteration / (LEARNING_STEPS * 0.5)), 1, 4);
+        return 1024 * clamp(ceil(8 * (iteration + 1) / (LEARNING_STEPS * 0.25)), 4, 24);
     },
     miniBatchSize: (iteration: number) => {
-        return 64 * clamp(ceil(iteration / (LEARNING_STEPS * 0.5)), 1, 4);
+        return 128 * clamp(ceil((iteration + 1) / (LEARNING_STEPS * 0.25)), 1, 4);
     },
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
-    episodeFrames: Math.round(2 * 60 * 1000 / TICK_TIME_SIMULATION),
+    episodeFrames: (iteration: number) => Math.round(30 * 1000 / TICK_TIME_SIMULATION) * clamp((iteration / LEARNING_STEPS) * 4, 1, 4),
     // Workers
     workerCount: 8,
     backpressureQueueSize: 2,

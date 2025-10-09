@@ -17,7 +17,6 @@ const backpressure$ = race([
     queueSize$.pipe(filter((queueSize) => queueSize <= CONFIG.backpressureQueueSize)),
 ]).pipe(first());
 
-const maxFramesCount = (CONFIG.episodeFrames - (CONFIG.episodeFrames % SNAPSHOT_EVERY) + SNAPSHOT_EVERY);
 
 export class EpisodeManager {
     protected curriculumState: CurriculumState = {
@@ -89,6 +88,7 @@ export class EpisodeManager {
         const episode = await this.beforeEpisode();
 
         try {
+            await this.waitSync(episode);
             await this.runGameLoop(episode);
             this.afterEpisode(episode);
         } catch (error) {
@@ -98,7 +98,14 @@ export class EpisodeManager {
         }
     }
 
+    protected waitSync(episode: Scenario) {
+        return Promise.all(episode.getAlivePilots().map(pilot => pilot.sync?.()));
+    }
+
     protected runGameLoop(episode: Scenario) {
+        const iteration = this.curriculumState.currentVersion;
+        const maxFramesCount = (CONFIG.episodeFrames(iteration) - (CONFIG.episodeFrames(iteration) % SNAPSHOT_EVERY) + SNAPSHOT_EVERY);
+
         return new Promise((resolve, reject) => {
             let frame = 0;
 
@@ -107,6 +114,7 @@ export class EpisodeManager {
                     for (let i = 0; i < 100; i++) {
                         const gameOver = this.runGameTick(
                             frame++,
+                            maxFramesCount,
                             TICK_TIME_SIMULATION,
                             episode,
                         );
@@ -127,6 +135,7 @@ export class EpisodeManager {
 
     protected runGameTick(
         frame: number,
+        maxFrame: number,
         deltaTime: number,
         scenario: Scenario,
     ) {
@@ -135,7 +144,7 @@ export class EpisodeManager {
         const gameOverByActorCount = actors.length <= 0;
         const gameOverByTankCount = currentTanks.length <= 1;
         const gameOverByTeamWin = scenario.getTeamsCount() === 1;
-        const gameOverByTime = frame > maxFramesCount;
+        const gameOverByTime = frame > maxFrame;
         const gameOver = gameOverByActorCount || gameOverByTankCount || gameOverByTeamWin || gameOverByTime;
 
         scenario.gameTick(deltaTime);

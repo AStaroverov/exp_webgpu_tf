@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { CONFIG } from '../../../ml-common/config.ts';
-import { ACTION_DIM } from '../../../ml-common/consts.ts';
+import { ACTION_DIM, LOG_STD_DIM } from '../../../ml-common/consts.ts';
 import {
     ALLY_BUFFER,
     BULLET_BUFFER,
@@ -16,6 +16,7 @@ import {
     convertInputsToTokens,
     createInputs,
 } from './ApplyLayers.ts';
+import { TrainableLogStdLayer } from './Layers/TrainableLogStdLayer.ts';
 
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 import { Model } from './def.ts';
@@ -61,16 +62,34 @@ const valueNetworkConfig: NetworkConfig = {
 export function createPolicyNetwork(): tf.LayersModel {
     const { inputs, network } = createBaseNetwork(Model.Policy, policyNetworkConfig);
     // Выход: ACTION_DIM * 2 (пример: mean и logStd) ---
-    const policyOutput = tf.layers.dense({
-        name: Model.Policy + '_output',
-        units: ACTION_DIM * 2,
+    const meanOutput = tf.layers.dense({
+        name: Model.Policy + '_mean',
+        units: ACTION_DIM,
         activation: 'linear',
     }).apply(network) as tf.SymbolicTensor;
+    // const model = tf.model({
+    //     name: Model.Policy,
+    //     inputs: Object.values(inputs),
+    //     outputs: policyOutput,
+    // });
+
+    const logStdOutput = new TrainableLogStdLayer({
+        name: Model.Policy + '_logStd',
+        len: LOG_STD_DIM,
+    })
+        .apply(meanOutput) as tf.SymbolicTensor;
+
+    const concatOutput = tf.layers.concatenate({
+        axis: -1,
+        name: Model.Policy + '_output',
+    }).apply([meanOutput, logStdOutput]) as tf.SymbolicTensor;
+
     const model = tf.model({
         name: Model.Policy,
         inputs: Object.values(inputs),
-        outputs: policyOutput,
+        outputs: concatOutput,
     });
+
     model.optimizer = new PatchedAdamOptimizer(CONFIG.lrConfig.initial);
     // fake loss for save optimizer with model
     model.loss = 'meanSquaredError';
