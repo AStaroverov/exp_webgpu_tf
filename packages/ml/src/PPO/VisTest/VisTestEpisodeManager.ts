@@ -59,10 +59,8 @@ export class VisTestEpisodeManager extends EpisodeManager {
     }
 
 
-    protected afterEpisode(episode: Scenario) {
-        if (getDrawState()) {
-            super.afterEpisode(episode);
-        }
+    protected afterEpisode() {
+        // dont't public visual data
     }
 
     protected cleanupEpisode(episode: Scenario) {
@@ -81,15 +79,13 @@ export class VisTestEpisodeManager extends EpisodeManager {
             let frame = 0;
 
             const stop = frameTasks.addInterval(() => {
-                if (!getDrawState()) return;
-
                 const gameOver = this.runGameTick(
                     frame++,
                     16.667,
                     episode,
                 );
 
-                if (gameOver) {
+                if (gameOver || !getDrawState()) {
                     stop();
                     resolve(null);
                 }
