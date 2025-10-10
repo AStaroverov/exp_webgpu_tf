@@ -125,7 +125,7 @@ function drawTab1() {
     tfvis.render.scatterplot({ name: 'KL', tab }, {
         values: [
             avgKL,
-            calculateMovingMedianAverage(avgKL, 25),
+            calculateMovingMedian(avgKL, 25),
         ],
         series: ['Avg', 'MA'],
     }, {
@@ -147,7 +147,7 @@ function drawTab1() {
     tfvis.render.scatterplot({ name: 'KL - Perturbed', tab }, {
         values: [
             avgKLPerturbed,
-            calculateMovingMedianAverage(avgKLPerturbed, 25),
+            calculateMovingMedian(avgKLPerturbed, 25),
         ],
         series: ['Avg', 'MA'],
     }, {

@@ -2,7 +2,7 @@ import { getNetworkExpIteration, getNetworkLearningRate, getNetworkPerturbConfig
 
 import * as tf from '@tensorflow/tfjs';
 import { RingBuffer } from 'ring-buffer-ts';
-import { ceil, floor, max, mean, median, min } from '../../../../../lib/math.ts';
+import { ceil, floor, max, median, min } from '../../../../../lib/math.ts';
 import { metricsChannels } from '../../../../ml-common/channels.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
 import { flatTypedArray } from '../../../../ml-common/flat.ts';
@@ -139,28 +139,20 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
                 throw new Error(`Policy loss too dangerous: ${min(...policyLossList)}, ${max(...policyLossList)}`);
             }
 
-            if (klList.some(kl => kl > CONFIG.klConfig.maxPure)) {
-                throw new Error(`KL divergence too high ${max(...klList)}`);
-            }
-
-            if (klPerturbedList.some(kl => kl > CONFIG.klConfig.maxPerturbed)) {
-                throw new Error(`KL divergence on perturbed data too high ${max(...klPerturbedList)}`);
-            }
-
             klHistory.add(...klList);
             const klArr = klHistory.toArray();
-            const kl = klArr.length > 0 ? (mean(klArr) + median(klArr)) / 2 : undefined;
+            const kl = klArr.length > 0 ? median(klArr) : undefined;
             const lr = kl
                 ? getDynamicLearningRate(kl, getNetworkLearningRate(network))
                 : getNetworkLearningRate(network);
 
             klPerturbedHistory.add(...klPerturbedList);
             const klPerturbedArr = klPerturbedHistory.toArray();
-            const klPerturbed = klPerturbedArr.length > 0 ? (mean(klPerturbedArr) + median(klPerturbedArr)) / 2 : undefined;
+            const klPerturbed = klPerturbedArr.length > 0 ? median(klPerturbedArr) : undefined;
             const perturbScale = klPerturbed
                 ? getDynamicPerturb(klPerturbed, getNetworkPerturbConfig(network).scale)
                 : getNetworkPerturbConfig(network).scale;
-            const perturbChance = kl === undefined || kl > CONFIG.lrConfig.kl.target ? 0 : CONFIG.perturbChance(expIteration);
+            const perturbChance = 0; //kl === undefined || kl > CONFIG.lrConfig.kl.target ? 0 : CONFIG.perturbChance(expIteration);
 
             modelSettingsChannel.emit({ lr, perturbChance, perturbScale, expIteration: expIteration + batch.size });
             console.info(`[Train Policy]: Finish iteration=${expIteration}

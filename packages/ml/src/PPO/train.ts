@@ -11,10 +11,10 @@ import { createInputTensors } from '../../../ml-common/InputTensors.ts';
 import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
 
-export const MIN_LOG_STD_DEV = -2;
-export const MAX_LOG_STD_DEV = 1;
-export const MIN_STD_DEV = Math.exp(MIN_LOG_STD_DEV); // ~0.14
-export const MAX_STD_DEV = Math.exp(MAX_LOG_STD_DEV); // ~2.72
+export const MIN_LOG_STD_DEV = -3;
+export const MAX_LOG_STD_DEV = 0;
+export const MIN_STD_DEV = Math.exp(MIN_LOG_STD_DEV); // ~0.05
+export const MAX_STD_DEV = Math.exp(MAX_LOG_STD_DEV); // ~1.0
 
 export function trainPolicyNetwork(
     network: tf.LayersModel,
@@ -263,35 +263,39 @@ export function computeVTrace(
     clipRhoPG: number,
 ): { vTraces: Float32Array, tdErrors: Float32Array, advantages: Float32Array } {
     const T = rewards.length;
+    // bootstrap v̂_{T} = values[T]
+    let vtp1 = dones[T - 1] ? 0 : values[T];
+    if (vtp1 === undefined) { throw new Error('Implementation required last state as terminal'); }
+
     const vTraces = new Float32Array(T);
     const tdErrors = new Float32Array(T);
     const advantages = new Float32Array(T);
 
-    // bootstrap v̂_{T} = values[T]
-    let vtp1 = dones[T - 1] ? 0 : values[T];
-
-    if (vtp1 === undefined) {
-        throw new Error('Implementation required last state as terminal');
-    }
+    // bootstrap: v̂_T = done? 0 : V(s_T)
+    let nextAdv = 0; // A_{t+1}
 
     for (let t = T - 1; t >= 0; --t) {
         const discount = dones[t] ? 0 : gamma;
         const nextValue = dones[t] ? 0 : values[t + 1];
         const value = values[t];
 
+        const c = dones[t] ? 0 : Math.min(rhos[t], clipC);
         const rho = Math.min(rhos[t], clipRho);
-        const c = Math.min(rhos[t], clipC);
-
-        const tdError = (rewards[t] + discount * nextValue - value);
-        tdErrors[t] = tdError;
-        const delta = rho * tdError;
-        vTraces[t] = value + delta + discount * c * (vtp1 - nextValue);
-
-        // policy-gradient advantage
         const rhoPG = Math.min(rhos[t], clipRhoPG);
-        advantages[t] = rhoPG * (rewards[t] + discount * vtp1 - value);
+
+        // δ_t^V = r_t + γ V(s_{t+1}) - V(s_t)
+        const tdError = rewards[t] + discount * nextValue - value;
+        tdErrors[t] = tdError;
+
+        // v̂_t = V(s_t) + ρ̄_t δ_t^V + γ c̄_t (v̂_{t+1} - V(s_{t+1}))
+        vTraces[t] = value + rho * tdError + discount * c * (vtp1 - nextValue);
+
+        // A_t = ρ̄_t^{PG} δ_t^V + γ c̄_t A_{t+1}
+        const adv = rhoPG * tdError + discount * c * nextAdv;
+        advantages[t] = adv;
 
         vtp1 = vTraces[t];
+        nextAdv = adv;
     }
 
     return { vTraces, advantages, tdErrors };
