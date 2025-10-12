@@ -15,7 +15,7 @@ export const episodeSampleChannel = createChannel<EpisodeSample>('episodeSampleC
 
 export const learnProcessChannel = createChannel<
     LearnData,
-    { modelName: Model, version: number } | { modelName: Model, error: string }
+    { modelName: Model, version: number } | { modelName: Model, error: string, restart: boolean }
 >('learn-memory-channel');
 
 export const queueSizeChannel = createChannel<number>('queueSizeChannel');

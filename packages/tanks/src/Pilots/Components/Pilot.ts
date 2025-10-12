@@ -15,9 +15,7 @@ export const Pilot = {
 
     addComponent(world: World, eid: EntityId, agent: TankAgent) {
         addComponent(world, eid, Pilot);
-
         Pilot.agent[eid] = agent;
-        if (isFunction(agent.sync)) agent.sync();
     },
 
     isSynced() {

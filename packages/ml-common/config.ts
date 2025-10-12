@@ -14,7 +14,7 @@ export const DEFAULT_EXPERIMENT = {
     policyEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
     policyClipRatio: 0.2, // https://arxiv.org/pdf/2202.00079 - interesting idea don't clip at all
     policyEntropy: (iteration: number) => {
-        return lerp(0.01, 0.1, clamp(1 - iteration / (LEARNING_STEPS * 0.4), 0, 1))
+        return lerp(0.01, 0.1, clamp(1 - iteration / (LEARNING_STEPS * 0.25), 0, 1))
     },
 
     valueEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
@@ -51,10 +51,10 @@ export const DEFAULT_EXPERIMENT = {
     perturbChance: (iteration: number) => lerp(0.01, 0.1, clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1)),
 
     batchSize: (iteration: number) => {
-        return (1024 * 4) * clamp(ceil(iteration / (LEARNING_STEPS * 0.5)), 1, 4);
+        return 1024 * clamp(ceil(8 * (iteration + 1) / (LEARNING_STEPS * 0.20)), 4, 24);
     },
     miniBatchSize: (iteration: number) => {
-        return 64 * clamp(ceil(iteration / (LEARNING_STEPS * 0.5)), 1, 4);
+        return 64 * clamp(ceil((iteration + 1) / (LEARNING_STEPS * 0.25)), 1, 4);
     },
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION

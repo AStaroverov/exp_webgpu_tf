@@ -106,7 +106,11 @@ export function createLearnerManager() {
                                 return acc;
                             }
 
-                            throw new Error(`Model ${envelope.modelName} error: ${envelope.error}`);
+                            if (envelope.restart) {
+                                forceExitChannel.postMessage(null);
+                            }
+
+                            throw new Error(`Model ${envelope.modelName} failed`, { cause: envelope.error });
                         }, { [Model.Policy]: false, [Model.Value]: false }),
                         first((state) => state[Model.Policy] && state[Model.Value]),
                         tap(() => {

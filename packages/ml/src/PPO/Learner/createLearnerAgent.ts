@@ -32,14 +32,14 @@ export async function createLearnerAgent({ modelName, createNetwork, trainNetwor
             await patientAction(() => saveNetworkToDB(network, modelName));
 
             return { modelName: modelName, version: getNetworkExpIteration(network) };
-        } catch (e) {
+        } catch (e: Error | unknown) {
             console.error(e);
 
             disposeNetwork(network);
             console.info('Load last network after error...');
             network = await patientAction(() => getNetwork(modelName));
 
-            return { modelName: modelName, error: get(e, 'message') ?? 'Unknown error' };
+            return { modelName: modelName, error: get(e, 'message') ?? 'Unknown error', restart: e instanceof Error && e.message.includes('mem') };
         }
     });
 }

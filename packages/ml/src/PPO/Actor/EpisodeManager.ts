@@ -89,6 +89,7 @@ export class EpisodeManager {
         const episode = await this.beforeEpisode();
 
         try {
+            await this.awaitAgentsSync(episode);
             await this.runGameLoop(episode);
             this.afterEpisode(episode);
         } catch (error) {
@@ -96,6 +97,10 @@ export class EpisodeManager {
         } finally {
             this.cleanupEpisode(episode);
         }
+    }
+
+    protected awaitAgentsSync(episode: Scenario) {
+        return Promise.all(episode.getPilots().map(agent => agent.sync?.()));
     }
 
     protected runGameLoop(episode: Scenario) {
