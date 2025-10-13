@@ -218,7 +218,7 @@ function drawTab1() {
 }
 
 function drawTab2() {
-    tfvis.render.linechart({ name: 'Log Std', tab: 'Tab 2' }, {
+    tfvis.render.scatterplot({ name: 'Log Std', tab: 'Tab 2' }, {
         values: [store.logStd.toArray()],
     }, {
         xLabel: 'Version',
