@@ -11,10 +11,10 @@ import { createInputTensors } from '../../../ml-common/InputTensors.ts';
 import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
 
-export const MIN_LOG_STD_DEV = -3;
-export const MAX_LOG_STD_DEV = 0;
-export const MIN_STD_DEV = Math.exp(MIN_LOG_STD_DEV); // ~0.05
-export const MAX_STD_DEV = Math.exp(MAX_LOG_STD_DEV); // ~1.0
+export const MIN_LOG_STD_DEV = -4;
+export const MAX_LOG_STD_DEV = 2;
+export const MIN_STD_DEV = Math.exp(MIN_LOG_STD_DEV); // ~0.018
+export const MAX_STD_DEV = Math.exp(MAX_LOG_STD_DEV); // ~7.39
 
 export function trainPolicyNetwork(
     network: tf.LayersModel,
@@ -42,8 +42,8 @@ export function trainPolicyNetwork(
 
             const c = 0.5 * Math.log(2 * Math.PI * Math.E);
             const entropyEachDim = logStd.add(c);
-            const totalEntropy = entropyEachDim.sum(1).mean();
-            const totalLoss = policyLoss.sub(totalEntropy.mul(entropyCoeff));
+            const totalEntropy = entropyEachDim.sum(1).mean().mul(entropyCoeff);
+            const totalLoss = policyLoss.sub(totalEntropy);
 
             return totalLoss as tf.Scalar;
         }, { clipNorm, returnCost });
@@ -199,11 +199,12 @@ export function computeVTraceTargets(
     tdErrors: Float32Array,
     returns: Float32Array,
     values: Float32Array,
+    logStd: Float32Array,
 } {
     return tf.tidy(() => {
         const input = createInputTensors(batch.states);
         const predicted = policyNetwork.predict(input, { batchSize }) as tf.Tensor;
-        const { mean: meanCurrent, logStd: logStdCurrent } = parsePredict(predicted);
+        const { mean: meanCurrent, logStd: logStdCurrent, pureLogStd: pureLogStdCurrent } = parsePredict(predicted);
         const actions = tf.tensor2d(flatTypedArray(batch.actions), [batch.size, ACTION_DIM]);
 
         const logProbCurrentTensor = computeLogProb(actions, meanCurrent, logStdCurrent.exp());
@@ -240,6 +241,7 @@ export function computeVTraceTargets(
             tdErrors: tdErrors,
             returns: vTraces,
             values: values,
+            logStd: syncUnwrapTensor(pureLogStdCurrent) as Float32Array,
         };
     });
 }
@@ -306,7 +308,7 @@ function parsePredict(predict: tf.Tensor) {
     const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
     const clippedLogStd = outLogStd.clipByValue(MIN_LOG_STD_DEV, MAX_LOG_STD_DEV);
 
-    return { mean: outMean, logStd: clippedLogStd };
+    return { mean: outMean, logStd: clippedLogStd, pureLogStd: outLogStd };
 }
 
 let randomInputTensors: tf.Tensor[];

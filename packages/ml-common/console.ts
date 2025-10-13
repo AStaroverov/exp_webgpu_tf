@@ -39,3 +39,5 @@ export function setConsolePrefix(prefix: string): void {
         };
     });
 }
+
+// RuntimeError: memory access out of bounds

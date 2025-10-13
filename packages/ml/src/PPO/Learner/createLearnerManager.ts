@@ -77,21 +77,23 @@ export function createLearnerManager() {
             ]).pipe(
                 map(([policyNetwork, valueNetwork]): LearnData => {
                     const version = getNetworkExpIteration(policyNetwork);
-                    const batch = squeezeBatches(samples.map(b => b.memoryBatch));
+                    const batchData = squeezeBatches(samples.map(b => b.memoryBatch));
+                    const { logStd, ...vTraceBatchData } = computeVTraceTargets(
+                        policyNetwork,
+                        valueNetwork,
+                        batchData,
+                        CONFIG.miniBatchSize(version),
+                        CONFIG.gamma(version)
+                    );
                     const learnData = {
-                        ...batch,
-                        ...computeVTraceTargets(
-                            policyNetwork,
-                            valueNetwork,
-                            batch,
-                            CONFIG.miniBatchSize(version),
-                            CONFIG.gamma(version)
-                        ),
+                        ...batchData,
+                        ...vTraceBatchData,
                     };
 
                     disposeNetwork(policyNetwork);
                     disposeNetwork(valueNetwork);
 
+                    metricsChannels.logStd.postMessage(logStd);
                     metricsChannels.versionDelta.postMessage(
                         samples.map(b => version - b.networkVersion),
                     );

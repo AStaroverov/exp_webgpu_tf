@@ -1,3 +1,4 @@
+
 export const forceExitChannel = new BroadcastChannel('exit');
 
 if (globalThis.document != null) {
@@ -17,6 +18,7 @@ export const metricsChannels = {
     klPerturbed: new BroadcastChannel('klPerturbed'),
     lr: new BroadcastChannel('lr'),
     perturbScale: new BroadcastChannel('perturbScale'),
+    logStd: new BroadcastChannel('logStd'),
     valueLoss: new BroadcastChannel('valueLoss'),
     policyLoss: new BroadcastChannel('policyLoss'),
     trainTime: new BroadcastChannel('trainTime'),

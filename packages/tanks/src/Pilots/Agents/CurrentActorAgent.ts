@@ -81,7 +81,7 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
 
         applyActionToTank(
             this.tankEid,
-            result.actions.map((v) => clamp(v, -1, 1)),
+            result.actions,
             // result.logStd.map((v) => lerp(0.1, 1, 1 - Math.exp(v) / MAX_STD_DEV)),
         );
 

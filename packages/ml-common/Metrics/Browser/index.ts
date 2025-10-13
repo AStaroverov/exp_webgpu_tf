@@ -10,16 +10,21 @@ type SuccessRatioIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
 const store = {
     rewards: new CompressedBuffer(10_000, 10),
-    values: new CompressedBuffer(10_000, 5),
-    returns: new CompressedBuffer(10_000, 5),
-    tdErrors: new CompressedBuffer(10_000, 5),
-    advantages: new CompressedBuffer(10_000, 5),
+
     kl: new CompressedBuffer(1_000, 5),
     klPerturbed: new CompressedBuffer(1_000, 5),
     lr: new CompressedBuffer(1_000, 5),
     perturbScale: new CompressedBuffer(1_000, 5),
+
+    values: new CompressedBuffer(10_000, 5),
+    returns: new CompressedBuffer(10_000, 5),
+    tdErrors: new CompressedBuffer(10_000, 5),
+    advantages: new CompressedBuffer(10_000, 5),
+
+    logStd: new CompressedBuffer(1_000, 5),
     valueLoss: new CompressedBuffer(1_000, 5),
     policyLoss: new CompressedBuffer(1_000, 5),
+
     trainTime: new CompressedBuffer(1_000, 5),
     waitTime: new CompressedBuffer(1_000, 5),
     batchSize: new CompressedBuffer(1_000, 5),
@@ -107,12 +112,11 @@ function drawTab1() {
     const tab = 'Tab 1';
 
     const avgRewards = store.rewards.toArray();
-    const avgRewardsMA = calculateMovingAverage(avgRewards, 1000);
     const minRewards = store.rewards.toArrayMin();
     const maxRewards = store.rewards.toArrayMax();
     tfvis.render.scatterplot({ name: 'Reward', tab }, {
-        values: [minRewards, maxRewards, avgRewards, avgRewardsMA],
-        series: ['Min', 'Max', 'Avg', 'Avg MA'],
+        values: [minRewards, maxRewards, avgRewards],
+        series: ['Min', 'Max', 'Avg'],
     }, {
         xLabel: 'Version',
         yLabel: 'Reward',
@@ -214,6 +218,15 @@ function drawTab1() {
 }
 
 function drawTab2() {
+    tfvis.render.linechart({ name: 'Log Std', tab: 'Tab 2' }, {
+        values: [store.logStd.toArray()],
+    }, {
+        xLabel: 'Version',
+        yLabel: 'Log Std',
+        width: 500,
+        height: 300,
+    });
+
     tfvis.render.linechart({ name: 'Policy Loss', tab: 'Tab 2' }, {
         values: [store.policyLoss.toArray()],
     }, {

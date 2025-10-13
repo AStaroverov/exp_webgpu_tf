@@ -1,5 +1,4 @@
 import * as tf from '@tensorflow/tfjs';
-import { clamp } from 'lodash-es';
 import { lerp } from '../../../../../lib/math.ts';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
 import { prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
@@ -38,7 +37,7 @@ export class RandomHistoricalAgent implements TankAgent<DownloableAgent> {
 
         applyActionToTank(
             this.tankEid,
-            result.actions.map((v) => clamp(v, -1, 1)),
+            result.actions,
             result.logStd.map((v) => lerp(0.1, 1, 1 - Math.exp(v) / MAX_STD_DEV)),
         );
     }
