@@ -3,6 +3,7 @@ import { clamp } from 'lodash-es';
 import { lerp, unlerp } from '../../../../../lib/math.ts';
 import { random } from '../../../../../lib/random.ts';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
+import { CONFIG } from '../../../../ml-common/config.ts';
 import { ACTION_DIM, LEARNING_STEPS } from '../../../../ml-common/consts.ts';
 import { prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
@@ -43,7 +44,10 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
     private memory = new AgentMemory();
     private policyNetwork?: tf.LayersModel;
 
-    private initialActionReward: undefined | number;
+    private minLogStdDev?: number;
+    private maxLogStdDev?: number;
+
+    private initialActionReward?: number;
 
     constructor(public readonly tankEid: number, private train: boolean) {
     }
@@ -73,17 +77,23 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
     }
 
     public isSynced() {
-        return this.policyNetwork != null;
+        return this.policyNetwork != null && this.minLogStdDev != null && this.maxLogStdDev != null;
     }
 
     public updateTankBehaviour(
         width: number,
         height: number,
     ) {
-        if (this.policyNetwork == null) return;
+        if (!(this.policyNetwork != null && this.minLogStdDev != null && this.maxLogStdDev != null)) return;
 
         const state = prepareInputArrays(this.tankEid, width, height);
-        const result = act(this.policyNetwork, state, this.noise.sample());
+        const result = act(
+            this.policyNetwork,
+            state,
+            this.minLogStdDev,
+            this.maxLogStdDev,
+            this.noise.sample()
+        );
 
         applyActionToTank(
             this.tankEid,
@@ -142,6 +152,11 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
 
     private async load() {
         this.policyNetwork = await getNetwork(Model.Policy);
+
+        const iteration = getNetworkExpIteration(this.policyNetwork);
+        this.minLogStdDev = CONFIG.minLogStdDev(iteration);
+        this.maxLogStdDev = CONFIG.maxLogStdDev(iteration);
+
         const config = getNetworkPerturbConfig(this.policyNetwork);
 
         if (config.chance > random()) {
@@ -160,11 +175,9 @@ export function perturbWeights(model: tf.LayersModel, scale: number) {
 
             let eps: tf.Tensor;
             if (val.shape.length === 2) {
-                // Матрица весов [out_dim, in_dim]
                 const [outDim, inDim] = val.shape;
                 const epsOut = tf.randomNormal([outDim, 1]);
                 const epsIn = tf.randomNormal([1, inDim]);
-                // Двухфакторный шум (снижает рандом до более "структурированного" уровня)
                 eps = epsOut.mul(epsIn);
             } else {
                 eps = tf.randomNormal(val.shape);

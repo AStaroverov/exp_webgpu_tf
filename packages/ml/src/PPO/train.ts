@@ -11,11 +11,6 @@ import { createInputTensors } from '../../../ml-common/InputTensors.ts';
 import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
 
-export const MIN_LOG_STD_DEV = -4;
-export const MAX_LOG_STD_DEV = 2;
-export const MIN_STD_DEV = Math.exp(MIN_LOG_STD_DEV); // ~0.018
-export const MAX_STD_DEV = Math.exp(MAX_LOG_STD_DEV); // ~7.389
-
 export function trainPolicyNetwork(
     network: tf.LayersModel,
     states: tf.Tensor[],
@@ -26,12 +21,14 @@ export function trainPolicyNetwork(
     clipRatio: number,
     entropyCoeff: number,
     clipNorm: number,
+    minLogStdDev: number,
+    maxLogStdDev: number,
     returnCost: boolean,
 ): undefined | tf.Tensor {
     return tf.tidy(() => {
         return optimize(network.optimizer, () => {
             const predicted = network.predict(states, { batchSize }) as tf.Tensor;
-            const { mean, logStd } = parsePredict(predicted);
+            const { mean, logStd } = parsePredict(predicted, minLogStdDev, maxLogStdDev);
             const std = logStd.exp();
             const newLogProbs = computeLogProb(actions, mean, std);
             const ratio = tf.exp(newLogProbs.sub(oldLogProbs));
@@ -82,11 +79,13 @@ export function computeKullbackLeiblerAprox(
     states: tf.Tensor[],
     actions: tf.Tensor,
     oldLogProb: tf.Tensor,
-    batchSize: number
+    batchSize: number,
+    minLogStdDev: number,
+    maxLogStdDev: number,
 ) {
     return tf.tidy(() => {
         const predicted = policyNetwork.predict(states, { batchSize }) as tf.Tensor;
-        const { mean, logStd } = parsePredict(predicted);
+        const { mean, logStd } = parsePredict(predicted, minLogStdDev, maxLogStdDev);
         const std = logStd.exp();
         const newLogProbs = computeLogProb(actions, mean, std);
         const diff = oldLogProb.sub(newLogProbs);
@@ -100,11 +99,13 @@ export function computeKullbackLeiblerExact(
     states: tf.Tensor[],
     oldMean: tf.Tensor,
     oldLogStd: tf.Tensor,
-    batchSize: number
+    batchSize: number,
+    minLogStdDev: number,
+    maxLogStdDev: number,
 ): tf.Tensor {
     return tf.tidy(() => {
         const predicted = policyNetwork.predict(states, { batchSize }) as tf.Tensor;
-        const { mean: newMean, logStd: newLogStd } = parsePredict(predicted);
+        const { mean: newMean, logStd: newLogStd } = parsePredict(predicted, minLogStdDev, maxLogStdDev);
 
         const oldStd = oldLogStd.exp();
         const newStd = newLogStd.exp();
@@ -123,6 +124,8 @@ export function computeKullbackLeiblerExact(
 export function act(
     policyNetwork: tf.LayersModel,
     state: InputArrays,
+    minLogStdDev: number,
+    maxLogStdDev: number,
     noise?: tf.Tensor,
 ): {
     actions: Float32Array,
@@ -132,7 +135,7 @@ export function act(
 } {
     return tf.tidy(() => {
         const predicted = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
-        const { mean, logStd } = parsePredict(predicted);
+        const { mean, logStd } = parsePredict(predicted, minLogStdDev, maxLogStdDev);
         const std = logStd.exp();
 
         const ns = noise ?? tf.randomNormal([ACTION_DIM]);
@@ -194,6 +197,8 @@ export function computeVTraceTargets(
     batch: AgentMemoryBatch,
     batchSize: number,
     gamma: number,
+    minLogStdDev: number,
+    maxLogStdDev: number,
     clipRho: number = 1.0,
     clipC: number = 1.0,
     clipRhoPG: number = 1.0,
@@ -207,7 +212,7 @@ export function computeVTraceTargets(
     return tf.tidy(() => {
         const input = createInputTensors(batch.states);
         const predicted = policyNetwork.predict(input, { batchSize }) as tf.Tensor;
-        const { mean: meanCurrent, logStd: logStdCurrent, pureLogStd: pureLogStdCurrent } = parsePredict(predicted);
+        const { mean: meanCurrent, logStd: logStdCurrent, pureLogStd: pureLogStdCurrent } = parsePredict(predicted, minLogStdDev, maxLogStdDev);
         const actions = tf.tensor2d(flatTypedArray(batch.actions), [batch.size, ACTION_DIM]);
 
         const logProbCurrentTensor = computeLogProb(actions, meanCurrent, logStdCurrent.exp());
@@ -306,10 +311,10 @@ export function computeVTrace(
     return { vTraces, advantages, tdErrors };
 }
 
-function parsePredict(predict: tf.Tensor) {
+function parsePredict(predict: tf.Tensor, minLogStdDev: number, maxLogStdDev: number) {
     const outMean = predict.slice([0, 0], [-1, ACTION_DIM]);
     const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
-    const clippedLogStd = outLogStd.clipByValue(MIN_LOG_STD_DEV, MAX_LOG_STD_DEV);
+    const clippedLogStd = outLogStd.clipByValue(minLogStdDev, maxLogStdDev);
 
     return { mean: outMean, logStd: clippedLogStd, pureLogStd: outLogStd };
 }

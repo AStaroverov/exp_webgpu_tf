@@ -16,6 +16,16 @@ export const DEFAULT_EXPERIMENT = {
     policyEntropy: (iteration: number) => {
         return lerp(0.0001, 0.01, clamp(1 - iteration / (LEARNING_STEPS * 0.5), 0, 1))
     },
+    minLogStdDev: (iteration: number) => {
+        return lerp(-4, -2, clamp(iteration / (LEARNING_STEPS * 0.75), 0, 1))
+        // Math.exp(-4) = 0.018
+        // Math.exp(-2) = 0.135
+    },
+    maxLogStdDev: (iteration: number) => {
+        return lerp(2, -1, clamp(iteration / (LEARNING_STEPS * 0.75), 0, 1))
+        // Math.exp(2) = 7.389
+        // Math.exp(-1) = 0.368
+    },
 
     valueEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
     valueClipRatio: 0.2,
