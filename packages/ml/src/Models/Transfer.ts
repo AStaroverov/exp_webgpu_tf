@@ -5,23 +5,19 @@ import { getNetworkExpIteration } from '../../../ml-common/utils.ts';
 import { LAST_NETWORK_VERSION, Model } from './def.ts';
 import { getIndexedDBModelPath, removeOutLimitNetworks, shouldSaveHistoricalVersion } from './Utils.ts';
 
-export async function saveNetworkToDB(network: tf.LayersModel, name: Model) {
+export async function saveNetworkToDB(network: tf.LayersModel, name: Model, idx: number) {
     await onReadyRead();
 
     const networkVersion = getNetworkExpIteration(network);
     const shouldSaveHistorical = await shouldSaveHistoricalVersion(name, networkVersion);
 
-    if (isBrowser) {
-        if (shouldSaveHistorical) {
-            console.info('Saving historical version of network:', name, networkVersion);
-            void network.save(getIndexedDBModelPath(name, networkVersion), { includeOptimizer: true });
-            void removeOutLimitNetworks(name);
-        }
-
-        return network.save(getIndexedDBModelPath(name, LAST_NETWORK_VERSION), { includeOptimizer: true });
+    if (idx && shouldSaveHistorical) {
+        console.info('Saving historical version of network:', name, networkVersion);
+        void network.save(getIndexedDBModelPath(name, networkVersion + '|frozen'), { includeOptimizer: true });
+        void removeOutLimitNetworks(name);
     }
 
-    throw new Error('Unsupported environment for saving model');
+    return network.save(getIndexedDBModelPath(name, idx), { includeOptimizer: true });
 }
 
 export function loadNetworkFromDB(name: Model, version: number) {
@@ -32,8 +28,8 @@ export function loadNetworkFromDB(name: Model, version: number) {
     throw new Error('Unsupported environment for loading model');
 }
 
-export async function loadLastNetworkFromDB(name: Model) {
-    return loadNetworkFromDB(name, LAST_NETWORK_VERSION);
+export async function loadLastNetworkFromDB(name: Model, idx: number) {
+    return loadNetworkFromDB(name, idx);
 }
 
 export async function loadNetworkFromFS(path: string, name: Model) {

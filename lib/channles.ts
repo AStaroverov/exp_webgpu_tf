@@ -1,34 +1,34 @@
-import { fromEvent, map, merge, Subject } from 'rxjs';
 import { get } from 'lodash';
+import { fromEvent, map, merge, Subject } from 'rxjs';
 
-export function createChannel<Req, Res = unknown>(name: string) {
+export function createChannel<Req, Res = unknown>(name: string, { global = false }: { global?: boolean } = {}) {
     const request = new Subject<Req>();
     const response = new Subject<Res>();
-    const crossRequest = new BroadcastChannel(name + '-request');
-    const crossResponse = new BroadcastChannel(name + '-response');
+    const crossRequest = global ? new BroadcastChannel(name + '-request') : null;
+    const crossResponse = global ? new BroadcastChannel(name + '-response') : null;
 
     const request$ = merge(
         request,
-        fromEvent(crossRequest, 'message').pipe(
+        crossRequest ? fromEvent(crossRequest, 'message').pipe(
             map((event: Event) => get(event, 'data') as Req),
-        ),
+        ) : [],
     );
 
     const response$ = merge(
         response,
-        fromEvent(crossResponse, 'message').pipe(
+        crossResponse ? fromEvent(crossResponse, 'message').pipe(
             map((event: Event) => get(event, 'data') as Res),
-        ),
+        ) : [],
     );
 
     return {
         emit: (data: Req) => {
-            crossRequest.postMessage(data);
+            crossRequest?.postMessage(data);
             request.next(data);
         },
         obs: request$,
-        request: (data: Req, { withCross = true }: { withCross?: boolean } = {}) => {
-            withCross && crossRequest.postMessage(data);
+        request: (data: Req) => {
+            crossRequest?.postMessage(data);
             request.next(data);
             return response$;
         },
@@ -36,7 +36,7 @@ export function createChannel<Req, Res = unknown>(name: string) {
             const sub = request$.subscribe(async (data) => {
                 const res = await cb(data);
                 response.next(res);
-                crossResponse.postMessage(res);
+                crossResponse?.postMessage(res);
             });
 
             return () => sub.unsubscribe();

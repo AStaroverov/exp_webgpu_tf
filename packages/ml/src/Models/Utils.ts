@@ -13,7 +13,7 @@ export function disposeNetwork(network: LayersModel) {
     network.dispose();
 }
 
-export function getStorePath(name: string, version: number): string {
+export function getStorePath(name: string, version: number | string): string {
     const postfix = version === LAST_NETWORK_VERSION ? '' : `|version:${version}`;
     return `${CONFIG.savePath}-${name}${postfix}`;
 }
@@ -23,22 +23,22 @@ export function getVersionFromStorePath(path: string): number {
     return splitted.length == 2 ? Number(splitted[1]) : LAST_NETWORK_VERSION;
 }
 
-export function getIndexedDBModelPath(name: string, version: number): string {
+export function getIndexedDBModelPath(name: string, version: number | string): string {
     return `indexeddb://${getStorePath(name, version)}`;
 }
 
-export async function getNetwork(modelName: Model, getInitial?: () => tf.LayersModel) {
+export async function getNetwork(modelName: Model, idx: number, getInitial?: () => tf.LayersModel) {
     let network: undefined | tf.LayersModel;
 
     try {
-        network = await patientAction(() => loadLastNetworkFromDB(modelName), isFunction(getInitial) ? 1 : 10);
+        network = await patientAction(() => loadLastNetworkFromDB(modelName, idx), isFunction(getInitial) ? 1 : 10);
     } catch (error) {
-        console.warn(`[getNetwork] Could not load model ${modelName} from DB:`, error);
+        console.warn(`[getNetwork] Could not load model ${modelName}|${idx} from DB:`, error);
         network = getInitial?.();
     }
 
     if (!network) {
-        throw new Error(`Failed to load model ${modelName}`);
+        throw new Error(`Failed to load model ${modelName}|${idx}`);
     }
 
     return network;
@@ -71,7 +71,7 @@ export async function getNetworkInfoList(model: Model) {
 
 export async function getRandomNetworkInfo(model: Model) {
     const list = await getNetworkInfoList(model);
-    return list[randomRangeInt(0, list.length - 1)];
+    return list.filter((v) => v.name.includes('frozen'))[randomRangeInt(0, list.length - 1)];
 }
 
 export async function getPenultimateNetworkVersion(name: Model): Promise<number | undefined> {

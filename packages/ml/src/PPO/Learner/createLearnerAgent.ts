@@ -8,14 +8,15 @@ import { learnProcessChannel, modelSettingsChannel } from '../channels.ts';
 import { networkHealthCheck } from '../train.ts';
 import { LearnData } from './createLearnerManager.ts';
 
-export async function createLearnerAgent({ modelName, createNetwork, trainNetwork }: {
+export async function createLearnerAgent({ idx, modelName, createNetwork, trainNetwork }: {
+    idx: number,
     modelName: Model,
     createNetwork: () => tf.LayersModel,
     trainNetwork: (network: tf.LayersModel, batch: LearnData) => unknown | Promise<unknown>,
 }) {
-    let network = await getNetwork(modelName, () => {
+    let network = await getNetwork(modelName, idx, () => {
         const newNetwork = createNetwork();
-        patientAction(() => saveNetworkToDB(newNetwork, modelName));
+        patientAction(() => saveNetworkToDB(newNetwork, modelName, idx));
         return newNetwork;
     });
 
@@ -29,7 +30,7 @@ export async function createLearnerAgent({ modelName, createNetwork, trainNetwor
         try {
             await trainNetwork(network, batch);
             await patientAction(() => networkHealthCheck(network));
-            await patientAction(() => saveNetworkToDB(network, modelName));
+            await patientAction(() => saveNetworkToDB(network, modelName, idx));
 
             return { modelName: modelName, version: getNetworkExpIteration(network) };
         } catch (e: Error | unknown) {

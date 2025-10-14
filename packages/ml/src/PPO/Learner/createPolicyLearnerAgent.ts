@@ -18,8 +18,9 @@ import { createLearnerAgent } from './createLearnerAgent.ts';
 import { LearnData } from './createLearnerManager.ts';
 import { isLossDangerous } from './isLossDangerous.ts';
 
-export function createPolicyLearnerAgent() {
+export function createPolicyLearnerAgent(idx: number) {
     return createLearnerAgent({
+        idx,
         modelName: Model.Policy,
         createNetwork: createPolicyNetwork,
         trainNetwork: trainPolicy,

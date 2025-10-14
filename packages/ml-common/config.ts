@@ -60,7 +60,7 @@ export const DEFAULT_EXPERIMENT = {
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
     episodeFrames: Math.round(2 * 60 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: 8,
+    workerCount: 1,
     backpressureQueueSize: 2,
     // Training control
     savePath: 'PPO_MHA',

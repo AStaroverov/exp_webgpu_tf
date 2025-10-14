@@ -157,17 +157,12 @@ function optimize(
 
     return tf.tidy(() => {
         const { grads, value } = tf.variableGrads(predict);
-
-        // считаем общую норму градиентов
         const gradsArray = Object.values(grads).map(g => g.square().sum());
         const sumSquares = gradsArray.reduce((acc, t) => acc.add(t), tf.scalar(0));
         const globalNorm = sumSquares.sqrt();
-        // вычисляем множитель для клиппинга
         const eps = 1e-8;
         const safeGlobalNorm = tf.maximum(globalNorm, tf.scalar(eps));
         const clipCoef = tf.minimum(tf.scalar(1), tf.div(clipNorm, safeGlobalNorm));
-
-        // применяем клиппинг к каждому градиенту
         const clippedGrads: NamedTensor[] = [];
         for (const [varName, grad] of Object.entries(grads)) {
             clippedGrads.push({ name: varName, tensor: tf.mul(grad, clipCoef) });
@@ -176,7 +171,6 @@ function optimize(
         // fix for internal implementation of applyGradients
         clippedGrads.sort((a, b) => a.name.localeCompare(b.name));
 
-        // применяем обрезанные градиенты
         optimizer.applyGradients(clippedGrads);
 
         tf.dispose(grads);
