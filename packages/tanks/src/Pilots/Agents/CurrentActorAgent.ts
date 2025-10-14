@@ -36,9 +36,9 @@ export type LearnableAgent = {
 export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableAgent> {
     private noise = new ColoredNoise(ACTION_DIM, 0.8, [
         1,
-        random() < 0.05 ? lerp(0.1, 0.7, random()) : 1,
-        random() < 0.05 ? lerp(0.1, 0.7, random()) : 1,
-        random() < 0.05 ? lerp(0.1, 0.7, random()) : 1,
+        random() < 0.05 ? lerp(0.1, 0.8, random()) : 1,
+        random() < 0.05 ? lerp(0.1, 0.8, random()) : 1,
+        random() < 0.2 ? lerp(0, 0.2, random()) : 1,
     ]);
     private memory = new AgentMemory();
     private policyNetwork?: tf.LayersModel;
