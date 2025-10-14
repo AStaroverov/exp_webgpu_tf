@@ -1,10 +1,9 @@
 import * as tf from '@tensorflow/tfjs';
 import { clamp } from 'lodash-es';
-import { unlerp } from '../../../../../lib/math.ts';
+import { lerp, unlerp } from '../../../../../lib/math.ts';
 import { random } from '../../../../../lib/random.ts';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
-import { CONFIG } from '../../../../ml-common/config.ts';
-import { LEARNING_STEPS } from '../../../../ml-common/consts.ts';
+import { ACTION_DIM, LEARNING_STEPS } from '../../../../ml-common/consts.ts';
 import { prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
 import { getNetworkExpIteration, getNetworkPerturbConfig, patientAction } from '../../../../ml-common/utils.ts';
@@ -35,6 +34,12 @@ export type LearnableAgent = {
 }
 
 export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableAgent> {
+    private noise = new ColoredNoise(ACTION_DIM, 0.8, [
+        1,
+        random() < 0.05 ? lerp(0.1, 0.7, random()) : 1,
+        random() < 0.05 ? lerp(0.1, 0.7, random()) : 1,
+        random() < 0.05 ? lerp(0.1, 0.7, random()) : 1,
+    ]);
     private memory = new AgentMemory();
     private policyNetwork?: tf.LayersModel;
 
@@ -60,10 +65,10 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         this.policyNetwork && disposeNetwork(this.policyNetwork);
         this.policyNetwork = undefined;
         this.memory.dispose();
+        this.noise.dispose();
     }
 
     public async sync() {
-        this.dispose();
         await patientAction(() => this.load());
     }
 
@@ -77,9 +82,8 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
     ) {
         if (this.policyNetwork == null) return;
 
-        const temp = CONFIG.actionNoiseScale(this.getVersion());
         const state = prepareInputArrays(this.tankEid, width, height);
-        const result = act(this.policyNetwork, state, temp);
+        const result = act(this.policyNetwork, state, this.noise.sample());
 
         applyActionToTank(
             this.tankEid,
@@ -193,4 +197,44 @@ function isPerturbable(v: tf.LayerVariable) {
     }
 
     return name.includes('mlp');
+}
+
+export class ColoredNoise {
+    private state: tf.Tensor;
+    private weights: tf.Tensor;
+    // private weightsRescale: tf.Tensor;
+
+    constructor(actionDim: number, private rho = 0.8, weights: number[] = [1, 1, 1, 1]) {
+        this.state = tf.zeros([actionDim]);
+        this.weights = tf.tensor1d(weights);
+        // this.weightsRescale = tf.tidy(() => {
+        //     const squared = this.weights.square();               // w_i^2
+        //     const sumSq = tf.sum(squared);                       // Σ w_i²
+        //     const meanSq = sumSq.div(this.actionDim);            // средняя энергия
+        //     return tf.sqrt(tf.div(1, meanSq));            // множитель нормировки
+        // });
+    }
+
+    sample(): tf.Tensor {
+        // z ~ N(0, I)
+        const z = tf.randomNormal(this.state.shape);
+        const a = this.rho;
+        const b = Math.sqrt(1 - a * a);
+
+        // eps_t = a * eps_{t-1} + b * z_t
+        let eps = tf.add(this.state.mul(a), z.mul(b));
+        eps = eps.mul(this.weights);
+        // eps = eps.mul(this.weightsRescale);
+
+        this.state.dispose();
+        this.state = eps.clone();
+
+        return eps;
+    }
+
+    dispose() {
+        this.state.dispose();
+        this.weights.dispose();
+        // this.weightsRescale.dispose();
+    }
 }

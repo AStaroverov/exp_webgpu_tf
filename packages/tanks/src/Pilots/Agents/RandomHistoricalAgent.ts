@@ -35,7 +35,7 @@ export class RandomHistoricalAgent implements TankAgent<DownloableAgent> {
         if (this.policyNetwork == null) return;
 
         const state = prepareInputArrays(this.tankEid, width, height);
-        const result = act(this.policyNetwork, state, 0);
+        const result = act(this.policyNetwork, state);
 
         applyActionToTank(
             this.tankEid,

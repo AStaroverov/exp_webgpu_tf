@@ -11,10 +11,6 @@ export const DEFAULT_EXPERIMENT = {
         return lerp(0.95, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
     },
 
-    actionNoiseScale: (iteration: number) => {
-        return 1;//lerp(0.2, 1, clamp(1 - ((iteration - LEARNING_STEPS * 0.2) / (LEARNING_STEPS * 0.2)), 0, 1))
-    },
-
     policyEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
     policyClipRatio: 0.2, // https://arxiv.org/pdf/2202.00079 - interesting idea don't clip at all
     policyEntropy: (iteration: number) => {
@@ -55,7 +51,7 @@ export const DEFAULT_EXPERIMENT = {
     perturbChance: (iteration: number) => lerp(0.01, 0.1, clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1)),
 
     batchSize: (iteration: number) => {
-        return 1024 * clamp(ceil(8 * (iteration + 1) / (LEARNING_STEPS * 0.20)), 4, 24);
+        return 1024 * clamp(ceil(6 * (iteration + 1) / (LEARNING_STEPS * 0.20)), 4, 24);
     },
     miniBatchSize: (iteration: number) => {
         return 64 * clamp(ceil((iteration + 1) / (LEARNING_STEPS * 0.25)), 1, 4);
