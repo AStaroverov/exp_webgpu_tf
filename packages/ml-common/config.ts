@@ -11,6 +11,10 @@ export const DEFAULT_EXPERIMENT = {
         return lerp(0.95, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
     },
 
+    actionNoiseScale: (iteration: number) => {
+        return 1;//lerp(0.2, 1, clamp(1 - ((iteration - LEARNING_STEPS * 0.2) / (LEARNING_STEPS * 0.2)), 0, 1))
+    },
+
     policyEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
     policyClipRatio: 0.2, // https://arxiv.org/pdf/2202.00079 - interesting idea don't clip at all
     policyEntropy: (iteration: number) => {
@@ -29,7 +33,7 @@ export const DEFAULT_EXPERIMENT = {
             low: ACTION_DIM * 0.016,
         },
         initial: 1e-5,
-        multHigh: 0.95,
+        multHigh: 0.9,
         multLow: 1.05,
         min: 5e-6,
         max: 1e-3,
@@ -43,7 +47,7 @@ export const DEFAULT_EXPERIMENT = {
             low: 0.05,
         },
         initial: 0.01,
-        multHigh: 0.95,
+        multHigh: 0.9,
         multLow: 1.05,
         min: 0.003,
         max: 0.02,

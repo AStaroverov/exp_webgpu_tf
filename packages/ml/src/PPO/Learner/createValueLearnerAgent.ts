@@ -69,7 +69,7 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
         .then((valueLossList) => {
             console.info(`[Train Value]: Finish`);
 
-            if (valueLossList.some((v) => isLossDangerous(v, 2000))) {
+            if (valueLossList.some((v) => isLossDangerous(v, 200))) {
                 throw new Error(`Value loss too dangerous: ${min(...valueLossList)} ${max(...valueLossList)}`);
             }
 

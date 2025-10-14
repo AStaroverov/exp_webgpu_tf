@@ -1,7 +1,8 @@
 import * as tf from '@tensorflow/tfjs';
 import { Scalar } from '@tensorflow/tfjs-core/dist/tensor';
 import { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
-import { normalize } from '../../../../lib/math.ts';
+import { clamp } from 'lodash';
+import { log, normalize } from '../../../../lib/math.ts';
 import { random } from '../../../../lib/random.ts';
 import { computeLogProb } from '../../../ml-common/computeLogProb.ts';
 import { ACTION_DIM } from '../../../ml-common/consts.ts';
@@ -12,9 +13,9 @@ import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
 
 export const MIN_LOG_STD_DEV = -4;
-export const MAX_LOG_STD_DEV = 2;
+export const MAX_LOG_STD_DEV = 0;
 export const MIN_STD_DEV = Math.exp(MIN_LOG_STD_DEV); // ~0.018
-export const MAX_STD_DEV = Math.exp(MAX_LOG_STD_DEV); // ~7.39
+export const MAX_STD_DEV = Math.exp(MAX_LOG_STD_DEV); // ~1
 
 export function trainPolicyNetwork(
     network: tf.LayersModel,
@@ -123,15 +124,19 @@ export function computeKullbackLeiblerExact(
 export function act(
     policyNetwork: tf.LayersModel,
     state: InputArrays,
+    temp: number = 1,
 ): {
     actions: Float32Array,
     mean: Float32Array,
     logStd: Float32Array,
     logProb: number
 } {
+    temp = clamp(temp, 0.0001, 1);
+
     return tf.tidy(() => {
         const predicted = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
-        const { mean, logStd } = parsePredict(predicted);
+        const { mean, logStd: _logStd } = parsePredict(predicted);
+        const logStd = _logStd.add(log(temp))
         const std = logStd.exp();
 
         const noise = tf.randomNormal([ACTION_DIM]).mul(std);

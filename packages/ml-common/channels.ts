@@ -1,4 +1,3 @@
-
 export const forceExitChannel = new BroadcastChannel('exit');
 
 if (globalThis.document != null) {

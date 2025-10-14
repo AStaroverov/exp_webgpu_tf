@@ -3,6 +3,7 @@ import { clamp } from 'lodash-es';
 import { unlerp } from '../../../../../lib/math.ts';
 import { random } from '../../../../../lib/random.ts';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
+import { CONFIG } from '../../../../ml-common/config.ts';
 import { LEARNING_STEPS } from '../../../../ml-common/consts.ts';
 import { prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
@@ -76,8 +77,9 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
     ) {
         if (this.policyNetwork == null) return;
 
+        const temp = CONFIG.actionNoiseScale(this.getVersion());
         const state = prepareInputArrays(this.tankEid, width, height);
-        const result = act(this.policyNetwork, state);
+        const result = act(this.policyNetwork, state, temp);
 
         applyActionToTank(
             this.tankEid,
