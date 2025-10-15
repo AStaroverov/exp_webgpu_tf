@@ -11,21 +11,23 @@ export const DEFAULT_EXPERIMENT = {
         return lerp(0.95, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
     },
 
-    policyEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
-    policyClipRatio: 0.2, // https://arxiv.org/pdf/2202.00079 - interesting idea don't clip at all
     policyEntropy: (iteration: number) => {
         return lerp(0.0001, 0.01, clamp(1 - iteration / (LEARNING_STEPS * 0.5), 0, 1))
     },
+
     minLogStdDev: (iteration: number) => {
-        return lerp(-4, -2, clamp(iteration / (LEARNING_STEPS * 0.75), 0, 1))
+        return -4; // lerp(-4, -2, clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1))
         // Math.exp(-4) = 0.018
         // Math.exp(-2) = 0.135
     },
     maxLogStdDev: (iteration: number) => {
-        return lerp(2, -1, clamp(iteration / (LEARNING_STEPS * 0.75), 0, 1))
+        return 2; // lerp(0, 2, clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1))
+        // Math.exp(0) = 1
         // Math.exp(2) = 7.389
-        // Math.exp(-1) = 0.368
     },
+
+    policyEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
+    policyClipRatio: 0.2, // https://arxiv.org/pdf/2202.00079 - interesting idea don't clip at all
 
     valueEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
     valueClipRatio: 0.2,
@@ -34,9 +36,9 @@ export const DEFAULT_EXPERIMENT = {
     // Dynamic learning rate adjustment based on KL
     lrConfig: {
         kl: {
-            high: ACTION_DIM * 0.024,
+            high: ACTION_DIM * 0.025,
             target: ACTION_DIM * 0.02,
-            low: ACTION_DIM * 0.016,
+            low: ACTION_DIM * 0.015,
         },
         initial: 1e-5,
         multHigh: 0.9,
@@ -48,9 +50,9 @@ export const DEFAULT_EXPERIMENT = {
     // Dynamic perturbation scale adjustment based on KL_noise
     perturbWeightsConfig: {
         kl: {
-            target: 0.1,
-            high: 0.2,
-            low: 0.05,
+            high: 2 * ACTION_DIM * 0.024,
+            target: 2 * ACTION_DIM * 0.02,
+            low: 2 * ACTION_DIM * 0.016,
         },
         initial: 0.01,
         multHigh: 0.9,
@@ -58,7 +60,7 @@ export const DEFAULT_EXPERIMENT = {
         min: 0.003,
         max: 0.02,
     },
-    perturbChance: (iteration: number) => lerp(0.01, 0.1, clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1)),
+    perturbChance: (iteration: number) => lerp(0.01, 0.7, clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1)),
 
     batchSize: (iteration: number) => {
         return 1024 * clamp(ceil(6 * (iteration + 1) / (LEARNING_STEPS * 0.20)), 4, 24);

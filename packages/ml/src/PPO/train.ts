@@ -138,10 +138,7 @@ export function act(
         const { mean, logStd } = parsePredict(predicted, minLogStdDev, maxLogStdDev);
         const std = logStd.exp();
 
-        const ns = noise ?? tf.randomNormal([ACTION_DIM]);
-        const mns = ns.mul(std);
-
-        const actions = mean.add(mns);
+        const actions = noise ? mean.add(noise.mul(std)) : mean.clone();
         const logProb = computeLogProb(actions, mean, std);
 
         return {

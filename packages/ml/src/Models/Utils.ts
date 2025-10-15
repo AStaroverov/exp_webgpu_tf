@@ -8,9 +8,9 @@ import { patientAction } from '../../../ml-common/utils.ts';
 import { LAST_NETWORK_VERSION, Model, NetworkInfo } from './def.ts';
 import { loadLastNetworkFromDB, loadNetworkFromDB } from './Transfer.ts';
 
-export function disposeNetwork(network: LayersModel) {
-    network.optimizer?.dispose();
-    network.dispose();
+export function disposeNetwork(network?: LayersModel) {
+    network?.optimizer?.dispose();
+    network?.dispose();
 }
 
 export function getStorePath(name: string, version: number): string {

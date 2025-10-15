@@ -144,29 +144,31 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             }
 
             klHistory.add(...klList);
+            klPerturbedHistory.add(...klPerturbedList);
+
             const klArr = klHistory.toArray();
+            const klPerturbedArr = klPerturbedHistory.toArray();
+
             const kl = klArr.length > 0 ? median(klArr) : undefined;
-            const lr = kl
+            const lr = kl != null
                 ? getDynamicLearningRate(kl, getNetworkLearningRate(network))
                 : getNetworkLearningRate(network);
 
-            klPerturbedHistory.add(...klPerturbedList);
-            const klPerturbedArr = klPerturbedHistory.toArray();
             const klPerturbed = klPerturbedArr.length > 0 ? median(klPerturbedArr) : undefined;
-            const perturbScale = klPerturbed
+            const perturbScale = klPerturbed != null
                 ? getDynamicPerturb(klPerturbed, getNetworkPerturbConfig(network).scale)
                 : getNetworkPerturbConfig(network).scale;
-            const perturbChance = 0; //kl === undefined || kl > CONFIG.lrConfig.kl.target ? 0 : CONFIG.perturbChance(expIteration);
+            const perturbChance = kl == null || kl > CONFIG.lrConfig.kl.high
+                ? 0
+                : CONFIG.perturbChance(expIteration) / (kl < CONFIG.lrConfig.kl.low ? 2 : 1);
 
             modelSettingsChannel.emit({ lr, perturbChance, perturbScale, expIteration: expIteration + batch.size });
-            console.info(`[Train Policy]: Finish iteration=${expIteration}
-                kl=${kl?.toFixed(3)}, lr=${lr},
-                perturb kl=${klPerturbed?.toFixed(3)}, chance=${perturbChance.toFixed(2)}, scale=${perturbScale.toFixed(2)}`);
+            console.info(`[Train Policy]: Finish iteration=${expIteration}`);
 
-            metricsChannels.lr.postMessage([lr]);
-            metricsChannels.perturbScale.postMessage([perturbScale]);
             metricsChannels.kl.postMessage(klList);
             metricsChannels.klPerturbed.postMessage(klPerturbedList);
+            metricsChannels.lr.postMessage([lr]);
+            metricsChannels.perturbScale.postMessage([perturbScale]);
             metricsChannels.policyLoss.postMessage(policyLossList);
         });
 }

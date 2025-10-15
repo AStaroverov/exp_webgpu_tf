@@ -35,13 +35,8 @@ export type LearnableAgent = {
 }
 
 export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableAgent> {
-    private noise = new ColoredNoise(ACTION_DIM, 0.8, [
-        1,
-        random() < 0.05 ? lerp(0.1, 0.8, random()) : 1,
-        random() < 0.05 ? lerp(0.1, 0.8, random()) : 1,
-        random() < 0.2 ? lerp(0, 0.2, random()) : 1,
-    ]);
     private memory = new AgentMemory();
+    private noise?: ColoredNoise
     private policyNetwork?: tf.LayersModel;
 
     private minLogStdDev?: number;
@@ -65,11 +60,9 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
     }
 
     public dispose() {
-        this.initialActionReward = undefined;
-        this.policyNetwork && disposeNetwork(this.policyNetwork);
-        this.policyNetwork = undefined;
+        disposeNetwork(this.policyNetwork);
         this.memory.dispose();
-        this.noise.dispose();
+        this.noise?.dispose();
     }
 
     public async sync() {
@@ -92,7 +85,7 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
             state,
             this.minLogStdDev,
             this.maxLogStdDev,
-            this.noise.sample()
+            this.noise?.sample(),
         );
 
         applyActionToTank(
@@ -162,6 +155,13 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         if (config.chance > random()) {
             this.memory.perturbed = true;
             perturbWeights(this.policyNetwork, config.scale);
+        } else {
+            this.noise = new ColoredNoise(ACTION_DIM, 0.8, [
+                1,
+                random() < 0.05 ? lerp(0.1, 0.8, random()) : 1,
+                random() < 0.05 ? lerp(0.1, 0.8, random()) : 1,
+                random() < 0.2 ? lerp(0, 0.2, random()) : 1,
+            ]);
         }
     }
 }
