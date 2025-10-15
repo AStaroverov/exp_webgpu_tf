@@ -11,6 +11,8 @@ import { createInputTensors } from '../../../ml-common/InputTensors.ts';
 import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
 
+let tC: undefined | tf.Tensor
+
 export function trainPolicyNetwork(
     network: tf.LayersModel,
     states: tf.Tensor[],
@@ -21,14 +23,16 @@ export function trainPolicyNetwork(
     clipRatio: number,
     entropyCoeff: number,
     clipNorm: number,
-    minLogStdDev: number,
-    maxLogStdDev: number,
+    minLogStd: number,
+    maxLogStd: number,
     returnCost: boolean,
 ): undefined | tf.Tensor {
+    const C = (tC ??= tf.scalar(0.5 * Math.log(2 * Math.PI * Math.E)));
+
     return tf.tidy(() => {
         return optimize(network.optimizer, () => {
             const predicted = network.predict(states, { batchSize }) as tf.Tensor;
-            const { mean, logStd } = parsePredict(predicted, minLogStdDev, maxLogStdDev);
+            const { mean, logStd } = parsePredict(predicted, minLogStd, maxLogStd);
             const std = logStd.exp();
             const newLogProbs = computeLogProb(actions, mean, std);
             const ratio = tf.exp(newLogProbs.sub(oldLogProbs));
@@ -36,12 +40,9 @@ export function trainPolicyNetwork(
             const surr1 = ratio.mul(advantages);
             const surr2 = clippedRatio.mul(advantages);
             const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
+            const entropyLoss = logStd.add(C).sum(1).mean().mul(entropyCoeff);
 
-            const c = 0.5 * Math.log(2 * Math.PI * Math.E);
-            const entropyEachDim = logStd.add(c);
-            const totalEntropy = entropyEachDim.sum(1).mean().mul(entropyCoeff);
-            const totalLoss = policyLoss.sub(totalEntropy);
-
+            const totalLoss = policyLoss.sub(entropyLoss);
             return totalLoss as tf.Scalar;
         }, { clipNorm, returnCost });
     });
@@ -80,12 +81,12 @@ export function computeKullbackLeiblerAprox(
     actions: tf.Tensor,
     oldLogProb: tf.Tensor,
     batchSize: number,
-    minLogStdDev: number,
-    maxLogStdDev: number,
+    minLogStd: number,
+    maxLogStd: number,
 ) {
     return tf.tidy(() => {
         const predicted = policyNetwork.predict(states, { batchSize }) as tf.Tensor;
-        const { mean, logStd } = parsePredict(predicted, minLogStdDev, maxLogStdDev);
+        const { mean, logStd } = parsePredict(predicted, minLogStd, maxLogStd);
         const std = logStd.exp();
         const newLogProbs = computeLogProb(actions, mean, std);
         const diff = oldLogProb.sub(newLogProbs);
@@ -100,12 +101,12 @@ export function computeKullbackLeiblerExact(
     oldMean: tf.Tensor,
     oldLogStd: tf.Tensor,
     batchSize: number,
-    minLogStdDev: number,
-    maxLogStdDev: number,
+    minLogStd: number,
+    maxLogStd: number,
 ): tf.Tensor {
     return tf.tidy(() => {
         const predicted = policyNetwork.predict(states, { batchSize }) as tf.Tensor;
-        const { mean: newMean, logStd: newLogStd } = parsePredict(predicted, minLogStdDev, maxLogStdDev);
+        const { mean: newMean, logStd: newLogStd } = parsePredict(predicted, minLogStd, maxLogStd);
 
         const oldStd = oldLogStd.exp();
         const newStd = newLogStd.exp();
@@ -124,8 +125,8 @@ export function computeKullbackLeiblerExact(
 export function act(
     policyNetwork: tf.LayersModel,
     state: InputArrays,
-    minLogStdDev: number,
-    maxLogStdDev: number,
+    minLogStd: number,
+    maxLogStd: number,
     noise?: tf.Tensor,
 ): {
     actions: Float32Array,
@@ -135,7 +136,7 @@ export function act(
 } {
     return tf.tidy(() => {
         const predicted = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
-        const { mean, logStd } = parsePredict(predicted, minLogStdDev, maxLogStdDev);
+        const { mean, logStd } = parsePredict(predicted, minLogStd, maxLogStd);
         const std = logStd.exp();
 
         const actions = noise ? mean.add(noise.mul(std)) : mean.clone();
@@ -194,8 +195,8 @@ export function computeVTraceTargets(
     batch: AgentMemoryBatch,
     batchSize: number,
     gamma: number,
-    minLogStdDev: number,
-    maxLogStdDev: number,
+    minLogStd: number,
+    maxLogStd: number,
     clipRho: number = 1.0,
     clipC: number = 1.0,
     clipRhoPG: number = 1.0,
@@ -209,7 +210,7 @@ export function computeVTraceTargets(
     return tf.tidy(() => {
         const input = createInputTensors(batch.states);
         const predicted = policyNetwork.predict(input, { batchSize }) as tf.Tensor;
-        const { mean: meanCurrent, logStd: logStdCurrent, pureLogStd: pureLogStdCurrent } = parsePredict(predicted, minLogStdDev, maxLogStdDev);
+        const { mean: meanCurrent, logStd: logStdCurrent, pureLogStd: pureLogStdCurrent } = parsePredict(predicted, minLogStd, maxLogStd);
         const actions = tf.tensor2d(flatTypedArray(batch.actions), [batch.size, ACTION_DIM]);
 
         const logProbCurrentTensor = computeLogProb(actions, meanCurrent, logStdCurrent.exp());
@@ -308,10 +309,53 @@ export function computeVTrace(
     return { vTraces, advantages, tdErrors };
 }
 
-function parsePredict(predict: tf.Tensor, minLogStdDev: number, maxLogStdDev: number) {
+function parsePredict(predict: tf.Tensor, minLogStd: number, maxLogStd: number) {
     const outMean = predict.slice([0, 0], [-1, ACTION_DIM]);
     const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
-    const clippedLogStd = outLogStd.clipByValue(minLogStdDev, maxLogStdDev);
+
+    // hard clipping
+    // const clippedLogStd = outLogStd.clipByValue(minLogStd, maxLogStd);
+
+    // sigmoid-based clipping
+    // const clippedLogStd = tf.add(minLogStd, tf.mul(maxLogStd - minLogStd, tf.sigmoid(outLogStd)));
+
+    // tanh-based clipping
+    // const c = (maxLogStd + minLogStd) / 2;
+    // const r = (maxLogStd - minLogStd) / 2;
+    // const clippedLogStd = tf.add(c, tf.mul(r, tf.tanh(outLogStd)));
+
+    // tanh-based with temperature
+    // const tau = 5.0;
+    // const span = maxLogStd - minLogStd;
+    // const soft = tf.tanh(outLogStd.div(tau));         // (-1,1)
+    // const s = soft.mul(0.5).add(0.5);
+    // const clippedLogStd = tf.add(minLogStd, tf.mul(span, s));
+
+    // softsign-based clipping
+    // const span = maxLogStd - minLogStd;
+    // const softsign = outLogStd.div(tf.add(1, tf.abs(outLogStd)));
+    // const s = softsign.div(2).add(0.5);   // в [0,1]
+    // const clippedLogStd = tf.add(minLogStd, tf.mul(span, s));
+
+    // Hard softsign-based clipping
+    const alpha = 2;  // >1 — делает насыщение быстрее (центральная зона)
+    const p = 2;      // >=1 — чем больше, тем резче прижимает к краям
+    const span = maxLogStd - minLogStd;
+    // Жёсткий softsign: u / (1 + |u|^p), с предварительным усилением alpha
+    // x = alpha * u
+    const x = outLogStd.mul(alpha);
+    // |x|^p
+    const axp = tf.pow(tf.abs(x), tf.scalar(p));
+    // soft_p = sign(x) * |x|^p / (1 + |x|^p)  -> в (-1, 1),  |x|->∞ => ±1
+    const soft = tf.sign(x).mul(axp.div(tf.add(1, axp)));
+    // Нормируем в [0,1]
+    const s = soft.mul(0.5).add(0.5);
+    // Маппим в [minLogStd, maxLogStd]
+    const clippedLogStd = tf.add(minLogStd, tf.mul(span, s));
+
+    // const r = clippedLogStd.dataSync()
+    // console.log([...outLogStd.dataSync()].map((v, i) => `${v.toFixed(3)} -> ${r[i].toFixed(6)}`));
+    // debugger
 
     return { mean: outMean, logStd: clippedLogStd, pureLogStd: outLogStd };
 }

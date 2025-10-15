@@ -31,8 +31,8 @@ const klPerturbedHistory = new RingBuffer<number>(25);
 
 function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const expIteration = getNetworkExpIteration(network);
-    const minLogStdDev = CONFIG.minLogStdDev(expIteration);
-    const maxLogStdDev = CONFIG.maxLogStdDev(expIteration);
+    const minLogStd = CONFIG.minLogStd(expIteration);
+    const maxLogStd = CONFIG.maxLogStd(expIteration);
     const mbs = CONFIG.miniBatchSize(expIteration);
     const mbc = ceil(batch.size / mbs);
 
@@ -105,8 +105,8 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
                 CONFIG.policyClipRatio,
                 entropyCoeff,
                 CONFIG.clipNorm,
-                minLogStdDev,
-                maxLogStdDev,
+                minLogStd,
+                maxLogStd,
                 j === mbc - 1,
             );
             policyLoss && policyLossList.push(policyLoss);
@@ -118,11 +118,11 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
         }
 
         // KL on perturbed data (for metrics only)
-        const klPerturbed = computeKLForBatch(network, getKLPerturbedBatch(klSize), mbs, minLogStdDev, maxLogStdDev);
+        const klPerturbed = computeKLForBatch(network, getKLPerturbedBatch(klSize), mbs, minLogStd, maxLogStd);
         if (klPerturbed != null) klPerturbedList.push(klPerturbed);
 
         // KL on non-perturbed data (for learning rate adaptation)
-        const tKL = computeKLForBatch(network, getKLBatch(klSize), mbs, minLogStdDev, maxLogStdDev);
+        const tKL = computeKLForBatch(network, getKLBatch(klSize), mbs, minLogStd, maxLogStd);
         const kl = tKL ? syncUnwrapTensor(tKL)[0] : undefined;
         if (kl != null) klList.push(kl);
         if (kl != null && kl > CONFIG.lrConfig.kl.high) {
@@ -158,9 +158,10 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             const perturbScale = klPerturbed != null
                 ? getDynamicPerturb(klPerturbed, getNetworkPerturbConfig(network).scale)
                 : getNetworkPerturbConfig(network).scale;
-            const perturbChance = kl == null || kl > CONFIG.lrConfig.kl.high
-                ? 0
-                : CONFIG.perturbChance(expIteration) / (kl < CONFIG.lrConfig.kl.low ? 2 : 1);
+            const perturbChance = 0;
+            // kl == null || kl > CONFIG.lrConfig.kl.high
+            //     ? 0
+            //     : CONFIG.perturbChance(expIteration) * (kl < CONFIG.lrConfig.kl.low ? 0.5 : 1);
 
             modelSettingsChannel.emit({ lr, perturbChance, perturbScale, expIteration: expIteration + batch.size });
             console.info(`[Train Policy]: Finish iteration=${expIteration}`);
@@ -200,8 +201,8 @@ function computeKLForBatch(
     network: tf.LayersModel,
     batch: ReturnType<typeof createKlBatch>,
     mbs: number,
-    minLogStdDev: number,
-    maxLogStdDev: number,
+    minLogStd: number,
+    maxLogStd: number,
 ) {
     let result: undefined | tf.Tensor;
 
@@ -216,8 +217,8 @@ function computeKLForBatch(
             tActions,
             tLogProb,
             mbs,
-            minLogStdDev,
-            maxLogStdDev,
+            minLogStd,
+            maxLogStd,
         )
 
         tf.dispose(tStates);

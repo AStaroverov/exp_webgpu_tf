@@ -39,8 +39,8 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
     private noise?: ColoredNoise
     private policyNetwork?: tf.LayersModel;
 
-    private minLogStdDev?: number;
-    private maxLogStdDev?: number;
+    private minLogStd?: number;
+    private maxLogStd?: number;
 
     private initialActionReward?: number;
 
@@ -70,21 +70,21 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
     }
 
     public isSynced() {
-        return this.policyNetwork != null && this.minLogStdDev != null && this.maxLogStdDev != null;
+        return this.policyNetwork != null && this.minLogStd != null && this.maxLogStd != null;
     }
 
     public updateTankBehaviour(
         width: number,
         height: number,
     ) {
-        if (!(this.policyNetwork != null && this.minLogStdDev != null && this.maxLogStdDev != null)) return;
+        if (!(this.policyNetwork != null && this.minLogStd != null && this.maxLogStd != null)) return;
 
         const state = prepareInputArrays(this.tankEid, width, height);
         const result = act(
             this.policyNetwork,
             state,
-            this.minLogStdDev,
-            this.maxLogStdDev,
+            this.minLogStd,
+            this.maxLogStd,
             this.noise?.sample(),
         );
 
@@ -147,8 +147,8 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         this.policyNetwork = await getNetwork(Model.Policy);
 
         const iteration = getNetworkExpIteration(this.policyNetwork);
-        this.minLogStdDev = CONFIG.minLogStdDev(iteration);
-        this.maxLogStdDev = CONFIG.maxLogStdDev(iteration);
+        this.minLogStd = CONFIG.minLogStd(iteration);
+        this.maxLogStd = CONFIG.maxLogStd(iteration);
 
         const config = getNetworkPerturbConfig(this.policyNetwork);
 

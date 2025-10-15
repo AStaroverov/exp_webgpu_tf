@@ -14,7 +14,7 @@ import { BattleState, getBattleState } from '../../../tanks/src/Pilots/Utils/sna
 export const GAME_OVER_REWARD_MULTIPLIER = 5;
 
 export const getFramePenalty = (frame: number) =>
-    -clamp(Math.log10(1 + frame), 0, 3) / 100;
+    -clamp(Math.log10(1 + frame), 0, 3) / 30;
 
 export const getDeathPenalty = (isDead: boolean) =>
     -GAME_OVER_REWARD_MULTIPLIER * Number(isDead);

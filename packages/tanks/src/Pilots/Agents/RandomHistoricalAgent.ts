@@ -11,8 +11,8 @@ import { DownloableAgent, TankAgent } from './CurrentActorAgent.ts';
 
 export class RandomHistoricalAgent implements TankAgent<DownloableAgent> {
     private policyNetwork?: tf.LayersModel;
-    private minLogStdDev?: number;
-    private maxLogStdDev?: number;
+    private minLogStd?: number;
+    private maxLogStd?: number;
 
     constructor(public readonly tankEid: number) {
     }
@@ -28,18 +28,18 @@ export class RandomHistoricalAgent implements TankAgent<DownloableAgent> {
     }
 
     public isSynced() {
-        return this.policyNetwork != null && this.minLogStdDev != null && this.maxLogStdDev != null;
+        return this.policyNetwork != null && this.minLogStd != null && this.maxLogStd != null;
     }
 
     public updateTankBehaviour(
         width: number,
         height: number,
     ) {
-        if (!(this.policyNetwork != null && this.minLogStdDev != null && this.maxLogStdDev != null)) return;
+        if (!(this.policyNetwork != null && this.minLogStd != null && this.maxLogStd != null)) return;
 
         const state = prepareInputArrays(this.tankEid, width, height);
-        const result = act(this.policyNetwork, state, this.minLogStdDev, this.maxLogStdDev);
-        const maxStdDev = Math.exp(this.maxLogStdDev);
+        const result = act(this.policyNetwork, state, this.minLogStd, this.maxLogStd);
+        const maxStdDev = Math.exp(this.maxLogStd);
 
         applyActionToTank(
             this.tankEid,
@@ -51,7 +51,7 @@ export class RandomHistoricalAgent implements TankAgent<DownloableAgent> {
     private async load() {
         this.policyNetwork = await getRandomHistoricalNetwork(Model.Policy);
         const iteration = getNetworkExpIteration(this.policyNetwork);
-        this.minLogStdDev = CONFIG.minLogStdDev(iteration);
-        this.maxLogStdDev = CONFIG.maxLogStdDev(iteration);
+        this.minLogStd = CONFIG.minLogStd(iteration);
+        this.maxLogStd = CONFIG.maxLogStd(iteration);
     }
 }

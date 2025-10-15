@@ -12,15 +12,15 @@ export const DEFAULT_EXPERIMENT = {
     },
 
     policyEntropy: (iteration: number) => {
-        return lerp(0.0001, 0.01, clamp(1 - iteration / (LEARNING_STEPS * 0.5), 0, 1))
+        return lerp(0.001, 0.01, clamp(1 - iteration / (LEARNING_STEPS * 0.5), 0, 1))
     },
 
-    minLogStdDev: (iteration: number) => {
+    minLogStd: (iteration: number) => {
         return -4; // lerp(-4, -2, clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1))
         // Math.exp(-4) = 0.018
         // Math.exp(-2) = 0.135
     },
-    maxLogStdDev: (iteration: number) => {
+    maxLogStd: (iteration: number) => {
         return 2; // lerp(0, 2, clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1))
         // Math.exp(0) = 1
         // Math.exp(2) = 7.389

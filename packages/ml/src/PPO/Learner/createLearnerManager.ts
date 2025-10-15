@@ -84,8 +84,8 @@ export function createLearnerManager() {
                         batchData,
                         CONFIG.miniBatchSize(version),
                         CONFIG.gamma(version),
-                        CONFIG.minLogStdDev(version),
-                        CONFIG.maxLogStdDev(version),
+                        CONFIG.minLogStd(version),
+                        CONFIG.maxLogStd(version),
                     );
                     const learnData = {
                         ...batchData,
