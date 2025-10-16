@@ -146,15 +146,17 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             klHistory.add(...klList);
             klPerturbedHistory.add(...klPerturbedList);
 
-            const klArr = klHistory.toArray();
-            const klPerturbedArr = klPerturbedHistory.toArray();
+            const klHistoryList = klHistory.toArray();
+            const klPerturbedHistoryList = klPerturbedHistory.toArray();
 
-            const kl = klArr.length > 0 ? median(klArr) : undefined;
+            const kl = klHistoryList.length > 0 ? median(klHistoryList) : undefined;
             const lr = kl != null
                 ? getDynamicLearningRate(kl, getNetworkLearningRate(network))
                 : getNetworkLearningRate(network);
 
-            const klPerturbed = klPerturbedArr.length > 0 ? median(klPerturbedArr) : undefined;
+            const klPerturbed = klPerturbedList.length > 0 && klPerturbedHistoryList.length > 0
+                ? median(klPerturbedHistoryList)
+                : undefined;
             const perturbScale = klPerturbed != null
                 ? getDynamicPerturb(klPerturbed, getNetworkPerturbConfig(network).scale)
                 : getNetworkPerturbConfig(network).scale;
