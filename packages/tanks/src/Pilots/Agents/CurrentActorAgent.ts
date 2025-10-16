@@ -80,12 +80,13 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         if (!(this.policyNetwork != null && this.minLogStd != null && this.maxLogStd != null)) return;
 
         const state = prepareInputArrays(this.tankEid, width, height);
+        const noise = this.noise?.sample();
         const result = act(
             this.policyNetwork,
             state,
             this.minLogStd,
             this.maxLogStd,
-            this.noise?.sample(),
+            noise
         );
 
         applyActionToTank(
@@ -224,7 +225,7 @@ export class ColoredNoise {
         const eps = tf.add(this.state.mul(a), z.mul(b));
 
         this.state.dispose();
-        this.state = eps.clone();
+        this.state = eps;
 
         return eps;
     }
