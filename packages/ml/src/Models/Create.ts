@@ -36,17 +36,31 @@ type NetworkConfig = {
     heads: number;
     dropout?: number;
     finalMLP: [ActivationIdentifier, number][];
-}
+};
 
-const policyNetworkConfig: NetworkConfig = {
+type policyNetworkConfig = NetworkConfig & {
+    headMLP: {
+        mean: [ActivationIdentifier, number][];
+        logStd: [ActivationIdentifier, number][];
+    };
+};
+
+const policyNetworkConfig: policyNetworkConfig = {
     dim: 64,
     heads: 4,
     finalMLP: [
         ['relu', 512],
         ['relu', 256],
-        ['relu', 256],
-        ['relu', 128],
-    ] as [ActivationIdentifier, number][],
+    ],
+    headMLP: {
+        mean: [
+            ['relu', 256],
+            ['relu', 128],
+        ],
+        logStd: [
+            ['relu', 64],
+        ],
+    },
 };
 const valueNetworkConfig: NetworkConfig = {
     dim: 16,
@@ -60,16 +74,36 @@ const valueNetworkConfig: NetworkConfig = {
 
 export function createPolicyNetwork(): tf.LayersModel {
     const { inputs, network } = createBaseNetwork(Model.Policy, policyNetworkConfig);
-    // Выход: ACTION_DIM * 2 (пример: mean и logStd) ---
-    const policyOutput = tf.layers.dense({
-        name: Model.Policy + '_output',
-        units: ACTION_DIM * 2,
+
+    // Две головы: одна для действий (mean), другая для log_std
+    // Mean head с отдельным MLP
+    const meanMLP = applyDenseLayers(
+        Model.Policy + '_mean_mlp',
+        network,
+        policyNetworkConfig.headMLP.mean,
+    );
+    const actionHead = tf.layers.dense({
+        name: Model.Policy + '_action_head',
+        units: ACTION_DIM,
         activation: 'linear',
-    }).apply(network) as tf.SymbolicTensor;
+    }).apply(meanMLP) as tf.SymbolicTensor;
+
+    // LogStd head с отдельным MLP
+    const logStdMLP = applyDenseLayers(
+        Model.Policy + '_log_std_mlp',
+        network,
+        policyNetworkConfig.headMLP.logStd,
+    );
+    const logStdHead = tf.layers.dense({
+        name: Model.Policy + '_log_std_head',
+        units: ACTION_DIM,
+        activation: 'linear',
+    }).apply(logStdMLP) as tf.SymbolicTensor;
+
     const model = tf.model({
         name: Model.Policy,
         inputs: Object.values(inputs),
-        outputs: policyOutput,
+        outputs: [actionHead, logStdHead],
     });
     model.optimizer = new PatchedAdamOptimizer(CONFIG.lrConfig.initial);
     // fake loss for save optimizer with model
@@ -97,7 +131,7 @@ export function createValueNetwork(): tf.LayersModel {
     return model;
 }
 
-function createBaseNetwork(modelName: Model, config: typeof policyNetworkConfig) {
+function createBaseNetwork(modelName: Model, config: NetworkConfig) {
     const inputs = createInputs(modelName);
     const tokens = convertInputsToTokens(inputs, config.dim);
 

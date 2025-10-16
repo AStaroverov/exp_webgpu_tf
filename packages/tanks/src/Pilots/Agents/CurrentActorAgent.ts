@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { clamp } from 'lodash-es';
-import { lerp, unlerp } from '../../../../../lib/math.ts';
+import { unlerp } from '../../../../../lib/math.ts';
 import { random } from '../../../../../lib/random.ts';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
@@ -156,12 +156,13 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
             this.memory.perturbed = true;
             perturbWeights(this.policyNetwork, config.scale);
         } else {
-            this.noise = new ColoredNoise(ACTION_DIM, 0.8, [
-                1,
-                random() < 0.05 ? lerp(0.1, 0.8, random()) : 1,
-                random() < 0.05 ? lerp(0.1, 0.8, random()) : 1,
-                random() < 0.2 ? lerp(0, 0.2, random()) : 1,
-            ]);
+            this.noise = new ColoredNoise(ACTION_DIM, 0);
+            // , [
+            //     1,
+            //     random() < 0.05 ? lerp(0.1, 0.8, random()) : 1,
+            //     random() < 0.05 ? lerp(0.1, 0.8, random()) : 1,
+            //     random() < 0.2 ? lerp(0, 0.2, random()) : 1,
+            // ]
         }
     }
 }

@@ -31,7 +31,7 @@ export function trainPolicyNetwork(
 
     return tf.tidy(() => {
         return optimize(network.optimizer, () => {
-            const predicted = network.predict(states, { batchSize }) as tf.Tensor;
+            const predicted = network.predict(states, { batchSize }) as tf.Tensor[];
             const { mean, logStd } = parsePredict(predicted, minLogStd, maxLogStd);
             const std = logStd.exp();
             const newLogProbs = computeLogProb(actions, mean, std);
@@ -85,7 +85,7 @@ export function computeKullbackLeiblerAprox(
     maxLogStd: number,
 ) {
     return tf.tidy(() => {
-        const predicted = policyNetwork.predict(states, { batchSize }) as tf.Tensor;
+        const predicted = policyNetwork.predict(states, { batchSize }) as tf.Tensor[];
         const { mean, logStd } = parsePredict(predicted, minLogStd, maxLogStd);
         const std = logStd.exp();
         const newLogProbs = computeLogProb(actions, mean, std);
@@ -105,7 +105,7 @@ export function computeKullbackLeiblerExact(
     maxLogStd: number,
 ): tf.Tensor {
     return tf.tidy(() => {
-        const predicted = policyNetwork.predict(states, { batchSize }) as tf.Tensor;
+        const predicted = policyNetwork.predict(states, { batchSize }) as tf.Tensor[];
         const { mean: newMean, logStd: newLogStd } = parsePredict(predicted, minLogStd, maxLogStd);
 
         const oldStd = oldLogStd.exp();
@@ -135,7 +135,7 @@ export function act(
     logProb: number
 } {
     return tf.tidy(() => {
-        const predicted = policyNetwork.predict(createInputTensors([state])) as tf.Tensor;
+        const predicted = policyNetwork.predict(createInputTensors([state])) as tf.Tensor[];
         const { mean, logStd } = parsePredict(predicted, minLogStd, maxLogStd);
         const std = logStd.exp();
 
@@ -209,7 +209,7 @@ export function computeVTraceTargets(
 } {
     return tf.tidy(() => {
         const input = createInputTensors(batch.states);
-        const predicted = policyNetwork.predict(input, { batchSize }) as tf.Tensor;
+        const predicted = policyNetwork.predict(input, { batchSize }) as tf.Tensor[];
         const { mean: meanCurrent, logStd: logStdCurrent, pureLogStd: pureLogStdCurrent } = parsePredict(predicted, minLogStd, maxLogStd);
         const actions = tf.tensor2d(flatTypedArray(batch.actions), [batch.size, ACTION_DIM]);
 
@@ -309,9 +309,10 @@ export function computeVTrace(
     return { vTraces, advantages, tdErrors };
 }
 
-function parsePredict(predict: tf.Tensor, minLogStd: number, maxLogStd: number) {
-    const outMean = predict.slice([0, 0], [-1, ACTION_DIM]);
-    const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
+function parsePredict(predict: tf.Tensor[], minLogStd: number, maxLogStd: number) {
+    const outMean: tf.Tensor = predict[0];
+    const outLogStd: tf.Tensor = predict[1];
+
     let clippedLogStd = outLogStd;
 
     if (isFinite(minLogStd) && isFinite(maxLogStd)) {
@@ -321,10 +322,10 @@ function parsePredict(predict: tf.Tensor, minLogStd: number, maxLogStd: number) 
         // sigmoid-based clipping
         // const clippedLogStd = tf.add(minLogStd, tf.mul(maxLogStd - minLogStd, tf.sigmoid(outLogStd)));
 
-        // tanh-based clipping
-        // const c = (maxLogStd + minLogStd) / 2;
-        // const r = (maxLogStd - minLogStd) / 2;
-        // const clippedLogStd = tf.add(c, tf.mul(r, tf.tanh(outLogStd)));
+        // tanh - based clipping
+        const c = (maxLogStd + minLogStd) / 2;
+        const r = (maxLogStd - minLogStd) / 2;
+        clippedLogStd = tf.add(c, tf.mul(r, tf.tanh(outLogStd)));
 
         // tanh-based with temperature
         // const tau = 5.0;
@@ -340,27 +341,27 @@ function parsePredict(predict: tf.Tensor, minLogStd: number, maxLogStd: number) 
         // const clippedLogStd = tf.add(minLogStd, tf.mul(span, s));
 
         // Hard softsign-based clipping
-        const alpha = 2;  // >1 — делает насыщение быстрее (центральная зона)
-        const p = 2;      // >=1 — чем больше, тем резче прижимает к краям
-        const span = maxLogStd - minLogStd;
-        // Жёсткий softsign: u / (1 + |u|^p), с предварительным усилением alpha
-        // x = alpha * u
-        const x = outLogStd.mul(alpha);
-        // |x|^p
-        const axp = tf.pow(tf.abs(x), tf.scalar(p));
-        // soft_p = sign(x) * |x|^p / (1 + |x|^p)  -> в (-1, 1),  |x|->∞ => ±1
-        const soft = tf.sign(x).mul(axp.div(tf.add(1, axp)));
-        // Нормируем в [0,1]
-        const s = soft.mul(0.5).add(0.5);
-        // Маппим в [minLogStd, maxLogStd]
-        clippedLogStd = tf.add(minLogStd, tf.mul(span, s));
+        // const alpha = 2;  // >1 — делает насыщение быстрее (центральная зона)
+        // const p = 2;      // >=1 — чем больше, тем резче прижимает к краям
+        // const span = maxLogStd - minLogStd;
+        // // Жёсткий softsign: u / (1 + |u|^p), с предварительным усилением alpha
+        // // x = alpha * u
+        // const x = outLogStd.mul(alpha);
+        // // |x|^p
+        // const axp = tf.pow(tf.abs(x), tf.scalar(p));
+        // // soft_p = sign(x) * |x|^p / (1 + |x|^p)  -> в (-1, 1),  |x|->∞ => ±1
+        // const soft = tf.sign(x).mul(axp.div(tf.add(1, axp)));
+        // // Нормируем в [0,1]
+        // const s = soft.mul(0.5).add(0.5);
+        // // Маппим в [minLogStd, maxLogStd]
+        // clippedLogStd = tf.add(minLogStd, tf.mul(span, s));
 
         // const r = clippedLogStd.dataSync()
         // console.log([...outLogStd.dataSync()].map((v, i) => `${v.toFixed(3)} -> ${r[i].toFixed(6)}`));
         // debugger
     }
 
-    return { mean: outMean, logStd: outLogStd, pureLogStd: outLogStd };
+    return { mean: outMean, logStd: clippedLogStd, pureLogStd: outLogStd };
 }
 
 let randomInputTensors: tf.Tensor[];
@@ -375,8 +376,12 @@ function getRandomInputTensors() {
 
 export function networkHealthCheck(network: tf.LayersModel): Promise<boolean> {
     const tData = tf.tidy(() => {
-        return (network.predict(getRandomInputTensors()) as tf.Tensor).squeeze();
+        const result = network.predict(getRandomInputTensors()) as tf.Tensor | tf.Tensor[];
+        const arr = Array.isArray(result) ? result : [result];
+        return arr.map(t => t.squeeze());
     });
 
-    return onReadyRead().then(() => asyncUnwrapTensor(tData)).then(() => true);
+    return onReadyRead()
+        .then(() => Promise.all(tData.map(t => asyncUnwrapTensor(t))))
+        .then(() => true);
 }
