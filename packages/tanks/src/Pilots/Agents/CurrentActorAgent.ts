@@ -157,12 +157,6 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
             perturbWeights(this.policyNetwork, config.scale);
         } else {
             this.noise = new ColoredNoise(ACTION_DIM, random());
-            // , [
-            //     1,
-            //     random() < 0.05 ? lerp(0.1, 0.8, random()) : 1,
-            //     random() < 0.05 ? lerp(0.1, 0.8, random()) : 1,
-            //     random() < 0.2 ? lerp(0, 0.2, random()) : 1,
-            // ]
         }
     }
 }
@@ -210,23 +204,14 @@ function isPerturbable(v: tf.LayerVariable) {
         return false;
     }
 
-    return name.includes('mlp');
+    return name.includes('mean_mlp');
 }
 
 export class ColoredNoise {
     private state: tf.Tensor;
-    private weights: tf.Tensor;
-    // private weightsRescale: tf.Tensor;
 
-    constructor(actionDim: number, private rho = 0.8, weights: number[] = [1, 1, 1, 1]) {
+    constructor(actionDim: number, private rho = 0.8) {
         this.state = tf.zeros([actionDim]);
-        this.weights = tf.tensor1d(weights);
-        // this.weightsRescale = tf.tidy(() => {
-        //     const squared = this.weights.square();               // w_i^2
-        //     const sumSq = tf.sum(squared);                       // Σ w_i²
-        //     const meanSq = sumSq.div(this.actionDim);            // средняя энергия
-        //     return tf.sqrt(tf.div(1, meanSq));            // множитель нормировки
-        // });
     }
 
     sample(): tf.Tensor {
@@ -236,9 +221,7 @@ export class ColoredNoise {
         const b = Math.sqrt(1 - a * a);
 
         // eps_t = a * eps_{t-1} + b * z_t
-        let eps = tf.add(this.state.mul(a), z.mul(b));
-        eps = eps.mul(this.weights);
-        // eps = eps.mul(this.weightsRescale);
+        const eps = tf.add(this.state.mul(a), z.mul(b));
 
         this.state.dispose();
         this.state = eps.clone();
@@ -248,7 +231,5 @@ export class ColoredNoise {
 
     dispose() {
         this.state.dispose();
-        this.weights.dispose();
-        // this.weightsRescale.dispose();
     }
 }
