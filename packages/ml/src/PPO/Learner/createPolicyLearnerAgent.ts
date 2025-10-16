@@ -158,10 +158,9 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             const perturbScale = klPerturbed != null
                 ? getDynamicPerturb(klPerturbed, getNetworkPerturbConfig(network).scale)
                 : getNetworkPerturbConfig(network).scale;
-            const perturbChance = 0;
-            // kl == null || kl > CONFIG.lrConfig.kl.high
-            //     ? 0
-            //     : CONFIG.perturbChance(expIteration) * (kl < CONFIG.lrConfig.kl.low ? 0.5 : 1);
+            const perturbChance = kl == null || kl > CONFIG.lrConfig.kl.high
+                ? 0
+                : CONFIG.perturbChance(expIteration) * (kl < CONFIG.lrConfig.kl.low ? 0.5 : 1);
 
             modelSettingsChannel.emit({ lr, perturbChance, perturbScale, expIteration: expIteration + batch.size });
             console.info(`[Train Policy]: Finish iteration=${expIteration}`);

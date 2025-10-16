@@ -312,52 +312,55 @@ export function computeVTrace(
 function parsePredict(predict: tf.Tensor, minLogStd: number, maxLogStd: number) {
     const outMean = predict.slice([0, 0], [-1, ACTION_DIM]);
     const outLogStd = predict.slice([0, ACTION_DIM], [-1, ACTION_DIM]);
+    let clippedLogStd = outLogStd;
 
-    // hard clipping
-    // const clippedLogStd = outLogStd.clipByValue(minLogStd, maxLogStd);
+    if (isFinite(minLogStd) && isFinite(maxLogStd)) {
+        // hard clipping
+        // const clippedLogStd = outLogStd.clipByValue(minLogStd, maxLogStd);
 
-    // sigmoid-based clipping
-    // const clippedLogStd = tf.add(minLogStd, tf.mul(maxLogStd - minLogStd, tf.sigmoid(outLogStd)));
+        // sigmoid-based clipping
+        // const clippedLogStd = tf.add(minLogStd, tf.mul(maxLogStd - minLogStd, tf.sigmoid(outLogStd)));
 
-    // tanh-based clipping
-    // const c = (maxLogStd + minLogStd) / 2;
-    // const r = (maxLogStd - minLogStd) / 2;
-    // const clippedLogStd = tf.add(c, tf.mul(r, tf.tanh(outLogStd)));
+        // tanh-based clipping
+        // const c = (maxLogStd + minLogStd) / 2;
+        // const r = (maxLogStd - minLogStd) / 2;
+        // const clippedLogStd = tf.add(c, tf.mul(r, tf.tanh(outLogStd)));
 
-    // tanh-based with temperature
-    // const tau = 5.0;
-    // const span = maxLogStd - minLogStd;
-    // const soft = tf.tanh(outLogStd.div(tau));         // (-1,1)
-    // const s = soft.mul(0.5).add(0.5);
-    // const clippedLogStd = tf.add(minLogStd, tf.mul(span, s));
+        // tanh-based with temperature
+        // const tau = 5.0;
+        // const span = maxLogStd - minLogStd;
+        // const soft = tf.tanh(outLogStd.div(tau));         // (-1,1)
+        // const s = soft.mul(0.5).add(0.5);
+        // const clippedLogStd = tf.add(minLogStd, tf.mul(span, s));
 
-    // softsign-based clipping
-    // const span = maxLogStd - minLogStd;
-    // const softsign = outLogStd.div(tf.add(1, tf.abs(outLogStd)));
-    // const s = softsign.div(2).add(0.5);   // в [0,1]
-    // const clippedLogStd = tf.add(minLogStd, tf.mul(span, s));
+        // softsign-based clipping
+        // const span = maxLogStd - minLogStd;
+        // const softsign = outLogStd.div(tf.add(1, tf.abs(outLogStd)));
+        // const s = softsign.div(2).add(0.5);   // в [0,1]
+        // const clippedLogStd = tf.add(minLogStd, tf.mul(span, s));
 
-    // Hard softsign-based clipping
-    const alpha = 2;  // >1 — делает насыщение быстрее (центральная зона)
-    const p = 2;      // >=1 — чем больше, тем резче прижимает к краям
-    const span = maxLogStd - minLogStd;
-    // Жёсткий softsign: u / (1 + |u|^p), с предварительным усилением alpha
-    // x = alpha * u
-    const x = outLogStd.mul(alpha);
-    // |x|^p
-    const axp = tf.pow(tf.abs(x), tf.scalar(p));
-    // soft_p = sign(x) * |x|^p / (1 + |x|^p)  -> в (-1, 1),  |x|->∞ => ±1
-    const soft = tf.sign(x).mul(axp.div(tf.add(1, axp)));
-    // Нормируем в [0,1]
-    const s = soft.mul(0.5).add(0.5);
-    // Маппим в [minLogStd, maxLogStd]
-    const clippedLogStd = tf.add(minLogStd, tf.mul(span, s));
+        // Hard softsign-based clipping
+        const alpha = 2;  // >1 — делает насыщение быстрее (центральная зона)
+        const p = 2;      // >=1 — чем больше, тем резче прижимает к краям
+        const span = maxLogStd - minLogStd;
+        // Жёсткий softsign: u / (1 + |u|^p), с предварительным усилением alpha
+        // x = alpha * u
+        const x = outLogStd.mul(alpha);
+        // |x|^p
+        const axp = tf.pow(tf.abs(x), tf.scalar(p));
+        // soft_p = sign(x) * |x|^p / (1 + |x|^p)  -> в (-1, 1),  |x|->∞ => ±1
+        const soft = tf.sign(x).mul(axp.div(tf.add(1, axp)));
+        // Нормируем в [0,1]
+        const s = soft.mul(0.5).add(0.5);
+        // Маппим в [minLogStd, maxLogStd]
+        clippedLogStd = tf.add(minLogStd, tf.mul(span, s));
 
-    // const r = clippedLogStd.dataSync()
-    // console.log([...outLogStd.dataSync()].map((v, i) => `${v.toFixed(3)} -> ${r[i].toFixed(6)}`));
-    // debugger
+        // const r = clippedLogStd.dataSync()
+        // console.log([...outLogStd.dataSync()].map((v, i) => `${v.toFixed(3)} -> ${r[i].toFixed(6)}`));
+        // debugger
+    }
 
-    return { mean: outMean, logStd: clippedLogStd, pureLogStd: outLogStd };
+    return { mean: outMean, logStd: outLogStd, pureLogStd: outLogStd };
 }
 
 let randomInputTensors: tf.Tensor[];

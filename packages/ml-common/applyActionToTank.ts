@@ -5,8 +5,6 @@ export type Actions = Float32Array | [number, number, number, number];
 
 const defaultProbability = [1, 1, 1, 1] as Actions;
 
-const actionSpace = 10;
-
 export function applyActionToTank(
     tankEid: number,
     actions: Actions,
@@ -42,5 +40,5 @@ export function applyActionToTank(
 
 function blendLinear(prev: number, raw: number, p: number): number {
     const next = prev * (1 - p) + raw * p;
-    return clamp(next, -actionSpace, actionSpace) / actionSpace;
+    return clamp(next, -1, 1);
 }
