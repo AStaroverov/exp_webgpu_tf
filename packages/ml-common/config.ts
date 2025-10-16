@@ -5,7 +5,7 @@ import { ACTION_DIM, LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
 // Default experiment configuration for PPO
 export const DEFAULT_EXPERIMENT = {
     // Learning parameters
-    clipNorm: 20.0,
+    clipNorm: 1.0,
     // PPO-specific parameters
     gamma: (iteration: number) => {
         return lerp(0.95, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))

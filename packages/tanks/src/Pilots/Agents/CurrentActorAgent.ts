@@ -156,7 +156,7 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
             this.memory.perturbed = true;
             perturbWeights(this.policyNetwork, config.scale);
         } else {
-            this.noise = new ColoredNoise(ACTION_DIM, 0);
+            this.noise = new ColoredNoise(ACTION_DIM, random());
             // , [
             //     1,
             //     random() < 0.05 ? lerp(0.1, 0.8, random()) : 1,
