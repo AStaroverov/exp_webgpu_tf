@@ -54,6 +54,10 @@ export async function getRandomHistoricalNetwork(modelName: Model) {
 const defaultSubNames = {
     [Model.Policy]: getStorePath(Model.Policy, LAST_NETWORK_VERSION),
     [Model.Value]: getStorePath(Model.Value, LAST_NETWORK_VERSION),
+    [Model.Critic1]: getStorePath(Model.Critic1, LAST_NETWORK_VERSION),
+    [Model.Critic2]: getStorePath(Model.Critic2, LAST_NETWORK_VERSION),
+    [Model.TargetCritic1]: getStorePath(Model.TargetCritic1, LAST_NETWORK_VERSION),
+    [Model.TargetCritic2]: getStorePath(Model.TargetCritic2, LAST_NETWORK_VERSION),
 };
 
 export async function getNetworkInfoList(model: Model) {
@@ -121,4 +125,37 @@ export async function removeOutLimitNetworks(name: Model) {
             throw new Error('Unsupported environment for removing model');
         }
     }
+}
+
+/**
+ * Soft update (Polyak averaging) for target networks
+ * θ_target = τ * θ_source + (1 - τ) * θ_target
+ * Used in SAC to slowly update target Q-networks
+ */
+export function softUpdateTargetNetwork(
+    sourceNetwork: tf.LayersModel,
+    targetNetwork: tf.LayersModel,
+    tau: number,
+): void {
+    const sourceWeights = sourceNetwork.getWeights();
+    const targetWeights = targetNetwork.getWeights();
+
+    if (sourceWeights.length !== targetWeights.length) {
+        throw new Error('Source and target networks must have the same number of weights');
+    }
+
+    const updatedWeights = targetWeights.map((targetWeight, i) => {
+        return tf.tidy(() => {
+            const sourceWeight = sourceWeights[i];
+            // θ_target = τ * θ_source + (1 - τ) * θ_target
+            return sourceWeight.mul(tau).add(
+                targetWeight.mul(1 - tau)
+            );
+        });
+    });
+
+    targetNetwork.setWeights(updatedWeights);
+
+    // Dispose old weights to prevent memory leak
+    targetWeights.forEach(w => w.dispose());
 }

@@ -77,5 +77,57 @@ export const DEFAULT_EXPERIMENT = {
     // fsModelPath: '/assets/models/v1',
 };
 
+// SAC configuration
+export const SAC_CONFIG = {
+    // Temperature (entropy coefficient)
+    alpha: 0.2,                    // initial entropy coefficient (or use auto-tune)
+    autoTuneAlpha: true,           // enable automatic alpha tuning
+    targetEntropy: -ACTION_DIM,    // target entropy for auto-tuning
+    alphaLR: 3e-4,                 // learning rate for alpha
+
+    // Soft target update
+    tau: 0.005,                    // Polyak averaging coefficient
+
+    // Discount factor
+    gamma: 0.99,                   // discount factor
+
+    // Replay buffer
+    replayBufferSize: 1_000_000,   // replay buffer size
+    prioritizedReplay: false,      // use Prioritized Experience Replay (TODO: enable later)
+    priorityAlpha: 0.6,            // prioritization exponent
+    priorityBeta: 0.4,             // importance sampling exponent
+
+    // Training
+    batchSize: 256,                // batch size for training
+    miniBatchSize: 256,            // mini-batch size (same as batch for now)
+    actorUpdateFreq: 1,            // actor update frequency
+    criticUpdateFreq: 1,           // critic update frequency
+    targetUpdateFreq: 1,           // target network update frequency
+
+    // Learning rates
+    actorLR: 3e-4,                 // actor learning rate
+    criticLR: 3e-4,                // critic learning rate
+
+    // Gradient clipping
+    clipNorm: 1.0,                 // gradient clipping norm
+
+    // Exploration
+    initialRandomSteps: 10000,     // initial random exploration steps
+
+    // Log std bounds
+    minLogStd: -20,                // minimum log std
+    maxLogStd: 2,                  // maximum log std
+
+    // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
+    episodeFrames: Math.round(2 * 60 * 1000 / TICK_TIME_SIMULATION),
+
+    // Workers
+    workerCount: 8,
+    backpressureQueueSize: 2,
+
+    // Training control
+    savePath: 'SAC_MHA',
+};
+
 // Current active experiment
 export let CONFIG = DEFAULT_EXPERIMENT;

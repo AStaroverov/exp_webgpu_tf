@@ -72,6 +72,18 @@ const valueNetworkConfig: NetworkConfig = {
     ] as [ActivationIdentifier, number][],
 };
 
+// SAC Critic Network configuration
+const criticNetworkConfig: NetworkConfig = {
+    dim: 64,               // embedding dimension
+    heads: 4,              // number of attention heads
+    dropout: 0.0,          // dropout rate
+    finalMLP: [
+        ['relu', 256],
+        ['relu', 256],
+        ['relu', 128],
+    ] as [ActivationIdentifier, number][],
+};
+
 export function createPolicyNetwork(): tf.LayersModel {
     const { inputs, network } = createBaseNetwork(Model.Policy, policyNetworkConfig);
 
@@ -183,4 +195,99 @@ function createBaseNetwork(modelName: Model, config: NetworkConfig) {
     );
 
     return { inputs, network: finalMLP };
+}
+
+// SAC Critic Network
+// Takes state + action as input, outputs Q-value
+export function createCriticNetwork(modelName: Model.Critic1 | Model.Critic2 | Model.TargetCritic1 | Model.TargetCritic2): tf.LayersModel {
+    // Create state inputs (same as policy network)
+    const inputs = createInputs(modelName);
+
+    // Create action input
+    const actionInput = tf.input({
+        shape: [ACTION_DIM],
+        name: modelName + '_action_input',
+        dtype: 'float32',
+    });
+
+    // Encode states through transformer
+    const tokens = convertInputsToTokens(inputs, criticNetworkConfig.dim);
+
+    const tankToEnemiesAttn = applyCrossTransformerLayer(modelName + '_tankToEnemiesAttn', {
+        numHeads: criticNetworkConfig.heads,
+        qTok: tokens.tankTok,
+        kvTok: tokens.enemiesTok,
+        kvMask: inputs.enemiesMaskInput,
+    });
+    const tankToAlliesAttn = applyCrossTransformerLayer(modelName + '_tankToAlliesAttn', {
+        numHeads: criticNetworkConfig.heads,
+        qTok: tokens.tankTok,
+        kvTok: tokens.alliesTok,
+        kvMask: inputs.alliesMaskInput,
+    });
+    const tankToBulletsAttn = applyCrossTransformerLayer(modelName + '_tankToBulletsAttn', {
+        numHeads: criticNetworkConfig.heads,
+        qTok: tokens.tankTok,
+        kvTok: tokens.bulletsTok,
+        kvMask: inputs.bulletsMaskInput,
+    });
+
+    const envToken = tf.layers.concatenate({ name: modelName + '_envToken', axis: 1 }).apply([
+        tokens.controllerTok,
+        tokens.battleTok,
+        tokens.tankTok,
+        tankToEnemiesAttn,
+        tankToAlliesAttn,
+        tankToBulletsAttn,
+    ]) as tf.SymbolicTensor;
+
+    const transformedEnvToken = applySelfTransformLayers(
+        modelName + '_transformedEnvToken',
+        {
+            depth: 2,
+            numHeads: criticNetworkConfig.heads,
+            dropout: criticNetworkConfig.dropout,
+            token: envToken,
+        },
+    );
+
+    // Global pooling for state representation
+    const stateEncoding = tf.layers.flatten({
+        name: modelName + '_flatten'
+    }).apply(transformedEnvToken) as tf.SymbolicTensor;
+
+    const normStateEncoding = tf.layers.layerNormalization({
+        name: modelName + '_norm'
+    }).apply(stateEncoding) as tf.SymbolicTensor;
+
+    // Concatenate state encoding + action
+    const combined = tf.layers.concatenate({
+        name: modelName + '_concat_state_action',
+    }).apply([normStateEncoding, actionInput]) as tf.SymbolicTensor;
+
+    // MLP layers
+    const hidden = applyDenseLayers(
+        modelName + '_mlp',
+        combined,
+        criticNetworkConfig.finalMLP,
+    );
+
+    // Q-value output (single scalar)
+    const qValue = tf.layers.dense({
+        name: modelName + '_q_value',
+        units: 1,
+        activation: 'linear',
+    }).apply(hidden) as tf.SymbolicTensor;
+
+    const model = tf.model({
+        inputs: [...Object.values(inputs), actionInput],
+        outputs: qValue,
+        name: modelName,
+    });
+
+    model.optimizer = new PatchedAdamOptimizer(CONFIG.lrConfig.initial);
+    // fake loss for save optimizer with model
+    model.loss = 'meanSquaredError';
+
+    return model;
 }
