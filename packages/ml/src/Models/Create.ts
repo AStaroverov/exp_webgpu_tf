@@ -38,12 +38,7 @@ type NetworkConfig = {
     finalMLP: [ActivationIdentifier, number][];
 };
 
-type policyNetworkConfig = NetworkConfig & {
-    headMLP: {
-        mean: [ActivationIdentifier, number][];
-        logStd: [ActivationIdentifier, number][];
-    };
-};
+type policyNetworkConfig = NetworkConfig
 
 const policyNetworkConfig: policyNetworkConfig = {
     dim: 64,
@@ -54,15 +49,6 @@ const policyNetworkConfig: policyNetworkConfig = {
         ['relu', 128],
         ['relu', 64],
     ],
-    headMLP: {
-        mean: [
-            ['relu', 256],
-            ['relu', 128],
-        ],
-        logStd: [
-            ['relu', 64],
-        ],
-    },
 };
 const valueNetworkConfig: NetworkConfig = {
     dim: 16,
