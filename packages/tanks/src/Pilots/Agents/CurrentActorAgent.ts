@@ -1,13 +1,13 @@
 import * as tf from '@tensorflow/tfjs';
 import { clamp } from 'lodash-es';
 import { unlerp } from '../../../../../lib/math.ts';
-import { random } from '../../../../../lib/random.ts';
+import { randomRangeFloat } from '../../../../../lib/random.ts';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
 import { ACTION_DIM, LEARNING_STEPS } from '../../../../ml-common/consts.ts';
 import { prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
-import { getNetworkExpIteration, getNetworkPerturbConfig, patientAction } from '../../../../ml-common/utils.ts';
+import { getNetworkExpIteration, patientAction } from '../../../../ml-common/utils.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../../../ml/src/Models/Utils.ts';
 import { act } from '../../../../ml/src/PPO/train.ts';
@@ -80,7 +80,11 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         if (!(this.policyNetwork != null && this.minLogStd != null && this.maxLogStd != null)) return;
 
         const state = prepareInputArrays(this.tankEid, width, height);
-        const noise = this.noise?.sample();
+
+        // @ts-ignore
+        const noise = globalThis.isVis
+            ? undefined
+            : this.noise?.sample();
         const result = act(
             this.policyNetwork,
             state,
@@ -151,14 +155,13 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         this.minLogStd = CONFIG.minLogStd(iteration);
         this.maxLogStd = CONFIG.maxLogStd(iteration);
 
-        const config = getNetworkPerturbConfig(this.policyNetwork);
+        // const config = getNetworkPerturbConfig(this.policyNetwork);
 
-        if (config.chance > random()) {
-            this.memory.perturbed = true;
-            perturbWeights(this.policyNetwork, config.scale);
-        } else {
-            this.noise = new ColoredNoise(ACTION_DIM, random());
-        }
+        // if (config.chance > random()) {
+        //     this.memory.perturbed = true;
+        //     perturbWeights(this.policyNetwork, config.scale);
+        // } else {
+        this.noise = new ColoredNoise(ACTION_DIM, randomRangeFloat(0.3, 0.8));
     }
 }
 
@@ -221,7 +224,6 @@ export class ColoredNoise {
         const a = this.rho;
         const b = Math.sqrt(1 - a * a);
 
-        // eps_t = a * eps_{t-1} + b * z_t
         const eps = tf.add(this.state.mul(a), z.mul(b));
 
         this.state.dispose();

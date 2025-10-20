@@ -9,6 +9,9 @@ import { Scenario } from '../../../../ml-common/Curriculum/types.ts';
 import { getDrawState } from '../../../../ml-common/uiUtils.ts';
 import { EpisodeManager } from '../Actor/EpisodeManager.ts';
 
+// @ts-ignore
+window.isVis = true;
+
 
 export class VisTestEpisodeManager extends EpisodeManager {
     private currentScenario?: Scenario;

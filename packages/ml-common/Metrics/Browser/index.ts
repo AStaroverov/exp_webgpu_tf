@@ -21,6 +21,7 @@ const store = {
     tdErrors: new CompressedBuffer(10_000, 5),
     advantages: new CompressedBuffer(10_000, 5),
 
+    mean: new CompressedBuffer(1_000, 5),
     logStd: new CompressedBuffer(1_000, 5),
     valueLoss: new CompressedBuffer(1_000, 5),
     policyLoss: new CompressedBuffer(1_000, 5),
@@ -218,6 +219,14 @@ function drawTab1() {
 }
 
 function drawTab2() {
+    tfvis.render.scatterplot({ name: 'mean', tab: 'Tab 2' }, {
+        values: [store.mean.toArray()],
+    }, {
+        xLabel: 'Version',
+        yLabel: 'mean',
+        width: 500,
+        height: 300,
+    });
     tfvis.render.scatterplot({ name: 'Log Std', tab: 'Tab 2' }, {
         values: [store.logStd.toArray()],
     }, {

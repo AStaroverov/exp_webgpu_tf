@@ -1,6 +1,5 @@
 import * as tf from '@tensorflow/tfjs';
 import { CONFIG } from '../../../ml-common/config.ts';
-import { ACTION_DIM } from '../../../ml-common/consts.ts';
 import {
     ALLY_BUFFER,
     BULLET_BUFFER,
@@ -18,6 +17,7 @@ import {
 } from './ApplyLayers.ts';
 
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
+import { ACTION_DIM } from '../../../ml-common/consts.ts';
 import { Model } from './def.ts';
 import { PatchedAdamOptimizer } from './PatchedAdamOptimizer.ts';
 
@@ -51,6 +51,8 @@ const policyNetworkConfig: policyNetworkConfig = {
     finalMLP: [
         ['relu', 512],
         ['relu', 256],
+        ['relu', 128],
+        ['relu', 64],
     ],
     headMLP: {
         mean: [
@@ -74,36 +76,15 @@ const valueNetworkConfig: NetworkConfig = {
 
 export function createPolicyNetwork(): tf.LayersModel {
     const { inputs, network } = createBaseNetwork(Model.Policy, policyNetworkConfig);
-
-    // Две головы: одна для действий (mean), другая для log_std
-    // Mean head с отдельным MLP
-    const meanMLP = applyDenseLayers(
-        Model.Policy + '_mean_mlp',
-        network,
-        policyNetworkConfig.headMLP.mean,
-    );
-    const actionHead = tf.layers.dense({
-        name: Model.Policy + '_action_head',
+    const policyOutput = tf.layers.dense({
+        name: Model.Policy + '_output',
         units: ACTION_DIM,
         activation: 'linear',
-    }).apply(meanMLP) as tf.SymbolicTensor;
-
-    // LogStd head с отдельным MLP
-    const logStdMLP = applyDenseLayers(
-        Model.Policy + '_log_std_mlp',
-        network,
-        policyNetworkConfig.headMLP.logStd,
-    );
-    const logStdHead = tf.layers.dense({
-        name: Model.Policy + '_log_std_head',
-        units: ACTION_DIM,
-        activation: 'linear',
-    }).apply(logStdMLP) as tf.SymbolicTensor;
-
+    }).apply(network) as tf.SymbolicTensor;
     const model = tf.model({
         name: Model.Policy,
         inputs: Object.values(inputs),
-        outputs: [actionHead, logStdHead],
+        outputs: policyOutput,
     });
     model.optimizer = new PatchedAdamOptimizer(CONFIG.lrConfig.initial);
     // fake loss for save optimizer with model

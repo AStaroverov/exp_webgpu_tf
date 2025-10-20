@@ -78,7 +78,7 @@ export function createLearnerManager() {
                 map(([policyNetwork, valueNetwork]): LearnData => {
                     const version = getNetworkExpIteration(policyNetwork);
                     const batchData = squeezeBatches(samples.map(b => b.memoryBatch));
-                    const { logStd, ...vTraceBatchData } = computeVTraceTargets(
+                    const { pureLogStd, ...vTraceBatchData } = computeVTraceTargets(
                         policyNetwork,
                         valueNetwork,
                         batchData,
@@ -95,7 +95,8 @@ export function createLearnerManager() {
                     disposeNetwork(policyNetwork);
                     disposeNetwork(valueNetwork);
 
-                    metricsChannels.logStd.postMessage(logStd);
+                    metricsChannels.mean.postMessage(flatTypedArray(batchData.mean));
+                    metricsChannels.logStd.postMessage(pureLogStd);
                     metricsChannels.versionDelta.postMessage(
                         samples.map(b => version - b.networkVersion),
                     );
