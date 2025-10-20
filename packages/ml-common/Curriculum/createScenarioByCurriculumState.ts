@@ -1,7 +1,6 @@
 import { clamp } from 'lodash';
 import { min } from '../../../lib/math.ts';
 import { random } from '../../../lib/random.ts';
-import { CurriculumState } from '../../ml/src/PPO/channels.ts';
 import { LEARNING_STEPS } from '../consts.ts';
 import { createBattlefield } from './createBattlefield.ts';
 import { createScenarioAgentsVsBots, indexScenarioAgentsVsBots } from './createScenarioAgentsVsBots.ts';
@@ -13,7 +12,7 @@ import {
     indexScenarioWithHistoricalAgents,
 } from './createScenarioWithHistoricalAgents.ts';
 import { createStaticScenarioWithBots, indexStaticScenarioWithBots } from './createStaticScenarioWithBots.ts';
-import { Scenario } from './types.ts';
+import { CurriculumState, Scenario } from './types.ts';
 
 type ScenarioOptions = Parameters<typeof createBattlefield>[0];
 

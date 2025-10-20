@@ -2,6 +2,7 @@ import { createChannel } from '../../../../lib/channles.ts';
 import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
 import { LearnData } from './Learner/createLearnerManager.ts';
 
+import { CurriculumState } from '../../../ml-common/Curriculum/types.ts';
 import { Model } from '../Models/def.ts';
 
 export type EpisodeSample = {
@@ -21,10 +22,5 @@ export const learnProcessChannel = createChannel<
 export const queueSizeChannel = createChannel<number>('queueSizeChannel');
 
 export const modelSettingsChannel = createChannel<{ lr?: number, perturbChance?: number, perturbScale?: number, expIteration?: number }>('modelSettingsChannel');
-
-export type CurriculumState = {
-    currentVersion: number,
-    mapScenarioIndexToSuccessRatio: Record<number, number>,
-}
 
 export const curriculumStateChannel = createChannel<CurriculumState>('curriculumStateChannel');

@@ -1,10 +1,10 @@
 import * as tf from '@tensorflow/tfjs';
 import { get, isNumber } from 'lodash-es';
-import { getNetworkExpIteration, patientAction, setNetworkExpIteration, setNetworkLearningRate, setNetworkPerturbConfig } from '../../../../ml-common/utils.ts';
+import { getNetworkCurriculumState, getNetworkExpIteration, patientAction, setNetworkCurriculumState, setNetworkExpIteration, setNetworkLearningRate, setNetworkPerturbConfig } from '../../../../ml-common/utils.ts';
 import { saveNetworkToDB } from '../../Models/Transfer.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
 import { Model } from '../../Models/def.ts';
-import { learnProcessChannel, modelSettingsChannel } from '../channels.ts';
+import { curriculumStateChannel, learnProcessChannel, modelSettingsChannel } from '../channels.ts';
 import { networkHealthCheck } from '../train.ts';
 import { LearnData } from './createLearnerManager.ts';
 
@@ -19,10 +19,17 @@ export async function createLearnerAgent({ modelName, createNetwork, trainNetwor
         return newNetwork;
     });
 
+    const lastCurriculumState = getNetworkCurriculumState(network);
+    lastCurriculumState && curriculumStateChannel.emit(lastCurriculumState);
+
     modelSettingsChannel.obs.subscribe(({ lr, perturbChance, perturbScale, expIteration }) => {
         isNumber(lr) && setNetworkLearningRate(network, lr);
         isNumber(expIteration) && setNetworkExpIteration(network, expIteration);
         (isNumber(perturbChance) && isNumber(perturbScale)) && setNetworkPerturbConfig(network, perturbChance, perturbScale);
+    });
+
+    curriculumStateChannel.obs.subscribe((curriculumState) => {
+        setNetworkCurriculumState(network, curriculumState);
     });
 
     learnProcessChannel.response(async (batch: LearnData) => {

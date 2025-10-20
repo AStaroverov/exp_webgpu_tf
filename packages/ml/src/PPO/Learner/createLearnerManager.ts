@@ -5,13 +5,13 @@ import { max } from '../../../../../lib/math.ts';
 import { bufferWhile } from '../../../../../lib/Rx/bufferWhile.ts';
 import { forceExitChannel, metricsChannels } from '../../../../ml-common/channels.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
+import { CurriculumState } from '../../../../ml-common/Curriculum/types.ts';
 import { flatTypedArray } from '../../../../ml-common/flat.ts';
 import { AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
-import { getNetworkExpIteration } from '../../../../ml-common/utils.ts';
+import { getNetworkCurriculumState, getNetworkExpIteration } from '../../../../ml-common/utils.ts';
 import { Model } from '../../Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
 import {
-    CurriculumState,
     curriculumStateChannel,
     EpisodeSample,
     episodeSampleChannel,
@@ -32,7 +32,7 @@ export function createLearnerManager() {
     let queueSize = 0;
     const mapScenarioIndexToSuccessRatio = new Map<number, RingBuffer<number>>;
     const mapScenarioIndexToAvgSuccessRatio = new Map<number, number>;
-    const computeCurriculumState = (samples: EpisodeSample[]): CurriculumState => {
+    const computeCurriculumState = (samples: EpisodeSample[], prev?: CurriculumState): CurriculumState => {
         for (const sample of samples) {
             if (!mapScenarioIndexToSuccessRatio.has(sample.scenarioIndex)) {
                 mapScenarioIndexToSuccessRatio.set(sample.scenarioIndex, new RingBuffer(30));
@@ -45,14 +45,17 @@ export function createLearnerManager() {
             const size = successRatioHistory.getSize();
             const ratio = length > size / 2
                 ? successRatioHistory.toArray().reduce((acc, v) => acc + v, 0) / length
-                : 0;
+                : prev?.mapScenarioIndexToSuccessRatio[scenarioIndex] ?? 0;
 
             mapScenarioIndexToAvgSuccessRatio.set(scenarioIndex, ratio);
         }
 
         return {
             currentVersion: max(...samples.map(s => s.networkVersion), 0),
-            mapScenarioIndexToSuccessRatio: Object.fromEntries(mapScenarioIndexToAvgSuccessRatio),
+            mapScenarioIndexToSuccessRatio: {
+                ...prev?.mapScenarioIndexToSuccessRatio,
+                ...Object.fromEntries(mapScenarioIndexToAvgSuccessRatio)
+            },
         };
     };
 
@@ -67,7 +70,6 @@ export function createLearnerManager() {
 
             console.info('Start processing batch', waitTime !== undefined ? `(waited ${waitTime} ms)` : '');
 
-            curriculumStateChannel.emit(computeCurriculumState(samples));
             metricsChannels.batchSize.postMessage(samples.map(b => b.memoryBatch.size));
             metricsChannels.successRatio.postMessage(samples.map(b => pick(b, 'scenarioIndex', 'successRatio')));
 
@@ -91,10 +93,12 @@ export function createLearnerManager() {
                         ...batchData,
                         ...vTraceBatchData,
                     };
+                    const curriculumState = getNetworkCurriculumState(policyNetwork);
 
                     disposeNetwork(policyNetwork);
                     disposeNetwork(valueNetwork);
 
+                    curriculumStateChannel.emit(computeCurriculumState(samples, curriculumState));
                     metricsChannels.mean.postMessage(flatTypedArray(batchData.mean));
                     metricsChannels.logStd.postMessage(pureLogStd);
                     metricsChannels.versionDelta.postMessage(
