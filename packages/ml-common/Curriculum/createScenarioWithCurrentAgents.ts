@@ -5,8 +5,8 @@ import { fillWithCurrentAgents } from './Utils/fillWithCurrentAgents.ts';
 
 export const indexScenarioWithCurrentAgents = 5;
 
-export async function createScenarioWithCurrentAgents(options: Parameters<typeof createBattlefield>[0]): Promise<Scenario> {
-    const scenario = await createScenarioBase(options);
+export function createScenarioWithCurrentAgents(options: Parameters<typeof createBattlefield>[0]): Scenario {
+    const scenario = createScenarioBase(options);
     scenario.index = indexScenarioWithCurrentAgents;
     fillWithCurrentAgents(scenario);
     return scenario;

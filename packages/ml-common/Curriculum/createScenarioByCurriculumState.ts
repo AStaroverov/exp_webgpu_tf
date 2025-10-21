@@ -1,11 +1,10 @@
 import { clamp } from 'lodash';
 import { min } from '../../../lib/math.ts';
 import { random } from '../../../lib/random.ts';
-import { LEARNING_STEPS } from '../consts.ts';
-import { createBattlefield } from './createBattlefield.ts';
 import { createScenarioAgentsVsBots, indexScenarioAgentsVsBots } from './createScenarioAgentsVsBots.ts';
 import { createScenarioAgentsVsBots1, indexScenarioAgentsVsBots1 } from './createScenarioAgentsVsBots1.ts';
 import { createScenarioAgentsVsBots2, indexScenarioAgentsVsBots2 } from './createScenarioAgentsVsBots2.ts';
+import { createScenarioBase } from './createScenarioBase.ts';
 import { createScenarioWithCurrentAgents, indexScenarioWithCurrentAgents } from './createScenarioWithCurrentAgents.ts';
 import {
     createScenarioWithHistoricalAgents,
@@ -14,7 +13,7 @@ import {
 import { createStaticScenarioWithBots, indexStaticScenarioWithBots } from './createStaticScenarioWithBots.ts';
 import { CurriculumState, Scenario } from './types.ts';
 
-type ScenarioOptions = Parameters<typeof createBattlefield>[0];
+type ScenarioOptions = Parameters<typeof createScenarioBase>[0];
 
 const mapEntries = [
     [indexStaticScenarioWithBots, createStaticScenarioWithBots],
@@ -24,7 +23,7 @@ const mapEntries = [
     [indexScenarioWithHistoricalAgents, createScenarioWithHistoricalAgents],
     [indexScenarioWithCurrentAgents, createScenarioWithCurrentAgents],
 ] as const;
-const mapIndexToConstructor = new Map<number, (options: ScenarioOptions) => Promise<Scenario>>(mapEntries);
+const mapIndexToConstructor = new Map<number, (options: ScenarioOptions) => Scenario>(mapEntries);
 
 if (mapIndexToConstructor.size !== mapEntries.length) {
     throw new Error('Scenario index is not unique');
@@ -35,13 +34,6 @@ export const scenariosCount = mapIndexToConstructor.size;
 const edge = 0.3; // 0.3 success ratio to unlock next scenario
 
 export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: ScenarioOptions): Promise<Scenario> {
-    const progress = curriculumState.currentVersion / LEARNING_STEPS;
-    // first 50% steps - no self-play
-    const selfPlayProb = clamp(progress - 0.5, 0, 0.5);
-    if (random() < selfPlayProb) {
-        return createScenarioWithCurrentAgents(options);
-    }
-
     let constructor = createStaticScenarioWithBots;
 
     let weights = [];

@@ -14,10 +14,11 @@ import { fillAlliesWithAgents } from './Utils/fillAlliesWithAgents.ts';
 
 export const indexScenarioWithAlliesStatic = 1;
 
-export async function createScenarioBase(options?: Parameters<typeof createBattlefield>[0] & {
+export function createScenarioBase(options?: Parameters<typeof createBattlefield>[0] & {
+    train?: boolean;
     alliesCount?: number;
     enemiesCount?: number;
-}): Promise<Scenario> {
+}): Scenario {
     const game = createBattlefield(options);
     const pilots = createPilotsPlugin(game);
 
@@ -27,7 +28,9 @@ export async function createScenarioBase(options?: Parameters<typeof createBattl
     const activeTeam = getTankTeamId(tanks[0]);
     const initialTeamHealth = getTeamHealth(tanks);
 
-    pilots.setPilot(tanks[0], new CurrentActorAgent(tanks[0], true), game);
+    const isTrain = options?.train ?? true;
+
+    pilots.setPilot(tanks[0], new CurrentActorAgent(tanks[0], isTrain), game);
     pilots.toggle(true);
 
     const scenario: Scenario = {
@@ -35,6 +38,7 @@ export async function createScenarioBase(options?: Parameters<typeof createBattl
         ...pilots,
 
         index: indexScenarioWithAlliesStatic,
+        isTrain,
 
         getTankEids: () => {
             return query(game.world, [Tank]);
@@ -47,9 +51,10 @@ export async function createScenarioBase(options?: Parameters<typeof createBattl
         getSuccessRatio() {
             return getSuccessRatio(activeTeam, initialTeamHealth, getTeamHealth(tanks));
         },
+
     }
 
-    fillAlliesWithAgents(scenario);
+    fillAlliesWithAgents(scenario, isTrain);
 
     return scenario;
 }

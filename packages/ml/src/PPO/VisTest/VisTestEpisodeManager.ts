@@ -10,8 +10,7 @@ import { getDrawState } from '../../../../ml-common/uiUtils.ts';
 import { EpisodeManager } from '../Actor/EpisodeManager.ts';
 
 // @ts-ignore
-window.isVis = true;
-
+window.applyNoise = false;
 
 export class VisTestEpisodeManager extends EpisodeManager {
     private currentScenario?: Scenario;
@@ -48,9 +47,8 @@ export class VisTestEpisodeManager extends EpisodeManager {
 
     protected beforeEpisode() {
         return createScenarioByCurriculumState(this.curriculumState, {
-            iteration: this.curriculumState.currentVersion,
+            iteration: this.curriculumState.iteration,
         })
-            // return createScenarioWithHeuristicAgents({})
             .then((scenario) => {
                 (this.currentScenario = scenario);
                 const canvas = document.querySelector('canvas')!;

@@ -6,11 +6,11 @@ import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { CurrentActorAgent, TankAgent } from '../Agents/CurrentActorAgent.ts';
 
 export const Pilot = {
-    agent: [] as TankAgent[],
+    agent: {} as Record<EntityId, TankAgent>,
 
     dispose() {
         getPilots().forEach(agent => agent?.dispose?.());
-        Pilot.agent.length = 0;
+        Pilot.agent = {};
     },
 
     addComponent(world: World, eid: EntityId, agent: TankAgent) {
@@ -40,7 +40,7 @@ export function getAlivePilots({ world } = GameDI) {
 }
 
 export function getPilots(): readonly TankAgent[] {
-    return Pilot.agent;
+    return Object.values(Pilot.agent);
 }
 
 export function getFreeTankEids({ world } = GameDI) {

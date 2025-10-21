@@ -5,8 +5,8 @@ import { fillWithRandomHistoricalAgents } from './Utils/fillWithRandomHistorical
 
 export const indexScenarioWithHistoricalAgents = 4;
 
-export async function createScenarioWithHistoricalAgents(options: Parameters<typeof createBattlefield>[0]): Promise<Scenario> {
-    const scenario = await createScenarioBase(options);
+export function createScenarioWithHistoricalAgents(options: Parameters<typeof createBattlefield>[0]): Scenario {
+    const scenario = createScenarioBase(options);
     scenario.index = indexScenarioWithHistoricalAgents;
     fillWithRandomHistoricalAgents(scenario);
     return scenario;

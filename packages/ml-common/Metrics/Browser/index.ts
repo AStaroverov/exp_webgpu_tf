@@ -32,9 +32,10 @@ const store = {
     versionDelta: new CompressedBuffer(1_000, 5),
     // successRatioN
     ...Array.from({ length: scenariosCount }, (_, i) => i).reduce((acc, i) => {
-        acc[`successRatio${i as SuccessRatioIndex}`] = new CompressedBuffer(500, 5);
+        acc[`successRatio${i as SuccessRatioIndex}Ref`] = new CompressedBuffer(500, 5);
+        acc[`successRatio${i as SuccessRatioIndex}Train`] = new CompressedBuffer(500, 5);
         return acc;
-    }, {} as Record<`successRatio${SuccessRatioIndex}`, CompressedBuffer>),
+    }, {} as Record<`successRatio${SuccessRatioIndex}${'Ref' | 'Train'}`, CompressedBuffer>),
 };
 
 getAgentLog().then((data) => {
@@ -75,9 +76,10 @@ export function subscribeOnMetrics() {
             channel.onmessage = w((event) => {
                 (event.data as {
                     scenarioIndex: SuccessRatioIndex,
-                    successRatio: number
-                }[]).forEach(({ scenarioIndex, successRatio }) => {
-                    store[`successRatio${scenarioIndex}` as keyof typeof store].add(successRatio);
+                    successRatio: number,
+                    isReference: boolean,
+                }[]).forEach(({ scenarioIndex, successRatio, isReference }) => {
+                    store[`successRatio${scenarioIndex}${isReference ? 'Ref' : 'Train'}` as keyof typeof store].add(successRatio);
                 });
             });
         } else {
@@ -91,14 +93,26 @@ export function subscribeOnMetrics() {
 function drawTab0() {
     const tab = 'Tab 0';
     const renderSuccessRatio = (index: SuccessRatioIndex) => {
-        const successRatio = store[`successRatio${index}`].toArray();
-        const successRatioMA = calculateMovingAverage(successRatio, 100);
-        tfvis.render.scatterplot({ name: 'Success Ratio ' + index, tab }, {
-            values: [successRatio, successRatioMA],
-            series: ['Success Ratio', 'MA'],
+        const successRatioTrain = store[`successRatio${index}Train`].toArray();
+        const successRatioTrainMA = calculateMovingAverage(successRatioTrain, 100);
+        tfvis.render.scatterplot({ name: 'Train Success Ratio ' + index, tab }, {
+            values: [successRatioTrain, successRatioTrainMA],
+            series: ['V', 'MA'],
         }, {
             xLabel: 'Version',
-            yLabel: 'Success Ratio',
+            yLabel: 'Train Success Ratio',
+            width: 500,
+            height: 300,
+        });
+
+        const successRatioRef = store[`successRatio${index}Ref`].toArray();
+        const successRatioRefMA = calculateMovingAverage(successRatioRef, 100);
+        tfvis.render.scatterplot({ name: 'Ref Success Ratio ' + index, tab }, {
+            values: [successRatioRef, successRatioRefMA],
+            series: ['V', 'MA'],
+        }, {
+            xLabel: 'Version',
+            yLabel: 'Ref Success Ratio',
             width: 500,
             height: 300,
         });

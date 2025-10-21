@@ -5,12 +5,19 @@ import { LearnData } from './Learner/createLearnerManager.ts';
 import { CurriculumState } from '../../../ml-common/Curriculum/types.ts';
 import { Model } from '../Models/def.ts';
 
-export type EpisodeSample = {
+export type AgentSample = {
     memoryBatch: AgentMemoryBatch,
     networkVersion: number,
+}
+
+export type EpisodeSample = {
+    maxNetworkVersion: number,
     scenarioIndex: number,
     successRatio: number,
+    isReference: boolean,
 }
+
+export const agentSampleChannel = createChannel<AgentSample>('agentSampleChannel');
 
 export const episodeSampleChannel = createChannel<EpisodeSample>('episodeSampleChannel');
 

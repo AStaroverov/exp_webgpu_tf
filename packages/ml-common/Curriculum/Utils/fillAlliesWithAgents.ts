@@ -2,7 +2,7 @@ import { getTankTeamId } from '../../../tanks/src/Game/ECS/Entities/Tank/TankUti
 import { CurrentActorAgent } from '../../../tanks/src/Pilots/Agents/CurrentActorAgent.ts';
 import { Scenario } from '../types.ts';
 
-export function fillAlliesWithAgents(scenario: Scenario) {
+export function fillAlliesWithAgents(scenario: Scenario, train: boolean) {
     const tankEids = scenario.getFreeTankEids();
     const firstAgent = scenario.getAlivePilots();
     const activeTeam = getTankTeamId(firstAgent[0].tankEid);
@@ -12,7 +12,7 @@ export function fillAlliesWithAgents(scenario: Scenario) {
 
         if (getTankTeamId(tankEid) !== activeTeam) continue;
 
-        const agent = new CurrentActorAgent(tankEid, true);
+        const agent = new CurrentActorAgent(tankEid, train);
         scenario.setPilot(tankEid, agent);
     }
 }

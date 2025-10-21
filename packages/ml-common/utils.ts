@@ -45,7 +45,7 @@ export function getNetworkCurriculumState(network: tf.LayersModel): CurriculumSt
 
 function cloneCurriculumState(state: CurriculumState): CurriculumState {
     return {
-        currentVersion: state.currentVersion,
+        iteration: state.iteration,
         mapScenarioIndexToSuccessRatio: { ...state.mapScenarioIndexToSuccessRatio },
     };
 }

@@ -1,7 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { clamp } from 'lodash-es';
 import { unlerp } from '../../../../../lib/math.ts';
-import { randomRangeFloat } from '../../../../../lib/random.ts';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
 import { ACTION_DIM, LEARNING_STEPS } from '../../../../ml-common/consts.ts';
@@ -82,9 +81,9 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         const state = prepareInputArrays(this.tankEid, width, height);
 
         // @ts-ignore
-        const noise = globalThis.isVis
-            ? undefined
-            : this.noise?.sample();
+        const noise = this.noise && (this.train || globalThis.applyNoise)
+            ? this.noise.sample()
+            : undefined;
         const result = act(
             this.policyNetwork,
             state,
@@ -154,14 +153,13 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         const iteration = getNetworkExpIteration(this.policyNetwork);
         this.minLogStd = CONFIG.minLogStd(iteration);
         this.maxLogStd = CONFIG.maxLogStd(iteration);
+        this.noise = new ColoredNoise(ACTION_DIM);
 
         // const config = getNetworkPerturbConfig(this.policyNetwork);
-
         // if (config.chance > random()) {
         //     this.memory.perturbed = true;
         //     perturbWeights(this.policyNetwork, config.scale);
         // } else {
-        this.noise = new ColoredNoise(ACTION_DIM, randomRangeFloat(0.3, 0.8));
     }
 }
 
@@ -213,12 +211,17 @@ function isPerturbable(v: tf.LayerVariable) {
 
 export class ColoredNoise {
     private state: tf.Tensor;
+    private step = 0;
 
-    constructor(actionDim: number, private rho = 0.8) {
-        this.state = tf.zeros([actionDim]);
+    constructor(actionDim: number, private rho = 0.7, private resetInterval = 30) {
+        this.state = tf.randomNormal([actionDim]);
     }
 
     sample(): tf.Tensor {
+        if (++this.step % this.resetInterval === 0) {
+            this.state.dispose();
+            this.state = tf.randomNormal(this.state.shape)
+        }
         // z ~ N(0, I)
         const z = tf.randomNormal(this.state.shape);
         const a = this.rho;

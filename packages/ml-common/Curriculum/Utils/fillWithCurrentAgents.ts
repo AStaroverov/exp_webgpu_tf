@@ -5,7 +5,7 @@ export function fillWithCurrentAgents(episode: Scenario) {
     const freeTanks = episode.getFreeTankEids();
 
     for (const tankEid of freeTanks) {
-        const agent = new CurrentActorAgent(tankEid, true);
+        const agent = new CurrentActorAgent(tankEid, false);
         episode.setPilot(tankEid, agent);
     }
 }

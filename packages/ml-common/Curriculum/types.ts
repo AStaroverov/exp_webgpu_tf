@@ -3,17 +3,18 @@ import { TankAgent } from '../../tanks/src/Pilots/Agents/CurrentActorAgent.ts';
 import { createBattlefield } from './createBattlefield.ts';
 
 export type CurriculumState = {
-    currentVersion: number,
+    iteration: number,
     mapScenarioIndexToSuccessRatio: Record<number, number>,
 };
 
 export const DEFAULT_CURRICULUM_STATE: CurriculumState = {
-    currentVersion: 0,
+    iteration: 0,
     mapScenarioIndexToSuccessRatio: {},
 };
 
 export type Scenario = Awaited<ReturnType<typeof createBattlefield>> & {
     index: number;
+    isTrain: boolean;
 
     getTankEids(): readonly EntityId[];
     getTeamsCount(): number;

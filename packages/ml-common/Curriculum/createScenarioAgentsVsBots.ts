@@ -6,8 +6,8 @@ import { fillWithSimpleHeuristicAgents } from './Utils/fillWithSimpleHeuristicAg
 
 export const indexScenarioAgentsVsBots = 1;
 
-export async function createScenarioAgentsVsBots(level: 0 | 1 | 2, options: Parameters<typeof createBattlefield>[0]): Promise<Scenario> {
-    const scenario = await createScenarioBase(options);
+export function createScenarioAgentsVsBots(level: 0 | 1 | 2, options: Parameters<typeof createBattlefield>[0]): Scenario {
+    const scenario = createScenarioBase(options);
     scenario.index = indexScenarioAgentsVsBots;
     fillWithSimpleHeuristicAgents(scenario, createBotFeatures(level));
     return scenario;

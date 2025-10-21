@@ -33,7 +33,7 @@ export function trainPolicyNetwork(
     return tf.tidy(() => {
         return optimize(network.optimizer, () => {
             const predicted = network.predict(states, { batchSize }) as tf.Tensor;
-            const { mean, logStd, pureLogStd } = parsePredict(predicted, minLogStd, maxLogStd);
+            const { mean, logStd } = parsePredict(predicted, minLogStd, maxLogStd);
             const std = logStd.exp();
             const newLogProbs = computeLogProbTanh(actions, mean, std);
             const ratio = tf.exp(newLogProbs.sub(oldLogProbs));

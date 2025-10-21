@@ -1,12 +1,13 @@
 import { filter, first, firstValueFrom, race, shareReplay, startWith, timer } from 'rxjs';
-import { abs, max, min } from '../../../../../lib/math.ts';
+import { max } from '../../../../../lib/math.ts';
+import { random } from '../../../../../lib/random.ts';
 import { macroTasks } from '../../../../../lib/TasksScheduler/macroTasks.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
 import { SNAPSHOT_EVERY, TICK_TIME_SIMULATION } from '../../../../ml-common/consts.ts';
 import { createScenarioByCurriculumState } from '../../../../ml-common/Curriculum/createScenarioByCurriculumState.ts';
 import { CurriculumState, Scenario } from '../../../../ml-common/Curriculum/types.ts';
 import { getGameOverReward } from '../../Reward/calculateReward.ts';
-import { curriculumStateChannel, episodeSampleChannel, queueSizeChannel } from '../channels.ts';
+import { agentSampleChannel, curriculumStateChannel, episodeSampleChannel, queueSizeChannel } from '../channels.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -21,7 +22,7 @@ const maxFramesCount = (CONFIG.episodeFrames - (CONFIG.episodeFrames % SNAPSHOT_
 
 export class EpisodeManager {
     protected curriculumState: CurriculumState = {
-        currentVersion: 0,
+        iteration: 0,
         mapScenarioIndexToSuccessRatio: {},
     };
 
@@ -44,39 +45,39 @@ export class EpisodeManager {
 
     protected beforeEpisode() {
         return createScenarioByCurriculumState(this.curriculumState, {
-            iteration: this.curriculumState.currentVersion,
+            train: random() < 0.95,
+            iteration: this.curriculumState.iteration,
         });
     }
 
     protected afterEpisode(episode: Scenario) {
-        episode.getPilots().forEach(agent => {
+        const successRatio = episode.getSuccessRatio();
+        const isReference = !episode.isTrain;
+        const pilots = episode.getPilots();
+
+        episodeSampleChannel.emit({
+            maxNetworkVersion: max(...pilots.map(p => p.getVersion?.() ?? 0)),
+            scenarioIndex: episode.index,
+            successRatio,
+            isReference,
+        });
+
+        if (isReference) return;
+
+        pilots.forEach(agent => {
             if (agent.getVersion == null || agent.getMemoryBatch == null) {
                 return;
             }
 
             const networkVersion = agent.getVersion();
-            const successRatio = episode.getSuccessRatio();
             const finalReward = getGameOverReward(networkVersion, successRatio);
             const memoryBatch = agent.getMemoryBatch(finalReward);
 
-            if (memoryBatch == null) {
-                return;
-            }
+            if (memoryBatch == null) return;
 
-            const minReward = min(...memoryBatch.rewards);
-            const maxReward = max(...memoryBatch.rewards);
-
-            if (abs(minReward) < 1 && abs(maxReward) < 1) {
-                // Skip if the rewards are too small, indicating no significant learning
-                console.info('Skipping episode sample due to low reward magnitude:', { minReward, maxReward });
-                return;
-            }
-
-            episodeSampleChannel.emit({
-                memoryBatch: memoryBatch,
-                successRatio,
-                scenarioIndex: episode.index,
+            agentSampleChannel.emit({
                 networkVersion,
+                memoryBatch,
             });
         });
     }

@@ -4,8 +4,8 @@ import { fillWithSimpleHeuristicAgents } from './Utils/fillWithSimpleHeuristicAg
 
 export const indexStaticScenarioWithBots = 0;
 
-export async function createStaticScenarioWithBots(options: Parameters<typeof createScenarioBase>[0]): Promise<Scenario> {
-    const scenario = await createScenarioBase({
+export function createStaticScenarioWithBots(options: Parameters<typeof createScenarioBase>[0]): Scenario {
+    const scenario = createScenarioBase({
         ...options,
         alliesCount: 3,
         enemiesCount: 3,

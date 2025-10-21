@@ -1,36 +1,36 @@
+import { EventQueue } from '@dimforge/rapier2d-simd';
+import { createWorld, deleteWorld, EntityId, hasComponent, resetWorld } from 'bitecs';
+import { destroyChangeDetectorSystem } from '../../../renderer/src/ECS/Systems/ChangedDetectorSystem.ts';
+import { createDrawShapeSystem } from '../../../renderer/src/ECS/Systems/SDFSystem/createDrawShapeSystem.ts';
+import { createTransformSystem } from '../../../renderer/src/ECS/Systems/TransformSystem.ts';
 import { initWebGPU } from '../../../renderer/src/gpu.ts';
 import { createFrameTick } from '../../../renderer/src/WGSL/createFrame.ts';
-import { createDrawShapeSystem } from '../../../renderer/src/ECS/Systems/SDFSystem/createDrawShapeSystem.ts';
-import { initPhysicalWorld } from './Physical/initPhysicalWorld.ts';
-import { createApplyRigidBodyToTransformSystem } from './ECS/Systems/createApplyRigidBodyToTransformSystem.ts';
-import { EventQueue } from '@dimforge/rapier2d-simd';
 import { GameDI } from './DI/GameDI.ts';
-import { createTransformSystem } from '../../../renderer/src/ECS/Systems/TransformSystem.ts';
+import { PlayerEnvDI } from './DI/PlayerEnvDI.ts';
+import { RenderDI } from './DI/RenderDI.ts';
+import { Hitable } from './ECS/Components/Hitable.ts';
+import { getEntityIdByPhysicalId, RigidBodyRef } from './ECS/Components/Physical.ts';
+import { GameSession } from './ECS/Entities/GameSession.ts';
+import { SystemGroup } from './ECS/Plugins/systems.ts';
+import { createApplyRigidBodyToTransformSystem } from './ECS/Systems/createApplyRigidBodyToTransformSystem.ts';
+import { createSpawnerBulletsSystem } from './ECS/Systems/createBulletSystem.ts';
+import { createDestroyByTimeoutSystem } from './ECS/Systems/createDestroyByTimeoutSystem.ts';
+import { createDestroyOutOfZoneSystem } from './ECS/Systems/createDestroyOutOfZoneSystem.ts';
+import { createDestroySystem } from './ECS/Systems/createDestroySystem.ts';
+import { createHitableSystem } from './ECS/Systems/createHitableSystem.ts';
+import { createRigidBodyStateSystem } from './ECS/Systems/createRigidBodyStateSystem.ts';
 import {
     createPlayerTankBulletSystem,
     createPlayerTankPositionSystem,
     createPlayerTankTurretRotationSystem,
 } from './ECS/Systems/PlayerTankControllerSystems.ts';
-import { createSpawnerBulletsSystem } from './ECS/Systems/createBulletSystem.ts';
-import { getEntityIdByPhysicalId, RigidBodyRef } from './ECS/Components/Physical.ts';
-import { createWorld, deleteWorld, EntityId, hasComponent, resetWorld } from 'bitecs';
-import { Hitable } from './ECS/Components/Hitable.ts';
-import { createHitableSystem } from './ECS/Systems/createHitableSystem.ts';
-import { createTankAliveSystem } from './ECS/Systems/Tank/createTankAliveSystem.ts';
-import { createTankPositionSystem, createTankTurretRotationSystem } from './ECS/Systems/Tank/TankControllerSystems.ts';
-import { createDestroyOutOfZoneSystem } from './ECS/Systems/createDestroyOutOfZoneSystem.ts';
-import { destroyChangeDetectorSystem } from '../../../renderer/src/ECS/Systems/ChangedDetectorSystem.ts';
-import { createDestroyByTimeoutSystem } from './ECS/Systems/createDestroyByTimeoutSystem.ts';
 import { createDrawGrassSystem } from './ECS/Systems/Render/Grass/createDrawGrassSystem.ts';
-import { createRigidBodyStateSystem } from './ECS/Systems/createRigidBodyStateSystem.ts';
-import { createDestroySystem } from './ECS/Systems/createDestroySystem.ts';
-import { RenderDI } from './DI/RenderDI.ts';
-import { PlayerEnvDI } from './DI/PlayerEnvDI.ts';
-import { createVisualizationTracksSystem } from './ECS/Systems/Tank/createVisualizationTracksSystem.ts';
 import { createPostEffect } from './ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
+import { createTankAliveSystem } from './ECS/Systems/Tank/createTankAliveSystem.ts';
 import { createTankDecayOutOfZoneSystem } from './ECS/Systems/Tank/createTankDecayOutOfZoneSystem.ts';
-import { GameSession } from './ECS/Entities/GameSession.ts';
-import { SystemGroup } from './ECS/Plugins/systems.ts';
+import { createVisualizationTracksSystem } from './ECS/Systems/Tank/createVisualizationTracksSystem.ts';
+import { createTankPositionSystem, createTankTurretRotationSystem } from './ECS/Systems/Tank/TankControllerSystems.ts';
+import { initPhysicalWorld } from './Physical/initPhysicalWorld.ts';
 
 export type Game = ReturnType<typeof createGame>;
 
