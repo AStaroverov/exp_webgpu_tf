@@ -30,6 +30,8 @@ const store = {
     waitTime: new CompressedBuffer(1_000, 5),
     batchSize: new CompressedBuffer(1_000, 5),
     versionDelta: new CompressedBuffer(1_000, 5),
+    vTraceExplainedVariance: new CompressedBuffer(1_000, 5),
+    vTraceStdRatio: new CompressedBuffer(1_000, 5),
     // successRatioN
     ...Array.from({ length: scenariosCount }, (_, i) => i).reduce((acc, i) => {
         acc[`successRatio${i as SuccessRatioIndex}Ref`] = new CompressedBuffer(500, 5);
@@ -140,7 +142,6 @@ function drawTab1() {
     });
 
     const avgKL = store.kl.toArray();
-    const avgKLPerturbed = store.klPerturbed.toArray();
     tfvis.render.scatterplot({ name: 'KL', tab }, {
         values: [
             avgKL,
@@ -163,24 +164,55 @@ function drawTab1() {
         height: 300,
     });
 
-    tfvis.render.scatterplot({ name: 'KL - Perturbed', tab }, {
+    // const avgKLPerturbed = store.klPerturbed.toArray();
+    // tfvis.render.scatterplot({ name: 'KL - Perturbed', tab }, {
+    //     values: [
+    //         avgKLPerturbed,
+    //         calculateMovingMedian(avgKLPerturbed, 25),
+    //     ],
+    //     series: ['Avg', 'MA'],
+    // }, {
+    //     xLabel: 'Version',
+    //     yLabel: 'KL',
+    //     width: 500,
+    //     height: 300,
+    // });
+
+    // tfvis.render.linechart({ name: 'Perturb Scale', tab }, {
+    //     values: [store.perturbScale.toArray()],
+    // }, {
+    //     xLabel: 'Version',
+    //     yLabel: 'Perturb Scale',
+    //     width: 500,
+    //     height: 300,
+    // });
+
+    const evSeries = store.vTraceExplainedVariance.toArray();
+    tfvis.render.linechart({ name: 'V-Trace Explained Variance', tab }, {
         values: [
-            avgKLPerturbed,
-            calculateMovingMedian(avgKLPerturbed, 25),
+            evSeries,
+            constantLine(evSeries, 0.65),
+            constantLine(evSeries, 0.75),
         ],
-        series: ['Avg', 'MA'],
+        series: ['Explained Variance', 'Target Low', 'Target High'],
     }, {
         xLabel: 'Version',
-        yLabel: 'KL',
+        yLabel: 'Explained Variance',
         width: 500,
         height: 300,
     });
 
-    tfvis.render.linechart({ name: 'Perturb Scale', tab }, {
-        values: [store.perturbScale.toArray()],
+    const stdRatioSeries = store.vTraceStdRatio.toArray();
+    tfvis.render.linechart({ name: 'V-Trace Std Ratio', tab }, {
+        values: [
+            stdRatioSeries,
+            constantLine(stdRatioSeries, 0.8),
+            constantLine(stdRatioSeries, 1.2),
+        ],
+        series: ['σ(V)/σ(R)', 'Target Low', 'Target High'],
     }, {
         xLabel: 'Version',
-        yLabel: 'Perturb Scale',
+        yLabel: 'σ(V)/σ(R)',
         width: 500,
         height: 300,
     });
@@ -228,7 +260,6 @@ function drawTab1() {
         width: 500,
         height: 300,
     });
-
 
 }
 
@@ -318,6 +349,10 @@ function drawTab3() {
 
 type RenderPoint = { x: number, y: number };
 
+function constantLine(data: RenderPoint[], value: number): RenderPoint[] {
+    return data.map((point) => ({ x: point.x, y: value }));
+}
+
 function calculateMovingAverage(data: RenderPoint[], windowSize: number): RenderPoint[] {
     if (data.length === 0) return [];
     if (windowSize <= 0) throw new Error('Window size must be positive');
@@ -371,14 +406,4 @@ function calculateMovingMedian(data: RenderPoint[], windowSize: number): RenderP
     }
 
     return averaged;
-}
-
-function calculateMovingMedianAverage(data: RenderPoint[], windowSize: number): RenderPoint[] {
-    const average = calculateMovingAverage(data, windowSize);
-    const median = calculateMovingMedian(data, windowSize);
-
-    return average.map((point, index) => ({
-        x: point.x,
-        y: (point.y + median[index].y) / 2,
-    }));
 }
