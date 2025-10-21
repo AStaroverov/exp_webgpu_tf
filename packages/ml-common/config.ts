@@ -1,4 +1,4 @@
-import { clamp, floor } from 'lodash';
+import { clamp } from 'lodash';
 import { ceil, lerp } from '../../lib/math.ts';
 import { ACTION_DIM, LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
 
@@ -15,10 +15,6 @@ export const DEFAULT_EXPERIMENT = {
         return lerp(0.001, 0.01, clamp(1 - ((iteration - LEARNING_STEPS) / LEARNING_STEPS * 0.5), 0, 1));
     },
 
-    // targetLogStd: (iteration: number) => {
-    //     return lerp(-1, -3, clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1));
-    // },
-
     logStd: () => {
         return -1.0; // Math.exp(-1) = 0.36787944117144233
     },
@@ -32,12 +28,12 @@ export const DEFAULT_EXPERIMENT = {
         // Math.exp(-0.8) = 0.44932896411722156
     },
 
-    policyEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
-    policyClipRatio: 0.15, // https://arxiv.org/pdf/2202.00079 - interesting idea don't clip at all
+    policyEpochs: (iteration: number) => 2,
+    policyClipRatio: 0.15,
 
-    valueEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
+    valueEpochs: (iteration: number) => 3,
     valueClipRatio: 0.2,
-    valueLossCoeff: 0.8,
+    valueLossCoeff: 1.2,
     valueLRCoeff: 1.5,
 
     // Dynamic learning rate adjustment based on KL
