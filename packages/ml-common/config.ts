@@ -33,23 +33,23 @@ export const DEFAULT_EXPERIMENT = {
     },
 
     policyEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
-    policyClipRatio: 0.2, // https://arxiv.org/pdf/2202.00079 - interesting idea don't clip at all
+    policyClipRatio: 0.15, // https://arxiv.org/pdf/2202.00079 - interesting idea don't clip at all
 
     valueEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
     valueClipRatio: 0.2,
-    valueLossCoeff: 0.5,
+    valueLossCoeff: 0.8,
+    valueLRCoeff: 1.5,
 
     // Dynamic learning rate adjustment based on KL
     lrConfig: {
         kl: {
-            stop: ACTION_DIM * 0.5,
-            high: ACTION_DIM * 0.022,
+            high: ACTION_DIM * 0.024,
             target: ACTION_DIM * 0.02,
-            low: ACTION_DIM * 0.018,
+            low: ACTION_DIM * 0.016,
         },
         initial: 1e-5,
         multHigh: 0.9,
-        multLow: 1.01,
+        multLow: 1.005,
         min: 5e-6,
         max: 1e-3,
     },
@@ -72,10 +72,10 @@ export const DEFAULT_EXPERIMENT = {
     // gSDE (generalized State Dependent Exploration) parameters
     gSDE: {
         enabled: true,
-        latentDim: 64,              // размерность gSDE features (φ)
-        noiseUpdateFrequency: 30,   // обновление матрицы шума каждые N шагов
-        logStdBaseInit: -(1 + 1.5), // начальное значение logStdBase
-        trainableLogStdBase: false, // обучаемый или фиксированный logStdBase
+        latentDim: 64,
+        noiseUpdateFrequency: 30,
+        logStdBaseInit: -(1 + 1.5),
+        trainableLogStdBase: false,
     },
 
     batchSize: (iteration: number) => {

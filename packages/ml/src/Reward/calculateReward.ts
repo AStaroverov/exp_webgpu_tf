@@ -11,7 +11,7 @@ import { getTankHealth, getTankScore } from '../../../tanks/src/Game/ECS/Entitie
 import { ALLY_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../../tanks/src/Pilots/Components/TankState.ts';
 import { BattleState, getBattleState } from '../../../tanks/src/Pilots/Utils/snapshotTankInputTensor.ts';
 
-export const GAME_OVER_REWARD_MULTIPLIER = 5;
+export const GAME_OVER_REWARD_MULTIPLIER = 3;
 
 export const getFramePenalty = (frame: number) =>
     -clamp(Math.log10(1 + frame), 0, 3) / 30;
@@ -23,8 +23,8 @@ export const getGameOverReward = (iteration: number, successRatio: number) =>
     GAME_OVER_REWARD_MULTIPLIER * successRatio * clamp(unlerp(LEARNING_STEPS * 0.2, LEARNING_STEPS * 0.6, iteration), 0, 1);
 
 const WEIGHTS = ({
-    STATE_MULTIPLIER: 1, // it's often reward and work as learning base principle
-    ACTION_MULTIPLIER: 3, // it's rare reward and work as path to win
+    STATE_MULTIPLIER: 1 / 6, // it's often reward and work as learning base principle
+    ACTION_MULTIPLIER: 3 / 6, // it's rare reward and work as path to win
 
     // ACTION REWARD
     COMMON: {

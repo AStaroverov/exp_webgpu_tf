@@ -3,6 +3,7 @@ import { get, isNumber } from 'lodash-es';
 import { RingBuffer } from 'ring-buffer-ts';
 import { CurriculumState } from '../../../../ml-common/Curriculum/types.ts';
 import { metricsChannels } from '../../../../ml-common/channels.ts';
+import { CONFIG } from '../../../../ml-common/config.ts';
 import { getNetworkCurriculumState, getNetworkExpIteration, patientAction, setNetworkCurriculumState, setNetworkExpIteration, setNetworkLearningRate, setNetworkPerturbConfig } from '../../../../ml-common/utils.ts';
 import { saveNetworkToDB } from '../../Models/Transfer.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
@@ -23,7 +24,7 @@ export async function createLearnerAgent({ modelName, createNetwork, trainNetwor
     });
 
     modelSettingsChannel.obs.subscribe(({ lr, perturbChance, perturbScale, expIteration }) => {
-        isNumber(lr) && setNetworkLearningRate(network, lr);
+        isNumber(lr) && setNetworkLearningRate(network, lr * (modelName === Model.Value ? CONFIG.valueLRCoeff : 1));
         isNumber(expIteration) && setNetworkExpIteration(network, expIteration);
         (isNumber(perturbChance) && isNumber(perturbScale)) && setNetworkPerturbConfig(network, perturbChance, perturbScale);
     });

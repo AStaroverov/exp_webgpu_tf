@@ -144,8 +144,8 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
             + actionReward * actionRewardMultiplier
             + frameReward
             + deathReward,
-            -30,
-            +30
+            -5,
+            +5
         );
 
         this.memory.updateSecondPart(reward, isDead);
@@ -157,9 +157,7 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         const iteration = getNetworkExpIteration(this.policyNetwork);
         this.minLogStd = CONFIG.minLogStd(iteration);
         this.maxLogStd = CONFIG.maxLogStd(iteration);
-        // this.noise = new ColoredNoise(ACTION_DIM);
 
-        // Инициализируем NoiseMatrix для gSDE
         if (CONFIG.gSDE.enabled && this.train) {
             const logStdBase = tf.variable(
                 tf.fill([ACTION_DIM], CONFIG.gSDE.logStdBaseInit),
@@ -171,7 +169,6 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
                 ACTION_DIM,
                 CONFIG.gSDE.noiseUpdateFrequency,
                 logStdBase,
-                true // вариант A: масштаб после φ@Θ
             );
         }
     }
@@ -221,35 +218,4 @@ function isPerturbable(v: tf.LayerVariable) {
     }
 
     return name.includes('mean_mlp');
-}
-
-export class ColoredNoise {
-    private state: tf.Tensor;
-    private step = 0;
-
-    constructor(actionDim: number, private rho = 0.7, private resetInterval = 30) {
-        this.state = tf.randomNormal([actionDim]);
-    }
-
-    sample(): tf.Tensor {
-        if (++this.step % this.resetInterval === 0) {
-            this.state.dispose();
-            this.state = tf.randomNormal(this.state.shape)
-        }
-        // z ~ N(0, I)
-        const z = tf.randomNormal(this.state.shape);
-        const a = this.rho;
-        const b = Math.sqrt(1 - a * a);
-
-        const eps = tf.add(this.state.mul(a), z.mul(b));
-
-        this.state.dispose();
-        this.state = eps;
-
-        return eps;
-    }
-
-    dispose() {
-        this.state.dispose();
-    }
 }
