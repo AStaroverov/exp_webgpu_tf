@@ -42,6 +42,7 @@ export const DEFAULT_EXPERIMENT = {
     // Dynamic learning rate adjustment based on KL
     lrConfig: {
         kl: {
+            stop: ACTION_DIM * 0.5,
             high: ACTION_DIM * 0.022,
             target: ACTION_DIM * 0.02,
             low: ACTION_DIM * 0.018,
