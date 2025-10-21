@@ -37,7 +37,7 @@ export function trainPolicyNetwork(
 
             // Вычисляем newLogProbs и энтропию
             let newLogProbs: tf.Tensor1D;
-            let entropy: tf.Tensor;
+            // let entropy: tf.Tensor;
 
             if (CONFIG.gSDE.enabled && phi) {
                 // gSDE: используем state-dependent std
@@ -50,8 +50,8 @@ export function trainPolicyNetwork(
                 newLogProbs = computeLogProbTanh(actions as tf.Tensor2D, mean, stdEff) as tf.Tensor1D;
 
                 // Энтропия
-                const c = 0.5 * Math.log(2 * Math.PI * Math.E);
-                entropy = clippedLogStdEff.add(c).sum(1).mean().mul(entropyCoeff);
+                // const c = 0.5 * Math.log(2 * Math.PI * Math.E);
+                // entropy = clippedLogStdEff.add(c).sum(1).mean().mul(entropyCoeff);
             } else {
                 // Без gSDE: фиксированное std
                 const fixedLogStd = CONFIG.logStd();
@@ -62,7 +62,7 @@ export function trainPolicyNetwork(
                 newLogProbs = computeLogProbTanh(actions as tf.Tensor2D, mean, std2d) as tf.Tensor1D;
 
                 // Энтропия (минимальная для фиксированного std)
-                entropy = tf.scalar(0);
+                // entropy = tf.scalar(0);
             }
 
             const ratio = tf.exp(newLogProbs.sub(oldLogProbs));
@@ -71,8 +71,8 @@ export function trainPolicyNetwork(
             const surr2 = clippedRatio.mul(advantages);
             const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
 
-            const totalLoss = policyLoss.sub(entropy) as tf.Scalar;
-            return totalLoss;
+            const totalLoss = policyLoss;//.sub(entropy);
+            return totalLoss as tf.Scalar;
         }, { clipNorm, returnCost });
     });
 }
