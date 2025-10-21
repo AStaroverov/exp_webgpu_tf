@@ -1,16 +1,5 @@
 import * as tf from '@tensorflow/tfjs';
 
-/**
- * NoiseMatrix для gSDE (generalized State Dependent Exploration)
- * 
- * Управляет матрицей шума Θ размерности [latentDim, actionDim], которая:
- * - Периодически пересэмплируется (раз в noiseUpdateFrequency шагов)
- * - Используется для генерации state-dependent шума: ε(s) = φ(s) @ Θ
- * 
- * Варианты масштабирования:
- * - Вариант A: Θ ~ N(0, I), масштаб применяется после φ@Θ
- * - Вариант B: Θ ~ N(0, diag(exp(2*logStdBase))), без дополнительного масштаба
- */
 export class NoiseMatrix {
     private Theta?: tf.Tensor2D; // [latentDim, actionDim]
     private step = 0;
@@ -19,8 +8,7 @@ export class NoiseMatrix {
         private latentDim: number,
         private actionDim: number,
         private noiseUpdateFrequency: number,
-        public logStdBase: tf.Variable,  // shape [actionDim]
-        private variantA = true          // true: вариант A, false: вариант B
+        public logStdBase: tf.Variable,
     ) {
     }
 
@@ -42,24 +30,15 @@ export class NoiseMatrix {
         }
     }
 
-    /**
-     * Пересэмплирование по расписанию (вызывать перед каждым шагом rollout)
-     */
     maybeResample() {
-        if (this.step % this.noiseUpdateFrequency === 0) {
+        if (this.step++ % this.noiseUpdateFrequency === 0 || !this.Theta) {
             this.resample();
         }
-        this.step += 1;
     }
 
-    /**
-     * Генерация state-dependent шума
-     * @param phi - gSDE features из сети, размерность [batchSize, latentDim]
-     * @returns шум размерности [batchSize, actionDim]
-     */
     noise(phi: tf.Tensor2D): tf.Tensor2D {
         if (!this.Theta) {
-            this.resample();
+            throw new Error('NoiseMatrix: Theta is not initialized. Call resample() first.');
         }
 
         const raw = phi.matMul(this.Theta!) as tf.Tensor2D; // [B, A]
@@ -71,10 +50,6 @@ export class NoiseMatrix {
         }
 
         return raw;
-    }
-
-    resetStep() {
-        this.step = 0;
     }
 
     dispose() {

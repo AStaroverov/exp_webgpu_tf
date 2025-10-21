@@ -35,7 +35,6 @@ export function trainPolicyNetwork(
             const predicted = network.predict(states, { batchSize });
             const { mean, phi } = parsePolicyOutput(predicted);
 
-            // Вычисляем newLogProbs и энтропию
             let newLogProbs: tf.Tensor1D;
             // let entropy: tf.Tensor;
 
@@ -44,12 +43,11 @@ export function trainPolicyNetwork(
                 const logStdBase = tf.fill([ACTION_DIM], CONFIG.gSDE.logStdBaseInit);
                 const power = tf.log(phi.square().sum(1, true).add(1e-6)).mul(0.5); // [B, 1]
                 const logStdEff = logStdBase.reshape([1, ACTION_DIM]).add(power); // [B, A]
-                const clippedLogStdEff = tf.clipByValue(logStdEff, minLogStd, maxLogStd) as tf.Tensor2D;
-                const stdEff = tf.exp(clippedLogStdEff) as tf.Tensor2D;
+                const clippedLogStdEff = tf.clipByValue(logStdEff, minLogStd, maxLogStd);
+                const stdEff = tf.exp(clippedLogStdEff);
 
-                newLogProbs = computeLogProbTanh(actions as tf.Tensor2D, mean, stdEff) as tf.Tensor1D;
+                newLogProbs = computeLogProbTanh(actions, mean, stdEff) as tf.Tensor1D;
 
-                // Энтропия
                 // const c = 0.5 * Math.log(2 * Math.PI * Math.E);
                 // entropy = clippedLogStdEff.add(c).sum(1).mean().mul(entropyCoeff);
             } else {
@@ -57,12 +55,9 @@ export function trainPolicyNetwork(
                 const fixedLogStd = CONFIG.logStd();
                 const logStd = tf.fill([ACTION_DIM], fixedLogStd) as tf.Tensor1D;
                 const std = tf.exp(logStd) as tf.Tensor1D;
-                const std2d = std.reshape([1, ACTION_DIM]).tile([batchSize, 1]) as tf.Tensor2D;
+                const std2d = std.reshape([1, ACTION_DIM]).tile([batchSize, 1]);
 
-                newLogProbs = computeLogProbTanh(actions as tf.Tensor2D, mean, std2d) as tf.Tensor1D;
-
-                // Энтропия (минимальная для фиксированного std)
-                // entropy = tf.scalar(0);
+                newLogProbs = computeLogProbTanh(actions, mean, std2d) as tf.Tensor1D;
             }
 
             const ratio = tf.exp(newLogProbs.sub(oldLogProbs));
@@ -350,12 +345,15 @@ export function computeVTraceTargets(
             throw new Error('VTrace returns are NaN');
         }
 
+        const normalizedAdvantages = normalize(advantages);
+
         return {
-            advantages: normalize(advantages),
+            advantages: normalizedAdvantages,
             tdErrors: tdErrors,
             returns: vTraces,
             values: values,
             // just for logs
+            // ...analyzeVTrace(normalizedAdvantages, tdErrors, vTraces, values),
             pureMean: syncUnwrapTensor(meanCurrent) as Float32Array,
             pureLogStd: syncUnwrapTensor(pureLogStd) as Float32Array,
         };
