@@ -44,12 +44,6 @@ export type VTraceDiagnostics = {
     };
 };
 
-// @TODO: implement
-// Мониторить:
-// explainedVariance → 0.65–0.75,
-// std(V)/std(R) держать 0.8–1.2,
-// Аллертить флаги если они true
-
 export function analyzeVTrace(
     advantages: ArrayLike<number>,
     tdErrors: ArrayLike<number>,

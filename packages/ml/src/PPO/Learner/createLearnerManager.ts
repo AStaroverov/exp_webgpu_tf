@@ -1,6 +1,8 @@
 import { catchError, concatMap, EMPTY, first, forkJoin, map, mergeMap, scan, tap } from 'rxjs';
 import { max } from '../../../../../lib/math.ts';
 import { bufferWhile } from '../../../../../lib/Rx/bufferWhile.ts';
+import type { VTraceDiagnostics } from '../../../../ml-common/analyzeVTrace.ts';
+import { analyzeVTrace } from '../../../../ml-common/analyzeVTrace.ts';
 import { forceExitChannel, metricsChannels } from '../../../../ml-common/channels.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
 import { flatTypedArray } from '../../../../ml-common/flat.ts';
@@ -98,6 +100,24 @@ export function createLearnerManager() {
                             metricsChannels.tdErrors.postMessage(batch.tdErrors);
                             metricsChannels.advantages.postMessage(batch.advantages);
 
+                            const diagnostics = analyzeVTrace(
+                                batch.advantages,
+                                batch.tdErrors,
+                                batch.returns,
+                                batch.values,
+                            );
+
+                            metricsChannels.vTraceExplainedVariance.postMessage([
+                                diagnostics.fit.explainedVariance,
+                            ]);
+
+                            const stdRatio = diagnostics.returns.std > 0
+                                ? diagnostics.values.std / diagnostics.returns.std
+                                : 0;
+                            metricsChannels.vTraceStdRatio.postMessage([stdRatio]);
+
+                            reportVTraceAlerts(diagnostics, stdRatio);
+
                             waitTime !== undefined && metricsChannels.waitTime.postMessage([waitTime / 1000]);
                             metricsChannels.trainTime.postMessage([(lastEndTime - startTime) / 1000]);
                         }),
@@ -131,4 +151,37 @@ function squeezeBatches(batches: AgentMemoryBatch[]): AgentMemoryBatch {
         logProbs: flatTypedArray(batches.map(b => b.logProbs)),
         perturbed: flatTypedArray(batches.map(b => b.perturbed)),
     };
+}
+
+function reportVTraceAlerts(diagnostics: VTraceDiagnostics, stdRatio: number): void {
+    const triggeredFlags: string[] = [];
+
+    if (diagnostics.advantages.flags.advStdHigh) {
+        triggeredFlags.push('advStdHigh');
+    }
+    if (diagnostics.advantages.flags.advTailsWide) {
+        triggeredFlags.push('advTailsWide');
+    }
+    if (diagnostics.advantages.flags.advMeanShift) {
+        triggeredFlags.push('advMeanShift');
+    }
+    if (diagnostics.tdErrors.flags.tdMeanShift) {
+        triggeredFlags.push('tdMeanShift');
+    }
+    if (diagnostics.tdErrors.flags.tdHeavyTails) {
+        triggeredFlags.push('tdHeavyTails');
+    }
+    if (diagnostics.fit.scaleMismatch) {
+        triggeredFlags.push('scaleMismatch');
+    }
+    if (diagnostics.fit.explainedVariance < 0.65 || diagnostics.fit.explainedVariance > 0.75) {
+        triggeredFlags.push(`explainedVariance=${diagnostics.fit.explainedVariance.toFixed(3)}`);
+    }
+    if (!Number.isFinite(stdRatio) || stdRatio < 0.8 || stdRatio > 1.2) {
+        triggeredFlags.push(`stdRatio=${stdRatio.toFixed(3)}`);
+    }
+
+    if (triggeredFlags.length > 0) {
+        console.log(`WARNING! VTrace alerts: ${triggeredFlags.join(', ')}`);
+    }
 }
