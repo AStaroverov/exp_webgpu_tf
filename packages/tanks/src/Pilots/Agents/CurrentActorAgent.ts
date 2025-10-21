@@ -6,6 +6,7 @@ import { CONFIG } from '../../../../ml-common/config.ts';
 import { ACTION_DIM, LEARNING_STEPS } from '../../../../ml-common/consts.ts';
 import { prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
+import { NoiseMatrix } from '../../../../ml-common/NoiseMatrix.ts';
 import { getNetworkExpIteration, patientAction } from '../../../../ml-common/utils.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../../../ml/src/Models/Utils.ts';
@@ -35,7 +36,7 @@ export type LearnableAgent = {
 
 export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableAgent> {
     private memory = new AgentMemory();
-    private noise?: ColoredNoise
+    private noiseMatrix?: NoiseMatrix
     private policyNetwork?: tf.LayersModel;
 
     private minLogStd?: number;
@@ -61,7 +62,7 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
     public dispose() {
         disposeNetwork(this.policyNetwork);
         this.memory.dispose();
-        this.noise?.dispose();
+        this.noiseMatrix?.dispose();
     }
 
     public async sync() {
@@ -80,16 +81,19 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
 
         const state = prepareInputArrays(this.tankEid, width, height);
 
+        // Обновляем матрицу шума по расписанию (только в train режиме)
         // @ts-ignore
-        const noise = this.noise && (this.train || globalThis.applyNoise)
-            ? this.noise.sample()
-            : undefined;
+        const useNoise = this.train && !globalThis.applyNoise;
+        if (useNoise && this.noiseMatrix) {
+            this.noiseMatrix.maybeResample();
+        }
+
         const result = act(
             this.policyNetwork,
             state,
             this.minLogStd,
             this.maxLogStd,
-            noise
+            useNoise ? this.noiseMatrix : undefined
         );
 
         applyActionToTank(
@@ -153,13 +157,23 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         const iteration = getNetworkExpIteration(this.policyNetwork);
         this.minLogStd = CONFIG.minLogStd(iteration);
         this.maxLogStd = CONFIG.maxLogStd(iteration);
-        this.noise = new ColoredNoise(ACTION_DIM);
+        // this.noise = new ColoredNoise(ACTION_DIM);
 
-        // const config = getNetworkPerturbConfig(this.policyNetwork);
-        // if (config.chance > random()) {
-        //     this.memory.perturbed = true;
-        //     perturbWeights(this.policyNetwork, config.scale);
-        // } else {
+        // Инициализируем NoiseMatrix для gSDE
+        if (CONFIG.gSDE.enabled && this.train) {
+            const logStdBase = tf.variable(
+                tf.fill([ACTION_DIM], CONFIG.gSDE.logStdBaseInit),
+                CONFIG.gSDE.trainableLogStdBase
+            );
+
+            this.noiseMatrix = new NoiseMatrix(
+                CONFIG.gSDE.latentDim,
+                ACTION_DIM,
+                CONFIG.gSDE.noiseUpdateFrequency,
+                logStdBase,
+                true // вариант A: масштаб после φ@Θ
+            );
+        }
     }
 }
 

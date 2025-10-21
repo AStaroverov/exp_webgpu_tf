@@ -38,7 +38,10 @@ type NetworkConfig = {
     finalMLP: [ActivationIdentifier, number][];
 };
 
-type policyNetworkConfig = NetworkConfig
+type policyNetworkConfig = NetworkConfig & {
+    latentDim?: number;  // для gSDE features
+    useGSDE?: boolean;
+}
 
 const policyNetworkConfig: policyNetworkConfig = {
     dim: 64,
@@ -49,6 +52,8 @@ const policyNetworkConfig: policyNetworkConfig = {
         ['relu', 128],
         ['relu', 64],
     ],
+    latentDim: CONFIG.gSDE.latentDim,
+    useGSDE: CONFIG.gSDE.enabled,
 };
 const valueNetworkConfig: NetworkConfig = {
     dim: 16,
@@ -62,19 +67,37 @@ const valueNetworkConfig: NetworkConfig = {
 
 export function createPolicyNetwork(): tf.LayersModel {
     const { inputs, network } = createBaseNetwork(Model.Policy, policyNetworkConfig);
-    const policyOutput = tf.layers.dense({
-        name: Model.Policy + '_output',
+
+    // Mean output (основной выход для действий)
+    const meanOutput = tf.layers.dense({
+        name: Model.Policy + '_mean_output',
         units: ACTION_DIM,
         activation: 'linear',
     }).apply(network) as tf.SymbolicTensor;
+
+    // Если gSDE включён, создаём модель с двумя выходами
+    if (policyNetworkConfig.useGSDE) {
+        // gSDE features output (для state-dependent шума)
+        // Используем тот же network как φ(s) - последний скрытый слой
+        const model = tf.model({
+            name: Model.Policy,
+            inputs: Object.values(inputs),
+            outputs: [meanOutput, network], // [mean, phi]
+        });
+        model.optimizer = new PatchedAdamOptimizer(CONFIG.lrConfig.initial);
+        model.loss = 'meanSquaredError'; // fake loss for save optimizer with model
+
+        return model;
+    }
+
+    // Без gSDE - стандартная модель с одним выходом
     const model = tf.model({
         name: Model.Policy,
         inputs: Object.values(inputs),
-        outputs: policyOutput,
+        outputs: meanOutput,
     });
     model.optimizer = new PatchedAdamOptimizer(CONFIG.lrConfig.initial);
-    // fake loss for save optimizer with model
-    model.loss = 'meanSquaredError';
+    model.loss = 'meanSquaredError'; // fake loss for save optimizer with model
 
     return model;
 }

@@ -68,6 +68,15 @@ export const DEFAULT_EXPERIMENT = {
     },
     perturbChance: (iteration: number) => 0,//lerp(0.01, 0.7, clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1)),
 
+    // gSDE (generalized State Dependent Exploration) parameters
+    gSDE: {
+        enabled: true,
+        latentDim: 64,              // размерность gSDE features (φ)
+        noiseUpdateFrequency: 30,   // обновление матрицы шума каждые N шагов
+        logStdBaseInit: -(1 + 1.5), // начальное значение logStdBase
+        trainableLogStdBase: false, // обучаемый или фиксированный logStdBase
+    },
+
     batchSize: (iteration: number) => {
         return 1024 * clamp(ceil(6 * (iteration + 1) / (LEARNING_STEPS * 0.20)), 4, 16);
     },
