@@ -14,11 +14,11 @@ export const metricsChannels = {
     tdErrors: new BroadcastChannel('tdErrors'),
     advantages: new BroadcastChannel('advantages'),
     kl: new BroadcastChannel('kl'),
-    klPerturbed: new BroadcastChannel('klPerturbed'),
     lr: new BroadcastChannel('lr'),
-    perturbScale: new BroadcastChannel('perturbScale'),
     mean: new BroadcastChannel('mean'),
     logStd: new BroadcastChannel('logStd'),
+    vTraceStdRatio: new BroadcastChannel('vTraceStdRatio'),
+    vTraceExplainedVariance: new BroadcastChannel('vTraceExplainedVariance'),
     valueLoss: new BroadcastChannel('valueLoss'),
     policyLoss: new BroadcastChannel('policyLoss'),
     trainTime: new BroadcastChannel('trainTime'),
@@ -26,6 +26,5 @@ export const metricsChannels = {
     batchSize: new BroadcastChannel('batchSize'),
     versionDelta: new BroadcastChannel('versionDelta'),
     successRatio: new BroadcastChannel('successRatio'),
-    vTraceExplainedVariance: new BroadcastChannel('vTraceExplainedVariance'),
-    vTraceStdRatio: new BroadcastChannel('vTraceStdRatio'),
+
 };

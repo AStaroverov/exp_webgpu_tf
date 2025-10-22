@@ -8,16 +8,12 @@ export class NoiseMatrix {
         private latentDim: number,
         private actionDim: number,
         private noiseUpdateFrequency: number,
-        public logStdBase: tf.Variable,
     ) {
     }
 
     resample() {
         this.Theta?.dispose();
-        this.Theta = tf.tidy(() => {
-            const baseStd = tf.exp(this.logStdBase).reshape([1, this.actionDim]);
-            return tf.randomNormal([this.latentDim, this.actionDim]).mul(baseStd) as tf.Tensor2D;
-        });
+        this.Theta = tf.randomNormal([this.latentDim, this.actionDim])
     }
 
     maybeResample() {
@@ -26,12 +22,12 @@ export class NoiseMatrix {
         }
     }
 
-    noise(phi: tf.Tensor2D): tf.Tensor2D {
+    noise(logStd: tf.Tensor, phi: tf.Tensor2D): tf.Tensor {
         if (!this.Theta) {
             throw new Error('NoiseMatrix: Theta is not initialized. Call resample() first.');
         }
 
-        return phi.matMul(this.Theta!) as tf.Tensor2D; // [B, A]
+        return phi.matMul(this.Theta.mul(tf.exp(logStd).reshape([1, this.actionDim]))); // [B, A]
     }
 
     dispose() {

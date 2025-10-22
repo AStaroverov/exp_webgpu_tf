@@ -1,5 +1,6 @@
+import { clamp } from 'lodash';
 import { catchError, concatMap, EMPTY, first, forkJoin, map, mergeMap, scan, tap } from 'rxjs';
-import { max } from '../../../../../lib/math.ts';
+import { exp, log, max } from '../../../../../lib/math.ts';
 import { bufferWhile } from '../../../../../lib/Rx/bufferWhile.ts';
 import type { VTraceDiagnostics } from '../../../../ml-common/analyzeVTrace.ts';
 import { analyzeVTrace } from '../../../../ml-common/analyzeVTrace.ts';
@@ -7,21 +8,26 @@ import { forceExitChannel, metricsChannels } from '../../../../ml-common/channel
 import { CONFIG } from '../../../../ml-common/config.ts';
 import { flatTypedArray } from '../../../../ml-common/flat.ts';
 import { AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
-import { getNetworkExpIteration } from '../../../../ml-common/utils.ts';
+import { getNetworkSettings } from '../../../../ml-common/utils.ts';
 import { Model } from '../../Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
 import {
     agentSampleChannel,
     learnProcessChannel,
+    modelSettingsChannel,
     queueSizeChannel
 } from '../channels.ts';
-import { computeVTraceTargets } from '../train.ts';
+import { computeVTraceTargets, getTLogStd } from '../train.ts';
 
 export type LearnData = AgentMemoryBatch & {
     values: Float32Array,
     returns: Float32Array,
     tdErrors: Float32Array,
-    advantages: Float32Array
+    advantages: Float32Array,
+
+    rewardRatio: number,
+    emaStdValues?: number,
+    emaStdReturns?: number,
 };
 
 export function createLearnerManager() {
@@ -39,37 +45,43 @@ export function createLearnerManager() {
 
             console.info('Start processing batch', waitTime !== undefined ? `(waited ${waitTime} ms)` : '');
 
-            metricsChannels.batchSize.postMessage(samples.map(b => b.memoryBatch.size));
-
             return forkJoin([
                 getNetwork(Model.Policy),
                 getNetwork(Model.Value),
             ]).pipe(
                 map(([policyNetwork, valueNetwork]): LearnData => {
-                    const version = getNetworkExpIteration(policyNetwork);
-                    const batchData = squeezeBatches(samples.map(b => b.memoryBatch));
+                    const settings = getNetworkSettings(policyNetwork);
+                    const expIteration = settings.expIteration ?? 0;
+                    const batchData = squeezeBatches(samples.map(b => {
+                        b.memoryBatch.rewards.forEach((_, i, arr) => { arr[i] *= settings.rewardRatio ?? 1 / 4; })
+                        return b.memoryBatch
+                    }));
+                    const tLogStd = getTLogStd(expIteration);
                     const { pureLogStd, ...vTraceBatchData } = computeVTraceTargets(
                         policyNetwork,
                         valueNetwork,
                         batchData,
-                        CONFIG.miniBatchSize(version),
-                        CONFIG.gamma(version),
-                        CONFIG.minLogStd(version),
-                        CONFIG.maxLogStd(version),
+                        tLogStd,
+                        CONFIG.miniBatchSize(expIteration),
+                        CONFIG.gamma(expIteration),
+                        CONFIG.minLogStd(expIteration),
+                        CONFIG.maxLogStd(expIteration),
                     );
                     const learnData = {
+                        rewardRatio: settings.rewardRatio ?? 1 / 4,
+                        emaStdReturns: settings.emaStdReturns,
                         ...batchData,
                         ...vTraceBatchData,
                     };
 
-                    disposeNetwork(policyNetwork);
-                    disposeNetwork(valueNetwork);
-
                     metricsChannels.mean.postMessage(flatTypedArray(batchData.mean));
                     metricsChannels.logStd.postMessage(pureLogStd);
-                    metricsChannels.versionDelta.postMessage(
-                        samples.map(b => version - b.networkVersion),
-                    );
+                    metricsChannels.batchSize.postMessage(samples.map(b => b.memoryBatch.size));
+                    metricsChannels.versionDelta.postMessage(samples.map(b => expIteration - b.networkVersion));
+
+                    disposeNetwork(policyNetwork);
+                    disposeNetwork(valueNetwork);
+                    tLogStd.dispose();
 
                     return learnData;
                 }),
@@ -106,20 +118,21 @@ export function createLearnerManager() {
                                 batch.returns,
                                 batch.values,
                             );
-
-                            metricsChannels.vTraceExplainedVariance.postMessage([
-                                diagnostics.fit.explainedVariance,
-                            ]);
-
                             const stdRatio = diagnostics.returns.std > 0
                                 ? diagnostics.values.std / diagnostics.returns.std
                                 : 0;
-                            metricsChannels.vTraceStdRatio.postMessage([stdRatio]);
+                            // compute reward ratio adjustment, for correct scaling of all v-trace components
+                            const nextEmaStdReturns = (batch.emaStdReturns ?? diagnostics.returns.std) * 0.9 + diagnostics.returns.std * 0.1;
+                            const nextRewardRatio = getRewardRatio(nextEmaStdReturns, batch.rewardRatio);
 
-                            reportVTraceAlerts(diagnostics, stdRatio);
+                            modelSettingsChannel.emit({ emaStdReturns: nextEmaStdReturns, rewardRatio: nextRewardRatio });
 
                             waitTime !== undefined && metricsChannels.waitTime.postMessage([waitTime / 1000]);
                             metricsChannels.trainTime.postMessage([(lastEndTime - startTime) / 1000]);
+                            metricsChannels.vTraceStdRatio.postMessage([stdRatio]);
+                            metricsChannels.vTraceExplainedVariance.postMessage([diagnostics.fit.explainedVariance]);
+
+                            reportVTraceAlerts(diagnostics);
                         }),
                         catchError((error) => {
                             queueSizeChannel.emit(queueSize--);
@@ -145,15 +158,23 @@ function squeezeBatches(batches: AgentMemoryBatch[]): AgentMemoryBatch {
         states: batches.map(b => b.states).flat(),
         actions: batches.map(b => b.actions).flat(),
         mean: batches.map(b => b.mean).flat(),
-        logStd: batches.map(b => b.logStd).flat(),
         dones: flatTypedArray(batches.map(b => b.dones)),
         rewards: flatTypedArray(batches.map(b => b.rewards)),
         logProbs: flatTypedArray(batches.map(b => b.logProbs)),
-        perturbed: flatTypedArray(batches.map(b => b.perturbed)),
     };
 }
 
-function reportVTraceAlerts(diagnostics: VTraceDiagnostics, stdRatio: number): void {
+function getRewardRatio(stdReturns: number, rewardRatio: number) {
+    const target = 1.5; // target std
+    const kp = 0.2; // adjustment speed
+    const alpha = exp(kp * (log(target) - log(max(stdReturns, 1e-6))));
+    const clampedAlpha = clamp(alpha, 0.8, 1.2);
+    const nextRewardRatio = rewardRatio * clampedAlpha;
+
+    return nextRewardRatio;
+}
+
+function reportVTraceAlerts(diagnostics: VTraceDiagnostics): void {
     const triggeredFlags: string[] = [];
 
     if (diagnostics.advantages.flags.advStdHigh) {
@@ -174,13 +195,6 @@ function reportVTraceAlerts(diagnostics: VTraceDiagnostics, stdRatio: number): v
     if (diagnostics.fit.scaleMismatch) {
         triggeredFlags.push('scaleMismatch');
     }
-    if (diagnostics.fit.explainedVariance < 0.65 || diagnostics.fit.explainedVariance > 0.75) {
-        triggeredFlags.push(`explainedVariance=${diagnostics.fit.explainedVariance.toFixed(3)}`);
-    }
-    if (!Number.isFinite(stdRatio) || stdRatio < 0.8 || stdRatio > 1.2) {
-        triggeredFlags.push(`stdRatio=${stdRatio.toFixed(3)}`);
-    }
-
     if (triggeredFlags.length > 0) {
         console.log(`WARNING! VTrace alerts: ${triggeredFlags.join(', ')}`);
     }
