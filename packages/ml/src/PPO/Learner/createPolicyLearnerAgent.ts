@@ -1,4 +1,4 @@
-import { getNetworkExpIteration, getNetworkLearningRate, getNetworkPerturbConfig } from '../../../../ml-common/utils.ts';
+import { getNetworkExpIteration, getNetworkLearningRate } from '../../../../ml-common/utils.ts';
 
 import * as tf from '@tensorflow/tfjs';
 import { RingBuffer } from 'ring-buffer-ts';
@@ -6,14 +6,14 @@ import { ceil, floor, max, median, min } from '../../../../../lib/math.ts';
 import { metricsChannels } from '../../../../ml-common/channels.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
 import { flatTypedArray } from '../../../../ml-common/flat.ts';
-import { getDynamicLearningRate, getDynamicPerturb } from '../../../../ml-common/getDynamicLearningRate.ts';
+import { getDynamicLearningRate } from '../../../../ml-common/getDynamicLearningRate.ts';
 import { createInputTensors } from '../../../../ml-common/InputTensors.ts';
 import { ReplayBuffer } from '../../../../ml-common/ReplayBuffer.ts';
 import { asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../../ml-common/Tensor.ts';
 import { createPolicyNetwork } from '../../Models/Create.ts';
 import { Model } from '../../Models/def.ts';
 import { modelSettingsChannel } from '../channels.ts';
-import { computeKullbackLeiblerAprox, trainPolicyNetwork } from '../train.ts';
+import { computeKullbackLeiblerAprox, getTLogStd, trainPolicyNetwork } from '../train.ts';
 import { createLearnerAgent } from './createLearnerAgent.ts';
 import { LearnData } from './createLearnerManager.ts';
 import { isLossDangerous } from './isLossDangerous.ts';
@@ -27,7 +27,6 @@ export function createPolicyLearnerAgent() {
 }
 
 const klHistory = new RingBuffer<number>(25);
-const klPerturbedHistory = new RingBuffer<number>(25);
 
 function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const expIteration = getNetworkExpIteration(network);
@@ -35,56 +34,28 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const maxLogStd = CONFIG.maxLogStd(expIteration);
     const mbs = CONFIG.miniBatchSize(expIteration);
     const mbc = ceil(batch.size / mbs);
+    const rb = new ReplayBuffer(batch.states.length);
 
     console.info(`[Train Policy]: Stating..
          Iteration ${expIteration},
          Sum batch size: ${batch.size},
          Mini batch count: ${mbc} by ${mbs}`);
 
-    const getPolicyBatch = (() => {
-        const rb = new ReplayBuffer(batch.states.length);
-
-        return (batchSize: number, index: number) => {
-            const indices = rb.getSample(batchSize, index * batchSize, (index + 1) * batchSize);
-            return createPolicyBatch(batch, indices);
-        };
-    })()
-
-    const createKLBatchGetter = (() => {
-        const pureIndices: number[] = [];
-        const perturbedIndices: number[] = [];
-        for (let i = 0; i < batch.size; i++) {
-            if (batch.perturbed[i] === 0) {
-                pureIndices.push(i);
-            } else {
-                perturbedIndices.push(i);
-            }
-        }
-        const pureRb = new ReplayBuffer(pureIndices.length);
-        const perturbedRb = new ReplayBuffer(perturbedIndices.length);
-
-        return (perturbed: boolean) => {
-            return (size: number) => {
-                const filteredIndices = perturbed ? perturbedIndices : pureIndices;
-                if (filteredIndices.length === 0) return createKlBatch(batch, []);
-                const rb = perturbed ? perturbedRb : pureRb;
-                const indices = rb.getSample(min(size, filteredIndices.length));
-                const mappedIndices = indices.map(i => filteredIndices[i]);
-                return createKlBatch(batch, mappedIndices);
-            };
-        }
-    })();
-
-    // KL на данных без пертурбаций (для адаптации learning rate)
-    const getKLBatch = createKLBatchGetter(false);
-    // KL на данных с пертурбациями (только для метрик)
-    const getKLPerturbedBatch = createKLBatchGetter(true);
+    const getPolicyBatch = (batchSize: number, index: number) => {
+        const indices = rb.getSample(batchSize, index * batchSize, (index + 1) * batchSize);
+        return createPolicyBatch(batch, indices);
+    };
+    const getKlBatch = (batchSize: number) => {
+        const indices = rb.getSample(batchSize);
+        return createKlBatch(batch, indices);
+    }
 
     const klSize = floor(mbs * ceil(mbc / 3));
     const klList: number[] = [];
-    const klPerturbedList: tf.Tensor[] = [];
     const policyLossList: tf.Tensor[] = [];
     const entropyCoeff = CONFIG.policyEntropy(expIteration);
+
+    const tLogStd = getTLogStd(expIteration);
 
     for (let i = 0; i < CONFIG.policyEpochs(expIteration); i++) {
         for (let j = 0; j < mbc; j++) {
@@ -101,6 +72,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
                 tActions,
                 tOldLogProbs,
                 tAdvantages,
+                tLogStd,
                 mbs,
                 CONFIG.policyClipRatio,
                 entropyCoeff,
@@ -117,12 +89,8 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             tAdvantages.dispose();
         }
 
-        // KL on perturbed data (for metrics only)
-        const klPerturbed = computeKLForBatch(network, getKLPerturbedBatch(klSize), mbs, minLogStd, maxLogStd);
-        if (klPerturbed != null) klPerturbedList.push(klPerturbed);
-
         // KL on non-perturbed data (for learning rate adaptation)
-        const tKL = computeKLForBatch(network, getKLBatch(klSize), mbs, minLogStd, maxLogStd);
+        const tKL = computeKLForBatch(network, tLogStd, getKlBatch(klSize), mbs, minLogStd, maxLogStd);
         const kl = tKL ? syncUnwrapTensor(tKL)[0] : undefined;
         if (kl != null) klList.push(kl);
         if (kl != null && kl > CONFIG.lrConfig.kl.stop) {
@@ -134,47 +102,33 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
         }
     }
 
+    tLogStd.dispose();
+
     return onReadyRead()
         .then(() => Promise.all([
             klList,
-            // Promise.all(klList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
-            Promise.all(klPerturbedList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
             Promise.all(policyLossList.map((t) => asyncUnwrapTensor(t).then(v => v[0]))),
         ]))
-        .then(([klList, klPerturbedList, policyLossList]) => {
+        .then(([klList, policyLossList]) => {
             if (policyLossList.some((v) => isLossDangerous(v, 2))) {
                 throw new Error(`Policy loss too dangerous: ${min(...policyLossList)}, ${max(...policyLossList)}`);
             }
 
             klHistory.add(...klList);
-            klPerturbedHistory.add(...klPerturbedList);
 
             const klHistoryList = klHistory.toArray();
-            const klPerturbedHistoryList = klPerturbedHistory.toArray();
-
             const kl = klHistoryList.length > 0 ? median(klHistoryList) : undefined;
             const lr = kl != null
                 ? getDynamicLearningRate(kl, getNetworkLearningRate(network))
                 : getNetworkLearningRate(network);
 
-            const klPerturbed = klPerturbedList.length > 0 && klPerturbedHistoryList.length > 0
-                ? median(klPerturbedHistoryList)
-                : undefined;
-            const perturbScale = klPerturbed != null
-                ? getDynamicPerturb(klPerturbed, getNetworkPerturbConfig(network).scale)
-                : getNetworkPerturbConfig(network).scale;
-            const perturbChance = kl == null || kl > CONFIG.lrConfig.kl.high
-                ? 0
-                : CONFIG.perturbChance(expIteration) * (kl < CONFIG.lrConfig.kl.low ? 0.5 : 1);
-
-            modelSettingsChannel.emit({ lr, perturbChance, perturbScale, expIteration: expIteration + batch.size });
-            console.info(`[Train Policy]: Finish iteration=${expIteration}`);
+            modelSettingsChannel.emit({ lr, expIteration: expIteration + batch.size });
 
             metricsChannels.kl.postMessage(klList);
-            metricsChannels.klPerturbed.postMessage(klPerturbedList);
             metricsChannels.lr.postMessage([lr]);
-            metricsChannels.perturbScale.postMessage([perturbScale]);
             metricsChannels.policyLoss.postMessage(policyLossList);
+
+            console.info(`[Train Policy]: Finish iteration=${expIteration}`);
         });
 }
 
@@ -203,6 +157,7 @@ function createKlBatch(batch: LearnData, indices: number[]) {
 
 function computeKLForBatch(
     network: tf.LayersModel,
+    logStd: tf.Tensor,
     batch: ReturnType<typeof createKlBatch>,
     mbs: number,
     minLogStd: number,
@@ -220,6 +175,7 @@ function computeKLForBatch(
             tStates,
             tActions,
             tLogProb,
+            logStd,
             mbs,
             minLogStd,
             maxLogStd,

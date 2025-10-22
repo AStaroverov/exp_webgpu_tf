@@ -7,20 +7,16 @@ export type AgentMemoryBatch = {
     rewards: Float32Array,
     dones: Float32Array,
     mean: Float32Array[],
-    logStd: Float32Array[],
     logProbs: Float32Array,
-    perturbed: Float32Array, // 0 = not perturbed, 1 = perturbed
 }
 
 export class AgentMemory {
     public states: InputArrays[] = [];
     public actions: Float32Array[] = [];
     public mean: Float32Array[] = [];
-    public logStd: Float32Array[] = [];
     public logProbs: number[] = [];
     public rewards: number[] = [];
     public dones: boolean[] = [];
-    public perturbed: boolean = false;
 
     constructor() {
     }
@@ -37,7 +33,6 @@ export class AgentMemory {
         state: InputArrays,
         action: Float32Array,
         mean: Float32Array,
-        logStd: Float32Array,
         logProb: number,
     ) {
         if (this.isDone()) return;
@@ -46,7 +41,6 @@ export class AgentMemory {
         this.states.push(state);
         this.actions.push(action);
         this.mean.push(mean);
-        this.logStd.push(logStd);
         this.logProbs.push(logProb);
     }
 
@@ -72,20 +66,14 @@ export class AgentMemory {
         const dones = new Float32Array(this.dones);
         dones[dones.length - 1] = 1.0;
 
-        // Создаем массив perturbed для каждого сэмпла
-        const perturbedArray = new Float32Array(this.states.length);
-        perturbedArray.fill(this.perturbed ? 1.0 : 0.0);
-
         return {
             size: this.states.length,
             states: (this.states),
             actions: (this.actions),
             mean: (this.mean),
-            logStd: (this.logStd),
             logProbs: new Float32Array(this.logProbs),
             rewards: rewards,
             dones: dones,
-            perturbed: perturbedArray,
         };
     }
 
@@ -93,11 +81,9 @@ export class AgentMemory {
         this.states.length = 0;
         this.actions.length = 0;
         this.mean.length = 0;
-        this.logStd.length = 0;
         this.logProbs.length = 0;
         this.rewards.length = 0;
         this.dones.length = 0;
-        this.perturbed = false;
     }
 
     private setMinLength() {
@@ -105,7 +91,6 @@ export class AgentMemory {
             this.states.length,
             this.actions.length,
             this.mean.length,
-            this.logStd.length,
             this.logProbs.length,
             this.rewards.length,
             this.dones.length,
@@ -114,7 +99,6 @@ export class AgentMemory {
         this.states.length = minLength;
         this.actions.length = minLength;
         this.mean.length = minLength;
-        this.logStd.length = minLength;
         this.logProbs.length = minLength;
         this.rewards.length = minLength;
         this.dones.length = minLength;

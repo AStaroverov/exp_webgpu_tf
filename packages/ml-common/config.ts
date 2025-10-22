@@ -2,21 +2,21 @@ import { clamp } from 'lodash';
 import { ceil, lerp } from '../../lib/math.ts';
 import { ACTION_DIM, LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
 
+const getLogStd = (iteration: number) => {
+    return -0.8 - clamp(iteration / LEARNING_STEPS, 0, 3)
+}
+
 // Default experiment configuration for PPO
 export const DEFAULT_EXPERIMENT = {
     // Learning parameters
-    clipNorm: 1.0,
+    clipNorm: 1,
     // PPO-specific parameters
     gamma: (iteration: number) => {
-        return lerp(0.95, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
+        return lerp(0.97, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
     },
 
     policyEntropy: (iteration: number) => {
         return lerp(0.001, 0.01, clamp(1 - ((iteration - LEARNING_STEPS) / LEARNING_STEPS * 0.5), 0, 1));
-    },
-
-    logStd: () => {
-        return -1.0; // Math.exp(-1) = 0.36787944117144233
     },
 
     minLogStd: (iteration: number) => {
@@ -29,12 +29,11 @@ export const DEFAULT_EXPERIMENT = {
     },
 
     policyEpochs: (iteration: number) => 2,
-    policyClipRatio: 0.15,
-
+    policyClipRatio: 0.2,
     valueEpochs: (iteration: number) => 3,
-    valueClipRatio: 0.2,
-    valueLossCoeff: 1.2,
-    valueLRCoeff: 1.5,
+    valueClipRatio: 0.4,
+    valueLossCoeff: 1,
+    valueLRCoeff: 2,
 
     // Dynamic learning rate adjustment based on KL
     lrConfig: {
@@ -46,32 +45,17 @@ export const DEFAULT_EXPERIMENT = {
         initial: 1e-5,
         multHigh: 0.9,
         multLow: 1.005,
-        min: 5e-6,
+        min: 1e-6,
         max: 1e-3,
     },
-
-    // Dynamic perturbation scale adjustment based on KL_noise
-    perturbWeightsConfig: {
-        kl: {
-            high: 2 * ACTION_DIM * 0.02,
-            target: 2 * ACTION_DIM * 0.015,
-            low: 2 * ACTION_DIM * 0.01,
-        },
-        initial: 0.01,
-        multHigh: 0.9,
-        multLow: 1.01,
-        min: 0.003,
-        max: 0.02,
-    },
-    perturbChance: (iteration: number) => 0,//lerp(0.01, 0.7, clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1)),
 
     // gSDE (generalized State Dependent Exploration) parameters
     gSDE: {
         enabled: true,
         latentDim: 64,
         noiseUpdateFrequency: 30,
-        logStdBaseInit: -(1 + 1.5),
         trainableLogStdBase: false,
+        logStd: (iteration: number) => -1 + getLogStd(iteration),
     },
 
     batchSize: (iteration: number) => {

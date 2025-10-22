@@ -4,7 +4,7 @@ import { RingBuffer } from 'ring-buffer-ts';
 import { CurriculumState } from '../../../../ml-common/Curriculum/types.ts';
 import { metricsChannels } from '../../../../ml-common/channels.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
-import { getNetworkCurriculumState, getNetworkExpIteration, patientAction, setNetworkCurriculumState, setNetworkExpIteration, setNetworkLearningRate, setNetworkPerturbConfig } from '../../../../ml-common/utils.ts';
+import { getNetworkCurriculumState, getNetworkExpIteration, patientAction, setNetworkCurriculumState, setNetworkSettings } from '../../../../ml-common/utils.ts';
 import { saveNetworkToDB } from '../../Models/Transfer.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
 import { Model } from '../../Models/def.ts';
@@ -23,10 +23,11 @@ export async function createLearnerAgent({ modelName, createNetwork, trainNetwor
         return newNetwork;
     });
 
-    modelSettingsChannel.obs.subscribe(({ lr, perturbChance, perturbScale, expIteration }) => {
-        isNumber(lr) && setNetworkLearningRate(network, lr * (modelName === Model.Value ? CONFIG.valueLRCoeff : 1));
-        isNumber(expIteration) && setNetworkExpIteration(network, expIteration);
-        (isNumber(perturbChance) && isNumber(perturbScale)) && setNetworkPerturbConfig(network, perturbChance, perturbScale);
+    modelSettingsChannel.obs.subscribe((settings) => {
+        if (isNumber(settings.lr)) {
+            settings.lr = settings.lr * (modelName === Model.Value ? CONFIG.valueLRCoeff : 1);
+        }
+        setNetworkSettings(network, settings);
     });
 
     learnProcessChannel.response(async (batch: LearnData) => {

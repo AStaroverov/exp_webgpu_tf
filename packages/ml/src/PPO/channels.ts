@@ -28,6 +28,14 @@ export const learnProcessChannel = createChannel<
 
 export const queueSizeChannel = createChannel<number>('queueSizeChannel');
 
-export const modelSettingsChannel = createChannel<{ lr?: number, perturbChance?: number, perturbScale?: number, expIteration?: number }>('modelSettingsChannel');
+
+export type ModelSettings = {
+    lr?: number,
+    expIteration?: number
+
+    rewardRatio?: number,
+    emaStdReturns?: number,
+}
+export const modelSettingsChannel = createChannel<ModelSettings>('modelSettingsChannel');
 
 export const curriculumStateChannel = createChannel<CurriculumState>('curriculumStateChannel');
