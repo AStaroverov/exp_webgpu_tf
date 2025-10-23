@@ -70,7 +70,7 @@ export function createPolicyNetwork(): tf.LayersModel {
         name: Model.Policy + '_mean_output',
         units: ACTION_DIM,
         useBias: true,
-        activation: 'tanh',
+        activation: 'linear',
     }).apply(network) as tf.SymbolicTensor;
     const model = tf.model({
         name: Model.Policy,
@@ -97,7 +97,6 @@ export function createValueNetwork(): tf.LayersModel {
         outputs: valueOutput,
     });
     model.optimizer = new PatchedAdamOptimizer(CONFIG.lrConfig.initial);
-    // fake loss for save optimizer with model
     model.loss = 'meanSquaredError';
 
     return model;

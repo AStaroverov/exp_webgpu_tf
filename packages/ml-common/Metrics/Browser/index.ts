@@ -129,11 +129,8 @@ function drawTab1() {
     const tab = 'Tab 1';
 
     const avgRewards = store.rewards.toArray();
-    const minRewards = store.rewards.toArrayMin();
-    const maxRewards = store.rewards.toArrayMax();
     tfvis.render.scatterplot({ name: 'Reward', tab }, {
-        values: [minRewards, maxRewards, avgRewards],
-        series: ['Min', 'Max', 'Avg'],
+        values: [avgRewards],
     }, {
         xLabel: 'Version',
         yLabel: 'Reward',
@@ -219,8 +216,6 @@ function drawTab1() {
 
     tfvis.render.scatterplot({ name: 'Value', tab }, {
         values: [
-            store.values.toArrayMin(),
-            store.values.toArrayMax(),
             store.values.toArray(),
         ],
     }, {
@@ -231,11 +226,7 @@ function drawTab1() {
     });
 
     tfvis.render.scatterplot({ name: 'Return', tab }, {
-        values: [
-            store.returns.toArrayMin(),
-            store.returns.toArrayMax(),
-            store.returns.toArray(),
-        ],
+        values: [store.returns.toArray()],
     }, {
         xLabel: 'Version',
         yLabel: 'Return',
@@ -244,7 +235,7 @@ function drawTab1() {
     });
 
     tfvis.render.scatterplot({ name: 'TD Error', tab }, {
-        values: [store.tdErrors.toArrayMin(), store.tdErrors.toArrayMax(), store.tdErrors.toArray()],
+        values: [store.tdErrors.toArray()],
     }, {
         xLabel: 'Version',
         yLabel: 'TD Error',
@@ -253,7 +244,7 @@ function drawTab1() {
     });
 
     tfvis.render.scatterplot({ name: 'Advantage', tab }, {
-        values: [store.advantages.toArrayMin(), store.advantages.toArrayMax()],
+        values: [store.advantages.toArray()],
     }, {
         xLabel: 'Version',
         yLabel: 'Advantage',
