@@ -56,8 +56,8 @@ export const DEFAULT_EXPERIMENT = {
         noiseUpdateFrequency: 8,
         trainableLogStdBase: false,
         logStd: (iteration: number) => {
-            const temps = [1, 1, 1, 1 - clamp(iteration / (LEARNING_STEPS * 0.01), 0, 0.8)];              // ACTION_DIM
             const base = -1.4 + getLogStd(iteration);
+            const temps = [1, 1, 1, 1 - clamp(iteration / (LEARNING_STEPS * 0.1), 0, 0.8)];              // ACTION_DIM
             const logStds = temps.map(t => base + Math.log(t));
             return logStds;
         },
