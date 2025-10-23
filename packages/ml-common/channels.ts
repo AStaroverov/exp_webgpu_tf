@@ -26,5 +26,4 @@ export const metricsChannels = {
     batchSize: new BroadcastChannel('batchSize'),
     versionDelta: new BroadcastChannel('versionDelta'),
     successRatio: new BroadcastChannel('successRatio'),
-
 };

@@ -74,7 +74,7 @@ export function createLearnerManager() {
                         ...vTraceBatchData,
                     };
 
-                    metricsChannels.mean.postMessage(flatTypedArray(batchData.mean));
+                    metricsChannels.mean.postMessage(batchData.mean);
                     metricsChannels.logStd.postMessage(pureLogStd);
                     metricsChannels.batchSize.postMessage(samples.map(b => b.memoryBatch.size));
                     metricsChannels.versionDelta.postMessage(samples.map(b => expIteration - b.networkVersion));
