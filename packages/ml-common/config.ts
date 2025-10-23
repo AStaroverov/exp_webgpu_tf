@@ -3,7 +3,7 @@ import { ceil, lerp } from '../../lib/math.ts';
 import { ACTION_DIM, LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
 
 const getLogStd = (iteration: number) => {
-    return -0.8 - clamp(iteration / LEARNING_STEPS, 0, 1) * 3.2
+    return -0.8 - clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 3.2
 }
 
 // Default experiment configuration for PPO
