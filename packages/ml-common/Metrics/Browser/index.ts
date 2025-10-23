@@ -5,6 +5,7 @@ import { metricsChannels } from '../../channels.ts';
 import { ACTION_DIM } from '../../consts.ts';
 import { scenariosCount } from '../../Curriculum/createScenarioByCurriculumState.ts';
 import { CompressedBuffer } from './CompressedBuffer.ts';
+import { RingBuffer } from './RingBuffer.ts';
 import { getAgentLog, setAgentLog } from './store.ts';
 
 type MetricIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
@@ -13,20 +14,19 @@ const store = {
     rewards: new CompressedBuffer(10_000, 10),
 
     kl: new CompressedBuffer(1_000, 5),
-    klPerturbed: new CompressedBuffer(1_000, 5),
     lr: new CompressedBuffer(1_000, 5),
-    perturbScale: new CompressedBuffer(1_000, 5),
 
-    values: new CompressedBuffer(10_000, 5),
-    returns: new CompressedBuffer(10_000, 5),
-    tdErrors: new CompressedBuffer(10_000, 5),
-    advantages: new CompressedBuffer(10_000, 5),
+    values: new RingBuffer(30_000),
+    returns: new RingBuffer(30_000),
+    tdErrors: new RingBuffer(30_000),
+    advantages: new RingBuffer(30_000),
 
     ...Array.from({ length: ACTION_DIM }, (_, i) => i).reduce((acc, i) => {
-        acc[`mean${i as MetricIndex}`] = new CompressedBuffer(500, 5);
+        acc[`mean${i as MetricIndex}`] = new RingBuffer(5_000);
         return acc;
-    }, {} as Record<`mean${MetricIndex}`, CompressedBuffer>),
-    logStd: new CompressedBuffer(1_000, 5),
+    }, {} as Record<`mean${MetricIndex}`, RingBuffer>),
+    logStd: new RingBuffer(5_000),
+
     valueLoss: new CompressedBuffer(1_000, 5),
     policyLoss: new CompressedBuffer(1_000, 5),
 
@@ -34,8 +34,10 @@ const store = {
     waitTime: new CompressedBuffer(1_000, 5),
     batchSize: new CompressedBuffer(1_000, 5),
     versionDelta: new CompressedBuffer(1_000, 5),
-    vTraceExplainedVariance: new CompressedBuffer(1_000, 5),
-    vTraceStdRatio: new CompressedBuffer(1_000, 5),
+
+    vTraceStdRatio: new RingBuffer(5_000),
+    vTraceExplainedVariance: new RingBuffer(5_000),
+
     // successRatioN
     ...Array.from({ length: scenariosCount }, (_, i) => i).reduce((acc, i) => {
         acc[`successRatio${i as MetricIndex}Ref`] = new CompressedBuffer(500, 5);
