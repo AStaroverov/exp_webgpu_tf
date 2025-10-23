@@ -3,7 +3,7 @@ import { ceil, lerp } from '../../lib/math.ts';
 import { ACTION_DIM, LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
 
 const getLogStd = (iteration: number) => {
-    return -0.8 - clamp(iteration / LEARNING_STEPS, 0, 3)
+    return -0.8 - clamp(iteration / LEARNING_STEPS, 0, 1) * 3.2
 }
 
 // Default experiment configuration for PPO
@@ -30,10 +30,11 @@ export const DEFAULT_EXPERIMENT = {
 
     policyEpochs: (iteration: number) => 2,
     policyClipRatio: 0.2,
+
     valueEpochs: (iteration: number) => 3,
     valueClipRatio: 0.4,
-    valueLossCoeff: 1,
-    valueLRCoeff: 2,
+    valueLossCoeff: 1.5,
+    valueLRCoeff: 1.5,
 
     // Dynamic learning rate adjustment based on KL
     lrConfig: {
@@ -43,19 +44,23 @@ export const DEFAULT_EXPERIMENT = {
             low: ACTION_DIM * 0.016,
         },
         initial: 1e-5,
-        multHigh: 0.9,
-        multLow: 1.005,
+        multHigh: 0.95,
+        multLow: 1.0025,
         min: 1e-6,
         max: 1e-3,
     },
 
     // gSDE (generalized State Dependent Exploration) parameters
     gSDE: {
-        enabled: true,
         latentDim: 64,
-        noiseUpdateFrequency: 30,
+        noiseUpdateFrequency: 8,
         trainableLogStdBase: false,
-        logStd: (iteration: number) => -1 + getLogStd(iteration),
+        logStd: (iteration: number) => {
+            const temps = [1, 1, 1, 1 - clamp(iteration / (LEARNING_STEPS * 0.01), 0, 0.8)];              // ACTION_DIM
+            const base = -1.4 + getLogStd(iteration);
+            const logStds = temps.map(t => base + Math.log(t));
+            return logStds;
+        },
     },
 
     batchSize: (iteration: number) => {

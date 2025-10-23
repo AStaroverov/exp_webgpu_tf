@@ -83,9 +83,7 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
 
         const state = prepareInputArrays(this.tankEid, width, height);
 
-        // @ts-ignore
-        const useNoise = this.train && !globalThis.applyNoise;
-        if (useNoise && this.noiseMatrix) {
+        if (this.noiseMatrix) {
             this.noiseMatrix.maybeResample();
         }
 
@@ -95,7 +93,7 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
             state,
             this.minLogStd,
             this.maxLogStd,
-            useNoise ? this.noiseMatrix : undefined
+            this.noiseMatrix
         );
 
         applyActionToTank(
@@ -159,7 +157,7 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         this.minLogStd = CONFIG.minLogStd(iteration);
         this.maxLogStd = CONFIG.maxLogStd(iteration);
 
-        if (CONFIG.gSDE.enabled && this.train) {
+        if (this.train) {
             this.noiseMatrix = new NoiseMatrix(
                 CONFIG.gSDE.latentDim,
                 ACTION_DIM,

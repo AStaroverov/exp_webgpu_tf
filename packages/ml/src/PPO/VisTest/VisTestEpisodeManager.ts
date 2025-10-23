@@ -9,9 +9,6 @@ import { Scenario } from '../../../../ml-common/Curriculum/types.ts';
 import { getDrawState } from '../../../../ml-common/uiUtils.ts';
 import { EpisodeManager } from '../Actor/EpisodeManager.ts';
 
-// @ts-ignore
-window.applyNoise = false;
-
 export class VisTestEpisodeManager extends EpisodeManager {
     private currentScenario?: Scenario;
 
@@ -48,6 +45,7 @@ export class VisTestEpisodeManager extends EpisodeManager {
     protected beforeEpisode() {
         return createScenarioByCurriculumState(this.curriculumState, {
             iteration: this.curriculumState.iteration,
+            train: false,
         })
             .then((scenario) => {
                 (this.currentScenario = scenario);

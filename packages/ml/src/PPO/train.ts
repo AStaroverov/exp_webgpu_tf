@@ -35,17 +35,17 @@ export function trainPolicyNetwork(
         return optimize(network.optimizer, () => {
             const predicted = network.predict(states, { batchSize });
             const { mean, phi } = parsePolicyOutput(predicted);
-            const { std } = computeEffectiveStd(logStd, phi, minLogStd, maxLogStd);
-            const newLogProbs = computeLogProbTanh(actions, mean, std);
+            const { stdEff } = computeEffectiveStd(logStd, phi, minLogStd, maxLogStd);
+            const newLogProbs = computeLogProbTanh(actions, mean, stdEff);
             const ratio = tf.exp(newLogProbs.sub(oldLogProbs));
             const clippedRatio = ratio.clipByValue(1 - clipRatio, 1 + clipRatio);
             const surr1 = ratio.mul(advantages);
             const surr2 = clippedRatio.mul(advantages);
             const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
-            const meanLoss = mean.square().mean().mul(1e-3);
+            // const meanLoss = mean.square().mean().mul(1e-3);
             // const c = 0.5 * Math.log(2 * Math.PI * Math.E);
             // entropy = clippedLogStdEff.add(c).sum(1).mean().mul(entropyCoeff);
-            const totalLoss = policyLoss.add(meanLoss);//.sub(entropy);
+            const totalLoss = policyLoss;//.add(meanLoss);//.sub(entropy);
             return totalLoss as tf.Scalar;
         }, { clipNorm, returnCost });
     });
@@ -91,8 +91,8 @@ export function computeKullbackLeiblerAprox(
     return tf.tidy(() => {
         const predicted = policyNetwork.predict(states, { batchSize });
         const { mean, phi } = parsePolicyOutput(predicted);
-        const { std } = computeEffectiveStd(logStd, phi, minLogStd, maxLogStd);
-        const newLogProbs = computeLogProbTanh(actions, mean, std);
+        const { stdEff } = computeEffectiveStd(logStd, phi, minLogStd, maxLogStd);
+        const newLogProbs = computeLogProbTanh(actions, mean, stdEff);
         const diff = oldLogProb.sub(newLogProbs);
         const kl = diff.mean().abs();
         return kl;
@@ -114,12 +114,10 @@ export function noisyAct(
     return tf.tidy(() => {
         const predicted = policyNetwork.predict(createInputTensors([state]));
         const { mean, phi } = parsePolicyOutput(predicted);
-
-        const { std, logStd: logStdEff } = computeEffectiveStd(logStd, phi, minLogStd, maxLogStd);
-        const eps = noiseMatrix ? noiseMatrix.noise(logStdEff, phi) : undefined; // noiseMatrix.noise(logStd, phi)
-        const u = eps ? mean.add(eps) : mean.clone() as tf.Tensor2D;
-        const actions = u.tanh() as tf.Tensor2D;
-        const logProb = computeLogProbTanh(actions, mean, std);
+        const { stdEff } = computeEffectiveStd(logStd, phi, minLogStd, maxLogStd);
+        const eps = noiseMatrix?.noise(logStd, phi);
+        const actions = (eps ? mean.add(eps) : mean).tanh();
+        const logProb = computeLogProbTanh(actions, mean, stdEff);
 
         return {
             actions: syncUnwrapTensor(actions) as Float32Array,
@@ -138,7 +136,7 @@ export function pureAct(
     return tf.tidy(() => {
         const predicted = policyNetwork.predict(createInputTensors([state]));
         const { mean } = parsePolicyOutput(predicted);
-        const actions = mean.tanh() as tf.Tensor2D;
+        const actions = mean.tanh();
 
         return {
             actions: syncUnwrapTensor(actions) as Float32Array,
@@ -207,11 +205,10 @@ export function computeVTraceTargets(
     return tf.tidy(() => {
         const input = createInputTensors(batch.states);
         const predicted = policyNetwork.predict(input, { batchSize });
-        const { mean: meanCurrent, phi } = parsePolicyOutput(predicted);
+        const { mean, phi } = parsePolicyOutput(predicted);
+        const { stdEff, logStdEff } = computeEffectiveStd(logStd, phi, minLogStd, maxLogStd);
         const actions = tf.tensor2d(flatTypedArray(batch.actions), [batch.size, ACTION_DIM]);
-
-        const { std, logStd: LogStdEff } = computeEffectiveStd(logStd, phi, minLogStd, maxLogStd);
-        const logProbCurrentTensor = computeLogProbTanh(actions, meanCurrent, std);
+        const logProbCurrentTensor = computeLogProbTanh(actions, mean, stdEff);
         const logProbBehaviorTensor = tf.tensor1d(batch.logProbs);
         const rhosTensor = computeRho(logProbBehaviorTensor, logProbCurrentTensor);
         const valuesTensor = (valueNetwork.predict(input, { batchSize }) as tf.Tensor).squeeze();
@@ -248,8 +245,8 @@ export function computeVTraceTargets(
             returns: vTraces,
             values: values,
             // just for logs
-            pureMean: syncUnwrapTensor(meanCurrent) as Float32Array,
-            pureLogStd: syncUnwrapTensor(LogStdEff) as Float32Array,
+            pureMean: syncUnwrapTensor(mean) as Float32Array,
+            pureLogStd: syncUnwrapTensor(logStdEff) as Float32Array,
         };
     });
 }
@@ -312,15 +309,15 @@ export function computeVTrace(
 }
 
 export function getTLogStd(iteration: number): tf.Tensor {
-    return tf.fill([ACTION_DIM], CONFIG.gSDE.logStd(iteration));
+    return tf.tensor(CONFIG.gSDE.logStd(iteration));
 }
 
 function computeEffectiveStd(logStd: tf.Tensor, phi: tf.Tensor, minLogStd: number, maxLogStd: number) {
     const power = tf.log(phi.square().sum(1, true).add(1e-6)).mul(0.5); // [B, 1]
     const logStdEff = logStd.reshape([1, ACTION_DIM]).add(power); // [B, A]
     const clippedLogStdEff = tf.clipByValue(logStdEff, minLogStd, maxLogStd);
-    const std = tf.exp(clippedLogStdEff);
-    return { std, logStd }
+    const stdEff = tf.exp(clippedLogStdEff);
+    return { stdEff, logStdEff }
 }
 
 let randomInputTensors: tf.Tensor[];
