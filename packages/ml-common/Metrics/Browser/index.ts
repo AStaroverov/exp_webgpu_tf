@@ -2,11 +2,12 @@ import * as tfvis from '@tensorflow/tfjs-vis';
 import { get } from 'lodash';
 import { isObject, mapValues, throttle } from 'lodash-es';
 import { metricsChannels } from '../../channels.ts';
+import { ACTION_DIM } from '../../consts.ts';
 import { scenariosCount } from '../../Curriculum/createScenarioByCurriculumState.ts';
 import { CompressedBuffer } from './CompressedBuffer.ts';
 import { getAgentLog, setAgentLog } from './store.ts';
 
-type SuccessRatioIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+type MetricIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
 const store = {
     rewards: new CompressedBuffer(10_000, 10),
@@ -21,7 +22,10 @@ const store = {
     tdErrors: new CompressedBuffer(10_000, 5),
     advantages: new CompressedBuffer(10_000, 5),
 
-    mean: new CompressedBuffer(1_000, 5),
+    ...Array.from({ length: ACTION_DIM }, (_, i) => i).reduce((acc, i) => {
+        acc[`mean${i as MetricIndex}`] = new CompressedBuffer(500, 5);
+        return acc;
+    }, {} as Record<`mean${MetricIndex}`, CompressedBuffer>),
     logStd: new CompressedBuffer(1_000, 5),
     valueLoss: new CompressedBuffer(1_000, 5),
     policyLoss: new CompressedBuffer(1_000, 5),
@@ -34,10 +38,10 @@ const store = {
     vTraceStdRatio: new CompressedBuffer(1_000, 5),
     // successRatioN
     ...Array.from({ length: scenariosCount }, (_, i) => i).reduce((acc, i) => {
-        acc[`successRatio${i as SuccessRatioIndex}Ref`] = new CompressedBuffer(500, 5);
-        acc[`successRatio${i as SuccessRatioIndex}Train`] = new CompressedBuffer(500, 5);
+        acc[`successRatio${i as MetricIndex}Ref`] = new CompressedBuffer(500, 5);
+        acc[`successRatio${i as MetricIndex}Train`] = new CompressedBuffer(500, 5);
         return acc;
-    }, {} as Record<`successRatio${SuccessRatioIndex}${'Ref' | 'Train'}`, CompressedBuffer>),
+    }, {} as Record<`successRatio${MetricIndex}${'Ref' | 'Train'}`, CompressedBuffer>),
 };
 
 getAgentLog().then((data) => {
@@ -74,10 +78,19 @@ export function subscribeOnMetrics() {
     };
     Object.keys(metricsChannels).forEach((key) => {
         const channel = metricsChannels[key as keyof typeof metricsChannels];
-        if (key === 'successRatio') {
+        if (key === 'mean') {
+            channel.onmessage = w((event) => {
+                (event.data as number[][]).forEach((means) => {
+                    store.mean0.add(means[0]);
+                    store.mean1.add(means[1]);
+                    store.mean2.add(means[2]);
+                    store.mean3.add(means[3]);
+                })
+            });
+        } else if (key === 'successRatio') {
             channel.onmessage = w((event) => {
                 (event.data as {
-                    scenarioIndex: SuccessRatioIndex,
+                    scenarioIndex: MetricIndex,
                     successRatio: number,
                     isReference: boolean,
                 }[]).forEach(({ scenarioIndex, successRatio, isReference }) => {
@@ -94,7 +107,7 @@ export function subscribeOnMetrics() {
 
 function drawTab0() {
     const tab = 'Tab 0';
-    const renderSuccessRatio = (index: SuccessRatioIndex) => {
+    const renderSuccessRatio = (index: MetricIndex) => {
         const successRatioTrain = store[`successRatio${index}Train`].toArray();
         const successRatioTrainMA = calculateMovingAverage(successRatioTrain, 100);
         tfvis.render.scatterplot({ name: 'Train Success Ratio ' + index, tab }, {
@@ -121,7 +134,7 @@ function drawTab0() {
     };
 
     Array.from({ length: scenariosCount }, (_, i) => i).forEach((i) => {
-        renderSuccessRatio(i as SuccessRatioIndex);
+        renderSuccessRatio(i as MetricIndex);
     });
 }
 
@@ -251,12 +264,11 @@ function drawTab1() {
         width: 500,
         height: 300,
     });
-
 }
 
 function drawTab2() {
     tfvis.render.scatterplot({ name: 'mean', tab: 'Tab 2' }, {
-        values: [store.mean.toArray()],
+        values: [store.mean0.toArray(), store.mean1.toArray(), store.mean2.toArray(), store.mean3.toArray(),],
     }, {
         xLabel: 'Version',
         yLabel: 'mean',
