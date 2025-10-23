@@ -10,9 +10,10 @@ import {
 } from '../../../tanks/src/Pilots/Components/TankState.ts';
 import {
     applyCrossTransformerLayer,
-    applyDenseLayers,
+    applyMLP,
     applySelfTransformLayers,
     convertInputsToTokens,
+    createDenseLayer,
     createInputs,
 } from './ApplyLayers.ts';
 
@@ -34,7 +35,6 @@ export const BULLET_FEATURES_DIM = BULLET_BUFFER - 1; // -1 потому что 
 type NetworkConfig = {
     dim: number;
     heads: number;
-    dropout?: number;
     finalMLP: [ActivationIdentifier, number][];
 };
 
@@ -66,10 +66,11 @@ const valueNetworkConfig: NetworkConfig = {
 export function createPolicyNetwork(): tf.LayersModel {
     const { inputs, network } = createBaseNetwork(Model.Policy, policyNetworkConfig);
 
-    const meanOutput = tf.layers.dense({
+    const meanOutput = createDenseLayer({
         name: Model.Policy + '_mean_output',
         units: ACTION_DIM,
-        activation: 'linear',
+        useBias: true,
+        activation: 'tanh',
     }).apply(network) as tf.SymbolicTensor;
     const model = tf.model({
         name: Model.Policy,
@@ -84,9 +85,10 @@ export function createPolicyNetwork(): tf.LayersModel {
 
 export function createValueNetwork(): tf.LayersModel {
     const { inputs, network } = createBaseNetwork(Model.Value, valueNetworkConfig);
-    const valueOutput = tf.layers.dense({
+    const valueOutput = createDenseLayer({
         name: Model.Value + '_output',
         units: 1,
+        useBias: true,
         activation: 'linear',
     }).apply(network) as tf.SymbolicTensor;
     const model = tf.model({
@@ -136,17 +138,16 @@ function createBaseNetwork(modelName: Model, config: NetworkConfig) {
     const transformedEnvToken = applySelfTransformLayers(
         modelName + '_transformedEnvToken',
         {
+            token: envToken,
             depth: 2,
             numHeads: config.heads,
-            dropout: config.dropout,
-            token: envToken,
         },
     );
 
     const flattenFinalToken = tf.layers.flatten({ name: modelName + '_flattenFinalToken' }).apply(transformedEnvToken) as tf.SymbolicTensor;
     const normFinalToken = tf.layers.layerNormalization({ name: modelName + '_normFinalToken' }).apply(flattenFinalToken) as tf.SymbolicTensor;
 
-    const finalMLP = applyDenseLayers(
+    const finalMLP = applyMLP(
         modelName + '_finalMLP',
         normFinalToken,
         config.finalMLP,

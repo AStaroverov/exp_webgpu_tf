@@ -23,7 +23,7 @@ export class NoiseMatrix {
     }
 
     noise(logStd: tf.Tensor, phi: tf.Tensor2D): tf.Tensor {
-        if (!this.Theta) {
+        if (this.Theta == null) {
             throw new Error('NoiseMatrix: Theta is not initialized. Call resample() first.');
         }
 
