@@ -20,6 +20,7 @@ import {
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 import { ACTION_DIM } from '../../../ml-common/consts.ts';
 import { Model } from './def.ts';
+import { StopGradientLayer } from './Layers/StopGradientLayer.ts';
 import { PatchedAdamOptimizer } from './PatchedAdamOptimizer.ts';
 
 export const CONTROLLER_FEATURES_DIM = 4;
@@ -64,7 +65,7 @@ const valueNetworkConfig: NetworkConfig = {
 };
 
 export function createPolicyNetwork(): tf.LayersModel {
-    const { inputs, network } = createBaseNetwork(Model.Policy, policyNetworkConfig);
+    const { inputs, network, phi } = createBaseNetwork(Model.Policy, policyNetworkConfig);
 
     const meanOutput = createDenseLayer({
         name: Model.Policy + '_mean_output',
@@ -72,10 +73,23 @@ export function createPolicyNetwork(): tf.LayersModel {
         useBias: true,
         activation: 'linear',
     }).apply(network) as tf.SymbolicTensor;
+
+    const phiDetached = new StopGradientLayer({
+        name: Model.Policy + '_phi_stop_gradient'
+    }).apply(phi) as tf.SymbolicTensor;
+
+    const phiOutput = createDenseLayer({
+        name: Model.Policy + '_phi_output',
+        units: CONFIG.gSDE.latentDim,
+        useBias: true,
+        activation: 'linear',
+        kernelInitializer: 'orthogonal',
+    }).apply(phiDetached) as tf.SymbolicTensor;
+
     const model = tf.model({
         name: Model.Policy,
         inputs: Object.values(inputs),
-        outputs: [meanOutput, network], // [mean, phi]
+        outputs: [meanOutput, phiOutput], // [mean, phi]
     });
     model.optimizer = new PatchedAdamOptimizer(CONFIG.lrConfig.initial);
     model.loss = 'meanSquaredError'; // fake loss for save optimizer with model
@@ -152,5 +166,5 @@ function createBaseNetwork(modelName: Model, config: NetworkConfig) {
         config.finalMLP,
     );
 
-    return { inputs, network: finalMLP };
+    return { inputs, network: finalMLP, phi: normFinalToken };
 }
