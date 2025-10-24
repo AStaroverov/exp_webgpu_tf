@@ -8,10 +8,13 @@ const stopGradient = tf.customGrad((x) => {
 
 export class StopGradientLayer extends tf.layers.Layer {
     static className = 'StopGradientLayer';
+
     call(inputs: tf.Tensor | tf.Tensor[]) {
-        const x = Array.isArray(inputs) ? inputs[0] : inputs;
-        debugger
-        return stopGradient(x as tf.Tensor);
+        if (Array.isArray(inputs)) {
+            return inputs.map(x => stopGradient(x));
+        } else {
+            return stopGradient(inputs);
+        }
     }
 }
 
