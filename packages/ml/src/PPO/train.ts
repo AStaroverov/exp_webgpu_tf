@@ -206,7 +206,7 @@ export function computeVTraceTargets(
         const input = createInputTensors(batch.states);
         const predicted = policyNetwork.predict(input, { batchSize });
         const { mean, phi } = parsePolicyOutput(predicted);
-        const { stdEff, logStdEff } = computeEffectiveStd(logStd, phi, minLogStd, maxLogStd);
+        const { stdEff, pureLogStdEff } = computeEffectiveStd(logStd, phi, minLogStd, maxLogStd);
         const actions = tf.tensor2d(flatTypedArray(batch.actions), [batch.size, ACTION_DIM]);
         const logProbCurrentTensor = computeLogProbTanh(actions, mean, stdEff);
         const logProbBehaviorTensor = tf.tensor1d(batch.logProbs);
@@ -246,7 +246,7 @@ export function computeVTraceTargets(
             values: values,
             // just for logs
             pureMean: syncUnwrapTensor(mean) as Float32Array,
-            pureLogStd: syncUnwrapTensor(logStdEff) as Float32Array,
+            pureLogStd: syncUnwrapTensor(pureLogStdEff) as Float32Array,
         };
     });
 }
@@ -313,11 +313,23 @@ export function getTLogStd(iteration: number): tf.Tensor {
 }
 
 function computeEffectiveStd(logStd: tf.Tensor, phi: tf.Tensor, minLogStd: number, maxLogStd: number) {
-    const power = tf.log(phi.square().sum(1, true).add(1e-6)).mul(0.5); // [B, 1]
+    const phiNorm = phi.norm('euclidean', 1, true);
+    const power = tf.log(phiNorm.square().sum(1, true).add(1e-6)).mul(0.5); // [B, 1]
     const logStdEff = logStd.reshape([1, ACTION_DIM]).add(power); // [B, A]
-    const clippedLogStdEff = tf.clipByValue(logStdEff, minLogStd, maxLogStd);
-    const stdEff = tf.exp(clippedLogStdEff);
-    return { stdEff, logStdEff }
+    const boundedLogStdEff = softClipByValue(logStdEff, minLogStd, maxLogStd);
+    const stdEff = tf.exp(boundedLogStdEff);
+    return { stdEff, pureLogStdEff: logStdEff };
+}
+
+export function softClipByValue(
+    z: tf.Tensor,
+    minL: number,
+    maxL: number,
+): tf.Tensor {
+    const normalized = z.sub(minL).div(maxL - minL); // [0, 1]
+    const scaled = normalized.mul(2).sub(1); // [-1, 1]
+    const clipped = tf.tanh(scaled.mul(2)).mul(0.5).add(0.5); // плавный клип
+    return clipped.mul(maxL - minL).add(minL);
 }
 
 let randomInputTensors: tf.Tensor[];
