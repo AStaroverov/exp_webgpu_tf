@@ -7,10 +7,10 @@ import { ACTION_DIM, LEARNING_STEPS } from '../../../../ml-common/consts.ts';
 import { prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
 import { NoiseMatrix } from '../../../../ml-common/NoiseMatrix.ts';
-import { getNetworkExpIteration, patientAction } from '../../../../ml-common/utils.ts';
+import { getNetworkExpIteration, getNetworkSettings, patientAction } from '../../../../ml-common/utils.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../../../ml/src/Models/Utils.ts';
-import { getTLogStd, noisyAct } from '../../../../ml/src/PPO/train.ts';
+import { noisyAct } from '../../../../ml/src/PPO/train.ts';
 import { calculateActionReward, calculateStateReward, getDeathPenalty, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 
@@ -39,9 +39,8 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
     private noiseMatrix?: NoiseMatrix
     private policyNetwork?: tf.LayersModel;
 
-    private logStd?: tf.Tensor;
-    private minLogStd?: number;
-    private maxLogStd?: number;
+    private minLogStd?: number[];
+    private maxLogStd?: number[];
 
     private initialActionReward?: number;
 
@@ -63,7 +62,6 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
     public dispose() {
         disposeNetwork(this.policyNetwork);
         this.memory.dispose();
-        this.logStd?.dispose();
         this.noiseMatrix?.dispose();
     }
 
@@ -79,7 +77,7 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         width: number,
         height: number,
     ) {
-        if (!(this.policyNetwork != null && this.logStd != null && this.minLogStd != null && this.maxLogStd != null)) return;
+        if (!(this.policyNetwork != null && this.minLogStd != null && this.maxLogStd != null)) return;
 
         const state = prepareInputArrays(this.tankEid, width, height);
 
@@ -89,7 +87,6 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
 
         const result = noisyAct(
             this.policyNetwork,
-            this.logStd,
             state,
             this.minLogStd,
             this.maxLogStd,
@@ -152,11 +149,9 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
     private async load() {
         this.policyNetwork = await getNetwork(Model.Policy);
 
-        const iteration = getNetworkExpIteration(this.policyNetwork);
-        this.logStd = getTLogStd(iteration);
-        this.minLogStd = CONFIG.minLogStd(iteration);
-        this.maxLogStd = CONFIG.maxLogStd(iteration);
-
+        const settings = getNetworkSettings(this.policyNetwork)
+        this.minLogStd = CONFIG.minLogStd(settings.expIteration ?? 0);
+        this.maxLogStd = CONFIG.maxLogStd(settings.expIteration ?? 0);
         if (this.train) {
             this.noiseMatrix = new NoiseMatrix(
                 CONFIG.gSDE.latentDim,

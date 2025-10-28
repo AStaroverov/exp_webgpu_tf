@@ -63,12 +63,12 @@ export function createDenseLayer(options: DenseLayerArgs & Required<Pick<DenseLa
 
 export function applySelfTransformLayers(name: string, {
     depth,
-    numHeads,
+    heads: numHeads,
     token,
     mask,
 }: {
     depth: number,
-    numHeads: number,
+    heads: number,
     token: tf.SymbolicTensor,
     mask?: tf.SymbolicTensor
 }) {
@@ -200,15 +200,15 @@ export function applySelfAttentionLayer(
 export function applyCrossTransformerLayer(
     name: string,
     {
-        numHeads,
+        heads: numHeads,
         qTok,
         kvTok,
         kvMask,
     }: {
-        numHeads: number,
+        heads: number,
         qTok: tf.SymbolicTensor,
         kvTok: tf.SymbolicTensor,
-        kvMask?: tf.SymbolicTensor,
+        kvMask?: tf.SymbolicTensor
     },
 ) {
     const dModel = qTok.shape[qTok.shape.length - 1]!;
