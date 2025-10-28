@@ -2,12 +2,7 @@ import { clamp } from 'lodash';
 import { ceil, lerp } from '../../lib/math.ts';
 import { ACTION_DIM, LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
 
-const getLogStd = (iteration: number) => {
-    return -0.8 - clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 3.2
-}
-
-// Default experiment configuration for PPO
-export const DEFAULT_EXPERIMENT = {
+export const CONFIG = {
     // Learning parameters
     clipNorm: 1,
     // PPO-specific parameters
@@ -20,21 +15,19 @@ export const DEFAULT_EXPERIMENT = {
     },
 
     minLogStd: (iteration: number) => {
-        return -5; // lerp(-4, -2, clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1))
-        // Math.exp(-5) = 0.006737946999085467
+        return [-5, -5, -5, -5].map(v => v - 1.25);
     },
     maxLogStd: (iteration: number) => {
-        return -0.8;//; // lerp(0, 2, clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1))
-        // Math.exp(-0.8) = 0.44932896411722156
+        return [-0.8, -0.8, -0.8, -(0.8 + clamp(iteration / (LEARNING_STEPS * 0.1), 0, 1) * 3)].map(v => v - 1.25);
     },
 
     policyEpochs: (iteration: number) => 2,
     policyClipRatio: 0.2,
 
     valueEpochs: (iteration: number) => 3,
-    valueClipRatio: 0.4,
-    valueLossCoeff: 1.5,
-    valueLRCoeff: 1.5,
+    valueClipRatio: 0.2,
+    valueLossCoeff: 0.5,
+    valueLRCoeff: 1,
 
     // Dynamic learning rate adjustment based on KL
     lrConfig: {
@@ -54,13 +47,6 @@ export const DEFAULT_EXPERIMENT = {
     gSDE: {
         latentDim: 64,
         noiseUpdateFrequency: 8,
-        trainableLogStdBase: false,
-        logStd: (iteration: number) => {
-            const base = -2.4 + getLogStd(iteration);
-            const temps = [1, 1, 1, 1 - clamp(iteration / (LEARNING_STEPS * 0.1), 0, 0.8)];              // ACTION_DIM
-            const logStds = temps.map(t => base + Math.log(t));
-            return logStds;
-        },
     },
 
     batchSize: (iteration: number) => {
@@ -79,6 +65,3 @@ export const DEFAULT_EXPERIMENT = {
     savePath: 'PPO_MHA',
     // fsModelPath: '/assets/models/v1',
 };
-
-// Current active experiment
-export let CONFIG = DEFAULT_EXPERIMENT;

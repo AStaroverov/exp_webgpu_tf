@@ -1,4 +1,4 @@
-import { getNetworkExpIteration, getNetworkLearningRate } from '../../../../ml-common/utils.ts';
+import { getNetworkLearningRate, getNetworkSettings } from '../../../../ml-common/utils.ts';
 
 import * as tf from '@tensorflow/tfjs';
 import { RingBuffer } from 'ring-buffer-ts';
@@ -13,7 +13,7 @@ import { asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../../ml
 import { createPolicyNetwork } from '../../Models/Create.ts';
 import { Model } from '../../Models/def.ts';
 import { modelSettingsChannel } from '../channels.ts';
-import { computeKullbackLeiblerAprox, getTLogStd, trainPolicyNetwork } from '../train.ts';
+import { computeKullbackLeiblerAprox, trainPolicyNetwork } from '../train.ts';
 import { createLearnerAgent } from './createLearnerAgent.ts';
 import { LearnData } from './createLearnerManager.ts';
 import { isLossDangerous } from './isLossDangerous.ts';
@@ -29,7 +29,8 @@ export function createPolicyLearnerAgent() {
 const klHistory = new RingBuffer<number>(25);
 
 function trainPolicy(network: tf.LayersModel, batch: LearnData) {
-    const expIteration = getNetworkExpIteration(network);
+    const settings = getNetworkSettings(network);
+    const expIteration = settings.expIteration ?? 0;
     const minLogStd = CONFIG.minLogStd(expIteration);
     const maxLogStd = CONFIG.maxLogStd(expIteration);
     const mbs = CONFIG.miniBatchSize(expIteration);
@@ -55,8 +56,6 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const policyLossList: tf.Tensor[] = [];
     const entropyCoeff = CONFIG.policyEntropy(expIteration);
 
-    const tLogStd = getTLogStd(expIteration);
-
     for (let i = 0; i < CONFIG.policyEpochs(expIteration); i++) {
         for (let j = 0; j < mbc; j++) {
             const mBatch = getPolicyBatch(mbs, j);
@@ -72,7 +71,6 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
                 tActions,
                 tOldLogProbs,
                 tAdvantages,
-                tLogStd,
                 mbs,
                 CONFIG.policyClipRatio,
                 entropyCoeff,
@@ -90,7 +88,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
         }
 
         // KL on non-perturbed data (for learning rate adaptation)
-        const tKL = computeKLForBatch(network, tLogStd, getKlBatch(klSize), mbs, minLogStd, maxLogStd);
+        const tKL = computeKLForBatch(network, getKlBatch(klSize), mbs, minLogStd, maxLogStd);
         const kl = tKL ? syncUnwrapTensor(tKL)[0] : undefined;
         if (kl != null) klList.push(kl);
         if (kl != null && kl > CONFIG.lrConfig.kl.high) {
@@ -98,8 +96,6 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             break;
         }
     }
-
-    tLogStd.dispose();
 
     return onReadyRead()
         .then(() => Promise.all([
@@ -154,11 +150,10 @@ function createKlBatch(batch: LearnData, indices: number[]) {
 
 function computeKLForBatch(
     network: tf.LayersModel,
-    logStd: tf.Tensor,
     batch: ReturnType<typeof createKlBatch>,
     mbs: number,
-    minLogStd: number,
-    maxLogStd: number,
+    minLogStd: number[],
+    maxLogStd: number[],
 ) {
     let result: undefined | tf.Tensor;
 
@@ -172,7 +167,6 @@ function computeKLForBatch(
             tStates,
             tActions,
             tLogProb,
-            logStd,
             mbs,
             minLogStd,
             maxLogStd,

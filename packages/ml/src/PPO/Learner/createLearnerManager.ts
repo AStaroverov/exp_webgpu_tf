@@ -17,7 +17,7 @@ import {
     modelSettingsChannel,
     queueSizeChannel
 } from '../channels.ts';
-import { computeVTraceTargets, getTLogStd } from '../train.ts';
+import { computeVTraceTargets } from '../train.ts';
 
 export type LearnData = AgentMemoryBatch & {
     values: Float32Array,
@@ -26,7 +26,6 @@ export type LearnData = AgentMemoryBatch & {
     advantages: Float32Array,
 
     rewardRatio: number,
-    emaStdValues?: number,
     emaStdReturns?: number,
 };
 
@@ -56,12 +55,10 @@ export function createLearnerManager() {
                         b.memoryBatch.rewards.forEach((_, i, arr) => { arr[i] *= settings.rewardRatio ?? 1 / 4; })
                         return b.memoryBatch
                     }));
-                    const tLogStd = getTLogStd(expIteration);
-                    const { pureLogStd, ...vTraceBatchData } = computeVTraceTargets(
+                    const { pureLogStd, logStdShift, ...vTraceBatchData } = computeVTraceTargets(
                         policyNetwork,
                         valueNetwork,
                         batchData,
-                        tLogStd,
                         CONFIG.miniBatchSize(expIteration),
                         CONFIG.gamma(expIteration),
                         CONFIG.minLogStd(expIteration),
@@ -81,7 +78,6 @@ export function createLearnerManager() {
 
                     disposeNetwork(policyNetwork);
                     disposeNetwork(valueNetwork);
-                    tLogStd.dispose();
 
                     return learnData;
                 }),
