@@ -26,7 +26,7 @@ export const CONFIG = {
 
     valueEpochs: (iteration: number) => 3,
     valueClipRatio: 0.2,
-    valueLossCoeff: 0.5,
+    valueLossCoeff: 1,
     valueLRCoeff: 1,
 
     // Dynamic learning rate adjustment based on KL

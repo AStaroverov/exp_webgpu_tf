@@ -21,7 +21,7 @@ export class LogStdLayer extends tf.layers.Layer {
             'logStd',
             [this.units],
             'float32',
-            tf.initializers.constant({ value: 0.95 }),
+            tf.initializers.constant({ value: -2.5 }),
         );
     }
 
