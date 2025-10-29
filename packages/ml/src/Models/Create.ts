@@ -17,7 +17,7 @@ import { ACTION_DIM } from '../../../ml-common/consts.ts';
 import { Model } from './def.ts';
 import { LogStdLayer } from './Layers/LogStdLayer.ts';
 import { StopGradientLayer } from './Layers/StopGradientLayer.ts';
-import { createNetwork } from './Networks/v2.ts';
+import { createNetwork } from './Networks/v3.ts';
 import { PatchedAdamOptimizer } from './PatchedAdamOptimizer.ts';
 
 export const CONTROLLER_FEATURES_DIM = 4;
@@ -44,6 +44,7 @@ const policyNetworkConfig: policyNetworkConfig = {
     finalMLP: [
         ['relu', 512],
         ['relu', 256],
+        ['relu', 128],
         ['relu', 64],
     ],
 };
@@ -51,8 +52,9 @@ const valueNetworkConfig: NetworkConfig = {
     dim: 16,
     heads: 1,
     finalMLP: [
+        ['relu', 128],
         ['relu', 64],
-        ['relu', 16],
+        ['relu', 32],
     ] as [ActivationIdentifier, number][],
 };
 
@@ -65,7 +67,7 @@ export function createPolicyNetwork(): tf.LayersModel {
         useBias: true,
         activation: 'linear',
         biasInitializer: 'zeros',
-        kernelInitializer: 'glorotUniform',
+        kernelInitializer: tf.initializers.randomNormal({ mean: 0, stddev: 0.01 }),
     }).apply(network) as tf.SymbolicTensor;
 
     const logStdOutput = new LogStdLayer({
@@ -104,7 +106,7 @@ export function createValueNetwork(): tf.LayersModel {
         useBias: true,
         activation: 'linear',
         biasInitializer: 'zeros',
-        kernelInitializer: 'zeros',
+        kernelInitializer: 'glorotUniform',
     }).apply(network) as tf.SymbolicTensor;
     const model = tf.model({
         name: Model.Value,

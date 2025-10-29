@@ -1,10 +1,11 @@
 import * as tf from '@tensorflow/tfjs';
 import {
-    applyCrossTransformerLayer,
+    applyCrossAttentionLayer,
     applyMLP,
     applySelfTransformLayers,
     convertInputsToTokens,
-    createInputs
+    createInputs,
+    createNormalizationLayer
 } from '../ApplyLayers.ts';
 
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
@@ -64,12 +65,12 @@ export function createNetwork(modelName: Model, config: NetworkConfig) {
         },
     );
 
-    const finalToken = applyCrossTransformerLayer(modelName + '_controllerTokenAttn', {
+    const finalToken = applyCrossAttentionLayer(modelName + '_controllerTokenAttn', {
         heads: config.heads,
         qTok: tokens.controllerTok,
         kvTok: transformedTankContextToken,
     })
-    const normFinalToken = tf.layers.layerNormalization({ name: modelName + '_normFinalToken' }).apply(finalToken) as tf.SymbolicTensor;
+    const normFinalToken = createNormalizationLayer({ name: modelName + '_normFinalToken' }).apply(finalToken) as tf.SymbolicTensor;
     const flattenedFinalToken = tf.layers.flatten({ name: modelName + '_flattenedFinalToken' }).apply(normFinalToken) as tf.SymbolicTensor;
 
     const finalMLP = applyMLP(
@@ -89,13 +90,13 @@ function attentionToTank(config: {
     kvTok: tf.SymbolicTensor,
     kvMask?: tf.SymbolicTensor
 }) {
-    const tankAttn = applyCrossTransformerLayer(config.name + '_crossAttn', {
+    const tankAttn = applyCrossAttentionLayer(config.name + '_crossAttn', {
         heads: config.heads,
         qTok: config.qTok,
         kvTok: config.kvTok,
         kvMask: config.kvMask,
     });
-    const normTankAttn = tf.layers.layerNormalization({ name: config.name + '_norm' }).apply(tankAttn) as tf.SymbolicTensor;
+    const normTankAttn = createNormalizationLayer({ name: config.name + '_norm' }).apply(tankAttn) as tf.SymbolicTensor;
 
     return normTankAttn;
 }

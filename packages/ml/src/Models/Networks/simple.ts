@@ -2,7 +2,6 @@ import * as tf from '@tensorflow/tfjs';
 import {
     applyAttentionPoolingLayer,
     applyMLP,
-    applySelfTransformLayers,
     convertInputsToTokens,
     createInputs,
     createNormalizationLayer
@@ -21,12 +20,6 @@ export function createNetwork(modelName: Model, config: NetworkConfig) {
     const inputs = createInputs(modelName);
     const tokens = convertInputsToTokens(inputs, config.dim);
 
-    const tankToBattleAttn = getAttention({
-        name: modelName + '_tankToBattleAttn',
-        heads: config.heads,
-        qTok: tokens.tankTok,
-        kvTok: tokens.battleTok,
-    });
     const tankToEnemiesAttn = getAttention({
         name: modelName + '_tankToEnemiesAttn',
         heads: config.heads,
@@ -49,26 +42,13 @@ export function createNetwork(modelName: Model, config: NetworkConfig) {
         kvMask: inputs.bulletsMaskInput,
     });
 
-    const tankContextToken = tf.layers.concatenate({ name: modelName + '_tankContextToken', axis: 1 }).apply([
-        tankToBattleAttn,
+    const finalToken = tf.layers.concatenate({ name: modelName + '_finalToken', axis: 1 }).apply([
+        tokens.controllerTok,
+        tokens.battleTok,
+        tokens.tankTok,
         tankToEnemiesAttn,
         tankToAlliesAttn,
         tankToBulletsAttn,
-    ]) as tf.SymbolicTensor;
-
-    const transformedTankContextToken = applySelfTransformLayers(
-        modelName + '_transformedTankContextToken',
-        {
-            token: tankContextToken,
-            depth: 3,
-            heads: config.heads,
-        },
-    );
-
-    const finalToken = tf.layers.concatenate({ name: modelName + '_finalToken', axis: 1 }).apply([
-        tokens.tankTok,
-        tokens.controllerTok,
-        transformedTankContextToken,
     ]) as tf.SymbolicTensor;
 
     const flattenedFinalToken = tf.layers.flatten({ name: modelName + '_flattenedFinalToken' }).apply(finalToken) as tf.SymbolicTensor;

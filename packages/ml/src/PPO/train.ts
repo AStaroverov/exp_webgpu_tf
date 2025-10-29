@@ -65,13 +65,30 @@ export function trainValueNetwork(
                 newValues.sub(oldValues).clipByValue(-clipRatio, clipRatio),
             );
 
-            const vfLoss1 = returns.sub(newValues).square();
-            const vfLoss2 = returns.sub(newValuesClipped).square();
-            const finalValueLoss = tf.maximum(vfLoss1, vfLoss2).mean().mul(lossCoeff);
+            // mse with clipping
+            // const vfLoss1 = returns.sub(newValues).square();
+            // const vfLoss2 = returns.sub(newValuesClipped).square();
 
+            // huber loss with clipping
+            const rMean = returns.mean();
+            const rStd = returns.sub(rMean).square().mean().sqrt().add(1e-8);
+            const e1 = returns.sub(newValues);
+            const e2 = returns.sub(newValuesClipped);
+            const vfLoss1 = huber(e1, rStd);
+            const vfLoss2 = huber(e2, rStd);
+
+            const finalValueLoss = tf.maximum(vfLoss1, vfLoss2).mean().mul(lossCoeff) as tf.Scalar;
             return finalValueLoss as tf.Scalar;
         }, { clipNorm, returnCost });
     });
+}
+
+function huber(e: tf.Tensor, delta: number | tf.Tensor): tf.Tensor {
+    const d = (typeof delta === 'number') ? tf.scalar(delta, 'float32') : delta as tf.Tensor;
+    const abs = e.abs();
+    const m = tf.minimum(abs, d);                     // no boolean ops
+    // 0.5*m^2 + d*(abs - m)
+    return m.square().mul(0.5).add(abs.sub(m).mul(d));
 }
 
 export function computeKullbackLeiblerAprox(
@@ -305,7 +322,7 @@ export function computeVTrace(
 
 function parsePolicyOutput(prediction: tf.Tensor | tf.Tensor[], minLogStd: number[], maxLogStd: number[]) {
     const [mean, logStd, phi] = prediction as [tf.Tensor2D, tf.Tensor2D, tf.Tensor2D];
-    return { mean, logStd: tanhMapToRange(logStd, minLogStd, maxLogStd), phi };
+    return { mean, logStd, phi }; // logStd: tanhMapToRange(logStd, minLogStd, maxLogStd)
 }
 
 function tanhMapToRange(z: tf.Tensor, min: number[], max: number[]) {
