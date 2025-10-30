@@ -34,9 +34,9 @@ export const CONFIG = {
     policyClipRatio: 0.2,
 
     valueEpochs: (iteration: number) => 2,
-    valueClipRatio: 0.3,
-    valueLossCoeff: 1,
-    valueLRCoeff: 1,
+    valueClipRatio: 0.4,
+    valueLossCoeff: 0.5,
+    valueLRCoeff: 2,
 
     // Dynamic learning rate adjustment based on KL
     lrConfig: {

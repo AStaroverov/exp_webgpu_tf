@@ -51,7 +51,7 @@ export function trainPolicyNetwork(
     });
 }
 
-function targetLogStdFromBounds(minLogStd: number[], maxLogStd: number[], mix = 0.7) {
+function targetLogStdFromBounds(minLogStd: number[], maxLogStd: number[], mix = 0.5) {
     return tf.tensor1d(minLogStd).mul(1 - mix).add(tf.tensor1d(maxLogStd).mul(mix));
 }
 
@@ -302,7 +302,7 @@ export function computeVTrace(
         const discount = dones[t] ? 0 : gamma;
         const value = values[t];
 
-        const c = 0.95; // 0.95 * Math.min(rhos[t], clipC);// Math.min(rhos[t], clipC);
+        const c = Math.min(rhos[t], clipC); // 0.95 * Math.min(rhos[t], clipC);
         const rho = 1; // Math.min(rhos[t], clipRho);
         const rhoPG = Math.min(rhos[t], clipRhoPG);
 
