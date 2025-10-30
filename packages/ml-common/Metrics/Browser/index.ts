@@ -258,8 +258,9 @@ function drawTab1() {
         height: 300,
     });
 
+    const avgAdvantages = store.advantages.toArray();
     tfvis.render.scatterplot({ name: 'Advantage', tab }, {
-        values: [store.advantages.toArray()],
+        values: [avgAdvantages, calculateMovingAverage(avgAdvantages, 1000)],
     }, {
         xLabel: 'Version',
         yLabel: 'Advantage',

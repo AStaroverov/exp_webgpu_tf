@@ -18,7 +18,7 @@ import { Model } from './def.ts';
 import { LogStdLayer } from './Layers/LogStdLayer.ts';
 import { StopGradientLayer } from './Layers/StopGradientLayer.ts';
 import { createNetwork } from './Networks/v3.ts';
-import { PatchedAdamOptimizer } from './PatchedAdamOptimizer.ts';
+import { AdamW } from './Optimizer/AdamW.ts';
 
 export const CONTROLLER_FEATURES_DIM = 4;
 export const BATTLE_FEATURES_DIM = 6;
@@ -67,7 +67,7 @@ export function createPolicyNetwork(): tf.LayersModel {
         useBias: true,
         activation: 'linear',
         biasInitializer: 'zeros',
-        kernelInitializer: tf.initializers.randomNormal({ mean: 0, stddev: 0.01 }),
+        kernelInitializer: tf.initializers.randomNormal({ mean: 0, stddev: 0.05 }),
     }).apply(network) as tf.SymbolicTensor;
 
     const logStdOutput = new LogStdLayer({
@@ -92,7 +92,7 @@ export function createPolicyNetwork(): tf.LayersModel {
         inputs: Object.values(inputs),
         outputs: [meanOutput, logStdOutput, phiOutput], // [mean, phi]
     });
-    model.optimizer = new PatchedAdamOptimizer(CONFIG.lrConfig.initial);
+    model.optimizer = new AdamW(CONFIG.lrConfig.initial);
     model.loss = 'meanSquaredError'; // fake loss for save optimizer with model
 
     return model;
@@ -113,7 +113,7 @@ export function createValueNetwork(): tf.LayersModel {
         inputs: Object.values(inputs),
         outputs: valueOutput,
     });
-    model.optimizer = new PatchedAdamOptimizer(CONFIG.lrConfig.initial);
+    model.optimizer = new AdamW(CONFIG.lrConfig.initial);
     model.loss = 'meanSquaredError';
 
     return model;

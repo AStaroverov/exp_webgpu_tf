@@ -14,7 +14,7 @@ const queueSize$ = queueSizeChannel.obs.pipe(
     shareReplay(1),
 );
 const backpressure$ = race([
-    timer(60_000),
+    timer(60 * 1000),
     queueSize$.pipe(filter((queueSize) => queueSize <= CONFIG.backpressureQueueSize)),
 ]).pipe(first());
 

@@ -3,9 +3,8 @@ import { ceil, lerp } from '../../lib/math.ts';
 import { ACTION_DIM, LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
 
 export const CONFIG = {
-    // Learning parameters
     clipNorm: 1,
-    // PPO-specific parameters
+
     gamma: (iteration: number) => {
         return lerp(0.97, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
     },
@@ -15,30 +14,40 @@ export const CONFIG = {
     },
 
     minLogStd: (iteration: number) => {
-        return [-5, -5, -5, -5].map(v => v - 1.25);
+        return [
+            -(5 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2),
+            -(5 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2),
+            -(5 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2),
+            -(5 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2),
+        ].map(v => v - 1.25);
     },
     maxLogStd: (iteration: number) => {
-        return [-0.8, -0.8, -0.8, -(0.8 + clamp(iteration / (LEARNING_STEPS * 0.1), 0, 1) * 3)].map(v => v - 1.25);
+        return [
+            -(0.8 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1),
+            -(0.8 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1),
+            -(0.8 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1),
+            -(0.8 + clamp(iteration / (LEARNING_STEPS * 0.1), 0, 1) * 3)
+        ].map(v => v - 1.25);
     },
 
     policyEpochs: (iteration: number) => 2,
     policyClipRatio: 0.2,
 
-    valueEpochs: (iteration: number) => 3,
-    valueClipRatio: 0.2,
+    valueEpochs: (iteration: number) => 2,
+    valueClipRatio: 0.3,
     valueLossCoeff: 1,
     valueLRCoeff: 1,
 
     // Dynamic learning rate adjustment based on KL
     lrConfig: {
         kl: {
-            high: ACTION_DIM * 0.024,
-            target: ACTION_DIM * 0.02,
-            low: ACTION_DIM * 0.016,
+            high: ACTION_DIM * 0.02,
+            target: ACTION_DIM * 0.015,
+            low: ACTION_DIM * 0.01,
         },
         initial: 1e-5,
-        multHigh: 0.95,
-        multLow: 1.0025,
+        multHigh: 0.97,
+        multLow: 1.004,
         min: 1e-6,
         max: 1e-3,
     },
@@ -59,7 +68,7 @@ export const CONFIG = {
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
     episodeFrames: Math.round(2 * 60 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: 8,
+    workerCount: 6,
     backpressureQueueSize: 2,
     // Training control
     savePath: 'PPO_MHA',

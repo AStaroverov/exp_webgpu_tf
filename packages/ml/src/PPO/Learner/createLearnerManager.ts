@@ -55,7 +55,7 @@ export function createLearnerManager() {
                         b.memoryBatch.rewards.forEach((_, i, arr) => { arr[i] *= settings.rewardRatio ?? 1 / 4; })
                         return b.memoryBatch
                     }));
-                    const { pureLogStd, logStdShift, ...vTraceBatchData } = computeVTraceTargets(
+                    const { pureLogStd, ...vTraceBatchData } = computeVTraceTargets(
                         policyNetwork,
                         valueNetwork,
                         batchData,
@@ -118,7 +118,7 @@ export function createLearnerManager() {
                                 ? diagnostics.values.std / diagnostics.returns.std
                                 : 0;
                             // compute reward ratio adjustment, for correct scaling of all v-trace components
-                            const nextEmaStdReturns = (batch.emaStdReturns ?? diagnostics.returns.std) * 0.9 + diagnostics.returns.std * 0.1;
+                            const nextEmaStdReturns = (batch.emaStdReturns ?? diagnostics.returns.std) * 0.95 + diagnostics.returns.std * 0.05;
                             const nextRewardRatio = getRewardRatio(nextEmaStdReturns, batch.rewardRatio);
 
                             modelSettingsChannel.emit({ emaStdReturns: nextEmaStdReturns, rewardRatio: nextRewardRatio });
