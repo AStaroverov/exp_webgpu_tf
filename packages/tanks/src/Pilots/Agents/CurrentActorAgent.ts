@@ -128,8 +128,8 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         const actionReward = this.initialActionReward === undefined
             ? 0
             : calculateActionReward(this.tankEid) - this.initialActionReward;
-        const stateRewardMultiplier = clamp(1 - unlerp(0, LEARNING_STEPS * 0.4, version), 0, 1);
-        const actionRewardMultiplier = clamp(unlerp(0, LEARNING_STEPS * 0.2, version), 0.2, 1) - clamp(unlerp(LEARNING_STEPS * 0.6, LEARNING_STEPS, version), 0, 1);
+        const stateRewardMultiplier = clamp(1 - unlerp(0, LEARNING_STEPS * 0.4, version), 0, 0.6);
+        const actionRewardMultiplier = clamp(unlerp(0, LEARNING_STEPS * 0.2, version), 0.4, 1) - clamp(unlerp(LEARNING_STEPS * 0.6, LEARNING_STEPS, version), 0, 0.5);
 
         const frameReward = getFramePenalty(frame);
         const deathReward = getDeathPenalty(isDead);
