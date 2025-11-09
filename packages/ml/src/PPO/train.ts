@@ -12,6 +12,7 @@ import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
 import { NoiseMatrix } from '../../../ml-common/NoiseMatrix.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
 
+const C = 0.5 * Math.log(2 * Math.PI * Math.E);
 export function trainPolicyNetwork(
     network: tf.LayersModel,
     states: tf.Tensor[],
@@ -30,7 +31,7 @@ export function trainPolicyNetwork(
         return optimize(network.optimizer, () => {
             const predicted = network.predict(states, { batchSize });
             const { mean, logStd, phi } = parsePolicyOutput(predicted, minLogStd, maxLogStd);
-            const { stdEff } = computeEffectiveStd(logStd, phi);
+            const { stdEff, logStdEff } = computeEffectiveStd(logStd, phi);
             const newLogProbs = computeLogProbTanh(actions, mean, stdEff);
             const ratio = tf.exp(newLogProbs.sub(oldLogProbs));
             const clippedRatio = ratio.clipByValue(1 - clipRatio, 1 + clipRatio);
@@ -38,33 +39,14 @@ export function trainPolicyNetwork(
             const surr2 = clippedRatio.mul(advantages);
             // Losses
             const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
-            const meanLoss = hingeLoss(mean).mul(3e-4);
-            // KL к целевой σ0 (в пресквош-пространстве)
-            const targetLogStd = targetLogStdFromBounds(minLogStd, maxLogStd); // [A]
-            const klSigma = klToTargetSigma(logStd, targetLogStd);                     // scalar
-            const klLoss = klSigma.mul(5e-4) as tf.Scalar;
-            // const c = 0.5 * Math.log(2 * Math.PI * Math.E);
-            // const entropy = clippedLogStdEff.add(c).sum(1).mean().mul(entropyCoeff);
-            const totalLoss = policyLoss.add(meanLoss).add(klLoss);//.sub(entropyCoeff);;
+            const entropy = logStdEff.add(C).sum(1).mean().mul(entropyCoeff);
+            const totalLoss = policyLoss.sub(entropy);//.add(meanLoss).add(klLoss);
             return totalLoss as tf.Scalar;
         }, { clipNorm, returnCost });
     });
 }
 
-function targetLogStdFromBounds(minLogStd: number[], maxLogStd: number[], mix = 0.5) {
-    return tf.tensor1d(minLogStd).mul(1 - mix).add(tf.tensor1d(maxLogStd).mul(mix));
-}
-
-function klToTargetSigma(logStd: tf.Tensor, targetLogStd: tf.Tensor) {
-    const sigma = tf.exp(logStd);
-    const sigma0 = tf.exp(targetLogStd);
-    const term1 = sigma0.div(sigma).log();
-    const term2 = sigma.square().div(sigma0.square()).mul(0.5);
-    const kl = term1.add(term2).sub(0.5).sum(1).mean();
-    return kl as tf.Scalar;
-}
-
-function hingeLoss(value: tf.Tensor, z0 = 1.3) {
+function boundLoss(value: tf.Tensor, z0 = 1.3) {
     const excess = value.abs().sub(z0);
     const relu = tf.relu(excess);
     return relu.square().mean(); // (|μ|-z0)_+^2
@@ -137,8 +119,8 @@ export function noisyAct(
         const logProb = computeLogProbTanh(actions, mean, stdEff);
 
         return {
-            actions: syncUnwrapTensor(actions) as Float32Array,
             mean: syncUnwrapTensor(mean) as Float32Array,
+            actions: syncUnwrapTensor(actions) as Float32Array,
             logProb: syncUnwrapTensor(logProb)[0],
         };
     });
@@ -222,7 +204,7 @@ export function computeVTraceTargets(
         const input = createInputTensors(batch.states);
         const predicted = policyNetwork.predict(input, { batchSize });
         const { mean, logStd, phi } = parsePolicyOutput(predicted, minLogStd, maxLogStd);
-        const { stdEff, pureLogStdEff } = computeEffectiveStd(logStd, phi);
+        const { stdEff, logStdEff: pureLogStdEff } = computeEffectiveStd(logStd, phi);
         const actions = tf.tensor2d(flatTypedArray(batch.actions), [batch.size, ACTION_DIM]);
         const logProbCurrentTensor = computeLogProbTanh(actions, mean, stdEff);
         const logProbBehaviorTensor = tf.tensor1d(batch.logProbs);
@@ -328,9 +310,11 @@ function parsePolicyOutput(prediction: tf.Tensor | tf.Tensor[], minLogStd: numbe
     const [mean, logStd, phi] = prediction as [tf.Tensor2D, tf.Tensor2D, tf.Tensor2D];
     return {
         phi,
-        mean,
+        mean: mean.clipByValue(-2, 2),
         // logStd,
-        logStd: tanhMapToRange(logStd, minLogStd, maxLogStd)
+        logStd: tanhMapToRange(logStd, minLogStd, maxLogStd),
+        pureMean: mean,
+        pureLogStd: logStd,
     };
 }
 
@@ -346,7 +330,7 @@ function computeEffectiveStd(logStd: tf.Tensor, phi: tf.Tensor) {
     const power = tf.log(phi.square().sum(1, true).add(1e-6)).mul(0.5); // [B, 1]
     const logStdEff = logStd.add(power); // [B, A]
     const stdEff = tf.exp(logStdEff);
-    return { stdEff, power, pureLogStdEff: logStdEff };
+    return { stdEff, logStdEff };
 }
 
 export function softClipByValue(

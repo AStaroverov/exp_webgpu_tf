@@ -15,28 +15,28 @@ export const CONFIG = {
 
     minLogStd: (iteration: number) => {
         return [
-            -(5 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2),
-            -(5 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2),
-            -(5 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2),
-            -(5 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2),
+            -(5), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2
+            -(5), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2
+            -(5), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2
+            -(5), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2
         ].map(v => v - 1.25);
     },
     maxLogStd: (iteration: number) => {
         return [
-            -(0.8 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1),
-            -(0.8 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1),
-            -(0.8 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1),
-            -(0.8 + clamp(iteration / (LEARNING_STEPS * 0.1), 0, 1) * 3)
+            -(0.8), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1
+            -(0.8), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1
+            -(0.8), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1
+            -(0.8 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 3)
         ].map(v => v - 1.25);
     },
 
-    policyEpochs: (iteration: number) => 2,
+    policyEpochs: (iteration: number) => 3,
     policyClipRatio: 0.2,
 
-    valueEpochs: (iteration: number) => 2,
-    valueClipRatio: 0.4,
+    valueEpochs: (iteration: number) => 3,
+    valueClipRatio: 0.2,
     valueLossCoeff: 0.5,
-    valueLRCoeff: 2,
+    valueLRCoeff: 1,
 
     // Dynamic learning rate adjustment based on KL
     lrConfig: {
