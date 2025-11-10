@@ -55,7 +55,7 @@ export function createLearnerManager() {
                         b.memoryBatch.rewards.forEach((_, i, arr) => { arr[i] *= settings.rewardRatio ?? 1 / 4; })
                         return b.memoryBatch
                     }));
-                    const { pureLogStd, ...vTraceBatchData } = computeVTraceTargets(
+                    const { pureLogStd, pureMean, ...vTraceBatchData } = computeVTraceTargets(
                         policyNetwork,
                         valueNetwork,
                         batchData,
@@ -71,7 +71,7 @@ export function createLearnerManager() {
                         ...vTraceBatchData,
                     };
 
-                    metricsChannels.mean.postMessage(batchData.mean);
+                    metricsChannels.mean.postMessage(pureMean);
                     metricsChannels.logStd.postMessage(pureLogStd);
                     metricsChannels.batchSize.postMessage(samples.map(b => b.memoryBatch.size));
                     metricsChannels.versionDelta.postMessage(samples.map(b => expIteration - b.networkVersion));

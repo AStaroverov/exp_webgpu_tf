@@ -82,12 +82,13 @@ export function subscribeOnMetrics() {
         const channel = metricsChannels[key as keyof typeof metricsChannels];
         if (key === 'mean') {
             channel.onmessage = w((event) => {
-                (event.data as number[][]).forEach((means) => {
-                    store.mean0.add(means[0]);
-                    store.mean1.add(means[1]);
-                    store.mean2.add(means[2]);
-                    store.mean3.add(means[3]);
-                })
+                const means = event.data as number[];
+                for (let i = 0; i < means.length; i += 4) {
+                    store.mean0.add(means[i]);
+                    store.mean1.add(means[i + 1]);
+                    store.mean2.add(means[i + 2]);
+                    store.mean3.add(means[i + 3]);
+                }
             });
         } else if (key === 'successRatio') {
             channel.onmessage = w((event) => {
