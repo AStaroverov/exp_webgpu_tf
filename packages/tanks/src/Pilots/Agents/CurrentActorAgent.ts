@@ -93,10 +93,7 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
             this.noiseMatrix
         );
 
-        applyActionToTank(
-            this.tankEid,
-            result.actions,
-        );
+        applyActionToTank(this.tankEid, result.actions.map(v => clamp(v, -1, 1)));
 
         if (!this.train) return;
 

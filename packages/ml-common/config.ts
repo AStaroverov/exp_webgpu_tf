@@ -23,10 +23,10 @@ export const CONFIG = {
     },
     maxLogStd: (iteration: number) => {
         return [
-            -(0.8), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1
-            -(0.8), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1
-            -(0.8), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1
-            -(0.8 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 3)
+            -(1 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 3),
+            -(1 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 3),
+            -(1 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 3),
+            -(1 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 3)
         ].map(v => v - 1.25);
     },
 
@@ -62,7 +62,7 @@ export const CONFIG = {
         return 1024 * clamp(ceil(6 * (iteration + 1) / (LEARNING_STEPS * 0.20)), 4, 16);
     },
     miniBatchSize: (iteration: number) => {
-        return 64 * clamp(ceil((iteration + 1) / (LEARNING_STEPS * 0.25)), 1, 4);
+        return 64 * clamp(ceil((iteration + 1) / (LEARNING_STEPS * 0.25)), 2, 4);
     },
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION

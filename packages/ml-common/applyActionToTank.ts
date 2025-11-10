@@ -25,7 +25,6 @@ export function applyActionToTank(
         actions[2],
         probability[2],
     );
-
     const turretRot = blendLinear(
         TankController.turretRotation[tankEid],
         actions[3],

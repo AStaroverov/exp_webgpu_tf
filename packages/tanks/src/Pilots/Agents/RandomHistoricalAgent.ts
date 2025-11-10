@@ -1,4 +1,5 @@
 import * as tf from '@tensorflow/tfjs';
+import { clamp } from 'lodash-es';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
 import { prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
 import { patientAction } from '../../../../ml-common/utils.ts';
@@ -38,10 +39,7 @@ export class RandomHistoricalAgent implements TankAgent<DownloableAgent> {
         const state = prepareInputArrays(this.tankEid, width, height);
         const result = pureAct(this.policyNetwork, state);
 
-        applyActionToTank(
-            this.tankEid,
-            result.actions,
-        );
+        applyActionToTank(this.tankEid, result.actions.map(v => clamp(v, -1, 1)));
     }
 
     private async load() {
