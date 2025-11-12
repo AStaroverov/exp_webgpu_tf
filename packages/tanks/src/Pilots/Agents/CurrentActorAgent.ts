@@ -1,19 +1,19 @@
 import * as tf from '@tensorflow/tfjs';
 import { clamp } from 'lodash-es';
 import { unlerp } from '../../../../../lib/math.ts';
+import { randomRangeFloat } from '../../../../../lib/random.ts';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
+import { ColoredNoiseApprox } from '../../../../ml-common/ColoredNoiseApprox.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
 import { ACTION_DIM, LEARNING_STEPS } from '../../../../ml-common/consts.ts';
 import { prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
-import { NoiseMatrix } from '../../../../ml-common/NoiseMatrix.ts';
 import { getNetworkExpIteration, getNetworkSettings, patientAction } from '../../../../ml-common/utils.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../../../ml/src/Models/Utils.ts';
 import { noisyAct } from '../../../../ml/src/PPO/train.ts';
 import { calculateActionReward, calculateStateReward, getDeathPenalty, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
-
 
 export type TankAgent<A = Partial<DownloableAgent> & Partial<LearnableAgent>> = A & {
     tankEid: number;
@@ -36,7 +36,7 @@ export type LearnableAgent = {
 
 export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableAgent> {
     private memory = new AgentMemory();
-    private noiseMatrix?: NoiseMatrix
+    private noise?: ColoredNoiseApprox;
     private policyNetwork?: tf.LayersModel;
 
     private minLogStd?: number[];
@@ -62,7 +62,7 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
     public dispose() {
         disposeNetwork(this.policyNetwork);
         this.memory.dispose();
-        this.noiseMatrix?.dispose();
+        this.noise?.dispose();
     }
 
     public async sync() {
@@ -80,17 +80,16 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         if (!(this.policyNetwork != null && this.minLogStd != null && this.maxLogStd != null)) return;
 
         const state = prepareInputArrays(this.tankEid, width, height);
-
-        if (this.noiseMatrix) {
-            this.noiseMatrix.maybeResample();
-        }
-
+        const useNoise =
+            this.noise != null
+            // @ts-ignore
+            && globalThis.disableNoise !== true;
         const result = noisyAct(
             this.policyNetwork,
             state,
             this.minLogStd,
             this.maxLogStd,
-            this.noiseMatrix
+            useNoise ? this.noise?.sample() : undefined
         );
 
         applyActionToTank(this.tankEid, result.actions.map(v => clamp(v, -1, 1)));
@@ -125,8 +124,8 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         const actionReward = this.initialActionReward === undefined
             ? 0
             : calculateActionReward(this.tankEid) - this.initialActionReward;
-        const stateRewardMultiplier = clamp(1 - unlerp(0, LEARNING_STEPS * 0.4, version), 0, 0.6);
-        const actionRewardMultiplier = clamp(unlerp(0, LEARNING_STEPS * 0.2, version), 0.4, 1) - clamp(unlerp(LEARNING_STEPS * 0.6, LEARNING_STEPS, version), 0, 0.5);
+        const stateRewardMultiplier = clamp(1 - unlerp(0, LEARNING_STEPS * 0.4, version), 0, 1);
+        const actionRewardMultiplier = clamp(unlerp(0, LEARNING_STEPS * 0.2, version), 0.3, 1) - clamp(unlerp(LEARNING_STEPS * 0.6, LEARNING_STEPS, version), 0, 0.5);
 
         const frameReward = getFramePenalty(frame);
         const deathReward = getDeathPenalty(isDead);
@@ -149,12 +148,8 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         const settings = getNetworkSettings(this.policyNetwork)
         this.minLogStd = CONFIG.minLogStd(settings.expIteration ?? 0);
         this.maxLogStd = CONFIG.maxLogStd(settings.expIteration ?? 0);
-        if (this.train) {
-            this.noiseMatrix = new NoiseMatrix(
-                CONFIG.gSDE.latentDim,
-                ACTION_DIM,
-                CONFIG.gSDE.noiseUpdateFrequency,
-            );
+        if (this.train || globalThis.document !== undefined) {
+            this.noise = new ColoredNoiseApprox(ACTION_DIM, randomRangeFloat(0.3, 0.7));
         }
     }
 }

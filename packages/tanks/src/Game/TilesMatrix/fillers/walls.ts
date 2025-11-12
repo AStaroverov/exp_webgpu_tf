@@ -1,8 +1,8 @@
+import { Matrix, TMatrix } from '../../../../../../lib/Matrix';
+import { random } from '../../../../../../lib/random.ts';
 import { Tile, TileType, WallTile } from '../def.ts';
 import { isNotEmptyTile, isNotWallTile, isWallTile, isWallTileNotLast } from './utils/is.ts';
-import { Matrix, TMatrix } from '../../../../../../lib/Matrix';
 import { matchNotWall } from './utils/patterns.ts';
-import { random } from '../../../../../../lib/random.ts';
 
 const createReplaceToWall = (chance: number) => (tile: Tile) => {
     return <WallTile>Object.assign(tile, {

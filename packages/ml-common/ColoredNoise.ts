@@ -4,7 +4,7 @@ export class ColoredNoise {
     private state: tf.Tensor;
     private step = 0;
 
-    constructor(actionDim: number, private rho = 0.7, private resetInterval = 30) {
+    constructor(actionDim: number, private rho = 0.95, private resetInterval = 16) {
         this.state = tf.randomNormal([actionDim]);
     }
 
