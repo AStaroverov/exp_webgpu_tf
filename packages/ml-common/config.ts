@@ -19,21 +19,22 @@ export const CONFIG = {
             -(5), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2
             -(5), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2
             -(5), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2
-        ].map(v => v - 1.25);
+        ]
     },
     maxLogStd: (iteration: number) => {
         return [
-            -(1 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 3),
-            -(1 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 3),
-            -(1 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 3),
-            -(1 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 3)
-        ].map(v => v - 1.25);
+            -(0.8),// + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1.5),
+            -(0.8),// + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1.5),
+            -(0.8),// + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1.5),
+            -(0.8 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1),
+            // -(1 + clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1) * 1.5)
+        ]
     },
 
-    policyEpochs: (iteration: number) => 3,
+    policyEpochs: (iteration: number) => 2,
     policyClipRatio: 0.2,
 
-    valueEpochs: (iteration: number) => 3,
+    valueEpochs: (iteration: number) => 2,
     valueClipRatio: 0.2,
     valueLossCoeff: 0.5,
     valueLRCoeff: 1,
@@ -41,21 +42,15 @@ export const CONFIG = {
     // Dynamic learning rate adjustment based on KL
     lrConfig: {
         kl: {
-            high: ACTION_DIM * 0.02,
-            target: ACTION_DIM * 0.015,
-            low: ACTION_DIM * 0.01,
+            high: ACTION_DIM * 0.023,
+            target: ACTION_DIM * 0.02,
+            low: ACTION_DIM * 0.017,
         },
         initial: 1e-5,
-        multHigh: 0.97,
-        multLow: 1.004,
+        multHigh: 0.95,
+        multLow: 1.01,
         min: 1e-6,
         max: 1e-3,
-    },
-
-    // gSDE (generalized State Dependent Exploration) parameters
-    gSDE: {
-        latentDim: 64,
-        noiseUpdateFrequency: 8,
     },
 
     batchSize: (iteration: number) => {

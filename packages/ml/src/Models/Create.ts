@@ -16,7 +16,6 @@ import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/
 import { ACTION_DIM } from '../../../ml-common/consts.ts';
 import { Model } from './def.ts';
 import { LogStdLayer } from './Layers/LogStdLayer.ts';
-import { StopGradientLayer } from './Layers/StopGradientLayer.ts';
 import { createNetwork } from './Networks/v3.ts';
 import { AdamW } from './Optimizer/AdamW.ts';
 
@@ -39,10 +38,9 @@ type NetworkConfig = {
 type policyNetworkConfig = NetworkConfig
 
 const policyNetworkConfig: policyNetworkConfig = {
-    dim: 64,
+    dim: 128,
     heads: 4,
     finalMLP: [
-        ['relu', 512],
         ['relu', 512],
         ['relu', 256],
         ['relu', 128],
@@ -50,7 +48,7 @@ const policyNetworkConfig: policyNetworkConfig = {
 };
 const valueNetworkConfig: NetworkConfig = {
     dim: 32,
-    heads: 2,
+    heads: 1,
     finalMLP: [
         ['relu', 128],
         ['relu', 64],
@@ -59,7 +57,7 @@ const valueNetworkConfig: NetworkConfig = {
 };
 
 export function createPolicyNetwork(): tf.LayersModel {
-    const { inputs, network, phi } = createNetwork(Model.Policy, policyNetworkConfig);
+    const { inputs, network } = createNetwork(Model.Policy, policyNetworkConfig);
 
     const meanOutput = createDenseLayer({
         name: Model.Policy + '_mean_output',
@@ -75,22 +73,10 @@ export function createPolicyNetwork(): tf.LayersModel {
         units: ACTION_DIM
     }).apply(meanOutput) as tf.SymbolicTensor;
 
-    const phiDetached = new StopGradientLayer({
-        name: Model.Policy + '_phi_stop_gradient'
-    }).apply(phi) as tf.SymbolicTensor;
-
-    const phiOutput = createDenseLayer({
-        name: Model.Policy + '_phi_dense',
-        units: CONFIG.gSDE.latentDim,
-        useBias: false,
-        activation: 'tanh',
-        kernelInitializer: 'orthogonal',
-    }).apply(phiDetached) as tf.SymbolicTensor;
-
     const model = tf.model({
         name: Model.Policy,
         inputs: Object.values(inputs),
-        outputs: [meanOutput, logStdOutput, phiOutput], // [mean, phi]
+        outputs: [meanOutput, logStdOutput], // [mean, phi]
     });
     model.optimizer = new AdamW(CONFIG.lrConfig.initial);
     model.loss = 'meanSquaredError'; // fake loss for save optimizer with model
