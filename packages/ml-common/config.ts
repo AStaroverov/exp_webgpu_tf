@@ -10,7 +10,7 @@ export const CONFIG = {
     },
 
     policyEntropy: (iteration: number) => {
-        return lerp(0.001, 0.01, clamp(1 - ((iteration - LEARNING_STEPS) / LEARNING_STEPS * 0.5), 0, 1));
+        return lerp(0.0001, 0.01, clamp(1 - ((iteration - LEARNING_STEPS) / LEARNING_STEPS * 0.5), 0, 1)) / ACTION_DIM;
     },
 
     minLogStd: (iteration: number) => {
