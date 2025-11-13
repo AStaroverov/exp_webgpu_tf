@@ -38,9 +38,10 @@ type NetworkConfig = {
 type policyNetworkConfig = NetworkConfig
 
 const policyNetworkConfig: policyNetworkConfig = {
-    dim: 128,
+    dim: 64,
     heads: 4,
     finalMLP: [
+        ['relu', 512],
         ['relu', 512],
         ['relu', 256],
         ['relu', 128],

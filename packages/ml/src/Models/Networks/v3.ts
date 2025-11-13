@@ -44,9 +44,6 @@ export function createNetwork(modelName: Model, config: NetworkConfig) {
     });
 
     const tankContextToken = tf.layers.concatenate({ name: modelName + '_tankContextToken', axis: 1 }).apply([
-        tokens.battleTok,
-        tokens.controllerTok,
-        tokens.tankTok,
         tankToEnemiesAttn,
         tankToAlliesAttn,
         tankToBulletsAttn,
@@ -61,13 +58,14 @@ export function createNetwork(modelName: Model, config: NetworkConfig) {
         },
     );
 
-    // const finalToken = tf.layers.concatenate({ name: modelName + '_finalToken', axis: 1 }).apply([
-    //     tokens.battleTok,
-    //     tokens.controllerTok,
-    //     transformedTankContextToken,
-    // ]) as tf.SymbolicTensor;
+    const finalToken = tf.layers.concatenate({ name: modelName + '_finalToken', axis: 1 }).apply([
+        tokens.tankTok,
+        tokens.battleTok,
+        tokens.controllerTok,
+        transformedTankContextToken,
+    ]) as tf.SymbolicTensor;
 
-    const flattenedFinalToken = tf.layers.flatten({ name: modelName + '_flattenedFinalToken' }).apply(transformedTankContextToken) as tf.SymbolicTensor;
+    const flattenedFinalToken = tf.layers.flatten({ name: modelName + '_flattenedFinalToken' }).apply(finalToken) as tf.SymbolicTensor;
 
     const finalMLP = applyMLP(
         modelName + '_finalMLP',
