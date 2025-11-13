@@ -29,36 +29,8 @@ export const ALLY_FEATURES_DIM = ALLY_BUFFER - 1; // -1 потому что id �
 export const BULLET_SLOTS = MAX_BULLETS;
 export const BULLET_FEATURES_DIM = BULLET_BUFFER - 1; // -1 потому что id не считаем
 
-type NetworkConfig = {
-    dim: number;
-    heads: number;
-    finalMLP: [ActivationIdentifier, number][];
-};
-
-type policyNetworkConfig = NetworkConfig
-
-const policyNetworkConfig: policyNetworkConfig = {
-    dim: 64,
-    heads: 4,
-    finalMLP: [
-        ['relu', 512],
-        ['relu', 512],
-        ['relu', 256],
-        ['relu', 128],
-    ],
-};
-const valueNetworkConfig: NetworkConfig = {
-    dim: 32,
-    heads: 1,
-    finalMLP: [
-        ['relu', 128],
-        ['relu', 64],
-        ['relu', 32],
-    ] as [ActivationIdentifier, number][],
-};
-
 export function createPolicyNetwork(): tf.LayersModel {
-    const { inputs, network } = createNetwork(Model.Policy, policyNetworkConfig);
+    const { inputs, network } = createNetwork(Model.Policy);
 
     const meanOutput = createDenseLayer({
         name: Model.Policy + '_mean_output',
@@ -86,7 +58,7 @@ export function createPolicyNetwork(): tf.LayersModel {
 }
 
 export function createValueNetwork(): tf.LayersModel {
-    const { inputs, network } = createNetwork(Model.Value, valueNetworkConfig);
+    const { inputs, network } = createNetwork(Model.Value);
     const valueOutput = createDenseLayer({
         name: Model.Value + '_output',
         units: 1,

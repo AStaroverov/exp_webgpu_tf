@@ -14,10 +14,36 @@ import { Model } from '../def.ts';
 type NetworkConfig = {
     dim: number;
     heads: number;
-    finalMLP: [ActivationIdentifier, number][];
+    depth: number;
+    MLP: [ActivationIdentifier, number][];
 };
 
-export function createNetwork(modelName: Model, config: NetworkConfig) {
+type policyNetworkConfig = NetworkConfig
+
+const policyNetworkConfig: policyNetworkConfig = {
+    dim: 64,
+    heads: 4,
+    depth: 3,
+    MLP: [
+        ['relu', 512],
+        ['relu', 512],
+        ['relu', 256],
+        ['relu', 128],
+    ],
+};
+
+const valueNetworkConfig: NetworkConfig = {
+    dim: 64,
+    heads: 2,
+    depth: 2,
+    MLP: [
+        ['relu', 128],
+        ['relu', 64],
+        ['relu', 32],
+    ] as [ActivationIdentifier, number][],
+};
+
+export function createNetwork(modelName: Model, config: NetworkConfig = modelName === Model.Policy ? policyNetworkConfig : valueNetworkConfig) {
     const inputs = createInputs(modelName);
     const tokens = convertInputsToTokens(inputs, config.dim);
 
@@ -53,8 +79,8 @@ export function createNetwork(modelName: Model, config: NetworkConfig) {
         modelName + '_transformedTankContextToken',
         {
             token: tankContextToken,
-            depth: 3,
             heads: config.heads,
+            depth: config.depth,
         },
     );
 
@@ -70,7 +96,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig) {
     const finalMLP = applyMLP(
         modelName + '_finalMLP',
         flattenedFinalToken,
-        config.finalMLP,
+        config.MLP,
     );
 
     return { inputs, network: finalMLP };
