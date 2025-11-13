@@ -25,7 +25,10 @@ const store = {
         acc[`mean${i as MetricIndex}`] = new RingBuffer(5_000);
         return acc;
     }, {} as Record<`mean${MetricIndex}`, RingBuffer>),
-    logStd: new RingBuffer(5_000),
+    ...Array.from({ length: ACTION_DIM }, (_, i) => i).reduce((acc, i) => {
+        acc[`logStd${i as MetricIndex}`] = new RingBuffer(5_000);
+        return acc;
+    }, {} as Record<`logStd${MetricIndex}`, RingBuffer>),
 
     valueLoss: new CompressedBuffer(1_000, 5),
     policyLoss: new CompressedBuffer(1_000, 5),
@@ -88,6 +91,16 @@ export function subscribeOnMetrics() {
                     store.mean1.add(means[i + 1]);
                     store.mean2.add(means[i + 2]);
                     store.mean3.add(means[i + 3]);
+                }
+            });
+        } else if (key === 'logStd') {
+            channel.onmessage = w((event) => {
+                const logStds = event.data as number[];
+                for (let i = 0; i < logStds.length; i += 4) {
+                    store.logStd0.add(logStds[i]);
+                    store.logStd1.add(logStds[i + 1]);
+                    store.logStd2.add(logStds[i + 2]);
+                    store.logStd3.add(logStds[i + 3]);
                 }
             });
         } else if (key === 'successRatio') {
@@ -273,6 +286,7 @@ function drawTab1() {
 function drawTab2() {
     tfvis.render.scatterplot({ name: 'mean', tab: 'Tab 2' }, {
         values: [store.mean0.toArray(), store.mean1.toArray(), store.mean2.toArray(), store.mean3.toArray(),],
+        series: ['shot', 'move', 'rot', 'turRot'],
     }, {
         xLabel: 'Version',
         yLabel: 'mean',
@@ -280,7 +294,8 @@ function drawTab2() {
         height: 300,
     });
     tfvis.render.scatterplot({ name: 'Log Std', tab: 'Tab 2' }, {
-        values: [store.logStd.toArray()],
+        values: [store.logStd0.toArray(), store.logStd1.toArray(), store.logStd2.toArray(), store.logStd3.toArray(),],
+        series: ['shot', 'move', 'rot', 'turRot'],
     }, {
         xLabel: 'Version',
         yLabel: 'Log Std',

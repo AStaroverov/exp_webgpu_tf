@@ -149,8 +149,10 @@ function wrapPi(a: number): number {
 }
 
 function getRandomWaypoint(width: number, height: number) {
+    const gapW = width * 0.2;
+    const gapH = height * 0.2;
     return {
-        x: randomRangeFloat(200, width - 200),
-        y: randomRangeFloat(200, height - 200),
+        x: randomRangeFloat(gapW, width - gapW),
+        y: randomRangeFloat(gapH, height - gapH),
     };
 }

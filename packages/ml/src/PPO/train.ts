@@ -76,15 +76,18 @@ export function trainPolicyNetwork(
             // Энтропия (как у тебя): H = mean(sum(logStd + C))
             // const entropy = logStd.add(C).sum(1).mean().mul(entropyCoeff) as tf.Scalar;
 
+            // Ограничение на значения среднего (|μ| ≤ 2)
+            // const boundLoss = getBoundLoss(mean, 6).mul(1e-3);
+
             // Итоговый лосс
-            const totalLoss = policyLoss;//.sub(entropy) as tf.Scalar;
-            return totalLoss;
+            const totalLoss = policyLoss//.add(boundLoss);//.sub(entropy) 
+            return totalLoss as tf.Scalar;
         }, { clipNorm, returnCost });
     });
 }
 
 
-function getBoundLoss(value: tf.Tensor, z0 = 1) {
+function getBoundLoss(value: tf.Tensor, z0: number) {
     const excess = value.abs().sub(z0);
     return tf.relu(excess).square().mean(); // (|μ|-z0)_+^2
 }
@@ -345,21 +348,27 @@ export function computeVTrace(
 
 function parsePolicyOutput(prediction: tf.Tensor | tf.Tensor[], minLogStd: number[], maxLogStd: number[]) {
     const [mean, logStd] = prediction as [tf.Tensor2D, tf.Tensor2D];
+    const clippedMean = softClip(mean, 2);
     return {
-        mean: mean.tanh().mul(2),
-        // logStd,
-        logStd: tanhMapToRange(logStd, minLogStd, maxLogStd),
+        mean: clippedMean,
+        logStd: tanhMapToRange(logStd, clippedMean, minLogStd, maxLogStd),
         pureMean: mean,
         pureLogStd: logStd,
     };
 }
 
-function tanhMapToRange(z: tf.Tensor, min: number[], max: number[]) {
+function tanhMapToRange(logStd: tf.Tensor, mean: tf.Tensor, min: number[], max: number[]) {
+    const bump = mean.pow(4).div(16);
+
     const tMin = tf.tensor1d(min);
-    const tMax = tf.tensor1d(max);
+    const tMax = tf.minimum(1, tf.tensor1d(max).add(bump));
     const c = tMin.add(tMax).mul(0.5);
     const r = tMax.sub(tMin).mul(0.5);
-    return tf.tanh(z).mul(r).add(c);
+    return tf.tanh(logStd).mul(r).add(c);
+}
+
+function softClip(mu: tf.Tensor, M: number) {
+    return tf.mul(M, tf.tanh(mu.div(M)));
 }
 
 let randomInputTensors: tf.Tensor[];

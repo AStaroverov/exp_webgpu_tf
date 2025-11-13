@@ -32,10 +32,10 @@ export const CONFIG = {
     },
 
     policyEpochs: (iteration: number) => 2,
-    policyClipRatio: 0.2,
+    policyClipRatio: 0.3,
 
     valueEpochs: (iteration: number) => 2,
-    valueClipRatio: 0.2,
+    valueClipRatio: 0.3,
     valueLossCoeff: 0.5,
     valueLRCoeff: 1,
 
@@ -46,10 +46,10 @@ export const CONFIG = {
             target: ACTION_DIM * 0.02,
             low: ACTION_DIM * 0.017,
         },
-        initial: 1e-5,
+        initial: 1e-4,
         multHigh: 0.95,
         multLow: 1.01,
-        min: 1e-6,
+        min: 1e-5,
         max: 1e-3,
     },
 

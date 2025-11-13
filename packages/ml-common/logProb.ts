@@ -22,10 +22,41 @@ export function computeLogProb(actions: tf.Tensor, mean: tf.Tensor, std: tf.Tens
     });
 }
 
-export function computeLogProbTanh(actions: tf.Tensor, mean: tf.Tensor, std: tf.Tensor) {
-    const u = tf.atanh(tf.clipByValue(actions, -0.999999, 0.999999));
-    const z = u.sub(mean).div(std);
-    const logN = tf.scalar(-0.5).mul(z.square().add(tf.log(tf.scalar(2 * Math.PI)).add(std.square().log().mul(2))));
-    const logJac = tf.log(tf.scalar(1).sub(actions.square()).add(1e-6)); // ∑ log(1 - a^2)
-    return logN.sum(1).sub(logJac.sum(1)); // [batch]
+export function computeLogProbTanh(
+    actions: tf.Tensor, // [batch, actDim], в tanh-пространстве
+    mean: tf.Tensor,    // [batch, actDim], μ
+    std: tf.Tensor      // [batch, actDim], σ (> 0)
+) {
+    const eps = 1e-4;
+
+    // Transform actions from tanh space to Gaussian space
+    const clipped = tf.clipByValue(actions, -1 + eps, 1 - eps);
+    const u = tf.atanh(clipped);
+
+    // Standardized distance from mean
+    const z = u.sub(mean).div(std); // (u - μ) / σ
+
+    // Log-probability components for Gaussian
+    const zSquared = z.square();                     // z²
+    const logTwoPi = tf.scalar(Math.log(2 * Math.PI));
+    const logVar = std.square().log();              // log(σ²) = 2 log σ
+
+    // Log N(u | μ, σ²) per-dimension
+    const logGaussian = tf.scalar(-0.5).mul(
+        zSquared.add(logTwoPi).add(logVar)
+    ); // shape: [batch, actDim]
+
+    // Jacobian correction: -log(1 - a²)
+    const logJacobian = tf
+        .scalar(1)
+        .sub(clipped.square())
+        .add(eps)
+        .log(); // log(1 - a²)
+
+    // Sum over action dimensions → [batch]
+    const logProbGaussian = logGaussian.sum(1);
+    const logDetJacobian = logJacobian.sum(1);
+
+    return logProbGaussian.sub(logDetJacobian); // [batch]
 }
+
