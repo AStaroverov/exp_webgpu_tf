@@ -74,13 +74,13 @@ export function trainPolicyNetwork(
             const policyLoss = spoTerm.mean().mul(-1) as tf.Scalar;              // scalar
 
             // Энтропия (как у тебя): H = mean(sum(logStd + C))
-            // const entropy = logStd.add(C).sum(1).mean().mul(entropyCoeff) as tf.Scalar;
+            const entropy = logStd.add(C).sum(1).mean().mul(entropyCoeff) as tf.Scalar;
 
-            // Ограничение на значения среднего (|μ| ≤ 2)
-            // const boundLoss = getBoundLoss(mean, 6).mul(1e-3);
+            // Ограничение на значения среднего (|soft_clip(μ)| ≤ 2)
+            const boundLoss = getBoundLoss(mean, 6).mul(1e-3);
 
             // Итоговый лосс
-            const totalLoss = policyLoss//.add(boundLoss);//.sub(entropy) 
+            const totalLoss = policyLoss.add(boundLoss).sub(entropy);
             return totalLoss as tf.Scalar;
         }, { clipNorm, returnCost });
     });
