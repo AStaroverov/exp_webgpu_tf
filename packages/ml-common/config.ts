@@ -23,7 +23,7 @@ export const CONFIG = {
     },
     maxLogStd: (iteration: number) => {
         return [
-            -(0.8),// + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1.5),
+            -(0.0),// + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1.5),
             -(0.8),// + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1.5),
             -(0.8),// + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1.5),
             -(0.8 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1),
