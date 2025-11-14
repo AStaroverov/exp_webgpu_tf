@@ -61,7 +61,7 @@ const WEIGHTS = ({
     DISTANCE_KEEPING_MULTIPLIER: 1,
 
     MOVING: {
-        PENALTY_SPEED: -1,
+        SPEED: 1,
     },
     MOVING_MULTIPLIER: 1,
 });
@@ -88,10 +88,10 @@ export function calculateStateReward(
     strictness: number,
 ): number {
     const isShooting = TankController.shoot[tankEid] > 0;
-    const moveDir = TankController.move[tankEid];
-    const rotationDir = TankController.rotation[tankEid];
+    // const moveDir = TankController.move[tankEid];
+    // const rotationDir = TankController.rotation[tankEid];
     const [currentTankX, currentTankY] = RigidBodyState.position.getBatch(tankEid);
-    // const [currentTankSpeedX, currentTankSpeedY] = RigidBodyState.linvel.getBatche(tankEid);
+    const [currentTankSpeedX, currentTankSpeedY] = RigidBodyState.linvel.getBatch(tankEid);
     const turretRotation = RigidBodyState.rotation[Tank.turretEId[tankEid]];
     // const currentShootings = TankController.shoot[tankEid] > 0;
     // const currentEnemies = findTankEnemiesEids(tankEid);
@@ -116,7 +116,7 @@ export function calculateStateReward(
 
     const rewards = initializeStateRewards();
 
-    rewards.moving.speed = calculateMovingReward(moveDir, rotationDir);
+    rewards.moving.speed = calculateMovingReward(currentTankSpeedX, currentTankSpeedY);
 
     rewards.positioning.mapAwareness = calculateTankMapAwarenessReward(
         width,
@@ -229,13 +229,9 @@ export function calculateActionReward(tankEid: number): number {
     return WEIGHTS.ACTION_MULTIPLIER * totalReward;
 }
 
-function calculateMovingReward(moveDir: number, rotationDir: number): number {
-    const absSumDir = min(abs(moveDir) + abs(rotationDir) / 2, 1);
-    const minLimit = 0.2;
-
-    return absSumDir > minLimit
-        ? 0
-        : WEIGHTS.MOVING.PENALTY_SPEED * (minLimit - absSumDir) / minLimit;
+function calculateMovingReward(linvelX: number, linvelY: number): number {
+    const speed = Math.hypot(linvelX, linvelY) - 20; // under 20 is penalized
+    return WEIGHTS.MOVING.SPEED * speed / 50;
 }
 
 export function getTeamAdvantageScore(state: BattleState): number {
