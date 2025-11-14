@@ -85,7 +85,7 @@ export function calculateStateReward(
     tankEid: number,
     width: number,
     height: number,
-    strictness: number,
+    _strictness: number
 ): number {
     const isShooting = TankController.shoot[tankEid] > 0;
     // const moveDir = TankController.move[tankEid];
@@ -142,7 +142,6 @@ export function calculateStateReward(
         isShooting,
         aimingResult.bestEnemyAimQuality,
         aimingResult.bestAlliesAimQuality,
-        strictness
     );
 
     rewards.positioning.enemiesPositioning = calculateEnemyDistanceReward(
@@ -389,7 +388,7 @@ function calculateShootingReward(
     isShooting: boolean,
     bestEnemyAimQuality: number,
     bestAlliesAimQuality: number,
-    strictness: number
+    strictness: number = 1
 ): number {
     if (isShooting && bestAlliesAimQuality > bestEnemyAimQuality) {
         return strictness * WEIGHTS.AIM.ALLIES_SHOOTING_PENALTY;
