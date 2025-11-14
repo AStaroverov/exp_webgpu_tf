@@ -1,7 +1,6 @@
 import { clamp } from 'lodash';
 import { min } from '../../../lib/math.ts';
 import { random } from '../../../lib/random.ts';
-import { createScenarioAgentsVsBots, indexScenarioAgentsVsBots } from './createScenarioAgentsVsBots.ts';
 import { createScenarioAgentsVsBots1, indexScenarioAgentsVsBots1 } from './createScenarioAgentsVsBots1.ts';
 import { createScenarioAgentsVsBots2, indexScenarioAgentsVsBots2 } from './createScenarioAgentsVsBots2.ts';
 import { createScenarioBase } from './createScenarioBase.ts';
@@ -10,14 +9,13 @@ import {
     createScenarioWithHistoricalAgents,
     indexScenarioWithHistoricalAgents,
 } from './createScenarioWithHistoricalAgents.ts';
-import { createStaticScenarioWithBots, indexStaticScenarioWithBots } from './createStaticScenarioWithBots.ts';
+import { createStaticScenarioAgentsVsBots0, indexStaticScenarioAgentsVsBots0 } from './createStaticScenarioAgentsVsBots0.ts';
 import { CurriculumState, Scenario } from './types.ts';
 
 type ScenarioOptions = Parameters<typeof createScenarioBase>[0];
 
 const mapEntries = [
-    [indexStaticScenarioWithBots, createStaticScenarioWithBots],
-    [indexScenarioAgentsVsBots, createScenarioAgentsVsBots.bind(null, 0)],
+    [indexStaticScenarioAgentsVsBots0, createStaticScenarioAgentsVsBots0],
     [indexScenarioAgentsVsBots1, createScenarioAgentsVsBots1],
     [indexScenarioAgentsVsBots2, createScenarioAgentsVsBots2],
     [indexScenarioWithHistoricalAgents, createScenarioWithHistoricalAgents],
@@ -34,7 +32,7 @@ export const scenariosCount = mapIndexToConstructor.size;
 const edge = 0.3; // 0.3 success ratio to unlock next scenario
 
 export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: ScenarioOptions): Promise<Scenario> {
-    let constructor = createStaticScenarioWithBots;
+    let constructor = createStaticScenarioAgentsVsBots0;
 
     let weights = [];
     let totalWeight = 0;
@@ -60,7 +58,7 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
         if (r < weight) {
             constructor = mapIndexToConstructor.get(i) ?? (() => {
                 console.warn(`Scenario ${i} not found, using default scenario static`);
-                return createStaticScenarioWithBots;
+                return createStaticScenarioAgentsVsBots0;
             })();
             break;
         }
