@@ -16,8 +16,8 @@ const policyNetworkConfig: policyNetworkConfig = {
     heads: 4,
     depth: 6,
     MLP: [
-        ['relu', 512],
-        ['relu', 512],
+        ['relu', 1024],
+        ['relu', 1024],
         ['relu', 512],
         ['relu', 256],
         ['relu', 128],

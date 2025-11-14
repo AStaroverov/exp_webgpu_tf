@@ -12,7 +12,6 @@ import {
     createDenseLayer
 } from './ApplyLayers.ts';
 
-import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 import { ACTION_DIM } from '../../../ml-common/consts.ts';
 import { Model } from './def.ts';
 import { LogStdLayer } from './Layers/LogStdLayer.ts';

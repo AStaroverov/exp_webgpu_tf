@@ -33,7 +33,7 @@ const policyNetworkConfig: policyNetworkConfig = {
 };
 
 const valueNetworkConfig: NetworkConfig = {
-    dim: 64,
+    dim: 32,
     heads: 2,
     depth: 2,
     MLP: [
