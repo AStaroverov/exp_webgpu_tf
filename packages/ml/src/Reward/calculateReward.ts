@@ -229,8 +229,8 @@ export function calculateActionReward(tankEid: number): number {
 }
 
 function calculateMovingReward(linvelX: number, linvelY: number): number {
-    const speed = Math.hypot(linvelX, linvelY) - 20; // under 20 is penalized
-    return WEIGHTS.MOVING.SPEED * speed / 50;
+    const speed = Math.hypot(linvelX, linvelY);
+    return WEIGHTS.MOVING.SPEED * min(0.33, speed / 100) * 3;
 }
 
 export function getTeamAdvantageScore(state: BattleState): number {
