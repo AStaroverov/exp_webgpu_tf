@@ -23,7 +23,7 @@ export const CONFIG = {
     },
     maxLogStd: (iteration: number) => {
         return [
-            -(0.0),// + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1.5),
+            -(1.5),// + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1.5),
             -(0.8),// + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1.5),
             -(0.8),// + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1.5),
             -(0.8 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1),
@@ -61,7 +61,7 @@ export const CONFIG = {
     },
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
-    episodeFrames: Math.round(2 * 60 * 1000 / TICK_TIME_SIMULATION),
+    episodeFrames: Math.round(5 * 60 * 1000 / TICK_TIME_SIMULATION),
     // Workers
     workerCount: 6,
     backpressureQueueSize: 2,

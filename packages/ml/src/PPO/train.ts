@@ -358,7 +358,7 @@ function parsePolicyOutput(prediction: tf.Tensor | tf.Tensor[], minLogStd: numbe
 }
 
 function tanhMapToRange(logStd: tf.Tensor, mean: tf.Tensor, min: number[], max: number[]) {
-    const bump = mean.pow(4).div(16);
+    const bump = mean.pow(4).div(32);
 
     const tMin = tf.tensor1d(min);
     const tMax = tf.minimum(1, tf.tensor1d(max).add(bump));
