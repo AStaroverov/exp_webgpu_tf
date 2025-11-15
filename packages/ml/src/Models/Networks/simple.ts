@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import {
-    applyAttentionPoolingLayer,
+    applyCrossAttentionLayer,
     applyMLP,
     convertInputsToTokens,
     createInputs,
@@ -13,10 +13,36 @@ import { Model } from '../def.ts';
 type NetworkConfig = {
     dim: number;
     heads: number;
-    finalMLP: [ActivationIdentifier, number][];
+    MLP: [ActivationIdentifier, number][];
 };
 
-export function createNetwork(modelName: Model, config: NetworkConfig) {
+type policyNetworkConfig = NetworkConfig
+
+const policyNetworkConfig: policyNetworkConfig = {
+    dim: 64,
+    heads: 1,
+    MLP: [
+        ['relu', 512],
+        ['relu', 1024],
+        ['relu', 1024],
+        ['relu', 512],
+        ['relu', 256],
+        ['relu', 128],
+    ],
+};
+
+const valueNetworkConfig: NetworkConfig = {
+    dim: 32,
+    heads: 1,
+    MLP: [
+        ['relu', 128],
+        ['relu', 128],
+        ['relu', 64],
+        ['relu', 32],
+    ] as [ActivationIdentifier, number][],
+};
+
+export function createNetwork(modelName: Model, config: NetworkConfig = modelName === Model.Policy ? policyNetworkConfig : valueNetworkConfig) {
     const inputs = createInputs(modelName);
     const tokens = convertInputsToTokens(inputs, config.dim);
 
@@ -43,9 +69,9 @@ export function createNetwork(modelName: Model, config: NetworkConfig) {
     });
 
     const finalToken = tf.layers.concatenate({ name: modelName + '_finalToken', axis: 1 }).apply([
-        tokens.controllerTok,
-        tokens.battleTok,
         tokens.tankTok,
+        tokens.battleTok,
+        tokens.controllerTok,
         tankToEnemiesAttn,
         tankToAlliesAttn,
         tankToBulletsAttn,
@@ -56,10 +82,10 @@ export function createNetwork(modelName: Model, config: NetworkConfig) {
     const finalMLP = applyMLP(
         modelName + '_finalMLP',
         flattenedFinalToken,
-        config.finalMLP,
+        config.MLP,
     );
 
-    return { inputs, network: finalMLP, phi: flattenedFinalToken };
+    return { inputs, network: finalMLP };
 }
 
 
@@ -70,7 +96,8 @@ function getAttention(config: {
     kvTok: tf.SymbolicTensor,
     kvMask?: tf.SymbolicTensor
 }) {
-    const tankAttn = applyAttentionPoolingLayer(config.name + '_crossAttn', config.heads, {
+    const tankAttn = applyCrossAttentionLayer(config.name + '_crossAttn', {
+        heads: config.heads,
         qTok: config.qTok,
         kvTok: config.kvTok,
         kvMask: config.kvMask,
