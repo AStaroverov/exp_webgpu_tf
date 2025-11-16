@@ -63,7 +63,7 @@ const WEIGHTS = ({
     MOVING: {
         SPEED: 1,
     },
-    MOVING_MULTIPLIER: 1,
+    MOVING_MULTIPLIER: 2,
 });
 
 function initializeStateRewards() {

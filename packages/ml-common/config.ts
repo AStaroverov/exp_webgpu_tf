@@ -23,11 +23,10 @@ export const CONFIG = {
     },
     maxLogStd: (iteration: number) => {
         return [
-            -(1.5),// + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1.5),
-            -(0.8),// + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1.5),
-            -(0.8),// + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1.5),
-            -(0.8 + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 1),
-            // -(1 + clamp(iteration / (LEARNING_STEPS * 0.2), 0, 1) * 1.5)
+            -(1 + clamp(iteration / (LEARNING_STEPS * 0.05), 0, 1) * 1),
+            -(1 + clamp(iteration / (LEARNING_STEPS * 0.05), 0, 1) * 1),
+            -(1 + clamp(iteration / (LEARNING_STEPS * 0.05), 0, 1) * 1),
+            -(1 + clamp(iteration / (LEARNING_STEPS * 0.05), 0, 1) * 2),
         ]
     },
 
