@@ -16,7 +16,7 @@ function createBotFeatures(level: 0 | 1 | 2) {
                 move: randomRangeFloat(0.05, 0.3),
                 aim: {
                     aimError: randomRangeFloat(0.3, 0.5),
-                    shootChance: randomRangeFloat(0.01, 0.1),
+                    shootChance: randomRangeFloat(0.01, 0.03),
                 },
             };
         case 1:
@@ -24,7 +24,7 @@ function createBotFeatures(level: 0 | 1 | 2) {
                 move: randomRangeFloat(0.3, 0.7),
                 aim: {
                     aimError: randomRangeFloat(0.1, 0.3),
-                    shootChance: randomRangeFloat(0.1, 0.6),
+                    shootChance: randomRangeFloat(0.1, 0.4),
                 },
             };
         case 2:
@@ -32,7 +32,7 @@ function createBotFeatures(level: 0 | 1 | 2) {
                 move: randomRangeFloat(0.7, 1),
                 aim: {
                     aimError: randomRangeFloat(0, 0.1),
-                    shootChance: randomRangeFloat(0.6, 1),
+                    shootChance: randomRangeFloat(0.5, 1),
                 },
             };
         default:

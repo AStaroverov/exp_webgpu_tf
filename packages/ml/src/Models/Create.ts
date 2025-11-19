@@ -37,7 +37,7 @@ export function createPolicyNetwork(): tf.LayersModel {
         useBias: true,
         activation: 'linear',
         biasInitializer: 'zeros',
-        kernelInitializer: tf.initializers.randomNormal({ mean: 0, stddev: 0.05 }),
+        kernelInitializer: tf.initializers.randomNormal({ mean: 0, stddev: 0.02 }),
     }).apply(network) as tf.SymbolicTensor;
 
     const logStdOutput = new LogStdLayer({

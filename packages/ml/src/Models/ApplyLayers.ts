@@ -41,18 +41,51 @@ export function createInputs(name: string) {
     };
 }
 
-export function applyMLP(name: string, layer: tf.SymbolicTensor, hiddenLayers: [ActivationIdentifier, number][]) {
-    let x = layer;
-    let i = 0;
-    for (const [activation, units] of hiddenLayers) {
-        x = createDenseLayer({ name: `${name}/dense${i++}`, units, activation, useBias: true }).apply(x) as tf.SymbolicTensor;
+export function applyMLP({ name, layers: hiddenLayers, preNorm = false }: { name: string, layers: [ActivationIdentifier, number][], preNorm?: boolean }, layer: tf.SymbolicTensor) {
+    if (preNorm) {
+        layer = createNormalizationLayer({
+            name: `${name}/MLP_preNorm`,
+        }).apply(layer) as tf.SymbolicTensor;
     }
 
-    return x;
+    let i = 0;
+    for (const [activation, units] of hiddenLayers) {
+        layer = createDenseLayer({ name: `${name}/MLP_dense${i++}`, units, activation, useBias: true }).apply(layer) as tf.SymbolicTensor;
+    }
+
+    return layer;
 }
 
 export function createDenseLayer(options: DenseLayerArgs & Required<Pick<DenseLayerArgs, 'useBias' | 'activation'>>) {
     return tf.layers.dense(options)
+}
+
+// https://arxiv.org/html/2406.09079v1
+export function applyLaNLayer({ name, units, preNorm = false }: {
+    name: string,
+    units: number,
+    preNorm?: boolean,
+}, layer: tf.SymbolicTensor) {
+    if (preNorm) {
+        layer = createNormalizationLayer({
+            name: `${name}/LaN_preNorm`,
+        }).apply(layer) as tf.SymbolicTensor;
+    }
+
+    const branch1 = createDenseLayer({
+        name: `${name}/LaN_branch1`,
+        units,
+        useBias: true,
+        activation: 'tanh',
+    }).apply(layer) as tf.SymbolicTensor;
+    const branch2 = createDenseLayer({
+        name: `${name}/LaN_branch2`,
+        units,
+        useBias: true,
+        activation: 'tanh',
+    }).apply(layer) as tf.SymbolicTensor;
+
+    return tf.layers.multiply({ name: `${name}/LaN_output` }).apply([branch1, branch2]) as tf.SymbolicTensor;
 }
 
 export function createNormalizationLayer(options: LayerNormalizationLayerArgs) {
@@ -138,7 +171,7 @@ export function applyAttentionPoolingLayer(
     const qTokNorm = createNormalizationLayer({
         name: name + '_QNorm_' + qTok.name,
     }).apply(qTok) as tf.SymbolicTensor;
-    const kvTokNorm = createNormalizationLayer({
+    const kvTokNorm = qTok === kvTok ? qTokNorm : createNormalizationLayer({
         name: name + '_KVNorm_' + kvTok.name,
     }).apply(kvTok) as tf.SymbolicTensor;
 
@@ -190,7 +223,7 @@ export function applyCrossAttentionLayer(
         name: `${name}_ffn1`,
         units: dModel * 4,
         useBias: false,
-        activation: 'relu',
+        activation: 'swish',
     }).apply(ffnNorm) as tf.SymbolicTensor;
 
     const ffnOut = createDenseLayer({
@@ -232,7 +265,7 @@ export function applySelfTransformerLayer(
         name: `${name}_ffn1`,
         units: dModel * 4,
         useBias: false,
-        activation: 'relu',
+        activation: 'swish',
     }).apply(ffnNorm) as tf.SymbolicTensor;
 
     const ffnOut = createDenseLayer({
