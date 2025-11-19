@@ -1,15 +1,15 @@
-import { EntityId } from 'bitecs';
-import { clamp } from 'lodash';
-import { abs, acos, cos, hypot, max, min, normalizeAngle, PI, sin, smoothstep, unlerp } from '../../../../lib/math.ts';
-import { LEARNING_STEPS } from '../../../ml-common/consts.ts';
-import { MAX_BULLET_SPEED } from '../../../tanks/src/Game/ECS/Components/Bullet.ts';
-import { HeuristicsData } from '../../../tanks/src/Game/ECS/Components/HeuristicsData.ts';
-import { RigidBodyState } from '../../../tanks/src/Game/ECS/Components/Physical.ts';
-import { Tank } from '../../../tanks/src/Game/ECS/Components/Tank.ts';
-import { TankController } from '../../../tanks/src/Game/ECS/Components/TankController.ts';
-import { getTankHealth, getTankScore } from '../../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
-import { ALLY_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../../tanks/src/Pilots/Components/TankState.ts';
-import { BattleState, getBattleState } from '../../../tanks/src/Pilots/Utils/snapshotTankInputTensor.ts';
+import {EntityId} from 'bitecs';
+import {clamp} from 'lodash';
+import {abs, acos, cos, hypot, max, min, normalizeAngle, PI, sin, smoothstep, unlerp} from '../../../../lib/math.ts';
+import {LEARNING_STEPS} from '../../../ml-common/consts.ts';
+import {MAX_BULLET_SPEED} from '../../../tanks/src/Game/ECS/Components/Bullet.ts';
+import {HeuristicsData} from '../../../tanks/src/Game/ECS/Components/HeuristicsData.ts';
+import {RigidBodyState} from '../../../tanks/src/Game/ECS/Components/Physical.ts';
+import {Tank} from '../../../tanks/src/Game/ECS/Components/Tank.ts';
+import {TankController} from '../../../tanks/src/Game/ECS/Components/TankController.ts';
+import {getTankHealth, getTankScore} from '../../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
+import {ALLY_BUFFER, ENEMY_BUFFER, TankInputTensor} from '../../../tanks/src/Pilots/Components/TankState.ts';
+import {BattleState, getBattleState} from '../../../tanks/src/Pilots/Utils/snapshotTankInputTensor.ts';
 
 export const GAME_OVER_REWARD_MULTIPLIER = 5;
 
@@ -56,20 +56,20 @@ const WEIGHTS = ({
     MAP_BORDER_MULTIPLIER: 3,
 
     DISTANCE: {
-        MIN_PENALTY: -1,
+        MIN_PENALTY: -0.5,
     },
     DISTANCE_KEEPING_MULTIPLIER: 1,
 
     MOVING: {
-        SPEED: 1,
+        SPEED: 0.33,
     },
-    MOVING_MULTIPLIER: 2,
+    MOVING_MULTIPLIER: 1,
 });
 
 function initializeStateRewards() {
     return {
-        aim: { quality: 0, shootDecision: 0, total: 0 },
-        moving: { speed: 0, total: 0 },
+        aim: {quality: 0, shootDecision: 0, total: 0},
+        moving: {speed: 0, total: 0},
         positioning: {
             enemiesPositioning: 0,
             alliesPositioning: 0,
@@ -85,7 +85,7 @@ export function calculateStateReward(
     tankEid: number,
     width: number,
     height: number,
-    _strictness: number
+    strictness: number
 ): number {
     const isShooting = TankController.shoot[tankEid] > 0;
     // const moveDir = TankController.move[tankEid];
@@ -142,6 +142,7 @@ export function calculateStateReward(
         isShooting,
         aimingResult.bestEnemyAimQuality,
         aimingResult.bestAlliesAimQuality,
+        strictness,
     );
 
     rewards.positioning.enemiesPositioning = calculateEnemyDistanceReward(
@@ -167,9 +168,10 @@ export function calculateStateReward(
             + rewards.positioning.enemiesPositioning * WEIGHTS.DISTANCE_KEEPING_MULTIPLIER);
 
     const totalReward = (
-        + rewards.aim.total
+        rewards.aim.total
         + rewards.moving.total
-        + rewards.positioning.total);
+        + rewards.positioning.total
+    );
 
     // console.log('>>', `
     //     team: ${ rewards.team.total.toFixed(2) },
@@ -194,8 +196,8 @@ export function calculateStateReward(
 
 function initializeActionRewards() {
     return {
-        team: { score: 0, total: 0 },
-        common: { score: 0, health: 0, total: 0 },
+        team: {score: 0, total: 0},
+        common: {score: 0, health: 0, total: 0},
     };
 }
 
@@ -388,7 +390,7 @@ function calculateShootingReward(
     isShooting: boolean,
     bestEnemyAimQuality: number,
     bestAlliesAimQuality: number,
-    strictness: number = 1
+    strictness: number
 ): number {
     if (isShooting && bestAlliesAimQuality > bestEnemyAimQuality) {
         return strictness * WEIGHTS.AIM.ALLIES_SHOOTING_PENALTY;
