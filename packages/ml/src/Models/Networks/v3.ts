@@ -4,8 +4,7 @@ import {
     applyMLP,
     applySelfTransformLayers,
     convertInputsToTokens,
-    createInputs,
-    createNormalizationLayer
+    createInputs
 } from '../ApplyLayers.ts';
 
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
@@ -84,16 +83,17 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         },
     );
 
-    const normTransformedTankContextToken = createNormalizationLayer({ name: modelName + '_normTransformedTankContextToken' }).apply(transformedTankContextToken) as tf.SymbolicTensor;
-
     const finalToken = tf.layers.concatenate({ name: modelName + '_finalToken', axis: 1 }).apply([
         tokens.tankTok,
         tokens.battleTok,
         tokens.controllerTok,
-        normTransformedTankContextToken,
+        transformedTankContextToken,
     ]) as tf.SymbolicTensor;
 
     const flattenedFinalToken = tf.layers.flatten({ name: modelName + '_flattenedFinalToken' }).apply(finalToken) as tf.SymbolicTensor;
+
+
+    tf.layers.layerNormalization()
 
     const finalMLP = applyMLP({
         name: modelName + '_finalMLP',
