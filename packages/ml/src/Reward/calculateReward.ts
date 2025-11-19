@@ -142,7 +142,7 @@ export function calculateStateReward(
         isShooting,
         aimingResult.bestEnemyAimQuality,
         aimingResult.bestAlliesAimQuality,
-        strictness,
+        max(strictness, 0.3),
     );
 
     rewards.positioning.enemiesPositioning = calculateEnemyDistanceReward(
@@ -392,20 +392,20 @@ function calculateShootingReward(
     bestAlliesAimQuality: number,
     strictness: number
 ): number {
-    if (isShooting && bestAlliesAimQuality > bestEnemyAimQuality) {
-        return strictness * WEIGHTS.AIM.ALLIES_SHOOTING_PENALTY;
+    if (isShooting && bestAlliesAimQuality > bestEnemyAimQuality && bestAlliesAimQuality > 0.5) {
+        return strictness * WEIGHTS.AIM.ALLIES_SHOOTING_PENALTY * (bestAlliesAimQuality - 0.5) * (1 / (1 - 0.5));
     }
 
-    if (isShooting && bestEnemyAimQuality < 0.35) {
-        return strictness * WEIGHTS.AIM.MISS_SHOOTING_PENALTY * (1 - bestEnemyAimQuality);
-    }
+    // if (isShooting && bestEnemyAimQuality < 0.35) {
+    //     return strictness * WEIGHTS.AIM.MISS_SHOOTING_PENALTY * (1 - bestEnemyAimQuality);
+    // }
 
     if (!isShooting && bestEnemyAimQuality > 0.7) {
-        return strictness * WEIGHTS.AIM.NO_SHOOTING_PENALTY * bestEnemyAimQuality;
+        return strictness * WEIGHTS.AIM.NO_SHOOTING_PENALTY * (bestEnemyAimQuality - 0.7) * (1 / (1 - 0.7));
     }
 
     if (isShooting && bestEnemyAimQuality > 0.5) {
-        return WEIGHTS.AIM.SHOOTING_REWARD * bestEnemyAimQuality;
+        return WEIGHTS.AIM.SHOOTING_REWARD * bestEnemyAimQuality * (1 / (1 - 0.5));
     }
 
     return 0;
