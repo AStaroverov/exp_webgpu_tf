@@ -1,6 +1,6 @@
-import { clamp } from 'lodash';
-import { ceil, lerp, sin, tanh } from '../../lib/math.ts';
-import { ACTION_DIM, LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
+import {clamp} from 'lodash';
+import {ceil, lerp} from '../../lib/math.ts';
+import {ACTION_DIM, LEARNING_STEPS, TICK_TIME_SIMULATION} from './consts.ts';
 
 export const CONFIG = {
     clipNorm: 1,
@@ -13,7 +13,7 @@ export const CONFIG = {
         return lerp(0.0001, 0.01, clamp(1 - ((iteration - LEARNING_STEPS) / LEARNING_STEPS * 0.5), 0, 1)) / ACTION_DIM;
     },
 
-    minLogStd: (iteration: number) => {
+    minLogStd: (_iter: number) => {
         return [
             -(5), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2
             -(5), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2
@@ -21,23 +21,24 @@ export const CONFIG = {
             -(5), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2
         ]
     },
+
     maxLogStd: (iteration: number) => {
         const warmup = clamp(iteration / (LEARNING_STEPS * 0.1), 0, 1);
-        const step = Math.PI * iteration / (LEARNING_STEPS * 0.02);
+        // const step = Math.PI * iteration / (LEARNING_STEPS * 0.02);
         const decay = warmup * 1.5 - 0.5
 
         return [
-            -(0.8 + warmup * tanh((sin(step + 0) - 0.5) * 2)),
-            -(0.8 + warmup * tanh((sin(step + 1) - 0.5) * 2)),
-            -(0.8 + warmup * tanh((sin(step + 2) - 0.5) * 2)),
-            -(1 + warmup * tanh((sin(step + 3) - 0.5) * 2) / 2),
+            -(0.8),// + warmup * tanh((sin(step + 0) - 0.5) * 2)),
+            -(0.8),// + warmup * tanh((sin(step + 1) - 0.5) * 2)),
+            -(0.8),// + warmup * tanh((sin(step + 2) - 0.5) * 2)),
+            -(1.1),// + warmup * tanh((sin(step + 3) - 0.5) * 2) / 2),
         ].map(v => v - decay)
     },
 
-    policyEpochs: (iteration: number) => 2,
+    policyEpochs: (_iter: number) => 2,
     policyClipRatio: 0.3,
 
-    valueEpochs: (iteration: number) => 2,
+    valueEpochs: (_iter: number) => 2,
     valueClipRatio: 0.3,
     valueLossCoeff: 0.5,
     valueLRCoeff: 1,
