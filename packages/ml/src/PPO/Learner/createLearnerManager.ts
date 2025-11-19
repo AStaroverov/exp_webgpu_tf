@@ -1,23 +1,18 @@
-import { clamp } from 'lodash';
-import { catchError, concatMap, EMPTY, first, forkJoin, map, mergeMap, scan, tap } from 'rxjs';
-import { exp, log, max } from '../../../../../lib/math.ts';
-import { bufferWhile } from '../../../../../lib/Rx/bufferWhile.ts';
-import type { VTraceDiagnostics } from '../../../../ml-common/analyzeVTrace.ts';
-import { analyzeVTrace } from '../../../../ml-common/analyzeVTrace.ts';
-import { forceExitChannel, metricsChannels } from '../../../../ml-common/channels.ts';
-import { CONFIG } from '../../../../ml-common/config.ts';
-import { flatTypedArray } from '../../../../ml-common/flat.ts';
-import { AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
-import { getNetworkSettings } from '../../../../ml-common/utils.ts';
-import { Model } from '../../Models/def.ts';
-import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
-import {
-    agentSampleChannel,
-    learnProcessChannel,
-    modelSettingsChannel,
-    queueSizeChannel
-} from '../channels.ts';
-import { computeVTraceTargets } from '../train.ts';
+import {clamp} from 'lodash';
+import {catchError, concatMap, EMPTY, first, forkJoin, map, mergeMap, scan, tap} from 'rxjs';
+import {exp, log, max} from '../../../../../lib/math.ts';
+import {bufferWhile} from '../../../../../lib/Rx/bufferWhile.ts';
+import type {VTraceDiagnostics} from '../../../../ml-common/analyzeVTrace.ts';
+import {analyzeVTrace} from '../../../../ml-common/analyzeVTrace.ts';
+import {forceExitChannel, metricsChannels} from '../../../../ml-common/channels.ts';
+import {CONFIG} from '../../../../ml-common/config.ts';
+import {flatTypedArray} from '../../../../ml-common/flat.ts';
+import {AgentMemoryBatch} from '../../../../ml-common/Memory.ts';
+import {getNetworkSettings} from '../../../../ml-common/utils.ts';
+import {Model} from '../../Models/def.ts';
+import {disposeNetwork, getNetwork} from '../../Models/Utils.ts';
+import {agentSampleChannel, learnProcessChannel, modelSettingsChannel, queueSizeChannel} from '../channels.ts';
+import {computeVTraceTargets} from '../train.ts';
 
 export type LearnData = AgentMemoryBatch & {
     values: Float32Array,
@@ -52,10 +47,12 @@ export function createLearnerManager() {
                     const settings = getNetworkSettings(policyNetwork);
                     const expIteration = settings.expIteration ?? 0;
                     const batchData = squeezeBatches(samples.map(b => {
-                        b.memoryBatch.rewards.forEach((_, i, arr) => { arr[i] *= settings.rewardRatio ?? 1 / 4; })
+                        b.memoryBatch.rewards.forEach((_, i, arr) => {
+                            arr[i] *= settings.rewardRatio ?? 1;
+                        })
                         return b.memoryBatch
                     }));
-                    const { pureLogStd, pureMean, ...vTraceBatchData } = computeVTraceTargets(
+                    const {pureLogStd, pureMean, ...vTraceBatchData} = computeVTraceTargets(
                         policyNetwork,
                         valueNetwork,
                         batchData,
@@ -65,7 +62,7 @@ export function createLearnerManager() {
                         CONFIG.maxLogStd(expIteration),
                     );
                     const learnData = {
-                        rewardRatio: settings.rewardRatio ?? 1 / 4,
+                        rewardRatio: settings.rewardRatio ?? 1,
                         emaStdReturns: settings.emaStdReturns,
                         ...batchData,
                         ...vTraceBatchData,
@@ -93,8 +90,8 @@ export function createLearnerManager() {
                                 forceExitChannel.postMessage(null);
                             }
 
-                            throw new Error(`Model ${envelope.modelName} failed`, { cause: envelope.error });
-                        }, { [Model.Policy]: false, [Model.Value]: false }),
+                            throw new Error(`Model ${envelope.modelName} failed`, {cause: envelope.error});
+                        }, {[Model.Policy]: false, [Model.Value]: false}),
                         first((state) => state[Model.Policy] && state[Model.Value]),
                         tap(() => {
                             queueSizeChannel.emit(queueSize--);
@@ -118,10 +115,10 @@ export function createLearnerManager() {
                                 ? diagnostics.values.std / diagnostics.returns.std
                                 : 0;
                             // compute reward ratio adjustment, for correct scaling of all v-trace components
-                            const nextEmaStdReturns = (batch.emaStdReturns ?? diagnostics.returns.std) * 0.95 + diagnostics.returns.std * 0.05;
+                            const nextEmaStdReturns = (batch.emaStdReturns ?? diagnostics.returns.std) * 0.99 + diagnostics.returns.std * 0.01;
                             const nextRewardRatio = getRewardRatio(nextEmaStdReturns, batch.rewardRatio);
 
-                            modelSettingsChannel.emit({ emaStdReturns: nextEmaStdReturns, rewardRatio: nextRewardRatio });
+                            modelSettingsChannel.emit({emaStdReturns: nextEmaStdReturns, rewardRatio: nextRewardRatio});
 
                             waitTime !== undefined && metricsChannels.waitTime.postMessage([waitTime / 1000]);
                             metricsChannels.trainTime.postMessage([(lastEndTime - startTime) / 1000]);
