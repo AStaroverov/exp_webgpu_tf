@@ -244,7 +244,7 @@ export function computeVTraceTargets(
     return tf.tidy(() => {
         const input = createInputTensors(batch.states);
         const predicted = policyNetwork.predict(input, { batchSize });
-        const { mean, logStd, pureMean } = parsePolicyOutput(predicted, minLogStd, maxLogStd);
+        const { mean, logStd, pureMean, pureLogStd } = parsePolicyOutput(predicted, minLogStd, maxLogStd);
         const actions = tf.tensor2d(flatTypedArray(batch.actions), [batch.size, ACTION_DIM]);
         const logProbCurrentTensor = computeLogProbTanh(actions, mean, logStd.exp());
         const logProbBehaviorTensor = tf.tensor1d(batch.logProbs);
@@ -284,7 +284,7 @@ export function computeVTraceTargets(
             values: values,
             // just for logs
             pureMean: syncUnwrapTensor(pureMean) as Float32Array,
-            pureLogStd: syncUnwrapTensor(logStd) as Float32Array,
+            pureLogStd: syncUnwrapTensor(pureLogStd) as Float32Array,
         };
     });
 }
@@ -348,20 +348,19 @@ export function computeVTrace(
 
 function parsePolicyOutput(prediction: tf.Tensor | tf.Tensor[], minLogStd: number[], maxLogStd: number[]) {
     const [mean, logStd] = prediction as [tf.Tensor2D, tf.Tensor2D];
-    const clippedMean = softClip(mean, 2);
+    const mappedLogStd = tanhMapToRange(logStd, minLogStd, maxLogStd);
     return {
-        mean: clippedMean,
-        logStd: tanhMapToRange(logStd, clippedMean, minLogStd, maxLogStd),
+        mean: mean,
+        logStd: mappedLogStd,
         pureMean: mean,
-        pureLogStd: logStd,
+        pureLogStd: mappedLogStd,
     };
 }
 
-function tanhMapToRange(logStd: tf.Tensor, mean: tf.Tensor, min: number[], max: number[]) {
-    const bump = mean.pow(4).div(32);
-
+function tanhMapToRange(logStd: tf.Tensor, min: number[], max: number[]) {
+    // const bump = mean.pow(4).div(32);
     const tMin = tf.tensor1d(min);
-    const tMax = tf.minimum(1, tf.tensor1d(max).add(bump));
+    const tMax = tf.tensor1d(max);
     const c = tMin.add(tMax).mul(0.5);
     const r = tMax.sub(tMin).mul(0.5);
     return tf.tanh(logStd).mul(r).add(c);

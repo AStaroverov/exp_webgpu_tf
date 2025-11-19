@@ -1,5 +1,5 @@
 import { clamp } from 'lodash';
-import { ceil, lerp } from '../../lib/math.ts';
+import { ceil, lerp, sin, tanh } from '../../lib/math.ts';
 import { ACTION_DIM, LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
 
 export const CONFIG = {
@@ -22,12 +22,16 @@ export const CONFIG = {
         ]
     },
     maxLogStd: (iteration: number) => {
+        const warmup = clamp(iteration / (LEARNING_STEPS * 0.1), 0, 1);
+        const step = Math.PI * iteration / (LEARNING_STEPS * 0.02);
+        const decay = warmup * 1.5 - 0.5
+
         return [
-            -(1 + clamp(iteration / (LEARNING_STEPS * 0.05), 0, 1) * 1),
-            -(1 + clamp(iteration / (LEARNING_STEPS * 0.05), 0, 1) * 1),
-            -(1 + clamp(iteration / (LEARNING_STEPS * 0.05), 0, 1) * 1),
-            -(1 + clamp(iteration / (LEARNING_STEPS * 0.05), 0, 1) * 2),
-        ]
+            -(0.8 + warmup * tanh((sin(step + 0) - 0.5) * 2)),
+            -(0.8 + warmup * tanh((sin(step + 1) - 0.5) * 2)),
+            -(0.8 + warmup * tanh((sin(step + 2) - 0.5) * 2)),
+            -(1 + warmup * tanh((sin(step + 3) - 0.5) * 2) / 2),
+        ].map(v => v - decay)
     },
 
     policyEpochs: (iteration: number) => 2,
@@ -60,7 +64,7 @@ export const CONFIG = {
     },
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
-    episodeFrames: Math.round(5 * 60 * 1000 / TICK_TIME_SIMULATION),
+    episodeFrames: Math.round(60 * 1000 / TICK_TIME_SIMULATION),
     // Workers
     workerCount: 6,
     backpressureQueueSize: 2,

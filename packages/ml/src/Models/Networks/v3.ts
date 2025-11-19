@@ -23,23 +23,23 @@ type policyNetworkConfig = NetworkConfig
 const policyNetworkConfig: policyNetworkConfig = {
     dim: 64,
     heads: 4,
-    depth: 3,
+    depth: 2,
     MLP: [
-        ['relu', 512],
-        ['relu', 512],
-        ['relu', 256],
-        ['relu', 128],
+        ['swish', 512],
+        ['swish', 256],
+        ['swish', 256],
+        ['swish', 128],
     ],
 };
 
 const valueNetworkConfig: NetworkConfig = {
     dim: 32,
     heads: 2,
-    depth: 2,
+    depth: 1,
     MLP: [
-        ['relu', 128],
-        ['relu', 64],
-        ['relu', 32],
+        ['swish', 128],
+        ['swish', 64],
+        ['swish', 64],
     ] as [ActivationIdentifier, number][],
 };
 
@@ -84,20 +84,22 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         },
     );
 
+    const normTransformedTankContextToken = createNormalizationLayer({ name: modelName + '_normTransformedTankContextToken' }).apply(transformedTankContextToken) as tf.SymbolicTensor;
+
     const finalToken = tf.layers.concatenate({ name: modelName + '_finalToken', axis: 1 }).apply([
         tokens.tankTok,
         tokens.battleTok,
         tokens.controllerTok,
-        transformedTankContextToken,
+        normTransformedTankContextToken,
     ]) as tf.SymbolicTensor;
 
     const flattenedFinalToken = tf.layers.flatten({ name: modelName + '_flattenedFinalToken' }).apply(finalToken) as tf.SymbolicTensor;
 
-    const finalMLP = applyMLP(
-        modelName + '_finalMLP',
-        flattenedFinalToken,
-        config.MLP,
-    );
+    const finalMLP = applyMLP({
+        name: modelName + '_finalMLP',
+        layers: config.MLP,
+        preNorm: false,
+    }, flattenedFinalToken,);
 
     return { inputs, network: finalMLP };
 }
@@ -110,13 +112,12 @@ function getAttention(config: {
     kvTok: tf.SymbolicTensor,
     kvMask?: tf.SymbolicTensor
 }) {
-    const tankAttn = applyCrossAttentionLayer(config.name + '_crossAttn', {
+    return applyCrossAttentionLayer(config.name + '_crossAttn', {
         heads: config.heads,
         qTok: config.qTok,
         kvTok: config.kvTok,
         kvMask: config.kvMask,
     });
-    const normTankAttn = createNormalizationLayer({ name: config.name + '_norm' }).apply(tankAttn) as tf.SymbolicTensor;
-
-    return normTankAttn;
+    // const normTankAttn = createNormalizationLayer({ name: config.name + '_norm' }).apply(tankAttn) as tf.SymbolicTensor;
+    // return normTankAttn;
 }
