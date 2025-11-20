@@ -31,8 +31,6 @@ const klHistory = new RingBuffer<number>(25);
 function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const settings = getNetworkSettings(network);
     const expIteration = settings.expIteration ?? 0;
-    const minLogStd = CONFIG.minLogStd(expIteration);
-    const maxLogStd = CONFIG.maxLogStd(expIteration);
     const mbs = CONFIG.miniBatchSize(expIteration);
     const mbc = ceil(batch.size / mbs);
     const rb = new ReplayBuffer(batch.states.length);
@@ -75,8 +73,6 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
                 CONFIG.policyClipRatio,
                 entropyCoeff,
                 CONFIG.clipNorm,
-                minLogStd,
-                maxLogStd,
                 j === mbc - 1,
             );
             policyLoss && policyLossList.push(policyLoss);
@@ -88,7 +84,7 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
         }
 
         // KL on non-perturbed data (for learning rate adaptation)
-        const tKL = computeKLForBatch(network, getKlBatch(klSize), mbs, minLogStd, maxLogStd);
+        const tKL = computeKLForBatch(network, getKlBatch(klSize), mbs);
         const kl = tKL ? syncUnwrapTensor(tKL)[0] : undefined;
         if (kl != null) klList.push(kl);
         if (kl != null && kl > CONFIG.lrConfig.kl.high) {
@@ -142,18 +138,16 @@ function createPolicyBatch(batch: LearnData, indices: number[]) {
 function createKlBatch(batch: LearnData, indices: number[]) {
     const states = indices.map(i => batch.states[i]);
     const actions = indices.map(i => batch.actions[i]);
-    const mean = indices.map(i => batch.mean[i]);
+    const logits = indices.map(i => batch.logits[i]);
     const logProb = indices.map(i => batch.logProbs[i]);
 
-    return { states, actions, mean, logProb, };
+    return { states, actions, logits, logProb, };
 }
 
 function computeKLForBatch(
     network: tf.LayersModel,
     batch: ReturnType<typeof createKlBatch>,
     mbs: number,
-    minLogStd: number[],
-    maxLogStd: number[],
 ) {
     let result: undefined | tf.Tensor;
 
@@ -168,8 +162,6 @@ function computeKLForBatch(
             tActions,
             tLogProb,
             mbs,
-            minLogStd,
-            maxLogStd,
         )
 
         tf.dispose(tStates);

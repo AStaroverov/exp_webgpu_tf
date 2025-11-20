@@ -6,14 +6,14 @@ export type AgentMemoryBatch = {
     actions: Float32Array[],
     rewards: Float32Array,
     dones: Float32Array,
-    mean: Float32Array[],
+    logits: Float32Array[],
     logProbs: Float32Array,
 }
 
 export class AgentMemory {
     public states: InputArrays[] = [];
     public actions: Float32Array[] = [];
-    public mean: Float32Array[] = [];
+    public logits: Float32Array[] = [];
     public logProbs: number[] = [];
     public rewards: number[] = [];
     public dones: boolean[] = [];
@@ -32,7 +32,7 @@ export class AgentMemory {
     addFirstPart(
         state: InputArrays,
         action: Float32Array,
-        mean: Float32Array,
+        logits: Float32Array,
         logProb: number,
     ) {
         if (this.isDone()) return;
@@ -40,7 +40,7 @@ export class AgentMemory {
 
         this.states.push(state);
         this.actions.push(action);
-        this.mean.push(mean);
+        this.logits.push(logits);
         this.logProbs.push(logProb);
     }
 
@@ -70,7 +70,7 @@ export class AgentMemory {
             size: this.states.length,
             states: (this.states),
             actions: (this.actions),
-            mean: (this.mean),
+            logits: (this.logits),
             logProbs: new Float32Array(this.logProbs),
             rewards: rewards,
             dones: dones,
@@ -80,7 +80,7 @@ export class AgentMemory {
     dispose() {
         this.states.length = 0;
         this.actions.length = 0;
-        this.mean.length = 0;
+        this.logits.length = 0;
         this.logProbs.length = 0;
         this.rewards.length = 0;
         this.dones.length = 0;
@@ -90,7 +90,7 @@ export class AgentMemory {
         const minLength = Math.min(
             this.states.length,
             this.actions.length,
-            this.mean.length,
+            this.logits.length,
             this.logProbs.length,
             this.rewards.length,
             this.dones.length,
@@ -98,7 +98,7 @@ export class AgentMemory {
 
         this.states.length = minLength;
         this.actions.length = minLength;
-        this.mean.length = minLength;
+        this.logits.length = minLength;
         this.logProbs.length = minLength;
         this.rewards.length = minLength;
         this.dones.length = minLength;
