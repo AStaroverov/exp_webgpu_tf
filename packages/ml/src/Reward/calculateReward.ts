@@ -61,7 +61,7 @@ const WEIGHTS = ({
     DISTANCE_KEEPING_MULTIPLIER: 1,
 
     MOVING: {
-        SPEED: 0.33,
+        SPEED: 1,
     },
     MOVING_MULTIPLIER: 1,
 });
@@ -395,10 +395,6 @@ function calculateShootingReward(
     if (isShooting && bestAlliesAimQuality > bestEnemyAimQuality && bestAlliesAimQuality > 0.5) {
         return strictness * WEIGHTS.AIM.ALLIES_SHOOTING_PENALTY * (bestAlliesAimQuality - 0.5) * (1 / (1 - 0.5));
     }
-
-    // if (isShooting && bestEnemyAimQuality < 0.35) {
-    //     return strictness * WEIGHTS.AIM.MISS_SHOOTING_PENALTY * (1 - bestEnemyAimQuality);
-    // }
 
     if (!isShooting && bestEnemyAimQuality > 0.7) {
         return strictness * WEIGHTS.AIM.NO_SHOOTING_PENALTY * (bestEnemyAimQuality - 0.7) * (1 / (1 - 0.7));

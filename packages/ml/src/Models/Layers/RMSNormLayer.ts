@@ -1,7 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
-import { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
+import {LayerArgs} from '@tensorflow/tfjs-layers/dist/engine/topology';
 
-interface RMSNormConfig extends LayerArgs {
+export interface RMSNormConfig extends LayerArgs {
     /**
      * The axis or axes along which to compute RMS normalization.
      * Default: -1 (last axis)

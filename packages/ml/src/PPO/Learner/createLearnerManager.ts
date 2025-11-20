@@ -19,14 +19,14 @@ export type LearnData = AgentMemoryBatch & {
     returns: Float32Array,
     tdErrors: Float32Array,
     advantages: Float32Array,
-
-    rewardRatio: number,
-    emaStdReturns?: number,
 };
 
 export function createLearnerManager() {
     let lastEndTime = 0;
     let queueSize = 0;
+
+    let rewardRatio = 0;
+    let emaStdReturns = 0;
 
     agentSampleChannel.obs.pipe(
         bufferWhile((batches) => {
@@ -45,10 +45,13 @@ export function createLearnerManager() {
             ]).pipe(
                 map(([policyNetwork, valueNetwork]): LearnData => {
                     const settings = getNetworkSettings(policyNetwork);
+                    rewardRatio = rewardRatio || settings.rewardRatio || 1;
+                    emaStdReturns = emaStdReturns || settings.emaStdReturns || 0;
+
                     const expIteration = settings.expIteration ?? 0;
                     const batchData = squeezeBatches(samples.map(b => {
                         b.memoryBatch.rewards.forEach((_, i, arr) => {
-                            arr[i] *= settings.rewardRatio ?? 1;
+                            arr[i] *= rewardRatio;
                         })
                         return b.memoryBatch
                     }));
@@ -62,8 +65,6 @@ export function createLearnerManager() {
                         CONFIG.maxLogStd(expIteration),
                     );
                     const learnData = {
-                        rewardRatio: settings.rewardRatio ?? 1,
-                        emaStdReturns: settings.emaStdReturns,
                         ...batchData,
                         ...vTraceBatchData,
                     };
@@ -115,10 +116,10 @@ export function createLearnerManager() {
                                 ? diagnostics.values.std / diagnostics.returns.std
                                 : 0;
                             // compute reward ratio adjustment, for correct scaling of all v-trace components
-                            const nextEmaStdReturns = (batch.emaStdReturns ?? diagnostics.returns.std) * 0.99 + diagnostics.returns.std * 0.01;
-                            const nextRewardRatio = getRewardRatio(nextEmaStdReturns, batch.rewardRatio);
+                            emaStdReturns = (emaStdReturns || diagnostics.returns.std) * 0.9 + diagnostics.returns.std * 0.1;
+                            rewardRatio = getRewardRatio(emaStdReturns, rewardRatio);
 
-                            modelSettingsChannel.emit({emaStdReturns: nextEmaStdReturns, rewardRatio: nextRewardRatio});
+                            modelSettingsChannel.emit({emaStdReturns, rewardRatio});
 
                             waitTime !== undefined && metricsChannels.waitTime.postMessage([waitTime / 1000]);
                             metricsChannels.trainTime.postMessage([(lastEndTime - startTime) / 1000]);
