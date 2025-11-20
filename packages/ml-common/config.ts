@@ -25,7 +25,7 @@ export const CONFIG = {
     maxLogStd: (iteration: number) => {
         const warmup = clamp(iteration / (LEARNING_STEPS * 0.1), 0, 1);
         // const step = Math.PI * iteration / (LEARNING_STEPS * 0.02);
-        const decay = warmup * 1.5 - 0.5
+        const decay = 0.5 + warmup
 
         return [
             -(0.8),// + warmup * tanh((sin(step + 0) - 0.5) * 2)),

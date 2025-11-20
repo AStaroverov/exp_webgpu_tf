@@ -7,14 +7,14 @@ import {
     createInputs
 } from '../ApplyLayers.ts';
 
-import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
-import { Model } from '../def.ts';
+import {ActivationIdentifier} from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
+import {Model} from '../def.ts';
 
 type NetworkConfig = {
     dim: number;
     heads: number;
     depth: number;
-    MLP: [ActivationIdentifier, number][];
+    headsMLP: ([ActivationIdentifier, number][])[];
 };
 
 type policyNetworkConfig = NetworkConfig
@@ -22,24 +22,23 @@ type policyNetworkConfig = NetworkConfig
 const policyNetworkConfig: policyNetworkConfig = {
     dim: 64,
     heads: 4,
-    depth: 2,
-    MLP: [
-        ['swish', 512],
-        ['swish', 256],
-        ['swish', 256],
-        ['swish', 128],
-    ],
+    depth: 4,
+    headsMLP: [0, 1, 2, 3].map(() =>
+        ([
+            ['swish', 256] as const,
+            ['swish', 64] as const,
+        ])
+    )
 };
 
 const valueNetworkConfig: NetworkConfig = {
     dim: 32,
-    heads: 2,
-    depth: 1,
-    MLP: [
+    heads: 1,
+    depth: 2,
+    headsMLP: [[
         ['swish', 128],
-        ['swish', 64],
-        ['swish', 64],
-    ] as [ActivationIdentifier, number][],
+        ['swish', 32],
+    ]],
 };
 
 export function createNetwork(modelName: Model, config: NetworkConfig = modelName === Model.Policy ? policyNetworkConfig : valueNetworkConfig) {
@@ -68,7 +67,10 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         kvMask: inputs.bulletsMaskInput,
     });
 
-    const tankContextToken = tf.layers.concatenate({ name: modelName + '_tankContextToken', axis: 1 }).apply([
+    const tankContextToken = tf.layers.concatenate({name: modelName + '_tankContextToken', axis: 1}).apply([
+        tokens.tankTok,
+        tokens.battleTok,
+        tokens.controllerTok,
         tankToEnemiesAttn,
         tankToAlliesAttn,
         tankToBulletsAttn,
@@ -83,25 +85,17 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         },
     );
 
-    const finalToken = tf.layers.concatenate({ name: modelName + '_finalToken', axis: 1 }).apply([
-        tokens.tankTok,
-        tokens.battleTok,
-        tokens.controllerTok,
-        transformedTankContextToken,
-    ]) as tf.SymbolicTensor;
+    const flattenedFinalToken = tf.layers.flatten({name: modelName + '_flattenedFinalToken'})
+        .apply(transformedTankContextToken) as tf.SymbolicTensor;
 
-    const flattenedFinalToken = tf.layers.flatten({ name: modelName + '_flattenedFinalToken' }).apply(finalToken) as tf.SymbolicTensor;
+    const heads = config.headsMLP.map((layers, i) => {
+        return applyMLP({
+            name: modelName + '_headsMLP_' + i,
+            layers,
+        }, flattenedFinalToken)
+    })
 
-
-    tf.layers.layerNormalization()
-
-    const finalMLP = applyMLP({
-        name: modelName + '_finalMLP',
-        layers: config.MLP,
-        preNorm: false,
-    }, flattenedFinalToken,);
-
-    return { inputs, network: finalMLP };
+    return {inputs, heads, latent: flattenedFinalToken};
 }
 
 
