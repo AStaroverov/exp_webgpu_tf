@@ -1,5 +1,5 @@
 import * as tf from '@tensorflow/tfjs';
-import {CONFIG} from '../../../ml-common/config.ts';
+import { CONFIG } from '../../../ml-common/config.ts';
 import {
     ALLY_BUFFER,
     BULLET_BUFFER,
@@ -9,12 +9,10 @@ import {
     MAX_ENEMIES,
 } from '../../../tanks/src/Pilots/Components/TankState.ts';
 
-import {ACTION_DIM} from '../../../ml-common/consts.ts';
-import {Model} from './def.ts';
-import {LogStdLayer} from './Layers/LogStdLayer.ts';
-import {createNetwork} from './Networks/v3.ts';
-import {AdamW} from './Optimizer/AdamW.ts';
-import {createDenseLayer} from "./ApplyLayers.ts";
+import { createDenseLayer } from "./ApplyLayers.ts";
+import { Model } from './def.ts';
+import { createNetwork } from './Networks/v3.ts';
+import { AdamW } from './Optimizer/AdamW.ts';
 
 export const CONTROLLER_FEATURES_DIM = 4;
 export const BATTLE_FEATURES_DIM = 6;
@@ -26,40 +24,28 @@ export const ALLY_FEATURES_DIM = ALLY_BUFFER - 1; // -1 потому что id �
 export const BULLET_SLOTS = MAX_BULLETS;
 export const BULLET_FEATURES_DIM = BULLET_BUFFER - 1; // -1 потому что id не считаем
 
-export function createPolicyNetwork(): tf.LayersModel {
-    const {inputs, heads, latent} = createNetwork(Model.Policy);
+export const ACTION_HEAD_DIMS = [2, 15, 15, 15];
 
-    const means = heads.map((head, i) => {
-        const item = createDenseLayer({
-            name: Model.Policy + '_head_output' + '_' + i,
-            units: 1,
-            useBias: false,
-            activation: 'tanh',
+export function createPolicyNetwork(): tf.LayersModel {
+    const {inputs, heads} = createNetwork(Model.Policy);
+
+    // Create logits output for each head
+    const logitsOutputs = heads.map((head, i) => {
+        const units = ACTION_HEAD_DIMS[i];
+        return createDenseLayer({
+            name: Model.Policy + '_head_logits_' + i,
+            units: units,
+            useBias: true,
+            activation: 'linear',
             biasInitializer: 'zeros',
             kernelInitializer: tf.initializers.randomNormal({mean: 0, stddev: 0.02}),
         }).apply(head) as tf.SymbolicTensor;
-
-        return item;
     });
-
-    // const meanOutput = createDenseLayer({
-    //     name: Model.Policy + '_mean_output',
-    //     units: ACTION_DIM,
-    //     useBias: true,
-    //     activation: 'linear',
-    //     biasInitializer: 'zeros',
-    //     kernelInitializer: tf.initializers.randomNormal({mean: 0, stddev: 0.02}),
-    // }).apply(lan) as tf.SymbolicTensor;
-
-    const logStdOutput = new LogStdLayer({
-        name: Model.Policy + '_log_std_output',
-        units: ACTION_DIM
-    }).apply(latent) as tf.SymbolicTensor;
 
     const model = tf.model({
         name: Model.Policy,
         inputs: Object.values(inputs),
-        outputs: [logStdOutput, ...means], // [mean, phi]
+        outputs: logitsOutputs, // [shootLogits, moveLogits, rotLogits, turRotLogits]
     });
     model.optimizer = new AdamW(CONFIG.lrConfig.initial);
     model.loss = 'meanSquaredError'; // fake loss for save optimizer with model

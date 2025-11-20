@@ -33,7 +33,11 @@ export class AttentionPoolLayer extends tf.layers.Layer {
     call(tokens: tf.Tensor | tf.Tensor[]) {
         const token = Array.isArray(tokens) ? tokens[0] : tokens;
 
-        const scores = tf.mul(token, this.w.read()).sum(-1).div(this.scale);
+        const [batch, time, features] = token.shape;
+        const scores = tf.matMul(
+            token.reshape([-1, features]),
+            this.w.read().expandDims(-1)
+        ).reshape([batch, time]).div(this.scale);
         const weights = tf.softmax(scores, -1).expandDims(-1);
         const weightedTokens = tf.mul(token, weights);
         const pooledToken = tf.sum(weightedTokens, 1);

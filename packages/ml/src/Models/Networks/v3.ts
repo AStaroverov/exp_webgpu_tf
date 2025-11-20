@@ -7,8 +7,9 @@ import {
     createInputs
 } from '../ApplyLayers.ts';
 
-import {ActivationIdentifier} from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
-import {Model} from '../def.ts';
+import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
+import { Model } from '../def.ts';
+import { AttentionPoolLayer } from '../Layers/AttentionPoolLayer.ts';
 
 type NetworkConfig = {
     dim: number;
@@ -20,24 +21,24 @@ type NetworkConfig = {
 type policyNetworkConfig = NetworkConfig
 
 const policyNetworkConfig: policyNetworkConfig = {
-    dim: 64,
+    dim: 256,
     heads: 4,
     depth: 4,
     headsMLP: [0, 1, 2, 3].map(() =>
         ([
             ['swish', 256] as const,
-            ['swish', 64] as const,
+            ['swish', 128] as const,
         ])
     )
 };
 
 const valueNetworkConfig: NetworkConfig = {
-    dim: 32,
+    dim: 64,
     heads: 1,
     depth: 2,
     headsMLP: [[
         ['swish', 128],
-        ['swish', 32],
+        ['swish', 64],
     ]],
 };
 
@@ -85,17 +86,16 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         },
     );
 
-    const flattenedFinalToken = tf.layers.flatten({name: modelName + '_flattenedFinalToken'})
-        .apply(transformedTankContextToken) as tf.SymbolicTensor;
+    const latent = new AttentionPoolLayer({name: modelName + '_latentPool'}).apply(transformedTankContextToken) as tf.SymbolicTensor;
 
     const heads = config.headsMLP.map((layers, i) => {
         return applyMLP({
             name: modelName + '_headsMLP_' + i,
             layers,
-        }, flattenedFinalToken)
+        }, latent)
     })
 
-    return {inputs, heads, latent: flattenedFinalToken};
+    return {inputs, heads};
 }
 
 

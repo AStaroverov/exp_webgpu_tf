@@ -7,21 +7,21 @@ type MultiOUOpts = {
 };
 
 export class ColoredNoiseApprox {
-    private actionDim: number;
+    private headDims: number[];
     private K: number;
     private a: tf.Tensor1D;      // [K] коэффициенты AR(1): x <- a x + b z
     private b: tf.Tensor1D;      // [K] чтобы var(x_k)=1: b = sqrt(1 - a^2)
     private w: tf.Tensor1D;      // [K] веса по шкалам, ||w||_2 = 1
-    private state: tf.Tensor2D;  // [K, D]
+    private states: tf.Tensor2D[];  // массив [K, headDim] для каждой головы
     private disposed = false;
 
-    constructor(actionDim: number, beta = 1, opts: MultiOUOpts = {}) {
+    constructor(headDims: number[], beta = 1, opts: MultiOUOpts = {}) {
         const {
             K = 8,
             tauMin = 4,
             tauMax = 64,
         } = opts;
-        this.actionDim = actionDim;
+        this.headDims = headDims;
         this.K = K;
 
         const { a, b, w } = tf.tidy(() => {
@@ -48,37 +48,45 @@ export class ColoredNoiseApprox {
         this.b = b as tf.Tensor1D;
         this.w = w as tf.Tensor1D;
 
-        // Инициализация состояния K фильтров на D каналов (ноль — ок, стац. режим быстро достигается)
-        this.state = tf.zeros([K, actionDim]) as tf.Tensor2D;
+        // Инициализация состояния K фильтров для каждой головы отдельно
+        this.states = headDims.map(dim => tf.zeros([K, dim]) as tf.Tensor2D);
     }
 
-    /** Возвращает вектор [D] ~ N(0,1) с 1/f^beta спектром по времени. */
-    sample(): tf.Tensor1D {
+    /** Возвращает массив тензоров для каждой головы с 1/f^beta спектром по времени. */
+    sample(): tf.Tensor[] {
         if (this.disposed) throw new Error('ColoredNoise: disposed');
 
-        const { newState, out } = tf.tidy(() => {
-            const K = this.K;
-            const D = this.actionDim;
-            const a2d = this.a.reshape([K, 1]);      // [K,1]
-            const b2d = this.b.reshape([K, 1]);      // [K,1]
-            const w2d = this.w.reshape([K, 1]);      // [K,1]
+        const K = this.K;
+        const a2d = this.a.reshape([K, 1]);      // [K,1]
+        const b2d = this.b.reshape([K, 1]);      // [K,1]
+        const w2d = this.w.reshape([K, 1]);      // [K,1]
 
-            const z = tf.randomNormal([K, D]);       // независимые возбуждения
-            const nextState = tf.add(tf.mul(a2d, this.state), tf.mul(b2d, z)) as tf.Tensor2D; // [K,D]
-            const y = tf.sum(tf.mul(nextState, w2d), 0) as tf.Tensor1D; // взвешенная сумма по шкалам -> [D]
+        const newStates: tf.Tensor2D[] = [];
+        const outputs: tf.Tensor[] = [];
 
-            return { newState: nextState, out: y };
-        });
+        for (let headIdx = 0; headIdx < this.headDims.length; headIdx++) {
+            const D = this.headDims[headIdx];
+            const { newState, out } = tf.tidy(() => {
+                const z = tf.randomNormal([K, D]);       // независимые возбуждения
+                const nextState = tf.add(tf.mul(a2d, this.states[headIdx]), tf.mul(b2d, z)) as tf.Tensor2D; // [K,D]
+                const y = tf.sum(tf.mul(nextState, w2d), 0); // взвешенная сумма по шкалам -> [D]
 
-        this.state.dispose();
-        this.state = newState;
-        return out;
+                return { newState: nextState, out: y };
+            });
+
+            this.states[headIdx].dispose();
+            newStates.push(newState);
+            outputs.push(out);
+        }
+
+        this.states = newStates;
+        return outputs;
     }
 
     dispose() {
         if (this.disposed) return;
         this.disposed = true;
-        this.state.dispose();
+        this.states.forEach(s => s.dispose());
         this.a.dispose();
         this.b.dispose();
         this.w.dispose();

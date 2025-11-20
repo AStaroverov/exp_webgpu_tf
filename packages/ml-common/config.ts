@@ -1,6 +1,6 @@
-import {clamp} from 'lodash';
-import {ceil, lerp} from '../../lib/math.ts';
-import {ACTION_DIM, LEARNING_STEPS, TICK_TIME_SIMULATION} from './consts.ts';
+import { clamp } from 'lodash';
+import { ceil, lerp } from '../../lib/math.ts';
+import { ACTION_DIM, LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
 
 export const CONFIG = {
     clipNorm: 1,
@@ -50,7 +50,7 @@ export const CONFIG = {
             target: ACTION_DIM * 0.02,
             low: ACTION_DIM * 0.017,
         },
-        initial: 1e-4,
+        initial: 1e-3,
         multHigh: 0.95,
         multLow: 1.01,
         min: 1e-5,

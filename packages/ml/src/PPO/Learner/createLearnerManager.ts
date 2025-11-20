@@ -1,18 +1,18 @@
-import {clamp} from 'lodash';
-import {catchError, concatMap, EMPTY, first, forkJoin, map, mergeMap, scan, tap} from 'rxjs';
-import {exp, log, max} from '../../../../../lib/math.ts';
-import {bufferWhile} from '../../../../../lib/Rx/bufferWhile.ts';
-import type {VTraceDiagnostics} from '../../../../ml-common/analyzeVTrace.ts';
-import {analyzeVTrace} from '../../../../ml-common/analyzeVTrace.ts';
-import {forceExitChannel, metricsChannels} from '../../../../ml-common/channels.ts';
-import {CONFIG} from '../../../../ml-common/config.ts';
-import {flatTypedArray} from '../../../../ml-common/flat.ts';
-import {AgentMemoryBatch} from '../../../../ml-common/Memory.ts';
-import {getNetworkSettings} from '../../../../ml-common/utils.ts';
-import {Model} from '../../Models/def.ts';
-import {disposeNetwork, getNetwork} from '../../Models/Utils.ts';
-import {agentSampleChannel, learnProcessChannel, modelSettingsChannel, queueSizeChannel} from '../channels.ts';
-import {computeVTraceTargets} from '../train.ts';
+import { clamp } from 'lodash';
+import { catchError, concatMap, EMPTY, first, forkJoin, map, mergeMap, scan, tap } from 'rxjs';
+import { exp, log, max } from '../../../../../lib/math.ts';
+import { bufferWhile } from '../../../../../lib/Rx/bufferWhile.ts';
+import type { VTraceDiagnostics } from '../../../../ml-common/analyzeVTrace.ts';
+import { analyzeVTrace } from '../../../../ml-common/analyzeVTrace.ts';
+import { forceExitChannel, metricsChannels } from '../../../../ml-common/channels.ts';
+import { CONFIG } from '../../../../ml-common/config.ts';
+import { flatTypedArray } from '../../../../ml-common/flat.ts';
+import { AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
+import { getNetworkSettings } from '../../../../ml-common/utils.ts';
+import { Model } from '../../Models/def.ts';
+import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
+import { agentSampleChannel, learnProcessChannel, modelSettingsChannel, queueSizeChannel } from '../channels.ts';
+import { computeVTraceTargets } from '../train.ts';
 
 export type LearnData = AgentMemoryBatch & {
     values: Float32Array,
@@ -55,22 +55,20 @@ export function createLearnerManager() {
                         })
                         return b.memoryBatch
                     }));
-                    const {pureLogStd, pureMean, ...vTraceBatchData} = computeVTraceTargets(
+                    const {pureLogits, ...vTraceBatchData} = computeVTraceTargets(
                         policyNetwork,
                         valueNetwork,
                         batchData,
                         CONFIG.miniBatchSize(expIteration),
                         CONFIG.gamma(expIteration),
-                        CONFIG.minLogStd(expIteration),
-                        CONFIG.maxLogStd(expIteration),
                     );
                     const learnData = {
                         ...batchData,
                         ...vTraceBatchData,
                     };
 
-                    metricsChannels.mean.postMessage(pureMean);
-                    metricsChannels.logStd.postMessage(pureLogStd);
+                    // Use mean channel for logits (backwards compatible)
+                    metricsChannels.mean.postMessage(pureLogits);
                     metricsChannels.batchSize.postMessage(samples.map(b => b.memoryBatch.size));
                     metricsChannels.versionDelta.postMessage(samples.map(b => expIteration - b.networkVersion));
 
@@ -151,7 +149,7 @@ function squeezeBatches(batches: AgentMemoryBatch[]): AgentMemoryBatch {
         size: batches.reduce((acc, b) => acc + b.size, 0),
         states: batches.map(b => b.states).flat(),
         actions: batches.map(b => b.actions).flat(),
-        mean: batches.map(b => b.mean).flat(),
+        logits: batches.map(b => b.logits).flat(),
         dones: flatTypedArray(batches.map(b => b.dones)),
         rewards: flatTypedArray(batches.map(b => b.rewards)),
         logProbs: flatTypedArray(batches.map(b => b.logProbs)),

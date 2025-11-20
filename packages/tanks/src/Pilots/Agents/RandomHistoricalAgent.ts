@@ -1,5 +1,4 @@
 import * as tf from '@tensorflow/tfjs';
-import { clamp } from 'lodash-es';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
 import { prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
 import { patientAction } from '../../../../ml-common/utils.ts';
@@ -10,8 +9,6 @@ import { DownloableAgent, TankAgent } from './CurrentActorAgent.ts';
 
 export class RandomHistoricalAgent implements TankAgent<DownloableAgent> {
     private policyNetwork?: tf.LayersModel;
-    private minLogStd?: number;
-    private maxLogStd?: number;
 
     constructor(public readonly tankEid: number) {
     }
@@ -27,19 +24,19 @@ export class RandomHistoricalAgent implements TankAgent<DownloableAgent> {
     }
 
     public isSynced() {
-        return this.policyNetwork != null && this.minLogStd != null && this.maxLogStd != null;
+        return this.policyNetwork != null;
     }
 
     public updateTankBehaviour(
         width: number,
         height: number,
     ) {
-        if (!(this.policyNetwork != null && this.minLogStd != null && this.maxLogStd != null)) return;
+        if (this.policyNetwork == null) return;
 
         const state = prepareInputArrays(this.tankEid, width, height);
         const result = pureAct(this.policyNetwork, state);
 
-        applyActionToTank(this.tankEid, result.actions.map(v => clamp(v, -1, 1)));
+        applyActionToTank(this.tankEid, result.actions, false);
     }
 
     private async load() {

@@ -41,7 +41,7 @@ export class SimpleBot implements TankAgent<{}> {
             aim.turretRot,
         ];
 
-        applyActionToTank(this.tankEid, action);
+        applyActionToTank(this.tankEid, action, true);
     }
 
     private withMove() {
