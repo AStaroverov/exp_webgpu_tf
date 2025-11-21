@@ -1,44 +1,22 @@
 import { clamp } from 'lodash';
 import { ceil, lerp } from '../../lib/math.ts';
-import { ACTION_DIM, LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
+import { LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
 
 export const CONFIG = {
-    clipNorm: 1,
+    clipNorm: 5,
 
     gamma: (iteration: number) => {
         return lerp(0.97, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
     },
 
     policyEntropy: (iteration: number) => {
-        return lerp(0.0001, 0.01, clamp(1 - ((iteration - LEARNING_STEPS) / LEARNING_STEPS * 0.5), 0, 1)) / ACTION_DIM;
+        return lerp(0.001, 0.01, clamp(1 - ((iteration - LEARNING_STEPS) / LEARNING_STEPS * 0.5), 0, 1));
     },
 
-    minLogStd: (_iter: number) => {
-        return [
-            -(5), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2
-            -(5), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2
-            -(5), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2
-            -(5), // + clamp(iteration / (LEARNING_STEPS * 0.3), 0, 1) * 2
-        ]
-    },
-
-    maxLogStd: (iteration: number) => {
-        const warmup = clamp(iteration / (LEARNING_STEPS * 0.1), 0, 1);
-        // const step = Math.PI * iteration / (LEARNING_STEPS * 0.02);
-        const decay = 0.5 + warmup
-
-        return [
-            -(0.8),// + warmup * tanh((sin(step + 0) - 0.5) * 2)),
-            -(0.8),// + warmup * tanh((sin(step + 1) - 0.5) * 2)),
-            -(0.8),// + warmup * tanh((sin(step + 2) - 0.5) * 2)),
-            -(1.1),// + warmup * tanh((sin(step + 3) - 0.5) * 2) / 2),
-        ].map(v => v - decay)
-    },
-
-    policyEpochs: (_iter: number) => 2,
+    policyEpochs: (_iter: number) => 4,
     policyClipRatio: 0.3,
 
-    valueEpochs: (_iter: number) => 2,
+    valueEpochs: (_iter: number) => 4,
     valueClipRatio: 0.3,
     valueLossCoeff: 0.5,
     valueLRCoeff: 1,
@@ -46,9 +24,9 @@ export const CONFIG = {
     // Dynamic learning rate adjustment based on KL
     lrConfig: {
         kl: {
-            high: ACTION_DIM * 0.023,
-            target: ACTION_DIM * 0.02,
-            low: ACTION_DIM * 0.017,
+            high: 0.013,
+            target: 0.01,
+            low: 0.007,
         },
         initial: 1e-3,
         multHigh: 0.95,
@@ -65,9 +43,9 @@ export const CONFIG = {
     },
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
-    episodeFrames: Math.round(60 * 1000 / TICK_TIME_SIMULATION),
+    episodeFrames: Math.round(5 * 60 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: 6,
+    workerCount: 8,
     backpressureQueueSize: 2,
     // Training control
     savePath: 'PPO_MHA',

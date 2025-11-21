@@ -9,6 +9,7 @@ import { InputArrays, prepareRandomInputArrays } from '../../../ml-common/InputA
 import { createInputTensors } from '../../../ml-common/InputTensors.ts';
 import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
+import { ACTION_HEAD_DIMS } from '../Models/Create.ts';
 
 // Removed: const C = 0.5 * Math.log(2 * Math.PI * Math.E);
 // export function trainPolicyNetwork(
@@ -80,9 +81,6 @@ export function trainPolicyNetwork(
     });
 }
 
-
-// Removed getBoundLoss - not needed for categorical distributions
-
 export function trainValueNetwork(
     network: tf.LayersModel,
     states: tf.Tensor[],
@@ -120,7 +118,7 @@ export function computeKullbackLeiblerAprox(
         const predicted = policyNetwork.predict(states, {batchSize});
         const logitsHeads = parsePolicyOutput(predicted);
         const newLogProbs = computeLogProbCategorical(actions, logitsHeads);
-        const diff = oldLogProb.sub(newLogProbs);
+        const diff = oldLogProb.sub(newLogProbs).div(tf.scalar(ACTION_HEAD_DIMS.length));
         const kl = diff.mean().abs();
         return kl;
     });
@@ -136,7 +134,7 @@ export function noisyAct(
     logProb: number
 } {
     return tf.tidy(() => {
-        const predicted = policyNetwork.predict(createInputTensors([state]));
+        const predicted = policyNetwork.apply(createInputTensors([state]), {training: false}) as tf.Tensor | tf.Tensor[];
         const logitsHeads = parsePolicyOutput(predicted);
         
         // Sample actions from categorical distributions with optional noise
@@ -160,7 +158,7 @@ export function pureAct(
     actions: Float32Array,
 } {
     return tf.tidy(() => {
-        const predicted = policyNetwork.predict(createInputTensors([state]));
+        const predicted = policyNetwork.apply(createInputTensors([state]), {training: false}) as tf.Tensor | tf.Tensor[];
         const logitsHeads = parsePolicyOutput(predicted);
         
         // Use argmax for deterministic action selection
@@ -366,7 +364,7 @@ function computeEntropyCategorical(logitsHeads: tf.Tensor[]): tf.Tensor {
             const logProbs = tf.logSoftmax(logits); // [B, numClasses]
             return probs.mul(logProbs).sum(-1).mul(-1); // -sum(p * log(p)) -> [B]
         });
-        return tf.addN(entropies).mean() as tf.Scalar; // Mean entropy across batch and heads
+        return tf.addN(entropies).div(logitsHeads.length).mean() as tf.Scalar; // Mean entropy across batch and heads
     });
 }
 
