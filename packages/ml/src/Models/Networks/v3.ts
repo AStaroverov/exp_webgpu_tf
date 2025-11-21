@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import {
-    applyCrossAttentionLayer,
+    applyCrossTransformerLayer,
     applyMLP,
     applySelfTransformLayers,
     convertInputsToTokens,
@@ -9,7 +9,6 @@ import {
 
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 import { Model } from '../def.ts';
-import { AttentionPoolLayer } from '../Layers/AttentionPoolLayer.ts';
 
 type NetworkConfig = {
     dim: number;
@@ -21,13 +20,13 @@ type NetworkConfig = {
 type policyNetworkConfig = NetworkConfig
 
 const policyNetworkConfig: policyNetworkConfig = {
-    dim: 256,
+    dim: 128,
     heads: 4,
     depth: 4,
     headsMLP: [0, 1, 2, 3].map(() =>
         ([
-            ['swish', 256] as const,
-            ['swish', 128] as const,
+            ['relu', 128] as const,
+            ['relu', 64] as const,
         ])
     )
 };
@@ -37,8 +36,8 @@ const valueNetworkConfig: NetworkConfig = {
     heads: 1,
     depth: 2,
     headsMLP: [[
-        ['swish', 128],
-        ['swish', 64],
+        ['relu', 64],
+        ['relu', 32],
     ]],
 };
 
@@ -46,21 +45,21 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const inputs = createInputs(modelName);
     const tokens = convertInputsToTokens(inputs, config.dim);
 
-    const tankToEnemiesAttn = getAttention({
+    const enemiesAttn = getAttention({
         name: modelName + '_tankToEnemiesAttn',
         heads: config.heads,
         qTok: tokens.tankTok,
         kvTok: tokens.enemiesTok,
         kvMask: inputs.enemiesMaskInput,
     });
-    const tankToAlliesAttn = getAttention({
+    const alliesAttn = getAttention({
         name: modelName + '_tankToAlliesAttn',
         heads: config.heads,
         qTok: tokens.tankTok,
         kvTok: tokens.alliesTok,
         kvMask: inputs.alliesMaskInput,
     });
-    const tankToBulletsAttn = getAttention({
+    const bulletsAttn = getAttention({
         name: modelName + '_tankToBulletsAttn',
         heads: config.heads,
         qTok: tokens.tankTok,
@@ -68,31 +67,54 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         kvMask: inputs.bulletsMaskInput,
     });
 
-    const tankContextToken = tf.layers.concatenate({name: modelName + '_tankContextToken', axis: 1}).apply([
-        tokens.tankTok,
+    const contextToken = tf.layers.concatenate({name: modelName + '_tankContextToken', axis: 1 }).apply([
         tokens.battleTok,
-        tokens.controllerTok,
-        tankToEnemiesAttn,
-        tankToAlliesAttn,
-        tankToBulletsAttn,
+        tokens.tankTok,
+        enemiesAttn,
+        alliesAttn,
+        bulletsAttn,
     ]) as tf.SymbolicTensor;
 
-    const transformedTankContextToken = applySelfTransformLayers(
+    const transformedContextToken = applySelfTransformLayers(
         modelName + '_transformedTankContextToken',
         {
-            token: tankContextToken,
+            token: contextToken,
             heads: config.heads,
             depth: config.depth,
+            preNorm: true,
         },
     );
 
-    const latent = new AttentionPoolLayer({name: modelName + '_latentPool'}).apply(transformedTankContextToken) as tf.SymbolicTensor;
+    const attentionToController = applyCrossTransformerLayer({
+        name: modelName + '_contextToControllerAttn',
+        heads: config.heads,
+        qTok: tokens.controllerTok,
+        kvTok: transformedContextToken,
+        // preNorm: true,
+    });
+
+    // const flattenedFinalToken = tf.layers.flatten({name: modelName + '_flattenedTankContextToken'})
+    //     .apply(transformedContextToken) as tf.SymbolicTensor;
+
+    // const finalMLP = applyMLP({
+    //     name: modelName + '_finalMLP',
+    //     layers: [
+    //         ['relu', config.dim * 8],
+    //         ['relu', config.dim * 6],
+    //         ['relu', config.dim * 4],
+    //         ['relu', config.dim * 2],
+    //     ],
+    //     preNorm: true,
+    // }, flattenedFinalToken);
+
+    const flattenedAttentionToController = tf.layers.flatten({name: modelName + '_flattenedAttentionToController'})
+        .apply(attentionToController) as tf.SymbolicTensor;
 
     const heads = config.headsMLP.map((layers, i) => {
         return applyMLP({
             name: modelName + '_headsMLP_' + i,
             layers,
-        }, latent)
+        }, flattenedAttentionToController);
     })
 
     return {inputs, heads};
@@ -106,12 +128,11 @@ function getAttention(config: {
     kvTok: tf.SymbolicTensor,
     kvMask?: tf.SymbolicTensor
 }) {
-    return applyCrossAttentionLayer(config.name + '_crossAttn', {
+    return applyCrossTransformerLayer({
+        name: config.name + '_crossAttn',
         heads: config.heads,
         qTok: config.qTok,
         kvTok: config.kvTok,
         kvMask: config.kvMask,
     });
-    // const normTankAttn = createNormalizationLayer({ name: config.name + '_norm' }).apply(tankAttn) as tf.SymbolicTensor;
-    // return normTankAttn;
 }
