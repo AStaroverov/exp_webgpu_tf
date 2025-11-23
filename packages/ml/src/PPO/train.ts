@@ -9,7 +9,6 @@ import { InputArrays, prepareRandomInputArrays } from '../../../ml-common/InputA
 import { createInputTensors } from '../../../ml-common/InputTensors.ts';
 import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
-import { ACTION_HEAD_DIMS } from '../Models/Create.ts';
 
 // Removed: const C = 0.5 * Math.log(2 * Math.PI * Math.E);
 // export function trainPolicyNetwork(
@@ -118,7 +117,7 @@ export function computeKullbackLeiblerAprox(
         const predicted = policyNetwork.predict(states, {batchSize});
         const logitsHeads = parsePolicyOutput(predicted);
         const newLogProbs = computeLogProbCategorical(actions, logitsHeads);
-        const diff = oldLogProb.sub(newLogProbs).div(tf.scalar(ACTION_HEAD_DIMS.length));
+        const diff = oldLogProb.sub(newLogProbs);
         const kl = diff.mean().abs();
         return kl;
     });
@@ -225,7 +224,7 @@ export function computeVTraceTargets(
     tdErrors: Float32Array,
     returns: Float32Array,
     values: Float32Array,
-    pureLogits: Float32Array,
+    pureLogits: Float32Array[],
 } {
     return tf.tidy(() => {
         const input = createInputTensors(batch.states);
@@ -262,9 +261,6 @@ export function computeVTraceTargets(
         }
 
         const normalizedAdvantages = normalize(advantages);
-        
-        // Flatten logits for logging
-        const flatLogits = tf.concat(logitsHeads, -1);
 
         return {
             advantages: normalizedAdvantages,
@@ -272,7 +268,7 @@ export function computeVTraceTargets(
             returns: vTraces,
             values: values,
             // just for logs
-            pureLogits: syncUnwrapTensor(flatLogits) as Float32Array,
+            pureLogits: logitsHeads.map(syncUnwrapTensor) as Float32Array[],
         };
     });
 }

@@ -12,6 +12,10 @@ export class RingBuffer {
     }
 
     add(...data: number[]) {
+        this.addList(data);
+    }
+
+    addList(data: number[]) {
         for (let i = 0; i < data.length; i++) {
             const item = data[i];
             const last = this.buffer.getLast();
@@ -19,7 +23,6 @@ export class RingBuffer {
             this.buffer.add({ x: lastX + 1, y: item });
         }
     }
-
 
     toArray(): Point[] {
         return this.buffer.toArray().map((p, i) => ({ x: i, y: p.y }))
