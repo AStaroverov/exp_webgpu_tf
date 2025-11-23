@@ -13,10 +13,10 @@ export const CONFIG = {
         return lerp(0.001, 0.01, clamp(1 - ((iteration - LEARNING_STEPS) / LEARNING_STEPS * 0.5), 0, 1));
     },
 
-    policyEpochs: (_iter: number) => 4,
+    policyEpochs: (_iter: number) => 1,
     policyClipRatio: 0.3,
 
-    valueEpochs: (_iter: number) => 4,
+    valueEpochs: (_iter: number) => 1,
     valueClipRatio: 0.3,
     valueLossCoeff: 0.5,
     valueLRCoeff: 1,
@@ -28,7 +28,7 @@ export const CONFIG = {
             target: 0.01,
             low: 0.007,
         },
-        initial: 1e-3,
+        initial: 1e-4,
         multHigh: 0.95,
         multLow: 1.01,
         min: 1e-5,

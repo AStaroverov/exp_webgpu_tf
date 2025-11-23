@@ -22,14 +22,10 @@ const store = {
     advantages: new RingBuffer(30_000),
 
     ...Array.from({ length: ACTION_DIM }, (_, i) => i).reduce((acc, i) => {
-        acc[`mean${i as MetricIndex}`] = new RingBuffer(5_000);
+        acc[`logit${i as MetricIndex}`] = new RingBuffer(5_000);
         return acc;
-    }, {} as Record<`mean${MetricIndex}`, RingBuffer>),
-    ...Array.from({ length: ACTION_DIM }, (_, i) => i).reduce((acc, i) => {
-        acc[`logStd${i as MetricIndex}`] = new RingBuffer(5_000);
-        return acc;
-    }, {} as Record<`logStd${MetricIndex}`, RingBuffer>),
-
+    }, {} as Record<`logit${MetricIndex}`, RingBuffer>),
+    
     valueLoss: new CompressedBuffer(1_000, 5),
     policyLoss: new CompressedBuffer(1_000, 5),
 
@@ -83,25 +79,13 @@ export function subscribeOnMetrics() {
     };
     Object.keys(metricsChannels).forEach((key) => {
         const channel = metricsChannels[key as keyof typeof metricsChannels];
-        if (key === 'mean') {
+        if (key === 'logit') {
             channel.onmessage = w((event) => {
-                const means = event.data as number[];
-                for (let i = 0; i < means.length; i += 4) {
-                    store.mean0.add(means[i]);
-                    store.mean1.add(means[i + 1]);
-                    store.mean2.add(means[i + 2]);
-                    store.mean3.add(means[i + 3]);
-                }
-            });
-        } else if (key === 'logStd') {
-            channel.onmessage = w((event) => {
-                const logStds = event.data as number[];
-                for (let i = 0; i < logStds.length; i += 4) {
-                    store.logStd0.add(logStds[i]);
-                    store.logStd1.add(logStds[i + 1]);
-                    store.logStd2.add(logStds[i + 2]);
-                    store.logStd3.add(logStds[i + 3]);
-                }
+                const logits = event.data as number[][];
+                store.logit0.addList(logits[0]);
+                store.logit1.addList(logits[1]);
+                store.logit2.addList(logits[2]);
+                store.logit3.addList(logits[3]);
             });
         } else if (key === 'successRatio') {
             channel.onmessage = w((event) => {
@@ -284,24 +268,14 @@ function drawTab1() {
 }
 
 function drawTab2() {
-    tfvis.render.scatterplot({ name: 'mean', tab: 'Tab 2' }, {
-        values: [store.mean0.toArray(), store.mean1.toArray(), store.mean2.toArray(), store.mean3.toArray(),],
-        series: ['shot', 'move', 'rot', 'turRot'],
-    }, {
-        xLabel: 'Version',
-        yLabel: 'mean',
-        width: 500,
-        height: 300,
-    });
-    tfvis.render.scatterplot({ name: 'Log Std', tab: 'Tab 2' }, {
-        values: [store.logStd0.toArray(), store.logStd1.toArray(), store.logStd2.toArray(), store.logStd3.toArray(),],
-        series: ['shot', 'move', 'rot', 'turRot'],
-    }, {
-        xLabel: 'Version',
-        yLabel: 'Log Std',
-        width: 500,
-        height: 300,
-    });
+    Array.from({ length: ACTION_DIM }, (_, i) => i).forEach((i) => {
+        tfvis.render.scatterplot({ name: `Logit ${i}`, tab: 'Tab 2' }, {
+            values: [store[`logit${i as MetricIndex}`].toArray()],
+        }, {
+            width: 500,
+            height: 300,
+        });
+    })
 
     tfvis.render.linechart({ name: 'Policy Loss', tab: 'Tab 2' }, {
         values: [store.policyLoss.toArray()],

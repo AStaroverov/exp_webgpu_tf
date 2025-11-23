@@ -67,8 +67,17 @@ export function createLearnerManager() {
                         ...vTraceBatchData,
                     };
 
-                    // Use mean channel for logits (backwards compatible)
-                    metricsChannels.mean.postMessage(pureLogits);
+                    metricsChannels.logit.postMessage(pureLogits.map((v, i) => {
+                        const step = i === 0 ? 2 : 15;
+                        const actionIndexes = [];
+                        for (let j = 0; j < v.length; j += step) {
+                            const logitsSlice = v.subarray(j, j + step);
+                            const maxIndex = logitsSlice.reduce((bestIndex, value, index, array) =>
+                                value > array[bestIndex] ? index : bestIndex, 0);
+                            actionIndexes.push(maxIndex);
+                        }
+                        return actionIndexes;
+                    }));
                     metricsChannels.batchSize.postMessage(samples.map(b => b.memoryBatch.size));
                     metricsChannels.versionDelta.postMessage(samples.map(b => expIteration - b.networkVersion));
 

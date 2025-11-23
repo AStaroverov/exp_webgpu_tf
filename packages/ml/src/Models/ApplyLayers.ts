@@ -350,3 +350,8 @@ export function applySelfTransformerLayer(
 
     return finalOut;
 }
+
+export function applyGlobalAverage1d({ name }: { name: string }, token: tf.SymbolicTensor) {
+    return tf.layers.globalAveragePooling1d({ name: name + '_GlobalAvgPool1D' })
+        .apply(token) as tf.SymbolicTensor;
+}
