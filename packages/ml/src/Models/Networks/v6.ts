@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import {
-    applyCrossTransformerLayer,
+    applyCrossTransformerLayers,
     applyMLP, convertInputsToTokens,
     createInputs
 } from '../ApplyLayers.ts';
@@ -8,18 +8,21 @@ import {
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 import { Model } from '../def.ts';
 import { VariableLayer } from '../Layers/VariableLayer.ts';
+import { MaskSquashLayer } from '../Layers/MaskSquashLayer.ts';
 
 type NetworkConfig = {
     dim: number;
     heads: number;
+    depth: number;
     headsMLP: ([ActivationIdentifier, number][])[];
 };
 
 type policyNetworkConfig = NetworkConfig
 
 const policyNetworkConfig: policyNetworkConfig = {
-    dim: 16,
-    heads: 1,
+    dim: 64,
+    heads: 4,
+    depth: 4,
     headsMLP: [0, 1, 2, 3].map(() =>
         ([
             ['relu', 64],
@@ -30,6 +33,7 @@ const policyNetworkConfig: policyNetworkConfig = {
 const valueNetworkConfig: NetworkConfig = {
     dim: 16,
     heads: 1,
+    depth: 1,
     headsMLP: [[
         ['relu', 16],
     ]],
@@ -55,48 +59,57 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         initializer: 'truncatedNormal'
     }).apply(tokens.tankTok) as tf.SymbolicTensor;
 
-    const alliesAttnToken = applyCrossTransformerLayer({
+    const alliesAttnToken = applyCrossTransformerLayers({
         name: modelName + '_alliesAttn',
         heads: config.heads,
+        depth: config.depth,
         qTok: alliesClsToken,
         kvTok: tokens.alliesTok,
         kvMask: inputs.alliesMaskInput,
     });
-    const enemiesAttnToken = applyCrossTransformerLayer({
+    const enemiesAttnToken = applyCrossTransformerLayers({
         name: modelName + '_enemiesAttn',
         heads: config.heads,
+        depth: config.depth,
         qTok: enemiesClsToken,
         kvTok: tokens.enemiesTok,
         kvMask: inputs.enemiesMaskInput,
     });
-    const bulletsAttnToken = applyCrossTransformerLayer({
+    const bulletsAttnToken = applyCrossTransformerLayers({
         name: modelName + '_bulletsAttn',
-        heads: 1,
+        heads: config.heads,
+        depth: config.depth,
         qTok: bulletsClsToken,
         kvTok: tokens.bulletsTok,
         kvMask: inputs.bulletsMaskInput,
     });
 
-    const contextToken = tf.layers.concatenate({name: modelName + '_tankContextToken', axis: 1 }).apply([
-        tokens.tankTok,
+    const contextToken = (i: number) => tf.layers.concatenate({name: modelName + '_tankContextToken' + i, axis: 1 }).apply([
         alliesAttnToken,
         enemiesAttnToken,
         bulletsAttnToken,
     ]) as tf.SymbolicTensor;
+    const maskSquasher = new MaskSquashLayer({ name: modelName + '_maskSquasher' });
+    const contextMask = (i: number) => tf.layers.concatenate({name: modelName + '_tankContextTokenMask' + i, axis: 1 }).apply([
+        maskSquasher.apply(inputs.alliesMaskInput) as tf.SymbolicTensor,
+        maskSquasher.apply(inputs.enemiesMaskInput) as tf.SymbolicTensor,
+        maskSquasher.apply(inputs.bulletsMaskInput) as tf.SymbolicTensor,
+    ]) as tf.SymbolicTensor;
 
-    // Apply LTSM layer
-    const lstm = tf.layers.lstm({
-        name: modelName + '_lstmLayer',
-        units: config.dim * 4,
-        returnState: false,
-        returnSequences: false,
-    }).apply(contextToken) as tf.SymbolicTensor;
+   const finalAttn = applyCrossTransformerLayers({
+        name: modelName + '_finalAttn',
+        heads: config.heads,
+        depth: config.depth,
+        qTok: tokens.tankTok,
+        kvTok: contextToken,
+        kvMask: contextMask,
+    });
     
     const heads = config.headsMLP.map((layers, i) => {
         return applyMLP({
             name: modelName + '_headsMLP_' + i,
             layers,
-        }, lstm);
+        }, tf.layers.flatten().apply(finalAttn) as tf.SymbolicTensor);
     })
 
     return { inputs, heads };

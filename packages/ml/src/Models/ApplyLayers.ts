@@ -236,21 +236,21 @@ export function applyCrossTransformerLayers({
     name: string, 
     depth: number,
     heads: number,
-    qTok: tf.SymbolicTensor | (() => tf.SymbolicTensor),
-    kvTok: tf.SymbolicTensor | (() => tf.SymbolicTensor),
-    qMask?: tf.SymbolicTensor | (() => tf.SymbolicTensor),
-    kvMask?: tf.SymbolicTensor | (() => tf.SymbolicTensor),
+    qTok: tf.SymbolicTensor | ((i) => tf.SymbolicTensor),
+    kvTok: tf.SymbolicTensor | ((i) => tf.SymbolicTensor),
+    qMask?: tf.SymbolicTensor | ((i) => tf.SymbolicTensor),
+    kvMask?: tf.SymbolicTensor | ((i) => tf.SymbolicTensor),
     preNorm?: boolean,
 }) {
-    let x = typeof qTok === 'function' ? qTok() : qTok;
+    let x = typeof qTok === 'function' ? qTok(0) : qTok;
     for (let i = 0; i < depth; i++) {
         x = applyCrossAttentionLayer({
             name: `${name}/depth${i}`,
             heads,
             qTok: x,
-            kvTok: typeof kvTok === 'function' ? kvTok() : kvTok,
-            qMask: typeof qMask === 'function' ? qMask() : qMask,
-            kvMask: typeof kvMask === 'function' ? kvMask() : kvMask,
+            kvTok: typeof kvTok === 'function' ? kvTok(i) : kvTok,
+            qMask: typeof qMask === 'function' ? qMask(i) : qMask,
+            kvMask: typeof kvMask === 'function' ? kvMask(i) : kvMask,
             preNorm,
         });
     }
