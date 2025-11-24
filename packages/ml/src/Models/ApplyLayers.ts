@@ -12,7 +12,6 @@ import {
 import { MaskLikeLayer } from './Layers/MaskLikeLayer.ts';
 import { MultiHeadAttentionLayer } from './Layers/MultiHeadAttentionLayer.ts';
 import { RMSNormConfig, RMSNormLayer } from "./Layers/RMSNormLayer.ts";
-import { VariableLayer } from './Layers/VariableLayer.ts';
 
 export function createInputs(name: string) {
     const tankInput = tf.input({name: name + '_tankInput', shape: [TANK_FEATURES_DIM]});
@@ -112,13 +111,6 @@ export function convertInputsToTokens(
     }: ReturnType<typeof createInputs>,
     dModel: number,
 ) {
-    const addTypeEmbedding = (x: tf.SymbolicTensor) => {
-        const typeEmb = new VariableLayer({
-            name: `${x.name}_typeEmbedding`,
-            shape: [dModel],
-        }).apply(x) as tf.SymbolicTensor;
-        return tf.layers.add({ name: `${x.name}_withTypeEmbedding` }).apply([x, typeEmb]) as tf.SymbolicTensor;
-    }
     const reshape = (x: tf.SymbolicTensor) => {
         return tf.layers.reshape({
             name: `${x.name}_reshape`,
@@ -126,10 +118,10 @@ export function convertInputsToTokens(
         }).apply(x) as tf.SymbolicTensor;
     };
 
-    const tankTok = reshape(addTypeEmbedding(tokenProj(tankInput, dModel, tankInput.name)));
-    const alliesTok = addTypeEmbedding(tokenProj(alliesInput, dModel, alliesInput.name));
-    const enemiesTok = addTypeEmbedding(tokenProj(enemiesInput, dModel, enemiesInput.name));
-    const bulletsTok = addTypeEmbedding(tokenProj(bulletsInput, dModel, bulletsInput.name));
+    const tankTok = reshape((tokenProj(tankInput, dModel, tankInput.name)));
+    const alliesTok = (tokenProj(alliesInput, dModel, alliesInput.name));
+    const enemiesTok = (tokenProj(enemiesInput, dModel, enemiesInput.name));
+    const bulletsTok = (tokenProj(bulletsInput, dModel, bulletsInput.name));
 
     return {
         tankTok,
