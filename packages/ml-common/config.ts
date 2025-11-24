@@ -13,11 +13,11 @@ export const CONFIG = {
         return lerp(0.001, 0.01, clamp(1 - ((iteration - LEARNING_STEPS) / LEARNING_STEPS * 0.5), 0, 1));
     },
 
-    policyEpochs: (_iter: number) => 1,
-    policyClipRatio: 0.3,
+    policyEpochs: (_iter: number) => 3,
+    policyClipRatio: 0.2,
 
-    valueEpochs: (_iter: number) => 1,
-    valueClipRatio: 0.3,
+    valueEpochs: (_iter: number) => 3,
+    valueClipRatio: 0.2,
     valueLossCoeff: 0.5,
     valueLRCoeff: 1,
 
@@ -39,7 +39,7 @@ export const CONFIG = {
         return 1024 * clamp(ceil(6 * (iteration + 1) / (LEARNING_STEPS * 0.20)), 4, 16);
     },
     miniBatchSize: (iteration: number) => {
-        return 64 * clamp(ceil((iteration + 1) / (LEARNING_STEPS * 0.25)), 2, 4);
+        return 64 * clamp(ceil((iteration + 1) / (LEARNING_STEPS * 0.25)), 1, 4);
     },
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION

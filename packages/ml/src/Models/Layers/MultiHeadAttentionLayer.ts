@@ -14,6 +14,7 @@ export class MultiHeadAttentionLayer extends tf.layers.Layer {
     private wq!: tf.LayerVariable;
     private wk!: tf.LayerVariable;
     private wv!: tf.LayerVariable;
+    private wo!: tf.LayerVariable;
 
     constructor(config: MHAConfig) {
         super(config);
@@ -39,6 +40,7 @@ export class MultiHeadAttentionLayer extends tf.layers.Layer {
         this.wq = this.addWeight('wq', [dModel, this.numHeads * this.keyDim], 'float32', initializer);
         this.wk = this.addWeight('wk', [dModel, this.numHeads * this.keyDim], 'float32', initializer);
         this.wv = this.addWeight('wv', [dModel, this.numHeads * this.keyDim], 'float32', initializer);
+        this.wo = this.addWeight('wo', [this.numHeads * this.keyDim, dModel], 'float32', initializer);
 
         super.build(inputShape);
     }
@@ -51,7 +53,13 @@ export class MultiHeadAttentionLayer extends tf.layers.Layer {
     }
 
     call(inputs: tf.Tensor | tf.Tensor[]) {
-        const [qTok, kvTok, kvMask] = inputs as [tf.Tensor, tf.Tensor, tf.Tensor?];
+        const inputArray = Array.isArray(inputs) ? inputs : [inputs];
+        
+        if (inputArray.length !== 4) {
+            throw new Error(`MultiHeadAttentionLayer expects exactly 4 inputs: [qTok, qMask, kvTok, kvMask], got ${inputArray.length}`);
+        }
+        
+        const [qTok, qMask, kvTok,  kvMask] = inputArray;
         const [B, N, dModel] = qTok.shape;
 
         const q = write(qTok, this.wq);   // [b, qLen, heads*keyDim]
@@ -65,25 +73,27 @@ export class MultiHeadAttentionLayer extends tf.layers.Layer {
         const qh = split(q);
         const kh = split(k);
         const vh = split(v);
-        const mask = kvMask?.reshape([B, 1, 1, kvMask.shape[1]!]);
+        const kvMaskReshaped = kvMask.reshape([B, 1, 1, kvMask.shape[1]!]);
+        const qMaskReshaped = qMask.reshape([B, qMask.shape[1]!, 1]);
 
         let scores = tf.matMul(qh, kh, false, true).div(Math.sqrt(this.keyDim)); // [B,H,Q,K]
 
-        if (mask != null) {
-            scores = scores.add(mask.sub(1).mul(1e9));
-        }
+        // Apply kvMask to attention scores (mask out padding in key/value sequence)
+        scores = scores.add(kvMaskReshaped.sub(1).mul(1e9));
 
         let weights = tf.softmax(scores);
 
-        // remove noise if kvMask every == 0
-        if (mask != null) {
-            weights = tf.mul(weights, mask);
-        }
+        // Remove noise if kvMask == 0
+        weights = tf.mul(weights, kvMaskReshaped);
 
         const context = tf.matMul(weights, vh);
         const merged = context.transpose([0, 2, 1, 3]).reshape([B, N, dModel]);
+        const output = write(merged, this.wo);
 
-        return merged;
+        // Apply qMask to output (mask out padding in query sequence)
+        const result = tf.mul(output, qMaskReshaped);
+
+        return result;
     }
 
     getConfig() {
@@ -102,8 +112,9 @@ function write(
 ): tf.Tensor {
     const [B, L, D] = input.shape;
     const flat = input.reshape([B * L, D]);
-    const projected = tf.matMul(flat, weight.read());
-    return projected.reshape([B, L, D]);
+    const w = weight.read();
+    const projected = tf.matMul(flat, w);
+    return projected.reshape([B, L, w.shape[1]!]);
 }
 
 tf.serialization.registerClass(MultiHeadAttentionLayer);
