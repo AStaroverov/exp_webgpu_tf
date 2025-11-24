@@ -11,7 +11,7 @@ import {
 
 import { createDenseLayer } from "./ApplyLayers.ts";
 import { Model } from './def.ts';
-import { createNetwork } from './Networks/v3.ts';
+import { createNetwork } from './Networks/v5.ts';
 import { AdamW } from './Optimizer/AdamW.ts';
 
 export const CONTROLLER_FEATURES_DIM = 4;
@@ -38,6 +38,7 @@ export function createPolicyNetwork(): tf.LayersModel {
             useBias: true,
             activation: 'linear',
             biasInitializer: 'zeros',
+            kernelInitializer: tf.initializers.randomUniform({ minval: -0.03, maxval: 0.03 }),
         }).apply(head) as tf.SymbolicTensor;
     });
 
