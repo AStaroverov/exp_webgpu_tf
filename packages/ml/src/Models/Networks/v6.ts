@@ -20,8 +20,8 @@ type NetworkConfig = {
 type policyNetworkConfig = NetworkConfig
 
 const policyNetworkConfig: policyNetworkConfig = {
-    dim: 64,
-    heads: 4,
+    dim: 16,
+    heads: 1,
     depth: 4,
     headsMLP: [0, 1, 2, 3].map(() =>
         ([
@@ -40,7 +40,7 @@ const valueNetworkConfig: NetworkConfig = {
 };
 
 export function createNetwork(modelName: Model, config: NetworkConfig = modelName === Model.Policy ? policyNetworkConfig : valueNetworkConfig) {
-    const depth = Math.ceil(config.depth / 2);
+    const depth = config.depth;
 
     const inputs = createInputs(modelName);
     const tokens = convertInputsToTokens(inputs, config.dim);
