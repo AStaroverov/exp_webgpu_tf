@@ -40,6 +40,8 @@ const valueNetworkConfig: NetworkConfig = {
 };
 
 export function createNetwork(modelName: Model, config: NetworkConfig = modelName === Model.Policy ? policyNetworkConfig : valueNetworkConfig) {
+    const depth = Math.ceil(config.depth / 2);
+
     const inputs = createInputs(modelName);
     const tokens = convertInputsToTokens(inputs, config.dim);
 
@@ -62,7 +64,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const alliesAttnToken = applyCrossTransformerLayers({
         name: modelName + '_alliesAttn',
         heads: config.heads,
-        depth: config.depth,
+        depth,
         qTok: alliesClsToken,
         kvTok: tokens.alliesTok,
         kvMask: inputs.alliesMaskInput,
@@ -70,7 +72,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const enemiesAttnToken = applyCrossTransformerLayers({
         name: modelName + '_enemiesAttn',
         heads: config.heads,
-        depth: config.depth,
+        depth,
         qTok: enemiesClsToken,
         kvTok: tokens.enemiesTok,
         kvMask: inputs.enemiesMaskInput,
@@ -78,7 +80,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const bulletsAttnToken = applyCrossTransformerLayers({
         name: modelName + '_bulletsAttn',
         heads: config.heads,
-        depth: config.depth,
+        depth,
         qTok: bulletsClsToken,
         kvTok: tokens.bulletsTok,
         kvMask: inputs.bulletsMaskInput,
@@ -99,7 +101,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
    const finalAttn = applyCrossTransformerLayers({
         name: modelName + '_finalAttn',
         heads: config.heads,
-        depth: config.depth,
+        depth,
         qTok: tokens.tankTok,
         kvTok: contextToken,
         kvMask: contextMask,
