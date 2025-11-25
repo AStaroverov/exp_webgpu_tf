@@ -76,16 +76,10 @@ export class MultiHeadAttentionLayer extends tf.layers.Layer {
         const kvMaskReshaped = kvMask.reshape([B, 1, 1, kvMask.shape[1]!]);
         const qMaskReshaped = qMask.reshape([B, qMask.shape[1]!, 1]);
 
-        let scores = tf.matMul(qh, kh, false, true).div(Math.sqrt(this.keyDim)); // [B,H,Q,K]
-
-        // Apply kvMask to attention scores (mask out padding in key/value sequence)
-        scores = scores.add(kvMaskReshaped.sub(1).mul(1e9));
-
-        let weights = tf.softmax(scores);
-
-        // Remove noise if kvMask == 0
-        weights = tf.mul(weights, kvMaskReshaped);
-
+        const scores = tf.matMul(qh, kh, false, true)
+            .div(Math.sqrt(this.keyDim))
+            .add(kvMaskReshaped.sub(1).mul(1e9));
+        const weights = tf.softmax(scores).mul(kvMaskReshaped);
         const context = tf.matMul(weights, vh);
         const merged = context.transpose([0, 2, 1, 3]).reshape([B, N, dModel]);
         const output = write(merged, this.wo);

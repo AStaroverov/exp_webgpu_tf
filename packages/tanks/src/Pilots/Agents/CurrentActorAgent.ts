@@ -11,7 +11,7 @@ import { getNetworkExpIteration, patientAction } from '../../../../ml-common/uti
 import { ACTION_HEAD_DIMS } from '../../../../ml/src/Models/Create.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../../../ml/src/Models/Utils.ts';
-import { noisyAct } from '../../../../ml/src/PPO/train.ts';
+import { noisyAct, pureAct } from '../../../../ml/src/PPO/train.ts';
 import { calculateActionReward, calculateStateReward, getDeathPenalty, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 
@@ -36,12 +36,13 @@ export type LearnableAgent = {
 
 export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableAgent> {
     private memory = new AgentMemory();
-    private noise?: ColoredNoiseApprox;
+    private noise: ColoredNoiseApprox;
     private policyNetwork?: tf.LayersModel;
 
     private initialActionReward?: number;
 
     constructor(public readonly tankEid: number, private train: boolean) {
+        this.noise = new ColoredNoiseApprox(ACTION_HEAD_DIMS, randomRangeFloat(0.3, 0.7));
     }
 
     public getVersion(): number {
@@ -77,28 +78,27 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         if (this.policyNetwork == null) return;
 
         const state = prepareInputArrays(this.tankEid, width, height);
-        const useNoise =
-            this.noise != null
+
+        if (this.train) {
+            const result = noisyAct(this.policyNetwork, state, this.noise.sample());
+
+            applyActionToTank(this.tankEid, result.actions, false);
+            this.memory.addFirstPart(
+                state,
+                result.actions,
+                result.logits,
+                result.logProb,
+            );
+            this.initialActionReward = calculateActionReward(this.tankEid);
+        } else {
             // @ts-ignore
-            && globalThis.disableNoise !== true;
-        const result = noisyAct(
-            this.policyNetwork,
-            state,
-            useNoise ? this.noise?.sample() : undefined
-        );
+            const useNoise = globalThis.disableNoise !== true;
+            const result = useNoise
+                ? noisyAct(this.policyNetwork, state, this.noise.sample())
+                : pureAct(this.policyNetwork, state);
 
-        applyActionToTank(this.tankEid, result.actions, false);
-
-        if (!this.train) return;
-
-        this.initialActionReward = calculateActionReward(this.tankEid);
-
-        this.memory.addFirstPart(
-            state,
-            result.actions,
-            result.logits,
-            result.logProb,
-        );
+            applyActionToTank(this.tankEid, result.actions, false);
+        }
     }
 
     public evaluateTankBehaviour(
@@ -139,55 +139,5 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
 
     private async load() {
         this.policyNetwork = await getNetwork(Model.Policy);
-
-        if (this.train || globalThis.document !== undefined) {
-            this.noise = new ColoredNoiseApprox(ACTION_HEAD_DIMS, randomRangeFloat(0.3, 0.7));
-        }
     }
-}
-
-export function perturbWeights(model: tf.LayersModel, scale: number) {
-    tf.tidy(() => {
-        for (const v of model.trainableWeights) {
-            if (!isPerturbable(v)) continue;
-
-            const val = v.read() as tf.Tensor;
-
-            let eps: tf.Tensor;
-            if (val.shape.length === 2) {
-                const [outDim, inDim] = val.shape;
-                const epsOut = tf.randomNormal([outDim, 1]);
-                const epsIn = tf.randomNormal([1, inDim]);
-                eps = epsOut.mul(epsIn);
-            } else {
-                eps = tf.randomNormal(val.shape);
-            }
-
-            const std = tf.moments(val).variance.sqrt();
-            const perturbed = val.add(eps.mul(std).mul(scale));
-            (val as tf.Variable).assign(perturbed);
-        }
-    });
-}
-
-function isPerturbable(v: tf.LayerVariable) {
-    // 1. Только float32 параметры
-    if (v.dtype !== 'float32') return false;
-
-    // 2. Исключаем BatchNorm (они чувствительны к шуму)
-    const name = v.name.toLowerCase();
-    if (
-        name.includes('batchnorm') ||
-        name.includes('batch_normalization') ||
-        name.includes('layernorm') ||
-        name.includes('layer_norm') ||
-        name.endsWith('/gamma') ||
-        name.endsWith('/beta') ||
-        name.endsWith('/moving_mean') ||
-        name.endsWith('/moving_variance')
-    ) {
-        return false;
-    }
-
-    return name.includes('mean_mlp');
 }

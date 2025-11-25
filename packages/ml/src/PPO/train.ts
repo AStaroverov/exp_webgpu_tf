@@ -126,7 +126,7 @@ export function computeKullbackLeiblerAprox(
 export function noisyAct(
     policyNetwork: tf.LayersModel,
     state: InputArrays,
-    noise?: tf.Tensor[],
+    noise: tf.Tensor[],
 ): {
     actions: Float32Array,
     logits: Float32Array,
@@ -140,7 +140,7 @@ export function noisyAct(
         const {actions, logitsFlat} = sampleActionsFromLogits(logitsHeads, noise);
         const logProb = computeLogProbCategorical(actions.expandDims(0), logitsHeads);
 
-        noise?.forEach(t => t.dispose());
+        noise.forEach(t => t.dispose());
 
         return {
             logits: syncUnwrapTensor(logitsFlat) as Float32Array,
@@ -365,28 +365,14 @@ function computeEntropyCategorical(logitsHeads: tf.Tensor[]): tf.Tensor {
 }
 
 // Sample actions from logits with optional noise
-function sampleActionsFromLogits(
-    logitsHeads: tf.Tensor[],
-    noise?: tf.Tensor[]
-): { actions: tf.Tensor, logitsFlat: tf.Tensor } {
+function sampleActionsFromLogits(logitsHeads: tf.Tensor[], noise: tf.Tensor[]): { actions: tf.Tensor, logitsFlat: tf.Tensor } {
     return tf.tidy(() => {
         const sampledActions = logitsHeads.map((logits, i) => {
-            if (noise && noise[i]) {
-                // Add provided noise (e.g., colored noise) to logits
-                const noisyLogits = logits.add(noise[i]);
-                return tf.argMax(noisyLogits, -1);
-            } else {
-                // Deterministic or random: use Gumbel noise if no specific noise provided
-                if (noise === undefined) {
-                    // Deterministic: argmax
-                    return tf.argMax(logits, -1);
-                } else {
-                    // Random with Gumbel noise
-                    const gumbel = tf.neg(tf.log(tf.neg(tf.log(tf.randomUniform(logits.shape, 1e-8, 1)))));
-                    const noisyLogits = logits.add(gumbel);
-                    return tf.argMax(noisyLogits, -1);
-                }
+            if (noise[i] == null) {
+                throw new Error('Noise tensor is required for each action head');
             }
+            const noisyLogits = logits.add(noise[i]);
+            return tf.argMax(noisyLogits, -1);
         });
         
         const actions = tf.stack(sampledActions, -1).squeeze([0]); // [actionDim]

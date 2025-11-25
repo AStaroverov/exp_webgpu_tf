@@ -1,5 +1,5 @@
 import { clamp } from 'lodash';
-import { ceil, lerp } from '../../lib/math.ts';
+import { lerp } from '../../lib/math.ts';
 import { LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
 
 export const CONFIG = {
@@ -10,7 +10,7 @@ export const CONFIG = {
     },
 
     policyEntropy: (iteration: number) => {
-        return lerp(0.001, 0.01, clamp(1 - ((iteration - LEARNING_STEPS) / LEARNING_STEPS * 0.5), 0, 1));
+        return 0.05 * (1 - clamp(iteration / LEARNING_STEPS, 0, 1));
     },
 
     policyEpochs: (_iter: number) => 3,
@@ -36,10 +36,10 @@ export const CONFIG = {
     },
 
     batchSize: (iteration: number) => {
-        return 1024 * clamp(ceil(6 * (iteration + 1) / (LEARNING_STEPS * 0.20)), 4, 16);
+        return 1024 * 8
     },
     miniBatchSize: (iteration: number) => {
-        return 64 * clamp(ceil((iteration + 1) / (LEARNING_STEPS * 0.25)), 1, 4);
+        return 512;
     },
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
