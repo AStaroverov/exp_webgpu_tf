@@ -1,36 +1,18 @@
-import { clamp } from 'lodash-es';
+import { abs, sign } from '../../lib/math.ts';
+import { ACTION_HEAD_DIMS } from '../ml/src/Models/Create.ts';
 import { TankController } from '../tanks/src/Game/ECS/Components/TankController.ts';
 
 export type Actions = Float32Array | [number, number, number, number];
 
-const defaultProbability = [1, 1, 1, 1] as Actions;
-
 export function applyActionToTank(
     tankEid: number,
     actions: Actions,
-    probability = defaultProbability, // 0..1, 0 - not sure, 1 - sure
+    isContinuous: boolean,
 ) {
-    const shoot = blendLinear(
-        TankController.shoot[tankEid],
-        actions[0],
-        probability[0],
-    );
-    const move = blendLinear(
-        TankController.move[tankEid],
-        actions[1],
-        probability[1],
-    );
-    const rotate = blendLinear(
-        TankController.rotation[tankEid],
-        actions[2],
-        probability[2],
-    );
-
-    const turretRot = blendLinear(
-        TankController.turretRotation[tankEid],
-        actions[3],
-        probability[3],
-    );
+    const shoot = isContinuous ? actions[0] : actions[0] - 0.5;
+    const move = isContinuous ? actions[1] : toAction(actions, 1);
+    const rotate = isContinuous ? actions[2] : toAction(actions, 2);
+    const turretRot = isContinuous ? actions[3] : toAction(actions, 3);
 
     TankController.setShooting$(tankEid, shoot);
     TankController.setMove$(tankEid, move);
@@ -38,7 +20,13 @@ export function applyActionToTank(
     TankController.setTurretRotation$(tankEid, turretRot);
 }
 
-function blendLinear(prev: number, raw: number, p: number): number {
-    const next = prev * (1 - p) + raw * p;
-    return clamp(next, -1, 1);
+function toAction(actions: Actions, index: number): number {
+    const dims = (ACTION_HEAD_DIMS[index]-1) / 2;
+    const action = actions[index];
+    const value  = sign(action - dims) * (abs(action - dims) / dims) ** 3;
+    return value;
 }
+
+// new Array(11).fill(0).forEach((_,i) => {
+//     console.log(toAction([0,i,0,0], 1))
+// });

@@ -1,90 +1,53 @@
-import { clamp, floor } from 'lodash';
-import { ceil, lerp } from '../../lib/math.ts';
-import { ACTION_DIM, LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
+import { clamp } from 'lodash';
+import { lerp } from '../../lib/math.ts';
+import { LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
 
-// Default experiment configuration for PPO
-export const DEFAULT_EXPERIMENT = {
-    // Learning parameters
-    clipNorm: 1.0,
-    // PPO-specific parameters
+export const CONFIG = {
+    clipNorm: 5,
+
     gamma: (iteration: number) => {
-        return lerp(0.95, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
+        return lerp(0.97, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
     },
 
     policyEntropy: (iteration: number) => {
-        return lerp(0.001, 0.01, clamp(1 - ((iteration - LEARNING_STEPS) / LEARNING_STEPS * 0.5), 0, 1));
+        return 0.05 * (1 - clamp(iteration / LEARNING_STEPS, 0, 1));
     },
 
-    // targetLogStd: (iteration: number) => {
-    //     return lerp(-1, -3, clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1));
-    // },
+    policyEpochs: (_iter: number) => 3,
+    policyClipRatio: 0.2,
 
-    logStd: () => {
-        return -1.0; // Math.exp(-1) = 0.36787944117144233
-    },
-
-    minLogStd: (iteration: number) => {
-        return -5; // lerp(-4, -2, clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1))
-        // Math.exp(-5) = 0.006737946999085467
-    },
-    maxLogStd: (iteration: number) => {
-        return -0.8;//; // lerp(0, 2, clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1))
-        // Math.exp(-0.8) = 0.44932896411722156
-    },
-
-    policyEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
-    policyClipRatio: 0.2, // https://arxiv.org/pdf/2202.00079 - interesting idea don't clip at all
-
-    valueEpochs: (iteration: number) => 3 - floor(clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1) * 2),
+    valueEpochs: (_iter: number) => 3,
     valueClipRatio: 0.2,
     valueLossCoeff: 0.5,
+    valueLRCoeff: 1,
 
     // Dynamic learning rate adjustment based on KL
     lrConfig: {
         kl: {
-            stop: ACTION_DIM * 0.5,
-            high: ACTION_DIM * 0.022,
-            target: ACTION_DIM * 0.02,
-            low: ACTION_DIM * 0.018,
+            high: 0.013,
+            target: 0.01,
+            low: 0.007,
         },
-        initial: 1e-5,
-        multHigh: 0.9,
+        initial: 1e-4,
+        multHigh: 0.95,
         multLow: 1.01,
-        min: 5e-6,
+        min: 1e-5,
         max: 1e-3,
     },
 
-    // Dynamic perturbation scale adjustment based on KL_noise
-    perturbWeightsConfig: {
-        kl: {
-            high: 2 * ACTION_DIM * 0.02,
-            target: 2 * ACTION_DIM * 0.015,
-            low: 2 * ACTION_DIM * 0.01,
-        },
-        initial: 0.01,
-        multHigh: 0.9,
-        multLow: 1.01,
-        min: 0.003,
-        max: 0.02,
-    },
-    perturbChance: (iteration: number) => 0,//lerp(0.01, 0.7, clamp(iteration / (LEARNING_STEPS * 0.5), 0, 1)),
-
     batchSize: (iteration: number) => {
-        return 1024 * clamp(ceil(6 * (iteration + 1) / (LEARNING_STEPS * 0.20)), 4, 16);
+        return 1024 * 8
     },
     miniBatchSize: (iteration: number) => {
-        return 64 * clamp(ceil((iteration + 1) / (LEARNING_STEPS * 0.25)), 1, 4);
+        return 512;
     },
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
-    episodeFrames: Math.round(2 * 60 * 1000 / TICK_TIME_SIMULATION),
+    episodeFrames: Math.round(5 * 60 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: 8,
+    workerCount: 10,
     backpressureQueueSize: 2,
     // Training control
     savePath: 'PPO_MHA',
     // fsModelPath: '/assets/models/v1',
 };
-
-// Current active experiment
-export let CONFIG = DEFAULT_EXPERIMENT;

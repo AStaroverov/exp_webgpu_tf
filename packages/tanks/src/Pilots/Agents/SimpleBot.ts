@@ -26,7 +26,11 @@ export class SimpleBot implements TankAgent<{}> {
     ) {
     }
 
-    updateTankBehaviour(width: number, height: number): void {
+    applyUpdateTankBehaviour(): void {
+        //
+    }
+
+    scheduleUpdateTankBehaviour(width: number, height: number): void {
         this.updateWaypoint(width, height);
 
         const targetId = this.withAim() ? this.getTarget() : undefined;
@@ -41,7 +45,7 @@ export class SimpleBot implements TankAgent<{}> {
             aim.turretRot,
         ];
 
-        applyActionToTank(this.tankEid, action);
+        applyActionToTank(this.tankEid, action, true);
     }
 
     private withMove() {
@@ -149,8 +153,10 @@ function wrapPi(a: number): number {
 }
 
 function getRandomWaypoint(width: number, height: number) {
+    const gapW = width * 0.2;
+    const gapH = height * 0.2;
     return {
-        x: randomRangeFloat(200, width - 200),
-        y: randomRangeFloat(200, height - 200),
+        x: randomRangeFloat(gapW, width - gapW),
+        y: randomRangeFloat(gapH, height - gapH),
     };
 }

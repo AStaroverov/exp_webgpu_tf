@@ -16,11 +16,10 @@ export async function initTensorFlow(type: 'wasm' | 'webgpu' = 'wasm') {
             await tf.setBackend('webgpu');
         }
         await tf.ready();
-        console.log('TensorFlow.js initialized with WASM backend');
 
         // Log version info for debugging
-        console.log(`TensorFlow.js version: ${ tf.version.tfjs }`);
-        console.log(`Backend: ${ tf.getBackend() }`);
+        console.log(`TensorFlow.js version: ${tf.version.tfjs}`);
+        console.log(`Backend: ${tf.getBackend()}`);
 
         return true;
     } catch (error) {

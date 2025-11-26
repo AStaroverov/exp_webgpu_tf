@@ -1,14 +1,10 @@
 import * as tf from '@tensorflow/tfjs';
 import {
     ALLY_FEATURES_DIM,
-    ALLY_SLOTS,
-    BATTLE_FEATURES_DIM,
-    BULLET_FEATURES_DIM,
-    BULLET_SLOTS,
-    CONTROLLER_FEATURES_DIM,
-    ENEMY_FEATURES_DIM,
+    ALLY_SLOTS, BULLET_FEATURES_DIM,
+    BULLET_SLOTS, ENEMY_FEATURES_DIM,
     ENEMY_SLOTS,
-    TANK_FEATURES_DIM,
+    TANK_FEATURES_DIM
 } from '../ml/src/Models/Create.ts';
 import { InputArrays } from './InputArrays.ts';
 import { flatTypedArray } from './flat.ts';
@@ -19,9 +15,9 @@ export function createInputTensors(
     //[controller, battleInput, tankInput, enemiesInput, enemiesMaskInput, alliesInput, alliesMaskInput, bulletsInput, bulletsMaskInput],
     return [
         // controller
-        tf.tensor2d(flatTypedArray(state.map((s) => s.controllerFeatures)), [state.length, CONTROLLER_FEATURES_DIM]),
+        // tf.tensor2d(flatTypedArray(state.map((s) => s.controllerFeatures)), [state.length, CONTROLLER_FEATURES_DIM]),
         // battle
-        tf.tensor2d(flatTypedArray(state.map((s) => s.battleFeatures)), [state.length, BATTLE_FEATURES_DIM]),
+        // tf.tensor2d(flatTypedArray(state.map((s) => s.battleFeatures)), [state.length, BATTLE_FEATURES_DIM]),
         // tank
         tf.tensor2d(flatTypedArray(state.map((s) => s.tankFeatures)), [state.length, TANK_FEATURES_DIM]),
         // enemies + mask
@@ -61,9 +57,9 @@ export function sliceInputTensors(tensors: tf.Tensor[], start: number, size: num
 
     return [
         // controller
-        tensors[0].slice([start, 0], [size, -1]),
+        // tensors[0].slice([start, 0], [size, -1]),
         // battle
-        tensors[1].slice([start, 0], [size, -1]),
+        // tensors[1].slice([start, 0], [size, -1]),
         // tank
         tensors[2].slice([start, 0], [size, -1]),
         // enemies + mask

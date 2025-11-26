@@ -2,27 +2,30 @@ import * as tfvis from '@tensorflow/tfjs-vis';
 import { get } from 'lodash';
 import { isObject, mapValues, throttle } from 'lodash-es';
 import { metricsChannels } from '../../channels.ts';
+import { ACTION_DIM } from '../../consts.ts';
 import { scenariosCount } from '../../Curriculum/createScenarioByCurriculumState.ts';
 import { CompressedBuffer } from './CompressedBuffer.ts';
+import { RingBuffer } from './RingBuffer.ts';
 import { getAgentLog, setAgentLog } from './store.ts';
 
-type SuccessRatioIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+type MetricIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
 const store = {
     rewards: new CompressedBuffer(10_000, 10),
 
     kl: new CompressedBuffer(1_000, 5),
-    klPerturbed: new CompressedBuffer(1_000, 5),
     lr: new CompressedBuffer(1_000, 5),
-    perturbScale: new CompressedBuffer(1_000, 5),
 
-    values: new CompressedBuffer(10_000, 5),
-    returns: new CompressedBuffer(10_000, 5),
-    tdErrors: new CompressedBuffer(10_000, 5),
-    advantages: new CompressedBuffer(10_000, 5),
+    values: new RingBuffer(30_000),
+    returns: new RingBuffer(30_000),
+    tdErrors: new RingBuffer(30_000),
+    advantages: new RingBuffer(30_000),
 
-    mean: new CompressedBuffer(1_000, 5),
-    logStd: new CompressedBuffer(1_000, 5),
+    ...Array.from({ length: ACTION_DIM }, (_, i) => i).reduce((acc, i) => {
+        acc[`logit${i as MetricIndex}`] = new RingBuffer(5_000);
+        return acc;
+    }, {} as Record<`logit${MetricIndex}`, RingBuffer>),
+    
     valueLoss: new CompressedBuffer(1_000, 5),
     policyLoss: new CompressedBuffer(1_000, 5),
 
@@ -30,12 +33,16 @@ const store = {
     waitTime: new CompressedBuffer(1_000, 5),
     batchSize: new CompressedBuffer(1_000, 5),
     versionDelta: new CompressedBuffer(1_000, 5),
+
+    vTraceStdRatio: new RingBuffer(5_000),
+    vTraceExplainedVariance: new RingBuffer(5_000),
+
     // successRatioN
     ...Array.from({ length: scenariosCount }, (_, i) => i).reduce((acc, i) => {
-        acc[`successRatio${i as SuccessRatioIndex}Ref`] = new CompressedBuffer(500, 5);
-        acc[`successRatio${i as SuccessRatioIndex}Train`] = new CompressedBuffer(500, 5);
+        acc[`successRatio${i as MetricIndex}Ref`] = new CompressedBuffer(500, 5);
+        acc[`successRatio${i as MetricIndex}Train`] = new CompressedBuffer(500, 5);
         return acc;
-    }, {} as Record<`successRatio${SuccessRatioIndex}${'Ref' | 'Train'}`, CompressedBuffer>),
+    }, {} as Record<`successRatio${MetricIndex}${'Ref' | 'Train'}`, CompressedBuffer>),
 };
 
 getAgentLog().then((data) => {
@@ -72,10 +79,18 @@ export function subscribeOnMetrics() {
     };
     Object.keys(metricsChannels).forEach((key) => {
         const channel = metricsChannels[key as keyof typeof metricsChannels];
-        if (key === 'successRatio') {
+        if (key === 'logit') {
+            channel.onmessage = w((event) => {
+                const logits = event.data as number[][];
+                store.logit0.addList(logits[0]);
+                store.logit1.addList(logits[1]);
+                store.logit2.addList(logits[2]);
+                store.logit3.addList(logits[3]);
+            });
+        } else if (key === 'successRatio') {
             channel.onmessage = w((event) => {
                 (event.data as {
-                    scenarioIndex: SuccessRatioIndex,
+                    scenarioIndex: MetricIndex,
                     successRatio: number,
                     isReference: boolean,
                 }[]).forEach(({ scenarioIndex, successRatio, isReference }) => {
@@ -92,7 +107,7 @@ export function subscribeOnMetrics() {
 
 function drawTab0() {
     const tab = 'Tab 0';
-    const renderSuccessRatio = (index: SuccessRatioIndex) => {
+    const renderSuccessRatio = (index: MetricIndex) => {
         const successRatioTrain = store[`successRatio${index}Train`].toArray();
         const successRatioTrainMA = calculateMovingAverage(successRatioTrain, 100);
         tfvis.render.scatterplot({ name: 'Train Success Ratio ' + index, tab }, {
@@ -119,7 +134,7 @@ function drawTab0() {
     };
 
     Array.from({ length: scenariosCount }, (_, i) => i).forEach((i) => {
-        renderSuccessRatio(i as SuccessRatioIndex);
+        renderSuccessRatio(i as MetricIndex);
     });
 }
 
@@ -127,11 +142,8 @@ function drawTab1() {
     const tab = 'Tab 1';
 
     const avgRewards = store.rewards.toArray();
-    const minRewards = store.rewards.toArrayMin();
-    const maxRewards = store.rewards.toArrayMax();
     tfvis.render.scatterplot({ name: 'Reward', tab }, {
-        values: [minRewards, maxRewards, avgRewards],
-        series: ['Min', 'Max', 'Avg'],
+        values: [avgRewards],
     }, {
         xLabel: 'Version',
         yLabel: 'Reward',
@@ -140,7 +152,6 @@ function drawTab1() {
     });
 
     const avgKL = store.kl.toArray();
-    const avgKLPerturbed = store.klPerturbed.toArray();
     tfvis.render.scatterplot({ name: 'KL', tab }, {
         values: [
             avgKL,
@@ -163,32 +174,61 @@ function drawTab1() {
         height: 300,
     });
 
-    tfvis.render.scatterplot({ name: 'KL - Perturbed', tab }, {
+    // const avgKLPerturbed = store.klPerturbed.toArray();
+    // tfvis.render.scatterplot({ name: 'KL - Perturbed', tab }, {
+    //     values: [
+    //         avgKLPerturbed,
+    //         calculateMovingMedian(avgKLPerturbed, 25),
+    //     ],
+    //     series: ['Avg', 'MA'],
+    // }, {
+    //     xLabel: 'Version',
+    //     yLabel: 'KL',
+    //     width: 500,
+    //     height: 300,
+    // });
+
+    // tfvis.render.linechart({ name: 'Perturb Scale', tab }, {
+    //     values: [store.perturbScale.toArray()],
+    // }, {
+    //     xLabel: 'Version',
+    //     yLabel: 'Perturb Scale',
+    //     width: 500,
+    //     height: 300,
+    // });
+
+    const evSeries = store.vTraceExplainedVariance.toArray();
+    tfvis.render.linechart({ name: 'V-Trace Explained Variance', tab }, {
         values: [
-            avgKLPerturbed,
-            calculateMovingMedian(avgKLPerturbed, 25),
+            evSeries,
+            constantLine(evSeries, 0.65),
+            constantLine(evSeries, 0.75),
         ],
-        series: ['Avg', 'MA'],
+        series: ['Explained Variance', 'Target Low', 'Target High'],
     }, {
         xLabel: 'Version',
-        yLabel: 'KL',
+        yLabel: 'Explained Variance',
         width: 500,
         height: 300,
     });
 
-    tfvis.render.linechart({ name: 'Perturb Scale', tab }, {
-        values: [store.perturbScale.toArray()],
+    const stdRatioSeries = store.vTraceStdRatio.toArray();
+    tfvis.render.linechart({ name: 'V-Trace Std Ratio', tab }, {
+        values: [
+            stdRatioSeries,
+            constantLine(stdRatioSeries, 0.8),
+            constantLine(stdRatioSeries, 1.2),
+        ],
+        series: ['σ(V)/σ(R)', 'Target Low', 'Target High'],
     }, {
         xLabel: 'Version',
-        yLabel: 'Perturb Scale',
+        yLabel: 'σ(V)/σ(R)',
         width: 500,
         height: 300,
     });
 
     tfvis.render.scatterplot({ name: 'Value', tab }, {
         values: [
-            store.values.toArrayMin(),
-            store.values.toArrayMax(),
             store.values.toArray(),
         ],
     }, {
@@ -199,11 +239,7 @@ function drawTab1() {
     });
 
     tfvis.render.scatterplot({ name: 'Return', tab }, {
-        values: [
-            store.returns.toArrayMin(),
-            store.returns.toArrayMax(),
-            store.returns.toArray(),
-        ],
+        values: [store.returns.toArray()],
     }, {
         xLabel: 'Version',
         yLabel: 'Return',
@@ -212,7 +248,7 @@ function drawTab1() {
     });
 
     tfvis.render.scatterplot({ name: 'TD Error', tab }, {
-        values: [store.tdErrors.toArrayMin(), store.tdErrors.toArrayMax(), store.tdErrors.toArray()],
+        values: [store.tdErrors.toArray()],
     }, {
         xLabel: 'Version',
         yLabel: 'TD Error',
@@ -220,35 +256,26 @@ function drawTab1() {
         height: 300,
     });
 
+    const avgAdvantages = store.advantages.toArray();
     tfvis.render.scatterplot({ name: 'Advantage', tab }, {
-        values: [store.advantages.toArrayMin(), store.advantages.toArrayMax()],
+        values: [avgAdvantages, calculateMovingAverage(avgAdvantages, 1000)],
     }, {
         xLabel: 'Version',
         yLabel: 'Advantage',
         width: 500,
         height: 300,
     });
-
-
 }
 
 function drawTab2() {
-    tfvis.render.scatterplot({ name: 'mean', tab: 'Tab 2' }, {
-        values: [store.mean.toArray()],
-    }, {
-        xLabel: 'Version',
-        yLabel: 'mean',
-        width: 500,
-        height: 300,
-    });
-    tfvis.render.scatterplot({ name: 'Log Std', tab: 'Tab 2' }, {
-        values: [store.logStd.toArray()],
-    }, {
-        xLabel: 'Version',
-        yLabel: 'Log Std',
-        width: 500,
-        height: 300,
-    });
+    Array.from({ length: ACTION_DIM }, (_, i) => i).forEach((i) => {
+        tfvis.render.scatterplot({ name: `Logit ${i}`, tab: 'Tab 2' }, {
+            values: [store[`logit${i as MetricIndex}`].toArray()],
+        }, {
+            width: 500,
+            height: 300,
+        });
+    })
 
     tfvis.render.linechart({ name: 'Policy Loss', tab: 'Tab 2' }, {
         values: [store.policyLoss.toArray()],
@@ -318,6 +345,10 @@ function drawTab3() {
 
 type RenderPoint = { x: number, y: number };
 
+function constantLine(data: RenderPoint[], value: number): RenderPoint[] {
+    return data.map((point) => ({ x: point.x, y: value }));
+}
+
 function calculateMovingAverage(data: RenderPoint[], windowSize: number): RenderPoint[] {
     if (data.length === 0) return [];
     if (windowSize <= 0) throw new Error('Window size must be positive');
@@ -371,14 +402,4 @@ function calculateMovingMedian(data: RenderPoint[], windowSize: number): RenderP
     }
 
     return averaged;
-}
-
-function calculateMovingMedianAverage(data: RenderPoint[], windowSize: number): RenderPoint[] {
-    const average = calculateMovingAverage(data, windowSize);
-    const median = calculateMovingMedian(data, windowSize);
-
-    return average.map((point, index) => ({
-        x: point.x,
-        y: (point.y + median[index].y) / 2,
-    }));
 }

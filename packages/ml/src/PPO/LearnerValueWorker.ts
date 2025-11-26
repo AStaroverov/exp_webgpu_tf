@@ -9,5 +9,5 @@ import '../../../ml-common/uiUtils.ts';
 
 setConsolePrefix(`[LEARNER_VALUE]`);
 
-await initTensorFlow('wasm');
+await initTensorFlow('webgpu');
 createValueLearnerAgent();

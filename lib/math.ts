@@ -3,6 +3,7 @@ export const max = Math.max;
 export const min = Math.min;
 export const abs = Math.abs;
 export const log = Math.log;
+export const exp = Math.exp;
 export const sign = Math.sign;
 export const floor = Math.floor;
 export const ceil = Math.ceil;

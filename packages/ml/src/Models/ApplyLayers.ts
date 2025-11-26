@@ -1,37 +1,29 @@
 import * as tf from '@tensorflow/tfjs';
-import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 import { SymbolicTensor } from '@tensorflow/tfjs-layers/dist/engine/topology';
+import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
+import { DenseLayerArgs } from '@tensorflow/tfjs-layers/dist/layers/core';
 import {
     ALLY_FEATURES_DIM,
-    ALLY_SLOTS,
-    BATTLE_FEATURES_DIM,
-    BULLET_FEATURES_DIM,
-    BULLET_SLOTS,
-    CONTROLLER_FEATURES_DIM,
-    ENEMY_FEATURES_DIM,
+    ALLY_SLOTS, BULLET_FEATURES_DIM,
+    BULLET_SLOTS, ENEMY_FEATURES_DIM,
     ENEMY_SLOTS,
-    TANK_FEATURES_DIM,
+    TANK_FEATURES_DIM
 } from './Create.ts';
+import { MaskLikeLayer } from './Layers/MaskLikeLayer.ts';
 import { MultiHeadAttentionLayer } from './Layers/MultiHeadAttentionLayer.ts';
-import { FixedPositionalEncodingLayer } from './Layers/FixedPositionalEncodingLayer.ts';
-import { RoleEmbeddingLayer } from './Layers/RoleEncodingLayer.ts';
-import { AttentionPoolLayer } from './Layers/AttentionPoolLayer.ts';
+import { RMSNormConfig, RMSNormLayer } from "./Layers/RMSNormLayer.ts";
+import { VariableLayer } from './Layers/VariableLayer.ts';
 
 export function createInputs(name: string) {
-    const controllerInput = tf.input({ name: name + '_controllerInput', shape: [CONTROLLER_FEATURES_DIM] });
-    const battleInput = tf.input({ name: name + '_battlefieldInput', shape: [BATTLE_FEATURES_DIM] });
-    const tankInput = tf.input({ name: name + '_tankInput', shape: [TANK_FEATURES_DIM] });
-
-    const enemiesInput = tf.input({ name: name + '_enemiesInput', shape: [ENEMY_SLOTS, ENEMY_FEATURES_DIM] });
-    const enemiesMaskInput = tf.input({ name: name + '_enemiesMaskInput', shape: [ENEMY_SLOTS] });
-    const alliesInput = tf.input({ name: name + '_alliesInput', shape: [ALLY_SLOTS, ALLY_FEATURES_DIM] });
-    const alliesMaskInput = tf.input({ name: name + '_alliesMaskInput', shape: [ALLY_SLOTS] });
-    const bulletsInput = tf.input({ name: name + '_bulletsInput', shape: [BULLET_SLOTS, BULLET_FEATURES_DIM] });
-    const bulletsMaskInput = tf.input({ name: name + '_bulletsMaskInput', shape: [BULLET_SLOTS] });
+    const tankInput = tf.input({name: name + '_tankInput', shape: [TANK_FEATURES_DIM]});
+    const enemiesInput = tf.input({name: name + '_enemiesInput', shape: [ENEMY_SLOTS, ENEMY_FEATURES_DIM]});
+    const enemiesMaskInput = tf.input({name: name + '_enemiesMaskInput', shape: [ENEMY_SLOTS]});
+    const alliesInput = tf.input({name: name + '_alliesInput', shape: [ALLY_SLOTS, ALLY_FEATURES_DIM]});
+    const alliesMaskInput = tf.input({name: name + '_alliesMaskInput', shape: [ALLY_SLOTS]});
+    const bulletsInput = tf.input({name: name + '_bulletsInput', shape: [BULLET_SLOTS, BULLET_FEATURES_DIM]});
+    const bulletsMaskInput = tf.input({name: name + '_bulletsMaskInput', shape: [BULLET_SLOTS]});
 
     return {
-        controllerInput,
-        battleInput,
         tankInput,
         enemiesInput,
         enemiesMaskInput,
@@ -42,56 +34,77 @@ export function createInputs(name: string) {
     };
 }
 
-export function applyDenseLayers(name: string, layer: tf.SymbolicTensor, hiddenLayers: [ActivationIdentifier, number][]) {
-    let x = layer;
+export function applyMLP({name, layers: hiddenLayers, preNorm = false}: {
+    name: string,
+    layers: [ActivationIdentifier, number][],
+    preNorm?: boolean
+}, layer: tf.SymbolicTensor) {
+    if (preNorm) {
+        layer = createNormalizationLayer({
+            name: `${name}/MLP_preNorm`,
+        }).apply(layer) as tf.SymbolicTensor;
+    }
+
     let i = 0;
     for (const [activation, units] of hiddenLayers) {
-        x = tf.layers.dense({
-            name: `${ name }/dense${ i++ }`,
+        layer = createDenseLayer({
+            name: `${name}/MLP_dense${i++}`,
             units,
             activation,
-            kernelInitializer: 'glorotUniform',
-        }).apply(x) as tf.SymbolicTensor;
+            useBias: true
+        }).apply(layer) as tf.SymbolicTensor;
     }
 
-    return x;
+    return layer;
 }
 
+export function createDenseLayer(options: DenseLayerArgs & Required<Pick<DenseLayerArgs, 'useBias' | 'activation'>>) {
+    return tf.layers.dense(options)
+}
 
-export function applySelfTransformLayers(name: string, {
-    depth,
-    numHeads,
-    dropout,
-    token,
-    mask,
-}: {
-    depth: number,
-    numHeads: number,
-    dropout?: number;
-    token: tf.SymbolicTensor,
-    mask?: tf.SymbolicTensor
-}) {
-    let x = token;
-    for (let i = 0; i < depth; i++) {
-        x = applySelfTransformerLayer(`${ name }/transformer${ i }`, {
-            numHeads,
-            dropout,
-            token: x,
-            mask,
-        });
+// https://arxiv.org/html/2406.09079v1
+export function applyLaNLayer({name, units, preNorm = false}: {
+    name: string,
+    units: number,
+    preNorm?: boolean,
+}, layer: tf.SymbolicTensor) {
+    if (preNorm) {
+        layer = createNormalizationLayer({
+            name: `${name}/LaN_preNorm`,
+        }).apply(layer) as tf.SymbolicTensor;
     }
 
-    return x;
+    const branch1 = createDenseLayer({
+        name: `${name}/LaN_branch1`,
+        units,
+        useBias: true,
+        activation: 'tanh',
+    }).apply(layer) as tf.SymbolicTensor;
+    const branch2 = createDenseLayer({
+        name: `${name}/LaN_branch2`,
+        units,
+        useBias: true,
+        activation: 'tanh',
+    }).apply(layer) as tf.SymbolicTensor;
+
+    return tf.layers.multiply({name: `${name}/LaN_output`}).apply([branch1, branch2]) as tf.SymbolicTensor;
+}
+
+export function createNormalizationLayer(options: RMSNormConfig) {
+    return new RMSNormLayer(options);
 }
 
 export function tokenProj(x: tf.SymbolicTensor, dModel: number, name: string): SymbolicTensor {
-    return tf.layers.dense({ units: dModel, useBias: true, name: name + '_tokProj' }).apply(x) as SymbolicTensor;
+    return createDenseLayer({
+        name: name + '_tokProj',
+        units: dModel,
+        useBias: false,
+        activation: 'linear'
+    }).apply(x) as SymbolicTensor;
 }
 
 export function convertInputsToTokens(
     {
-        controllerInput,
-        battleInput,
         tankInput,
         enemiesInput,
         alliesInput,
@@ -99,23 +112,26 @@ export function convertInputsToTokens(
     }: ReturnType<typeof createInputs>,
     dModel: number,
 ) {
+    const addTypeEmbedding = (x: tf.SymbolicTensor) => {
+        const typeEmb = new VariableLayer({
+            name: `${x.name}_typeEmbedding`,
+            shape: [dModel],
+        }).apply(x) as tf.SymbolicTensor;
+        return tf.layers.add({ name: `${x.name}_withTypeEmbedding` }).apply([x, typeEmb]) as tf.SymbolicTensor;
+    }
     const reshape = (x: tf.SymbolicTensor) => {
         return tf.layers.reshape({
-            name: `${ x.name }_reshape`,
+            name: `${x.name}_reshape`,
             targetShape: [1, dModel],
         }).apply(x) as tf.SymbolicTensor;
     };
 
-    const controllerTok = reshape(tokenProj(controllerInput, dModel, controllerInput.name));
-    const battleTok = reshape(tokenProj(battleInput, dModel, battleInput.name));
-    const tankTok = reshape(tokenProj(tankInput, dModel, tankInput.name));
-    const alliesTok = tokenProj(alliesInput, dModel, alliesInput.name);
-    const enemiesTok = tokenProj(enemiesInput, dModel, enemiesInput.name);
-    const bulletsTok = tokenProj(bulletsInput, dModel, bulletsInput.name);
+    const tankTok = reshape(addTypeEmbedding(tokenProj(tankInput, dModel, tankInput.name)));
+    const alliesTok = addTypeEmbedding(tokenProj(alliesInput, dModel, alliesInput.name));
+    const enemiesTok = addTypeEmbedding(tokenProj(enemiesInput, dModel, enemiesInput.name));
+    const bulletsTok = addTypeEmbedding(tokenProj(bulletsInput, dModel, bulletsInput.name));
 
     return {
-        controllerTok,
-        battleTok,
         tankTok,
         alliesTok,
         enemiesTok,
@@ -124,198 +140,213 @@ export function convertInputsToTokens(
 }
 
 export function applyCrossAttentionLayer(
-    name: string,
-    numHeads: number,
     {
+        name,
+        heads,
         qTok,
         kvTok,
+        qMask,
         kvMask,
+        preNorm = false,
     }: {
+        name: string,
+        heads: number,
         qTok: tf.SymbolicTensor,
+        qMask?: tf.SymbolicTensor,
         kvTok: tf.SymbolicTensor,
         kvMask?: tf.SymbolicTensor,
+        preNorm?: boolean,
     },
 ) {
     const dModel = qTok.shape[qTok.shape.length - 1]!;
-    const qTokNorm = tf.layers.layerNormalization({
-        name: name + '_QNorm_' + qTok.name,
-        epsilon: 1e-5,
-    }).apply(qTok) as tf.SymbolicTensor;
+    qTok = preNorm
+        ? createNormalizationLayer({ name: name + '_QNorm_' + qTok.name}).apply(qTok) as tf.SymbolicTensor
+        : qTok;
+    kvTok = qTok === kvTok
+        ? qTok
+        : preNorm
+            ? createNormalizationLayer({ name: name + '_KVNorm_' + kvTok.name}).apply(kvTok) as tf.SymbolicTensor
+            : kvTok;
 
-    const attentionInputs = [qTokNorm, kvTok];
-    kvMask && attentionInputs.push(kvMask);
-
-    const attention = new MultiHeadAttentionLayer({
-        name: name + '_MultiHeadAttentionLayer',
-        keyDim: dModel / numHeads,
-        numHeads: numHeads,
-    }).apply(attentionInputs) as tf.SymbolicTensor;
-
-    const output = tf.layers.dense({
-        name: name + '_output',
-        units: dModel,
-        useBias: true,
-    }).apply(attention) as SymbolicTensor;
-
-    return output;
-}
-
-export function applySelfAttentionLayer(
-    name: string,
-    numHeads: number,
-    {
-        token,
-        mask,
-    }: {
-        token: tf.SymbolicTensor,
-        mask?: tf.SymbolicTensor,
-    },
-) {
-    const dModel = token.shape[token.shape.length - 1]!;
-    const tokensNorm = tf.layers.layerNormalization({
-        name: name + '_QNorm_' + token.name,
-        epsilon: 1e-5,
-    }).apply(token) as tf.SymbolicTensor;
-
-    const attentionInputs = [tokensNorm, tokensNorm];
-    mask && attentionInputs.push(mask);
+    // Create mask-like layers if masks are not provided
+    qMask ??= new MaskLikeLayer({ name: qTok.name + '_qMaskLike' }).apply(qTok) as tf.SymbolicTensor;
+    kvMask ??= new MaskLikeLayer({ name: kvTok.name + '_kvMaskLike' }).apply(kvTok) as tf.SymbolicTensor;
 
     const attention = new MultiHeadAttentionLayer({
         name: name + '_MultiHeadAttentionLayer',
-        keyDim: dModel / numHeads,
-        numHeads: numHeads,
-    }).apply(attentionInputs) as tf.SymbolicTensor;
+        keyDim: dModel / heads,
+        numHeads: heads,
+    }).apply([qTok, qMask, kvTok, kvMask]) as tf.SymbolicTensor;
 
-    const output = tf.layers.dense({
-        name: name + '_output',
-        units: dModel,
-        useBias: true,
-    }).apply(attention) as SymbolicTensor;
-
-    return output;
+    return attention;
 }
 
 export function applyCrossTransformerLayer(
-    name: string,
     {
-        numHeads,
-        dropout,
+        name,
+        heads,
         qTok,
+        qMask,
         kvTok,
         kvMask,
+        preNorm = false,
     }: {
-        numHeads: number,
-        dropout?: number;
+        name: string,
+        heads: number,
         qTok: tf.SymbolicTensor,
         kvTok: tf.SymbolicTensor,
+        qMask?: tf.SymbolicTensor,
         kvMask?: tf.SymbolicTensor,
+        preNorm?: boolean,
     },
 ) {
     const dModel = qTok.shape[qTok.shape.length - 1]!;
-    const crossAttn = applyCrossAttentionLayer(name, numHeads, { qTok, kvTok, kvMask });
 
-    const attnProj = dropout == null ? crossAttn : tf.layers.dropout({ rate: dropout, name: `${ name }_drop` })
-        .apply(crossAttn) as tf.SymbolicTensor;
+    const crossAttn = applyCrossAttentionLayer({name, heads, qTok, qMask, kvTok, kvMask, preNorm});
 
-    const norm2 = tf.layers.layerNormalization({
-        name: `${ name }_ln2`,
-        epsilon: 1e-5,
-    }).apply(attnProj) as tf.SymbolicTensor;
+    const attnResidual = tf.layers.add({name: `${name}_residual`})
+        .apply([qTok, crossAttn]) as tf.SymbolicTensor;
 
-    const ffnInner = tf.layers.dense({
-        name: `${ name }_ffn1`,
-        units: dModel * 4,
-        useBias: true,
-        activation: 'relu',
-    }).apply(norm2) as tf.SymbolicTensor;
-
-    const ffnOut = tf.layers.dense({
-        name: `${ name }_ffn2`,
-        units: dModel,
-        useBias: true,
-    }).apply(ffnInner) as tf.SymbolicTensor;
-
-    const ffnDrop = dropout == null ? ffnOut : tf.layers.dropout({ rate: dropout, name: `${ name }_ffnDrop` })
-        .apply(ffnOut) as tf.SymbolicTensor;
-
-    return ffnDrop;
-}
-
-export function applySelfTransformerLayer(
-    name: string,
-    {
-        numHeads,
-        dropout,
-        token,
-        mask,
-    }: {
-        numHeads: number,
-        dropout?: number;
-        token: tf.SymbolicTensor;
-        mask?: tf.SymbolicTensor;
-    },
-) {
-    const dModel = token.shape[token.shape.length - 1]!;
-    const selfAttn = applySelfAttentionLayer(name, numHeads, { token, mask });
-
-    const attnProj = dropout == null ? selfAttn : tf.layers.dropout({ rate: dropout, name: `${ name }_drop` })
-        .apply(selfAttn) as tf.SymbolicTensor;
-
-    const attnResidual = tf.layers.add({ name: `${ name }_residual` })
-        .apply([token, attnProj]) as tf.SymbolicTensor;
-
-    const norm2 = tf.layers.layerNormalization({
-        name: `${ name }_ln2`,
-        epsilon: 1e-5,
+    const ffnNorm = createNormalizationLayer({
+        name: `${name}_ffnLN`,
     }).apply(attnResidual) as tf.SymbolicTensor;
 
-    const ffnInner = tf.layers.dense({
-        name: `${ name }_ffn1`,
+    const ffnInner = createDenseLayer({
+        name: `${name}_ffn1`,
         units: dModel * 4,
-        useBias: true,
+        useBias: false,
         activation: 'relu',
-    }).apply(norm2) as tf.SymbolicTensor;
+    }).apply(ffnNorm) as tf.SymbolicTensor;
 
-    const ffnOut = tf.layers.dense({
-        name: `${ name }_ffn2`,
+    const ffnOut = createDenseLayer({
+        name: `${name}_ffn2`,
         units: dModel,
-        useBias: true,
+        useBias: false,
+        activation: 'linear'
     }).apply(ffnInner) as tf.SymbolicTensor;
 
-    const ffnDrop = dropout == null ? ffnOut : tf.layers.dropout({ rate: dropout, name: `${ name }_ffnDrop` })
-        .apply(ffnOut) as tf.SymbolicTensor;
-
-    const finalOut = tf.layers.add({ name: `${ name }_ffnAdd` })
-        .apply([attnResidual, ffnDrop]) as tf.SymbolicTensor;
+    const finalOut = tf.layers.add({name: `${name}_ffnAdd`})
+        .apply([attnResidual, ffnOut]) as tf.SymbolicTensor;
 
     return finalOut;
 }
 
-export function applyAttentionPool(
-    name: string,
-    tokens: tf.SymbolicTensor,
-    dropout?: number,
-) {
-    let x = new AttentionPoolLayer({ name: name + '_AttentionPoolLayer' }).apply(tokens) as tf.SymbolicTensor;
-    x = tf.layers.layerNormalization({ name: name + '_norm' }).apply(x) as tf.SymbolicTensor;
-    x = dropout == null ? x : tf.layers.dropout({
-        name: name + '_dropout',
-        rate: dropout,
-    }).apply(x) as tf.SymbolicTensor;
+export function applyCrossTransformerLayers({
+    name,
+    depth,
+    heads,
+    qTok,
+    kvTok,
+    qMask,
+    kvMask,
+    preNorm = false,
+}: {
+    name: string, 
+    depth: number,
+    heads: number,
+    qTok: tf.SymbolicTensor | (() => tf.SymbolicTensor),
+    kvTok: tf.SymbolicTensor | (() => tf.SymbolicTensor),
+    qMask?: tf.SymbolicTensor | (() => tf.SymbolicTensor),
+    kvMask?: tf.SymbolicTensor | (() => tf.SymbolicTensor),
+    preNorm?: boolean,
+}) {
+    let x = typeof qTok === 'function' ? qTok() : qTok;
+    for (let i = 0; i < depth; i++) {
+        x = applyCrossAttentionLayer({
+            name: `${name}/depth${i}`,
+            heads,
+            qTok: x,
+            kvTok: typeof kvTok === 'function' ? kvTok() : kvTok,
+            qMask: typeof qMask === 'function' ? qMask() : qMask,
+            kvMask: typeof kvMask === 'function' ? kvMask() : kvMask,
+            preNorm,
+        });
+    }
 
     return x;
 }
 
-export function applyEncoding(token: tf.SymbolicTensor): tf.SymbolicTensor {
-    const N = token.shape[1]!;
+export function applySelfTransformerLayer(
+    {
+        name,
+        heads,
+        token,
+        mask,
+        preNorm = false,
+    }: {
+        name: string,
+        heads: number,
+        token: tf.SymbolicTensor;
+        mask?: tf.SymbolicTensor;
+        preNorm?: boolean;
+    },
+) {
+    const dModel = token.shape[token.shape.length - 1]!;
+    const selfAttn = applyCrossAttentionLayer({
+        name,
+        heads,
+        qTok: token,
+        qMask: mask,
+        kvTok: token,
+        kvMask: mask,
+        preNorm
+    });
 
-    const posEmbedding = N === 1
-        ? token
-        : new FixedPositionalEncodingLayer({ name: token.name + '_withPos' })
-            .apply(token) as tf.SymbolicTensor;
+    const attnResidual = tf.layers.add({name: `${name}_residual`})
+        .apply([token, selfAttn]) as tf.SymbolicTensor;
 
-    const roleEmbedding = new RoleEmbeddingLayer({ name: posEmbedding.name + 'withRole' })
-        .apply(posEmbedding) as tf.SymbolicTensor;
+    const ffnNorm = createNormalizationLayer({
+        name: `${name}_ln2`,
+    }).apply(attnResidual) as tf.SymbolicTensor;
 
-    return roleEmbedding;
+    const ffnInner = createDenseLayer({
+        name: `${name}_ffn1`,
+        units: dModel * 4,
+        useBias: false,
+        activation: 'relu',
+    }).apply(ffnNorm) as tf.SymbolicTensor;
+
+    const ffnOut = createDenseLayer({
+        name: `${name}_ffn2`,
+        units: dModel,
+        useBias: false,
+        activation: 'linear'
+    }).apply(ffnInner) as tf.SymbolicTensor;
+
+    const finalOut = tf.layers.add({name: `${name}_ffnAdd`})
+        .apply([attnResidual, ffnOut]) as tf.SymbolicTensor;
+
+    return finalOut;
+}
+
+export function applySelfTransformLayers(name: string, {
+    depth,
+    heads,
+    token,
+    mask,
+    preNorm = false,
+}: {
+    depth: number,
+    heads: number,
+    token: tf.SymbolicTensor | ((i: number) => tf.SymbolicTensor),
+    mask?: tf.SymbolicTensor | ((i: number) => tf.SymbolicTensor),
+    preNorm?: boolean,
+}) {
+    let x = typeof token === 'function' ? token(0) : token;
+    for (let i = 0; i < depth; i++) {
+        x = applySelfTransformerLayer({
+            name: `${name}/depth${i}`,
+            heads,
+            token: x,
+            mask: mask ? (typeof mask === 'function' ? mask(i) : mask) : undefined,
+            preNorm,
+        });
+    }
+
+    return x;
+}
+
+export function applyGlobalAverage1d({ name }: { name: string }, token: tf.SymbolicTensor) {
+    return tf.layers.globalAveragePooling1d({ name: name + '_GlobalAvgPool1D' })
+        .apply(token) as tf.SymbolicTensor;
 }

@@ -8,18 +8,11 @@ import {
     MAX_BULLETS,
     MAX_ENEMIES,
 } from '../../../tanks/src/Pilots/Components/TankState.ts';
-import {
-    applyCrossTransformerLayer,
-    applyDenseLayers,
-    applySelfTransformLayers,
-    convertInputsToTokens,
-    createInputs,
-} from './ApplyLayers.ts';
 
-import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
-import { ACTION_DIM } from '../../../ml-common/consts.ts';
+import { createDenseLayer } from "./ApplyLayers.ts";
 import { Model } from './def.ts';
-import { PatchedAdamOptimizer } from './PatchedAdamOptimizer.ts';
+import { createNetwork } from './Networks/v5.ts';
+import { AdamW } from './Optimizer/AdamW.ts';
 
 export const CONTROLLER_FEATURES_DIM = 4;
 export const BATTLE_FEATURES_DIM = 6;
@@ -31,137 +24,52 @@ export const ALLY_FEATURES_DIM = ALLY_BUFFER - 1; // -1 потому что id �
 export const BULLET_SLOTS = MAX_BULLETS;
 export const BULLET_FEATURES_DIM = BULLET_BUFFER - 1; // -1 потому что id не считаем
 
-type NetworkConfig = {
-    dim: number;
-    heads: number;
-    dropout?: number;
-    finalMLP: [ActivationIdentifier, number][];
-};
-
-type policyNetworkConfig = NetworkConfig & {
-    headMLP: {
-        mean: [ActivationIdentifier, number][];
-        logStd: [ActivationIdentifier, number][];
-    };
-};
-
-const policyNetworkConfig: policyNetworkConfig = {
-    dim: 64,
-    heads: 4,
-    finalMLP: [
-        ['relu', 512],
-        ['relu', 256],
-        ['relu', 128],
-        ['relu', 64],
-    ],
-    headMLP: {
-        mean: [
-            ['relu', 256],
-            ['relu', 128],
-        ],
-        logStd: [
-            ['relu', 64],
-        ],
-    },
-};
-const valueNetworkConfig: NetworkConfig = {
-    dim: 16,
-    heads: 1,
-    finalMLP: [
-        ['relu', 128],
-        ['relu', 64],
-        ['relu', 32],
-    ] as [ActivationIdentifier, number][],
-};
+export const ACTION_HEAD_DIMS = [2, 15, 15, 15];
 
 export function createPolicyNetwork(): tf.LayersModel {
-    const { inputs, network } = createBaseNetwork(Model.Policy, policyNetworkConfig);
-    const policyOutput = tf.layers.dense({
-        name: Model.Policy + '_output',
-        units: ACTION_DIM,
-        activation: 'linear',
-    }).apply(network) as tf.SymbolicTensor;
+    const {inputs, heads} = createNetwork(Model.Policy);
+
+    // Create logits output for each head
+    const logitsOutputs = heads.map((head, i) => {
+        const units = ACTION_HEAD_DIMS[i];
+        return createDenseLayer({
+            name: Model.Policy + '_head_logits_' + i,
+            units: units,
+            useBias: true,
+            activation: 'linear',
+            biasInitializer: 'zeros',
+            kernelInitializer: tf.initializers.randomUniform({ minval: -0.03, maxval: 0.03 }),
+        }).apply(head) as tf.SymbolicTensor;
+    });
+
     const model = tf.model({
         name: Model.Policy,
         inputs: Object.values(inputs),
-        outputs: policyOutput,
+        outputs: logitsOutputs, // [shootLogits, moveLogits, rotLogits, turRotLogits]
     });
-    model.optimizer = new PatchedAdamOptimizer(CONFIG.lrConfig.initial);
-    // fake loss for save optimizer with model
-    model.loss = 'meanSquaredError';
+    model.optimizer = new AdamW(CONFIG.lrConfig.initial);
+    model.loss = 'meanSquaredError'; // fake loss for save optimizer with model
 
     return model;
 }
 
 export function createValueNetwork(): tf.LayersModel {
-    const { inputs, network } = createBaseNetwork(Model.Value, valueNetworkConfig);
-    const valueOutput = tf.layers.dense({
+    const {inputs, heads} = createNetwork(Model.Value);
+    const valueOutput = createDenseLayer({
         name: Model.Value + '_output',
         units: 1,
+        useBias: true,
         activation: 'linear',
-    }).apply(network) as tf.SymbolicTensor;
+        biasInitializer: 'zeros',
+        kernelInitializer: 'glorotUniform',
+    }).apply(heads[0]) as tf.SymbolicTensor;
     const model = tf.model({
         name: Model.Value,
         inputs: Object.values(inputs),
         outputs: valueOutput,
     });
-    model.optimizer = new PatchedAdamOptimizer(CONFIG.lrConfig.initial);
-    // fake loss for save optimizer with model
+    model.optimizer = new AdamW(CONFIG.lrConfig.initial);
     model.loss = 'meanSquaredError';
 
     return model;
-}
-
-function createBaseNetwork(modelName: Model, config: NetworkConfig) {
-    const inputs = createInputs(modelName);
-    const tokens = convertInputsToTokens(inputs, config.dim);
-
-    const tankToEnemiesAttn = applyCrossTransformerLayer(modelName + '_tankToEnemiesAttn', {
-        numHeads: config.heads,
-        qTok: tokens.tankTok,
-        kvTok: tokens.enemiesTok,
-        kvMask: inputs.enemiesMaskInput,
-    });
-    const tankToAlliesAttn = applyCrossTransformerLayer(modelName + '_tankToAlliesAttn', {
-        numHeads: config.heads,
-        qTok: tokens.tankTok,
-        kvTok: tokens.alliesTok,
-        kvMask: inputs.alliesMaskInput,
-    });
-    const tankToBulletsAttn = applyCrossTransformerLayer(modelName + '_tankToBulletsAttn', {
-        numHeads: config.heads,
-        qTok: tokens.tankTok,
-        kvTok: tokens.bulletsTok,
-        kvMask: inputs.bulletsMaskInput,
-    });
-
-    const envToken = tf.layers.concatenate({ name: modelName + '_envToken', axis: 1 }).apply([
-        tokens.controllerTok,
-        tokens.battleTok,
-        tokens.tankTok,
-        tankToEnemiesAttn,
-        tankToAlliesAttn,
-        tankToBulletsAttn,
-    ]) as tf.SymbolicTensor;
-
-    const transformedEnvToken = applySelfTransformLayers(
-        modelName + '_transformedEnvToken',
-        {
-            depth: 2,
-            numHeads: config.heads,
-            dropout: config.dropout,
-            token: envToken,
-        },
-    );
-
-    const flattenFinalToken = tf.layers.flatten({ name: modelName + '_flattenFinalToken' }).apply(transformedEnvToken) as tf.SymbolicTensor;
-    const normFinalToken = tf.layers.layerNormalization({ name: modelName + '_normFinalToken' }).apply(flattenFinalToken) as tf.SymbolicTensor;
-
-    const finalMLP = applyDenseLayers(
-        modelName + '_finalMLP',
-        normFinalToken,
-        config.finalMLP,
-    );
-
-    return { inputs, network: finalMLP };
 }

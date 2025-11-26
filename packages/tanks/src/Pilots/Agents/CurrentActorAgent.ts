@@ -1,31 +1,35 @@
 import * as tf from '@tensorflow/tfjs';
 import { clamp } from 'lodash-es';
 import { unlerp } from '../../../../../lib/math.ts';
+import { randomRangeFloat } from '../../../../../lib/random.ts';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
-import { CONFIG } from '../../../../ml-common/config.ts';
-import { ACTION_DIM, LEARNING_STEPS } from '../../../../ml-common/consts.ts';
-import { prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
+import { ColoredNoiseApprox } from '../../../../ml-common/ColoredNoiseApprox.ts';
+import { LEARNING_STEPS } from '../../../../ml-common/consts.ts';
+import { InputArrays, prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
 import { getNetworkExpIteration, patientAction } from '../../../../ml-common/utils.ts';
+import { ACTION_HEAD_DIMS } from '../../../../ml/src/Models/Create.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../../../ml/src/Models/Utils.ts';
-import { act } from '../../../../ml/src/PPO/train.ts';
+import { batchAct } from '../../../../ml/src/PPO/train.ts';
 import { calculateActionReward, calculateStateReward, getDeathPenalty, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 
-
-export type TankAgent<A = Partial<DownloableAgent> & Partial<LearnableAgent>> = A & {
+export type TankAgent<A = Partial<DownloadableAgent> & Partial<LearnableAgent>> = A & {
     tankEid: number;
-    updateTankBehaviour(width: number, height: number, frame: number): void;
+    scheduleUpdateTankBehaviour(width: number, height: number, frame: number): void;
+    applyUpdateTankBehaviour(): void;
 }
 
-export type DownloableAgent = {
+export type DownloadableAgent = {
     dispose(): void;
     sync(): Promise<void>;
     isSynced(): boolean;
 }
 
 export type LearnableAgent = {
+    train: boolean;
+    getNoise(): tf.Tensor[];
     dispose(): void;
     getVersion(): number;
     getMemory(): undefined | AgentMemory;
@@ -33,21 +37,102 @@ export type LearnableAgent = {
     evaluateTankBehaviour(width: number, height: number, frame: number): void;
 }
 
-export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableAgent> {
-    private memory = new AgentMemory();
-    private noise?: ColoredNoise
-    private policyNetwork?: tf.LayersModel;
+export const ActorUpdater = (getter: () => Promise<tf.LayersModel>) => {
+    let network: undefined | tf.LayersModel = undefined;
+    let promiseNetwork: undefined | Promise<tf.LayersModel> = undefined;
+    let dateRequestNetwork: number = 0;
 
-    private minLogStd?: number;
-    private maxLogStd?: number;
+    let scheduledAgents: {width: number, height: number, agent: TankAgent}[] = []
+    let computedAgents = new Map<TankAgent<unknown>, {
+        state: InputArrays,
+        actions: Float32Array,
+        logits: Float32Array,
+        logProb: number
+    }>();
+
+    const updateNetwork = async () => {
+        const now = Date.now();
+        const delta = now - dateRequestNetwork 
+        
+        if (delta > 10_000 || promiseNetwork == null) {
+            network = undefined;
+            promiseNetwork?.then(disposeNetwork);
+            promiseNetwork = patientAction(getter).then((v) => (network = v));
+            dateRequestNetwork = now;
+        }
+
+        return await promiseNetwork;
+    }
+    const getNetwork = () => network;
+    
+    const schedule = (width: number, height: number, agent: TankAgent<unknown>) => {
+        if (computedAgents.size > 0) {
+            computedAgents.clear();
+        }
+
+        scheduledAgents.push({
+            width,
+            height,
+            agent
+        });
+    }
+    
+    const get = (agent: TankAgent<unknown>) => {
+        if (network == null) {
+            scheduledAgents = [];
+            return;
+        }
+
+        if (scheduledAgents.length > 0) {
+            const states = scheduledAgents.map(({width, height, agent}) => prepareInputArrays(agent.tankEid, width, height));
+            const noises = scheduledAgents.map(({agent}) => (agent.train
+                // @ts-ignore
+                || globalThis.disableNoise !== true
+            ) ? agent.getNoise?.() : undefined);
+            const result = batchAct(network, states, noises);
+            
+            for (const [index, {agent}] of scheduledAgents.entries()) {
+                computedAgents.set(agent, {
+                    state: states[index],
+                    ...result[index]
+                });
+            }
+
+            scheduledAgents = [];
+        }
+        
+        return computedAgents.get(agent);
+    }
+
+    return {
+        updateNetwork,
+        getNetwork,
+        schedule,
+        get,
+    };
+}
+
+const currentActorUpdater = ActorUpdater(() => getNetwork(Model.Policy));
+
+export class CurrentActorAgent implements TankAgent<DownloadableAgent & LearnableAgent> {
+    private memory = new AgentMemory();
+    private noise: ColoredNoiseApprox;
 
     private initialActionReward?: number;
 
-    constructor(public readonly tankEid: number, private train: boolean) {
+    constructor(public readonly tankEid: number, public train: boolean) {
+        this.noise = new ColoredNoiseApprox(ACTION_HEAD_DIMS, randomRangeFloat(0.3, 0.7));
     }
 
+    public getNoise(): tf.Tensor[] {
+        return this.noise.sample();
+    }
+    
     public getVersion(): number {
-        return this.policyNetwork != null ? getNetworkExpIteration(this.policyNetwork) : 0;
+        const net = currentActorUpdater.getNetwork();
+        return net != null
+            ? getNetworkExpIteration(net)
+            : 0;
     }
 
     public getMemory(): undefined | AgentMemory {
@@ -59,56 +144,40 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
     }
 
     public dispose() {
-        disposeNetwork(this.policyNetwork);
         this.memory.dispose();
         this.noise?.dispose();
     }
 
     public async sync() {
-        await patientAction(() => this.load());
+        await currentActorUpdater.updateNetwork();
     }
 
     public isSynced() {
-        return this.policyNetwork != null && this.minLogStd != null && this.maxLogStd != null;
+        return currentActorUpdater.getNetwork() != null;
     }
 
-    public updateTankBehaviour(
+    public scheduleUpdateTankBehaviour(
         width: number,
         height: number,
     ) {
-        if (!(this.policyNetwork != null && this.minLogStd != null && this.maxLogStd != null)) return;
+        currentActorUpdater.schedule(width, height, this);
+    }
 
-        const state = prepareInputArrays(this.tankEid, width, height);
+    public applyUpdateTankBehaviour() {
+        const result = currentActorUpdater.get(this);
+        if (result == null) return;
+        
+        applyActionToTank(this.tankEid, result.actions, false);
 
-        // @ts-ignore
-        const noise = this.noise && (this.train || globalThis.applyNoise)
-            ? this.noise.sample()
-            : undefined;
-        const result = act(
-            this.policyNetwork,
-            state,
-            this.minLogStd,
-            this.maxLogStd,
-            noise
-        );
-
-        applyActionToTank(
-            this.tankEid,
-            result.actions,
-            // result.logStd.map((v) => lerp(0.1, 1, 1 - Math.exp(v) / MAX_STD_DEV)),
-        );
-
-        if (!this.train) return;
-
-        this.initialActionReward = calculateActionReward(this.tankEid);
-
-        this.memory.addFirstPart(
-            state,
-            result.actions,
-            result.mean,
-            result.logStd,
-            result.logProb,
-        );
+        if (this.train && result.logProb != null && result.logits != null) {
+            this.memory.addFirstPart(
+                result.state,
+                result.actions,
+                result.logits,
+                result.logProb,
+            );
+            this.initialActionReward = calculateActionReward(this.tankEid);
+        }
     }
 
     public evaluateTankBehaviour(
@@ -129,8 +198,8 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         const actionReward = this.initialActionReward === undefined
             ? 0
             : calculateActionReward(this.tankEid) - this.initialActionReward;
-        const stateRewardMultiplier = clamp(1 - unlerp(0, LEARNING_STEPS * 0.4, version), 0, 1);
-        const actionRewardMultiplier = clamp(unlerp(0, LEARNING_STEPS * 0.2, version), 0.2, 1) - clamp(unlerp(LEARNING_STEPS * 0.6, LEARNING_STEPS, version), 0, 1);
+        const stateRewardMultiplier = clamp(1 - unlerp(0, LEARNING_STEPS * 0.4, version), 0, 0.5);
+        const actionRewardMultiplier = clamp(unlerp(0, LEARNING_STEPS * 0.2, version), 0.3, 1);// - clamp(unlerp(LEARNING_STEPS * 0.6, LEARNING_STEPS, version), 0, 0.5);
 
         const frameReward = getFramePenalty(frame);
         const deathReward = getDeathPenalty(isDead);
@@ -140,102 +209,10 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
             + actionReward * actionRewardMultiplier
             + frameReward
             + deathReward,
-            -30,
-            +30
+            -5,
+            +5
         );
 
         this.memory.updateSecondPart(reward, isDead);
-    }
-
-    private async load() {
-        this.policyNetwork = await getNetwork(Model.Policy);
-
-        const iteration = getNetworkExpIteration(this.policyNetwork);
-        this.minLogStd = CONFIG.minLogStd(iteration);
-        this.maxLogStd = CONFIG.maxLogStd(iteration);
-        this.noise = new ColoredNoise(ACTION_DIM);
-
-        // const config = getNetworkPerturbConfig(this.policyNetwork);
-        // if (config.chance > random()) {
-        //     this.memory.perturbed = true;
-        //     perturbWeights(this.policyNetwork, config.scale);
-        // } else {
-    }
-}
-
-export function perturbWeights(model: tf.LayersModel, scale: number) {
-    tf.tidy(() => {
-        for (const v of model.trainableWeights) {
-            if (!isPerturbable(v)) continue;
-
-            const val = v.read() as tf.Tensor;
-
-            let eps: tf.Tensor;
-            if (val.shape.length === 2) {
-                const [outDim, inDim] = val.shape;
-                const epsOut = tf.randomNormal([outDim, 1]);
-                const epsIn = tf.randomNormal([1, inDim]);
-                eps = epsOut.mul(epsIn);
-            } else {
-                eps = tf.randomNormal(val.shape);
-            }
-
-            const std = tf.moments(val).variance.sqrt();
-            const perturbed = val.add(eps.mul(std).mul(scale));
-            (val as tf.Variable).assign(perturbed);
-        }
-    });
-}
-
-function isPerturbable(v: tf.LayerVariable) {
-    // 1. Только float32 параметры
-    if (v.dtype !== 'float32') return false;
-
-    // 2. Исключаем BatchNorm (они чувствительны к шуму)
-    const name = v.name.toLowerCase();
-    if (
-        name.includes('batchnorm') ||
-        name.includes('batch_normalization') ||
-        name.includes('layernorm') ||
-        name.includes('layer_norm') ||
-        name.endsWith('/gamma') ||
-        name.endsWith('/beta') ||
-        name.endsWith('/moving_mean') ||
-        name.endsWith('/moving_variance')
-    ) {
-        return false;
-    }
-
-    return name.includes('mean_mlp');
-}
-
-export class ColoredNoise {
-    private state: tf.Tensor;
-    private step = 0;
-
-    constructor(actionDim: number, private rho = 0.7, private resetInterval = 30) {
-        this.state = tf.randomNormal([actionDim]);
-    }
-
-    sample(): tf.Tensor {
-        if (++this.step % this.resetInterval === 0) {
-            this.state.dispose();
-            this.state = tf.randomNormal(this.state.shape)
-        }
-        // z ~ N(0, I)
-        const z = tf.randomNormal(this.state.shape);
-        const a = this.rho;
-        const b = Math.sqrt(1 - a * a);
-
-        const eps = tf.add(this.state.mul(a), z.mul(b));
-
-        this.state.dispose();
-        this.state = eps;
-
-        return eps;
-    }
-
-    dispose() {
-        this.state.dispose();
     }
 }

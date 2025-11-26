@@ -1,10 +1,18 @@
 import * as tf from '@tensorflow/tfjs';
 import { macroTasks } from '../../lib/TasksScheduler/macroTasks.ts';
+import { ModelSettings } from '../ml/src/PPO/channels.ts';
 import { CONFIG } from './config.ts';
 import { CurriculumState, DEFAULT_CURRICULUM_STATE } from './Curriculum/types.ts';
 
-export function setNetworkExpIteration(o: tf.LayersModel, it: number) {
-    o.setUserDefinedMetadata({ ...o.getUserDefinedMetadata(), expIteration: it });
+export function setNetworkSettings(o: tf.LayersModel, settings: ModelSettings) {
+    const meta = o.getUserDefinedMetadata() as ModelSettings;
+    o.setUserDefinedMetadata({ ...meta, ...settings });
+    setNetworkLearningRate(o, settings.lr ?? getNetworkLearningRate(o));
+}
+
+export function getNetworkSettings(network: tf.LayersModel): ModelSettings {
+    const meta = network.getUserDefinedMetadata() as undefined | ModelSettings;
+    return meta ?? {};
 }
 
 export function getNetworkExpIteration(network: tf.LayersModel): number {
@@ -20,15 +28,6 @@ export function setNetworkLearningRate(o: tf.LayersModel, lr: number) {
 export function getNetworkLearningRate(network: tf.LayersModel): number {
     // @ts-expect-error
     return network.optimizer.learningRate ?? CONFIG.lrConfig.initial;
-}
-
-export function setNetworkPerturbConfig(o: tf.LayersModel, chance: number, scale: number) {
-    o.setUserDefinedMetadata({ ...o.getUserDefinedMetadata(), perturbScale: scale, perturbChance: chance });
-}
-
-export function getNetworkPerturbConfig(network: tf.LayersModel): { scale: number, chance: number } {
-    const meta = network.getUserDefinedMetadata() as undefined | { perturbScale?: number, perturbChance?: number };
-    return { scale: meta?.perturbScale ?? CONFIG.perturbWeightsConfig.initial, chance: meta?.perturbChance ?? CONFIG.perturbWeightsConfig.initial };
 }
 
 export function setNetworkCurriculumState(network: tf.LayersModel, curriculumState: CurriculumState) {

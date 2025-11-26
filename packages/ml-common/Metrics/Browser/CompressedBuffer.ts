@@ -29,16 +29,16 @@ export class CompressedBuffer {
         }
     }
 
+    toArray(): Point[] {
+        return this.avgBuffer.concat(this.buffer).map((p, i) => ({ x: i, y: p.y }));
+    }
+
     toArrayMin(): Point[] {
         return this.minBuffer.map((p, i) => ({ x: i, y: p.y }));
     }
 
     toArrayMax(): Point[] {
         return this.maxBuffer.map((p, i) => ({ x: i, y: p.y }));
-    }
-
-    toArray(): Point[] {
-        return this.avgBuffer.concat(this.buffer).map((p, i) => ({ x: i, y: p.y }));
     }
 
     toJson() {

@@ -1,8 +1,8 @@
-import '../../../ml-common/unhandledErrors.ts'
 import '@tensorflow/tfjs-backend-wasm';
 import { randomShortId } from '../../../../lib/random.ts';
 import { setConsolePrefix } from '../../../ml-common/console.ts';
 import { initTensorFlow } from '../../../ml-common/initTensorFlow.ts';
+import '../../../ml-common/unhandledErrors.ts';
 import { EpisodeManager } from './Actor/EpisodeManager.ts';
 
 setConsolePrefix(`[ACTOR|${randomShortId()}]`);

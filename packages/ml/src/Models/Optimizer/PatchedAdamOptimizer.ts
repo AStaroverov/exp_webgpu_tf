@@ -1,14 +1,14 @@
 import * as tf from '@tensorflow/tfjs';
 import { AdamOptimizer, NamedTensorMap, Variable } from '@tensorflow/tfjs';
-import { tidy } from '@tensorflow/tfjs-core/dist/globals';
-import { sub } from '@tensorflow/tfjs-core/dist/ops/sub';
 import { ENGINE } from '@tensorflow/tfjs-core/dist/engine';
-import { zerosLike } from '@tensorflow/tfjs-core/dist/ops/zeros_like';
+import { tidy } from '@tensorflow/tfjs-core/dist/globals';
 import { add } from '@tensorflow/tfjs-core/dist/ops/add';
-import { mul } from '@tensorflow/tfjs-core/dist/ops/mul';
-import { square } from '@tensorflow/tfjs-core/dist/ops/square';
 import { div } from '@tensorflow/tfjs-core/dist/ops/div';
+import { mul } from '@tensorflow/tfjs-core/dist/ops/mul';
 import { sqrt } from '@tensorflow/tfjs-core/dist/ops/sqrt';
+import { square } from '@tensorflow/tfjs-core/dist/ops/square';
+import { sub } from '@tensorflow/tfjs-core/dist/ops/sub';
+import { zerosLike } from '@tensorflow/tfjs-core/dist/ops/zeros_like';
 import { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
 
 const FM_POSTFIX = '/m';
@@ -36,6 +36,7 @@ export class PatchedAdamOptimizer extends AdamOptimizer {
         const varNames = Array.isArray(variableGradients) ?
             variableGradients.map(v => v.name) :
             Object.keys(variableGradients);
+
         tidy(() => {
             const oneMinusAccBeta1 = sub(1, accBeta1);
             const oneMinusAccBeta2 = sub(1, accBeta2);
@@ -44,21 +45,21 @@ export class PatchedAdamOptimizer extends AdamOptimizer {
                 const trainable = false;
 
                 let firstMomentIndex = accumulatedFirstMoment
-                    .findIndex(({ originalName }) => originalName === `${ name }${ FM_POSTFIX }`);
+                    .findIndex(({ originalName }) => originalName === `${name}${FM_POSTFIX}`);
                 let secondMomentIndex = accumulatedSecondMoment
-                    .findIndex(({ originalName }) => originalName === `${ name }${ SM_POSTFIX }`);
+                    .findIndex(({ originalName }) => originalName === `${name}${SM_POSTFIX}`);
 
                 if (firstMomentIndex === -1) {
                     firstMomentIndex = accumulatedFirstMoment.length;
                     accumulatedFirstMoment.push({
-                        originalName: `${ name }${ FM_POSTFIX }`,
+                        originalName: `${name}${FM_POSTFIX}`,
                         variable: tidy(() => zerosLike(value).variable(trainable)),
                     });
                 }
                 if (secondMomentIndex === -1) {
                     secondMomentIndex = accumulatedSecondMoment.length;
                     accumulatedSecondMoment.push({
-                        originalName: `${ name }${ SM_POSTFIX }`,
+                        originalName: `${name}${SM_POSTFIX}`,
                         variable: tidy(() => zerosLike(value).variable(trainable)),
                     });
                 }
@@ -79,13 +80,32 @@ export class PatchedAdamOptimizer extends AdamOptimizer {
                 const biasCorrectedSecondMoment = div(newSecondMoment, oneMinusAccBeta2);
                 firstMoment.assign(newFirstMoment);
                 secondMoment.assign(newSecondMoment);
-                const newValue = add(mul(div(biasCorrectedFirstMoment, add(sqrt(biasCorrectedSecondMoment), this.epsilon)), -this.learningRate), value);
+
+                // Compute adaptive learning rate update
+                const adaptiveUpdate = mul(
+                    div(biasCorrectedFirstMoment, add(sqrt(biasCorrectedSecondMoment), this.epsilon)),
+                    -this.learningRate
+                );
+
+                // Apply adaptive update
+                let newValue = add(value, adaptiveUpdate);
+
+                // Apply additional updates (e.g., weight decay in AdamW)
+                const additionalUpdate = this.computeAdditionalUpdate(value, name);
+                if (additionalUpdate !== null) {
+                    newValue = add(newValue, additionalUpdate);
+                }
+
                 value.assign(newValue);
             });
             accBeta1.assign(mul(accBeta1, this.beta1));
             accBeta2.assign(mul(accBeta2, this.beta2));
         });
         this.incrementIterations();
+    }
+
+    protected computeAdditionalUpdate(_value: Variable, _name: string): tf.Tensor | null {
+        return null;
     }
 }
 

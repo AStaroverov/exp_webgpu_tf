@@ -1,30 +1,32 @@
+import { clamp } from 'lodash';
 import { catchError, concatMap, EMPTY, first, forkJoin, map, mergeMap, scan, tap } from 'rxjs';
-import { max } from '../../../../../lib/math.ts';
+import { exp, log, max } from '../../../../../lib/math.ts';
 import { bufferWhile } from '../../../../../lib/Rx/bufferWhile.ts';
+import type { VTraceDiagnostics } from '../../../../ml-common/analyzeVTrace.ts';
+import { analyzeVTrace } from '../../../../ml-common/analyzeVTrace.ts';
 import { forceExitChannel, metricsChannels } from '../../../../ml-common/channels.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
 import { flatTypedArray } from '../../../../ml-common/flat.ts';
 import { AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
-import { getNetworkExpIteration } from '../../../../ml-common/utils.ts';
+import { getNetworkSettings } from '../../../../ml-common/utils.ts';
 import { Model } from '../../Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
-import {
-    agentSampleChannel,
-    learnProcessChannel,
-    queueSizeChannel
-} from '../channels.ts';
+import { agentSampleChannel, learnProcessChannel, modelSettingsChannel, queueSizeChannel } from '../channels.ts';
 import { computeVTraceTargets } from '../train.ts';
 
 export type LearnData = AgentMemoryBatch & {
     values: Float32Array,
     returns: Float32Array,
     tdErrors: Float32Array,
-    advantages: Float32Array
+    advantages: Float32Array,
 };
 
 export function createLearnerManager() {
     let lastEndTime = 0;
     let queueSize = 0;
+
+    let rewardRatio = 0;
+    let emaStdReturns = 0;
 
     agentSampleChannel.obs.pipe(
         bufferWhile((batches) => {
@@ -37,37 +39,50 @@ export function createLearnerManager() {
 
             console.info('Start processing batch', waitTime !== undefined ? `(waited ${waitTime} ms)` : '');
 
-            metricsChannels.batchSize.postMessage(samples.map(b => b.memoryBatch.size));
-
             return forkJoin([
                 getNetwork(Model.Policy),
                 getNetwork(Model.Value),
             ]).pipe(
                 map(([policyNetwork, valueNetwork]): LearnData => {
-                    const version = getNetworkExpIteration(policyNetwork);
-                    const batchData = squeezeBatches(samples.map(b => b.memoryBatch));
-                    const { pureLogStd, ...vTraceBatchData } = computeVTraceTargets(
+                    const settings = getNetworkSettings(policyNetwork);
+                    rewardRatio = rewardRatio || settings.rewardRatio || 1;
+                    emaStdReturns = emaStdReturns || settings.emaStdReturns || 0;
+
+                    const expIteration = settings.expIteration ?? 0;
+                    const batchData = squeezeBatches(samples.map(b => {
+                        b.memoryBatch.rewards.forEach((_, i, arr) => {
+                            arr[i] *= rewardRatio;
+                        })
+                        return b.memoryBatch
+                    }));
+                    const {pureLogits, ...vTraceBatchData} = computeVTraceTargets(
                         policyNetwork,
                         valueNetwork,
                         batchData,
-                        CONFIG.miniBatchSize(version),
-                        CONFIG.gamma(version),
-                        CONFIG.minLogStd(version),
-                        CONFIG.maxLogStd(version),
+                        CONFIG.miniBatchSize(expIteration),
+                        CONFIG.gamma(expIteration),
                     );
                     const learnData = {
                         ...batchData,
                         ...vTraceBatchData,
                     };
 
+                    metricsChannels.logit.postMessage(pureLogits.map((v, i) => {
+                        const step = i === 0 ? 2 : 15;
+                        const actionIndexes = [];
+                        for (let j = 0; j < v.length; j += step) {
+                            const logitsSlice = v.subarray(j, j + step);
+                            const maxIndex = logitsSlice.reduce((bestIndex, value, index, array) =>
+                                value > array[bestIndex] ? index : bestIndex, 0);
+                            actionIndexes.push(maxIndex);
+                        }
+                        return actionIndexes;
+                    }));
+                    metricsChannels.batchSize.postMessage(samples.map(b => b.memoryBatch.size));
+                    metricsChannels.versionDelta.postMessage(samples.map(b => expIteration - b.networkVersion));
+
                     disposeNetwork(policyNetwork);
                     disposeNetwork(valueNetwork);
-
-                    metricsChannels.mean.postMessage(flatTypedArray(batchData.mean));
-                    metricsChannels.logStd.postMessage(pureLogStd);
-                    metricsChannels.versionDelta.postMessage(
-                        samples.map(b => version - b.networkVersion),
-                    );
 
                     return learnData;
                 }),
@@ -83,8 +98,8 @@ export function createLearnerManager() {
                                 forceExitChannel.postMessage(null);
                             }
 
-                            throw new Error(`Model ${envelope.modelName} failed`, { cause: envelope.error });
-                        }, { [Model.Policy]: false, [Model.Value]: false }),
+                            throw new Error(`Model ${envelope.modelName} failed`, {cause: envelope.error});
+                        }, {[Model.Policy]: false, [Model.Value]: false}),
                         first((state) => state[Model.Policy] && state[Model.Value]),
                         tap(() => {
                             queueSizeChannel.emit(queueSize--);
@@ -98,8 +113,27 @@ export function createLearnerManager() {
                             metricsChannels.tdErrors.postMessage(batch.tdErrors);
                             metricsChannels.advantages.postMessage(batch.advantages);
 
+                            const diagnostics = analyzeVTrace(
+                                batch.advantages,
+                                batch.tdErrors,
+                                batch.returns,
+                                batch.values,
+                            );
+                            const stdRatio = diagnostics.returns.std > 0
+                                ? diagnostics.values.std / diagnostics.returns.std
+                                : 0;
+                            // compute reward ratio adjustment, for correct scaling of all v-trace components
+                            emaStdReturns = (emaStdReturns || diagnostics.returns.std) * 0.9 + diagnostics.returns.std * 0.1;
+                            rewardRatio = getRewardRatio(emaStdReturns, rewardRatio);
+
+                            modelSettingsChannel.emit({emaStdReturns, rewardRatio});
+
                             waitTime !== undefined && metricsChannels.waitTime.postMessage([waitTime / 1000]);
                             metricsChannels.trainTime.postMessage([(lastEndTime - startTime) / 1000]);
+                            metricsChannels.vTraceStdRatio.postMessage([stdRatio]);
+                            metricsChannels.vTraceExplainedVariance.postMessage([diagnostics.fit.explainedVariance]);
+
+                            reportVTraceAlerts(diagnostics);
                         }),
                         catchError((error) => {
                             queueSizeChannel.emit(queueSize--);
@@ -124,11 +158,45 @@ function squeezeBatches(batches: AgentMemoryBatch[]): AgentMemoryBatch {
         size: batches.reduce((acc, b) => acc + b.size, 0),
         states: batches.map(b => b.states).flat(),
         actions: batches.map(b => b.actions).flat(),
-        mean: batches.map(b => b.mean).flat(),
-        logStd: batches.map(b => b.logStd).flat(),
+        logits: batches.map(b => b.logits).flat(),
         dones: flatTypedArray(batches.map(b => b.dones)),
         rewards: flatTypedArray(batches.map(b => b.rewards)),
         logProbs: flatTypedArray(batches.map(b => b.logProbs)),
-        perturbed: flatTypedArray(batches.map(b => b.perturbed)),
     };
+}
+
+function getRewardRatio(stdReturns: number, rewardRatio: number) {
+    const target = 1.5; // target std
+    const kp = 0.2; // adjustment speed
+    const alpha = exp(kp * (log(target) - log(max(stdReturns, 1e-6))));
+    const clampedAlpha = clamp(alpha, 0.8, 1.2);
+    const nextRewardRatio = rewardRatio * clampedAlpha;
+
+    return nextRewardRatio;
+}
+
+function reportVTraceAlerts(diagnostics: VTraceDiagnostics): void {
+    const triggeredFlags: string[] = [];
+
+    if (diagnostics.advantages.flags.advStdHigh) {
+        triggeredFlags.push('advStdHigh');
+    }
+    if (diagnostics.advantages.flags.advTailsWide) {
+        triggeredFlags.push('advTailsWide');
+    }
+    if (diagnostics.advantages.flags.advMeanShift) {
+        triggeredFlags.push('advMeanShift');
+    }
+    if (diagnostics.tdErrors.flags.tdMeanShift) {
+        triggeredFlags.push('tdMeanShift');
+    }
+    if (diagnostics.tdErrors.flags.tdHeavyTails) {
+        triggeredFlags.push('tdHeavyTails');
+    }
+    if (diagnostics.fit.scaleMismatch) {
+        triggeredFlags.push('scaleMismatch');
+    }
+    if (triggeredFlags.length > 0) {
+        console.log(`WARNING! VTrace alerts: ${triggeredFlags.join(', ')}`);
+    }
 }

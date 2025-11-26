@@ -1,15 +1,15 @@
-import { EntityId } from 'bitecs';
-import { clamp } from 'lodash';
-import { abs, acos, cos, hypot, max, min, normalizeAngle, PI, sin, smoothstep, unlerp } from '../../../../lib/math.ts';
-import { LEARNING_STEPS } from '../../../ml-common/consts.ts';
-import { MAX_BULLET_SPEED } from '../../../tanks/src/Game/ECS/Components/Bullet.ts';
-import { HeuristicsData } from '../../../tanks/src/Game/ECS/Components/HeuristicsData.ts';
-import { RigidBodyState } from '../../../tanks/src/Game/ECS/Components/Physical.ts';
-import { Tank } from '../../../tanks/src/Game/ECS/Components/Tank.ts';
-import { TankController } from '../../../tanks/src/Game/ECS/Components/TankController.ts';
-import { getTankHealth, getTankScore } from '../../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
-import { ALLY_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../../tanks/src/Pilots/Components/TankState.ts';
-import { BattleState, getBattleState } from '../../../tanks/src/Pilots/Utils/snapshotTankInputTensor.ts';
+import {EntityId} from 'bitecs';
+import {clamp} from 'lodash';
+import {abs, acos, cos, hypot, max, min, normalizeAngle, PI, sin, smoothstep, unlerp} from '../../../../lib/math.ts';
+import {LEARNING_STEPS} from '../../../ml-common/consts.ts';
+import {MAX_BULLET_SPEED} from '../../../tanks/src/Game/ECS/Components/Bullet.ts';
+import {HeuristicsData} from '../../../tanks/src/Game/ECS/Components/HeuristicsData.ts';
+import {RigidBodyState} from '../../../tanks/src/Game/ECS/Components/Physical.ts';
+import {Tank} from '../../../tanks/src/Game/ECS/Components/Tank.ts';
+import {TankController} from '../../../tanks/src/Game/ECS/Components/TankController.ts';
+import {getTankHealth, getTankScore} from '../../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
+import {ALLY_BUFFER, ENEMY_BUFFER, TankInputTensor} from '../../../tanks/src/Pilots/Components/TankState.ts';
+import {BattleState, getBattleState} from '../../../tanks/src/Pilots/Utils/snapshotTankInputTensor.ts';
 
 export const GAME_OVER_REWARD_MULTIPLIER = 5;
 
@@ -56,20 +56,20 @@ const WEIGHTS = ({
     MAP_BORDER_MULTIPLIER: 3,
 
     DISTANCE: {
-        MIN_PENALTY: -1,
+        MIN_PENALTY: -0.5,
     },
     DISTANCE_KEEPING_MULTIPLIER: 1,
 
     MOVING: {
-        PENALTY_SPEED: -1,
+        SPEED: 1,
     },
     MOVING_MULTIPLIER: 1,
 });
 
 function initializeStateRewards() {
     return {
-        aim: { quality: 0, shootDecision: 0, total: 0 },
-        moving: { speed: 0, total: 0 },
+        aim: {quality: 0, shootDecision: 0, total: 0},
+        moving: {speed: 0, total: 0},
         positioning: {
             enemiesPositioning: 0,
             alliesPositioning: 0,
@@ -85,13 +85,13 @@ export function calculateStateReward(
     tankEid: number,
     width: number,
     height: number,
-    strictness: number,
+    strictness: number
 ): number {
     const isShooting = TankController.shoot[tankEid] > 0;
-    const moveDir = TankController.move[tankEid];
-    const rotationDir = TankController.rotation[tankEid];
+    // const moveDir = TankController.move[tankEid];
+    // const rotationDir = TankController.rotation[tankEid];
     const [currentTankX, currentTankY] = RigidBodyState.position.getBatch(tankEid);
-    // const [currentTankSpeedX, currentTankSpeedY] = RigidBodyState.linvel.getBatche(tankEid);
+    const [currentTankSpeedX, currentTankSpeedY] = RigidBodyState.linvel.getBatch(tankEid);
     const turretRotation = RigidBodyState.rotation[Tank.turretEId[tankEid]];
     // const currentShootings = TankController.shoot[tankEid] > 0;
     // const currentEnemies = findTankEnemiesEids(tankEid);
@@ -116,7 +116,7 @@ export function calculateStateReward(
 
     const rewards = initializeStateRewards();
 
-    rewards.moving.speed = calculateMovingReward(moveDir, rotationDir);
+    rewards.moving.speed = calculateMovingReward(currentTankSpeedX, currentTankSpeedY);
 
     rewards.positioning.mapAwareness = calculateTankMapAwarenessReward(
         width,
@@ -142,7 +142,7 @@ export function calculateStateReward(
         isShooting,
         aimingResult.bestEnemyAimQuality,
         aimingResult.bestAlliesAimQuality,
-        strictness
+        max(strictness, 0.3),
     );
 
     rewards.positioning.enemiesPositioning = calculateEnemyDistanceReward(
@@ -168,9 +168,10 @@ export function calculateStateReward(
             + rewards.positioning.enemiesPositioning * WEIGHTS.DISTANCE_KEEPING_MULTIPLIER);
 
     const totalReward = (
-        + rewards.aim.total
+        rewards.aim.total
         + rewards.moving.total
-        + rewards.positioning.total);
+        + rewards.positioning.total
+    );
 
     // console.log('>>', `
     //     team: ${ rewards.team.total.toFixed(2) },
@@ -195,8 +196,8 @@ export function calculateStateReward(
 
 function initializeActionRewards() {
     return {
-        team: { score: 0, total: 0 },
-        common: { score: 0, health: 0, total: 0 },
+        team: {score: 0, total: 0},
+        common: {score: 0, health: 0, total: 0},
     };
 }
 
@@ -229,13 +230,9 @@ export function calculateActionReward(tankEid: number): number {
     return WEIGHTS.ACTION_MULTIPLIER * totalReward;
 }
 
-function calculateMovingReward(moveDir: number, rotationDir: number): number {
-    const absSumDir = min(abs(moveDir) + abs(rotationDir) / 2, 1);
-    const minLimit = 0.2;
-
-    return absSumDir > minLimit
-        ? 0
-        : WEIGHTS.MOVING.PENALTY_SPEED * (minLimit - absSumDir) / minLimit;
+function calculateMovingReward(linvelX: number, linvelY: number): number {
+    const speed = Math.hypot(linvelX, linvelY);
+    return WEIGHTS.MOVING.SPEED * min(0.33, speed / 100) * 3;
 }
 
 export function getTeamAdvantageScore(state: BattleState): number {
@@ -395,20 +392,16 @@ function calculateShootingReward(
     bestAlliesAimQuality: number,
     strictness: number
 ): number {
-    if (isShooting && bestAlliesAimQuality > bestEnemyAimQuality) {
-        return strictness * WEIGHTS.AIM.ALLIES_SHOOTING_PENALTY;
-    }
-
-    if (isShooting && bestEnemyAimQuality < 0.35) {
-        return strictness * WEIGHTS.AIM.MISS_SHOOTING_PENALTY * (1 - bestEnemyAimQuality);
+    if (isShooting && bestAlliesAimQuality > bestEnemyAimQuality && bestAlliesAimQuality > 0.5) {
+        return strictness * WEIGHTS.AIM.ALLIES_SHOOTING_PENALTY * (bestAlliesAimQuality - 0.5) * (1 / (1 - 0.5));
     }
 
     if (!isShooting && bestEnemyAimQuality > 0.7) {
-        return strictness * WEIGHTS.AIM.NO_SHOOTING_PENALTY * bestEnemyAimQuality;
+        return strictness * WEIGHTS.AIM.NO_SHOOTING_PENALTY * (bestEnemyAimQuality - 0.7) * (1 / (1 - 0.7));
     }
 
     if (isShooting && bestEnemyAimQuality > 0.5) {
-        return WEIGHTS.AIM.SHOOTING_REWARD * bestEnemyAimQuality;
+        return WEIGHTS.AIM.SHOOTING_REWARD * bestEnemyAimQuality * (1 / (1 - 0.5));
     }
 
     return 0;
