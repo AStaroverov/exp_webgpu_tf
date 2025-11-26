@@ -18,18 +18,6 @@ export const TankInputTensor = component({
     turretRotation: TypedArray.f64(delegate.defaultSize),
     colliderRadius: TypedArray.f64(delegate.defaultSize),
 
-    // Controller
-    shoot: TypedArray.f64(delegate.defaultSize),
-    moveDir: TypedArray.f64(delegate.defaultSize),
-    rotDir: TypedArray.f64(delegate.defaultSize),
-    turretRotDir: TypedArray.f64(delegate.defaultSize),
-
-    // Battlefield
-    enemiesCount: TypedArray.i32(delegate.defaultSize),
-    enemiesTotalHealth: TypedArray.f64(delegate.defaultSize),
-    alliesCount: TypedArray.i32(delegate.defaultSize),
-    alliesTotalHealth: TypedArray.f64(delegate.defaultSize),
-
     // Enemies [id, hp,x,y,r,vx,vy,tr,collider]
     enemiesData: NestedArray.f64(ENEMY_BUFFER * MAX_ENEMIES, delegate.defaultSize),
 
@@ -59,32 +47,6 @@ export const TankInputTensor = component({
         TankInputTensor.speed.setBatch(eid, speed);
         TankInputTensor.turretRotation[eid] = turretRotation;
         TankInputTensor.colliderRadius[eid] = colliderRadius;
-    },
-
-    setControllerData(
-        eid: number,
-        shoot: number,
-        move: number,
-        rot: number,
-        turretRot: number,
-    ) {
-        TankInputTensor.shoot[eid] = shoot;
-        TankInputTensor.moveDir[eid] = move;
-        TankInputTensor.rotDir[eid] = rot;
-        TankInputTensor.turretRotDir[eid] = turretRot;
-    },
-
-    setBattlefieldData(
-        eid: number,
-        enemiesCount: number,
-        enemiesTotalHealth: number,
-        alliesCount: number,
-        alliesTotalHealth: number,
-    ) {
-        TankInputTensor.alliesCount[eid] = alliesCount;
-        TankInputTensor.alliesTotalHealth[eid] = alliesTotalHealth;
-        TankInputTensor.enemiesCount[eid] = enemiesCount;
-        TankInputTensor.enemiesTotalHealth[eid] = enemiesTotalHealth;
     },
 
     setEnemiesData(

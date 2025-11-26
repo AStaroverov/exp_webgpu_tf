@@ -33,8 +33,8 @@ export type LearnableAgent = {
     dispose(): void;
     getVersion(): number;
     getMemory(): undefined | AgentMemory;
-    getMemoryBatch(gameOverReward: number): undefined | AgentMemoryBatch;
-    evaluateTankBehaviour(width: number, height: number, frame: number): void;
+    getMemoryBatch(): undefined | AgentMemoryBatch;
+    evaluateTankBehaviour(width: number, height: number, frame: number, successRatio: number): void;
 }
 
 export const ActorUpdater = (getter: () => Promise<tf.LayersModel>) => {
@@ -139,8 +139,8 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         return this.train ? this.memory : undefined;
     }
 
-    public getMemoryBatch(gameOverReward: number): undefined | AgentMemoryBatch {
-        return this.train ? this.memory.getBatch(gameOverReward) : undefined;
+    public getMemoryBatch(): undefined | AgentMemoryBatch {
+        return this.train ? this.memory.getBatch() : undefined;
     }
 
     public dispose() {
@@ -189,28 +189,31 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
 
         const isDead = getTankHealth(this.tankEid) <= 0;
         const version = this.getVersion();
-        const stateReward = calculateStateReward(
+
+        const stateRewardMultiplier = clamp(1 - unlerp(0, LEARNING_STEPS * 0.4, version), 0, 1);
+        const actionRewardMultiplier = clamp(unlerp(0, LEARNING_STEPS * 0.2, version), 0.2, 1);
+
+        const stateReward = stateRewardMultiplier === 0 ? 0 : calculateStateReward(
             this.tankEid,
             width,
             height,
             clamp(version / (LEARNING_STEPS * 0.2), 0, 1)
         );
-        const actionReward = this.initialActionReward === undefined
+        const actionReward = this.initialActionReward === undefined || actionRewardMultiplier === 0
             ? 0
             : calculateActionReward(this.tankEid) - this.initialActionReward;
-        const stateRewardMultiplier = clamp(1 - unlerp(0, LEARNING_STEPS * 0.4, version), 0, 0.5);
-        const actionRewardMultiplier = clamp(unlerp(0, LEARNING_STEPS * 0.2, version), 0.3, 1);// - clamp(unlerp(LEARNING_STEPS * 0.6, LEARNING_STEPS, version), 0, 0.5);
-
+        
         const frameReward = getFramePenalty(frame);
         const deathReward = getDeathPenalty(isDead);
+ 
         // it's not all reward, also we have final reward for lose/win in the end of episode
         const reward = clamp(
             stateReward * stateRewardMultiplier
             + actionReward * actionRewardMultiplier
             + frameReward
             + deathReward,
-            -5,
-            +5
+            -10,
+            +10
         );
 
         this.memory.updateSecondPart(reward, isDead);

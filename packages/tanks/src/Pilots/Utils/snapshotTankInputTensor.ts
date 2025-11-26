@@ -12,7 +12,6 @@ import { hasIntersectionVectorAndCircle } from '../../Game/Utils/intersections.t
 import { MAX_ALLIES, MAX_BULLETS, MAX_ENEMIES, TankInputTensor } from '../Components/TankState.ts';
 
 import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
-import { TankController } from '../../Game/ECS/Components/TankController.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 
 export function snapshotTankInputTensor({ world } = GameDI) {
@@ -24,29 +23,6 @@ export function snapshotTankInputTensor({ world } = GameDI) {
 
     for (let i = 0; i < tankEids.length; i++) {
         const tankEid = tankEids[i];
-
-        const {
-            enemiesCount,
-            enemiesTotalHealth,
-            alliesCount,
-            alliesTotalHealth,
-        } = getBattleState(tankEid, tankEids);
-
-        TankInputTensor.setBattlefieldData(
-            tankEid,
-            enemiesCount,
-            enemiesTotalHealth,
-            alliesCount,
-            alliesTotalHealth,
-        );
-
-        TankInputTensor.setControllerData(
-            tankEid,
-            TankController.move[tankEid],
-            TankController.rotation[tankEid],
-            TankController.shoot[tankEid],
-            TankController.turretRotation[tankEid],
-        );
 
         // Set tank data
         const health = getTankHealth(tankEid);
@@ -119,29 +95,6 @@ export function snapshotTankInputTensor({ world } = GameDI) {
             );
         }
     }
-}
-
-
-export type BattleState = {
-    enemiesCount: number,
-    enemiesTotalHealth: number,
-    alliesCount: number,
-    alliesTotalHealth: number,
-};
-
-export function getBattleState(tankEid: EntityId, tankEids = query(GameDI.world, [Tank, TankInputTensor, RigidBodyState])): BattleState {
-    const tankTeamId = TeamRef.id[tankEid];
-    const allEnemiesEids = tankEids.filter((eid) => TeamRef.id[eid] !== tankTeamId);
-    const allEnemiesHealth = allEnemiesEids.reduce((acc, eid) => acc + getTankHealth(eid), 0);
-    const allAlliesEids = tankEids.filter((eid) => TeamRef.id[eid] === tankTeamId);
-    const allAlliesHealth = allAlliesEids.reduce((acc, eid) => acc + getTankHealth(eid), 0);
-
-    return {
-        enemiesCount: allEnemiesEids.length,
-        enemiesTotalHealth: allEnemiesHealth,
-        alliesCount: allAlliesEids.length,
-        alliesTotalHealth: allAlliesHealth,
-    };
 }
 
 export function findTankEnemiesEids(tankEid: EntityId) {

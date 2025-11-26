@@ -6,7 +6,6 @@ import { CONFIG } from '../../../../ml-common/config.ts';
 import { SNAPSHOT_EVERY, TICK_TIME_SIMULATION } from '../../../../ml-common/consts.ts';
 import { createScenarioByCurriculumState } from '../../../../ml-common/Curriculum/createScenarioByCurriculumState.ts';
 import { CurriculumState, Scenario } from '../../../../ml-common/Curriculum/types.ts';
-import { getGameOverReward } from '../../Reward/calculateReward.ts';
 import { agentSampleChannel, curriculumStateChannel, episodeSampleChannel, queueSizeChannel } from '../channels.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
@@ -70,8 +69,7 @@ export class EpisodeManager {
             }
 
             const networkVersion = agent.getVersion();
-            const finalReward = getGameOverReward(networkVersion, successRatio);
-            const memoryBatch = agent.getMemoryBatch(finalReward);
+            const memoryBatch = agent.getMemoryBatch();
 
             if (memoryBatch == null) return;
 

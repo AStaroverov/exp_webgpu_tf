@@ -1,26 +1,19 @@
-import {EntityId} from 'bitecs';
-import {clamp} from 'lodash';
-import {abs, acos, cos, hypot, max, min, normalizeAngle, PI, sin, smoothstep, unlerp} from '../../../../lib/math.ts';
-import {LEARNING_STEPS} from '../../../ml-common/consts.ts';
-import {MAX_BULLET_SPEED} from '../../../tanks/src/Game/ECS/Components/Bullet.ts';
-import {HeuristicsData} from '../../../tanks/src/Game/ECS/Components/HeuristicsData.ts';
-import {RigidBodyState} from '../../../tanks/src/Game/ECS/Components/Physical.ts';
-import {Tank} from '../../../tanks/src/Game/ECS/Components/Tank.ts';
-import {TankController} from '../../../tanks/src/Game/ECS/Components/TankController.ts';
-import {getTankHealth, getTankScore} from '../../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
-import {ALLY_BUFFER, ENEMY_BUFFER, TankInputTensor} from '../../../tanks/src/Pilots/Components/TankState.ts';
-import {BattleState, getBattleState} from '../../../tanks/src/Pilots/Utils/snapshotTankInputTensor.ts';
-
-export const GAME_OVER_REWARD_MULTIPLIER = 5;
+import { EntityId } from 'bitecs';
+import { clamp } from 'lodash';
+import { abs, acos, cos, hypot, max, min, normalizeAngle, PI, sin, smoothstep } from '../../../../lib/math.ts';
+import { MAX_BULLET_SPEED } from '../../../tanks/src/Game/ECS/Components/Bullet.ts';
+import { HeuristicsData } from '../../../tanks/src/Game/ECS/Components/HeuristicsData.ts';
+import { RigidBodyState } from '../../../tanks/src/Game/ECS/Components/Physical.ts';
+import { Tank } from '../../../tanks/src/Game/ECS/Components/Tank.ts';
+import { TankController } from '../../../tanks/src/Game/ECS/Components/TankController.ts';
+import { getTankHealth, getTankScore } from '../../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
+import { ALLY_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../../tanks/src/Pilots/Components/TankState.ts';
 
 export const getFramePenalty = (frame: number) =>
-    -clamp(Math.log10(1 + frame), 0, 3) / 30;
+    -clamp(Math.log10(1 + frame), 0, 3) / 100;
 
 export const getDeathPenalty = (isDead: boolean) =>
-    -GAME_OVER_REWARD_MULTIPLIER * Number(isDead);
-
-export const getGameOverReward = (iteration: number, successRatio: number) =>
-    GAME_OVER_REWARD_MULTIPLIER * successRatio * clamp(unlerp(LEARNING_STEPS * 0.2, LEARNING_STEPS * 0.6, iteration), 0, 1);
+    -3 * Number(isDead);
 
 const WEIGHTS = ({
     STATE_MULTIPLIER: 1, // it's often reward and work as learning base principle
@@ -28,15 +21,10 @@ const WEIGHTS = ({
 
     // ACTION REWARD
     COMMON: {
-        SCORE: 2,
+        SCORE: 1,
         HEALTH: 1,
     },
     COMMON_MULTIPLIER: 1,
-
-    TEAM: {
-        SCORE: 1,
-    },
-    TEAM_MULTIPLIER: 1,
 
     // STATE REWARD
     AIM: {
@@ -196,7 +184,6 @@ export function calculateStateReward(
 
 function initializeActionRewards() {
     return {
-        team: {score: 0, total: 0},
         common: {score: 0, health: 0, total: 0},
     };
 }
@@ -204,24 +191,19 @@ function initializeActionRewards() {
 export function calculateActionReward(tankEid: number): number {
     const currentScore = getTankScore(tankEid);
     const currentHealth = getTankHealth(tankEid);
-    const currentBattleState = getBattleState(tankEid);
 
     const rewards = initializeActionRewards();
 
-    rewards.team.score = getTeamAdvantageScore(currentBattleState);
     rewards.common.score = WEIGHTS.COMMON.SCORE * currentScore * 0.33;
-    rewards.common.health = WEIGHTS.COMMON.HEALTH * currentHealth * 33;
+    rewards.common.health = WEIGHTS.COMMON.HEALTH * currentHealth;
 
-    rewards.team.total = WEIGHTS.TEAM_MULTIPLIER
-        * (rewards.team.score);
     rewards.common.total = WEIGHTS.COMMON_MULTIPLIER
         * (rewards.common.health + rewards.common.score);
 
-    const totalReward = rewards.team.total + rewards.common.total;
+    const totalReward = rewards.common.total;
 
     if (!Number.isFinite(totalReward)) {
         console.error(`
-            team: ${rewards.team.total.toFixed(2)},
             common: ${rewards.common.total.toFixed(2)},
         `);
         throw new Error('Rewards are not finite:');
@@ -233,13 +215,6 @@ export function calculateActionReward(tankEid: number): number {
 function calculateMovingReward(linvelX: number, linvelY: number): number {
     const speed = Math.hypot(linvelX, linvelY);
     return WEIGHTS.MOVING.SPEED * min(0.33, speed / 100) * 3;
-}
-
-export function getTeamAdvantageScore(state: BattleState): number {
-    const normCount = (state.alliesCount - state.enemiesCount) / 3;
-    const normHP = (state.alliesTotalHealth - state.enemiesTotalHealth);
-
-    return WEIGHTS.TEAM.SCORE * (normCount + normHP);
 }
 
 function calculateTankMapAwarenessReward(

@@ -45,7 +45,7 @@ export const CONFIG = {
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
     episodeFrames: Math.round(5 * 60 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: 10,
+    workerCount: 6,
     backpressureQueueSize: 2,
     // Training control
     savePath: 'PPO_MHA',

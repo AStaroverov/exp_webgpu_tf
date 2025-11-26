@@ -2,15 +2,15 @@ import { query } from 'bitecs';
 import { max } from '../../../lib/math.ts';
 import { randomRangeInt } from '../../../lib/random.ts';
 import { Tank } from '../../tanks/src/Game/ECS/Components/Tank.ts';
-import { getTeamsCount } from '../../tanks/src/Game/ECS/Components/TeamRef.ts';
 import { getTankTeamId } from '../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
 import { CurrentActorAgent } from '../../tanks/src/Pilots/Agents/CurrentActorAgent.ts';
 import { createPilotsPlugin } from '../../tanks/src/Pilots/createPilotsPlugin.ts';
 import { createBattlefield } from './createBattlefield.ts';
 import { Scenario } from './types.ts';
-import { getSuccessRatio, getTeamHealth } from './utils.ts';
+import { getSuccessRatio as computeSuccessRatio, getTeamHealth } from './utils.ts';
 import { addRandomTanks } from './Utils/addRandomTanks.ts';
 import { fillAlliesWithAgents } from './Utils/fillAlliesWithAgents.ts';
+import { getTeamsCount } from '../../tanks/src/Game/ECS/Components/TeamRef.ts';
 
 export const indexScenarioWithAlliesStatic = 1;
 
@@ -22,17 +22,16 @@ export function createScenarioBase(options?: Parameters<typeof createBattlefield
     const game = createBattlefield(options);
     const pilots = createPilotsPlugin(game);
 
+    const isTrain = options?.train ?? true;
     const alliesCount = options?.alliesCount ?? randomRangeInt(1, 3);
     const enemiesCount = options?.enemiesCount ?? max(1, alliesCount + randomRangeInt(-1, 1));
     const tanks = addRandomTanks([[0, alliesCount], [1, enemiesCount]]);
     const activeTeam = getTankTeamId(tanks[0]);
     const initialTeamHealth = getTeamHealth(tanks);
 
-    const isTrain = options?.train ?? true;
-
-    pilots.setPilot(tanks[0], new CurrentActorAgent(tanks[0], isTrain), game);
-    pilots.toggle(true);
-
+    const getTankEids = () => query(game.world, [Tank]);
+    const getSuccessRatio = () => computeSuccessRatio(activeTeam, initialTeamHealth, getTeamHealth(tanks));
+    
     const scenario: Scenario = {
         ...game,
         ...pilots,
@@ -40,20 +39,14 @@ export function createScenarioBase(options?: Parameters<typeof createBattlefield
         index: indexScenarioWithAlliesStatic,
         isTrain,
 
-        getTankEids: () => {
-            return query(game.world, [Tank]);
-        },
-
-        getTeamsCount(): number {
-            return getTeamsCount();
-        },
-
-        getSuccessRatio() {
-            return getSuccessRatio(activeTeam, initialTeamHealth, getTeamHealth(tanks));
-        },
-
+        getTankEids,
+        getTeamsCount,
+        getSuccessRatio,
     }
 
+    pilots.setPilot(tanks[0], new CurrentActorAgent(tanks[0], isTrain), game);
+    pilots.toggle(true);
+    
     fillAlliesWithAgents(scenario, isTrain);
 
     return scenario;

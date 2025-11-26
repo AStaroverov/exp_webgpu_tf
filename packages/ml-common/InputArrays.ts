@@ -1,4 +1,3 @@
-import { max } from '../../lib/math.ts';
 import { random, randomRangeInt } from '../../lib/random.ts';
 import { shuffle } from '../../lib/shuffle.ts';
 import {
@@ -41,27 +40,25 @@ export function prepareInputArrays(
     width: number,
     height: number,
 ): InputArrays {
-    // ---- Battlefield features ----
+    // ---- ????? features ----
     const battleFeatures = new Float32Array(BATTLE_FEATURES_DIM);
     let bi = 0;
 
-    const maxCount = max(1, TankInputTensor.alliesCount[tankEid], TankInputTensor.enemiesCount[tankEid]);
-
     battleFeatures[bi++] = Math.log1p(width);
     battleFeatures[bi++] = Math.log1p(height);
-    battleFeatures[bi++] = TankInputTensor.alliesCount[tankEid] / maxCount;
-    battleFeatures[bi++] = TankInputTensor.alliesTotalHealth[tankEid] / max(1, TankInputTensor.alliesCount[tankEid]);
-    battleFeatures[bi++] = TankInputTensor.enemiesCount[tankEid] / maxCount;
-    battleFeatures[bi++] = TankInputTensor.enemiesTotalHealth[tankEid] / max(1, TankInputTensor.enemiesCount[tankEid]);
+    battleFeatures[bi++] = 0;
+    battleFeatures[bi++] = 0;
+    battleFeatures[bi++] = 0;
+    battleFeatures[bi++] = 0;
 
-    // ---- Controller features ----
+    // ---- ????? features ----
     const controllerFeatures = new Float32Array(CONTROLLER_FEATURES_DIM);
     let ci = 0;
 
-    controllerFeatures[ci++] = norm(TankInputTensor.shoot[tankEid], 1);
-    controllerFeatures[ci++] = norm(TankInputTensor.moveDir[tankEid], 1);
-    controllerFeatures[ci++] = norm(TankInputTensor.rotDir[tankEid], 1);
-    controllerFeatures[ci++] = norm(TankInputTensor.turretRotDir[tankEid], 1);
+    controllerFeatures[ci++] = 0;
+    controllerFeatures[ci++] = 0;
+    controllerFeatures[ci++] = 0;
+    controllerFeatures[ci++] = 0;
 
     // ---- Tank features ----
     const tankFeatures = new Float32Array(TANK_FEATURES_DIM);
