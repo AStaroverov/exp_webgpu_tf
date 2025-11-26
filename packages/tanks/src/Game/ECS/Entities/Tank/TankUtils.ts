@@ -60,7 +60,8 @@ export function tearOffTankPart(tankPartEid: number, shouldBreakConnection: bool
     if (jointPid > 0) {
         removeComponent(world, tankPartEid, TankPart);
         resetTankPartJointComponent(tankPartEid);
-        setPhysicalCollisionGroup(tankPartEid, CollisionGroup.ALL & ~CollisionGroup.TANK_BASE);
+        // @todo: remove bullet collision in game, keep only for training
+        setPhysicalCollisionGroup(tankPartEid, CollisionGroup.ALL & ~CollisionGroup.TANK_BASE & ~CollisionGroup.BULLET);
         removePhysicalJoint(jointPid);
         changePhysicalDensity(tankPartEid, 8);
     }
