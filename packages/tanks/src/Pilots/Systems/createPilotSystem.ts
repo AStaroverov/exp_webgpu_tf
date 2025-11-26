@@ -26,7 +26,11 @@ export function createPilotSystem() {
             currentPilots = getAlivePilots();
 
             for (const agent of currentPilots) {
-                agent.updateTankBehaviour(GameDI.width, GameDI.height, frame);
+                agent.scheduleUpdateTankBehaviour(GameDI.width, GameDI.height, frame);
+            }
+
+            for (const agent of currentPilots) {
+                agent.applyUpdateTankBehaviour();
             }
         }
     };

@@ -5,28 +5,31 @@ import { randomRangeFloat } from '../../../../../lib/random.ts';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
 import { ColoredNoiseApprox } from '../../../../ml-common/ColoredNoiseApprox.ts';
 import { LEARNING_STEPS } from '../../../../ml-common/consts.ts';
-import { prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
+import { InputArrays, prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
 import { getNetworkExpIteration, patientAction } from '../../../../ml-common/utils.ts';
 import { ACTION_HEAD_DIMS } from '../../../../ml/src/Models/Create.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../../../ml/src/Models/Utils.ts';
-import { noisyAct, pureAct } from '../../../../ml/src/PPO/train.ts';
+import { batchAct } from '../../../../ml/src/PPO/train.ts';
 import { calculateActionReward, calculateStateReward, getDeathPenalty, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 
-export type TankAgent<A = Partial<DownloableAgent> & Partial<LearnableAgent>> = A & {
+export type TankAgent<A = Partial<DownloadableAgent> & Partial<LearnableAgent>> = A & {
     tankEid: number;
-    updateTankBehaviour(width: number, height: number, frame: number): void;
+    scheduleUpdateTankBehaviour(width: number, height: number, frame: number): void;
+    applyUpdateTankBehaviour(): void;
 }
 
-export type DownloableAgent = {
+export type DownloadableAgent = {
     dispose(): void;
     sync(): Promise<void>;
     isSynced(): boolean;
 }
 
 export type LearnableAgent = {
+    train: boolean;
+    getNoise(): tf.Tensor[];
     dispose(): void;
     getVersion(): number;
     getMemory(): undefined | AgentMemory;
@@ -34,19 +37,102 @@ export type LearnableAgent = {
     evaluateTankBehaviour(width: number, height: number, frame: number): void;
 }
 
-export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableAgent> {
+export const ActorUpdater = (getter: () => Promise<tf.LayersModel>) => {
+    let network: undefined | tf.LayersModel = undefined;
+    let promiseNetwork: undefined | Promise<tf.LayersModel> = undefined;
+    let dateRequestNetwork: number = 0;
+
+    let scheduledAgents: {width: number, height: number, agent: TankAgent}[] = []
+    let computedAgents = new Map<TankAgent<unknown>, {
+        state: InputArrays,
+        actions: Float32Array,
+        logits: Float32Array,
+        logProb: number
+    }>();
+
+    const updateNetwork = async () => {
+        const now = Date.now();
+        const delta = now - dateRequestNetwork 
+        
+        if (delta > 10_000 || promiseNetwork == null) {
+            network = undefined;
+            promiseNetwork?.then(disposeNetwork);
+            promiseNetwork = patientAction(getter).then((v) => (network = v));
+            dateRequestNetwork = now;
+        }
+
+        return await promiseNetwork;
+    }
+    const getNetwork = () => network;
+    
+    const schedule = (width: number, height: number, agent: TankAgent<unknown>) => {
+        if (computedAgents.size > 0) {
+            computedAgents.clear();
+        }
+
+        scheduledAgents.push({
+            width,
+            height,
+            agent
+        });
+    }
+    
+    const get = (agent: TankAgent<unknown>) => {
+        if (network == null) {
+            scheduledAgents = [];
+            return;
+        }
+
+        if (scheduledAgents.length > 0) {
+            const states = scheduledAgents.map(({width, height, agent}) => prepareInputArrays(agent.tankEid, width, height));
+            const noises = scheduledAgents.map(({agent}) => (agent.train
+                // @ts-ignore
+                || globalThis.disableNoise !== true
+            ) ? agent.getNoise?.() : undefined);
+            const result = batchAct(network, states, noises);
+            
+            for (const [index, {agent}] of scheduledAgents.entries()) {
+                computedAgents.set(agent, {
+                    state: states[index],
+                    ...result[index]
+                });
+            }
+
+            scheduledAgents = [];
+        }
+        
+        return computedAgents.get(agent);
+    }
+
+    return {
+        updateNetwork,
+        getNetwork,
+        schedule,
+        get,
+    };
+}
+
+const currentActorUpdater = ActorUpdater(() => getNetwork(Model.Policy));
+
+export class CurrentActorAgent implements TankAgent<DownloadableAgent & LearnableAgent> {
     private memory = new AgentMemory();
     private noise: ColoredNoiseApprox;
-    private policyNetwork?: tf.LayersModel;
 
     private initialActionReward?: number;
 
-    constructor(public readonly tankEid: number, private train: boolean) {
+    constructor(public readonly tankEid: number, public train: boolean) {
         this.noise = new ColoredNoiseApprox(ACTION_HEAD_DIMS, randomRangeFloat(0.3, 0.7));
     }
 
+    public getNoise(): tf.Tensor[] {
+        return this.noise.sample();
+    }
+    
     public getVersion(): number {
-        return this.policyNetwork != null ? getNetworkExpIteration(this.policyNetwork) : 0;
+        const net = currentActorUpdater.getNetwork();
+        return net != null
+            ? getNetworkExpIteration(net)
+            : 0;
     }
 
     public getMemory(): undefined | AgentMemory {
@@ -58,46 +144,39 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
     }
 
     public dispose() {
-        disposeNetwork(this.policyNetwork);
         this.memory.dispose();
         this.noise?.dispose();
     }
 
     public async sync() {
-        await patientAction(() => this.load());
+        await currentActorUpdater.updateNetwork();
     }
 
     public isSynced() {
-        return this.policyNetwork != null;
+        return currentActorUpdater.getNetwork() != null;
     }
 
-    public updateTankBehaviour(
+    public scheduleUpdateTankBehaviour(
         width: number,
         height: number,
     ) {
-        if (this.policyNetwork == null) return;
+        currentActorUpdater.schedule(width, height, this);
+    }
 
-        const state = prepareInputArrays(this.tankEid, width, height);
+    public applyUpdateTankBehaviour() {
+        const result = currentActorUpdater.get(this);
+        if (result == null) return;
+        
+        applyActionToTank(this.tankEid, result.actions, false);
 
-        if (this.train) {
-            const result = noisyAct(this.policyNetwork, state, this.noise.sample());
-
-            applyActionToTank(this.tankEid, result.actions, false);
+        if (this.train && result.logProb != null && result.logits != null) {
             this.memory.addFirstPart(
-                state,
+                result.state,
                 result.actions,
                 result.logits,
                 result.logProb,
             );
             this.initialActionReward = calculateActionReward(this.tankEid);
-        } else {
-            // @ts-ignore
-            const useNoise = globalThis.disableNoise !== true;
-            const result = useNoise
-                ? noisyAct(this.policyNetwork, state, this.noise.sample())
-                : pureAct(this.policyNetwork, state);
-
-            applyActionToTank(this.tankEid, result.actions, false);
         }
     }
 
@@ -135,9 +214,5 @@ export class CurrentActorAgent implements TankAgent<DownloableAgent & LearnableA
         );
 
         this.memory.updateSecondPart(reward, isDead);
-    }
-
-    private async load() {
-        this.policyNetwork = await getNetwork(Model.Policy);
     }
 }

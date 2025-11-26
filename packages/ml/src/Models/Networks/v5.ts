@@ -24,7 +24,7 @@ type policyNetworkConfig = NetworkConfig
 const policyNetworkConfig: policyNetworkConfig = {
     dim: 64,
     heads: 4,
-    depth: 8,
+    depth: 6,
     headsMLP: [0, 1, 2, 3].map(() =>
         ([
             ['relu', 64],
@@ -89,7 +89,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
      const transformedClsToken = new SliceLayer({
         name: modelName + '_transformedClsToken',
         beginSlice: [0, 0, 0],
-        sliceSize: [-1, 1, -1],
+        sliceSize: [-1, 2, -1],
     }).apply(transformedTokens) as tf.SymbolicTensor[];
 
     const flattenedClsToken = tf.layers.flatten({ name: modelName + '_flattenedClsToken' })

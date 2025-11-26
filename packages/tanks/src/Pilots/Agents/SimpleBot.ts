@@ -26,7 +26,11 @@ export class SimpleBot implements TankAgent<{}> {
     ) {
     }
 
-    updateTankBehaviour(width: number, height: number): void {
+    applyUpdateTankBehaviour(): void {
+        //
+    }
+
+    scheduleUpdateTankBehaviour(width: number, height: number): void {
         this.updateWaypoint(width, height);
 
         const targetId = this.withAim() ? this.getTarget() : undefined;

@@ -123,30 +123,34 @@ export function computeKullbackLeiblerAprox(
     });
 }
 
-export function noisyAct(
-    policyNetwork: tf.LayersModel,
-    state: InputArrays,
-    noise: tf.Tensor[],
-): {
+export function batchAct(policyNetwork: tf.LayersModel, states: InputArrays[], noise?: (undefined | tf.Tensor[])[]): {
     actions: Float32Array,
     logits: Float32Array,
-    logProb: number
-} {
+    logProb: number,
+}[] {
     return tf.tidy(() => {
-        const predicted = policyNetwork.apply(createInputTensors([state]), {training: false}) as tf.Tensor | tf.Tensor[];
+        const batchSize = states.length;
+        const predicted = policyNetwork.apply(createInputTensors(states), {training: false}) as tf.Tensor | tf.Tensor[];
         const logitsHeads = parsePolicyOutput(predicted);
         
-        // Sample actions from categorical distributions with optional noise
-        const {actions, logitsFlat} = sampleActionsFromLogits(logitsHeads, noise);
-        const logProb = computeLogProbCategorical(actions.expandDims(0), logitsHeads);
-
-        noise.forEach(t => t.dispose());
-
-        return {
-            logits: syncUnwrapTensor(logitsFlat) as Float32Array,
-            actions: syncUnwrapTensor(actions) as Float32Array,
-            logProb: syncUnwrapTensor(logProb)[0],
-        };
+        const results: {actions: Float32Array, logits: Float32Array, logProb: number}[] = [];
+        
+        for (let i = 0; i < batchSize; i++) {
+            const stateLogitsHeads = logitsHeads.map(logits => logits.slice([i], [1])); // [1, numClasses]
+            const stateNoise = noise?.[i];
+            const sample = sampleActionsFromLogits(stateLogitsHeads, stateNoise);
+            const logProb = computeLogProbCategorical(sample.actions.expandDims(0), stateLogitsHeads);
+            
+            results.push({
+                logits: syncUnwrapTensor(sample.logitsFlat) as Float32Array,
+                actions: syncUnwrapTensor(sample.actions) as Float32Array,
+                logProb: syncUnwrapTensor(logProb)[0],
+            });
+            
+            stateNoise?.forEach(t => t.dispose());
+        }
+        
+        return results;
     });
 }
 
@@ -364,14 +368,31 @@ function computeEntropyCategorical(logitsHeads: tf.Tensor[]): tf.Tensor {
     });
 }
 
-// Sample actions from logits with optional noise
-function sampleActionsFromLogits(logitsHeads: tf.Tensor[], noise: tf.Tensor[]): { actions: tf.Tensor, logitsFlat: tf.Tensor } {
+// Sample actions from logits with optional Gumbel noise for categorical sampling
+// Uses the Gumbel-Max trick: argmax(logits + Gumbel(0,1)) ~ Categorical(softmax(logits))
+// If noise is null, uses argmax (deterministic)
+// The colored noise provides temporal correlation for exploration
+function sampleActionsFromLogits(logitsHeads: tf.Tensor[], noise?: tf.Tensor[]): { actions: tf.Tensor, logitsFlat: tf.Tensor } {
     return tf.tidy(() => {
         const sampledActions = logitsHeads.map((logits, i) => {
-            if (noise[i] == null) {
-                throw new Error('Noise tensor is required for each action head');
+            if (noise == null) {
+                // Deterministic: argmax
+                return tf.argMax(logits, -1);
             }
-            const noisyLogits = logits.add(noise[i]);
+
+            if (noise != null && noise[i] == null) {
+                throw new Error('Noise tensor is null but expected to be a tensor.');
+            }
+            // Transform colored noise to Gumbel-like distribution
+            // noise is ~N(0,1) colored, we convert it to approximate Gumbel via inverse CDF
+            // Gumbel(0,1) = -log(-log(U)) where U ~ Uniform(0,1)
+            // For N(0,1): Φ(z) gives U, so Gumbel ≈ -log(-log(Φ(noise)))
+            // Approximation: use sigmoid to map to (0,1), then apply Gumbel transform
+            const eps = 1e-7;
+            const u = tf.sigmoid(noise[i]).clipByValue(eps, 1 - eps); // ~Uniform(0,1) approximation
+            const gumbelNoise = tf.neg(tf.log(tf.neg(tf.log(u)))); // Gumbel(0,1)
+            
+            const noisyLogits = logits.add(gumbelNoise);
             return tf.argMax(noisyLogits, -1);
         });
         

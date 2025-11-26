@@ -1,45 +1,34 @@
-import * as tf from '@tensorflow/tfjs';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
-import { prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
-import { patientAction } from '../../../../ml-common/utils.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
-import { disposeNetwork, getRandomHistoricalNetwork } from '../../../../ml/src/Models/Utils.ts';
-import { pureAct } from '../../../../ml/src/PPO/train.ts';
-import { DownloableAgent, TankAgent } from './CurrentActorAgent.ts';
+import { getRandomHistoricalNetwork } from '../../../../ml/src/Models/Utils.ts';
+import { ActorUpdater, DownloadableAgent, TankAgent } from './CurrentActorAgent.ts';
 
-export class RandomHistoricalAgent implements TankAgent<DownloableAgent> {
-    private policyNetwork?: tf.LayersModel;
+const historcalActorUpdater = ActorUpdater(() => getRandomHistoricalNetwork(Model.Policy));
 
+export class RandomHistoricalAgent implements TankAgent<DownloadableAgent> {
     constructor(public readonly tankEid: number) {
     }
-
-    public dispose() {
-        this.policyNetwork && disposeNetwork(this.policyNetwork);
-        this.policyNetwork = undefined;
+    
+    scheduleUpdateTankBehaviour(width: number, height: number): void {
+        historcalActorUpdater.schedule(width, height, this);
     }
 
-    public sync() {
-        this.dispose();
-        return patientAction(() => this.load());
-    }
-
-    public isSynced() {
-        return this.policyNetwork != null;
-    }
-
-    public updateTankBehaviour(
-        width: number,
-        height: number,
-    ) {
-        if (this.policyNetwork == null) return;
-
-        const state = prepareInputArrays(this.tankEid, width, height);
-        const result = pureAct(this.policyNetwork, state);
-
+    applyUpdateTankBehaviour(): void {
+        const result = historcalActorUpdater.get(this);
+        if (result == null) return;
+    
         applyActionToTank(this.tankEid, result.actions, false);
     }
 
-    private async load() {
-        this.policyNetwork = await getRandomHistoricalNetwork(Model.Policy);
+    public dispose() {
+        // Nothing to dispose
+    }
+
+    public async sync() {
+        await historcalActorUpdater.updateNetwork();
+    }
+
+    public isSynced() {
+        return historcalActorUpdater.getNetwork() != null;
     }
 }
