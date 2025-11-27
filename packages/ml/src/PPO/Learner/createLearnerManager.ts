@@ -13,6 +13,7 @@ import { Model } from '../../Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
 import { agentSampleChannel, learnProcessChannel, modelSettingsChannel, queueSizeChannel } from '../channels.ts';
 import { computeVTraceTargets } from '../train.ts';
+import { ACTION_HEAD_DIMS } from '../../Models/Create.ts';
 
 export type LearnData = AgentMemoryBatch & {
     values: Float32Array,
@@ -68,7 +69,7 @@ export function createLearnerManager() {
                     };
 
                     metricsChannels.logit.postMessage(pureLogits.map((v, i) => {
-                        const step = i === 0 ? 2 : 15;
+                        const step = ACTION_HEAD_DIMS[i];
                         const actionIndexes = [];
                         for (let j = 0; j < v.length; j += step) {
                             const logitsSlice = v.subarray(j, j + step);

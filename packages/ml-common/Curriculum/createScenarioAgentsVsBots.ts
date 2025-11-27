@@ -15,23 +15,23 @@ function createBotFeatures(level: 0 | 1 | 2) {
             return {
                 move: randomRangeFloat(0.05, 0.3),
                 aim: {
-                    aimError: randomRangeFloat(0.3, 0.5),
-                    shootChance: randomRangeFloat(0.01, 0.03),
+                    aimError: randomRangeFloat(0.5, 0.8),
+                    shootChance: randomRangeFloat(0.01, 0.3),
                 },
             };
         case 1:
             return {
-                move: randomRangeFloat(0.3, 0.7),
+                move: randomRangeFloat(0.1, 0.7),
                 aim: {
-                    aimError: randomRangeFloat(0.1, 0.3),
-                    shootChance: randomRangeFloat(0.1, 0.4),
+                    aimError: randomRangeFloat(0.2, 0.6),
+                    shootChance: randomRangeFloat(0.2, 0.6),
                 },
             };
         case 2:
             return {
-                move: randomRangeFloat(0.7, 1),
+                move: randomRangeFloat(0.5, 1),
                 aim: {
-                    aimError: randomRangeFloat(0, 0.1),
+                    aimError: randomRangeFloat(0.05, 0.3),
                     shootChance: randomRangeFloat(0.5, 1),
                 },
             };

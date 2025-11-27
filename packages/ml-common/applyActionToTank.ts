@@ -23,10 +23,12 @@ export function applyActionToTank(
 function toAction(actions: Actions, index: number): number {
     const dims = (ACTION_HEAD_DIMS[index]-1) / 2;
     const action = actions[index];
-    const value  = sign(action - dims) * (abs(action - dims) / dims) ** 3;
+    const value  = sign(action - dims) * (abs(action - dims) / dims) ** 2;
     return value;
 }
 
-// new Array(11).fill(0).forEach((_,i) => {
-//     console.log(toAction([0,i,0,0], 1))
+// console.log('>>>>>>>>>')
+// new Array(31).fill(0).forEach((_,i) => {
+//     console.log(toAction([0,0,0,i], 3))
 // });
+// debugger;

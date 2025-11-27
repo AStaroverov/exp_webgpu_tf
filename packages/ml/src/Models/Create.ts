@@ -24,7 +24,7 @@ export const ALLY_FEATURES_DIM = ALLY_BUFFER - 1; // -1 потому что id �
 export const BULLET_SLOTS = MAX_BULLETS;
 export const BULLET_FEATURES_DIM = BULLET_BUFFER - 1; // -1 потому что id не считаем
 
-export const ACTION_HEAD_DIMS = [2, 15, 15, 15];
+export const ACTION_HEAD_DIMS = [2, 15, 15, 31];
 
 export function createPolicyNetwork(): tf.LayersModel {
     const {inputs, heads} = createNetwork(Model.Policy);

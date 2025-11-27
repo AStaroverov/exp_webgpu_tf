@@ -14,19 +14,19 @@ export const CONFIG = {
     },
 
     policyEpochs: (_iter: number) => 3,
-    policyClipRatio: 0.2,
+    policyClipRatio: 0.3,
 
     valueEpochs: (_iter: number) => 3,
-    valueClipRatio: 0.2,
+    valueClipRatio: 0.3,
     valueLossCoeff: 0.5,
     valueLRCoeff: 1,
 
     // Dynamic learning rate adjustment based on KL
     lrConfig: {
         kl: {
-            high: 0.013,
-            target: 0.01,
-            low: 0.007,
+            high: 0.013 * 2,
+            target: 0.01 * 2,
+            low: 0.007 * 2,
         },
         initial: 1e-4,
         multHigh: 0.95,
@@ -39,13 +39,13 @@ export const CONFIG = {
         return 1024 * 8
     },
     miniBatchSize: (iteration: number) => {
-        return 512;
+        return 256;
     },
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
     episodeFrames: Math.round(5 * 60 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: 6,
+    workerCount: 8,
     backpressureQueueSize: 2,
     // Training control
     savePath: 'PPO_MHA',

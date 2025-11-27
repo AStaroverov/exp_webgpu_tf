@@ -12,8 +12,8 @@ import { ALLY_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../../tanks/src/P
 export const getFramePenalty = (frame: number) =>
     -clamp(Math.log10(1 + frame), 0, 3) / 100;
 
-export const getDeathPenalty = (isDead: boolean) =>
-    -3 * Number(isDead);
+export const getFinalReward = (isDead: boolean) =>
+    isDead ? -3 : 3;
 
 const WEIGHTS = ({
     STATE_MULTIPLIER: 1, // it's often reward and work as learning base principle

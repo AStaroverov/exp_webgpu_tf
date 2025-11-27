@@ -1,3 +1,4 @@
+import { getFinalReward } from '../ml/src/Reward/calculateReward.ts';
 import { InputArrays } from './InputArrays.ts';
 
 export type AgentMemoryBatch = {
@@ -59,6 +60,10 @@ export class AgentMemory {
             return undefined;
         }
 
+        const isDead = this.isDone();
+        const rewards = new Float32Array(this.rewards);
+        rewards[rewards.length - 1] = rewards[rewards.length - 1] + getFinalReward(isDead);
+        
         // @ts-expect-error - js convertion
         const dones = new Float32Array(this.dones);
         dones[dones.length - 1] = 1.0;

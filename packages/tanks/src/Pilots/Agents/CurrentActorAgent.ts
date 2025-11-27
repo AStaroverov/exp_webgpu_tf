@@ -12,7 +12,7 @@ import { ACTION_HEAD_DIMS } from '../../../../ml/src/Models/Create.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../../../ml/src/Models/Utils.ts';
 import { batchAct } from '../../../../ml/src/PPO/train.ts';
-import { calculateActionReward, calculateStateReward, getDeathPenalty, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
+import { calculateActionReward, calculateStateReward, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 
 export type TankAgent<A = Partial<DownloadableAgent> & Partial<LearnableAgent>> = A & {
@@ -190,8 +190,8 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         const isDead = getTankHealth(this.tankEid) <= 0;
         const version = this.getVersion();
 
-        const stateRewardMultiplier = clamp(1 - unlerp(0, LEARNING_STEPS * 0.4, version), 0, 1);
-        const actionRewardMultiplier = clamp(unlerp(0, LEARNING_STEPS * 0.2, version), 0.2, 1);
+        const stateRewardMultiplier = clamp(1 - unlerp(0, LEARNING_STEPS * 0.4, version), 0.3, 1);
+        const actionRewardMultiplier = clamp(unlerp(0, LEARNING_STEPS * 0.2, version), 0.3, 1);
 
         const stateReward = stateRewardMultiplier === 0 ? 0 : calculateStateReward(
             this.tankEid,
@@ -204,14 +204,12 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
             : calculateActionReward(this.tankEid) - this.initialActionReward;
         
         const frameReward = getFramePenalty(frame);
-        const deathReward = getDeathPenalty(isDead);
  
         // it's not all reward, also we have final reward for lose/win in the end of episode
         const reward = clamp(
             stateReward * stateRewardMultiplier
             + actionReward * actionRewardMultiplier
-            + frameReward
-            + deathReward,
+            + frameReward,
             -10,
             +10
         );
