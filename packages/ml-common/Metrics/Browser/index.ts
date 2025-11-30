@@ -109,7 +109,7 @@ function drawTab0() {
     const tab = 'Tab 0';
     const renderSuccessRatio = (index: MetricIndex) => {
         const successRatioTrain = store[`successRatio${index}Train`].toArray();
-        const successRatioTrainMA = calculateMovingAverage(successRatioTrain, 100);
+        const successRatioTrainMA = calculateMovingAverage(successRatioTrain, 20);
         tfvis.render.scatterplot({ name: 'Train Success Ratio ' + index, tab }, {
             values: [successRatioTrain, successRatioTrainMA],
             series: ['V', 'MA'],
@@ -121,7 +121,7 @@ function drawTab0() {
         });
 
         const successRatioRef = store[`successRatio${index}Ref`].toArray();
-        const successRatioRefMA = calculateMovingAverage(successRatioRef, 100);
+        const successRatioRefMA = calculateMovingAverage(successRatioRef, 20);
         tfvis.render.scatterplot({ name: 'Ref Success Ratio ' + index, tab }, {
             values: [successRatioRef, successRatioRefMA],
             series: ['V', 'MA'],

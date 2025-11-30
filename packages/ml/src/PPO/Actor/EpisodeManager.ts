@@ -69,7 +69,7 @@ export class EpisodeManager {
             }
 
             const networkVersion = agent.getVersion();
-            const memoryBatch = agent.getMemoryBatch();
+            const memoryBatch = agent.getMemoryBatch(successRatio > 0.05);
 
             if (memoryBatch == null) return;
 

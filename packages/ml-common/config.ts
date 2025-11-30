@@ -10,14 +10,14 @@ export const CONFIG = {
     },
 
     policyEntropy: (iteration: number) => {
-        return 0.05 * (1 - clamp(iteration / LEARNING_STEPS, 0, 1));
+        return lerp(0.01, 0.05, 1 - clamp(iteration / LEARNING_STEPS, 0, 1));
     },
 
-    policyEpochs: (_iter: number) => 3,
-    policyClipRatio: 0.3,
+    policyEpochs: (_iter: number) => 4,
+    policyClipRatio: 0.2,
 
-    valueEpochs: (_iter: number) => 3,
-    valueClipRatio: 0.3,
+    valueEpochs: (_iter: number) => 4,
+    valueClipRatio: 0.2,
     valueLossCoeff: 0.5,
     valueLRCoeff: 1,
 
@@ -36,10 +36,10 @@ export const CONFIG = {
     },
 
     batchSize: (iteration: number) => {
-        return 1024 * 8
+        return 512 * 16;
     },
     miniBatchSize: (iteration: number) => {
-        return 256;
+        return 512;
     },
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION

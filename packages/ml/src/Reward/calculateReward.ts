@@ -12,12 +12,12 @@ import { ALLY_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../../tanks/src/P
 export const getFramePenalty = (frame: number) =>
     -clamp(Math.log10(1 + frame), 0, 3) / 100;
 
-export const getFinalReward = (isDead: boolean) =>
-    isDead ? -3 : 3;
+export const getFinalReward = (_isDead: boolean) => 0;
+    // isDead ? -5 : 5;
 
 const WEIGHTS = ({
     STATE_MULTIPLIER: 1, // it's often reward and work as learning base principle
-    ACTION_MULTIPLIER: 3, // it's rare reward and work as path to win
+    ACTION_MULTIPLIER: 1, // it's rare reward and work as path to win
 
     // ACTION REWARD
     COMMON: {
@@ -195,7 +195,7 @@ export function calculateActionReward(tankEid: number): number {
     const rewards = initializeActionRewards();
 
     rewards.common.score = WEIGHTS.COMMON.SCORE * currentScore * 0.33;
-    rewards.common.health = WEIGHTS.COMMON.HEALTH * currentHealth;
+    rewards.common.health = WEIGHTS.COMMON.HEALTH * currentHealth * 3;
 
     rewards.common.total = WEIGHTS.COMMON_MULTIPLIER
         * (rewards.common.health + rewards.common.score);

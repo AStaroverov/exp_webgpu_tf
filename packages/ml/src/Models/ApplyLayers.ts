@@ -95,7 +95,7 @@ export function createNormalizationLayer(options: RMSNormConfig) {
 }
 
 export function tokenProj(x: tf.SymbolicTensor, dModel: number, name: string): SymbolicTensor {
-    return createDenseLayer({
+   return createDenseLayer({
         name: name + '_tokProj',
         units: dModel,
         useBias: false,
@@ -129,7 +129,7 @@ export function convertInputsToTokens(
     const tankTok = reshape(addTypeEmbedding(tokenProj(tankInput, dModel, tankInput.name)));
     const alliesTok = addTypeEmbedding(tokenProj(alliesInput, dModel, alliesInput.name));
     const enemiesTok = addTypeEmbedding(tokenProj(enemiesInput, dModel, enemiesInput.name));
-    const bulletsTok = addTypeEmbedding(tokenProj(bulletsInput, dModel, bulletsInput.name));
+    const bulletsTok = (tokenProj(bulletsInput, dModel, bulletsInput.name));
 
     return {
         tankTok,

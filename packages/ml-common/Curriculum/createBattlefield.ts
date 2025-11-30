@@ -3,7 +3,7 @@ import { lerp } from '../../../lib/math.ts';
 import { createGame } from '../../tanks/src/Game/createGame.ts';
 import { LEARNING_STEPS } from '../consts.ts';
 
-const MAX_SIZE = 1200;
+const MAX_SIZE = 1600;
 const MIN_SIZE = 800;
 
 export function createBattlefield(options?: { size?: number, iteration?: number }) {

@@ -1,4 +1,5 @@
 import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
+import { prepareInputArrays } from '../ml-common/InputArrays.ts';
 import { createGame } from '../tanks/src/Game/createGame.ts';
 import { GameDI } from '../tanks/src/Game/DI/GameDI.ts';
 import { createPlayer } from '../tanks/src/Game/ECS/Entities/Player.ts';
@@ -12,7 +13,7 @@ const { gameTick, setRenderTarget } = game;
 const pilotsPlugin = createPilotsPlugin(game);
 pilotsPlugin.toggle(true);
 
-setRenderTarget(document.querySelector('canvas') as HTMLCanvasElement);
+setRenderTarget(document.querySelector('canvas') as HTMLCanvasElement)
 
 const tanks = [
     // createLightTank({
@@ -67,6 +68,8 @@ frameTasks.addInterval(() => {
 
         snapshotTankInputTensor();
         actionReward = calculateActionReward(tanks[2]);
+
+        prepareInputArrays(tanks[0], GameDI.width, GameDI.height);
     }
 
     // const enemyTankPosition = getMatrixTranslation(GlobalTransform.matrix.getBatch(enemyEid));

@@ -39,9 +39,9 @@ export class SimpleBot implements TankAgent<{}> {
         const move = this.withMove() ? this.getMoveAction(rotation) : 0;
 
         const action: Actions = [
-            aim.shoot,
             move * (this.features.move ?? 0),
             rotation * (this.features.move ?? 0),
+            aim.shoot,
             aim.turretRot,
         ];
 

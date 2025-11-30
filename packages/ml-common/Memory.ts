@@ -53,7 +53,7 @@ export class AgentMemory {
         this.dones.push(done);
     }
 
-    getBatch(): undefined | AgentMemoryBatch {
+    getBatch(isWin: boolean): undefined | AgentMemoryBatch {
         this.setMinLength();
 
         if (this.states.length === 0) {
@@ -62,7 +62,7 @@ export class AgentMemory {
 
         const isDead = this.isDone();
         const rewards = new Float32Array(this.rewards);
-        rewards[rewards.length - 1] = rewards[rewards.length - 1] + getFinalReward(isDead);
+        rewards[rewards.length - 1] = rewards[rewards.length - 1] + ((isWin && isDead) ? 0 : getFinalReward(isDead));
         
         // @ts-expect-error - js convertion
         const dones = new Float32Array(this.dones);

@@ -1,10 +1,8 @@
 import * as tf from '@tensorflow/tfjs';
 import { clamp } from 'lodash-es';
-import { unlerp } from '../../../../../lib/math.ts';
 import { randomRangeFloat } from '../../../../../lib/random.ts';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
 import { ColoredNoiseApprox } from '../../../../ml-common/ColoredNoiseApprox.ts';
-import { LEARNING_STEPS } from '../../../../ml-common/consts.ts';
 import { InputArrays, prepareInputArrays } from '../../../../ml-common/InputArrays.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
 import { getNetworkExpIteration, patientAction } from '../../../../ml-common/utils.ts';
@@ -12,7 +10,7 @@ import { ACTION_HEAD_DIMS } from '../../../../ml/src/Models/Create.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../../../ml/src/Models/Utils.ts';
 import { batchAct } from '../../../../ml/src/PPO/train.ts';
-import { calculateActionReward, calculateStateReward, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
+import { calculateActionReward, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 
 export type TankAgent<A = Partial<DownloadableAgent> & Partial<LearnableAgent>> = A & {
@@ -33,7 +31,7 @@ export type LearnableAgent = {
     dispose(): void;
     getVersion(): number;
     getMemory(): undefined | AgentMemory;
-    getMemoryBatch(): undefined | AgentMemoryBatch;
+    getMemoryBatch(isWin: boolean): undefined | AgentMemoryBatch;
     evaluateTankBehaviour(width: number, height: number, frame: number, successRatio: number): void;
 }
 
@@ -139,8 +137,8 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         return this.train ? this.memory : undefined;
     }
 
-    public getMemoryBatch(): undefined | AgentMemoryBatch {
-        return this.train ? this.memory.getBatch() : undefined;
+    public getMemoryBatch(isWin: boolean): undefined | AgentMemoryBatch {
+        return this.train ? this.memory.getBatch(isWin) : undefined;
     }
 
     public dispose() {
@@ -188,18 +186,19 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         if (!this.train || this.memory.size() === 0) return;
 
         const isDead = getTankHealth(this.tankEid) <= 0;
-        const version = this.getVersion();
+        // const version = this.getVersion();
 
-        const stateRewardMultiplier = clamp(1 - unlerp(0, LEARNING_STEPS * 0.4, version), 0.3, 1);
-        const actionRewardMultiplier = clamp(unlerp(0, LEARNING_STEPS * 0.2, version), 0.3, 1);
+        const stateRewardMultiplier = 1;//; - 0.5 * clamp(unlerp(0, LEARNING_STEPS * 0.4, version), 0, 1);
+        const actionRewardMultiplier = 1;// clamp(unlerp(0, LEARNING_STEPS * 0.2, version), 0.3, 1);
 
-        const stateReward = stateRewardMultiplier === 0 ? 0 : calculateStateReward(
-            this.tankEid,
-            width,
-            height,
-            clamp(version / (LEARNING_STEPS * 0.2), 0, 1)
-        );
-        const actionReward = this.initialActionReward === undefined || actionRewardMultiplier === 0
+        const stateReward = 0
+        // calculateStateReward(
+        //     this.tankEid,
+        //     width,
+        //     height,
+        //     clamp(version / (LEARNING_STEPS * 0.2), 0, 1)
+        // );
+        const actionReward = this.initialActionReward === undefined
             ? 0
             : calculateActionReward(this.tankEid) - this.initialActionReward;
         

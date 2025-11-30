@@ -1,5 +1,4 @@
 import { query } from 'bitecs';
-import { max } from '../../../lib/math.ts';
 import { randomRangeInt } from '../../../lib/random.ts';
 import { Tank } from '../../tanks/src/Game/ECS/Components/Tank.ts';
 import { getTankTeamId } from '../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
@@ -14,7 +13,8 @@ import { getTeamsCount } from '../../tanks/src/Game/ECS/Components/TeamRef.ts';
 
 export const indexScenarioWithAlliesStatic = 1;
 
-export function createScenarioBase(options?: Parameters<typeof createBattlefield>[0] & {
+export function createScenarioBase(options: Parameters<typeof createBattlefield>[0] & {
+    index: number;
     train?: boolean;
     alliesCount?: number;
     enemiesCount?: number;
@@ -22,9 +22,9 @@ export function createScenarioBase(options?: Parameters<typeof createBattlefield
     const game = createBattlefield(options);
     const pilots = createPilotsPlugin(game);
 
-    const isTrain = options?.train ?? true;
-    const alliesCount = options?.alliesCount ?? randomRangeInt(1, 3);
-    const enemiesCount = options?.enemiesCount ?? max(1, alliesCount + randomRangeInt(-1, 1));
+    const isTrain = options.train ?? true;
+    const alliesCount = options.alliesCount ?? randomRangeInt(1, 3);
+    const enemiesCount = options.enemiesCount ?? alliesCount;
     const tanks = addRandomTanks([[0, alliesCount], [1, enemiesCount]]);
     const activeTeam = getTankTeamId(tanks[0]);
     const initialTeamHealth = getTeamHealth(tanks);
@@ -36,7 +36,7 @@ export function createScenarioBase(options?: Parameters<typeof createBattlefield
         ...game,
         ...pilots,
 
-        index: indexScenarioWithAlliesStatic,
+        index: options.index,
         isTrain,
 
         getTankEids,

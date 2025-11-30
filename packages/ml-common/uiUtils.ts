@@ -3,20 +3,18 @@ import { downloadNetwork } from '../ml/src/Models/Transfer.ts';
 import { Model } from '../ml/src/Models/def.ts';
 import { forceExitChannel } from './channels.ts';
 
-// Инициализируем базу Dexie с таблицей settings
 const db = new Dexie('ui-tank-rl');
 db.version(1).stores({ settings: 'key' });
 
-// Кэш для хранения значений настроек (аналог localStorage)
-let isVerbose = false;
+let useNoise = true;
 let shouldDraw = false;
 
 // Загружаем настройки из базы (если они там уже сохранены)
 async function initSettings() {
-    const verboseSetting = await db.table('settings').get('verbose');
+    const noiseSetting = await db.table('settings').get('useNoise');
     const drawSetting = await db.table('settings').get('shouldDraw');
 
-    isVerbose = verboseSetting ? verboseSetting.value === 'true' : false;
+    useNoise = noiseSetting ? noiseSetting.value === 'true' : true;
     shouldDraw = drawSetting ? drawSetting.value === 'true' : false;
 }
 
@@ -35,10 +33,11 @@ if (globalThis && globalThis.document) {
         }
     });
 
-    document.getElementById('toggleVerbose')?.addEventListener('click', async () => {
-        // Переключаем режим подробного логирования
-        isVerbose = !isVerbose;
-        await db.table('settings').put({ key: 'verbose', value: isVerbose.toString() });
+    document.getElementById('toggleNoise')?.addEventListener('click', async () => {
+        useNoise = !useNoise;
+        // @ts-ignore
+        globalThis.disableNoise = !useNoise;
+        await db.table('settings').put({ key: 'useNoise', value: useNoise.toString() });
     });
 
     document.getElementById('resetState')?.addEventListener('click', async () => {
@@ -67,6 +66,6 @@ export function getDrawState(): boolean {
     return shouldDraw;
 }
 
-export function isVerboseLog(): boolean {
-    return isVerbose;
+export function getUseNoise(): boolean {
+    return useNoise;
 }

@@ -1,25 +1,20 @@
 import { clamp } from 'lodash';
 import { min } from '../../../lib/math.ts';
 import { random } from '../../../lib/random.ts';
-import { createScenarioAgentsVsBots1, indexScenarioAgentsVsBots1 } from './createScenarioAgentsVsBots1.ts';
-import { createScenarioAgentsVsBots2, indexScenarioAgentsVsBots2 } from './createScenarioAgentsVsBots2.ts';
+import { createScenarioAgentsVsBots1 } from './createScenarioAgentsVsBots1.ts';
 import { createScenarioBase } from './createScenarioBase.ts';
-import { createScenarioWithCurrentAgents, indexScenarioWithCurrentAgents } from './createScenarioWithCurrentAgents.ts';
-import {
-    createScenarioWithHistoricalAgents,
-    indexScenarioWithHistoricalAgents,
-} from './createScenarioWithHistoricalAgents.ts';
-import { createStaticScenarioAgentsVsBots0, indexStaticScenarioAgentsVsBots0 } from './createStaticScenarioAgentsVsBots0.ts';
+import { createScenarioWithCurrentAgents } from './createScenarioWithCurrentAgents.ts';
+import { createScenarioWithHistoricalAgents } from './createScenarioWithHistoricalAgents.ts';
+import { createStaticScenarioAgentsVsBots0 } from './createStaticScenarioAgentsVsBots0.ts';
 import { CurriculumState, Scenario } from './types.ts';
 
 type ScenarioOptions = Parameters<typeof createScenarioBase>[0];
 
 const mapEntries = [
-    [indexStaticScenarioAgentsVsBots0, createStaticScenarioAgentsVsBots0],
-    [indexScenarioAgentsVsBots1, createScenarioAgentsVsBots1],
-    [indexScenarioAgentsVsBots2, createScenarioAgentsVsBots2],
-    [indexScenarioWithHistoricalAgents, createScenarioWithHistoricalAgents],
-    [indexScenarioWithCurrentAgents, createScenarioWithCurrentAgents],
+    [0, createStaticScenarioAgentsVsBots0],
+    [1, createScenarioAgentsVsBots1],
+    [2, createScenarioWithHistoricalAgents],
+    [3, createScenarioWithCurrentAgents],
 ] as const;
 const mapIndexToConstructor = new Map<number, (options: ScenarioOptions) => Scenario>(mapEntries);
 
@@ -29,9 +24,9 @@ if (mapIndexToConstructor.size !== mapEntries.length) {
 
 export const scenariosCount = mapIndexToConstructor.size;
 
-const edge = 0.3; // 0.3 success ratio to unlock next scenario
+const edge = 0.5; // 0.5 success ratio to unlock next scenario
 
-export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: ScenarioOptions): Promise<Scenario> {
+export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: Omit<ScenarioOptions, 'index'>): Promise<Scenario> {
     let constructor = createStaticScenarioAgentsVsBots0;
 
     let weights = [];
@@ -53,11 +48,14 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
         minSuccessRatio = min(minSuccessRatio, successRatio);
     }
 
+    const constructorOptions = options as ScenarioOptions;
     for (let i = 0, r = random() * totalWeight; i < weights.length; i++) {
         const weight = weights[i];
         if (r < weight) {
+            constructorOptions.index = i;
             constructor = mapIndexToConstructor.get(i) ?? (() => {
-                console.warn(`Scenario ${i} not found, using default scenario static`);
+                console.error(`Scenario ${i} not found, using default scenario static`);
+                constructorOptions.index = 0;
                 return createStaticScenarioAgentsVsBots0;
             })();
             break;
@@ -65,5 +63,5 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
         r -= weight;
     }
 
-    return constructor(options);
+    return constructor(constructorOptions);
 }

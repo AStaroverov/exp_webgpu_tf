@@ -9,14 +9,16 @@ export function applyActionToTank(
     actions: Actions,
     isContinuous: boolean,
 ) {
-    const shoot = isContinuous ? actions[0] : actions[0] - 0.5;
-    const move = isContinuous ? actions[1] : toAction(actions, 1);
-    const rotate = isContinuous ? actions[2] : toAction(actions, 2);
+    const move = isContinuous ? actions[0] : toAction(actions, 0);
+    const rotate = isContinuous ? actions[1] : toAction(actions, 1);
+    
+    const turretShoot = isContinuous ? actions[2] : actions[2] - 0.5;
     const turretRot = isContinuous ? actions[3] : toAction(actions, 3);
 
-    TankController.setShooting$(tankEid, shoot);
     TankController.setMove$(tankEid, move);
     TankController.setRotate$(tankEid, rotate);
+    
+    TankController.setShooting$(tankEid, turretShoot);
     TankController.setTurretRotation$(tankEid, turretRot);
 }
 

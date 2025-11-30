@@ -1,9 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { CONFIG } from '../../../ml-common/config.ts';
 import {
-    ALLY_BUFFER,
-    BULLET_BUFFER,
-    ENEMY_BUFFER,
     MAX_ALLIES,
     MAX_BULLETS,
     MAX_ENEMIES,
@@ -11,20 +8,20 @@ import {
 
 import { createDenseLayer } from "./ApplyLayers.ts";
 import { Model } from './def.ts';
-import { createNetwork } from './Networks/v5.ts';
+import { createNetwork } from './Networks/v6.ts';
 import { AdamW } from './Optimizer/AdamW.ts';
 
 export const CONTROLLER_FEATURES_DIM = 4;
 export const BATTLE_FEATURES_DIM = 6;
-export const TANK_FEATURES_DIM = 7;
+export const TANK_FEATURES_DIM = 10;
 export const ENEMY_SLOTS = MAX_ENEMIES;
-export const ENEMY_FEATURES_DIM = ENEMY_BUFFER - 1; // -1 потому что id не считаем
+export const ENEMY_FEATURES_DIM = 10;
 export const ALLY_SLOTS = MAX_ALLIES;
-export const ALLY_FEATURES_DIM = ALLY_BUFFER - 1; // -1 потому что id не считаем
+export const ALLY_FEATURES_DIM = 10;
 export const BULLET_SLOTS = MAX_BULLETS;
-export const BULLET_FEATURES_DIM = BULLET_BUFFER - 1; // -1 потому что id не считаем
+export const BULLET_FEATURES_DIM = 4;
 
-export const ACTION_HEAD_DIMS = [2, 15, 15, 31];
+export const ACTION_HEAD_DIMS = [15, 15, 2, 31];
 
 export function createPolicyNetwork(): tf.LayersModel {
     const {inputs, heads} = createNetwork(Model.Policy);

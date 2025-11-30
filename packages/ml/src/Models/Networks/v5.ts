@@ -1,13 +1,12 @@
 import * as tf from '@tensorflow/tfjs';
 import {
-    applyMLP,
-    applySelfTransformLayers,
+    applyCrossAttentionLayer,
+    applyLaNLayer, applySelfTransformLayers,
     convertInputsToTokens,
     createInputs
 } from '../ApplyLayers.ts';
 import { MaskLikeLayer } from '../Layers/MaskLikeLayer.ts';
 
-import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 import { Model } from '../def.ts';
 import { VariableLayer } from '../Layers/VariableLayer.ts';
 import { SliceLayer } from '../Layers/SliceLayer.ts';
@@ -16,29 +15,20 @@ type NetworkConfig = {
     dim: number;
     heads: number;
     depth: number;
-    headsMLP: ([ActivationIdentifier, number][])[];
 };
 
 type policyNetworkConfig = NetworkConfig
 
 const policyNetworkConfig: policyNetworkConfig = {
-    dim: 64,
+    dim: 32,
     heads: 4,
-    depth: 6,
-    headsMLP: [0, 1, 2, 3].map(() =>
-        ([
-            ['relu', 64],
-        ])
-    )
+    depth: 8,
 };
 
 const valueNetworkConfig: NetworkConfig = {
     dim: 16,
     heads: 1,
     depth: 2,
-    headsMLP: [[
-        ['relu', 16],
-    ]],
 };
 
 export function createNetwork(modelName: Model, config: NetworkConfig = modelName === Model.Policy ? policyNetworkConfig : valueNetworkConfig) {
@@ -58,20 +48,18 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
                 tokens.tankTok,
                 tokens.alliesTok,
                 tokens.enemiesTok,
-                tokens.bulletsTok,
             ]) as tf.SymbolicTensor;
     }
 
     const maskLike = new MaskLikeLayer({ name: modelName + '_maskLike' });
+    const oneMask = maskLike.apply(tokens.tankTok) as tf.SymbolicTensor;
     const getContextMask = (i: number) => {
-        const oneMask = maskLike.apply(tokens.tankTok) as tf.SymbolicTensor;
         return tf.layers.concatenate({name: modelName + '_contextTokenMask' + i, axis: 1 })
             .apply([
                 oneMask,
                 oneMask,
                 inputs.alliesMaskInput,
                 inputs.enemiesMaskInput,
-                inputs.bulletsMaskInput,
             ]) as tf.SymbolicTensor;
     };
 
@@ -86,21 +74,56 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         },
     );
 
-     const transformedClsToken = new SliceLayer({
+    const transformedClsToken = new SliceLayer({
         name: modelName + '_transformedClsToken',
         beginSlice: [0, 0, 0],
-        sliceSize: [-1, 2, -1],
-    }).apply(transformedTokens) as tf.SymbolicTensor[];
+        sliceSize: [-1, 1, -1],
+    }).apply(transformedTokens) as tf.SymbolicTensor;
 
-    const flattenedClsToken = tf.layers.flatten({ name: modelName + '_flattenedClsToken' })
+    const flattenedTransformedClsToken = tf.layers.flatten({ name: modelName + '_flattenedTransformedClsToken' })
         .apply(transformedClsToken) as tf.SymbolicTensor;
 
-    const heads = config.headsMLP.map((layers, i) => {
-        return applyMLP({
-            name: modelName + '_headsMLP_' + i,
-            layers,
-        }, flattenedClsToken);
-    })
+    const transformedTankToken = new SliceLayer({
+        name: modelName + '_transformedTankToken',
+        beginSlice: [0, 1, 0],
+        sliceSize: [-1, 1, -1],
+    }).apply(transformedTokens) as tf.SymbolicTensor;
+
+    const attentionToBullets = applyCrossAttentionLayer({
+        name: modelName + '_attentionToBullets',
+        heads: config.heads,
+        qTok: transformedTankToken,
+        kvTok: tokens.bulletsTok,
+        kvMask: inputs.bulletsMaskInput,
+    });
+
+    const flattenedAttentionToBullets = tf.layers.flatten({ name: modelName + '_flattenedAttentionToBullets' })
+        .apply(attentionToBullets) as tf.SymbolicTensor;
+
+    const getSingleToken = (name: string) => {
+        const concatenated = tf.layers.concatenate({name: name + '_concatenated', axis: 1 })
+            .apply([flattenedTransformedClsToken, flattenedAttentionToBullets]) as tf.SymbolicTensor;
+        return concatenated;
+    }
+
+    const getHeadToken = (i: number) => {
+        if (i === 0 || i === 1) {
+            return flattenedAttentionToBullets;
+        }
+        if (i === 2 || i === 3) {
+            return flattenedTransformedClsToken;
+        }
+        throw new Error('Invalid head index');
+    }
+
+    const heads = Array.from({length: modelName === Model.Policy ? 4 : 1 }, (_, i) => {
+        const token = modelName === Model.Policy ? getHeadToken(i) : getSingleToken(modelName + '_headToken_' + i);
+        return applyLaNLayer({
+            name: `${modelName}_head${i}`,
+            units: config.dim,
+            preNorm: true
+        }, token);
+    });
 
     return { inputs, heads };
 }

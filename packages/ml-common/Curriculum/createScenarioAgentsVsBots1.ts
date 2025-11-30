@@ -1,12 +1,9 @@
-import { createBattlefield } from './createBattlefield.ts';
 import { createScenarioAgentsVsBots } from './createScenarioAgentsVsBots.ts';
+import { createScenarioBase } from './createScenarioBase.ts';
 import { Scenario } from './types.ts';
 
-export const indexScenarioAgentsVsBots1 = 1;
-
-export function createScenarioAgentsVsBots1(options: Parameters<typeof createBattlefield>[0]): Scenario {
+export function createScenarioAgentsVsBots1(options: Parameters<typeof createScenarioBase>[0]): Scenario {
     const episode = createScenarioAgentsVsBots(1, options);
-    episode.index = indexScenarioAgentsVsBots1;
     return episode;
 }
 

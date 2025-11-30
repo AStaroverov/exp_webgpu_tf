@@ -11,14 +11,19 @@ import {
     ENEMY_SLOTS,
     TANK_FEATURES_DIM,
 } from '../ml/src/Models/Create.ts';
-import { MAX_APPROXIMATE_COLLIDER_RADIUS } from '../tanks/src/Game/ECS/Components/HeuristicsData.ts';
 import { ALLY_BUFFER, BULLET_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../tanks/src/Pilots/Components/TankState.ts';
 
 function norm(v: number, size: number): number {
     return v / size;
 }
 
-const QUANT = 1000;
+function rotateVector(x: number, y: number, angle: number): [number, number] {
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    return [x * cos - y * sin, x * sin + y * cos];
+}
+
+const QUANT = 100;
 const ENEMIES_INDEXES = new Uint32Array(Array.from({ length: ENEMY_SLOTS }, (_, i) => i));
 const ALLIES_INDEXES = new Uint32Array(Array.from({ length: ALLY_SLOTS }, (_, i) => i));
 const BULLETS_INDEXES = new Uint32Array(Array.from({ length: BULLET_SLOTS }, (_, i) => i));
@@ -72,14 +77,20 @@ export function prepareInputArrays(
     const turretRot = TankInputTensor.turretRotation[tankEid];
     const colliderRadius = TankInputTensor.colliderRadius[tankEid];
 
+    const invRotation = -rotation;
+    const [locSpeedX, locSpeedY] = rotateVector(speedX, speedY, invRotation);
+    const turretRel = turretRot - rotation;
+
     tankFeatures[ti++] = TankInputTensor.health[tankEid]; // hp
     tankFeatures[ti++] = norm(tankX - width / 2, width / 2); // x
     tankFeatures[ti++] = norm(tankY - height / 2, height / 2); // y
-    tankFeatures[ti++] = norm(rotation, Math.PI); // body rotation
-    tankFeatures[ti++] = norm(speedX, QUANT); // speedX
-    tankFeatures[ti++] = norm(speedY, QUANT); // speedY
-    tankFeatures[ti++] = norm(turretRot, Math.PI); // turret rotation
-    tankFeatures[ti++] = norm(colliderRadius, MAX_APPROXIMATE_COLLIDER_RADIUS); // collider radius
+    tankFeatures[ti++] = Math.sin(rotation); // body rotation sin
+    tankFeatures[ti++] = Math.cos(rotation); // body rotation cos
+    tankFeatures[ti++] = norm(locSpeedX, QUANT); // speedX
+    tankFeatures[ti++] = norm(locSpeedY, QUANT); // speedY
+    tankFeatures[ti++] = Math.sin(turretRel); // turret rotation sin
+    tankFeatures[ti++] = Math.cos(turretRel); // turret rotation cos
+    tankFeatures[ti++] = norm(colliderRadius, QUANT); // collider radius
 
     // ---- Enemies features ----
     const enemiesMask = new Float32Array(ENEMY_SLOTS);
@@ -97,15 +108,30 @@ export function prepareInputArrays(
             continue;
         }
 
+        const eX = enemiesBuffer[srcOffset + 2];
+        const eY = enemiesBuffer[srcOffset + 3];
+        const eRot = enemiesBuffer[srcOffset + 4];
+        const eSpeedX = enemiesBuffer[srcOffset + 5];
+        const eSpeedY = enemiesBuffer[srcOffset + 6];
+        const eTurretRot = enemiesBuffer[srcOffset + 7];
+        const eColliderRadius = enemiesBuffer[srcOffset + 8];
+
+        const [locX, locY] = rotateVector(eX - tankX, eY - tankY, invRotation);
+        const [locSpeedX, locSpeedY] = rotateVector(eSpeedX - speedX, eSpeedY - speedY, invRotation);
+        const relRot = eRot - rotation;
+        const relTurretRot = eTurretRot - rotation;
+
         enemiesMask[w] = 1;
         enemiesFeatures[dstOffset + 0] = enemiesBuffer[srcOffset + 1]; // hp
-        enemiesFeatures[dstOffset + 1] = norm(enemiesBuffer[srcOffset + 2] - tankX, QUANT); // x
-        enemiesFeatures[dstOffset + 2] = norm(enemiesBuffer[srcOffset + 3] - tankY, QUANT); // y
-        enemiesFeatures[dstOffset + 3] = norm(enemiesBuffer[srcOffset + 4], Math.PI); // body rotation
-        enemiesFeatures[dstOffset + 4] = norm(enemiesBuffer[srcOffset + 5], QUANT); // speedX
-        enemiesFeatures[dstOffset + 5] = norm(enemiesBuffer[srcOffset + 6], QUANT); // speedY
-        enemiesFeatures[dstOffset + 6] = norm(enemiesBuffer[srcOffset + 7], Math.PI); // turret rotation
-        enemiesFeatures[dstOffset + 7] = norm(enemiesBuffer[srcOffset + 8], MAX_APPROXIMATE_COLLIDER_RADIUS); // collider radius
+        enemiesFeatures[dstOffset + 1] = norm(locX, QUANT); // x
+        enemiesFeatures[dstOffset + 2] = norm(locY, QUANT); // y
+        enemiesFeatures[dstOffset + 3] = Math.sin(relRot); // body rotation sin
+        enemiesFeatures[dstOffset + 4] = Math.cos(relRot); // body rotation cos
+        enemiesFeatures[dstOffset + 5] = norm(locSpeedX, QUANT); // speedX
+        enemiesFeatures[dstOffset + 6] = norm(locSpeedY, QUANT); // speedY
+        enemiesFeatures[dstOffset + 7] = Math.sin(relTurretRot); // turret rotation sin
+        enemiesFeatures[dstOffset + 8] = Math.cos(relTurretRot); // turret rotation cos
+        enemiesFeatures[dstOffset + 9] = norm(eColliderRadius, QUANT); // collider radius
     }
 
     // ---- Allies features ----
@@ -124,15 +150,30 @@ export function prepareInputArrays(
             continue;
         }
 
+        const aX = alliesBuffer[srcOffset + 2];
+        const aY = alliesBuffer[srcOffset + 3];
+        const aRot = alliesBuffer[srcOffset + 4];
+        const aSpeedX = alliesBuffer[srcOffset + 5];
+        const aSpeedY = alliesBuffer[srcOffset + 6];
+        const aTurretRot = alliesBuffer[srcOffset + 7];
+        const aColliderRadius = alliesBuffer[srcOffset + 8];
+
+        const [locX, locY] = rotateVector(aX - tankX, aY - tankY, invRotation);
+        const [locSpeedX, locSpeedY] = rotateVector(aSpeedX - speedX, aSpeedY - speedY, invRotation);
+        const relRot = aRot - rotation;
+        const relTurretRot = aTurretRot - rotation;
+
         alliesMask[w] = 1;
         alliesFeatures[dstOffset + 0] = alliesBuffer[srcOffset + 1]; // hp
-        alliesFeatures[dstOffset + 1] = norm(alliesBuffer[srcOffset + 2] - tankX, QUANT);
-        alliesFeatures[dstOffset + 2] = norm(alliesBuffer[srcOffset + 3] - tankY, QUANT);
-        alliesFeatures[dstOffset + 3] = norm(alliesBuffer[srcOffset + 4], Math.PI);
-        alliesFeatures[dstOffset + 4] = norm(alliesBuffer[srcOffset + 5], QUANT);
-        alliesFeatures[dstOffset + 5] = norm(alliesBuffer[srcOffset + 6], QUANT);
-        alliesFeatures[dstOffset + 6] = norm(alliesBuffer[srcOffset + 7], Math.PI);
-        alliesFeatures[dstOffset + 7] = norm(alliesBuffer[srcOffset + 8], MAX_APPROXIMATE_COLLIDER_RADIUS);
+        alliesFeatures[dstOffset + 1] = norm(locX, QUANT);
+        alliesFeatures[dstOffset + 2] = norm(locY, QUANT);
+        alliesFeatures[dstOffset + 3] = Math.sin(relRot);
+        alliesFeatures[dstOffset + 4] = Math.cos(relRot);
+        alliesFeatures[dstOffset + 5] = norm(locSpeedX, QUANT);
+        alliesFeatures[dstOffset + 6] = norm(locSpeedY, QUANT);
+        alliesFeatures[dstOffset + 7] = Math.sin(relTurretRot);
+        alliesFeatures[dstOffset + 8] = Math.cos(relTurretRot);
+        alliesFeatures[dstOffset + 9] = norm(aColliderRadius, QUANT);
     }
 
     // ---- Bullets features ----
@@ -151,11 +192,19 @@ export function prepareInputArrays(
             continue;
         }
 
+        const bX = bulletsBuffer[srcOffset + 1];
+        const bY = bulletsBuffer[srcOffset + 2];
+        const bSpeedX = bulletsBuffer[srcOffset + 3];
+        const bSpeedY = bulletsBuffer[srcOffset + 4];
+
+        const [locX, locY] = rotateVector(bX - tankX, bY - tankY, invRotation);
+        const [locSpeedX, locSpeedY] = rotateVector(bSpeedX - speedX, bSpeedY - speedY, invRotation);
+
         bulletsMask[w] = 1;
-        bulletsFeatures[dstOffset + 0] = norm(bulletsBuffer[srcOffset + 1] - tankX, QUANT);
-        bulletsFeatures[dstOffset + 1] = norm(bulletsBuffer[srcOffset + 2] - tankY, QUANT);
-        bulletsFeatures[dstOffset + 2] = norm(bulletsBuffer[srcOffset + 3], QUANT);
-        bulletsFeatures[dstOffset + 3] = norm(bulletsBuffer[srcOffset + 4], QUANT);
+        bulletsFeatures[dstOffset + 0] = norm(locX, QUANT);
+        bulletsFeatures[dstOffset + 1] = norm(locY, QUANT);
+        bulletsFeatures[dstOffset + 2] = norm(locSpeedX, QUANT);
+        bulletsFeatures[dstOffset + 3] = norm(locSpeedY, QUANT);
     }
 
     const result = {
