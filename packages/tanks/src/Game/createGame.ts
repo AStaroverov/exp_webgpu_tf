@@ -30,6 +30,8 @@ import { createPostEffect } from './ECS/Systems/Render/PostEffect/Pixelate/creat
 import { createTankAliveSystem } from './ECS/Systems/Tank/createTankAliveSystem.ts';
 import { createTankDecayOutOfZoneSystem } from './ECS/Systems/Tank/createTankDecayOutOfZoneSystem.ts';
 import { createVisualizationTracksSystem } from './ECS/Systems/Tank/createVisualizationTracksSystem.ts';
+import { createSpawnTankTracksSystem } from './ECS/Systems/Tank/createSpawnTankTracksSystem.ts';
+import { createUpdateTankTracksSystem } from './ECS/Systems/Tank/createUpdateTankTracksSystem.ts';
 import { createTankPositionSystem, createTankTurretRotationSystem } from './ECS/Systems/Tank/TankControllerSystems.ts';
 import { initPhysicalWorld } from './Physical/initPhysicalWorld.ts';
 
@@ -115,6 +117,8 @@ export function createGame({ width, height }: {
     };
 
     const visTracksUpdate = createVisualizationTracksSystem();
+    const spawnTankTracks = createSpawnTankTracksSystem();
+    const updateTankTracks = createUpdateTankTracksSystem();
 
     GameDI.gameTick = (delta: number) => {
         GameDI.plugins.systems[SystemGroup.Before].forEach(system => system(delta));
@@ -124,6 +128,8 @@ export function createGame({ width, height }: {
         physicalFrame(delta);
 
         visTracksUpdate(delta);
+        spawnTankTracks(delta);
+        updateTankTracks(delta);
         // updateMap();
 
         // stats.begin();
