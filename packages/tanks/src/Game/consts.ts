@@ -6,5 +6,6 @@ export enum ZIndex {
     TankTurret = 0.0011,
     Bullet = 0.002,
     Explosion = 0.003,
+    HitFlash = 0.0035,
     MuzzleFlash = 0.004,
 }

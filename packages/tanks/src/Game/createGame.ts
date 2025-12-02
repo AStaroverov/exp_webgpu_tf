@@ -26,6 +26,7 @@ import {
 } from './ECS/Systems/PlayerTankControllerSystems.ts';
 import { createDrawGrassSystem } from './ECS/Systems/Render/Grass/createDrawGrassSystem.ts';
 import { createDrawMuzzleFlashSystem } from './ECS/Systems/Render/MuzzleFlash/createDrawMuzzleFlashSystem.ts';
+import { createDrawHitFlashSystem } from './ECS/Systems/Render/HitFlash/createDrawHitFlashSystem.ts';
 import { createPostEffect } from './ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
 import { createTankAliveSystem } from './ECS/Systems/Tank/createTankAliveSystem.ts';
 import { createTankDecayOutOfZoneSystem } from './ECS/Systems/Tank/createTankDecayOutOfZoneSystem.ts';
@@ -186,6 +187,7 @@ export function createGame({ width, height }: {
 
         const drawGrass = createDrawGrassSystem();
         const drawMuzzleFlash = createDrawMuzzleFlashSystem();
+        const drawHitFlash = createDrawHitFlashSystem();
         const drawShape = createDrawShapeSystem(world, device);
         const { renderFrame, renderTexture } = createFrameTick({
             canvas,
@@ -196,6 +198,7 @@ export function createGame({ width, height }: {
         }, ({ passEncoder, delta }) => {
             drawGrass(passEncoder, delta);
             drawShape(passEncoder);
+            drawHitFlash(passEncoder, delta);
             drawMuzzleFlash(passEncoder, delta);
         });
         const postEffectFrame = createPostEffect(device, context, renderTexture);
