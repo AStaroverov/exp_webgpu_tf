@@ -10,8 +10,8 @@ export const shaderMeta = new ShaderMeta(
         projection: new VariableMeta('uProjection', VariableKind.Uniform, `mat4x4<f32>`),
         // Array of flash transforms (position encoded in matrix)
         transform: new VariableMeta('uTransform', VariableKind.StorageRead, `array<mat4x4<f32>, ${MAX_HIT_FLASH_COUNT}>`),
-        // Flash data: size, progress (0-1), seed, unused
-        flashData: new VariableMeta('uFlashData', VariableKind.StorageRead, `array<vec4<f32>, ${MAX_HIT_FLASH_COUNT}>`),
+        // Flash data: progress (0-1), seed
+        flashData: new VariableMeta('uFlashData', VariableKind.StorageRead, `array<vec2<f32>, ${MAX_HIT_FLASH_COUNT}>`),
     },
     {},
     // language=WGSL
@@ -28,8 +28,8 @@ export const shaderMeta = new ShaderMeta(
             @builtin(instance_index) instance_index: u32,
         ) -> VertexOutput {
             let flashInfo = uFlashData[instance_index];
-            let size = flashInfo.x;
-            let progress = flashInfo.y;
+            let size = 1.0; // Size is in transform scale
+            let progress = flashInfo.x;
             
             // Calculate expanded size for sparks
             let expandedSize = size * (1.0 + progress * 0.5);
@@ -149,9 +149,9 @@ export const shaderMeta = new ShaderMeta(
             @location(1) local_position: vec2f,
         ) -> @location(0) vec4f {
             let flashInfo = uFlashData[instance_index];
-            let size = flashInfo.x;
-            let progress = flashInfo.y;
-            let seed = flashInfo.z;
+            let size = 1.0; // Size is in transform scale
+            let progress = flashInfo.x;
+            let seed = flashInfo.y;
             
             var totalAlpha = 0.0;
             var finalColor = vec3f(0.0);

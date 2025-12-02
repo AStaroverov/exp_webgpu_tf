@@ -1,6 +1,7 @@
 import { EntityId } from 'bitecs';
 import { GameDI } from '../../DI/GameDI.ts';
 import { TankTrack } from '../Components/TankTrack.ts';
+import { Progress } from '../Components/Progress.ts';
 import { DestroyByTimeout } from '../Components/Destroy.ts';
 import { createRectangle } from '../../../../../renderer/src/ECS/Entities/Shapes.ts';
 import {
@@ -38,8 +39,9 @@ export function createTankTrack(options: TankTrackOptions, { world } = GameDI): 
         applyMatrixRotateZ(LocalTransform.matrix.getBatch(eid), options.rotation);
     }
 
-    // Add TankTrack component for age tracking
-    TankTrack.addComponent(world, eid, TRACK_DURATION);
+    // Add TankTrack and Progress components
+    TankTrack.addComponent(world, eid);
+    Progress.addComponent(world, eid, TRACK_DURATION);
     DestroyByTimeout.addComponent(world, eid, TRACK_DURATION);
 
     return eid;

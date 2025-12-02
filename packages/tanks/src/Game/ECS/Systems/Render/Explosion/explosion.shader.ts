@@ -10,8 +10,8 @@ export const shaderMeta = new ShaderMeta(
         projection: new VariableMeta('uProjection', VariableKind.Uniform, `mat4x4<f32>`),
         // Array of explosion transforms (position encoded in matrix)
         transform: new VariableMeta('uTransform', VariableKind.StorageRead, `array<mat4x4<f32>, ${MAX_EXPLOSION_COUNT}>`),
-        // Explosion data: size, progress (0-1), seed, unused
-        explosionData: new VariableMeta('uExplosionData', VariableKind.StorageRead, `array<vec4<f32>, ${MAX_EXPLOSION_COUNT}>`),
+        // Explosion data: progress (0-1), seed
+        explosionData: new VariableMeta('uExplosionData', VariableKind.StorageRead, `array<vec2<f32>, ${MAX_EXPLOSION_COUNT}>`),
     },
     {},
     // language=WGSL
@@ -28,8 +28,8 @@ export const shaderMeta = new ShaderMeta(
             @builtin(instance_index) instance_index: u32,
         ) -> VertexOutput {
             let explosionInfo = uExplosionData[instance_index];
-            let size = explosionInfo.x;
-            let progress = explosionInfo.y;
+            let size = 1.0; // Size is in transform scale
+            let progress = explosionInfo.x;
             
             // Explosion expands then contracts slightly
             let expandFactor = 1.0 + progress * 0.5;
@@ -215,9 +215,9 @@ export const shaderMeta = new ShaderMeta(
             @location(1) local_position: vec2f,
         ) -> @location(0) vec4f {
             let explosionInfo = uExplosionData[instance_index];
-            let size = explosionInfo.x;
-            let progress = explosionInfo.y;
-            let seed = explosionInfo.z;
+            let size = 1.0; // Size is in transform scale
+            let progress = explosionInfo.x;
+            let seed = explosionInfo.y;
             
             var finalColor = vec3f(0.0);
             var totalAlpha = 0.0;

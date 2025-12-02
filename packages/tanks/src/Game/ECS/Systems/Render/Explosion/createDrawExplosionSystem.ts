@@ -6,7 +6,8 @@ import { projectionMatrix } from '../../../../../../../renderer/src/ECS/Systems/
 import { RenderDI } from '../../../../DI/RenderDI.ts';
 import { GameDI } from '../../../../DI/GameDI.ts';
 import { Explosion } from '../../../Components/Explosion.ts';
-import { ZIndex } from '../../../../consts.ts';
+import { Progress } from '../../../Components/Progress.ts';
+import { GlobalTransform } from '../../../../../../../renderer/src/ECS/Components/Transform.ts';
 
 export function createDrawExplosionSystem({ device } = RenderDI, { world } = GameDI) {
     const gpuShader = new GPUShader(shaderMeta);
@@ -16,57 +17,32 @@ export function createDrawExplosionSystem({ device } = RenderDI, { world } = Gam
 
     // Transform matrices for each explosion instance (mat4x4 = 16 floats)
     const transformBuffer = getTypeTypedArray(shaderMeta.uniforms.transform.type);
-    // Explosion data: size, progress, seed, unused for each explosion
+    // Explosion data: progress, seed for each explosion
     const explosionDataBuffer = getTypeTypedArray(shaderMeta.uniforms.explosionData.type);
 
-    return (renderPass: GPURenderPassEncoder, delta: number) => {
-        const explosionEids = query(world, [Explosion]);
+    return (renderPass: GPURenderPassEncoder) => {
+        const explosionEids = query(world, [Explosion, Progress, GlobalTransform]);
         const explosionCount = Math.min(explosionEids.length, MAX_EXPLOSION_COUNT);
 
         if (explosionCount === 0) {
             return;
         }
 
-        // Update explosion age and collect data
+        // Collect data from GlobalTransform and Progress
         for (let i = 0; i < explosionCount; i++) {
             const eid = explosionEids[i];
+            const globalMatrix = GlobalTransform.matrix.getBatch(eid);
 
-            // Update age
-            Explosion.updateAge(eid, delta);
-
-            const x = Explosion.x[eid];
-            const y = Explosion.y[eid];
-
-            // Build transform matrix (no rotation for explosion - radial effect)
-            // mat4x4 column-major:
-            // [1, 0, 0, 0]  col 0
-            // [0, 1, 0, 0]  col 1
-            // [0, 0, 1, 0]  col 2
-            // [x, y, z, 1]  col 3
+            // Copy transform matrix directly from GlobalTransform
             const matOffset = i * 16;
-            transformBuffer[matOffset + 0] = 1;
-            transformBuffer[matOffset + 1] = 0;
-            transformBuffer[matOffset + 2] = 0;
-            transformBuffer[matOffset + 3] = 0;
-            transformBuffer[matOffset + 4] = 0;
-            transformBuffer[matOffset + 5] = 1;
-            transformBuffer[matOffset + 6] = 0;
-            transformBuffer[matOffset + 7] = 0;
-            transformBuffer[matOffset + 8] = 0;
-            transformBuffer[matOffset + 9] = 0;
-            transformBuffer[matOffset + 10] = 1;
-            transformBuffer[matOffset + 11] = 0;
-            transformBuffer[matOffset + 12] = x;
-            transformBuffer[matOffset + 13] = y;
-            transformBuffer[matOffset + 14] = ZIndex.Explosion;
-            transformBuffer[matOffset + 15] = 1;
+            for (let j = 0; j < 16; j++) {
+                transformBuffer[matOffset + j] = globalMatrix[j];
+            }
 
-            // Fill explosion data buffer: size, progress, seed, unused
-            const dataOffset = i * 4;
-            explosionDataBuffer[dataOffset] = Explosion.size[eid];
-            explosionDataBuffer[dataOffset + 1] = Explosion.getProgress(eid);
-            explosionDataBuffer[dataOffset + 2] = (eid * 0.1) % 1.0; // seed based on entity id
-            explosionDataBuffer[dataOffset + 3] = 0;
+            // Fill explosion data buffer: progress, seed
+            const dataOffset = i * 2;
+            explosionDataBuffer[dataOffset] = Progress.getProgress(eid);
+            explosionDataBuffer[dataOffset + 1] = (eid * 0.1) % 1.0; // seed based on entity id
         }
 
         device.queue.writeBuffer(gpuShader.uniforms.projection.getGPUBuffer(device), 0, projectionMatrix as BufferSource);

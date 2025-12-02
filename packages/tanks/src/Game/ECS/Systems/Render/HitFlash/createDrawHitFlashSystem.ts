@@ -6,7 +6,8 @@ import { projectionMatrix } from '../../../../../../../renderer/src/ECS/Systems/
 import { RenderDI } from '../../../../DI/RenderDI.ts';
 import { GameDI } from '../../../../DI/GameDI.ts';
 import { HitFlash } from '../../../Components/HitFlash.ts';
-import { ZIndex } from '../../../../consts.ts';
+import { Progress } from '../../../Components/Progress.ts';
+import { GlobalTransform } from '../../../../../../../renderer/src/ECS/Components/Transform.ts';
 
 export function createDrawHitFlashSystem({ device } = RenderDI, { world } = GameDI) {
     const gpuShader = new GPUShader(shaderMeta);
@@ -16,57 +17,32 @@ export function createDrawHitFlashSystem({ device } = RenderDI, { world } = Game
 
     // Transform matrices for each flash instance (mat4x4 = 16 floats)
     const transformBuffer = getTypeTypedArray(shaderMeta.uniforms.transform.type);
-    // Flash data: size, progress, seed, unused for each flash
+    // Flash data: progress, seed for each flash
     const flashDataBuffer = getTypeTypedArray(shaderMeta.uniforms.flashData.type);
 
-    return (renderPass: GPURenderPassEncoder, delta: number) => {
-        const flashEids = query(world, [HitFlash]);
+    return (renderPass: GPURenderPassEncoder) => {
+        const flashEids = query(world, [HitFlash, Progress, GlobalTransform]);
         const flashCount = Math.min(flashEids.length, MAX_HIT_FLASH_COUNT);
 
         if (flashCount === 0) {
             return;
         }
 
-        // Update flash age and collect data
+        // Collect data from GlobalTransform and Progress
         for (let i = 0; i < flashCount; i++) {
             const eid = flashEids[i];
+            const globalMatrix = GlobalTransform.matrix.getBatch(eid);
 
-            // Update age
-            HitFlash.updateAge(eid, delta);
-
-            const x = HitFlash.x[eid];
-            const y = HitFlash.y[eid];
-
-            // Build transform matrix (no rotation for hit flash - radial effect)
-            // mat4x4 column-major:
-            // [1, 0, 0, 0]  col 0
-            // [0, 1, 0, 0]  col 1
-            // [0, 0, 1, 0]  col 2
-            // [x, y, z, 1]  col 3
+            // Copy transform matrix directly from GlobalTransform
             const matOffset = i * 16;
-            transformBuffer[matOffset + 0] = 1;
-            transformBuffer[matOffset + 1] = 0;
-            transformBuffer[matOffset + 2] = 0;
-            transformBuffer[matOffset + 3] = 0;
-            transformBuffer[matOffset + 4] = 0;
-            transformBuffer[matOffset + 5] = 1;
-            transformBuffer[matOffset + 6] = 0;
-            transformBuffer[matOffset + 7] = 0;
-            transformBuffer[matOffset + 8] = 0;
-            transformBuffer[matOffset + 9] = 0;
-            transformBuffer[matOffset + 10] = 1;
-            transformBuffer[matOffset + 11] = 0;
-            transformBuffer[matOffset + 12] = x;
-            transformBuffer[matOffset + 13] = y;
-            transformBuffer[matOffset + 14] = ZIndex.HitFlash;
-            transformBuffer[matOffset + 15] = 1;
+            for (let j = 0; j < 16; j++) {
+                transformBuffer[matOffset + j] = globalMatrix[j];
+            }
 
-            // Fill flash data buffer: size, progress, seed, unused
-            const dataOffset = i * 4;
-            flashDataBuffer[dataOffset] = HitFlash.size[eid];
-            flashDataBuffer[dataOffset + 1] = HitFlash.getProgress(eid);
-            flashDataBuffer[dataOffset + 2] = (eid * 0.1) % 1.0; // seed based on entity id
-            flashDataBuffer[dataOffset + 3] = 0;
+            // Fill flash data buffer: progress, seed
+            const dataOffset = i * 2;
+            flashDataBuffer[dataOffset] = Progress.getProgress(eid);
+            flashDataBuffer[dataOffset + 1] = (eid * 0.1) % 1.0; // seed based on entity id
         }
 
         device.queue.writeBuffer(gpuShader.uniforms.projection.getGPUBuffer(device), 0, projectionMatrix as BufferSource);
