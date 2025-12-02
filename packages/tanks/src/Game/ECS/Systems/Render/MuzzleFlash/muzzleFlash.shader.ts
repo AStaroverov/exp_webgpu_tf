@@ -98,9 +98,9 @@ export const shaderMeta = new ShaderMeta(
             let flashProgress = progress / 0.25; // Normalize to 0-1 for flash duration
             let flashSize = size * 1.5 * (1.0 - flashProgress * 0.3);
             
-            // Offset flash forward in shooting direction
+            // Offset flash closer to barrel (less offset than smoke)
             var offsetPos = localPos;
-            offsetPos.y += size * 1.0;
+            offsetPos.y += size * 0.3;
             
             let dist = length(offsetPos);
             let angle = atan2(offsetPos.x, -offsetPos.y);
