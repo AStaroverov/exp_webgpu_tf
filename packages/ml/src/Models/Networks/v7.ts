@@ -1,15 +1,14 @@
 import * as tf from '@tensorflow/tfjs';
 import {
-    applyCrossAttentionLayer,
-    applyLaNLayer, applySelfTransformLayers,
-    convertInputsToTokens,
-    createInputs
+    applyCrossAttentionLayer, applyLaNLayer, applySelfTransformLayers,
+    convertInputsToTokens, createInputs
 } from '../ApplyLayers.ts';
 import { MaskLikeLayer } from '../Layers/MaskLikeLayer.ts';
 
 import { Model } from '../def.ts';
 import { VariableLayer } from '../Layers/VariableLayer.ts';
 import { SliceLayer } from '../Layers/SliceLayer.ts';
+import { MaskSquashLayer } from '../Layers/MaskSquashLayer.ts';
 
 type NetworkConfig = {
     dim: number;
@@ -21,8 +20,8 @@ type policyNetworkConfig = NetworkConfig
 
 const policyNetworkConfig: policyNetworkConfig = {
     dim: 16,
-    heads: 2,
-    depth: 8,
+    heads: 1,
+    depth: 6,
 };
 
 const valueNetworkConfig: NetworkConfig = {
@@ -34,6 +33,19 @@ const valueNetworkConfig: NetworkConfig = {
 export function createNetwork(modelName: Model, config: NetworkConfig = modelName === Model.Policy ? policyNetworkConfig : valueNetworkConfig) {
     const inputs = createInputs(modelName);
     const tokens = convertInputsToTokens(inputs, config.dim);
+
+    const clsBulletsToken = new VariableLayer({
+        name: modelName + '_clsBulletsToken',
+        shape: [1, config.dim],
+        initializer: 'truncatedNormal'
+    }).apply(tokens.bulletsTok) as tf.SymbolicTensor;
+    const bulletsToken = applyCrossAttentionLayer({
+        name: modelName + '_clsBulletsAttention',
+        heads: config.heads,
+        qTok: clsBulletsToken,
+        kvTok: tokens.bulletsTok,
+        kvMask: inputs.bulletsMaskInput,
+    });
 
     const clsToken = new VariableLayer({
         name: modelName + '_clsToken',
@@ -48,18 +60,21 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
                 tokens.tankTok,
                 tokens.alliesTok,
                 tokens.enemiesTok,
+                bulletsToken,
             ]) as tf.SymbolicTensor;
     }
 
     const maskLike = new MaskLikeLayer({ name: modelName + '_maskLike' });
-    const oneMask = maskLike.apply(tokens.tankTok) as tf.SymbolicTensor;
+    const maskSquash = new MaskSquashLayer({ name: modelName + '_maskSquash' });
     const getContextMask = (i: number) => {
+        const oneMask = maskLike.apply(tokens.tankTok) as tf.SymbolicTensor;
         return tf.layers.concatenate({name: modelName + '_contextTokenMask' + i, axis: 1 })
             .apply([
                 oneMask,
                 oneMask,
                 inputs.alliesMaskInput,
                 inputs.enemiesMaskInput,
+                maskSquash.apply(inputs.bulletsMaskInput) as tf.SymbolicTensor,
             ]) as tf.SymbolicTensor;
     };
 
@@ -80,49 +95,22 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         sliceSize: [-1, 1, -1],
     }).apply(transformedTokens) as tf.SymbolicTensor;
 
-    const flattenedTransformedClsToken = tf.layers.flatten({ name: modelName + '_flattenedTransformedClsToken' })
+    const finalToken = tf.layers.flatten({ name: modelName + '_finalToken_mut_' })
         .apply(transformedClsToken) as tf.SymbolicTensor;
 
-    const transformedTankToken = new SliceLayer({
-        name: modelName + '_transformedTankToken',
-        beginSlice: [0, 1, 0],
-        sliceSize: [-1, 1, -1],
-    }).apply(transformedTokens) as tf.SymbolicTensor;
-
-    const attentionToBullets = applyCrossAttentionLayer({
-        name: modelName + '_attentionToBullets',
-        heads: config.heads,
-        qTok: transformedTankToken,
-        kvTok: tokens.bulletsTok,
-        kvMask: inputs.bulletsMaskInput,
-    });
-
-    const flattenedAttentionToBullets = tf.layers.flatten({ name: modelName + '_flattenedAttentionToBullets' })
-        .apply(attentionToBullets) as tf.SymbolicTensor;
-
-    const getSingleToken = (name: string) => {
-        const concatenated = tf.layers.concatenate({name: name + '_concatenated', axis: 1 })
-            .apply([flattenedTransformedClsToken, flattenedAttentionToBullets]) as tf.SymbolicTensor;
-        return concatenated;
-    }
-
-    const getHeadToken = (i: number) => {
-        if (i === 0 || i === 1) {
-            return flattenedAttentionToBullets;
-        }
-        if (i === 2 || i === 3) {
-            return flattenedTransformedClsToken;
-        }
-        throw new Error('Invalid head index');
-    }
-
-    const heads = Array.from({length: modelName === Model.Policy ? 4 : 1 }, (_, i) => {
-        const token = modelName === Model.Policy ? getHeadToken(i) : getSingleToken(modelName + '_headToken_' + i);
+    const len = modelName === Model.Policy ? 4 : 1;
+    const heads = Array.from({ length: len }, (_, i) => {
+        // return createDenseLayer({
+        //     name: modelName + '_head' + i,
+        //     units: config.dim,
+        //     useBias: true,
+        //     activation: 'relu',
+        // }).apply(finalToken) as tf.SymbolicTensor;
         return applyLaNLayer({
             name: `${modelName}_head${i}`,
             units: config.dim,
             preNorm: true
-        }, token);
+        }, finalToken);
     });
 
     return { inputs, heads };

@@ -1,9 +1,10 @@
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { getRandomHistoricalNetwork } from '../../../../ml/src/Models/Utils.ts';
-import { ActorUpdater, DownloadableAgent, TankAgent } from './CurrentActorAgent.ts';
+import { NetworkModelManager } from './NetworkModelManager.ts';
+import { DownloadableAgent, TankAgent } from './CurrentActorAgent.ts';
 
-const historcalActorUpdater = ActorUpdater(() => getRandomHistoricalNetwork(Model.Policy));
+const historcalActorUpdater = NetworkModelManager(() => getRandomHistoricalNetwork(Model.Policy));
 
 export class RandomHistoricalAgent implements TankAgent<DownloadableAgent> {
     constructor(public readonly tankEid: number) {
@@ -25,7 +26,7 @@ export class RandomHistoricalAgent implements TankAgent<DownloadableAgent> {
     }
 
     public async sync() {
-        await historcalActorUpdater.updateNetwork();
+        await historcalActorUpdater.updateNetwork(false);
     }
 
     public isSynced() {

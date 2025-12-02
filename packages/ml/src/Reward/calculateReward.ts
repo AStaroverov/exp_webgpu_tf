@@ -17,7 +17,7 @@ export const getFinalReward = (_isDead: boolean) => 0;
 
 const WEIGHTS = ({
     STATE_MULTIPLIER: 1, // it's often reward and work as learning base principle
-    ACTION_MULTIPLIER: 1, // it's rare reward and work as path to win
+    ACTION_MULTIPLIER: 2, // it's rare reward and work as path to win
 
     // ACTION REWARD
     COMMON: {

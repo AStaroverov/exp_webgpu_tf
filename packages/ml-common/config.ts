@@ -6,7 +6,7 @@ export const CONFIG = {
     clipNorm: 5,
 
     gamma: (iteration: number) => {
-        return lerp(0.97, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
+        return 0.97;//lerp(0.97, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
     },
 
     policyEntropy: (iteration: number) => {
@@ -24,22 +24,22 @@ export const CONFIG = {
     // Dynamic learning rate adjustment based on KL
     lrConfig: {
         kl: {
-            high: 0.013 * 2,
-            target: 0.01 * 2,
-            low: 0.007 * 2,
+            high: 0.013 * 3,
+            target: 0.01 * 3,
+            low: 0.007 * 3,
         },
         initial: 1e-4,
         multHigh: 0.95,
         multLow: 1.01,
         min: 1e-5,
-        max: 1e-3,
+        max: 1e-2,
     },
 
     batchSize: (iteration: number) => {
-        return 512 * 16;
+        return 256 * 16;
     },
     miniBatchSize: (iteration: number) => {
-        return 512;
+        return 256;
     },
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION

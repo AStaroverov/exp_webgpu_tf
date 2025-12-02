@@ -16,7 +16,7 @@ export function createPilotSystem() {
 
         if (shouldAction) {
             for (const agent of currentPilots) {
-                agent.evaluateTankBehaviour?.(GameDI.width, GameDI.height, frame);
+                agent.evaluateTankBehaviour?.(GameDI.width, GameDI.height, frame, 0);
             }
         }
 

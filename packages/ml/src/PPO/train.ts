@@ -65,15 +65,15 @@ export function trainPolicyNetwork(
             const ratios = tf.exp(newLogProbs.sub(oldLogProbs));                 // [B]
 
             // PPO
-            const clippedRatio = ratios.clipByValue(1 - clipRatio, 1 + clipRatio);
-            const surr1 = ratios.mul(advantages);
-            const surr2 = clippedRatio.mul(advantages);
-            const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
+            // const clippedRatio = ratios.clipByValue(1 - clipRatio, 1 + clipRatio);
+            // const surr1 = ratios.mul(advantages);
+            // const surr2 = clippedRatio.mul(advantages);
+            // const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
 
             // SPO:  A * r  -  |A| * (r - 1)^2 / (2 * clipRatio)
-            // const quad = ratios.sub(1).square().div(2 * clipRatio);                // [B]
-            // const spoTerm = advantages.mul(ratios).sub(tf.abs(advantages).mul(quad)); // [B]
-            // const policyLoss = spoTerm.mean().mul(-1) as tf.Scalar;              // scalar
+            const quad = ratios.sub(1).square().div(2 * clipRatio);                // [B]
+            const spoTerm = advantages.mul(ratios).sub(tf.abs(advantages).mul(quad)); // [B]
+            const policyLoss = spoTerm.mean().mul(-1) as tf.Scalar;              // scalar
 
             // Entropy for categorical distributions
             const entropy = computeEntropyCategorical(logitsHeads).mul(entropyCoeff) as tf.Scalar;
