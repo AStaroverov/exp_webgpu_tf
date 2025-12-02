@@ -19,8 +19,7 @@ export const shaderMeta = new ShaderMeta(
         shadow: new VariableMeta('uShadow', VariableKind.StorageRead, `array<vec2<f32>, ${ MAX_INSTANCE_COUNT }>`),
     },
     {},
-    // language=WGSL
-    wgsl`
+    wgsl/* WGSL */`
         struct VertexOutput {
             @builtin(position) position: vec4<f32>,
             @location(0) @interpolate(flat) instance_index: u32,

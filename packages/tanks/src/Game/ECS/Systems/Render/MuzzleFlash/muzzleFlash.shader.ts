@@ -2,38 +2,54 @@ import { ShaderMeta } from '../../../../../../../renderer/src/WGSL/ShaderMeta.ts
 import { VariableKind, VariableMeta } from '../../../../../../../renderer/src/Struct/VariableMeta.ts';
 import { wgsl } from '../../../../../../../renderer/src/WGSL/wgsl.ts';
 
-// Maximum number of muzzle flash particles we can render in one pass
+// Maximum number of muzzle flash instances
 export const MAX_MUZZLE_FLASH_COUNT = 64;
 
 export const shaderMeta = new ShaderMeta(
     {
-        screenSize: new VariableMeta('uScreenSize', VariableKind.Uniform, `vec2<f32>`),
-        flashCount: new VariableMeta('uFlashCount', VariableKind.Uniform, `u32`),
-        zIndex: new VariableMeta('uZIndex', VariableKind.Uniform, `f32`),
-        // Array of flash data: x, y, size, progress (0-1)
+        projection: new VariableMeta('uProjection', VariableKind.Uniform, `mat4x4<f32>`),
+        // Array of flash transforms (position, rotation, scale encoded in matrix)
+        transform: new VariableMeta('uTransform', VariableKind.StorageRead, `array<mat4x4<f32>, ${MAX_MUZZLE_FLASH_COUNT}>`),
+        // Flash data: size, progress (0-1), seed, unused
         flashData: new VariableMeta('uFlashData', VariableKind.StorageRead, `array<vec4<f32>, ${MAX_MUZZLE_FLASH_COUNT}>`),
-        flashRotation: new VariableMeta('uFlashRotation', VariableKind.StorageRead, `array<f32, ${MAX_MUZZLE_FLASH_COUNT}>`),
     },
     {},
     // language=WGSL
     wgsl/* wgsl */`
         struct VertexOutput {
             @builtin(position) position: vec4f,
+            @location(0) @interpolate(flat) instance_index: u32,
+            @location(1) local_position: vec2f,
         };
 
         @vertex
         fn vs_main(
             @builtin(vertex_index) vertex_index: u32,
+            @builtin(instance_index) instance_index: u32,
         ) -> VertexOutput {
-            let rect_vertex = vec4<f32>(
-                select(-1.0, 1.0, vertex_index > 0u && vertex_index < 4u),
-                select(-1.0, 1.0, vertex_index > 1u && vertex_index < 5u),
-                uZIndex,
-                1.0
+            let flashInfo = uFlashData[instance_index];
+            let size = flashInfo.x;
+            let progress = flashInfo.y;
+            
+            // Calculate expanded size for smoke
+            let expandedSize = size * (0.6 + progress * 1.44);
+            let maxRadius = expandedSize * 2.0;
+            
+            // Create quad vertices centered at origin
+            let local_pos = vec2f(
+                select(-maxRadius, maxRadius, vertex_index > 0u && vertex_index < 4u),
+                select(-maxRadius, maxRadius, vertex_index > 1u && vertex_index < 5u)
             );
+            
+            // Transform to world/screen position
+            let world_pos = (uProjection * uTransform[instance_index] * vec4f(local_pos, 0.0, 1.0)).xy;
+            
+            let position = vec4f(world_pos.x, -world_pos.y, uTransform[instance_index][3].z, 1.0);
 
             return VertexOutput(
-                rect_vertex,
+                position,
+                instance_index,
+                local_pos,
             );
         }
 
@@ -140,68 +156,43 @@ export const shaderMeta = new ShaderMeta(
         }
 
         @fragment
-        fn fs_main(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4f {
-            let screenPos = vec2f(fragCoord.x, fragCoord.y);
+        fn fs_main(
+            @location(0) @interpolate(flat) instance_index: u32,
+            @location(1) local_position: vec2f,
+        ) -> @location(0) vec4f {
+            let flashInfo = uFlashData[instance_index];
+            let size = flashInfo.x;
+            let progress = flashInfo.y;
+            let seed = flashInfo.z;
             
             var totalAlpha = 0.0;
             var finalColor = vec3f(0.0);
             
-            // Check each muzzle flash
-            for (var i = 0u; i < uFlashCount; i++) {
-                let flashInfo = uFlashData[i];
-                let flashX = flashInfo.x;
-                let flashY = flashInfo.y;
-                let flashSize = flashInfo.z;
-                let progress = flashInfo.w;
-                let rotation = uFlashRotation[i];
+            // Calculate smoke density
+            let smokeDensity = smokePattern(local_position, size, progress, seed);
+            
+            // Calculate flash intensity
+            let flashIntensity = flashPattern(local_position, size, progress, seed);
+            
+            // Combine smoke and flash
+            if (flashIntensity > 0.0) {
+                // Flash color: pure bright white
+                let flashColor = vec3f(1.0, 1.0, 1.0);
                 
-                // Transform screen position relative to flash center
-                let flashCenter = vec2f(flashX, flashY);
+                let alpha = flashIntensity;
+                finalColor = mix(finalColor, flashColor, alpha);
+                totalAlpha = max(totalAlpha, alpha);
+            }
+            
+            if (smokeDensity > 0.0) {
+                // Smoke color: light gray, more transparent
+                let baseGray = mix(0.85, 0.5, progress);
+                let smokeColor = vec3f(baseGray, baseGray * 0.95, baseGray * 0.9);
                 
-                // Early exit if too far from flash center
-                let maxRadius = flashSize * 4.0;
-                if (length(screenPos - flashCenter) > maxRadius) {
-                    continue;
-                }
-                
-                // Apply rotation around flash center (rotate to align with shooting direction)
-                let relPos = screenPos - flashCenter;
-                let cosR = cos(-rotation);
-                let sinR = sin(-rotation);
-                let localPos = vec2f(
-                    relPos.x * cosR - relPos.y * sinR,
-                    relPos.x * sinR + relPos.y * cosR
-                );
-                
-                // Generate seed for this flash
-                let flashSeed = hash21(vec2f(f32(i), 0.0));
-                
-                // Calculate smoke density
-                let smokeDensity = smokePattern(localPos, flashSize, progress, flashSeed);
-                
-                // Calculate flash intensity
-                let flashIntensity = flashPattern(localPos, flashSize, progress, flashSeed);
-                
-                // Combine smoke and flash
-                if (flashIntensity > 0.0) {
-                    // Flash color: pure bright white
-                    let flashColor = vec3f(1.0, 1.0, 1.0);
-                    
-                    let alpha = flashIntensity;
-                    finalColor = mix(finalColor, flashColor, alpha);
-                    totalAlpha = max(totalAlpha, alpha);
-                }
-                
-                if (smokeDensity > 0.0) {
-                    // Smoke color: light gray, more transparent
-                    let baseGray = mix(0.85, 0.5, progress);
-                    let smokeColor = vec3f(baseGray, baseGray * 0.95, baseGray * 0.9);
-                    
-                    // More transparent smoke (reduced from 0.8 to 0.5)
-                    let alpha = smokeDensity * 0.5;
-                    finalColor = mix(finalColor, smokeColor, alpha);
-                    totalAlpha = max(totalAlpha, alpha);
-                }
+                // More transparent smoke (reduced from 0.8 to 0.5)
+                let alpha = smokeDensity * 0.5;
+                finalColor = mix(finalColor, smokeColor, alpha);
+                totalAlpha = max(totalAlpha, alpha);
             }
             
             if (totalAlpha < 0.01) {
