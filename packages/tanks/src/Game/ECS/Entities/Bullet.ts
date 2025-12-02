@@ -119,7 +119,7 @@ export function spawnBullet(tankEid: number) {
     createMuzzleFlash({
         x: optionsSpawnBullet.x,
         y: optionsSpawnBullet.y,
-        size: bulletCaliber.width * 8,
+        size: bulletCaliber.width * 5,
         duration: 1050,
         rotation: optionsSpawnBullet.rotation,
     });
