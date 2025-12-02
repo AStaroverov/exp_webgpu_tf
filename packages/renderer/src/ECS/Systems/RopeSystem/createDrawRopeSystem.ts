@@ -38,7 +38,7 @@ export function createDrawRopeSystem(world: World, device: GPUDevice) {
             colorCollect[i * 4 + 3] = Color.a[id];
         }
 
-        device.queue.writeBuffer(gpuShader.uniforms.projection.getGPUBuffer(device), 0, projectionMatrix as Float32Array);
+        device.queue.writeBuffer(gpuShader.uniforms.projection.getGPUBuffer(device), 0, projectionMatrix as BufferSource);
         device.queue.writeBuffer(gpuShader.uniforms.color.getGPUBuffer(device), 0, colorCollect);
         device.queue.writeBuffer(gpuShader.uniforms.points.getGPUBuffer(device), 0, pointsCollect);
         device.queue.writeBuffer(gpuShader.uniforms.thinness.getGPUBuffer(device), 0, thinnessCollect);
