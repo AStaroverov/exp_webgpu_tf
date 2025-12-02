@@ -1,4 +1,3 @@
-import { EntityId } from 'bitecs';
 import { GameDI } from '../../DI/GameDI.ts';
 import { TankTrack } from '../Components/TankTrack.ts';
 import { Progress } from '../Components/Progress.ts';
@@ -9,6 +8,7 @@ import {
     applyMatrixRotateZ,
 } from '../../../../../renderer/src/ECS/Components/Transform.ts';
 import { ZIndex } from '../../consts.ts';
+import { RenderDI } from '../../DI/RenderDI.ts';
 
 export const TRACK_DURATION = 10_000; // 10 seconds
 
@@ -23,7 +23,8 @@ export interface TankTrackOptions {
     rotation?: number;
 }
 
-export function createTankTrack(options: TankTrackOptions, { world } = GameDI): EntityId {
+export function spawnTankTrack(options: TankTrackOptions, { world } = GameDI, { enabled } = RenderDI) {
+    if (!enabled) return;
     // Use the standard shape rendering system
     const eid = createRectangle(world, {
         x: options.x,
@@ -43,6 +44,4 @@ export function createTankTrack(options: TankTrackOptions, { world } = GameDI): 
     TankTrack.addComponent(world, eid);
     Progress.addComponent(world, eid, TRACK_DURATION);
     DestroyByTimeout.addComponent(world, eid, TRACK_DURATION);
-
-    return eid;
 }

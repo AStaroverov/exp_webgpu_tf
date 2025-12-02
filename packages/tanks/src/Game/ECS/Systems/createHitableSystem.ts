@@ -11,7 +11,7 @@ import { TeamRef } from '../Components/TeamRef.ts';
 import { PlayerRef } from '../Components/PlayerRef.ts';
 import { Damagable } from '../Components/Damagable.ts';
 import { min } from '../../../../../../lib/math.ts';
-import { createHitFlash } from '../Entities/HitFlash.ts';
+import { spawnHitFlash } from '../Entities/HitFlash.ts';
 import {
     getMatrixTranslationX,
     getMatrixTranslationY,
@@ -51,7 +51,7 @@ export function createHitableSystem({ world } = GameDI) {
             // Spawn hit flash at bullet position
             const bulletMatrix = GlobalTransform.matrix.getBatch(bulletId);
             const bulletCaliber = mapBulletCaliber[Bullet.caliber[bulletId] as BulletCaliber];
-            createHitFlash({
+            spawnHitFlash({
                 x: getMatrixTranslationX(bulletMatrix),
                 y: getMatrixTranslationY(bulletMatrix),
                 size: bulletCaliber.width * 2,

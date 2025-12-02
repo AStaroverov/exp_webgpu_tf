@@ -6,7 +6,7 @@ import { TankPartCaterpillar } from '../../Components/TankPart.ts';
 import { RigidBodyState } from '../../Components/Physical.ts';
 import { abs, cos, PI, sin } from '../../../../../../../lib/math.ts';
 import { random } from '../../../../../../../lib/random.ts';
-import { createTankTrack } from '../../Entities/TankTrack.ts';
+import { spawnTankTrack } from '../../Entities/TankTrack.ts';
 import {
     GlobalTransform,
     getMatrixTranslationX,
@@ -70,7 +70,7 @@ export function createSpawnTankTracksSystem({ world } = GameDI) {
                 const trackWidth = 3;
                 const trackHeight = 5;
 
-                createTankTrack({
+                spawnTankTrack({
                     x,
                     y,
                     width: trackWidth,

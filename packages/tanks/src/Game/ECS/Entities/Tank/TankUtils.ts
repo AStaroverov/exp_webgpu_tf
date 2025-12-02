@@ -14,7 +14,7 @@ import { TankPart, TankPartCaterpillar } from '../../Components/TankPart.ts';
 import { TeamRef } from '../../Components/TeamRef.ts';
 import { mapTankEngineLabel, TankEngineType } from '../../Systems/Tank/TankControllerSystems.ts';
 import { recursiveTypicalRemoveEntity, scheduleRemoveEntity } from '../../Utils/typicalRemoveEntity.ts';
-import { createExplosion } from '../Explosion.ts';
+import { spawnExplosion } from '../Explosion.ts';
 import {
     getMatrixTranslationX,
     getMatrixTranslationY,
@@ -24,7 +24,7 @@ import {
 export function destroyTank(tankEid: EntityId) {
     // Spawn explosion at tank position
     const tankMatrix = GlobalTransform.matrix.getBatch(tankEid);
-    createExplosion({
+    spawnExplosion({
         x: getMatrixTranslationX(tankMatrix),
         y: getMatrixTranslationY(tankMatrix),
         size: 60,

@@ -178,6 +178,7 @@ export function createGame({ width, height }: {
         }
 
         RenderDI.destroy?.();
+        RenderDI.enabled = canvas != null;
 
         if (canvas == null) {
             return;

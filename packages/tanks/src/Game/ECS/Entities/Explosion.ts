@@ -1,10 +1,11 @@
-import { addEntity, EntityId } from 'bitecs';
+import { addEntity } from 'bitecs';
 import { GameDI } from '../../DI/GameDI.ts';
 import { Explosion } from '../Components/Explosion.ts';
 import { Progress } from '../Components/Progress.ts';
 import { DestroyByTimeout } from '../Components/Destroy.ts';
 import { addTransformComponents, applyMatrixTranslate, applyMatrixScale, LocalTransform } from '../../../../../renderer/src/ECS/Components/Transform.ts';
 import { ZIndex } from '../../consts.ts';
+import { RenderDI } from '../../DI/RenderDI.ts';
 
 export interface ExplosionOptions {
     x: number;
@@ -13,7 +14,9 @@ export interface ExplosionOptions {
     duration: number;
 }
 
-export function createExplosion(options: ExplosionOptions, { world } = GameDI): EntityId {
+export function spawnExplosion(options: ExplosionOptions, { world } = GameDI, { enabled } = RenderDI) {
+    if (!enabled) return;
+
     const eid = addEntity(world);
 
     addTransformComponents(world, eid);
@@ -23,6 +26,4 @@ export function createExplosion(options: ExplosionOptions, { world } = GameDI): 
     Explosion.addComponent(world, eid);
     Progress.addComponent(world, eid, options.duration);
     DestroyByTimeout.addComponent(world, eid, options.duration);
-
-    return eid;
 }

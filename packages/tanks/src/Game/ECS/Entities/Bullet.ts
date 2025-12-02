@@ -5,7 +5,7 @@ import { createRectangleRR } from '../Components/RigidRender.ts';
 import { PlayerRef } from '../Components/PlayerRef.ts';
 import { Hitable } from '../Components/Hitable.ts';
 import { DestroyByTimeout } from '../Components/Destroy.ts';
-import { createMuzzleFlash } from './MuzzleFlash.ts';
+import { spawnMuzzleFlash } from './MuzzleFlash.ts';
 import { mat4, vec2, vec3 } from 'gl-matrix';
 import {
     getMatrixRotationZ,
@@ -116,7 +116,7 @@ export function spawnBullet(tankEid: number) {
     createBullet(optionsSpawnBullet);
 
     // Spawn muzzle flash effect
-    createMuzzleFlash({
+    spawnMuzzleFlash({
         x: optionsSpawnBullet.x,
         y: optionsSpawnBullet.y,
         size: bulletCaliber.width * 5,
