@@ -2,7 +2,7 @@ import { GameDI } from '../../DI/GameDI.ts';
 import { Hitable } from '../Components/Hitable.ts';
 import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 import { EntityId, hasComponent, onSet, query } from 'bitecs';
-import { Bullet } from '../Components/Bullet.ts';
+import { Bullet, BulletCaliber, mapBulletCaliber } from '../Components/Bullet.ts';
 import { createChangeDetector } from '../../../../../renderer/src/ECS/Systems/ChangedDetectorSystem.ts';
 import { TankPart } from '../Components/TankPart.ts';
 import { tearOffTankPart } from '../Entities/Tank/TankUtils.ts';
@@ -11,6 +11,12 @@ import { TeamRef } from '../Components/TeamRef.ts';
 import { PlayerRef } from '../Components/PlayerRef.ts';
 import { Damagable } from '../Components/Damagable.ts';
 import { min } from '../../../../../../lib/math.ts';
+import { spawnHitFlash } from '../Entities/HitFlash.ts';
+import {
+    getMatrixTranslationX,
+    getMatrixTranslationY,
+    GlobalTransform,
+} from '../../../../../renderer/src/ECS/Components/Transform.ts';
 
 export function createHitableSystem({ world } = GameDI) {
     const hitableChanges = createChangeDetector(world, [onSet(Hitable)]);
@@ -41,6 +47,16 @@ export function createHitableSystem({ world } = GameDI) {
             applyDamage(bulletId);
 
             if (!Hitable.isDestroyed(bulletId)) continue;
+
+            // Spawn hit flash at bullet position
+            const bulletMatrix = GlobalTransform.matrix.getBatch(bulletId);
+            const bulletCaliber = mapBulletCaliber[Bullet.caliber[bulletId] as BulletCaliber];
+            spawnHitFlash({
+                x: getMatrixTranslationX(bulletMatrix),
+                y: getMatrixTranslationY(bulletMatrix),
+                size: bulletCaliber.width * 2,
+                duration: 400,
+            });
 
             scheduleRemoveEntity(bulletId);
         }

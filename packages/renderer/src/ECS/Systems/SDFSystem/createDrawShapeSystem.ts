@@ -68,7 +68,7 @@ export function createDrawShapeSystem(world: World, device: GPUDevice) {
             }
         }
 
-        device.queue.writeBuffer(gpuShader.uniforms.projection.getGPUBuffer(device), 0, projectionMatrix as Float32Array);
+        device.queue.writeBuffer(gpuShader.uniforms.projection.getGPUBuffer(device), 0, projectionMatrix as BufferSource);
         device.queue.writeBuffer(gpuShader.uniforms.transform.getGPUBuffer(device), 0, transformCollect);
 
         if (countChanged || shapeChanges.hasChanges()) {

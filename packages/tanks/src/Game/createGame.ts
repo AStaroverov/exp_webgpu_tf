@@ -25,12 +25,18 @@ import {
     createPlayerTankTurretRotationSystem,
 } from './ECS/Systems/PlayerTankControllerSystems.ts';
 import { createDrawGrassSystem } from './ECS/Systems/Render/Grass/createDrawGrassSystem.ts';
+import { createDrawMuzzleFlashSystem } from './ECS/Systems/Render/MuzzleFlash/createDrawMuzzleFlashSystem.ts';
+import { createDrawHitFlashSystem } from './ECS/Systems/Render/HitFlash/createDrawHitFlashSystem.ts';
+import { createDrawExplosionSystem } from './ECS/Systems/Render/Explosion/createDrawExplosionSystem.ts';
 import { createPostEffect } from './ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
 import { createTankAliveSystem } from './ECS/Systems/Tank/createTankAliveSystem.ts';
 import { createTankDecayOutOfZoneSystem } from './ECS/Systems/Tank/createTankDecayOutOfZoneSystem.ts';
 import { createVisualizationTracksSystem } from './ECS/Systems/Tank/createVisualizationTracksSystem.ts';
+import { createSpawnTankTracksSystem } from './ECS/Systems/Tank/createSpawnTankTracksSystem.ts';
+import { createUpdateTankTracksSystem } from './ECS/Systems/Tank/createUpdateTankTracksSystem.ts';
 import { createTankPositionSystem, createTankTurretRotationSystem } from './ECS/Systems/Tank/TankControllerSystems.ts';
 import { initPhysicalWorld } from './Physical/initPhysicalWorld.ts';
+import { createProgressSystem } from './ECS/Systems/createProgressSystem.ts';
 
 export type Game = ReturnType<typeof createGame>;
 
@@ -114,6 +120,9 @@ export function createGame({ width, height }: {
     };
 
     const visTracksUpdate = createVisualizationTracksSystem();
+    const spawnTankTracks = createSpawnTankTracksSystem();
+    const updateTankTracks = createUpdateTankTracksSystem();
+    const updateProgress = createProgressSystem();
 
     GameDI.gameTick = (delta: number) => {
         GameDI.plugins.systems[SystemGroup.Before].forEach(system => system(delta));
@@ -123,6 +132,9 @@ export function createGame({ width, height }: {
         physicalFrame(delta);
 
         visTracksUpdate(delta);
+        spawnTankTracks(delta);
+        updateProgress(delta);
+        updateTankTracks();
         // updateMap();
 
         // stats.begin();
@@ -166,6 +178,7 @@ export function createGame({ width, height }: {
         }
 
         RenderDI.destroy?.();
+        RenderDI.enabled = canvas != null;
 
         if (canvas == null) {
             return;
@@ -178,6 +191,9 @@ export function createGame({ width, height }: {
         RenderDI.context = context;
 
         const drawGrass = createDrawGrassSystem();
+        const drawMuzzleFlash = createDrawMuzzleFlashSystem();
+        const drawHitFlash = createDrawHitFlashSystem();
+        const drawExplosion = createDrawExplosionSystem();
         const drawShape = createDrawShapeSystem(world, device);
         const { renderFrame, renderTexture } = createFrameTick({
             canvas,
@@ -188,6 +204,9 @@ export function createGame({ width, height }: {
         }, ({ passEncoder, delta }) => {
             drawGrass(passEncoder, delta);
             drawShape(passEncoder);
+            drawExplosion(passEncoder);
+            drawHitFlash(passEncoder);
+            drawMuzzleFlash(passEncoder);
         });
         const postEffectFrame = createPostEffect(device, context, renderTexture);
 

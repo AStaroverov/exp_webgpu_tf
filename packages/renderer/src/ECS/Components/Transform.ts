@@ -64,3 +64,31 @@ export function getMatrixTranslation(m: mat4) {
 export function getMatrixRotationZ(m: mat4) {
     return Math.atan2(m[1], m[0]);
 }
+
+export function applyMatrixScale(m: mat4, sx: number, sy: number, sz: number = 1) {
+    mat4.scale(m, m, [sx, sy, sz]);
+}
+
+export function setMatrixScale(m: mat4, sx: number, sy: number, sz: number = 1) {
+    // Extract current rotation
+    const cosR = m[0];
+    const sinR = m[1];
+    const len = Math.sqrt(cosR * cosR + sinR * sinR);
+    const cos = len > 0 ? cosR / len : 1;
+    const sin = len > 0 ? sinR / len : 0;
+    
+    // Apply scale with rotation preserved
+    m[0] = cos * sx;
+    m[1] = sin * sx;
+    m[4] = -sin * sy;
+    m[5] = cos * sy;
+    m[10] = sz;
+}
+
+export function getMatrixScaleX(m: mat4) {
+    return Math.sqrt(m[0] * m[0] + m[1] * m[1]);
+}
+
+export function getMatrixScaleY(m: mat4) {
+    return Math.sqrt(m[4] * m[4] + m[5] * m[5]);
+}
