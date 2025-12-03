@@ -8,12 +8,13 @@ import { Tank } from '../../../tanks/src/Game/ECS/Components/Tank.ts';
 import { TankController } from '../../../tanks/src/Game/ECS/Components/TankController.ts';
 import { getTankHealth, getTankScore } from '../../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
 import { ALLY_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../../tanks/src/Pilots/Components/TankState.ts';
+import { LEARNING_STEPS } from '../../../ml-common/consts.ts';
 
 export const getFramePenalty = (frame: number) =>
     -clamp(Math.log10(1 + frame), 0, 3) / 100;
 
-export const getFinalReward = (_isDead: boolean) => 0;
-    // isDead ? -5 : 5;
+export const getFinalReward = (successRatio: number, networkVersion: number) => 
+    successRatio * (0.3 + 0.7 * clamp(networkVersion / LEARNING_STEPS, 0, 1));
 
 const WEIGHTS = ({
     STATE_MULTIPLIER: 1, // it's often reward and work as learning base principle
@@ -195,7 +196,7 @@ export function calculateActionReward(tankEid: number): number {
     const rewards = initializeActionRewards();
 
     rewards.common.score = WEIGHTS.COMMON.SCORE * currentScore * 0.33;
-    rewards.common.health = WEIGHTS.COMMON.HEALTH * currentHealth * 3;
+    rewards.common.health = WEIGHTS.COMMON.HEALTH * currentHealth * 7;
 
     rewards.common.total = WEIGHTS.COMMON_MULTIPLIER
         * (rewards.common.health + rewards.common.score);

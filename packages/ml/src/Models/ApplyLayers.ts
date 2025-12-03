@@ -13,6 +13,7 @@ import { MaskLikeLayer } from './Layers/MaskLikeLayer.ts';
 import { MultiHeadAttentionLayer } from './Layers/MultiHeadAttentionLayer.ts';
 import { RMSNormConfig, RMSNormLayer } from "./Layers/RMSNormLayer.ts";
 import { VariableLayer } from './Layers/VariableLayer.ts';
+import { NoisyDenseLayer } from './Layers/NoisyDenseLayer.ts';
 
 export function createInputs(name: string) {
     const tankInput = tf.input({name: name + '_tankInput', shape: [TANK_FEATURES_DIM]});
@@ -81,6 +82,33 @@ export function applyLaNLayer({name, units, preNorm = false}: {
         activation: 'tanh',
     }).apply(layer) as tf.SymbolicTensor;
     const branch2 = createDenseLayer({
+        name: `${name}/LaN_branch2`,
+        units,
+        useBias: true,
+        activation: 'tanh',
+    }).apply(layer) as tf.SymbolicTensor;
+
+    return tf.layers.multiply({name: `${name}/LaN_output`}).apply([branch1, branch2]) as tf.SymbolicTensor;
+}
+
+export function applyNoisyLaNLayer({name, units, preNorm = false}: {
+    name: string,
+    units: number,
+    preNorm?: boolean,
+}, layer: tf.SymbolicTensor) {
+    if (preNorm) {
+        layer = createNormalizationLayer({
+            name: `${name}/LaN_preNorm`,
+        }).apply(layer) as tf.SymbolicTensor;
+    }
+
+    const branch1 = new NoisyDenseLayer({
+        name: `${name}/LaN_branch1`,
+        units,
+        useBias: true,
+        activation: 'tanh',
+    }).apply(layer) as tf.SymbolicTensor;
+    const branch2 = new NoisyDenseLayer({
         name: `${name}/LaN_branch2`,
         units,
         useBias: true,

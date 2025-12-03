@@ -8,7 +8,7 @@ import {
 
 import { createDenseLayer } from "./ApplyLayers.ts";
 import { Model } from './def.ts';
-import { createNetwork } from './Networks/v7.ts';
+import { createNetwork } from './Networks/v9.ts';
 import { AdamW } from './Optimizer/AdamW.ts';
 
 export const CONTROLLER_FEATURES_DIM = 4;

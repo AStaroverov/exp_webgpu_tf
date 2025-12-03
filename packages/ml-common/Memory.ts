@@ -1,4 +1,3 @@
-import { getFinalReward } from '../ml/src/Reward/calculateReward.ts';
 import { InputArrays } from './InputArrays.ts';
 
 export type AgentMemoryBatch = {
@@ -53,16 +52,15 @@ export class AgentMemory {
         this.dones.push(done);
     }
 
-    getBatch(isWin: boolean): undefined | AgentMemoryBatch {
+    getBatch(rewardBias: number): undefined | AgentMemoryBatch {
         this.setMinLength();
 
         if (this.states.length === 0) {
             return undefined;
         }
 
-        const isDead = this.isDone();
-        const rewards = new Float32Array(this.rewards);
-        rewards[rewards.length - 1] = rewards[rewards.length - 1] + ((isWin && isDead) ? 0 : getFinalReward(isDead));
+        const rewards = new Float32Array(this.rewards)
+            .map(v => v + rewardBias);
         
         // @ts-expect-error - js convertion
         const dones = new Float32Array(this.dones);
@@ -74,7 +72,7 @@ export class AgentMemory {
             actions: (this.actions),
             logits: (this.logits),
             logProbs: new Float32Array(this.logProbs),
-            rewards: new Float32Array(this.rewards),
+            rewards: rewards,
             dones: dones,
         };
     }

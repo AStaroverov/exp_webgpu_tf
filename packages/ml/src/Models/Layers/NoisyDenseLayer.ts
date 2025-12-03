@@ -9,6 +9,7 @@ import {
 import { getActivation, serializeActivation } from '@tensorflow/tfjs-layers/dist/activations';
 import { Activation } from '@tensorflow/tfjs-layers/dist/activations';
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
+import * as K from '@tensorflow/tfjs-layers/dist/backend/tfjs_backend';
 
 /**
  * Noisy Dense Layer configuration
@@ -49,20 +50,26 @@ export interface NoisyDenseConfig extends LayerArgs {
 
     /**
      * Whether to use factorized noise (more efficient) or independent noise.
-     * Default: true (factorized)
+     * Default: false (factorized)
      */
     factorized?: boolean;
+
+    /**
+     * Configuration for colored (pink) noise.
+     * Uses multi-scale Ornstein-Uhlenbeck process for temporally correlated noise.
+     * Default: { K: 8, tauMin: 4, tauMax: 64, beta: 1 } (pink noise)
+     */
+    coloredNoiseConfig?: ColoredNoiseConfig;
 }
 
 /**
- * Noisy Dense Layer
+ * Noisy Dense Layer with Pink (Colored) Noise
  *
  * Based on "Noisy Networks for Exploration" (Fortunato et al., 2017)
  * https://arxiv.org/abs/1706.10295
  *
- * This layer replaces standard dense layers with noisy equivalents,
- * where learned noise parameters are added to the weights during forward pass.
- * This provides a form of exploration that is learned during training.
+ * Extended with temporally correlated (pink) noise using multi-scale
+ * Ornstein-Uhlenbeck process for smoother exploration patterns.
  *
  * The noisy layer can be represented as:
  * y = (μ_w + σ_w ⊙ ε_w) * x + (μ_b + σ_b ⊙ ε_b)
@@ -70,7 +77,7 @@ export interface NoisyDenseConfig extends LayerArgs {
  * Where:
  * - μ_w, μ_b are the mean weight and bias parameters
  * - σ_w, σ_b are the noise scale parameters (learned)
- * - ε_w, ε_b are noise samples (from unit Gaussian)
+ * - ε_w, ε_b are pink noise samples (temporally correlated)
  * - ⊙ denotes element-wise multiplication
  */
 export class NoisyDenseLayer extends tf.layers.Layer {
@@ -81,6 +88,7 @@ export class NoisyDenseLayer extends tf.layers.Layer {
     private useBias: boolean;
     private sigma: number;
     private factorized: boolean;
+    private coloredNoiseConfig: ColoredNoiseConfig;
     private kernelInitializer: Initializer;
     private biasInitializer: Initializer;
 
@@ -94,13 +102,17 @@ export class NoisyDenseLayer extends tf.layers.Layer {
 
     private inputDim!: number;
 
+    // Colored noise state for pink noise generation
+    private coloredNoiseState!: ColoredNoiseState;
+
     constructor(config: NoisyDenseConfig) {
         super(config);
         this.units = config.units;
         this.activation = getActivation(config.activation ?? 'linear');
         this.useBias = config.useBias ?? true;
         this.sigma = config.sigma ?? 0.5;
-        this.factorized = config.factorized ?? true;
+        this.factorized = config.factorized ?? false;
+        this.coloredNoiseConfig = config.coloredNoiseConfig ?? {};
         this.kernelInitializer = config.kernelInitializer instanceof Initializer
             ? config.kernelInitializer
             : getInitializer(config.kernelInitializer ?? 'glorotNormal');
@@ -163,6 +175,13 @@ export class NoisyDenseLayer extends tf.layers.Layer {
             );
         }
 
+        // Initialize colored noise state for pink noise generation
+        this.coloredNoiseState = new ColoredNoiseState(
+            this.inputDim,
+            this.units,
+            this.coloredNoiseConfig
+        );
+
         super.build(inputShape);
     }
 
@@ -175,59 +194,67 @@ export class NoisyDenseLayer extends tf.layers.Layer {
     }
 
     /**
-     * Generate noise samples.
+     * Generate pink noise samples using multi-scale OU process.
      * For factorized noise: ε_w = f(ε_i) ⊗ f(ε_j) where ⊗ is outer product
-     * For independent noise: ε_w is sampled independently for each weight
+     * For independent noise: ε_w is computed from outer product directly
      */
     private sampleNoise(): { kernelNoise: tf.Tensor; biasNoise?: tf.Tensor } {
-        return tf.tidy(() => {
-            if (this.factorized) {
-                // Factorized Gaussian noise (more efficient)
-                // Sample noise for input dimension and output dimension separately
-                const epsilonInput = tf.randomNormal([this.inputDim, 1]);
-                const epsilonOutput = tf.randomNormal([1, this.units]);
+        if (!this.coloredNoiseState) {
+            throw new Error('ColoredNoiseState not initialized');
+        }
 
-                // Apply scaling function f(x) = sign(x) * sqrt(|x|)
-                const scaledInput = this.scaleNoise(epsilonInput);
-                const scaledOutput = this.scaleNoise(epsilonOutput);
+        return tf.tidy(() => {
+            const { inputNoise, outputNoise } = this.coloredNoiseState.sample();
+
+            if (this.factorized) {
+                // Factorized colored noise: apply scaling function to correlated vectors
+                const scaledInput = this.scaleNoise(inputNoise.reshape([this.inputDim, 1]));
+                const scaledOutput = this.scaleNoise(outputNoise.reshape([1, this.units]));
 
                 // Outer product: ε_w = f(ε_i) * f(ε_j)^T
                 const kernelNoise = tf.matMul(scaledInput, scaledOutput);
 
                 let biasNoise: tf.Tensor | undefined;
                 if (this.useBias) {
-                    // Bias noise uses only the output noise
-                    biasNoise = scaledOutput.squeeze([0]);
+                    biasNoise = this.scaleNoise(outputNoise);
                 }
+
+                // Dispose raw noise tensors
+                inputNoise.dispose();
+                outputNoise.dispose();
 
                 return { kernelNoise, biasNoise };
             } else {
-                // Independent Gaussian noise (more expressive but less efficient)
-                const kernelNoise = tf.randomNormal([this.inputDim, this.units]);
+                // Non-factorized: use outer product directly
+                const kernelNoise = tf.outerProduct(inputNoise, outputNoise);
 
                 let biasNoise: tf.Tensor | undefined;
                 if (this.useBias) {
-                    biasNoise = tf.randomNormal([this.units]);
+                    biasNoise = outputNoise;
+                } else {
+                    outputNoise.dispose();
                 }
+
+                inputNoise.dispose();
 
                 return { kernelNoise, biasNoise };
             }
         });
     }
 
-    call(inputs: tf.Tensor | tf.Tensor[], kwargs?: { training?: boolean }): tf.Tensor {
+    call(inputs: tf.Tensor | tf.Tensor[], kwargs?: { noise?: boolean }): tf.Tensor {
+        const enable = kwargs?.noise ?? false;
+
         return tf.tidy(() => {
             const input = Array.isArray(inputs) ? inputs[0] : inputs;
-            const training = kwargs?.training ?? true;
 
             // Read mean parameters
             const kernelMu = this.kernelMu.read();
 
             let kernel: tf.Tensor;
-            let bias: tf.Tensor | undefined;
+            let bias: tf.Tensor | null = null;
 
-            if (training) {
-                // During training: add noise
+            if (enable) {
                 const { kernelNoise, biasNoise } = this.sampleNoise();
 
                 // w = μ_w + σ_w ⊙ ε_w
@@ -246,11 +273,12 @@ export class NoisyDenseLayer extends tf.layers.Layer {
                 }
             }
 
-            // Compute output: y = x * W + b
-            let output = tf.matMul(input, kernel);
+            // Compute output using K.dot (handles gradients correctly for any rank)
+            // y = x · W + b
+            let output = K.dot(input, kernel);
 
-            if (bias) {
-                output = output.add(bias);
+            if (bias !== null) {
+                output = K.biasAdd(output, bias);
             }
 
             // Apply activation
@@ -276,35 +304,133 @@ export class NoisyDenseLayer extends tf.layers.Layer {
             useBias: this.useBias,
             sigma: this.sigma,
             factorized: this.factorized,
+            coloredNoiseConfig: this.coloredNoiseConfig as unknown as tf.serialization.ConfigDict,
             kernelInitializer: serializeInitializer(this.kernelInitializer),
             biasInitializer: serializeInitializer(this.biasInitializer),
         };
     }
 
-    /**
-     * Reset noise by generating new noise samples.
-     * Useful when you want to refresh the exploration noise.
-     */
-    resetNoise(): void {
-        // Noise is sampled fresh on each forward pass,
-        // so this method is provided for API compatibility
-        // but doesn't need to do anything special
-    }
-
-    /**
-     * Get the current noise scale (average of sigma parameters).
-     * Useful for monitoring exploration during training.
-     */
-    getNoiseScale(): number {
-        return tf.tidy(() => {
-            const kernelSigmaValues = this.kernelSigma.read().abs().mean().arraySync() as number;
-            if (this.useBias && this.biasSigma) {
-                const biasSigmaValues = this.biasSigma.read().abs().mean().arraySync() as number;
-                return (kernelSigmaValues + biasSigmaValues) / 2;
-            }
-            return kernelSigmaValues;
-        });
+    override dispose() {
+        if (this.coloredNoiseState) {
+            this.coloredNoiseState.dispose();
+        }
+        return super.dispose();
     }
 }
 
 tf.serialization.registerClass(NoisyDenseLayer);
+
+
+/**
+ * Colored noise configuration for multi-scale OU process
+ */
+export type ColoredNoiseConfig = {
+    /** Number of OU filters (scales). Default: 8 */
+    K?: number;
+    /** Minimum timescale in steps. Default: 4 */
+    tauMin?: number;
+    /** Maximum timescale in steps. Default: 64 */
+    tauMax?: number;
+    /** Spectral exponent (1 = pink, 2 = brown/red). Default: 1 (pink noise) */
+    beta?: number;
+}
+
+/**
+ * Internal state for colored noise generation using multi-scale OU process.
+ * Generates temporally correlated (pink) noise for smoother exploration.
+ */
+class ColoredNoiseState {
+    private K: number;
+    private a: tf.Tensor2D;  // AR(1) coefficients
+    private b: tf.Tensor2D;  // Noise scale for unit variance
+    private w: tf.Tensor2D;  // Spectral weights
+    private inputState: tf.Tensor2D;
+    private outputState: tf.Tensor2D;
+    private disposed = false;
+
+    constructor(
+        private inputDim: number,
+        private outputDim: number,
+        config: ColoredNoiseConfig = {}
+    ) {
+        const {
+            K = 8,
+            tauMin = 4,
+            tauMax = 64,
+            beta = 0.7,  // 1 = pink, 2 = brown/red
+        } = config;
+
+        this.K = K;
+
+        const { a, b, w } = tf.tidy(() => {
+            const logMin = Math.log(tauMin);
+            const logMax = Math.log(tauMax);
+            const logs = tf.linspace(logMin, logMax, K);
+            const taus = tf.exp(logs);
+
+            // AR(1) coefficients: a = exp(-1/tau)
+            const aVec = tf.exp(tf.neg(tf.div(tf.onesLike(taus), taus)));
+            // Noise scale to maintain unit variance: b = sqrt(1 - a^2)
+            const bVec = tf.sqrt(tf.maximum(tf.sub(1, tf.square(aVec)), 1e-8));
+
+            // Spectral weighting for colored noise (beta=1 -> pink, beta=2 -> brown)
+            const tilt = (beta - 1) / 2;
+            const wRaw = tf.pow(taus, tf.scalar(-tilt));
+            const wVec = tf.div(wRaw, tf.sqrt(tf.sum(tf.square(wRaw))));
+
+            return {
+                a: aVec.reshape([K, 1]) as tf.Tensor2D,
+                b: bVec.reshape([K, 1]) as tf.Tensor2D,
+                w: wVec.reshape([K, 1]) as tf.Tensor2D,
+            };
+        });
+
+        this.a = a;
+        this.b = b;
+        this.w = w;
+
+        this.inputState = tf.randomNormal([K, inputDim]) as tf.Tensor2D;
+        this.outputState = tf.randomNormal([K, outputDim]) as tf.Tensor2D;
+    }
+
+    sample(): { inputNoise: tf.Tensor1D; outputNoise: tf.Tensor1D } {
+        if (this.disposed) {
+            throw new Error('ColoredNoiseState: already disposed');
+        }
+
+        const { K, a, b, w, inputDim, outputDim } = this;
+
+        // Update input state with AR(1) process
+        const zInput = tf.randomNormal([K, inputDim]);
+        const newInputState = a.mul(this.inputState).add(b.mul(zInput));
+        const inputNoise = newInputState.mul(w).sum(0) as tf.Tensor1D;
+
+        // Update output state with AR(1) process
+        const zOutput = tf.randomNormal([K, outputDim]);
+        const newOutputState = a.mul(this.outputState).add(b.mul(zOutput));
+        const outputNoise = newOutputState.mul(w).sum(0) as tf.Tensor1D;
+
+
+        // Update states outside tidy
+        this.inputState.dispose();
+        this.outputState.dispose();
+        this.inputState = tf.keep(newInputState) as tf.Tensor2D;
+        this.outputState = tf.keep(newOutputState) as tf.Tensor2D;
+
+        return {
+            inputNoise: inputNoise,
+            outputNoise: outputNoise,
+        };
+    }
+
+    dispose(): void {
+        if (this.disposed) return;
+        this.disposed = true;
+
+        this.a.dispose();
+        this.b.dispose();
+        this.w.dispose();
+        this.inputState.dispose();
+        this.outputState.dispose();
+    }
+}

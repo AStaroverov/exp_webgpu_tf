@@ -24,15 +24,15 @@ export const CONFIG = {
     // Dynamic learning rate adjustment based on KL
     lrConfig: {
         kl: {
-            high: 0.013 * 3,
-            target: 0.01 * 3,
-            low: 0.007 * 3,
+            high: 0.013 * 2,
+            target: 0.01 * 2,
+            low: 0.007 * 2,
         },
-        initial: 1e-4,
+        initial: 1e-3,
         multHigh: 0.95,
         multLow: 1.01,
         min: 1e-5,
-        max: 1e-2,
+        max: 1e-3,
     },
 
     batchSize: (iteration: number) => {

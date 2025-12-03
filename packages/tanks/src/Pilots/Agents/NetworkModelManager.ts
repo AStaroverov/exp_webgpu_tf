@@ -19,16 +19,14 @@ export const NetworkModelManager = (getter: () => Promise<tf.LayersModel>) => {
         logProb: number
     }>();
 
-    const updateNetwork = async (isTrain: boolean) => {
+    const updateNetwork = async () => {
         const now = Date.now();
         const delta = now - dateRequestNetwork 
         
         if (delta > 10_000 || promiseNetwork == null) {
             network = undefined;
             promiseNetwork?.then(disposeNetwork);
-            promiseNetwork = patientAction(getter).then((v) => {
-                return (network = (isTrain && Math.random() < 0.9 ? perturbWeights(v, 0.05) : v));
-            });
+            promiseNetwork = patientAction(getter).then((net) => (network = net));
             dateRequestNetwork = now;
         }
 
@@ -48,7 +46,7 @@ export const NetworkModelManager = (getter: () => Promise<tf.LayersModel>) => {
         });
     }
     
-    const get = (agent: TankAgent<unknown>) => {
+    const get = (agent: TankAgent<unknown>, train: boolean) => {
         if (network == null) {
             scheduledAgents = [];
             return;
@@ -56,11 +54,8 @@ export const NetworkModelManager = (getter: () => Promise<tf.LayersModel>) => {
 
         if (scheduledAgents.length > 0) {
             const states = scheduledAgents.map(({width, height, agent}) => prepareInputArrays(agent.tankEid, width, height));
-            const noises = scheduledAgents.map(({agent}) => (agent.train
-                // @ts-ignore
-                || globalThis.disableNoise !== true
-            ) ? agent.getNoise?.() : undefined);
-            const result = batchAct(network, states, noises);
+            const options = train ? { greedy: false, epsilon: 0.01 } : { greedy: true };
+            const result = batchAct(network, states, options);
             
             for (const [index, {agent}] of scheduledAgents.entries()) {
                 computedAgents.set(agent, {

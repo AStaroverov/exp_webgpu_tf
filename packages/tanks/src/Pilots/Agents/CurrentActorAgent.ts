@@ -1,17 +1,13 @@
-import * as tf from '@tensorflow/tfjs';
-import { clamp } from 'lodash-es';
-import { randomRangeFloat } from '../../../../../lib/random.ts';
+import { clamp } from 'lodash';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
-import { ColoredNoiseApprox } from '../../../../ml-common/ColoredNoiseApprox.ts';
+import { LEARNING_STEPS } from '../../../../ml-common/consts.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
 import { getNetworkExpIteration } from '../../../../ml-common/utils.ts';
-import { ACTION_HEAD_DIMS } from '../../../../ml/src/Models/Create.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { getNetwork } from '../../../../ml/src/Models/Utils.ts';
 import { calculateActionReward, calculateStateReward, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { NetworkModelManager } from './NetworkModelManager.ts';
-import { LEARNING_STEPS } from '../../../../ml-common/consts.ts';
 
 export type TankAgent<A = Partial<DownloadableAgent> & Partial<LearnableAgent>> = A & {
     tankEid: number;
@@ -27,11 +23,10 @@ export type DownloadableAgent = {
 
 export type LearnableAgent = {
     train: boolean;
-    getNoise(): tf.Tensor[];
     dispose(): void;
     getVersion(): number;
     getMemory(): undefined | AgentMemory;
-    getMemoryBatch(isWin: boolean): undefined | AgentMemoryBatch;
+    getMemoryBatch(rewardBias: number): undefined | AgentMemoryBatch;
     evaluateTankBehaviour(width: number, height: number, frame: number, successRatio: number): void;
 }
 
@@ -39,18 +34,12 @@ const currentActorUpdater = NetworkModelManager(() => getNetwork(Model.Policy));
 
 export class CurrentActorAgent implements TankAgent<DownloadableAgent & LearnableAgent> {
     private memory = new AgentMemory();
-    private noise: ColoredNoiseApprox;
 
     private initialActionReward?: number;
 
     constructor(public readonly tankEid: number, public train: boolean) {
-        this.noise = new ColoredNoiseApprox(ACTION_HEAD_DIMS, randomRangeFloat(0.3, 0.7));
     }
 
-    public getNoise(): tf.Tensor[] {
-        return this.noise.sample();
-    }
-    
     public getVersion(): number {
         const net = currentActorUpdater.getNetwork();
         return net != null
@@ -62,17 +51,16 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         return this.train ? this.memory : undefined;
     }
 
-    public getMemoryBatch(isWin: boolean): undefined | AgentMemoryBatch {
-        return this.train ? this.memory.getBatch(isWin) : undefined;
+    public getMemoryBatch(rewardBias: number): undefined | AgentMemoryBatch {
+        return this.train ? this.memory.getBatch(rewardBias) : undefined;
     }
 
     public dispose() {
         this.memory.dispose();
-        this.noise?.dispose();
     }
 
     public async sync() {
-        await currentActorUpdater.updateNetwork(this.train);
+        await currentActorUpdater.updateNetwork();
     }
 
     public isSynced() {
@@ -87,7 +75,12 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
     }
 
     public applyUpdateTankBehaviour() {
-        const result = currentActorUpdater.get(this);
+        const result = currentActorUpdater.get(
+            this,
+            this.train ||
+            // @ts-ignore
+            globalThis.disableNoise !== true
+        );
         if (result == null) return;
         
         applyActionToTank(this.tankEid, result.actions, false);

@@ -25,7 +25,8 @@ export class AdamW extends PatchedAdamOptimizer {
         if (name.includes('/bias') || name.endsWith('bias')) return null;
         if (name.includes('layernorm') || name.includes('layer_norm')) return null; // γ/β
         if (name.includes('batchnorm') || name.includes('batch_normalization')) return null; // γ/β
-        if (name.includes('logstd') || name.includes('log_std')) return null; // политика/gSDE
+        if (name.includes('rmsnormlayer')) return null;
+        if (name.includes('noisydenselayer') && name.includes('sigma')) return null; // noisy layer sigmas
 
         // AdamW: Apply decoupled weight decay
         // weight_decay = -learning_rate * weight_decay_rate * weights

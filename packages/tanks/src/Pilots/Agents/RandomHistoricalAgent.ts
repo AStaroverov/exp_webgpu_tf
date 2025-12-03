@@ -15,7 +15,7 @@ export class RandomHistoricalAgent implements TankAgent<DownloadableAgent> {
     }
 
     applyUpdateTankBehaviour(): void {
-        const result = historcalActorUpdater.get(this);
+        const result = historcalActorUpdater.get(this, false);
         if (result == null) return;
     
         applyActionToTank(this.tankEid, result.actions, false);
@@ -26,7 +26,7 @@ export class RandomHistoricalAgent implements TankAgent<DownloadableAgent> {
     }
 
     public async sync() {
-        await historcalActorUpdater.updateNetwork(false);
+        await historcalActorUpdater.updateNetwork();
     }
 
     public isSynced() {

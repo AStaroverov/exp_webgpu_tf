@@ -10,37 +10,6 @@ import { createInputTensors } from '../../../ml-common/InputTensors.ts';
 import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
 
-// Removed: const C = 0.5 * Math.log(2 * Math.PI * Math.E);
-// export function trainPolicyNetwork(
-//     network: tf.LayersModel,
-//     states: tf.Tensor[],
-//     actions: tf.Tensor,      // [batchSize, actionDim]
-//     oldLogProbs: tf.Tensor,  // [batchSize]
-//     advantages: tf.Tensor,   // [batchSize]
-//     batchSize: number,
-//     clipRatio: number,
-//     entropyCoeff: number,
-//     clipNorm: number,
-//     minLogStd: number[],
-//     maxLogStd: number[],
-//     returnCost: boolean,
-// ): undefined | tf.Tensor {
-//     return tf.tidy(() => {
-//         return optimize(network.optimizer, () => {
-//             const predicted = network.predict(states, { batchSize });
-//             const { mean, logStd } = parsePolicyOutput(predicted, minLogStd, maxLogStd);
-//             const newLogProbs = computeLogProbTanh(actions, mean, logStd.exp());
-//             const ratio = tf.exp(newLogProbs.sub(oldLogProbs));
-//             const clippedRatio = ratio.clipByValue(1 - clipRatio, 1 + clipRatio);
-//             const surr1 = ratio.mul(advantages);
-//             const surr2 = clippedRatio.mul(advantages);
-//             const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
-//             const entropy = logStd.add(C).sum(1).mean().mul(entropyCoeff);
-//             const totalLoss = policyLoss.sub(entropy);
-//             return totalLoss as tf.Scalar;
-//         }, { clipNorm, returnCost });
-//     });
-// }
 export function trainPolicyNetwork(
     network: tf.LayersModel,
     states: tf.Tensor[],
@@ -55,7 +24,7 @@ export function trainPolicyNetwork(
 ): undefined | tf.Tensor {
     return tf.tidy(() => {
         return optimize(network.optimizer, () => {
-            const predicted = network.predict(states, {batchSize});
+            const predicted = network.apply(states, { training: true, noise: true }) as tf.Tensor | tf.Tensor[];
             const logitsHeads = parsePolicyOutput(predicted);
 
             // Compute log probabilities for categorical distributions
@@ -98,7 +67,7 @@ export function trainValueNetwork(
 ): undefined | tf.Tensor {
     return tf.tidy(() => {
         return optimize(network.optimizer, () => {
-            const newValues = (network.predict(states, {batchSize}) as tf.Tensor).squeeze();
+            const newValues = (network.apply(states, { training: true }) as tf.Tensor).squeeze();
             const newValuesClipped = oldValues.add(
                 newValues.sub(oldValues).clipByValue(-clipRatio, clipRatio),
             );
@@ -128,22 +97,21 @@ export function computeKullbackLeiblerAprox(
     });
 }
 
-export function batchAct(policyNetwork: tf.LayersModel, states: InputArrays[], noise?: (undefined | tf.Tensor[])[]): {
+export function batchAct(policyNetwork: tf.LayersModel, states: InputArrays[], noise?: ({ greedy?: boolean; epsilon?: number })): {
     actions: Float32Array,
     logits: Float32Array,
     logProb: number,
 }[] {
     return tf.tidy(() => {
         const batchSize = states.length;
-        const predicted = policyNetwork.apply(createInputTensors(states), {training: false}) as tf.Tensor | tf.Tensor[];
+        const predicted = policyNetwork.apply(createInputTensors(states), { noise: noise?.greedy !== true }) as tf.Tensor | tf.Tensor[];
         const logitsHeads = parsePolicyOutput(predicted);
         
         const results: {actions: Float32Array, logits: Float32Array, logProb: number}[] = [];
         
         for (let i = 0; i < batchSize; i++) {
             const stateLogitsHeads = logitsHeads.map(logits => logits.slice([i], [1])); // [1, numClasses]
-            const stateNoise = noise?.[i];
-            const sample = sampleActionsFromLogits(stateLogitsHeads, stateNoise);
+            const sample = sampleActionsFromLogits(stateLogitsHeads, noise);
             const logProb = computeLogProbCategorical(sample.actions.expandDims(0), stateLogitsHeads);
             
             results.push({
@@ -151,11 +119,64 @@ export function batchAct(policyNetwork: tf.LayersModel, states: InputArrays[], n
                 actions: syncUnwrapTensor(sample.actions) as Float32Array,
                 logProb: syncUnwrapTensor(logProb)[0],
             });
-            
-            stateNoise?.forEach(t => t.dispose());
         }
         
         return results;
+    });
+}
+
+/**
+ * Сэмплирование действий из набора categorical голов.
+ *
+ * @param logitsHeads - массив логитов для каждой головы, shape [B, A_i] или [A_i]
+ * @param opts.greedy - если true, выбираем argmax (детерминированно)
+ * @param opts.epsilon - ε-greedy: π_mix = (1 - ε) * softmax + ε * uniform
+ *
+ * @returns actions [numHeads], logitsFlat [sum(A_i)]
+ */
+export function sampleActionsFromLogits(
+    logitsHeads: tf.Tensor[],
+    opts?: { greedy?: boolean; epsilon?: number }
+): { actions: tf.Tensor; logitsFlat: tf.Tensor } {
+    const { greedy = false, epsilon = 0 } = opts ?? {};
+
+    return tf.tidy(() => {
+        // Нормализуем все головы к shape [1, A_i]
+        const heads2d = logitsHeads.map(h => (h.rank === 1 ? h.expandDims(0) : h) as tf.Tensor2D);
+
+        const sampledActions = heads2d.map((logits) => {
+            if (greedy) {
+                return tf.argMax(logits, -1).squeeze();
+            }
+            return sampleCategorical(logits, epsilon);
+        });
+
+        return {
+            actions: tf.stack(sampledActions, -1),
+            logitsFlat: tf.concat(heads2d, -1).squeeze([0]),
+        };
+    });
+}
+
+/**
+ * Сэмплирование из categorical распределения с опциональным ε-greedy.
+ */
+function sampleCategorical(logits: tf.Tensor2D, epsilon: number): tf.Tensor {
+    return tf.tidy(() => {
+        const numActions = logits.shape[1]!;
+
+        // ε-greedy: смешиваем логиты с uniform
+        let samplingLogits = logits;
+        if (epsilon > 0) {
+            const probs = tf.softmax(logits) as tf.Tensor2D;
+            const uniform = tf.fill(probs.shape, 1 / numActions) as tf.Tensor2D;
+            const mixedProbs = tf.add(probs.mul(1 - epsilon), uniform.mul(epsilon)) as tf.Tensor2D;
+            // Конвертируем обратно в логиты для multinomial
+            samplingLogits = tf.log(mixedProbs.clipByValue(1e-8, 1)) as tf.Tensor2D;
+        }
+
+        // multinomial принимает логиты и сэмплирует из categorical
+        return tf.multinomial(samplingLogits, 1).squeeze();
     });
 }
 
@@ -166,7 +187,7 @@ export function pureAct(
     actions: Float32Array,
 } {
     return tf.tidy(() => {
-        const predicted = policyNetwork.apply(createInputTensors([state]), {training: false}) as tf.Tensor | tf.Tensor[];
+        const predicted = policyNetwork.apply(createInputTensors([state])) as tf.Tensor | tf.Tensor[];
         const logitsHeads = parsePolicyOutput(predicted);
         
         // Use argmax for deterministic action selection
@@ -370,41 +391,6 @@ function computeEntropyCategorical(logitsHeads: tf.Tensor[]): tf.Tensor {
             return probs.mul(logProbs).sum(-1).mul(-1); // -sum(p * log(p)) -> [B]
         });
         return tf.addN(entropies).div(logitsHeads.length).mean() as tf.Scalar; // Mean entropy across batch and heads
-    });
-}
-
-// Sample actions from logits with optional Gumbel noise for categorical sampling
-// Uses the Gumbel-Max trick: argmax(logits + Gumbel(0,1)) ~ Categorical(softmax(logits))
-// If noise is null, uses argmax (deterministic)
-// The colored noise provides temporal correlation for exploration
-function sampleActionsFromLogits(logitsHeads: tf.Tensor[], noise?: tf.Tensor[]): { actions: tf.Tensor, logitsFlat: tf.Tensor } {
-    return tf.tidy(() => {
-        const sampledActions = logitsHeads.map((logits, i) => {
-            if (noise == null) {
-                // Deterministic: argmax
-                return tf.argMax(logits, -1);
-            }
-
-            if (noise != null && noise[i] == null) {
-                throw new Error('Noise tensor is null but expected to be a tensor.');
-            }
-            // Transform colored noise to Gumbel-like distribution
-            // noise is ~N(0,1) colored, we convert it to approximate Gumbel via inverse CDF
-            // Gumbel(0,1) = -log(-log(U)) where U ~ Uniform(0,1)
-            // For N(0,1): Φ(z) gives U, so Gumbel ≈ -log(-log(Φ(noise)))
-            // Approximation: use sigmoid to map to (0,1), then apply Gumbel transform
-            const eps = 1e-7;
-            const u = tf.sigmoid(noise[i]).clipByValue(eps, 1 - eps); // ~Uniform(0,1) approximation
-            const gumbelNoise = tf.neg(tf.log(tf.neg(tf.log(u)))); // Gumbel(0,1)
-            
-            const noisyLogits = logits.add(gumbelNoise);
-            return tf.argMax(noisyLogits, -1);
-        });
-        
-        const actions = tf.stack(sampledActions, -1).squeeze([0]); // [actionDim]
-        const logitsFlat = tf.concat(logitsHeads, -1).squeeze([0]); // Flatten for storage
-        
-        return { actions, logitsFlat };
     });
 }
 

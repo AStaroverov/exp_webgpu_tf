@@ -7,6 +7,7 @@ import { removePhysicalJoint } from '../../../Physical/removePhysicalJoint.ts';
 import { setPhysicalCollisionGroup } from '../../../Physical/setPhysicalCollisionGroup.ts';
 import { Children } from '../../Components/Children.ts';
 import { Parent } from '../../Components/Parent.ts';
+import { RigidBodyRef } from '../../Components/Physical.ts';
 import { PlayerRef } from '../../Components/PlayerRef.ts';
 import { Score } from '../../Components/Score.ts';
 import { Tank } from '../../Components/Tank.ts';
@@ -20,31 +21,117 @@ import {
     getMatrixTranslationY,
     GlobalTransform,
 } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
+import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.ts';
+
+// Explosion force settings
+const EXPLOSION_IMPULSE_BASE = 40000;      // Base impulse strength
+const EXPLOSION_IMPULSE_RANDOM = EXPLOSION_IMPULSE_BASE / 2;    // Random additional impulse
+const EXPLOSION_TORQUE_BASE = 200000;        // Base angular impulse
+const EXPLOSION_TORQUE_RANDOM = EXPLOSION_TORQUE_BASE / 2;     // Random additional torque
+const EXPLOSION_UPWARD_BIAS = 0.3;       // Slight upward bias for more dramatic effect
+
+function applyExplosionImpulse(
+    partEid: EntityId,
+    explosionX: number,
+    explosionY: number,
+    { physicalWorld } = GameDI,
+) {
+    if (physicalWorld == null) return;
+
+    const pid = RigidBodyRef.id[partEid];
+    if (pid === 0) return;
+
+    const rb = physicalWorld.getRigidBody(pid);
+    if (rb == null) return;
+
+    // Get part position
+    const partMatrix = GlobalTransform.matrix.getBatch(partEid);
+    const partX = getMatrixTranslationX(partMatrix);
+    const partY = getMatrixTranslationY(partMatrix);
+
+    // Calculate direction from explosion center to part
+    let dirX = partX - explosionX;
+    let dirY = partY - explosionY;
+
+    // Normalize direction
+    const dist = Math.sqrt(dirX * dirX + dirY * dirY);
+    if (dist > 0.01) {
+        dirX /= dist;
+        dirY /= dist;
+    } else {
+        // If part is at explosion center, use random direction
+        const angle = Math.random() * Math.PI * 2;
+        dirX = Math.cos(angle);
+        dirY = Math.sin(angle);
+    }
+
+    // Add some randomness to direction
+    const spreadAngle = (Math.random() - 0.5) * 0.8; // ±0.4 radians spread
+    const cosSpread = Math.cos(spreadAngle);
+    const sinSpread = Math.sin(spreadAngle);
+    const newDirX = dirX * cosSpread - dirY * sinSpread;
+    const newDirY = dirX * sinSpread + dirY * cosSpread;
+    dirX = newDirX;
+    dirY = newDirY;
+
+    // Add slight upward bias (negative Y in screen coords)
+    dirY -= EXPLOSION_UPWARD_BIAS;
+
+    // Calculate impulse with randomness
+    const impulseStrength = EXPLOSION_IMPULSE_BASE + Math.random() * EXPLOSION_IMPULSE_RANDOM;
+    const impulseX = dirX * impulseStrength;
+    const impulseY = dirY * impulseStrength;
+
+    // Apply linear impulse
+    rb.applyImpulse({ x: impulseX, y: impulseY }, true);
+
+    // Apply random angular impulse for spinning effect
+    const torque = (Math.random() - 0.5) * 2 * (EXPLOSION_TORQUE_BASE + Math.random() * EXPLOSION_TORQUE_RANDOM);
+    rb.applyTorqueImpulse(torque, true);
+}
 
 export function destroyTank(tankEid: EntityId) {
-    // Spawn explosion at tank position
+    // Get explosion center position
     const tankMatrix = GlobalTransform.matrix.getBatch(tankEid);
+    const explosionX = getMatrixTranslationX(tankMatrix);
+    const explosionY = getMatrixTranslationY(tankMatrix);
+
+    // Spawn explosion at tank position
     spawnExplosion({
-        x: getMatrixTranslationX(tankMatrix),
-        y: getMatrixTranslationY(tankMatrix),
+        x: explosionX,
+        y: explosionY,
         size: 60,
         duration: 1500,
     });
 
-    // turret
+    // Collect all parts before tearing them off
+    const partsToExplode: EntityId[] = [];
+
+    // turret parts
     const turretEid = Tank.turretEId[tankEid];
     for (let i = 0; i < Children.entitiesCount[turretEid]; i++) {
         const eid = Children.entitiesIds.get(turretEid, i);
+        partsToExplode.push(eid);
         tearOffTankPart(eid, false);
     }
     Children.removeAllChildren(turretEid);
+
     // tank parts
     for (let i = 0; i < Children.entitiesCount[tankEid]; i++) {
         const partEid = Children.entitiesIds.get(tankEid, i);
+        partsToExplode.push(partEid);
         tearOffTankPart(partEid, false);
     }
     Children.removeAllChildren(tankEid);
+
     removeTankComponentsWithoutParts(tankEid);
+
+    macroTasks.addTimeout(() => {
+        // Apply explosion impulse to all parts after they're detached
+        for (const partEid of partsToExplode) {
+            applyExplosionImpulse(partEid, explosionX, explosionY);
+        }
+    }, 30); // delay to ensure parts are detached
 }
 
 export function removeTank(tankEid: EntityId) {

@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import {
-    applyCrossAttentionLayer, applyLaNLayer, applySelfTransformLayers,
+    applyCrossAttentionLayer, applyLaNLayer, applyNoisyLaNLayer, applySelfTransformLayers,
     convertInputsToTokens, createInputs
 } from '../ApplyLayers.ts';
 import { MaskLikeLayer } from '../Layers/MaskLikeLayer.ts';
@@ -9,7 +9,6 @@ import { Model } from '../def.ts';
 import { VariableLayer } from '../Layers/VariableLayer.ts';
 import { SliceLayer } from '../Layers/SliceLayer.ts';
 import { MaskSquashLayer } from '../Layers/MaskSquashLayer.ts';
-import { NoisyDenseLayer } from '../Layers/NoisyDenseLayer.ts';
 
 type NetworkConfig = {
     dim: number;
@@ -22,7 +21,7 @@ type policyNetworkConfig = NetworkConfig
 const policyNetworkConfig: policyNetworkConfig = {
     dim: 16,
     heads: 1,
-    depth: 6,
+    depth: 12,
 };
 
 const valueNetworkConfig: NetworkConfig = {
@@ -101,17 +100,11 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
 
     const len = modelName === Model.Policy ? 4 : 1;
     const heads = Array.from({ length: len }, (_, i) => {
-        const result = applyLaNLayer({
+        return (modelName === Model.Policy ? applyNoisyLaNLayer : applyLaNLayer)({
             name: `${modelName}_head${i}`,
             units: config.dim,
             preNorm: true
         }, flattenedFinalToken);
-
-        return modelName === Model.Policy ? new NoisyDenseLayer({
-            name: modelName + '_noised_head'+i,
-            units: config.dim,
-            activation: 'linear',
-        }).apply(result) as tf.SymbolicTensor : result;
     });
 
     return { inputs, heads };
