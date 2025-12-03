@@ -14,7 +14,7 @@ export const getFramePenalty = (frame: number) =>
     -clamp(Math.log10(1 + frame), 0, 3) / 100;
 
 export const getFinalReward = (successRatio: number, networkVersion: number) => 
-    successRatio * (0.3 + 0.7 * clamp(networkVersion / LEARNING_STEPS, 0, 1));
+    successRatio * (0.5 * (0.3 + 0.7 * clamp(networkVersion / LEARNING_STEPS, 0, 1)));
 
 const WEIGHTS = ({
     STATE_MULTIPLIER: 1, // it's often reward and work as learning base principle
