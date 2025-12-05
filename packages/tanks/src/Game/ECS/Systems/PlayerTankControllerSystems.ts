@@ -5,6 +5,7 @@ import { PlayerEnvDI } from '../../DI/PlayerEnvDI.ts';
 import { RenderDI } from '../../DI/RenderDI.ts';
 import { RigidBodyState } from '../Components/Physical.ts';
 import { normalizeAngle } from '../../../../../../lib/math.ts';
+import { GameDI } from '../../DI/GameDI.ts';
 
 export function createPlayerTankPositionSystem({ document } = PlayerEnvDI) {
     let move = 0;
@@ -86,8 +87,11 @@ export function createPlayerTankTurretRotationSystem({ document } = PlayerEnvDI)
             const turretRot = RigidBodyState.rotation[Tank.turretEId[PlayerEnvDI.tankEid]];
             const turretPos = RigidBodyState.position.getBatch(Tank.turretEId[PlayerEnvDI.tankEid]);
 
+            // Convert screen coordinates to world coordinates
+            const [worldX, worldY] = screenToWorld(lastEvent.clientX, lastEvent.clientY);
+
             // Глобальный угол от дула к позиции цели
-            const targetRot = Math.atan2(lastEvent.clientY - turretPos[1], lastEvent.clientX - turretPos[0]) + Math.PI / 2;
+            const targetRot = Math.atan2(worldY - turretPos[1], worldX - turretPos[0]) + Math.PI / 2;
             const relTurretRot = normalizeAngle(turretRot - tankRot);
             const relTargetTurretRot = normalizeAngle(targetRot - tankRot);
             const deltaRot = normalizeAngle(relTargetTurretRot - relTurretRot);
@@ -150,4 +154,17 @@ export function createPlayerTankBulletSystem({ document } = PlayerEnvDI, { canva
     };
 
     return { tick, destroy };
+}
+
+function screenToWorld(screenX: number, screenY: number): [number, number] {
+    if (!RenderDI.canvas) return [screenX, screenY];
+
+    const rect = RenderDI.canvas.getBoundingClientRect();
+    const scaleX = GameDI.width / rect.width;
+    const scaleY = GameDI.height / rect.height;
+
+    return [
+        (screenX - rect.left) * scaleX,
+        (screenY - rect.top) * scaleY,
+    ];
 }

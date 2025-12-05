@@ -12,21 +12,21 @@ export enum BulletCaliber {
 
 const BulletLightCaliber = {
     width: 3,
-    height: 5,
+    height: 8,
     speed: 300,
     density: 3_000,
     damage: 3,
 };
 const BulletMediumCaliber = {
     width: 5,
-    height: 7,
+    height: 10,
     speed: 350,
     density: 6_000,
     damage: 6,
 };
 const BulletHeavyCaliber = {
     width: 7,
-    height: 11,
+    height: 14,
     speed: 450,
     density: 10_000,
     damage: 10,
