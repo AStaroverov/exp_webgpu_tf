@@ -103,7 +103,12 @@ export function spawnBullet(tankEid: number) {
     mat4.translate(tmpMatrix, tmpMatrix, tmpPosition);
     mat4.multiply(tmpMatrix, globalTransform, tmpMatrix);
 
+    // Dark color for bullets (30% of original brightness)
     Color.applyColorToArray(tankEid, optionsSpawnBullet.color);
+    optionsSpawnBullet.color[0] *= 0.3;
+    optionsSpawnBullet.color[1] *= 0.3;
+    optionsSpawnBullet.color[2] *= 0.3;
+
     optionsSpawnBullet.x = getMatrixTranslationX(tmpMatrix);
     optionsSpawnBullet.y = getMatrixTranslationY(tmpMatrix);
     optionsSpawnBullet.width = bulletCaliber.width;

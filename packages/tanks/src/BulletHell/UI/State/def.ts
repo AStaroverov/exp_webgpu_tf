@@ -1,2 +1,2 @@
 // Bullet Hell game constants
-export const BULLET_HELL_MAP_SIZE = 600;
+export const BULLET_HELL_MAP_SIZE = 1000;
