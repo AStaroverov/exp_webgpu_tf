@@ -24,7 +24,7 @@ if (mapIndexToConstructor.size !== mapEntries.length) {
 
 export const scenariosCount = mapIndexToConstructor.size;
 
-const edge = 0.4; // success ratio to unlock next scenario
+const edge = 0.15; // success ratio to unlock next scenario
 
 export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: Omit<ScenarioOptions, 'index'>): Promise<Scenario> {
     let constructor = createStaticScenarioAgentsVsBots0;

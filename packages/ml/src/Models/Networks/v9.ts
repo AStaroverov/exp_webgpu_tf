@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import {
-    applyCrossAttentionLayer, applyLaNLayer, applyNoisyLaNLayer, applySelfTransformLayers,
+    applyCrossAttentionLayer, applyLaNLayer, applySelfTransformLayers,
     convertInputsToTokens, createInputs
 } from '../ApplyLayers.ts';
 import { MaskLikeLayer } from '../Layers/MaskLikeLayer.ts';
@@ -95,16 +95,38 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         sliceSize: [-1, 1, -1],
     }).apply(transformedTokens) as tf.SymbolicTensor;
 
-    const flattenedFinalToken = tf.layers.flatten({ name: modelName + '_finalToken_mut_' })
+    const flattenedFinalToken = tf.layers.flatten({ name: modelName + '_flattenedFinalToken' })
         .apply(finalToken) as tf.SymbolicTensor;
+
+    // const lanFinalToken = applyLaNLayer({
+    //     name: modelName + '_lanFinalToken',
+    //     units: config.dim,
+    //     preNorm: true
+    // }, flattenedFinalToken);
 
     const len = modelName === Model.Policy ? 4 : 1;
     const heads = Array.from({ length: len }, (_, i) => {
-        return (modelName === Model.Policy ? applyNoisyLaNLayer : applyLaNLayer)({
-            name: `${modelName}_head${i}`,
+        return applyLaNLayer({
+            name: modelName + '_head' + i,
             units: config.dim,
             preNorm: true
         }, flattenedFinalToken);
+        // if (modelName === Model.Policy) {
+        //     return new NoisyDenseLayer({
+        //         name: `${modelName}_head${i}`,
+        //         units: config.dim,
+        //         useBias: true,
+        //         activation: 'relu',
+        //         factorized: true,
+        //     }).apply(lanFinalToken) as tf.SymbolicTensor;
+        // } else {
+            // return createDenseLayer({
+            //     name: `${modelName}_head${i}`,
+            //     units: config.dim,
+            //     useBias: true,
+            //     activation: 'relu',
+            // }).apply(lanFinalToken) as tf.SymbolicTensor;
+        // }
     });
 
     return { inputs, heads };

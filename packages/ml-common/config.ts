@@ -28,7 +28,7 @@ export const CONFIG = {
             target: 0.01 * 2,
             low: 0.007 * 2,
         },
-        initial: 1e-3,
+        initial: 1e-4,
         multHigh: 0.95,
         multLow: 1.01,
         min: 1e-5,

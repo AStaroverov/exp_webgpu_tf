@@ -91,31 +91,34 @@ export function applyLaNLayer({name, units, preNorm = false}: {
     return tf.layers.multiply({name: `${name}/LaN_output`}).apply([branch1, branch2]) as tf.SymbolicTensor;
 }
 
-export function applyNoisyLaNLayer({name, units, preNorm = false}: {
+export function applyNoisyLaNLayer({name, units, sigma, preNorm = false}: {
     name: string,
     units: number,
+    sigma?: number,
     preNorm?: boolean,
 }, layer: tf.SymbolicTensor) {
     if (preNorm) {
         layer = createNormalizationLayer({
-            name: `${name}/LaN_preNorm`,
+            name: `${name}/NoisyLaN_preNorm`,
         }).apply(layer) as tf.SymbolicTensor;
     }
 
     const branch1 = new NoisyDenseLayer({
-        name: `${name}/LaN_branch1`,
+        name: `${name}/NoisyLaN_branch1`,
         units,
         useBias: true,
         activation: 'tanh',
+        sigma,
     }).apply(layer) as tf.SymbolicTensor;
     const branch2 = new NoisyDenseLayer({
-        name: `${name}/LaN_branch2`,
+        name: `${name}/NoisyLaN_branch2`,
         units,
         useBias: true,
         activation: 'tanh',
+        sigma,
     }).apply(layer) as tf.SymbolicTensor;
 
-    return tf.layers.multiply({name: `${name}/LaN_output`}).apply([branch1, branch2]) as tf.SymbolicTensor;
+    return tf.layers.multiply({name: `${name}/NoisyLaN_output`}).apply([branch1, branch2]) as tf.SymbolicTensor;
 }
 
 export function createNormalizationLayer(options: RMSNormConfig) {

@@ -4,12 +4,10 @@ import { addComponent, World } from 'bitecs';
 import { component, obs } from '../../../../../renderer/src/ECS/utils.ts';
 
 export const TankController = component(({
-    shoot: TypedArray.f32(delegate.defaultSize),
-
-
-    // Control user tank
     move: TypedArray.f64(delegate.defaultSize),
     rotation: TypedArray.f64(delegate.defaultSize),
+
+    shoot: TypedArray.f32(delegate.defaultSize),
     turretRotation: TypedArray.f64(delegate.defaultSize),
 
     // Methods
