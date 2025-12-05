@@ -59,8 +59,10 @@ export function applyMLP({name, layers: hiddenLayers, preNorm = false}: {
     return layer;
 }
 
-export function createDenseLayer(options: DenseLayerArgs & Required<Pick<DenseLayerArgs, 'useBias' | 'activation'>>) {
-    return tf.layers.dense(options)
+export function createDenseLayer(options: DenseLayerArgs & Required<Pick<DenseLayerArgs, 'useBias' | 'activation'>> & { noisy?: boolean }) {
+    return options.noisy
+        ? new NoisyDenseLayer(options)
+        : tf.layers.dense(options);
 }
 
 // https://arxiv.org/html/2406.09079v1
@@ -303,12 +305,14 @@ export function applySelfTransformerLayer(
         heads,
         token,
         mask,
+        noisy = false,
         preNorm = false,
     }: {
         name: string,
         heads: number,
         token: tf.SymbolicTensor;
         mask?: tf.SymbolicTensor;
+        noisy?: boolean;
         preNorm?: boolean;
     },
 ) {
@@ -341,7 +345,8 @@ export function applySelfTransformerLayer(
         name: `${name}_ffn2`,
         units: dModel,
         useBias: false,
-        activation: 'linear'
+        activation: 'linear',
+        noisy
     }).apply(ffnInner) as tf.SymbolicTensor;
 
     const finalOut = tf.layers.add({name: `${name}_ffnAdd`})
@@ -355,21 +360,25 @@ export function applySelfTransformLayers(name: string, {
     heads,
     token,
     mask,
+    noisy = false,
     preNorm = false,
 }: {
     depth: number,
     heads: number,
-    token: tf.SymbolicTensor | ((i: number) => tf.SymbolicTensor),
-    mask?: tf.SymbolicTensor | ((i: number) => tf.SymbolicTensor),
+    token: tf.SymbolicTensor | ((name: string, i: number) => tf.SymbolicTensor),
+    mask?: tf.SymbolicTensor | ((name: string, i: number) => tf.SymbolicTensor),
+    noisy?: boolean,
     preNorm?: boolean,
 }) {
-    let x = typeof token === 'function' ? token(0) : token;
+    let x = typeof token === 'function' ? token(name, 0) : token;
     for (let i = 0; i < depth; i++) {
+        const lName = `${name}/depth${i}`;
         x = applySelfTransformerLayer({
-            name: `${name}/depth${i}`,
+            name: lName,
             heads,
             token: x,
-            mask: mask ? (typeof mask === 'function' ? mask(i) : mask) : undefined,
+            mask: mask ? (typeof mask === 'function' ? mask(lName, i) : mask) : undefined,
+            noisy,
             preNorm,
         });
     }

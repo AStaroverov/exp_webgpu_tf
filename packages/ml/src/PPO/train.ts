@@ -9,6 +9,7 @@ import { InputArrays, prepareRandomInputArrays } from '../../../ml-common/InputA
 import { createInputTensors } from '../../../ml-common/InputTensors.ts';
 import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
+import { shouldNoiseLayer } from '../Models/Create.ts';
 
 export function trainPolicyNetwork(
     network: tf.LayersModel,
@@ -24,7 +25,7 @@ export function trainPolicyNetwork(
 ): undefined | tf.Tensor {
     return tf.tidy(() => {
         return optimize(network.optimizer, () => {
-            const predicted = network.apply(states, { training: true, noise: true }) as tf.Tensor | tf.Tensor[];
+            const predicted = network.apply(states, { training: true, noise: shouldNoiseLayer }) as tf.Tensor | tf.Tensor[];
             const logitsHeads = parsePolicyOutput(predicted);
 
             // Compute log probabilities for categorical distributions
@@ -97,21 +98,26 @@ export function computeKullbackLeiblerAprox(
     });
 }
 
-export function batchAct(policyNetwork: tf.LayersModel, states: InputArrays[], noise?: ({ greedy?: boolean; epsilon?: number })): {
+export function batchAct(
+    policyNetwork: tf.LayersModel,
+    states: InputArrays[],
+    options?: { greedy?: boolean; epsilon?: number },
+): {
     actions: Float32Array,
     logits: Float32Array,
     logProb: number,
 }[] {
     return tf.tidy(() => {
         const batchSize = states.length;
-        const predicted = policyNetwork.apply(createInputTensors(states), { noise: noise?.greedy !== true }) as tf.Tensor | tf.Tensor[];
+        const noise = options?.greedy !== true ? shouldNoiseLayer : undefined;
+        const predicted = policyNetwork.apply(createInputTensors(states), { noise }) as tf.Tensor | tf.Tensor[];
         const logitsHeads = parsePolicyOutput(predicted);
         
         const results: {actions: Float32Array, logits: Float32Array, logProb: number}[] = [];
         
         for (let i = 0; i < batchSize; i++) {
             const stateLogitsHeads = logitsHeads.map(logits => logits.slice([i], [1])); // [1, numClasses]
-            const sample = sampleActionsFromLogits(stateLogitsHeads, noise);
+            const sample = sampleActionsFromLogits(stateLogitsHeads, options);
             const logProb = computeLogProbCategorical(sample.actions.expandDims(0), stateLogitsHeads);
             
             results.push({

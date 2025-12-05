@@ -24,6 +24,19 @@ export const BULLET_FEATURES_DIM = 4;
 
 export const ACTION_HEAD_DIMS = [15, 15, 2, 31];
 
+export const shouldNoiseLayer = (name: string, _iteration?: number) => {
+    name = name.toLowerCase();
+    if (name.includes('head')) {
+        return true;
+    }
+
+    if (name.includes('noisytransformer')) {
+        return false;
+    }
+
+    return false;
+}
+
 export function createPolicyNetwork(): tf.LayersModel {
     const {inputs, heads} = createNetwork(Model.Policy);
 
@@ -36,16 +49,14 @@ export function createPolicyNetwork(): tf.LayersModel {
             useBias: true,
             activation: 'linear',
             biasInitializer: 'zeros',
-            // kernelInitializer: tf.initializers.randomUniform({ minval: -0.03, maxval: 0.03 }),
-            // sigma: 0.5 / units,
-            // factorized: false,
+            sigma: 0.25,
         }).apply(head) as tf.SymbolicTensor;
     });
 
     const model = tf.model({
         name: Model.Policy,
         inputs: Object.values(inputs),
-        outputs: logitsOutputs, // [shootLogits, moveLogits, rotLogits, turRotLogits]
+        outputs: logitsOutputs,
     });
     model.optimizer = new AdamW(CONFIG.lrConfig.initial);
     model.loss = 'meanSquaredError'; // fake loss for save optimizer with model

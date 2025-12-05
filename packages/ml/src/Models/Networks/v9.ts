@@ -9,6 +9,7 @@ import { Model } from '../def.ts';
 import { VariableLayer } from '../Layers/VariableLayer.ts';
 import { SliceLayer } from '../Layers/SliceLayer.ts';
 import { MaskSquashLayer } from '../Layers/MaskSquashLayer.ts';
+import { ceil } from '../../../../../lib/math.ts';
 
 type NetworkConfig = {
     dim: number;
@@ -53,8 +54,8 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         initializer: 'truncatedNormal'
     }).apply(tokens.tankTok) as tf.SymbolicTensor;
     
-    const getContextToken = (i: number) => {
-        return tf.layers.concatenate({name: modelName + '_contextToken' + i, axis: 1 })
+    const getContextToken = (name: string, i: number) => {
+        return tf.layers.concatenate({name: name + '_contextToken' + i, axis: 1 })
             .apply([
                 clsToken,
                 tokens.tankTok,
@@ -66,9 +67,9 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
 
     const maskLike = new MaskLikeLayer({ name: modelName + '_maskLike' });
     const maskSquash = new MaskSquashLayer({ name: modelName + '_maskSquash' });
-    const getContextMask = (i: number) => {
+    const getContextMask = (name: string, i: number) => {
         const oneMask = maskLike.apply(tokens.tankTok) as tf.SymbolicTensor;
-        return tf.layers.concatenate({name: modelName + '_contextTokenMask' + i, axis: 1 })
+        return tf.layers.concatenate({name: name + '_contextTokenMask' + i, axis: 1 })
             .apply([
                 oneMask,
                 oneMask,
@@ -78,12 +79,35 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
             ]) as tf.SymbolicTensor;
     };
 
-    const transformedTokens = applySelfTransformLayers(
-        modelName + '_transformedTokens',
+    let transformer = applySelfTransformLayers(
+        modelName + '_inputTransformer',
         {
             heads: config.heads,
-            depth: config.depth,
+            depth: ceil(config.depth * 0.6),
             token: getContextToken,
+            mask: getContextMask,
+            preNorm: true,
+        },
+    );
+
+    transformer = applySelfTransformLayers(
+        modelName + '_noisyTransformer',
+        {
+            heads: config.heads,
+            depth: ceil(config.depth * 0.2),
+            token: transformer,
+            mask: getContextMask,
+            noisy: true,
+            preNorm: true,
+        },
+    );
+
+    transformer = applySelfTransformLayers(
+        modelName + '_outputTransformer',
+        {
+            heads: config.heads,
+            depth: ceil(config.depth * 0.2),
+            token: transformer,
             mask: getContextMask,
             preNorm: true,
         },
@@ -93,7 +117,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         name: modelName + '_finalToken',
         beginSlice: [0, 0, 0],
         sliceSize: [-1, 1, -1],
-    }).apply(transformedTokens) as tf.SymbolicTensor;
+    }).apply(transformer) as tf.SymbolicTensor;
 
     const flattenedFinalToken = tf.layers.flatten({ name: modelName + '_flattenedFinalToken' })
         .apply(finalToken) as tf.SymbolicTensor;
