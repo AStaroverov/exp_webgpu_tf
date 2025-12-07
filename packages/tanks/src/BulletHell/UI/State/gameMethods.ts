@@ -84,8 +84,8 @@ export function deactivateBots() {
 export const startBulletHellGame = async (enemyCount: number = 3) => {
     await initTensorFlow('wasm');
     
-    // Setup player
-    setupPlayerTank(TankType.Medium);
+    // Setup player with special Player tank type
+    setupPlayerTank(TankType.Player);
     
     // Spawn initial enemies off-screen with random types
     for (let i = 0; i < enemyCount; i++) {
