@@ -11,11 +11,12 @@ import { Sound, SoundType, SoundState } from '../../Components/Sound.ts';
 
 const MOVE_THRESHOLD = 0.1;
 
-// Volume based on tank type: Light = 0.6, Medium = 0.8, Heavy = 1.0
+// Volume based on tank type: Light = 0.6, Medium/Player = 0.8, Heavy = 1.0
 const TANK_TYPE_VOLUME: Record<TankType, number> = {
     [TankType.Light]: 0.6,
     [TankType.Medium]: 0.8,
     [TankType.Heavy]: 1.0,
+    [TankType.Player]: 0.8,  // Same as Medium
 };
 
 /**

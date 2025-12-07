@@ -12,13 +12,15 @@ import { TankTurret } from '../../Components/TankTurret.ts';
 export enum TankEngineType {
     v6,
     v8,
-    v12
+    v12,
+    v8_turbo,  // Player special engine - faster than v8
 }
 
 export const mapTankEngineLabel = {
     [TankEngineType.v6]: 'v6',
     [TankEngineType.v8]: 'v8',
     [TankEngineType.v12]: 'v12',
+    [TankEngineType.v8_turbo]: 'v8 Turbo',
 };
 
 const IMPULSE_FACTOR = 15000000000;
@@ -35,6 +37,10 @@ const mapTypeToFeatures = {
     [TankEngineType.v12]: {
         impulseFactor: IMPULSE_FACTOR * 2,
         rotationImpulseFactor: ROTATION_IMPULSE_FACTOR * 3,
+    },
+    [TankEngineType.v8_turbo]: {
+        impulseFactor: IMPULSE_FACTOR * 2,
+        rotationImpulseFactor: ROTATION_IMPULSE_FACTOR * 2,
     },
 };
 
