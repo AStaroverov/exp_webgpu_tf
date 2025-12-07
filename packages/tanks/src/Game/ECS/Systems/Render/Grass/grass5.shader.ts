@@ -6,6 +6,7 @@ export const shaderMeta = new ShaderMeta(
     {
         screenSize: new VariableMeta('uScreenSize', VariableKind.Uniform, `vec2<f32>`),
         time: new VariableMeta('uTime', VariableKind.Uniform, `f32`),
+        mapOffset: new VariableMeta('uMapOffset', VariableKind.Uniform, `vec2<f32>`),
 
         // Tile size is now in physical pixels
         tileSize: new VariableMeta('uTileSize', VariableKind.Uniform, `f32`),
@@ -128,8 +129,12 @@ export const shaderMeta = new ShaderMeta(
             // Calculate the tile coordinate
             // We divide by the tile size to get consistent physical pixel size
             let tilesPerScreen = uScreenSize / uTileSize;
-            let tileUV = floor(normalizedCoord * tilesPerScreen);
-            let tileLocalUV = fract(normalizedCoord * tilesPerScreen);
+            
+            // Apply map offset to create infinite scrolling grass
+            // Note: Y is inverted to match the coordinate system
+            let offsetInTiles = vec2f(uMapOffset.x, -uMapOffset.y) / uTileSize;
+            let tileUV = floor(normalizedCoord * tilesPerScreen + offsetInTiles);
+            let tileLocalUV = fract(normalizedCoord * tilesPerScreen + offsetInTiles);
             
             // Generate random values for this tile
             let rnd = hash22(tileUV);
