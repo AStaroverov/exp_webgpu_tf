@@ -29,6 +29,7 @@ export class TypedArray {
     public static u32 = (length: number) => new Uint32Array(length);
     public static i32 = (length: number) => new Int32Array(length);
     public static i8 = (length: number) => new Int8Array(length);
+    public static i16 = (length: number) => new Int16Array(length);
 }
 
 type ArrayLikeConstructor =

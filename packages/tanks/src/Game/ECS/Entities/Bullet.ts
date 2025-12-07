@@ -6,6 +6,7 @@ import { PlayerRef } from '../Components/PlayerRef.ts';
 import { Hitable } from '../Components/Hitable.ts';
 import { DestroyBySpeed } from '../Components/Destroy.ts';
 import { spawnMuzzleFlash } from './MuzzleFlash.ts';
+import { Sound, SoundType } from '../Components/Sound.ts';
 import { mat4, vec2, vec3 } from 'gl-matrix';
 import {
     getMatrixRotationZ,
@@ -75,6 +76,15 @@ export function createBullet(options: Partial<Options> & {
     Hitable.addComponent(world, bulletId, min(bulletCaliber.width, bulletCaliber.height) / 10);
     Damagable.addComponent(world, bulletId, bulletCaliber.damage);
     DestroyBySpeed.addComponent(world, bulletId, MIN_BULLET_SPEED);
+
+    // Add shoot sound to bullet - volume based on caliber size
+    // Light: 0.6, Medium: 0.8, Heavy: 1.0
+    const soundVolume = 0.4 + (bulletCaliber.width / 7) * 0.6;
+    Sound.addComponent(world, bulletId, SoundType.TankShoot, {
+        loop: false,
+        volume: soundVolume,
+        autoplay: true,
+    });
 
     return bulletId;
 }

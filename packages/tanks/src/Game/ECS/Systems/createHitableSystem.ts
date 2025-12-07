@@ -31,7 +31,7 @@ export function createHitableSystem({ world } = GameDI) {
 
             const hitEids = Hitable.getHitEids(tankPartEid);
 
-            applyDamage(tankPartEid, true);
+            applyDamage(tankPartEid);
             applyScores(tankPartEid, hitEids);
 
             if (!Hitable.isDestroyed(tankPartEid)) continue;
@@ -48,13 +48,15 @@ export function createHitableSystem({ world } = GameDI) {
 
             if (!Hitable.isDestroyed(bulletId)) continue;
 
-            // Spawn hit flash at bullet position
+            // Spawn hit flash at bullet position (includes hit sound)
             const bulletMatrix = GlobalTransform.matrix.getBatch(bulletId);
             const bulletCaliber = mapBulletCaliber[Bullet.caliber[bulletId] as BulletCaliber];
+            const hitX = getMatrixTranslationX(bulletMatrix);
+            const hitY = getMatrixTranslationY(bulletMatrix);
          
             spawnHitFlash({
-                x: getMatrixTranslationX(bulletMatrix),
-                y: getMatrixTranslationY(bulletMatrix),
+                x: hitX,
+                y: hitY,
                 size: bulletCaliber.width * 2,
                 duration: 400,
             });
@@ -68,14 +70,13 @@ export function createHitableSystem({ world } = GameDI) {
 
 const FORCE_TARGET = 1_000_000_000;
 
-function applyDamage(targetEid: number, log = false, { world } = GameDI) {
+function applyDamage(targetEid: number, { world } = GameDI) {
     const count = Hitable.hitIndex[targetEid];
     const hits = Hitable.hits.getBatch(targetEid);
 
     for (let i = 0; i < count; i++) {
         const sourceEid = hits[i * 2];
         const forceCoeff = clamp(hits[i * 2 + 1] / FORCE_TARGET, 0, 1);
-        log && console.log('>>', hits[i * 2 + 1], forceCoeff)
         const damage = hasComponent(world, sourceEid, Damagable)
             ? forceCoeff * Damagable.damage[sourceEid]
             : 0;
