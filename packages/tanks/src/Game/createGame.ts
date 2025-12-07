@@ -41,6 +41,7 @@ import { initPhysicalWorld } from './Physical/initPhysicalWorld.ts';
 import { createProgressSystem } from './ECS/Systems/createProgressSystem.ts';
 import { createCameraSystem, setCameraTarget, setInfiniteMapMode, initCameraPosition, CameraState } from './ECS/Systems/Camera/CameraSystem.ts';
 import { setCameraPosition } from '../../../renderer/src/ECS/Systems/ResizeSystem.ts';
+import { createSoundSystem, loadGameSounds, disposeSoundSystem, SoundManager, createTankMoveSoundSystem } from './ECS/Systems/Sound/index.ts';
 
 export type Game = ReturnType<typeof createGame>;
 
@@ -134,6 +135,11 @@ export function createGame({ width, height }: {
     const updateTankTracks = createUpdateTankTracksSystem();
     const updateProgress = createProgressSystem();
     const updateCamera = createCameraSystem();
+    const updateSounds = createSoundSystem();
+    const updateTankMoveSounds = createTankMoveSoundSystem();
+
+    // Load sounds asynchronously (fire and forget)
+    loadGameSounds().catch(console.error);
 
     GameDI.gameTick = (delta: number) => {
         GameDI.plugins.systems[SystemGroup.Before].forEach(system => system(delta));
@@ -152,6 +158,11 @@ export function createGame({ width, height }: {
         updateCamera(delta);
         setCameraPosition(CameraState.x, CameraState.y);
 
+        // Update tank movement sounds (manages Sound components on tanks)
+        updateTankMoveSounds(delta);
+        // Update sounds (uses camera position for spatial audio)
+        updateSounds(delta);
+
         // stats.begin();
         RenderDI.renderFrame?.(delta);
         // stats.end();
@@ -166,6 +177,10 @@ export function createGame({ width, height }: {
 
     GameDI.destroy = () => {
         GameDI.plugins.dispose();
+
+        // Cleanup sounds
+        disposeSoundSystem();
+        SoundManager.dispose();
 
         physicalWorld.free();
         RigidBodyRef.dispose();
