@@ -11,10 +11,12 @@ import { RenderDI } from './DI/RenderDI.ts';
 import { Hitable } from './ECS/Components/Hitable.ts';
 import { getEntityIdByPhysicalId, RigidBodyRef } from './ECS/Components/Physical.ts';
 import { GameSession } from './ECS/Entities/GameSession.ts';
+import { GameMap } from './ECS/Entities/GameMap.ts';
 import { SystemGroup } from './ECS/Plugins/systems.ts';
 import { createApplyRigidBodyToTransformSystem } from './ECS/Systems/createApplyRigidBodyToTransformSystem.ts';
 import { createSpawnerBulletsSystem } from './ECS/Systems/createBulletSystem.ts';
 import { createDestroyByTimeoutSystem } from './ECS/Systems/createDestroyByTimeoutSystem.ts';
+import { createDestroyBySpeedSystem } from './ECS/Systems/createDestroyBySpeedSystem.ts';
 import { createDestroyOutOfZoneSystem } from './ECS/Systems/createDestroyOutOfZoneSystem.ts';
 import { createDestroySystem } from './ECS/Systems/createDestroySystem.ts';
 import { createHitableSystem } from './ECS/Systems/createHitableSystem.ts';
@@ -37,6 +39,8 @@ import { createUpdateTankTracksSystem } from './ECS/Systems/Tank/createUpdateTan
 import { createTankPositionSystem, createTankTurretRotationSystem } from './ECS/Systems/Tank/TankControllerSystems.ts';
 import { initPhysicalWorld } from './Physical/initPhysicalWorld.ts';
 import { createProgressSystem } from './ECS/Systems/createProgressSystem.ts';
+import { createCameraSystem, setCameraTarget, setInfiniteMapMode, initCameraPosition, CameraState } from './ECS/Systems/Camera/CameraSystem.ts';
+import { setCameraPosition } from '../../../renderer/src/ECS/Systems/ResizeSystem.ts';
 
 export type Game = ReturnType<typeof createGame>;
 
@@ -51,6 +55,10 @@ export function createGame({ width, height }: {
     GameDI.height = height;
     GameDI.world = world;
     GameDI.physicalWorld = physicalWorld;
+
+    // Initialize map offset to center (bounded mode default)
+    GameMap.setOffset(width / 2, height / 2);
+    initCameraPosition();
 
     // const updateMap = createMapSystem();
     const execTransformSystem = createTransformSystem(world);
@@ -110,11 +118,13 @@ export function createGame({ width, height }: {
     const destroy = createDestroySystem();
     const destroyOutOfZone = createDestroyOutOfZoneSystem();
     const destroyByTimeout = createDestroyByTimeoutSystem();
+    const destroyBySpeed = createDestroyBySpeedSystem();
     const decayTankOnOutOfZone = createTankDecayOutOfZoneSystem();
 
     const destroyFrame = (delta: number) => {
         decayTankOnOutOfZone();
         destroyByTimeout(delta);
+        destroyBySpeed();
         destroyOutOfZone();
         destroy();
     };
@@ -123,6 +133,7 @@ export function createGame({ width, height }: {
     const spawnTankTracks = createSpawnTankTracksSystem();
     const updateTankTracks = createUpdateTankTracksSystem();
     const updateProgress = createProgressSystem();
+    const updateCamera = createCameraSystem();
 
     GameDI.gameTick = (delta: number) => {
         GameDI.plugins.systems[SystemGroup.Before].forEach(system => system(delta));
@@ -136,6 +147,10 @@ export function createGame({ width, height }: {
         updateProgress(delta);
         updateTankTracks();
         // updateMap();
+
+        // Update camera before rendering
+        updateCamera(delta);
+        setCameraPosition(CameraState.x, CameraState.y);
 
         // stats.begin();
         RenderDI.renderFrame?.(delta);
@@ -160,6 +175,7 @@ export function createGame({ width, height }: {
         destroyChangeDetectorSystem(world);
 
         GameSession.reset();
+        GameMap.reset();
 
         GameDI.width = null!;
         GameDI.height = null!;
@@ -185,6 +201,9 @@ export function createGame({ width, height }: {
         }
 
         RenderDI.canvas = canvas;
+
+        // Initialize camera position for first render
+        setCameraPosition(CameraState.x, CameraState.y);
 
         const { device, context } = await initWebGPU(canvas);
         RenderDI.device = device;
@@ -254,6 +273,12 @@ export function createGame({ width, height }: {
     };
     GameDI.setPlayerTank = (tankEid: null | EntityId) => {
         PlayerEnvDI.tankEid = tankEid;
+    };
+    GameDI.setCameraTarget = (tankEid: null | EntityId) => {
+        setCameraTarget(tankEid);
+    };
+    GameDI.setInfiniteMapMode = (enabled: boolean) => {
+        setInfiniteMapMode(enabled);
     };
 
     return GameDI;

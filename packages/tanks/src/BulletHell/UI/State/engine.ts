@@ -1,6 +1,5 @@
 import { createGame } from '../../../Game/createGame.ts';
 import { BehaviorSubject } from 'rxjs';
-import { BULLET_HELL_MAP_SIZE } from './def.ts';
 import { createPilotsPlugin } from '../../../Pilots/createPilotsPlugin.ts';
 
 type Engine = ReturnType<typeof createGame> & {
@@ -11,7 +10,8 @@ export const engine$ = new BehaviorSubject<undefined | Engine>(undefined);
 
 export const getEngine = (): Engine => {
     if (!engine$.value) {
-        const core = createGame({ width: BULLET_HELL_MAP_SIZE, height: BULLET_HELL_MAP_SIZE });
+        // Use window size for the game zone (for infinite map, this defines the visible area)
+        const core = createGame({ width: window.innerWidth, height: window.innerHeight });
         engine$.next({
             pilots: createPilotsPlugin(core),
             ...core,

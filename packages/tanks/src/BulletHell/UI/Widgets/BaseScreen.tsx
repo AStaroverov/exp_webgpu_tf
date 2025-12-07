@@ -3,17 +3,12 @@ import { useObservable } from '../../../../../../lib/React/useSyncObservable.ts'
 import { BulletHellState$, toggleBulletHellGame } from '../State/GameState.ts';
 import { startBulletHellGame } from '../State/gameMethods.ts';
 import { setRenderTarget } from '../State/RenderTarget.ts';
-import { BULLET_HELL_MAP_SIZE } from '../State/def.ts';
 import { Button } from '../../../UI/Components/Button.tsx';
 import { Card } from '../../../UI/Components/Card.tsx';
 
 export function BaseScreen({ className, style }: { className?: string, style?: CSSProperties }) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isLoading, setIsLoading] = useState(false);
-    const canvasScale = Math.min(
-        window.innerWidth / (canvasRef.current?.offsetWidth ?? 1),
-        window.innerHeight / (canvasRef.current?.offsetHeight ?? 1)
-    );
     const { isStarted } = useObservable(BulletHellState$, BulletHellState$.value);
 
     useEffect(() => {
@@ -36,12 +31,7 @@ export function BaseScreen({ className, style }: { className?: string, style?: C
         <div className={`${className} flex items-center justify-center relative`} style={style}>
             <canvas
                 ref={canvasRef}
-                className="absolute"
-                style={{
-                    width: `${BULLET_HELL_MAP_SIZE}px`,
-                    height: `${BULLET_HELL_MAP_SIZE}px`,
-                    transform: `scale(${canvasScale * 0.9})`,
-                }}
+                className="absolute w-full h-full"
             />
 
             {/* Controls */}
