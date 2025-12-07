@@ -10,13 +10,13 @@ import { Score } from '../Components/Score.ts';
 import { TeamRef } from '../Components/TeamRef.ts';
 import { PlayerRef } from '../Components/PlayerRef.ts';
 import { Damagable } from '../Components/Damagable.ts';
-import { min } from '../../../../../../lib/math.ts';
 import { spawnHitFlash } from '../Entities/HitFlash.ts';
 import {
     getMatrixTranslationX,
     getMatrixTranslationY,
     GlobalTransform,
 } from '../../../../../renderer/src/ECS/Components/Transform.ts';
+import { clamp } from 'lodash';
 
 export function createHitableSystem({ world } = GameDI) {
     const hitableChanges = createChangeDetector(world, [onSet(Hitable)]);
@@ -31,7 +31,7 @@ export function createHitableSystem({ world } = GameDI) {
 
             const hitEids = Hitable.getHitEids(tankPartEid);
 
-            applyDamage(tankPartEid);
+            applyDamage(tankPartEid, true);
             applyScores(tankPartEid, hitEids);
 
             if (!Hitable.isDestroyed(tankPartEid)) continue;
@@ -51,6 +51,7 @@ export function createHitableSystem({ world } = GameDI) {
             // Spawn hit flash at bullet position
             const bulletMatrix = GlobalTransform.matrix.getBatch(bulletId);
             const bulletCaliber = mapBulletCaliber[Bullet.caliber[bulletId] as BulletCaliber];
+         
             spawnHitFlash({
                 x: getMatrixTranslationX(bulletMatrix),
                 y: getMatrixTranslationY(bulletMatrix),
@@ -65,15 +66,16 @@ export function createHitableSystem({ world } = GameDI) {
     };
 }
 
-const FORCE_TARGET = 10_000_000;
+const FORCE_TARGET = 1_000_000_000;
 
-function applyDamage(targetEid: number, { world } = GameDI) {
+function applyDamage(targetEid: number, log = false, { world } = GameDI) {
     const count = Hitable.hitIndex[targetEid];
     const hits = Hitable.hits.getBatch(targetEid);
 
     for (let i = 0; i < count; i++) {
         const sourceEid = hits[i * 2];
-        const forceCoeff = min(1, hits[i * 2 + 1] / FORCE_TARGET);
+        const forceCoeff = clamp(hits[i * 2 + 1] / FORCE_TARGET, 0, 1);
+        log && console.log('>>', hits[i * 2 + 1], forceCoeff)
         const damage = hasComponent(world, sourceEid, Damagable)
             ? forceCoeff * Damagable.damage[sourceEid]
             : 0;

@@ -4,7 +4,7 @@ import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';
 import { createRectangleRR } from '../Components/RigidRender.ts';
 import { PlayerRef } from '../Components/PlayerRef.ts';
 import { Hitable } from '../Components/Hitable.ts';
-import { DestroyByTimeout } from '../Components/Destroy.ts';
+import { DestroyBySpeed } from '../Components/Destroy.ts';
 import { spawnMuzzleFlash } from './MuzzleFlash.ts';
 import { mat4, vec2, vec3 } from 'gl-matrix';
 import {
@@ -17,7 +17,7 @@ import { Tank } from '../Components/Tank.ts';
 import { ZIndex } from '../../consts.ts';
 import { ActiveEvents, RigidBodyType } from '@dimforge/rapier2d-simd';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
-import { Bullet, BulletCaliber, mapBulletCaliber, MAX_BULLET_SPEED } from '../Components/Bullet.ts';
+import { Bullet, BulletCaliber, mapBulletCaliber, MAX_BULLET_SPEED, MIN_BULLET_SPEED } from '../Components/Bullet.ts';
 import { TeamRef } from '../Components/TeamRef.ts';
 import { Color } from '../../../../../renderer/src/ECS/Components/Common.ts';
 import { TankTurret } from '../Components/TankTurret.ts';
@@ -39,7 +39,7 @@ const optionsBulletRR: Options = {
     bodyType: RigidBodyType.Dynamic,
     density: 10_000,
     angularDamping: 0.1,
-    linearDamping: 0.1,
+    linearDamping: 0.1, // Will be overwritten by caliber-specific value
     collisionEvent: ActiveEvents.CONTACT_FORCE_EVENTS,
     belongsCollisionGroup: CollisionGroup.BULLET,
     interactsCollisionGroup: CollisionGroup.ALL & ~CollisionGroup.TANK_TURRET_GUN_PARTS,
@@ -66,6 +66,7 @@ export function createBullet(options: Partial<Options> & {
         optionsBulletRR.speedY = tmpSpeed[1];
     }
     optionsBulletRR.density = bulletCaliber.density;
+    optionsBulletRR.linearDamping = bulletCaliber.linearDamping;
 
     const [bulletId] = createRectangleRR(optionsBulletRR);
     Bullet.addComponent(world, bulletId, options.calibre);
@@ -73,7 +74,7 @@ export function createBullet(options: Partial<Options> & {
     PlayerRef.addComponent(world, bulletId, options.playerId);
     Hitable.addComponent(world, bulletId, min(bulletCaliber.width, bulletCaliber.height) / 10);
     Damagable.addComponent(world, bulletId, bulletCaliber.damage);
-    DestroyByTimeout.addComponent(world, bulletId, 8_000);
+    DestroyBySpeed.addComponent(world, bulletId, MIN_BULLET_SPEED);
 
     return bulletId;
 }

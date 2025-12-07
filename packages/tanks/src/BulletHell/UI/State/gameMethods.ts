@@ -1,9 +1,17 @@
 import { initTensorFlow } from '../../../../../ml-common/initTensorFlow.ts';
 import { TankType } from '../../../Game/ECS/Components/Tank.ts';
 import { destroyEngine, getEngine } from './engine.ts';
-import { addPlayerTank, addEnemyTank, BULLET_HELL_MAX_ENEMIES } from './engineMethods.ts';
+import { addPlayerTank, spawnEnemyOffScreen, BULLET_HELL_MAX_ENEMIES, getEnemyTankEids, resetEngineState } from './engineMethods.ts';
 import { toggleBulletHellGame } from './GameState.ts';
 import { CurrentActorAgent } from '../../../Pilots/Agents/CurrentActorAgent.ts';
+import { getTankHealth } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
+import { randomRangeInt } from '../../../../../../lib/random.ts';
+
+const ENEMY_TANK_TYPES = [TankType.Light, TankType.Medium, TankType.Heavy];
+
+function getRandomTankType(): TankType {
+    return ENEMY_TANK_TYPES[randomRangeInt(0, ENEMY_TANK_TYPES.length - 1)];
+}
 
 let playerTankEid: number | null = null;
 
@@ -15,24 +23,40 @@ export const setupPlayerTank = (tankType: TankType = TankType.Light) => {
     const engine = getEngine();
     engine.pilots.setPlayerPilot(playerTankEid);
     
+    // Enable infinite map mode and set camera to follow player
+    engine.setInfiniteMapMode(true);
+    engine.setCameraTarget(playerTankEid);
+    
     return playerTankEid;
 };
 
-// Spawn enemy tanks with AI pilots
-export const spawnEnemyWave = async (count: number = 3, tankType: TankType = TankType.Light) => {
+// Spawn a single enemy off-screen with random tank type
+export const spawnSingleEnemy = async () => {
     const engine = getEngine();
-    const enemies: number[] = [];
     
-    for (let i = 0; i < Math.min(count, BULLET_HELL_MAX_ENEMIES); i++) {
-        const enemyEid = addEnemyTank(i, tankType);
-        enemies.push(enemyEid);
-        
-        // Assign AI pilot using TensorFlow model
-        const agent = new CurrentActorAgent(enemyEid, false);
-        engine.pilots.setPilot(enemyEid, agent);
+    // Check if we reached max enemies
+    const currentEnemies = getEnemyTankEids();
+    if (currentEnemies.length >= BULLET_HELL_MAX_ENEMIES) {
+        return null;
     }
     
-    return enemies;
+    const tankType = getRandomTankType();
+    const enemyEid = spawnEnemyOffScreen(tankType);
+    
+    // Assign AI pilot using TensorFlow model
+    const agent = new CurrentActorAgent(enemyEid, false);
+    engine.pilots.setPilot(enemyEid, agent);
+    
+    // Sync pilot if needed (though usually sync is done once at start, 
+    // for dynamically spawned agents we might need to ensure model is ready)
+    if (agent.sync) {
+        await agent.sync();
+    }
+    
+    // Activate the new bot immediately if game is running
+    engine.pilots.toggle(true);
+    
+    return enemyEid;
 };
 
 // Finalize game state - sync all pilots
@@ -61,10 +85,12 @@ export const startBulletHellGame = async (enemyCount: number = 3) => {
     await initTensorFlow('wasm');
     
     // Setup player
-    setupPlayerTank(TankType.Light);
+    setupPlayerTank(TankType.Medium);
     
-    // Spawn enemies
-    await spawnEnemyWave(enemyCount, TankType.Light);
+    // Spawn initial enemies off-screen with random types
+    for (let i = 0; i < enemyCount; i++) {
+        await spawnSingleEnemy();
+    }
     
     // Finalize and activate
     await finalizeGameState();
@@ -77,8 +103,27 @@ export const startBulletHellGame = async (enemyCount: number = 3) => {
 export const exitBulletHellGame = () => {
     deactivateBots();
     destroyEngine();
+    resetEngineState();
     toggleBulletHellGame(false);
     playerTankEid = null;
+};
+
+// Check if player is dead
+export const isPlayerDead = (): boolean => {
+    if (playerTankEid === null) return false;
+    return getTankHealth(playerTankEid) <= 0;
+};
+
+// Restart the game
+export const restartBulletHellGame = async () => {
+    // Cleanup current game
+    deactivateBots();
+    destroyEngine();
+    resetEngineState();
+    playerTankEid = null;
+    
+    // Start new game
+    await startBulletHellGame();
 };
 
 // Get current player tank

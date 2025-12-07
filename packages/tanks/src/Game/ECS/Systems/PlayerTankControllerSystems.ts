@@ -5,6 +5,8 @@ import { PlayerEnvDI } from '../../DI/PlayerEnvDI.ts';
 import { RenderDI } from '../../DI/RenderDI.ts';
 import { RigidBodyState } from '../Components/Physical.ts';
 import { normalizeAngle } from '../../../../../../lib/math.ts';
+import { GameMap } from '../Entities/GameMap.ts';
+import { entityExists } from 'bitecs';
 import { GameDI } from '../../DI/GameDI.ts';
 
 export function createPlayerTankPositionSystem({ document } = PlayerEnvDI) {
@@ -61,9 +63,9 @@ export function createPlayerTankPositionSystem({ document } = PlayerEnvDI) {
     document.addEventListener('keyup', onKeyUp);
 
     const tick = () => {
-        if (PlayerEnvDI.tankEid) {
-            TankController.setMove$(PlayerEnvDI.tankEid, move);
-            TankController.setRotate$(PlayerEnvDI.tankEid, rotation);
+        if (isPlayerExist() ) {
+            TankController.setMove$(PlayerEnvDI.tankEid!, move);
+            TankController.setRotate$(PlayerEnvDI.tankEid!, rotation);
         }
     };
     const destroy = () => {
@@ -82,10 +84,10 @@ export function createPlayerTankTurretRotationSystem({ document } = PlayerEnvDI)
     document.addEventListener('mousemove', callback);
 
     const tick = () => {
-        if (PlayerEnvDI.tankEid && lastEvent) {
-            const tankRot = RigidBodyState.rotation[PlayerEnvDI.tankEid];
-            const turretRot = RigidBodyState.rotation[Tank.turretEId[PlayerEnvDI.tankEid]];
-            const turretPos = RigidBodyState.position.getBatch(Tank.turretEId[PlayerEnvDI.tankEid]);
+        if (isPlayerExist() && lastEvent) {
+            const tankRot = RigidBodyState.rotation[PlayerEnvDI.tankEid!];
+            const turretRot = RigidBodyState.rotation[Tank.turretEId[PlayerEnvDI.tankEid!]];
+            const turretPos = RigidBodyState.position.getBatch(Tank.turretEId[PlayerEnvDI.tankEid!]);
 
             // Convert screen coordinates to world coordinates
             const [worldX, worldY] = screenToWorld(lastEvent.clientX, lastEvent.clientY);
@@ -96,8 +98,7 @@ export function createPlayerTankTurretRotationSystem({ document } = PlayerEnvDI)
             const relTargetTurretRot = normalizeAngle(targetRot - tankRot);
             const deltaRot = normalizeAngle(relTargetTurretRot - relTurretRot);
 
-            TankController.setTurretRotation$(PlayerEnvDI.tankEid, clamp(deltaRot, -1, 1));
-        }
+            TankController.setTurretRotation$(PlayerEnvDI.tankEid!, clamp(deltaRot, -1, 1));}
     };
     const destroy = () => {
         document.removeEventListener('mousemove', callback);
@@ -143,7 +144,7 @@ export function createPlayerTankBulletSystem({ document } = PlayerEnvDI, { canva
     canvas.addEventListener('mouseup', onMouseUp);
 
     const tick = () => {
-        !isNil(PlayerEnvDI.tankEid) && TankController.setShooting$(PlayerEnvDI.tankEid, shooting);
+        isPlayerExist() && TankController.setShooting$(PlayerEnvDI.tankEid!, shooting);
     };
 
     const destroy = () => {
@@ -156,15 +157,22 @@ export function createPlayerTankBulletSystem({ document } = PlayerEnvDI, { canva
     return { tick, destroy };
 }
 
+function isPlayerExist({ world } = GameDI, { tankEid } = PlayerEnvDI) {
+    return !isNil(tankEid) && entityExists(world,tankEid)
+}
+
 function screenToWorld(screenX: number, screenY: number): [number, number] {
     if (!RenderDI.canvas) return [screenX, screenY];
 
     const rect = RenderDI.canvas.getBoundingClientRect();
-    const scaleX = GameDI.width / rect.width;
-    const scaleY = GameDI.height / rect.height;
+    
+    // Convert screen position to normalized position relative to canvas center (-0.5 to 0.5)
+    const normalizedX = (screenX - rect.left) / rect.width - 0.5;
+    const normalizedY = (screenY - rect.top) / rect.height - 0.5;
+    
+    // Convert to world coordinates relative to camera (canvas center = camera position)
+    const worldX = GameMap.offsetX + normalizedX * rect.width;
+    const worldY = GameMap.offsetY + normalizedY * rect.height;
 
-    return [
-        (screenX - rect.left) * scaleX,
-        (screenY - rect.top) * scaleY,
-    ];
+    return [worldX, worldY];
 }
