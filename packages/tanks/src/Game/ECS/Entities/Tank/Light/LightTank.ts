@@ -7,7 +7,7 @@ import { TankType } from '../../../Components/Tank.ts';
 import { TankEngineType } from '../../../Systems/Tank/TankControllerSystems.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from '../Common/Options.ts';
 import { createTankBase, createTankTurret } from '../Common/Tank.ts';
-import { createTankCaterpillarsParts, createTankHullParts, createTankTurretParts } from '../Common/TankParts.ts';
+import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../Common/TankParts.ts';
 import { SIZE } from '../Medium/MediumTankParts.ts';
 import {
     caterpillarLength,
@@ -20,6 +20,7 @@ import {
     turretGunSet,
     turretHeadSet,
 } from './LightTankParts.ts';
+import { SlotPartType } from '../../../Components/SlotConfig.ts';
 
 const TRACKS_COLOR = new Float32Array([0.6, 0.6, 0.6, 1]);
 const TURRET_COLOR = new Float32Array([0.6, 1, 0.6, 1]);
@@ -56,22 +57,20 @@ export function createLightTank(opts: {
     options.turret.bulletStartPosition = [0, -9 * PADDING];
     const [turretEid] = createTankTurret(options, tankEid, tankPid);
 
-    {
-        options.density = DENSITY * 10;
-        createTankHullParts(tankEid, hullSet, options);
-    }
+    createSlotEntities(tankEid, hullSet, options.color, SlotPartType.HullPart);
 
-    {
-        options.density = DENSITY;
-        updateColorOptions(options, TRACKS_COLOR);
-        createTankCaterpillarsParts(tankEid, [caterpillarSetLeft, caterpillarSetRight], options);
-    }
+    updateColorOptions(options, TRACKS_COLOR);
+    createSlotEntities(tankEid, caterpillarSetLeft, options.color, SlotPartType.Caterpillar);
+    createSlotEntities(tankEid, caterpillarSetRight, options.color, SlotPartType.Caterpillar);
 
-    {
-        options.density = DENSITY;
-        updateColorOptions(options, TURRET_COLOR);
-        createTankTurretParts(turretEid, turretHeadSet, turretGunSet, options);
-    }
+    updateColorOptions(options, TURRET_COLOR);
+    createSlotEntities(turretEid, turretGunSet, options.color, SlotPartType.TurretGun);
+    createSlotEntities(turretEid, turretHeadSet, options.color, SlotPartType.TurretHead);
+
+    updateSlotsBrightness(tankEid);
+    fillAllSlots(tankEid, options);
+    updateSlotsBrightness(turretEid);
+    fillAllSlots(turretEid, options);
 
     return tankEid;
 }

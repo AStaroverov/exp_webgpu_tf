@@ -1,13 +1,14 @@
 import { EntityId, hasComponent, removeComponent } from 'bitecs';
 import { min, smoothstep } from '../../../../../../../lib/math.ts';
 import { GameDI } from '../../../DI/GameDI.ts';
-import { changePhysicalDensity } from '../../../Physical/changePhysicalDensity.ts';
 import { CollisionGroup } from '../../../Physical/createRigid.ts';
 import { removePhysicalJoint } from '../../../Physical/removePhysicalJoint.ts';
 import { setPhysicalCollisionGroup } from '../../../Physical/setPhysicalCollisionGroup.ts';
 import { Children } from '../../Components/Children.ts';
+import { Debris } from '../../Components/Debris.ts';
 import { Parent } from '../../Components/Parent.ts';
 import { RigidBodyRef } from '../../Components/Physical.ts';
+import { Slot } from '../../Components/Slot.ts';
 import { PlayerRef } from '../../Components/PlayerRef.ts';
 import { Score } from '../../Components/Score.ts';
 import { Tank } from '../../Components/Tank.ts';
@@ -22,6 +23,9 @@ import {
     GlobalTransform,
 } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
 import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.ts';
+import { getFilledSlotCount, getSlotCount } from './Common/TankParts.ts';
+import { DestroyByTimeout } from '../../Components/Destroy.ts';
+import { randomRangeFloat } from '../../../../../../../lib/random.ts';
 
 // Explosion force settings
 const EXPLOSION_IMPULSE_BASE = 40000;      // Base impulse strength
@@ -110,21 +114,21 @@ export function destroyTank(tankEid: EntityId) {
     // turret parts
     const turretEid = Tank.turretEId[tankEid];
     for (let i = 0; i < Children.entitiesCount[turretEid]; i++) {
-        const eid = Children.entitiesIds.get(turretEid, i);
-        partsToExplode.push(eid);
-        tearOffTankPart(eid, false);
+        const slotEid = Children.entitiesIds.get(turretEid, i);
+        if (Slot.isEmpty(slotEid)) continue;
+        const partEid = Slot.getFillerEid(slotEid);
+        partsToExplode.push(partEid);
+        tearOffTankPart(partEid);
     }
-    Children.removeAllChildren(turretEid);
 
     // tank parts
     for (let i = 0; i < Children.entitiesCount[tankEid]; i++) {
-        const partEid = Children.entitiesIds.get(tankEid, i);
+        const slotEid = Children.entitiesIds.get(tankEid, i);
+        if (Slot.isEmpty(slotEid)) continue;
+        const partEid = Slot.getFillerEid(slotEid);
         partsToExplode.push(partEid);
-        tearOffTankPart(partEid, false);
+        tearOffTankPart(partEid);
     }
-    Children.removeAllChildren(tankEid);
-
-    removeTankComponentsWithoutParts(tankEid);
 
     macroTasks.addTimeout(() => {
         // Apply explosion impulse to all parts after they're detached
@@ -132,30 +136,23 @@ export function destroyTank(tankEid: EntityId) {
             applyExplosionImpulse(partEid, explosionX, explosionY);
         }
     }, 30); // delay to ensure parts are detached
-}
 
-export function removeTank(tankEid: EntityId) {
-    scheduleRemoveEntity(tankEid, true);
+    scheduleRemoveEntity(tankEid);
+    scheduleRemoveEntity(turretEid);
 }
 
 export function syncRemoveTank(tankEid: EntityId) {
     recursiveTypicalRemoveEntity(tankEid);
 }
 
-export function removeTankComponentsWithoutParts(tankEid: number) {
-    const turretEid = Tank.turretEId[tankEid];
-    Children.removeChild(tankEid, turretEid);
-    scheduleRemoveEntity(turretEid, false);
-    scheduleRemoveEntity(tankEid, false);
-}
-
 export function tearOffTankPart(tankPartEid: number, shouldBreakConnection: boolean = true, { world } = GameDI) {
     removeComponent(world, tankPartEid, TeamRef);
     removeComponent(world, tankPartEid, PlayerRef);
 
-    const parentEid = Parent.id[tankPartEid];
-    if (shouldBreakConnection) {
-        Children.removeChild(parentEid, tankPartEid);
+    const slotEid = Parent.id[tankPartEid];
+    
+    if (shouldBreakConnection && hasComponent(world, slotEid, Slot)) {
+        Children.removeChild(slotEid, tankPartEid);
     }
 
     const jointPid = hasComponent(world, tankPartEid, TankPart) ? TankPart.jointPid[tankPartEid] : 0;
@@ -165,7 +162,15 @@ export function tearOffTankPart(tankPartEid: number, shouldBreakConnection: bool
         // @todo: remove bullet collision in game, keep only for training
         setPhysicalCollisionGroup(tankPartEid, CollisionGroup.ALL & ~CollisionGroup.TANK_BASE & ~CollisionGroup.BULLET);
         removePhysicalJoint(jointPid);
-        changePhysicalDensity(tankPartEid, 8);
+        // changePhysicalDensity(tankPartEid, 8);
+    }
+
+    if (!hasComponent(world, tankPartEid, Debris)) {
+        Debris.addComponent(world, tankPartEid);
+    }
+
+    if (!hasComponent(world, tankPartEid, DestroyByTimeout)) {
+        DestroyByTimeout.addComponent(world, tankPartEid, 5_000 + randomRangeFloat(0, 5_000));
     }
 }
 
@@ -175,7 +180,13 @@ export function resetTankPartJointComponent(tankPartEid: number, { world } = Gam
 }
 
 export function getTankCurrentPartsCount(tankEid: number) {
-    return Children.entitiesCount[tankEid] + Children.entitiesCount[Tank.turretEId[tankEid]];
+    const turretEid = Tank.turretEId[tankEid];
+    return getFilledSlotCount(tankEid) + getFilledSlotCount(turretEid);
+}
+
+export function getTankTotalSlotCount(tankEid: number) {
+    const turretEid = Tank.turretEId[tankEid];
+    return getSlotCount(tankEid) + getSlotCount(turretEid);
 }
 
 export const HEALTH_THRESHOLD = 0.85;
@@ -183,14 +194,15 @@ export const HEALTH_THRESHOLD = 0.85;
 // return from 0 to 1
 export function getTankHealthAbs(tankEid: number): number {
     const health = getTankHealth(tankEid);
-    const absHealth = health * Tank.initialPartsCount[tankEid];
+    const totalSlots = getTankTotalSlotCount(tankEid);
+    const absHealth = health * totalSlots;
     return absHealth;
 }
 
 export function getTankHealth(tankEid: number): number {
-    const initialPartsCount = Tank.initialPartsCount[tankEid];
-    const partsCount = getTankCurrentPartsCount(tankEid);
-    const absHealth = min(1, partsCount / initialPartsCount);
+    const totalSlots = getTankTotalSlotCount(tankEid);
+    const filledSlots = getTankCurrentPartsCount(tankEid);
+    const absHealth = min(1, filledSlots / totalSlots);
     const health = smoothstep(HEALTH_THRESHOLD, 1, absHealth);
     return health;
 }

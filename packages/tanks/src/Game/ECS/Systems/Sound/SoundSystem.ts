@@ -22,6 +22,7 @@ const SOUND_IDS: Record<SoundType, string> = {
     [SoundType.TankMove]: 'tank_move',
     [SoundType.TankShoot]: 'tank_shoot',
     [SoundType.TankHit]: 'tank_hit',
+    [SoundType.DebrisCollect]: 'debris_collect',
 };
 
 // Configuration
@@ -31,6 +32,7 @@ const CONFIG = {
         [SoundType.TankMove]: 5,
         [SoundType.TankShoot]: 8,
         [SoundType.TankHit]: 8,
+        [SoundType.DebrisCollect]: 3,
     },
     hearingRange: 1000,   // Reduced from 1500 - sounds fade out faster
     refDistance: 100,     // Reduced from 200 - starts fading sooner
@@ -40,6 +42,7 @@ const CONFIG = {
         [SoundType.TankMove]: 0.3,
         [SoundType.TankShoot]: 0.35,  // Reduced by 30% (was 0.5)
         [SoundType.TankHit]: 0.28,    // Reduced by 30% (was 0.4)
+        [SoundType.DebrisCollect]: 0.5,  // Pickup sound should be noticeable
     },
 };
 
@@ -76,6 +79,13 @@ export async function loadGameSounds(): Promise<void> {
             ],
             maxInstances: CONFIG.maxSoundsPerType[SoundType.TankHit],
             volume: CONFIG.baseVolume[SoundType.TankHit],
+            loop: false,
+        }),
+        // Use one of the hit sounds for debris collection (metallic pickup sound)
+        SoundManager.load(SOUND_IDS[SoundType.DebrisCollect], {
+            src: '/assets/sounds/tanks/hit/an_explosive_shell_h_1.mp3',
+            maxInstances: CONFIG.maxSoundsPerType[SoundType.DebrisCollect],
+            volume: CONFIG.baseVolume[SoundType.DebrisCollect],
             loop: false,
         }),
     ]);

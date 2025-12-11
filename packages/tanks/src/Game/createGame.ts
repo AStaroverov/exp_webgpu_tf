@@ -42,6 +42,7 @@ import { createProgressSystem } from './ECS/Systems/createProgressSystem.ts';
 import { createCameraSystem, setCameraTarget, setInfiniteMapMode, initCameraPosition, CameraState } from './ECS/Systems/Camera/CameraSystem.ts';
 import { setCameraPosition } from '../../../renderer/src/ECS/Systems/ResizeSystem.ts';
 import { createSoundSystem, loadGameSounds, disposeSoundSystem, SoundManager, createTankMoveSoundSystem } from './ECS/Systems/Sound/index.ts';
+import { createDebrisCollectorSystem } from './ECS/Systems/createDebrisCollectorSystem.ts';
 
 export type Game = ReturnType<typeof createGame>;
 
@@ -137,6 +138,7 @@ export function createGame({ width, height }: {
     const updateCamera = createCameraSystem();
     const updateSounds = createSoundSystem();
     const updateTankMoveSounds = createTankMoveSoundSystem();
+    const collectDebris = createDebrisCollectorSystem();
 
     // Load sounds asynchronously (fire and forget)
     loadGameSounds().catch(console.error);
@@ -147,6 +149,9 @@ export function createGame({ width, height }: {
         spawnFrame(delta);
 
         physicalFrame(delta);
+
+        // Collect debris to heal player tank
+        collectDebris(delta);
 
         visTracksUpdate(delta);
         spawnTankTracks(delta);

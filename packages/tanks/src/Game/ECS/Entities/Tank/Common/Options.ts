@@ -47,7 +47,7 @@ export const mutatedOptions = {
 };
 
 export const defaultOptions = structuredClone(mutatedOptions);
-export const resetOptions = (target: Options, source: Parameters<typeof createMediumTank>[0]) => {
+export const resetOptions = (target: Options, source?: Partial<Parameters<typeof createMediumTank>[0]>) => {
     target.teamId = source?.teamId ?? defaultOptions.teamId;
     target.playerId = source?.playerId ?? defaultOptions.playerId;
 
