@@ -27,7 +27,7 @@ export function changeTankType(tankEid: EntityId, slot: number, tankType: TankTy
 //
 // }
 
-export const tankEids$ = frameInterval(10).pipe(
+export const tankEids$ = frameInterval(160).pipe(
     map(() => Array.from(getTankEids())),
     distinctUntilChanged((a, b) => {
         if (a.length !== b.length) return false;
@@ -37,7 +37,7 @@ export const tankEids$ = frameInterval(10).pipe(
 
 export const getTankState$ = dedobs(
     (id: number) => {
-        return frameInterval(200).pipe(
+        return frameInterval(32 * 100).pipe(
             map(() => {
                 return {
                     id,
@@ -56,7 +56,7 @@ export const getTankState$ = dedobs(
 
 export const getTankType$ = dedobs(
     (id: number) => {
-        return frameInterval(200).pipe(
+        return frameInterval(32 * 100).pipe(
             map(() => getTankType(id)),
         );
     },

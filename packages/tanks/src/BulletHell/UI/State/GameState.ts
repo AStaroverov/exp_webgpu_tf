@@ -19,7 +19,7 @@ export function BulletHellStateEffects() {
     const gameTicker = BulletHellState$.pipe(
         switchMap(({ isStarted }) => {
             const step = isStarted ? 1 : 6;
-            return frameInterval(step).pipe(
+            return frameInterval(step * 16).pipe(
                 map((dt) => min(16.6667, dt)),
                 tap((dt) => getEngine().gameTick(step * dt)),
             );
