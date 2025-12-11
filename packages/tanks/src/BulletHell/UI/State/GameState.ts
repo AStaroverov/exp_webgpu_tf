@@ -2,7 +2,7 @@ import { BehaviorSubject, map, merge, switchMap, tap, timer, filter, take } from
 import { min } from '../../../../../../lib/math.ts';
 import { frameInterval } from '../../../../../../lib/Rx/frameInterval.ts';
 import { getEngine } from './engine.ts';
-import { spawnSingleEnemy, isPlayerDead, restartBulletHellGame } from './gameMethods.ts';
+import { isPlayerDead, restartBulletHellGame, spawnSingleEnemy } from './gameMethods.ts';
 
 export const BulletHellState$ = new BehaviorSubject({
     isStarted: false,

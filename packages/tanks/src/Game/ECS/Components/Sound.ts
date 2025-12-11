@@ -13,6 +13,7 @@ export enum SoundType {
     TankMove = 1,
     TankShoot = 2,
     TankHit = 3,
+    DebrisCollect = 4,
 }
 
 // Sound state enum

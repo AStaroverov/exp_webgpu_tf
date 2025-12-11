@@ -33,6 +33,11 @@ export const Children = component({
     removeChild(parentEid: number, childEid: number): void {
         const children = Children.entitiesIds.getBatch(parentEid);
         const length = Children.entitiesCount[parentEid];
+
+        if (length === 0) {
+            return Children.removeAllChildren(parentEid);
+        }
+
         const index = children.subarray(0, length).indexOf(childEid);
 
         if (index === -1) return;

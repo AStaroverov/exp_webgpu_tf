@@ -69,7 +69,7 @@ export function createTankTurret(options: Options, tankEid: number, tankPid: num
         physicalWorld.getRigidBody(turretPid),
         false,
     );
-    TankPart.addComponent(world, turretEid, joint.handle, parentVector, childVector);
+    TankPart.addComponent(world, turretEid, joint.handle);
 
     addTransformComponents(world, turretEid);
     Parent.addComponent(world, turretEid, tankEid);
