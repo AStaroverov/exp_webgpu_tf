@@ -154,7 +154,7 @@ export function fillSlot(
         JointData.fixed(jointParentAnchor, 0, jointChildAnchor, 0),
         parentRb,
         physicalWorld.getRigidBody(pid),
-        true,
+        false,
     );
     
     // Add components
