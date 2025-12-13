@@ -19,7 +19,6 @@ import { createDestroyByTimeoutSystem } from './ECS/Systems/createDestroyByTimeo
 import { createDestroyBySpeedSystem } from './ECS/Systems/createDestroyBySpeedSystem.ts';
 import { createDestroyOutOfZoneSystem } from './ECS/Systems/createDestroyOutOfZoneSystem.ts';
 import { createDestroySystem } from './ECS/Systems/createDestroySystem.ts';
-import { createHitableSystem } from './ECS/Systems/createHitableSystem.ts';
 import { createRigidBodyStateSystem } from './ECS/Systems/createRigidBodyStateSystem.ts';
 import {
     createPlayerTankBulletSystem,
@@ -31,7 +30,6 @@ import { createDrawMuzzleFlashSystem } from './ECS/Systems/Render/MuzzleFlash/cr
 import { createDrawHitFlashSystem } from './ECS/Systems/Render/HitFlash/createDrawHitFlashSystem.ts';
 import { createDrawExplosionSystem } from './ECS/Systems/Render/Explosion/createDrawExplosionSystem.ts';
 import { createPostEffect } from './ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
-import { createTankAliveSystem } from './ECS/Systems/Tank/createTankAliveSystem.ts';
 import { createTankDecayOutOfZoneSystem } from './ECS/Systems/Tank/createTankDecayOutOfZoneSystem.ts';
 import { createVisualizationTracksSystem } from './ECS/Systems/Tank/createVisualizationTracksSystem.ts';
 import { createSpawnTankTracksSystem } from './ECS/Systems/Tank/createSpawnTankTracksSystem.ts';
@@ -43,6 +41,8 @@ import { createCameraSystem, setCameraTarget, setInfiniteMapMode, initCameraPosi
 import { setCameraPosition } from '../../../renderer/src/ECS/Systems/ResizeSystem.ts';
 import { createSoundSystem, loadGameSounds, disposeSoundSystem, SoundManager, createTankMoveSoundSystem } from './ECS/Systems/Sound/index.ts';
 import { createDebrisCollectorSystem } from './ECS/Systems/createDebrisCollectorSystem.ts';
+import { createHitableSystem } from './ECS/Systems/createHitableSystem.ts';
+import { createTankAliveSystem } from './ECS/Systems/Tank/createTankAliveSystem.ts';
 
 export type Game = ReturnType<typeof createGame>;
 
@@ -70,9 +70,6 @@ export function createGame({ width, height }: {
 
     const syncRigidBodyState = createRigidBodyStateSystem();
     const applyRigidBodyDeltaToLocalTransform = createApplyRigidBodyToTransformSystem();
-
-    const updateHitableSystem = createHitableSystem();
-    const updateTankAliveSystem = createTankAliveSystem();
 
     const eventQueue = new EventQueue(true);
     const physicalFrame = (delta: number) => {
@@ -107,9 +104,6 @@ export function createGame({ width, height }: {
                 Hitable.hit$(eid2, eid1, forceMagnitude);
             }
         });
-
-        updateHitableSystem();
-        updateTankAliveSystem();
     };
 
     const spawnBullets = createSpawnerBulletsSystem();
@@ -138,19 +132,20 @@ export function createGame({ width, height }: {
     const updateCamera = createCameraSystem();
     const updateSounds = createSoundSystem();
     const updateTankMoveSounds = createTankMoveSoundSystem();
+    const updateHitableSystem = createHitableSystem();
+    const updateTankAliveSystem = createTankAliveSystem();
     const collectDebris = createDebrisCollectorSystem();
 
     // Load sounds asynchronously (fire and forget)
     loadGameSounds().catch(console.error);
 
     GameDI.gameTick = (delta: number) => {
-        GameDI.plugins.systems[SystemGroup.Before].forEach(system => system(delta));
-
-        spawnFrame(delta);
-
         physicalFrame(delta);
 
-        // Collect debris to heal player tank
+        GameDI.plugins.systems[SystemGroup.Before].forEach(system => system(delta));
+
+        updateHitableSystem();
+        updateTankAliveSystem();
         collectDebris(delta);
 
         visTracksUpdate(delta);
@@ -174,6 +169,7 @@ export function createGame({ width, height }: {
         // stats.update();
 
         destroyFrame(delta);
+        spawnFrame(delta);
 
         PlayerEnvDI.inputFrame?.();
 
