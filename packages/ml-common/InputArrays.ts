@@ -82,8 +82,8 @@ export function prepareInputArrays(
     const turretRel = turretRot - rotation;
 
     tankFeatures[ti++] = TankInputTensor.health[tankEid]; // hp
-    tankFeatures[ti++] = norm(tankX - width / 2, width / 2); // x
-    tankFeatures[ti++] = norm(tankY - height / 2, height / 2); // y
+    tankFeatures[ti++] = norm(tankX, width / 2); // x
+    tankFeatures[ti++] = norm(tankY, height / 2); // y
     tankFeatures[ti++] = Math.sin(rotation); // body rotation sin
     tankFeatures[ti++] = Math.cos(rotation); // body rotation cos
     tankFeatures[ti++] = norm(locSpeedX, QUANT); // speedX
