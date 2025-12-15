@@ -43,6 +43,7 @@ import { createSoundSystem, loadGameSounds, disposeSoundSystem, SoundManager, cr
 import { createDebrisCollectorSystem } from './ECS/Systems/createDebrisCollectorSystem.ts';
 import { createHitableSystem } from './ECS/Systems/createHitableSystem.ts';
 import { createTankAliveSystem } from './ECS/Systems/Tank/createTankAliveSystem.ts';
+import { SoundDI } from './DI/SoundDI.ts';
 
 export type Game = ReturnType<typeof createGame>;
 
@@ -107,8 +108,10 @@ export function createGame({ width, height }: {
     };
 
     const spawnBullets = createSpawnerBulletsSystem();
+    const spawnTankTracks = createSpawnTankTracksSystem();
     const spawnFrame = (delta: number) => {
         spawnBullets(delta);
+        spawnTankTracks(delta);
     };
 
     const destroy = createDestroySystem();
@@ -126,18 +129,12 @@ export function createGame({ width, height }: {
     };
 
     const visTracksUpdate = createVisualizationTracksSystem();
-    const spawnTankTracks = createSpawnTankTracksSystem();
     const updateTankTracks = createUpdateTankTracksSystem();
     const updateProgress = createProgressSystem();
     const updateCamera = createCameraSystem();
-    const updateSounds = createSoundSystem();
-    const updateTankMoveSounds = createTankMoveSoundSystem();
     const updateHitableSystem = createHitableSystem();
     const updateTankAliveSystem = createTankAliveSystem();
     const collectDebris = createDebrisCollectorSystem();
-
-    // Load sounds asynchronously (fire and forget)
-    loadGameSounds().catch(console.error);
 
     GameDI.gameTick = (delta: number) => {
         physicalFrame(delta);
@@ -149,7 +146,6 @@ export function createGame({ width, height }: {
         collectDebris(delta);
 
         visTracksUpdate(delta);
-        spawnTankTracks(delta);
         updateProgress(delta);
         updateTankTracks();
         // updateMap();
@@ -158,30 +154,18 @@ export function createGame({ width, height }: {
         updateCamera(delta);
         setCameraPosition(CameraState.x, CameraState.y);
 
-        // Update tank movement sounds (manages Sound components on tanks)
-        updateTankMoveSounds(delta);
-        // Update sounds (uses camera position for spatial audio)
-        updateSounds(delta);
-
-        // stats.begin();
-        RenderDI.renderFrame?.(delta);
-        // stats.end();
-        // stats.update();
-
         destroyFrame(delta);
         spawnFrame(delta);
 
         PlayerEnvDI.inputFrame?.();
+        RenderDI.renderFrame?.(delta);
+        SoundDI.soundFrame?.(delta);
 
         GameDI.plugins.systems[SystemGroup.After].forEach(system => system(delta));
     };
 
     GameDI.destroy = () => {
         GameDI.plugins.dispose();
-
-        // Cleanup sounds
-        disposeSoundSystem();
-        SoundManager.dispose();
 
         physicalWorld.free();
         RigidBodyRef.dispose();
@@ -200,9 +184,38 @@ export function createGame({ width, height }: {
         GameDI.gameTick = null!;
         GameDI.destroy = null!;
 
+        SoundDI.destroy?.();
         RenderDI.destroy?.();
         PlayerEnvDI.destroy?.();
     };
+
+    GameDI.enableSound = async () => {
+        if (SoundDI.enabled) {
+            return;
+        }
+
+        SoundDI.enabled = true;
+
+        const updateSounds = createSoundSystem();
+        const updateTankMoveSounds = createTankMoveSoundSystem();
+
+        // Load sounds asynchronously
+        loadGameSounds().catch(console.error);
+
+        SoundDI.soundFrame = (delta: number) => {
+            updateSounds(delta);
+            updateTankMoveSounds(delta);
+        };
+
+        SoundDI.destroy = () => {
+            disposeSoundSystem();
+            SoundManager.dispose();
+
+            SoundDI.enabled = false;
+            SoundDI.destroy = undefined;
+            SoundDI.soundFrame = undefined;
+        };
+    }
 
     GameDI.setRenderTarget = async (canvas: null | undefined | HTMLCanvasElement) => {
         if (canvas === RenderDI.canvas) {
@@ -253,6 +266,7 @@ export function createGame({ width, height }: {
         };
 
         RenderDI.destroy = () => {
+            RenderDI.enabled = false;
             RenderDI.canvas = null!;
             RenderDI.device = null!;
             RenderDI.context = null!;

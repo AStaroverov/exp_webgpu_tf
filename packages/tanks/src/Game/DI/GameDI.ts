@@ -10,6 +10,7 @@ export const GameDI: {
     physicalWorld: PhysicalWorld;
     gameTick: (delta: number) => void;
     destroy: () => void;
+    enableSound: () => void;
     setRenderTarget: (canvas: undefined | null | HTMLCanvasElement) => void;
     enablePlayer: () => void
     setPlayerTank: (tankEid: null | EntityId) => void
@@ -24,6 +25,7 @@ export const GameDI: {
     physicalWorld: null as any,
     gameTick: null as any,
     destroy: null as any,
+    enableSound: null as any,
     setRenderTarget: null as any,
     enablePlayer: null as any,
     setPlayerTank: null as any,

@@ -9,12 +9,14 @@ import { HeuristicsData } from '../../../Components/HeuristicsData.ts';
 import { Parent } from '../../../Components/Parent.ts';
 import { PlayerRef } from '../../../Components/PlayerRef.ts';
 import { createRectangleRigidGroup } from '../../../Components/RigidGroup.ts';
-import { Tank } from '../../../Components/Tank.ts';
+import { Tank, TankType } from '../../../Components/Tank.ts';
 import { TankController } from '../../../Components/TankController.ts';
 import { TankPart } from '../../../Components/TankPart.ts';
 import { TankTurret } from '../../../Components/TankTurret.ts';
 import { TeamRef } from '../../../Components/TeamRef.ts';
 import { Options } from './Options.ts';
+import { spawnSoundAtParent } from '../../SoundEntity.ts';
+import { SoundParentRelative, SoundType } from '../../../Components/Sound.ts';
 
 export function createTankBase(options: Options, { world } = GameDI): [number, number] {
     options.belongsCollisionGroup = CollisionGroup.TANK_BASE;
@@ -36,6 +38,23 @@ export function createTankBase(options: Options, { world } = GameDI): [number, n
     Color.addComponent(world, tankEid, ...options.color);
 
     TankInputTensor.addComponent(world, tankEid);
+
+    // Spawn movement sound entity attached to tank
+    // Volume based on tank type: Light = 0.6, Medium/Player = 0.8, Heavy = 1.0
+    const volumeByType: Record<TankType, number> = {
+        [TankType.Light]: 0.6,
+        [TankType.Medium]: 0.8,
+        [TankType.Heavy]: 1.0,
+        [TankType.Player]: 0.8,
+    };
+    const soundEid = spawnSoundAtParent({
+        parentEid: tankEid,
+        type: SoundType.TankMove,
+        volume: volumeByType[options.tankType] ?? 0.8,
+        loop: true,
+        autoplay: false,
+    });
+    SoundParentRelative.addComponent(world, soundEid);
 
     return [tankEid, tankPid];
 }

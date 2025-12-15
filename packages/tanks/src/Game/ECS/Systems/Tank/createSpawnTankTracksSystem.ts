@@ -13,6 +13,7 @@ import {
     getMatrixTranslationY,
     getMatrixRotationZ,
 } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
+import { Slot } from '../../Components/Slot.ts';
 
 // Base chance for a caterpillar element to leave a track per frame
 const BASE_TRACK_CHANCE = 0.01;
@@ -52,7 +53,8 @@ export function createSpawnTankTracksSystem({ world } = GameDI) {
             const trackChance = BASE_TRACK_CHANCE + turnBonus;
 
             for (let i = 0; i < childrenCount; i++) {
-                const childEid = childrenEids[i];
+                const slotEid = childrenEids[i];
+                const childEid = Slot.getFillerEid(slotEid);
 
                 if (!hasComponent(world, childEid, TankPartCaterpillar)) continue;
 

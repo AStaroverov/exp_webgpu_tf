@@ -81,3 +81,23 @@ export const Sound = component({
         return hasComponent(world, eid, Sound);
     },
 });
+
+/**
+ * Marker component: sound should be destroyed when playback finishes
+ */
+export const DestroyOnSoundFinish = component({
+    addComponent(world: World, eid: EntityId): void {
+        addComponent(world, eid, DestroyOnSoundFinish);
+    },
+});
+
+/**
+ * Marker component: sound state depends on parent entity
+ * - Position is taken from Parent (via Parent component)
+ * - Sound starts/stops based on parent's state (alive/destroyed)
+ */
+export const SoundParentRelative = component({
+    addComponent(world: World, eid: EntityId): void {
+        addComponent(world, eid, SoundParentRelative);
+    },
+});

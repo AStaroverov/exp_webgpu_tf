@@ -4,7 +4,7 @@ export const RenderDI: {
     device: GPUDevice;
     context: GPUCanvasContext;
     destroy?: () => void;
-    renderFrame: (delta: number) => void;
+    renderFrame?: (delta: number) => void;
 } = {
     enabled: false,
     canvas: null as any,

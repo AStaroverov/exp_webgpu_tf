@@ -6,15 +6,19 @@
  * 2. Limits max simultaneous sounds per type
  * 3. Uses spatial audio with distance-based volume
  * 4. Cleans up sounds when entities are destroyed
+ * 5. Handles parent-relative sounds (position follows parent)
+ * 6. Auto-destroys sounds with DestroyOnSoundFinish when playback ends
  */
 
 import { query, EntityId, hasComponent } from 'bitecs';
 import { GameDI } from '../../../DI/GameDI.ts';
-import { Sound, SoundType, SoundState } from '../../Components/Sound.ts';
-import { RigidBodyState } from '../../Components/Physical.ts';
+import { Sound, SoundType, SoundState, DestroyOnSoundFinish } from '../../Components/Sound.ts';
 import { PlayerRef } from '../../Components/PlayerRef.ts';
 import { CameraState } from '../Camera/CameraSystem.ts';
-import { SoundManager } from './SoundManager.ts';
+import { soundManager } from './SoundManager.ts';
+import { Parent } from '../../Components/Parent.ts';
+import { Destroy } from '../../Components/Destroy.ts';
+import { GlobalTransform, getMatrixTranslationX, getMatrixTranslationY } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
 
 // Sound IDs for SoundManager
 const SOUND_IDS: Record<SoundType, string> = {
@@ -34,16 +38,16 @@ const CONFIG = {
         [SoundType.TankHit]: 8,
         [SoundType.DebrisCollect]: 3,
     },
-    hearingRange: 1000,   // Reduced from 1500 - sounds fade out faster
-    refDistance: 100,     // Reduced from 200 - starts fading sooner
-    nonPlayerVolumeMultiplier: 0.4,  // Non-player sounds are 40% of base volume
+    hearingRange: 1000,
+    refDistance: 100,
     baseVolume: {
         [SoundType.None]: 0,
-        [SoundType.TankMove]: 0.3,
-        [SoundType.TankShoot]: 0.35,  // Reduced by 30% (was 0.5)
-        [SoundType.TankHit]: 0.28,    // Reduced by 30% (was 0.4)
-        [SoundType.DebrisCollect]: 0.5,  // Pickup sound should be noticeable
+        [SoundType.TankMove]: 0.1,
+        [SoundType.TankShoot]: 0.2,  
+        [SoundType.TankHit]: 0.3,    
+        [SoundType.DebrisCollect]: 0.3,
     },
+    nonPlayerVolumeMultiplier: 0.4,  // Non-player sounds are 40% of base volume
 };
 
 // Track active audio instances per entity
@@ -54,51 +58,72 @@ const activeAudios: Map<EntityId, HTMLAudioElement> = new Map();
  */
 export async function loadGameSounds(): Promise<void> {
     await Promise.all([
-        SoundManager.load(SOUND_IDS[SoundType.TankMove], {
-            src: '/assets/sounds/tanks/move/smartsound_TRANSPORTATION_TANK_Small_Tracks_Rattle_Fast_01.mp3',
+        soundManager.load(SOUND_IDS[SoundType.TankMove], {
+            src: '/assets/sounds/tanks/move/engine1.webm',
             maxInstances: CONFIG.maxSoundsPerType[SoundType.TankMove] + 1,
             volume: CONFIG.baseVolume[SoundType.TankMove],
             loop: true,
         }),
-        SoundManager.load(SOUND_IDS[SoundType.TankShoot], {
+        soundManager.load(SOUND_IDS[SoundType.TankShoot], {
             src: [
-                '/assets/sounds/tanks/shot/tank_shot_1.mp3',
-                '/assets/sounds/tanks/shot/tank_shot_3.mp3',
-                '/assets/sounds/tanks/shot/tank_shot_4.mp3',
+                '/assets/sounds/tanks/shot/shot.webm',
             ],
             maxInstances: CONFIG.maxSoundsPerType[SoundType.TankShoot],
             volume: CONFIG.baseVolume[SoundType.TankShoot],
             loop: false,
         }),
-        SoundManager.load(SOUND_IDS[SoundType.TankHit], {
+        soundManager.load(SOUND_IDS[SoundType.TankHit], {
             src: [
-                '/assets/sounds/tanks/hit/an_explosive_shell_h_1.mp3',
-                '/assets/sounds/tanks/hit/an_explosive_shell_h_2.mp3',
-                '/assets/sounds/tanks/hit/an_explosive_shell_h_3.mp3',
-                '/assets/sounds/tanks/hit/an_explosive_shell_h_4.mp3',
+                '/assets/sounds/tanks/hit/hit1.webm',
+                '/assets/sounds/tanks/hit/hit2.webm',
             ],
             maxInstances: CONFIG.maxSoundsPerType[SoundType.TankHit],
             volume: CONFIG.baseVolume[SoundType.TankHit],
             loop: false,
         }),
-        // Use one of the hit sounds for debris collection (metallic pickup sound)
-        SoundManager.load(SOUND_IDS[SoundType.DebrisCollect], {
-            src: '/assets/sounds/tanks/hit/an_explosive_shell_h_1.mp3',
-            maxInstances: CONFIG.maxSoundsPerType[SoundType.DebrisCollect],
-            volume: CONFIG.baseVolume[SoundType.DebrisCollect],
-            loop: false,
-        }),
+        // SoundManager.load(SOUND_IDS[SoundType.DebrisCollect], {
+        //     src: '/assets/sounds/tanks/hit/an_explosive_shell_h_1.mp3',
+        //     maxInstances: CONFIG.maxSoundsPerType[SoundType.DebrisCollect],
+        //     volume: CONFIG.baseVolume[SoundType.DebrisCollect],
+        //     loop: false,
+        // }),
     ]);
+}
+
+/**
+ * Get entity position from GlobalTransform
+ * If entity has Parent, use parent's GlobalTransform
+ * Otherwise use entity's own GlobalTransform
+ */
+function getEntityPosition(eid: EntityId, world: any): { x: number; y: number } {
+    // If entity follows a parent, use parent's GlobalTransform
+    if (hasComponent(world, eid, Parent) && hasComponent(world, Parent.id[eid], GlobalTransform)) {
+        const matrix = GlobalTransform.matrix.getBatch(Parent.id[eid]);
+        return {
+            x: getMatrixTranslationX(matrix),
+            y: getMatrixTranslationY(matrix),
+        };
+    }
+    
+    // Use entity's own GlobalTransform
+    if (hasComponent(world, eid, GlobalTransform)) {
+        const matrix = GlobalTransform.matrix.getBatch(eid);
+        return {
+            x: getMatrixTranslationX(matrix),
+            y: getMatrixTranslationY(matrix),
+        };
+    }
+    
+    return { x: 0, y: 0 };
 }
 
 /**
  * Calculate distance from camera to entity
  */
-function getDistanceToCamera(eid: EntityId): number {
-    const x = RigidBodyState.position.get(eid, 0);
-    const y = RigidBodyState.position.get(eid, 1);
-    const dx = x - CameraState.x;
-    const dy = y - CameraState.y;
+function getDistanceToCamera(eid: EntityId, world: any): number {
+    const pos = getEntityPosition(eid, world);
+    const dx = pos.x - CameraState.x;
+    const dy = pos.y - CameraState.y;
     return Math.sqrt(dx * dx + dy * dy);
 }
 
@@ -127,7 +152,7 @@ export function createSoundSystem({ world } = GameDI) {
 
     return function updateSounds(_delta: number): void {
         // Update listener position
-        SoundManager.setListenerPosition(CameraState.x, CameraState.y);
+        soundManager.setListenerPosition(CameraState.x, CameraState.y);
 
         const soundEids = query(world, [Sound]);
 
@@ -150,7 +175,7 @@ export function createSoundSystem({ world } = GameDI) {
             const type = Sound.type[eid] as SoundType;
             if (type === SoundType.None) continue;
 
-            const distance = getDistanceToCamera(eid);
+            const distance = getDistanceToCamera(eid, world);
             const isPlayer = hasComponent(world, eid, PlayerRef);
             const wantsToPlay = Sound.state[eid] === SoundState.Playing;
 
@@ -184,7 +209,7 @@ export function createSoundSystem({ world } = GameDI) {
                 if (!toPlay.has(eid)) {
                     const audio = activeAudios.get(eid);
                     if (audio) {
-                        SoundManager.stopInstance(audio);
+                        soundManager.stopInstance(audio);
                         activeAudios.delete(eid);
                     }
                     typeSet.delete(eid);
@@ -200,15 +225,24 @@ export function createSoundSystem({ world } = GameDI) {
                 let audio = activeAudios.get(eid);
 
                 if (!audio) {
-                    // Start new sound
-                    const x = RigidBodyState.position.get(eid, 0);
-                    const y = RigidBodyState.position.get(eid, 1);
+                    // Start new sound - get position from entity
+                    const pos = getEntityPosition(eid, world);
                     const loop = Sound.loop[eid] === 1;
 
-                    const newAudio = SoundManager.play(soundId, { volume, loop, x, y });
+                    const newAudio = soundManager.play(soundId, { volume, loop, x: pos.x, y: pos.y });
                     if (newAudio) {
                         activeAudios.set(eid, newAudio);
                         typeSet.add(eid);
+                        
+                        // Track audio end for DestroyOnSoundFinish entities
+                        if (!loop && hasComponent(world, eid, DestroyOnSoundFinish)) {
+                            newAudio.addEventListener('ended', () => {
+                                // Mark entity for destruction when sound ends
+                                if (!hasComponent(world, eid, Destroy)) {
+                                    Destroy.addComponent(world, eid);
+                                }
+                            }, { once: true });
+                        }
                     }
                 } else {
                     // Update volume
@@ -224,7 +258,7 @@ export function createSoundSystem({ world } = GameDI) {
 
             if (audio) {
                 if (state === SoundState.Stopped) {
-                    SoundManager.stopInstance(audio);
+                    soundManager.stopInstance(audio);
                     activeAudios.delete(eid);
                     const type = Sound.type[eid] as SoundType;
                     soundsByType.get(type)?.delete(eid);
@@ -239,7 +273,7 @@ export function createSoundSystem({ world } = GameDI) {
         // Cleanup for destroyed entities
         for (const [eid, audio] of activeAudios) {
             if (!soundEids.includes(eid)) {
-                SoundManager.stopInstance(audio);
+                soundManager.stopInstance(audio);
                 activeAudios.delete(eid);
                 for (const typeSet of soundsByType.values()) {
                     typeSet.delete(eid);
@@ -254,7 +288,7 @@ export function createSoundSystem({ world } = GameDI) {
  */
 export function disposeSoundSystem(): void {
     for (const [, audio] of activeAudios) {
-        SoundManager.stopInstance(audio);
+        soundManager.stopInstance(audio);
     }
     activeAudios.clear();
 }

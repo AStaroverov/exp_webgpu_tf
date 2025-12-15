@@ -5,6 +5,7 @@ const targetCanvas$ = new BehaviorSubject<HTMLCanvasElement | null>(null);
 
 combineLatest([engine$, targetCanvas$]).subscribe(([engine, canvas]) => {
     engine?.setRenderTarget(canvas);
+    engine?.enableSound();
 });
 
 export const setRenderTarget = (canvas: HTMLCanvasElement | null) => {

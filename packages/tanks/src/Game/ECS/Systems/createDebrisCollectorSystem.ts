@@ -8,7 +8,7 @@ import { Tank } from '../Components/Tank.ts';
 import { CollisionGroup, createCollisionGroups } from '../../Physical/createRigid.ts';
 import { HeuristicsData } from '../Components/HeuristicsData.ts';
 import { getTankTotalSlotCount, getTankCurrentPartsCount } from '../Entities/Tank/TankUtils.ts';
-import { SoundManager } from './Sound/SoundManager.ts';
+import { spawnSoundAtPosition, SoundType } from './Sound/index.ts';
 import { fillSlot, findFirstEmptySlot, getEmptySlotsCount } from '../Entities/Tank/Common/TankParts.ts';
 import { mutatedOptions, resetOptions } from '../Entities/Tank/Common/Options.ts';
 import { PlayerRef } from '../Components/PlayerRef.ts';
@@ -89,8 +89,14 @@ export function createDebrisCollectorSystem({ world, physicalWorld } = GameDI) {
         fillSlots(playerTankEid, debrisEids);
         collectDebris(debrisEids);
 
-        // Play collection sound at player position
-        SoundManager.play('debris_collect', { x: playerX, y: playerY });
+        // Spawn collection sound entity at player position
+        spawnSoundAtPosition({
+            type: SoundType.DebrisCollect,
+            x: playerX,
+            y: playerY,
+            volume: 1,
+            destroyOnFinish: true,
+        });
     };
 }
 

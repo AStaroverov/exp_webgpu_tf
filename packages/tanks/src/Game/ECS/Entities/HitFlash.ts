@@ -28,7 +28,7 @@ export function spawnHitFlash(options: HitFlashOptions, { world } = GameDI, { en
     Progress.addComponent(world, eid, options.duration);
     DestroyByTimeout.addComponent(world, eid, options.duration);
 
-    // Add hit sound
+    // Add hit sound - entity already has Transform for position
     Sound.addComponent(world, eid, SoundType.TankHit, {
         loop: false,
         volume: 1,
