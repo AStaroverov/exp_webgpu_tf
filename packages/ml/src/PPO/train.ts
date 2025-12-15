@@ -101,7 +101,7 @@ export function computeKullbackLeiblerAprox(
 export function batchAct(
     policyNetwork: tf.LayersModel,
     states: InputArrays[],
-    options?: { greedy?: boolean; epsilon?: number },
+    options?: { greedy?: boolean; epsilon?: number; noises?: (tf.Tensor[] | undefined)[] },
 ): {
     actions: Float32Array,
     logits: Float32Array,
@@ -117,7 +117,8 @@ export function batchAct(
         
         for (let i = 0; i < batchSize; i++) {
             const stateLogitsHeads = logitsHeads.map(logits => logits.slice([i], [1])); // [1, numClasses]
-            const sample = sampleActionsFromLogits(stateLogitsHeads, options);
+            const noiseTensors = options?.noises?.[i];
+            const sample = sampleActionsFromLogits(stateLogitsHeads, options, noiseTensors);
             const logProb = computeLogProbCategorical(sample.actions.expandDims(0), stateLogitsHeads);
             
             results.push({
@@ -137,12 +138,14 @@ export function batchAct(
  * @param logitsHeads - массив логитов для каждой головы, shape [B, A_i] или [A_i]
  * @param opts.greedy - если true, выбираем argmax (детерминированно)
  * @param opts.epsilon - ε-greedy: π_mix = (1 - ε) * softmax + ε * uniform
+ * @param noiseTensors - опциональный colored noise для каждой головы
  *
  * @returns actions [numHeads], logitsFlat [sum(A_i)]
  */
 export function sampleActionsFromLogits(
     logitsHeads: tf.Tensor[],
-    opts?: { greedy?: boolean; epsilon?: number }
+    opts?: { greedy?: boolean; epsilon?: number },
+    noiseTensors?: tf.Tensor[],
 ): { actions: tf.Tensor; logitsFlat: tf.Tensor } {
     const { greedy = false, epsilon = 0 } = opts ?? {};
 
@@ -150,11 +153,12 @@ export function sampleActionsFromLogits(
         // Нормализуем все головы к shape [1, A_i]
         const heads2d = logitsHeads.map(h => (h.rank === 1 ? h.expandDims(0) : h) as tf.Tensor2D);
 
-        const sampledActions = heads2d.map((logits) => {
+        const sampledActions = heads2d.map((logits, headIdx) => {
             if (greedy) {
                 return tf.argMax(logits, -1).squeeze();
             }
-            return sampleCategorical(logits, epsilon);
+            const headNoise = noiseTensors?.[headIdx];
+            return sampleCategorical(logits, epsilon, headNoise);
         });
 
         return {
@@ -165,24 +169,33 @@ export function sampleActionsFromLogits(
 }
 
 /**
- * Сэмплирование из categorical распределения с опциональным ε-greedy.
+ * Сэмплирование из categorical распределения с опциональным ε-greedy и colored noise.
+ * Colored noise добавляется к логитам перед сэмплированием для создания 
+ * временной корреляции в исследовании.
  */
-function sampleCategorical(logits: tf.Tensor2D, epsilon: number): tf.Tensor {
+function sampleCategorical(logits: tf.Tensor2D, epsilon: number, coloredNoise?: tf.Tensor): tf.Tensor {
     return tf.tidy(() => {
         const numActions = logits.shape[1]!;
 
+        // Добавляем colored noise к логитам если он предоставлен
+        if (coloredNoise != null) {
+            // coloredNoise shape [numActions], logits shape [1, numActions]
+            const noiseReshaped = coloredNoise.reshape([1, numActions]);
+            logits = logits.add(noiseReshaped) as tf.Tensor2D;
+            return tf.argMax(logits, -1).squeeze();
+        }
+
         // ε-greedy: смешиваем логиты с uniform
-        let samplingLogits = logits;
         if (epsilon > 0) {
             const probs = tf.softmax(logits) as tf.Tensor2D;
             const uniform = tf.fill(probs.shape, 1 / numActions) as tf.Tensor2D;
             const mixedProbs = tf.add(probs.mul(1 - epsilon), uniform.mul(epsilon)) as tf.Tensor2D;
             // Конвертируем обратно в логиты для multinomial
-            samplingLogits = tf.log(mixedProbs.clipByValue(1e-8, 1)) as tf.Tensor2D;
+            logits = tf.log(mixedProbs.clipByValue(1e-8, 1)) as tf.Tensor2D;
         }
 
         // multinomial принимает логиты и сэмплирует из categorical
-        return tf.multinomial(samplingLogits, 1).squeeze();
+        return tf.multinomial(logits, 1).squeeze();
     });
 }
 

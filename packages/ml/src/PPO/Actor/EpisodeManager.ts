@@ -7,7 +7,6 @@ import { SNAPSHOT_EVERY, TICK_TIME_SIMULATION } from '../../../../ml-common/cons
 import { createScenarioByCurriculumState } from '../../../../ml-common/Curriculum/createScenarioByCurriculumState.ts';
 import { CurriculumState, Scenario } from '../../../../ml-common/Curriculum/types.ts';
 import { agentSampleChannel, curriculumStateChannel, episodeSampleChannel, queueSizeChannel } from '../channels.ts';
-import { getFinalReward } from '../../Reward/calculateReward.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -70,8 +69,8 @@ export class EpisodeManager {
             }
 
             const networkVersion = agent.getVersion();
-            const rewardBias = getFinalReward(successRatio, networkVersion);
-            const memoryBatch = agent.getMemoryBatch(rewardBias);
+            // const rewardBias = getFinalReward(successRatio, networkVersion);
+            const memoryBatch = agent.getMemoryBatch(0);
 
             if (memoryBatch == null) return;
 

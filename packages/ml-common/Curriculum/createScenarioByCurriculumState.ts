@@ -41,7 +41,7 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
 
         successRatio ??= 0;
 
-        const weight = clamp((edge + 0.15) - successRatio, 0.1, 1);
+        const weight = clamp(1 - successRatio, 0.2, 1);
 
         weights.push(weight);
         totalWeight += weight;

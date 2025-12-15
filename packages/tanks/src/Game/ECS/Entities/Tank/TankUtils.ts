@@ -197,7 +197,7 @@ export function getTankHealth(tankEid: number): number {
 
 export function getTankScore(tankEid: number): number {
     const playerId = PlayerRef.id[tankEid];
-    const score = Score.positiveScore[playerId] + Score.negativeScore[playerId];
+    const score = Score.positiveScore[playerId] + Score.negativeScore[playerId] * 1.3;
     return score;
 }
 

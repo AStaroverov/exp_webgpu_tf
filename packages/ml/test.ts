@@ -62,12 +62,12 @@ frameTasks.addInterval(() => {
     gameTick(16.66);
 
     if (i > 10 && i % 3 === 0) {
-        const deltaAction = (actionReward ? calculateActionReward(tanks[2]) - actionReward : 0);
-        const stateReward = calculateStateReward(tanks[2], GameDI.width, GameDI.height, 1);
+        const deltaAction = (actionReward ? calculateActionReward(tanks[0]) - actionReward : 0);
+        const stateReward = calculateStateReward(tanks[0], GameDI.width, GameDI.height, 1);
         const reward = stateReward + deltaAction;
 
         snapshotTankInputTensor();
-        actionReward = calculateActionReward(tanks[2]);
+        actionReward = calculateActionReward(tanks[0]);
 
         prepareInputArrays(tanks[0], GameDI.width, GameDI.height);
     }

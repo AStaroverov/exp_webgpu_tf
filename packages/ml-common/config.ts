@@ -10,11 +10,11 @@ export const CONFIG = {
     },
 
     policyEntropy: (iteration: number) => {
-        return lerp(0.01, 0.05, 1 - clamp(iteration / LEARNING_STEPS, 0, 1));
+        return lerp(0.01, 0.1, 1 - clamp(iteration / LEARNING_STEPS, 0, 1));
     },
 
     policyEpochs: (_iter: number) => 4,
-    policyClipRatio: 0.2,
+    policyClipRatio: 0.6,
 
     valueEpochs: (_iter: number) => 4,
     valueClipRatio: 0.2,
@@ -24,9 +24,9 @@ export const CONFIG = {
     // Dynamic learning rate adjustment based on KL
     lrConfig: {
         kl: {
-            high: 0.013 * 2,
-            target: 0.01 * 2,
-            low: 0.007 * 2,
+            high: 0.013,
+            target: 0.01,
+            low: 0.007,
         },
         initial: 1e-4,
         multHigh: 0.95,

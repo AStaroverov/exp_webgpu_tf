@@ -15,11 +15,11 @@ export class ColoredNoiseApprox {
     private states: tf.Tensor[];  // массив [K, headDim] для каждой головы
     private disposed = false;
 
-    constructor(headDims: number[], beta = 1, opts: MultiOUOpts = {}) {
+    constructor(headDims: number[], beta: number, opts: MultiOUOpts = {}) {
         const {
             K = 8,
-            tauMin = 4,
-            tauMax = 64,
+            tauMin = 16,
+            tauMax = 256,
         } = opts;
         this.headDims = headDims;
         this.K = K;
@@ -33,7 +33,7 @@ export class ColoredNoiseApprox {
             const bVec = tf.sqrt(tf.maximum(tf.sub(1, tf.square(aVec)), 1e-8));
 
             const tilt = (beta - 1) / 2;
-            const wRaw = tf.pow(taus, tf.scalar(-tilt));
+            const wRaw = tf.pow(taus, tf.scalar(tilt));
             const wVec = tf.div(wRaw, tf.sqrt(tf.sum(tf.square(wRaw))));
 
             return {

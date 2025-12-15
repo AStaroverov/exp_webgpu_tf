@@ -136,9 +136,9 @@ export class NoisyDenseLayer extends tf.layers.Layer {
         this.units = config.units;
         this.activation = getActivation(config.activation ?? 'linear');
         this.useBias = config.useBias ?? true;
-        this.sigma = config.sigma ?? 0.5;
+        this.sigma = config.sigma ?? 0.25;
         this.coloredNoiseConfig = config.coloredNoiseConfig ?? {};
-        this.sigmaParameterization = config.sigmaParameterization ?? 'per-output';
+        this.sigmaParameterization = config.sigmaParameterization ?? 'full';
         this.kernelInitializer = config.kernelInitializer instanceof Initializer
             ? config.kernelInitializer
             : getInitializer(config.kernelInitializer ?? 'glorotNormal');
@@ -391,40 +391,31 @@ tf.serialization.registerClass(NoisyDenseLayer);
 
 
 /**
- * Colored noise configuration for multi-scale OU process
+ * Colored noise configuration
  */
 export type ColoredNoiseConfig = {
-    /** Number of OU filters (scales). Default: 8 */
-    K?: number;
-    /** Minimum timescale in steps. Default: 16 */
-    tauMin?: number;
-    /** Maximum timescale in steps. Default: 256 */
-    tauMax?: number;
-    /** Spectral exponent (1 = pink, 2 = brown/red, 0 = white). Default: 1 (pink noise) */
-    beta?: number;
+    /** 
+     * Smoothing factor (0 to 1). 
+     * Higher = smoother noise (more temporal correlation).
+     * 0 = white noise, 0.9+ = very smooth
+     * Default: 0.9
+     */
+    smoothing?: number;
 }
 
 /**
- * Internal state for colored noise generation using multi-scale OU process.
- * Generates temporally correlated (pink) noise for smoother exploration.
+ * Simple colored noise state using exponential moving average (EMA).
  * 
- * The key insight is that each OU process contributes a band of frequencies,
- * and we weight them to achieve the desired 1/f^β spectrum.
+ * Formula: noise_t = α * noise_{t-1} + √(1-α²) * white_noise_t
  * 
- * For an OU process with timescale τ:
- * - Characteristic frequency: f_c = 1/(2πτ)
- * - Power spectral density peaks around f_c
- * 
- * To get 1/f^β (pink noise when β=1):
- * - Weight each component by τ^(β/2) to boost low frequencies
+ * This creates temporally correlated noise where α controls smoothness.
+ * The √(1-α²) factor ensures unit variance is preserved.
  */
 class ColoredNoiseState {
-    private K: number;
-    private alpha: Float32Array;  // AR(1) decay coefficients (JS for efficiency)
-    private noiseStddev: Float32Array;  // Innovation noise scale
-    private weights: Float32Array; // Spectral weights
-    private kernelState: tf.Tensor3D;  // [K, inputDim, outputDim]
-    private biasState: tf.Tensor2D;    // [K, outputDim]
+    private alpha: number;
+    private sigma: number;
+    private kernelState: tf.Tensor2D;
+    private biasState: tf.Tensor1D;
     private disposed = false;
 
     constructor(
@@ -432,52 +423,14 @@ class ColoredNoiseState {
         private outputDim: number,
         config: ColoredNoiseConfig = {}
     ) {
-        const {
-            K = 8,
-            tauMin = 16,    // Longer minimum timescale for visible correlation
-            tauMax = 256,   // Much longer maximum for smooth low-frequency drift
-            beta = 1,       // 1 = pink (1/f)
-        } = config;
+        // α controls how much of previous noise is retained
+        this.alpha = config.smoothing ?? 0.75;
+        // σ ensures unit variance: Var = σ²/(1-α²) = 1, so σ = √(1-α²)
+        this.sigma = Math.sqrt(1 - this.alpha * this.alpha);
 
-        this.K = K;
-
-        // Compute coefficients in JS (no need for tensors here)
-        this.alpha = new Float32Array(K);
-        this.noiseStddev = new Float32Array(K);
-        this.weights = new Float32Array(K);
-
-        // Logarithmically spaced timescales
-        const logMin = Math.log(tauMin);
-        const logMax = Math.log(tauMax);
-        
-        let weightSumSq = 0;
-        for (let k = 0; k < K; k++) {
-            const t = k / (K - 1);  // 0 to 1
-            const tau = Math.exp(logMin + t * (logMax - logMin));
-            
-            // AR(1) coefficient: how much of previous state is retained
-            // α = exp(-1/τ) ≈ 1 - 1/τ for large τ
-            this.alpha[k] = Math.exp(-1 / tau);
-            
-            // Innovation standard deviation for unit variance stationary process
-            // For AR(1): Var(X) = σ²/(1-α²), so σ = sqrt(1-α²) for Var=1
-            this.noiseStddev[k] = Math.sqrt(Math.max(1 - this.alpha[k] * this.alpha[k], 1e-8));
-            
-            // Spectral weight: τ^(β/2) to achieve 1/f^β spectrum
-            // Higher τ = lower frequency, gets more weight for pink noise
-            this.weights[k] = Math.pow(tau, beta / 2);
-            weightSumSq += this.weights[k] * this.weights[k];
-        }
-        
-        // Normalize weights to preserve overall variance
-        const weightNorm = Math.sqrt(weightSumSq);
-        for (let k = 0; k < K; k++) {
-            this.weights[k] /= weightNorm;
-        }
-
-        // Initialize states with random noise - directly as matrices
-        this.kernelState = tf.randomNormal([K, inputDim, outputDim]) as tf.Tensor3D;
-        this.biasState = tf.randomNormal([K, outputDim]) as tf.Tensor2D;
+        // Initialize with random noise
+        this.kernelState = tf.randomNormal([inputDim, outputDim]) as tf.Tensor2D;
+        this.biasState = tf.randomNormal([outputDim]) as tf.Tensor1D;
     }
 
     sample(): { kernelNoise: tf.Tensor2D; biasNoise: tf.Tensor1D } {
@@ -485,43 +438,29 @@ class ColoredNoiseState {
             throw new Error('ColoredNoiseState: already disposed');
         }
 
-        const { K, alpha, noiseStddev, weights, inputDim, outputDim } = this;
-
         const result = tf.tidy(() => {
-            // Create coefficient tensors for broadcasting
-            const alphaT = tf.tensor1d(Array.from(alpha)).reshape([K, 1, 1]);
-            const sigmaT = tf.tensor1d(Array.from(noiseStddev)).reshape([K, 1, 1]);
-            const weightsT = tf.tensor1d(Array.from(weights)).reshape([K, 1, 1]);
-            
-            const alphaTBias = tf.tensor1d(Array.from(alpha)).reshape([K, 1]);
-            const sigmaTBias = tf.tensor1d(Array.from(noiseStddev)).reshape([K, 1]);
-            const weightsTBias = tf.tensor1d(Array.from(weights)).reshape([K, 1]);
+            // EMA update: new_state = α * old_state + σ * white_noise
+            const whiteKernel = tf.randomNormal([this.inputDim, this.outputDim]);
+            const newKernelState = this.kernelState
+                .mul(this.alpha)
+                .add(whiteKernel.mul(this.sigma)) as tf.Tensor2D;
 
-            // Update kernel state: x_{t+1} = α * x_t + σ * z_t
-            const zKernel = tf.randomNormal([K, inputDim, outputDim]);
-            const newKernelState = this.kernelState.mul(alphaT).add(zKernel.mul(sigmaT));
-            
-            // Weighted sum across scales to produce pink noise matrix [inputDim, outputDim]
-            const kernelNoise = newKernelState.mul(weightsT).sum(0) as tf.Tensor2D;
-
-            // Update bias state
-            const zBias = tf.randomNormal([K, outputDim]);
-            const newBiasState = this.biasState.mul(alphaTBias).add(zBias.mul(sigmaTBias));
-            const biasNoise = newBiasState.mul(weightsTBias).sum(0) as tf.Tensor1D;
+            const whiteBias = tf.randomNormal([this.outputDim]);
+            const newBiasState = this.biasState
+                .mul(this.alpha)
+                .add(whiteBias.mul(this.sigma)) as tf.Tensor1D;
 
             return {
-                kernelNoise: tf.keep(kernelNoise),
-                biasNoise: tf.keep(biasNoise),
-                newKernelState: tf.keep(newKernelState) as tf.Tensor3D,
-                newBiasState: tf.keep(newBiasState) as tf.Tensor2D,
+                kernelNoise: tf.keep(newKernelState),
+                biasNoise: tf.keep(newBiasState),
             };
         });
 
         // Update states
         this.kernelState.dispose();
         this.biasState.dispose();
-        this.kernelState = result.newKernelState;
-        this.biasState = result.newBiasState;
+        this.kernelState = result.kernelNoise;
+        this.biasState = result.biasNoise;
 
         return { kernelNoise: result.kernelNoise, biasNoise: result.biasNoise };
     }

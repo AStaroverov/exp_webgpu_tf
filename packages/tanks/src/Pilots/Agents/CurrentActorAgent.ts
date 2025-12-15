@@ -1,13 +1,17 @@
+import * as tf from '@tensorflow/tfjs';
+
 import { clamp } from 'lodash';
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
-import { LEARNING_STEPS } from '../../../../ml-common/consts.ts';
 import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
 import { getNetworkExpIteration } from '../../../../ml-common/utils.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { getNetwork } from '../../../../ml/src/Models/Utils.ts';
-import { calculateActionReward, calculateStateReward, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
+import { calculateActionReward, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { NetworkModelManager } from './NetworkModelManager.ts';
+import { ColoredNoiseApprox } from '../../../../ml-common/ColoredNoiseApprox.ts';
+import { ACTION_HEAD_DIMS } from '../../../../ml/src/Models/Create.ts';
+import { randomRangeFloat } from '../../../../../lib/random.ts';
 
 export type TankAgent<A = Partial<DownloadableAgent> & Partial<LearnableAgent>> = A & {
     tankEid: number;
@@ -24,6 +28,7 @@ export type DownloadableAgent = {
 export type LearnableAgent = {
     train: boolean;
     dispose(): void;
+    getNoise(): tf.Tensor[];
     getVersion(): number;
     getMemory(): undefined | AgentMemory;
     getMemoryBatch(rewardBias: number): undefined | AgentMemoryBatch;
@@ -34,6 +39,7 @@ const currentActorUpdater = NetworkModelManager(() => getNetwork(Model.Policy));
 
 export class CurrentActorAgent implements TankAgent<DownloadableAgent & LearnableAgent> {
     private memory = new AgentMemory();
+    private noise = new ColoredNoiseApprox(ACTION_HEAD_DIMS, randomRangeFloat(0, 1));
 
     private initialActionReward?: number;
 
@@ -47,6 +53,10 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
             : 0;
     }
 
+    public getNoise() {
+        return this.noise.sample().map(t => t.mul(0.1));
+    }
+
     public getMemory(): undefined | AgentMemory {
         return this.train ? this.memory : undefined;
     }
@@ -57,6 +67,7 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
 
     public dispose() {
         this.memory.dispose();
+        this.noise.dispose();
     }
 
     public async sync() {
@@ -104,17 +115,18 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         if (!this.train || this.memory.size() === 0) return;
 
         const isDead = getTankHealth(this.tankEid) <= 0;
-        const version = this.getVersion();
+        // const version = this.getVersion();
 
-        const stateRewardMultiplier = 1;//; - 0.5 * clamp(unlerp(0, LEARNING_STEPS * 0.4, version), 0, 1);
+        const stateRewardMultiplier = 0.5;//; - 0.5 * clamp(unlerp(0, LEARNING_STEPS * 0.4, version), 0, 1);
         const actionRewardMultiplier = 1;// clamp(unlerp(0, LEARNING_STEPS * 0.2, version), 0.3, 1);
 
-        const stateReward = calculateStateReward(
-            this.tankEid,
-            width,
-            height,
-            clamp(version / (LEARNING_STEPS * 0.2), 0, 1)
-        );
+        const stateReward = 0
+        //  calculateStateReward(
+        //     this.tankEid,
+        //     width,
+        //     height,
+        //     clamp(version / (LEARNING_STEPS * 0.2), 0, 1)
+        // );
         const actionReward = this.initialActionReward === undefined
             ? 0
             : calculateActionReward(this.tankEid) - this.initialActionReward;

@@ -42,7 +42,7 @@ const WEIGHTS = ({
     MAP_BORDER: {
         PENALTY: -1,
     },
-    MAP_BORDER_MULTIPLIER: 3,
+    MAP_BORDER_MULTIPLIER: 5,
 
     DISTANCE: {
         MIN_PENALTY: -0.5,
@@ -112,6 +112,7 @@ export function calculateStateReward(
         height,
         currentTankX,
         currentTankY,
+        HeuristicsData.approxColliderRadius[tankEid]
     );
 
     // 3. Анализ целей и вычисление награды за прицеливание
@@ -196,7 +197,7 @@ export function calculateActionReward(tankEid: number): number {
     const rewards = initializeActionRewards();
 
     rewards.common.score = WEIGHTS.COMMON.SCORE * currentScore * 0.33;
-    rewards.common.health = WEIGHTS.COMMON.HEALTH * currentHealth * 7;
+    rewards.common.health = WEIGHTS.COMMON.HEALTH * currentHealth * 10;
 
     rewards.common.total = WEIGHTS.COMMON_MULTIPLIER
         * (rewards.common.health + rewards.common.score);
@@ -215,7 +216,7 @@ export function calculateActionReward(tankEid: number): number {
 
 function calculateMovingReward(linvelX: number, linvelY: number): number {
     const speed = Math.hypot(linvelX, linvelY);
-    return WEIGHTS.MOVING.SPEED * min(0.33, speed / 100) * 3;
+    return WEIGHTS.MOVING.SPEED * speed / 100
 }
 
 function calculateTankMapAwarenessReward(
@@ -223,25 +224,28 @@ function calculateTankMapAwarenessReward(
     height: number,
     x: number,
     y: number,
+    minGap: number,
 ): number {
-    const isInBounds = x >= 0 && x <= width && y >= 0 && y <= height;
+    const gapW = max(width * 0.1, minGap);
+    const gapH = max(height * 0.1, minGap);
+    const isInBounds = x >= gapW && x <= (width - gapW) && y >= gapH && y <= (height - gapH);
 
     if (isInBounds) {
         return 0;
     } else {
-        const dist = distanceToMap(width, height, x, y);
-        return 0.8 * WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, 200, dist)
-            + 0.2 * WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, 500, dist);
+        const dist = distanceToMap(gapW, gapH, width - gapW, height - gapH, x, y);
+        const score = WEIGHTS.MAP_BORDER.PENALTY * smoothstep(0, 100, dist);
+        return score;
     }
 }
 
-function distanceToMap(width: number, height: number, x: number, y: number): number {
-    if (x >= 0 && x <= width && y >= 0 && y <= height) {
-        return 0;
-    }
-
-    const closestX = max(0, min(width, x));
-    const closestY = max(0, min(height, y));
+function distanceToMap(
+    minX: number, minY: number,
+    maxX: number, maxY: number,
+    x: number, y: number
+): number {
+    const closestX = max(minX, min(maxX, x));
+    const closestY = max(minY, min(maxY, y));
     const dx = x - closestX;
     const dy = y - closestY;
 

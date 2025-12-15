@@ -59,7 +59,7 @@ export function applyMLP({name, layers: hiddenLayers, preNorm = false}: {
     return layer;
 }
 
-export function createDenseLayer(options: DenseLayerArgs & Required<Pick<DenseLayerArgs, 'useBias' | 'activation'>> & { noisy?: boolean }) {
+export function createDenseLayer(options: DenseLayerArgs & Required<Pick<DenseLayerArgs, 'useBias' | 'activation'>> & { noisy?: boolean, sigma?: number }) {
     return options.noisy
         ? new NoisyDenseLayer(options)
         : tf.layers.dense(options);
@@ -312,7 +312,7 @@ export function applySelfTransformerLayer(
         heads: number,
         token: tf.SymbolicTensor;
         mask?: tf.SymbolicTensor;
-        noisy?: boolean;
+        noisy?: boolean,
         preNorm?: boolean;
     },
 ) {
@@ -339,6 +339,7 @@ export function applySelfTransformerLayer(
         units: dModel * 4,
         useBias: false,
         activation: 'relu',
+        noisy,
     }).apply(ffnNorm) as tf.SymbolicTensor;
 
     const ffnOut = createDenseLayer({
@@ -346,7 +347,7 @@ export function applySelfTransformerLayer(
         units: dModel,
         useBias: false,
         activation: 'linear',
-        noisy
+        noisy,
     }).apply(ffnInner) as tf.SymbolicTensor;
 
     const finalOut = tf.layers.add({name: `${name}_ffnAdd`})

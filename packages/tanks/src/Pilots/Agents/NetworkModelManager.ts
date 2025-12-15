@@ -5,6 +5,7 @@ import { patientAction } from "../../../../ml-common/utils";
 import { disposeNetwork } from "../../../../ml/src/Models/Utils";
 import { batchAct } from "../../../../ml/src/PPO/train";
 import { TankAgent } from "./CurrentActorAgent";
+import { random } from '../../../../../lib/random';
 
 export const NetworkModelManager = (getter: () => Promise<tf.LayersModel>) => {
     let network: undefined | tf.LayersModel = undefined;
@@ -26,7 +27,12 @@ export const NetworkModelManager = (getter: () => Promise<tf.LayersModel>) => {
         if (delta > 10_000 || promiseNetwork == null) {
             network = undefined;
             promiseNetwork?.then(disposeNetwork);
-            promiseNetwork = patientAction(getter).then((net) => (network = net));
+            promiseNetwork = patientAction(getter).then((net) => {
+                return (network = net);
+                // return (network = random() < 0.9
+                //     ? perturbWeights(net, 0.3)
+                //     : net)
+            });
             dateRequestNetwork = now;
         }
 
@@ -42,7 +48,7 @@ export const NetworkModelManager = (getter: () => Promise<tf.LayersModel>) => {
         scheduledAgents.push({
             width,
             height,
-            agent
+            agent,
         });
     }
     
@@ -54,7 +60,12 @@ export const NetworkModelManager = (getter: () => Promise<tf.LayersModel>) => {
 
         if (scheduledAgents.length > 0) {
             const states = scheduledAgents.map(({width, height, agent}) => prepareInputArrays(agent.tankEid, width, height));
-            const options = train ? { greedy: false, epsilon: 0.01 } : { greedy: true };
+            // const noises = train
+            //     ? scheduledAgents.map(({agent}) => agent.getNoise?.())
+            //     : undefined;
+            const options = train 
+                ? { greedy: false, epsilon: 0 } 
+                : { greedy: true };
             const result = batchAct(network, states, options);
             
             for (const [index, {agent}] of scheduledAgents.entries()) {
@@ -79,11 +90,13 @@ export const NetworkModelManager = (getter: () => Promise<tf.LayersModel>) => {
 }
 
 export function perturbWeights(model: tf.LayersModel, scale: number) {
-    console.info(`Perturbing model weights with scale ${scale}`);
+    let count = 0;
     tf.tidy(() => {
         for (const v of model.trainableWeights) {
             if (!isPerturbable(v)) continue;
-
+            if (random() < 0.95) continue;
+            
+            count += 1;
             const val = v.read() as tf.Tensor;
 
             let eps: tf.Tensor;
@@ -103,6 +116,7 @@ export function perturbWeights(model: tf.LayersModel, scale: number) {
             (val as tf.Variable).assign(perturbed);
         }
     });
+    console.info(`Perturbing model weights with scale ${scale}, count ${count} from ${model.trainableWeights.length}`);
 
     return model;
 }
@@ -122,5 +136,5 @@ function isPerturbable(v: tf.LayerVariable) {
         return false;
     }
 
-    return name.includes('_head') && name.includes('lan_');
+    return true;
 }

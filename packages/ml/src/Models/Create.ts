@@ -10,7 +10,6 @@ import { createDenseLayer } from "./ApplyLayers.ts";
 import { Model } from './def.ts';
 import { createNetwork } from './Networks/v9.ts';
 import { AdamW } from './Optimizer/AdamW.ts';
-import { NoisyDenseLayer } from './Layers/NoisyDenseLayer.ts';
 
 export const CONTROLLER_FEATURES_DIM = 4;
 export const BATTLE_FEATURES_DIM = 6;
@@ -24,17 +23,8 @@ export const BULLET_FEATURES_DIM = 4;
 
 export const ACTION_HEAD_DIMS = [15, 15, 2, 31];
 
-export const shouldNoiseLayer = (name: string, _iteration?: number) => {
-    name = name.toLowerCase();
-    if (name.includes('head')) {
-        return true;
-    }
-
-    if (name.includes('noisytransformer')) {
-        return false;
-    }
-
-    return false;
+export const shouldNoiseLayer = (_name: string, _iteration?: number) => {
+    return true;
 }
 
 export function createPolicyNetwork(): tf.LayersModel {
@@ -43,13 +33,15 @@ export function createPolicyNetwork(): tf.LayersModel {
     // Create logits output for each head
     const logitsOutputs = heads.map((head, i) => {
         const units = ACTION_HEAD_DIMS[i];
-        return new NoisyDenseLayer({
+        return createDenseLayer({
             name: Model.Policy + '_head_logits_' + i,
             units: units,
             useBias: true,
             activation: 'linear',
             biasInitializer: 'zeros',
-            sigma: 0.25,
+            kernelInitializer: tf.initializers.randomUniform({minval: -0.03, maxval: 0.03}), 
+            noisy: true,
+            sigma: 0.03,
         }).apply(head) as tf.SymbolicTensor;
     });
 
