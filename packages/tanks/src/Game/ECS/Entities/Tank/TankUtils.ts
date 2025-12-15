@@ -202,8 +202,9 @@ export function getTankHealthAbs(tankEid: number): number {
 export function getTankHealth(tankEid: number): number {
     const totalSlots = getTankTotalSlotCount(tankEid);
     const filledSlots = getTankCurrentPartsCount(tankEid);
-    const absHealth = min(1, filledSlots / totalSlots);
+    const absHealth = totalSlots > 0 && filledSlots > 0 ? min(1, filledSlots / totalSlots) : 0;
     const health = smoothstep(HEALTH_THRESHOLD, 1, absHealth);
+
     return health;
 }
 
