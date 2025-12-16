@@ -77,6 +77,12 @@ export const finalizeGameState = async () => {
         const agent = new CurrentActorAgent(tankEid, false);
         getEngine().pilots.setPilot(tankEid, agent);
     }
+
+    // Sync all AI agents to load TensorFlow models
+    const pilots = getEngine().pilots.getPilots();
+    await Promise.all(
+        pilots.map(pilot => pilot.sync ? pilot.sync() : Promise.resolve())
+    );
 };
 
 export function activateBots() {
