@@ -22,7 +22,7 @@ export function GarageScreen({ className, style }: {
                 <Button
                     className="flex grow"
                     color="primary"
-                    onClick={ startGame }
+                    onPress={ startGame }
                 >
                     Start
                 </Button>

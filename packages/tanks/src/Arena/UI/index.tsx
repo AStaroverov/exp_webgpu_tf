@@ -9,7 +9,7 @@ import { HeroUIProvider } from '@heroui/react';
 
 createRoot(document.getElementById('ui')!).render(
     <StrictMode>
-        <HeroUIProvider className="w-full h-full"> {/*dark text-foreground bg-background */ }
+        <HeroUIProvider className="w-full h-full">
             <BaseScreen className="w-full h-full"/>
         </HeroUIProvider>
     </StrictMode>,
