@@ -21,7 +21,6 @@ import {
     getMatrixTranslationY,
     GlobalTransform,
 } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
-import { macroTasks } from '../../../../../../../lib/TasksScheduler/macroTasks.ts';
 import { getFilledSlotCount, getSlotCount } from './Common/TankParts.ts';
 import { DestroyByTimeout } from '../../Components/Destroy.ts';
 import { randomRangeFloat } from '../../../../../../../lib/random.ts';
@@ -64,12 +63,9 @@ export function destroyTank(tankEid: EntityId) {
         tearOffTankPart(partEid);
     }
 
-    macroTasks.addTimeout(() => {
-        // Apply explosion impulse to all parts after they're detached
-        for (const partEid of partsToExplode) {
-            applyExplosionImpulse(partEid, explosionX, explosionY);
-        }
-    }, 100); // delay to ensure parts are detached
+    for (const partEid of partsToExplode) {
+        applyExplosionImpulse(partEid, explosionX, explosionY);
+    }
 
     scheduleRemoveEntity(tankEid);
     scheduleRemoveEntity(turretEid);

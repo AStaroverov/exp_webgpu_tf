@@ -1,6 +1,7 @@
 import { createRigidCircle, createRigidRectangle } from '../../Physical/createRigid.ts';
 import { createCircle, createRectangle } from '../../../../../renderer/src/ECS/Entities/Shapes.ts';
 import { RigidBodyRef, RigidBodyState } from './Physical.ts';
+import { Impulse, TorqueImpulse } from './Impulse.ts';
 import { GameDI } from '../../DI/GameDI.ts';
 
 export function createCircleRR(
@@ -11,6 +12,8 @@ export function createCircleRR(
     const physicalId = createRigidCircle(options);
     RigidBodyRef.addComponent(world, renderId, physicalId);
     RigidBodyState.addComponent(world, renderId);
+    Impulse.addComponent(world, renderId);
+    TorqueImpulse.addComponent(world, renderId);
     return [renderId, physicalId];
 }
 
@@ -22,6 +25,8 @@ export function createRectangleRR(
     const physicalId = createRigidRectangle(options);
     RigidBodyRef.addComponent(world, renderId, physicalId);
     RigidBodyState.addComponent(world, renderId);
+    Impulse.addComponent(world, renderId);
+    TorqueImpulse.addComponent(world, renderId);
     return [renderId, physicalId];
 }
 

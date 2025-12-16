@@ -2,6 +2,7 @@ import { ActiveCollisionTypes, ActiveEvents, ColliderDesc } from '@dimforge/rapi
 import { GameDI } from '../DI/GameDI.ts';
 import { BodyOptions, createBody } from './createBody.ts';
 import { RigidBodyRef } from '../ECS/Components/Physical.ts';
+import { PhysicalWorld } from './initPhysicalWorld.ts';
 
 export enum CollisionGroup {
     ALL = 0xFFFF,
@@ -52,9 +53,9 @@ export function createRigidRectangle(
         width: number,
         height: number,
     },
-    { physicalWorld } = GameDI,
+    { physicalWorld }: { physicalWorld: PhysicalWorld } = GameDI,
 ) {
-    const body = createBody(o);
+    const body = createBody(o, { physicalWorld });
     const colliderDesc = prepareColliderDesc(ColliderDesc.cuboid(o.width / 2, o.height / 2), o);
     physicalWorld.createCollider(colliderDesc, body);
 
@@ -65,7 +66,7 @@ export function createRigidCircle(
     o: CommonRigidOptions & {
         radius: number,
     },
-    { physicalWorld } = GameDI,
+    { physicalWorld }: { physicalWorld: PhysicalWorld } = GameDI,
 ) {
     const body = createBody(o);
     const colliderDesc = prepareColliderDesc(ColliderDesc.ball(o.radius / 2), o);

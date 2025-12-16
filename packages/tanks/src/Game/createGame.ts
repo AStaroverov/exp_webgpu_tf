@@ -20,6 +20,7 @@ import { createDestroyBySpeedSystem } from './ECS/Systems/createDestroyBySpeedSy
 import { createDestroyOutOfZoneSystem } from './ECS/Systems/createDestroyOutOfZoneSystem.ts';
 import { createDestroySystem } from './ECS/Systems/createDestroySystem.ts';
 import { createRigidBodyStateSystem } from './ECS/Systems/createRigidBodyStateSystem.ts';
+import { createApplyImpulseSystem } from './ECS/Systems/createApplyImpulseSystem.ts';
 import {
     createPlayerTankBulletSystem,
     createPlayerTankPositionSystem,
@@ -71,6 +72,7 @@ export function createGame({ width, height }: {
 
     const syncRigidBodyState = createRigidBodyStateSystem();
     const applyRigidBodyDeltaToLocalTransform = createApplyRigidBodyToTransformSystem();
+    const applyImpulses = createApplyImpulseSystem();
 
     const eventQueue = new EventQueue(true);
     const physicalFrame = (delta: number) => {
@@ -78,6 +80,7 @@ export function createGame({ width, height }: {
         updateTankTurretRotation(delta);
 
         execTransformSystem();
+        applyImpulses();
         physicalWorld.step(eventQueue);
         syncRigidBodyState();
         applyRigidBodyDeltaToLocalTransform();

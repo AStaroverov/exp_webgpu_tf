@@ -1,12 +1,11 @@
 import { EntityId } from "bitecs";
 import { GlobalTransform, getMatrixTranslationX, getMatrixTranslationY } from "renderer/src/ECS/Components/Transform";
-import { GameDI } from "../DI/GameDI";
-import { RigidBodyRef } from "../ECS/Components/Physical";
+import { Impulse, TorqueImpulse } from "../ECS/Components/Impulse";
 
 // Explosion force settings
-const EXPLOSION_IMPULSE_BASE = 40000;      // Base impulse strength
+const EXPLOSION_IMPULSE_BASE = 1000000;      // Base impulse strength
 const EXPLOSION_IMPULSE_RANDOM = EXPLOSION_IMPULSE_BASE / 2;    // Random additional impulse
-const EXPLOSION_TORQUE_BASE = 200000;        // Base angular impulse
+const EXPLOSION_TORQUE_BASE = 10000000;        // Base angular impulse
 const EXPLOSION_TORQUE_RANDOM = EXPLOSION_TORQUE_BASE / 2;     // Random additional torque
 const EXPLOSION_UPWARD_BIAS = 0.3;       // Slight upward bias for more dramatic effect
 
@@ -14,16 +13,7 @@ export function applyExplosionImpulse(
     eid: EntityId,
     explosionX: number,
     explosionY: number,
-    { physicalWorld } = GameDI,
 ) {
-    if (physicalWorld == null) return;
-
-    const pid = RigidBodyRef.id[eid];
-    if (pid === 0) return;
-
-    const rb = physicalWorld.getRigidBody(pid);
-    if (rb == null) return;
-
     // Get part position
     const partMatrix = GlobalTransform.matrix.getBatch(eid);
     const partX = getMatrixTranslationX(partMatrix);
@@ -62,10 +52,10 @@ export function applyExplosionImpulse(
     const impulseX = dirX * impulseStrength;
     const impulseY = dirY * impulseStrength;
 
-    // Apply linear impulse
-    rb.applyImpulse({ x: impulseX, y: impulseY }, true);
+    // Add linear impulse to component (will be applied by system)
+    Impulse.add(eid, impulseX, impulseY);
 
-    // Apply random angular impulse for spinning effect
+    // Add random angular impulse for spinning effect
     const torque = (Math.random() - 0.5) * 2 * (EXPLOSION_TORQUE_BASE + Math.random() * EXPLOSION_TORQUE_RANDOM);
-    rb.applyTorqueImpulse(torque, true);
+    TorqueImpulse.add(eid, torque);
 }
