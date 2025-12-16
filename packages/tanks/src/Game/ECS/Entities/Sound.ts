@@ -14,7 +14,7 @@ import { GameDI } from '../../DI/GameDI.ts';
 import { Sound, SoundType, DestroyOnSoundFinish } from '../Components/Sound.ts';
 import { Parent } from '../Components/Parent.ts';
 import { Children } from '../Components/Children.ts';
-import { addTransformComponents, applyMatrixTranslate, LocalTransform } from '../../../../../renderer/src/ECS/Components/Transform.ts';
+import { addTransformComponents, applyMatrixTranslate, LocalTransform } from 'renderer/src/ECS/Components/Transform.ts';
 
 export interface SpawnSoundOptions {
     type: SoundType;
@@ -54,7 +54,7 @@ export function spawnSoundAtPosition(
         autoplay: options.autoplay ?? true,
     });
 
-    if (!options.destroyOnFinish) {
+    if (options.destroyOnFinish) {
         DestroyOnSoundFinish.addComponent(world, eid);
     }
 
@@ -87,7 +87,7 @@ export function spawnSoundAtParent(
         autoplay: options.autoplay ?? true,
     });
 
-    if (!options.destroyOnFinish) {
+    if (options.destroyOnFinish) {
         DestroyOnSoundFinish.addComponent(world, eid);
     }
 

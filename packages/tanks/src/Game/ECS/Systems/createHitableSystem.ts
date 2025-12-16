@@ -17,26 +17,44 @@ import {
     GlobalTransform,
 } from '../../../../../renderer/src/ECS/Components/Transform.ts';
 import { clamp } from 'lodash';
+import { Parent } from '../Components/Parent.ts';
+import { Tank } from '../Components/Tank.ts';
+import { SoundType } from '../Components/Sound.ts';
+import { spawnSoundAtParent } from '../Entities/Sound.ts';
 
 export function createHitableSystem({ world } = GameDI) {
     const hitableChanges = createChangeDetector(world, [onSet(Hitable)]);
+    let time = 0;
 
-    return () => {
+    return (delta: number) => {
+        time += delta;
+
         if (!hitableChanges.hasChanges()) return;
 
         const tankPartEids = query(world, [TankPart, Hitable]);
+        const hittedTanks = new Set<EntityId>();
+        
         for (let i = 0; i < tankPartEids.length; i++) {
             const tankPartEid = tankPartEids[i];
             if (!hitableChanges.has(tankPartEid)) continue;
 
             const hitEids = Hitable.getHitEids(tankPartEid);
+            const tankEid = Parent.id[Parent.id[tankPartEid]];
 
             applyDamage(tankPartEid);
             applyScores(tankPartEid, hitEids);
 
+            if (hasComponent(world, tankEid, Tank)) {
+                hittedTanks.add(tankEid);
+            }
+            
             if (!Hitable.isDestroyed(tankPartEid)) continue;
 
             tearOffTankPart(tankPartEid, true);
+        }
+
+        for (const tankEid of hittedTanks) {
+           throttledSpawnSoundAtParent(tankEid, time, 200);
         }
 
         const bulletIds = query(world, [Bullet, Hitable]);
@@ -101,4 +119,19 @@ function applyScores(tankPartEid: EntityId, hitEids: Float64Array, { world } = G
         }
     }
 
+}
+
+const mapParentToLastSoundTime = new Map<EntityId, number>();
+function throttledSpawnSoundAtParent(parentEid: EntityId, now: number, delay: number) {
+    const lastSpawnTime = mapParentToLastSoundTime.get(parentEid);
+    if (lastSpawnTime && (now - lastSpawnTime) < delay) return;
+    mapParentToLastSoundTime.set(parentEid, now);
+
+    spawnSoundAtParent({
+        parentEid,
+        type: SoundType.TankHit,
+        loop: false,
+        volume: 1,
+        autoplay: true,
+    });
 }

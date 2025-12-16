@@ -7,7 +7,7 @@ import { Hitable } from '../Components/Hitable.ts';
 import { DestroyBySpeed } from '../Components/Destroy.ts';
 import { spawnMuzzleFlash } from './MuzzleFlash.ts';
 import { SoundType } from '../Components/Sound.ts';
-import { spawnSoundAtPosition } from './SoundEntity.ts';
+import { spawnSoundAtPosition } from './Sound.ts';
 import { mat4, vec2, vec3 } from 'gl-matrix';
 import {
     getMatrixRotationZ,

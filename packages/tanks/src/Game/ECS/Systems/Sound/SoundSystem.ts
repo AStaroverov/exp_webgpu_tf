@@ -13,12 +13,13 @@
 import { query, EntityId, hasComponent } from 'bitecs';
 import { GameDI } from '../../../DI/GameDI.ts';
 import { Sound, SoundType, SoundState, DestroyOnSoundFinish } from '../../Components/Sound.ts';
-import { PlayerRef } from '../../Components/PlayerRef.ts';
 import { CameraState } from '../Camera/CameraSystem.ts';
 import { soundManager } from './SoundManager.ts';
+import { WebAudioTrack } from './WebAudioTrack.ts';
 import { Parent } from '../../Components/Parent.ts';
 import { Destroy } from '../../Components/Destroy.ts';
 import { GlobalTransform, getMatrixTranslationX, getMatrixTranslationY } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
+import { hypot } from '../../../../../../../lib/math.ts';
 
 // Sound IDs for SoundManager
 const SOUND_IDS: Record<SoundType, string> = {
@@ -47,11 +48,10 @@ const CONFIG = {
         [SoundType.TankHit]: 0.3,    
         [SoundType.DebrisCollect]: 0.3,
     },
-    nonPlayerVolumeMultiplier: 0.4,  // Non-player sounds are 40% of base volume
 };
 
 // Track active audio instances per entity
-const activeAudios: Map<EntityId, HTMLAudioElement> = new Map();
+const activeAudios: Map<EntityId, WebAudioTrack> = new Map();
 
 /**
  * Load all game sounds - call once at game start
@@ -75,7 +75,7 @@ export async function loadGameSounds(): Promise<void> {
         soundManager.load(SOUND_IDS[SoundType.TankHit], {
             src: [
                 '/assets/sounds/tanks/hit/hit1.webm',
-                '/assets/sounds/tanks/hit/hit2.webm',
+                // '/assets/sounds/tanks/hit/hit2.webm',
             ],
             maxInstances: CONFIG.maxSoundsPerType[SoundType.TankHit],
             volume: CONFIG.baseVolume[SoundType.TankHit],
@@ -95,7 +95,7 @@ export async function loadGameSounds(): Promise<void> {
  * If entity has Parent, use parent's GlobalTransform
  * Otherwise use entity's own GlobalTransform
  */
-function getEntityPosition(eid: EntityId, world: any): { x: number; y: number } {
+function getEntityPosition(eid: EntityId, { world } = GameDI): { x: number; y: number } {
     // If entity follows a parent, use parent's GlobalTransform
     if (hasComponent(world, eid, Parent) && hasComponent(world, Parent.id[eid], GlobalTransform)) {
         const matrix = GlobalTransform.matrix.getBatch(Parent.id[eid]);
@@ -120,11 +120,11 @@ function getEntityPosition(eid: EntityId, world: any): { x: number; y: number } 
 /**
  * Calculate distance from camera to entity
  */
-function getDistanceToCamera(eid: EntityId, world: any): number {
-    const pos = getEntityPosition(eid, world);
+function getDistanceToCamera(eid: EntityId): number {
+    const pos = getEntityPosition(eid);
     const dx = pos.x - CameraState.x;
     const dy = pos.y - CameraState.y;
-    return Math.sqrt(dx * dx + dy * dy);
+    return hypot(dx, dy);
 }
 
 /**
@@ -135,7 +135,7 @@ function calculateDistanceVolume(distance: number, baseVolume: number): number {
     if (distance >= CONFIG.hearingRange) return 0;
 
     const normalized = (distance - CONFIG.refDistance) / (CONFIG.hearingRange - CONFIG.refDistance);
-    return baseVolume * (1 - normalized * normalized);
+    return baseVolume * (1 - normalized ** 3);
 }
 
 /**
@@ -160,7 +160,6 @@ export function createSoundSystem({ world } = GameDI) {
         const entitiesByType: Map<SoundType, Array<{
             eid: EntityId;
             distance: number;
-            isPlayer: boolean;
             wantsToPlay: boolean;
         }>> = new Map();
 
@@ -175,78 +174,58 @@ export function createSoundSystem({ world } = GameDI) {
             const type = Sound.type[eid] as SoundType;
             if (type === SoundType.None) continue;
 
-            const distance = getDistanceToCamera(eid, world);
-            const isPlayer = hasComponent(world, eid, PlayerRef);
+            const distance = getDistanceToCamera(eid);
             const wantsToPlay = Sound.state[eid] === SoundState.Playing;
 
-            entitiesByType.get(type)?.push({ eid, distance, isPlayer, wantsToPlay });
+            entitiesByType.get(type)?.push({ eid, distance, wantsToPlay });
         }
 
         // Process each sound type
         for (const [type, entities] of entitiesByType) {
+            const baseVolume = CONFIG.baseVolume[type];
             const maxSounds = CONFIG.maxSoundsPerType[type];
             const soundId = SOUND_IDS[type];
-            const baseVolume = CONFIG.baseVolume[type];
             const typeSet = soundsByType.get(type)!;
 
             // Filter to entities that want to play and are in range
-            const playableEntities = entities.filter(e =>
-                e.wantsToPlay && (e.distance < CONFIG.hearingRange || e.isPlayer),
-            );
-
-            // Sort: players first, then by distance
-            playableEntities.sort((a, b) => {
-                if (a.isPlayer && !b.isPlayer) return -1;
-                if (!a.isPlayer && b.isPlayer) return 1;
-                return a.distance - b.distance;
-            });
+            const playableEntities = entities
+                .filter(e => e.wantsToPlay && (e.distance < CONFIG.hearingRange))
+                .sort((a, b) => a.distance - b.distance);
 
             // Take only top N
-            const toPlay = new Set(playableEntities.slice(0, maxSounds).map(e => e.eid));
+            const topN = playableEntities.slice(0, maxSounds);
+            const toPlay = new Set(topN.map(e => e.eid));
 
             // Stop sounds for entities that should no longer play
             for (const eid of typeSet) {
-                if (!toPlay.has(eid)) {
-                    const audio = activeAudios.get(eid);
-                    if (audio) {
-                        soundManager.stopInstance(audio);
-                        activeAudios.delete(eid);
-                    }
-                    typeSet.delete(eid);
-                }
+                if (toPlay.has(eid)) continue;
+                const track = activeAudios.get(eid);
+                track && soundManager.stopInstance(track);
+                handleStoppedSounds(eid);
+                activeAudios.delete(eid);
+                typeSet.delete(eid);
             }
 
             // Start or update sounds for active entities
-            for (const { eid, distance, isPlayer } of playableEntities.slice(0, maxSounds)) {
-                const volume = isPlayer
-                    ? baseVolume
-                    : calculateDistanceVolume(distance, baseVolume) * CONFIG.nonPlayerVolumeMultiplier;
+            for (const { eid, distance } of topN) {
+                const volume = calculateDistanceVolume(distance, baseVolume);
 
-                let audio = activeAudios.get(eid);
+                let track = activeAudios.get(eid);
 
-                if (!audio) {
+                if (!track) {
                     // Start new sound - get position from entity
-                    const pos = getEntityPosition(eid, world);
+                    const pos = getEntityPosition(eid);
                     const loop = Sound.loop[eid] === 1;
 
-                    const newAudio = soundManager.play(soundId, { volume, loop, x: pos.x, y: pos.y });
-                    if (newAudio) {
-                        activeAudios.set(eid, newAudio);
+                    const newTrack = soundManager.play(soundId, { volume, loop, x: pos.x, y: pos.y });
+                    if (newTrack) {
+                        activeAudios.set(eid, newTrack);
                         typeSet.add(eid);
-                        
-                        // Track audio end for DestroyOnSoundFinish entities
-                        if (!loop && hasComponent(world, eid, DestroyOnSoundFinish)) {
-                            newAudio.addEventListener('ended', () => {
-                                // Mark entity for destruction when sound ends
-                                if (!hasComponent(world, eid, Destroy)) {
-                                    Destroy.addComponent(world, eid);
-                                }
-                            }, { once: true });
-                        }
+                        newTrack.onEnded(() => handleStoppedSounds(eid));
                     }
                 } else {
                     // Update volume
-                    audio.volume = volume * Sound.volume[eid];
+                    track.setVolume(volume * Sound.volume[eid]);
                 }
             }
         }
@@ -254,41 +233,44 @@ export function createSoundSystem({ world } = GameDI) {
         // Handle stopped/paused sounds
         for (const eid of soundEids) {
             const state = Sound.state[eid];
-            const audio = activeAudios.get(eid);
+            const track = activeAudios.get(eid);
 
-            if (audio) {
+            if (track) {
                 if (state === SoundState.Stopped) {
-                    soundManager.stopInstance(audio);
+                    soundManager.stopInstance(track);
                     activeAudios.delete(eid);
                     const type = Sound.type[eid] as SoundType;
                     soundsByType.get(type)?.delete(eid);
-                } else if (state === SoundState.Paused && !audio.paused) {
-                    audio.pause();
-                } else if (state === SoundState.Playing && audio.paused) {
-                    audio.play().catch(() => {});
+                    handleStoppedSounds(eid);
+                } else if (state === SoundState.Paused && track.state === 'playing') {
+                    soundManager.pauseInstance(track);
+                } else if (state === SoundState.Playing && track.state === 'paused') {
+                    soundManager.resumeInstance(track);
                 }
             }
         }
 
         // Cleanup for destroyed entities
-        for (const [eid, audio] of activeAudios) {
-            if (!soundEids.includes(eid)) {
-                soundManager.stopInstance(audio);
-                activeAudios.delete(eid);
-                for (const typeSet of soundsByType.values()) {
-                    typeSet.delete(eid);
-                }
+        for (const [eid, track] of activeAudios) {
+            if (soundEids.includes(eid)) continue;
+            soundManager.stopInstance(track);
+            activeAudios.delete(eid);
+            for (const typeSet of soundsByType.values()) {
+                typeSet.delete(eid);
             }
         }
     };
 }
 
-/**
- * Dispose sound system
- */
+function handleStoppedSounds(eid: EntityId, { world } = GameDI): void {
+    if (hasComponent(world, eid, DestroyOnSoundFinish) && !hasComponent(world, eid, Destroy)) {
+        Destroy.addComponent(world, eid);
+    }
+}
+
 export function disposeSoundSystem(): void {
-    for (const [, audio] of activeAudios) {
-        soundManager.stopInstance(audio);
+    for (const [, track] of activeAudios) {
+        soundManager.stopInstance(track);
     }
     activeAudios.clear();
 }

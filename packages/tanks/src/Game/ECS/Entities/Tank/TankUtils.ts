@@ -69,7 +69,7 @@ export function destroyTank(tankEid: EntityId) {
         for (const partEid of partsToExplode) {
             applyExplosionImpulse(partEid, explosionX, explosionY);
         }
-    }, 30); // delay to ensure parts are detached
+    }, 100); // delay to ensure parts are detached
 
     scheduleRemoveEntity(tankEid);
     scheduleRemoveEntity(turretEid);

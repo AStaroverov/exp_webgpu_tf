@@ -6,7 +6,6 @@ import { DestroyByTimeout } from '../Components/Destroy.ts';
 import { addTransformComponents, applyMatrixTranslate, applyMatrixScale, LocalTransform } from '../../../../../renderer/src/ECS/Components/Transform.ts';
 import { ZIndex } from '../../consts.ts';
 import { RenderDI } from '../../DI/RenderDI.ts';
-import { Sound, SoundType } from '../Components/Sound.ts';
 
 export interface HitFlashOptions {
     x: number;
@@ -27,11 +26,4 @@ export function spawnHitFlash(options: HitFlashOptions, { world } = GameDI, { en
     HitFlash.addComponent(world, eid);
     Progress.addComponent(world, eid, options.duration);
     DestroyByTimeout.addComponent(world, eid, options.duration);
-
-    // Add hit sound - entity already has Transform for position
-    Sound.addComponent(world, eid, SoundType.TankHit, {
-        loop: false,
-        volume: 1,
-        autoplay: true,
-    });
 }

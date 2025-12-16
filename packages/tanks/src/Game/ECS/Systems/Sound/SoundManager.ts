@@ -3,6 +3,8 @@
  * Uses Web Audio API (AudioContext) for low-latency playback with spatial audio support
  */
 
+import { WebAudioTrack } from './WebAudioTrack.ts';
+
 export interface SoundConfig {
     src: string | string[];  // Single source or array for random selection
     maxInstances?: number;  // Max simultaneous plays of this sound
@@ -19,8 +21,7 @@ export interface PlayOptions {
 }
 
 interface SoundInstance {
-    source: AudioBufferSourceNode | null;
-    gainNode: GainNode;
+    track: WebAudioTrack;
     inUse: boolean;
     srcIndex: number;  // Which source this instance uses
 }
@@ -74,7 +75,7 @@ class SoundManager {
         this.configs.set(id, config);
 
         const sources = Array.isArray(config.src) ? config.src : [config.src];
-        const maxInstances = config.maxInstances ?? 3;
+        const maxInstances = config.maxInstances ?? 5;
 
         // Load all audio buffers
         const buffers: AudioBuffer[] = await Promise.all(
@@ -85,16 +86,17 @@ class SoundManager {
             })
         );
 
-        // Create gain nodes for instances (sources are created on play)
+        // Create WebAudioTrack instances
         const instances: SoundInstance[] = [];
         for (let i = 0; i < maxInstances; i++) {
-            const gainNode = ctx.createGain();
-            gainNode.gain.value = config.volume ?? 1;
-            gainNode.connect(this.masterGain!);
+            const track = new WebAudioTrack(ctx, {
+                volume: config.volume ?? 1,
+                loop: config.loop ?? false,
+            });
+            track.connect(this.masterGain!);
             
             instances.push({
-                source: null,
-                gainNode,
+                track,
                 inUse: false,
                 srcIndex: i % sources.length,
             });
@@ -106,28 +108,26 @@ class SoundManager {
     /**
      * Play a sound by id
      */
-    play(id: string, options: PlayOptions = {}): AudioBufferSourceNode | null {
+    play(id: string, options: PlayOptions = {}): WebAudioTrack | null {
         if (!this.enabled) return null;
 
-        const ctx = this.ensureContext();
+        this.ensureContext();
         const sound = this.sounds.get(id);
         const config = this.configs.get(id);
 
         if (!sound || !config) {
-            console.warn(`Sound "${id}" not loaded`);
             return null;
         }
 
         const { buffers, instances } = sound;
 
         // For multiple sources, pick a random one
-        let instance: SoundInstance | undefined;
         const randomSrcIndex = buffers.length > 1 
             ? Math.floor(Math.random() * buffers.length) 
             : 0;
 
         // Find an available instance
-        instance = instances.find(i => !i.inUse);
+        const instance = instances.find(i => !i.inUse);
 
         if (!instance) {
             // All instances busy - skip
@@ -137,21 +137,13 @@ class SoundManager {
         instance.inUse = true;
         instance.srcIndex = randomSrcIndex;
 
-        // Stop previous source if any
-        if (instance.source) {
-            try {
-                instance.source.stop();
-            } catch {
-                // Already stopped
-            }
-            instance.source.disconnect();
-        }
+        // Stop previous playback if any
+        instance.track.stop();
 
-        // Create new source
-        const source = ctx.createBufferSource();
-        source.buffer = buffers[randomSrcIndex];
-        source.loop = options.loop ?? config.loop ?? false;
-        source.connect(instance.gainNode);
+        // Set buffer and options
+        instance.track
+            .setBuffer(buffers[randomSrcIndex])
+            .setLoop(options.loop ?? config.loop ?? false);
 
         // Calculate volume based on distance
         let volume = options.volume ?? config.volume ?? 1;
@@ -161,20 +153,17 @@ class SoundManager {
             volume *= this.calculateDistanceAttenuation(distance);
         }
 
-        instance.gainNode.gain.value = volume;
-        instance.source = source;
-
-        source.start(0);
+        instance.track.setVolume(volume);
+        instance.track.play();
 
         // Mark as available when done (unless looping)
-        if (!source.loop) {
-            source.onended = () => {
+        if (!instance.track.loop) {
+            instance.track.onEnded(() => {
                 instance.inUse = false;
-                instance.source = null;
-            };
+            });
         }
 
-        return source;
+        return instance.track;
     }
 
     /**
@@ -185,36 +174,36 @@ class SoundManager {
         if (!sound) return;
 
         for (const instance of sound.instances) {
-            if (instance.source) {
-                try {
-                    instance.source.stop();
-                } catch {
-                    // Already stopped
-                }
-                instance.source.disconnect();
-                instance.source = null;
-            }
+            instance.track.stop();
             instance.inUse = false;
         }
     }
 
     /**
-     * Stop a specific audio instance
+     * Pause a specific track instance
      */
-    stopInstance(source: AudioBufferSourceNode): void {
-        try {
-            source.stop();
-        } catch {
-            // Already stopped
-        }
-        source.disconnect();
+    pauseInstance(track: WebAudioTrack): void {
+        track.pause();
+    }
+
+    /**
+     * Resume a specific track instance
+     */
+    resumeInstance(track: WebAudioTrack): void {
+        track.resume();
+    }
+
+    /**
+     * Stop a specific track instance
+     */
+    stopInstance(track: WebAudioTrack): void {
+        track.stop();
         
         // Find and mark as not in use
         for (const sound of this.sounds.values()) {
-            const instance = sound.instances.find(i => i.source === source);
+            const instance = sound.instances.find(i => i.track === track);
             if (instance) {
                 instance.inUse = false;
-                instance.source = null;
                 break;
             }
         }
@@ -281,10 +270,10 @@ class SoundManager {
     dispose(): void {
         this.stopAll();
         
-        // Disconnect all gain nodes
+        // Dispose all tracks
         for (const sound of this.sounds.values()) {
             for (const instance of sound.instances) {
-                instance.gainNode.disconnect();
+                instance.track.dispose();
             }
         }
         

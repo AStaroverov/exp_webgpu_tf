@@ -15,7 +15,7 @@ import { TankPart } from '../../../Components/TankPart.ts';
 import { TankTurret } from '../../../Components/TankTurret.ts';
 import { TeamRef } from '../../../Components/TeamRef.ts';
 import { Options } from './Options.ts';
-import { spawnSoundAtParent } from '../../SoundEntity.ts';
+import { spawnSoundAtParent } from '../../Sound.ts';
 import { SoundParentRelative, SoundType } from '../../../Components/Sound.ts';
 
 export function createTankBase(options: Options, { world } = GameDI): [number, number] {

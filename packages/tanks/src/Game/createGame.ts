@@ -141,7 +141,7 @@ export function createGame({ width, height }: {
 
         GameDI.plugins.systems[SystemGroup.Before].forEach(system => system(delta));
 
-        updateHitableSystem();
+        updateHitableSystem(delta);
         updateTankAliveSystem();
         collectDebris(delta);
 
