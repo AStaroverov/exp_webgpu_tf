@@ -1,6 +1,6 @@
-import { useObservable } from '../../../../../lib/React/useSyncObservable.ts';
+import { useObservable } from '../../../../../../lib/React/useSyncObservable.ts';
 import { Chip } from '../Components/Chip.tsx';
-import { getTankState$ } from '../State/Game/gameMethods.ts';
+import { getTankState$ } from '../../State/Game/gameMethods.ts';
 
 export function TankPreview({ className, tankEid }: { className?: string, tankEid: number }) {
     const tank = useObservable(getTankState$(tankEid));

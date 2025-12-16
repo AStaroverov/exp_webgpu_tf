@@ -1,10 +1,10 @@
 import { CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
 import { useObservable } from '../../../../../../lib/React/useSyncObservable.ts';
-import { BulletHellState$, toggleBulletHellGame } from '../State/GameState.ts';
-import { startBulletHellGame } from '../State/gameMethods.ts';
-import { setRenderTarget } from '../State/RenderTarget.ts';
-import { Button } from '../../../UI/Components/Button.tsx';
-import { Card } from '../../../UI/Components/Card.tsx';
+import { BulletHellState$, toggleBulletHellGame } from '../../State/GameState.ts';
+import { startBulletHellGame } from '../../State/gameMethods.ts';
+import { setRenderTarget } from '../../State/RenderTarget.ts';
+import { Button } from '../../../Arena/UI/Components/Button.tsx';
+import { Card } from '../../../Arena/UI/Components/Card.tsx';
 
 export function BaseScreen({ className, style }: { className?: string, style?: CSSProperties }) {
     const canvasRef = useRef<HTMLCanvasElement>(null);

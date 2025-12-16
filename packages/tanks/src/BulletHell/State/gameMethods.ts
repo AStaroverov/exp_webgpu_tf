@@ -1,11 +1,11 @@
-import { initTensorFlow } from '../../../../../ml-common/initTensorFlow.ts';
-import { TankType } from '../../../Game/ECS/Components/Tank.ts';
+import { initTensorFlow } from '../../../../ml-common/initTensorFlow.ts';
+import { TankType } from '../../Game/ECS/Components/Tank.ts';
 import { destroyEngine, getEngine } from './engine.ts';
 import { addPlayerTank, spawnEnemyOffScreen, BULLET_HELL_MAX_ENEMIES, getEnemyTankEids, resetEngineState } from './engineMethods.ts';
 import { toggleBulletHellGame } from './GameState.ts';
-import { CurrentActorAgent } from '../../../Pilots/Agents/CurrentActorAgent.ts';
-import { getTankHealth } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { randomRangeInt } from '../../../../../../lib/random.ts';
+import { CurrentActorAgent } from '../../Pilots/Agents/CurrentActorAgent.ts';
+import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
+import { randomRangeInt } from '../../../../../lib/random.ts';
 
 const ENEMY_TANK_TYPES = [TankType.Light, TankType.Medium, TankType.Heavy];
 

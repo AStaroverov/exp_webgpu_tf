@@ -1,4 +1,4 @@
-import { GameMenuState$ } from '../State/GameMenuState.ts';
+import { GameMenuState$ } from '../../State/GameMenuState.ts';
 import { filter, fromEvent, tap } from 'rxjs';
 
 export function GameMenuEffects() {

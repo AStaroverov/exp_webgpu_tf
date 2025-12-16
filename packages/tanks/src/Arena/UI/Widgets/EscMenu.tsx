@@ -1,7 +1,7 @@
 import { CSSProperties, useCallback } from 'react';
-import { GameMenuState$, toggleGameMenu } from '../State/GameMenuState.ts';
-import { useObservable } from '../../../../../lib/React/useSyncObservable.ts';
-import { exitGame } from '../State/Game/playerMethods.ts';
+import { GameMenuState$, toggleGameMenu } from '../../State/GameMenuState.ts';
+import { useObservable } from '../../../../../../lib/React/useSyncObservable.ts';
+import { exitGame } from '../../State/Game/playerMethods.ts';
 import { Button } from '../Components/Button.tsx';
 import { Card } from '../Components/Card.tsx';
 

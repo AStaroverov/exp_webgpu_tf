@@ -1,10 +1,10 @@
 import { CSSProperties } from 'react';
-import { startGame } from '../State/Game/playerMethods.ts';
+import { startGame } from '../../State/Game/playerMethods.ts';
 import { Button } from '../Components/Button.tsx';
 import { Card } from '../Components/Card.tsx';
 import { TankSlot } from './TankSlot.tsx';
 import { range } from 'lodash-es';
-import { GAME_MAX_TEAM_TANKS } from '../State/Game/engineMethods.ts';
+import { GAME_MAX_TEAM_TANKS } from '../../State/Game/engineMethods.ts';
 
 export function GarageScreen({ className, style }: {
     className?: string,

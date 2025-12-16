@@ -1,10 +1,10 @@
 import { Select, SelectItem } from '../Components/Selector.tsx';
-import { TankType } from '../../Game/ECS/Components/Tank.ts';
-import { useObservable } from '../../../../../lib/React/useSyncObservable.ts';
-import { changeTankType, getTankType$ } from '../State/Game/gameMethods.ts';
+import { TankType } from '../../../Game/ECS/Components/Tank.ts';
+import { useObservable } from '../../../../../../lib/React/useSyncObservable.ts';
+import { changeTankType, getTankType$ } from '../../State/Game/gameMethods.ts';
 import { EMPTY } from 'rxjs';
 import { ChangeEvent, useCallback } from 'react';
-import { getTankEidBySlot$ } from '../State/Game/playerMethods.ts';
+import { getTankEidBySlot$ } from '../../State/Game/playerMethods.ts';
 
 const tankTypes = [
     { key: TankType.Light, label: 'Light' },

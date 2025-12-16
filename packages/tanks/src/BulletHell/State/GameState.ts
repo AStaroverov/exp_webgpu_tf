@@ -1,6 +1,6 @@
 import { BehaviorSubject, map, merge, switchMap, tap, timer, filter, take } from 'rxjs';
-import { min } from '../../../../../../lib/math.ts';
-import { frameInterval } from '../../../../../../lib/Rx/frameInterval.ts';
+import { min } from '../../../../../lib/math.ts';
+import { frameInterval } from '../../../../../lib/Rx/frameInterval.ts';
 import { getEngine } from './engine.ts';
 import { isPlayerDead, restartBulletHellGame, spawnSingleEnemy } from './gameMethods.ts';
 

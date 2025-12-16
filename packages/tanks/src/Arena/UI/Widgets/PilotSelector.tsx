@@ -1,6 +1,4 @@
 import { Select, SelectItem } from '../Components/Selector.tsx';
-import { changeTankType } from '../State/Game/gameMethods.ts';
-import { useCallback } from 'react';
 
 const pilots = [
     { key: 0, label: 'Player' },
@@ -9,16 +7,16 @@ const pilots = [
 ];
 
 export function PilotSelector({ className, slot }: { className?: string, slot: number }) {
-    const handleChangePilot = useCallback(() => {
-        changeTankType();
-    }, []);
+    // const handleChangePilot = useCallback(() => {
+    //     changeTankType();
+    // }, []);
     return (
         <div className={ `${ className } gap-2` }>
             <Select
                 className="max-w-xs"
                 label="Pilot"
                 defaultSelectedKeys={ [0] }
-                onChange
+                // onChange
             >
                 { pilots.map((item) => <SelectItem key={ item.key }>{ item.label }</SelectItem>) }
             </Select>

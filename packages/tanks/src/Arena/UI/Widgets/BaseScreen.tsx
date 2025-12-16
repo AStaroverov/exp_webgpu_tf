@@ -1,11 +1,11 @@
 import { CSSProperties, useEffect, useRef } from 'react';
 import { GarageScreen } from './GarageScreen.tsx';
 import { EscMenu } from './EscMenu.tsx';
-import { useObservable } from '../../../../../lib/React/useSyncObservable.ts';
-import { GameState$ } from '../State/Game/GameState.ts';
-import { setRenderTarget } from '../State/Game/RenderTarget.ts';
+import { useObservable } from '../../../../../../lib/React/useSyncObservable.ts';
+import { GameState$ } from '../../State/Game/GameState.ts';
+import { setRenderTarget } from '../../State/Game/RenderTarget.ts';
 
-import { GAME_MAP_SIZE } from '../State/Game/def.ts';
+import { GAME_MAP_SIZE } from '../../State/Game/def.ts';
 
 export function BaseScreen({ className, style }: { className?: string, style?: CSSProperties }) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -35,5 +35,3 @@ export function BaseScreen({ className, style }: { className?: string, style?: C
         </div>
     );
 }
-
-

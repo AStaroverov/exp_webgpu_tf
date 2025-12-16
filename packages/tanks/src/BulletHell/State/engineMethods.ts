@@ -1,11 +1,11 @@
-import { PI } from '../../../../../../lib/math.ts';
-import { randomRangeFloat } from '../../../../../../lib/random.ts';
+import { PI } from '../../../../../lib/math.ts';
+import { randomRangeFloat } from '../../../../../lib/random.ts';
 import { EntityId, innerQuery } from 'bitecs';
-import { Tank, TankType } from '../../../Game/ECS/Components/Tank.ts';
+import { Tank, TankType } from '../../Game/ECS/Components/Tank.ts';
 import { getEngine } from './engine.ts';
-import { createTank } from '../../../Game/ECS/Entities/Tank/createTank.ts';
-import { createPlayer } from '../../../Game/ECS/Entities/Player.ts';
-import { RigidBodyState } from '../../../Game/ECS/Components/Physical.ts';
+import { createTank } from '../../Game/ECS/Entities/Tank/createTank.ts';
+import { createPlayer } from '../../Game/ECS/Entities/Player.ts';
+import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
 
 export const BULLET_HELL_MAX_ENEMIES = 10;
 
