@@ -1,5 +1,6 @@
 import { RigidBody, RigidBodyDesc, RigidBodyType } from '@dimforge/rapier2d-simd';
 import { GameDI } from '../DI/GameDI.ts';
+import { PhysicalWorld } from './initPhysicalWorld.ts';
 
 export type BodyOptions = {
     x: number,
@@ -17,7 +18,7 @@ export type BodyOptions = {
 
 export function createBody(
     o: BodyOptions,
-    { physicalWorld } = GameDI,
+    { physicalWorld }: { physicalWorld: PhysicalWorld } = GameDI,
 ): RigidBody {
     let bodyDesc = (new RigidBodyDesc(o.bodyType ?? RigidBodyType.Dynamic))
         .setAdditionalMass(o.additionalMass ?? 0)

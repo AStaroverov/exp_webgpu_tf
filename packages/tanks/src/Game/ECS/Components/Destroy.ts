@@ -27,3 +27,12 @@ export const DestroyByTimeout = component({
         DestroyByTimeout.timeout[eid] = timeout;
     },
 });
+
+export const DestroyBySpeed = component({
+    minSpeed: TypedArray.f64(delegate.defaultSize),
+
+    addComponent(world: World, eid: number, minSpeed: number) {
+        addComponent(world, eid, DestroyBySpeed);
+        DestroyBySpeed.minSpeed[eid] = minSpeed;
+    },
+});

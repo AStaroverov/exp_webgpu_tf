@@ -1,4 +1,5 @@
 import { RigidBodyRef, RigidBodyState } from './Physical.ts';
+import { Impulse, TorqueImpulse } from './Impulse.ts';
 import { GameDI } from '../../DI/GameDI.ts';
 import { addEntity } from 'bitecs';
 import { createRigidCircle, createRigidRectangle } from '../../Physical/createRigid.ts';
@@ -11,6 +12,8 @@ export function createCircleRigidGroup(
     const physicalId = createRigidCircle(options);
     RigidBodyRef.addComponent(world, eid, physicalId);
     RigidBodyState.addComponent(world, eid);
+    Impulse.addComponent(world, eid);
+    TorqueImpulse.addComponent(world, eid);
     return [eid, physicalId];
 }
 
@@ -22,6 +25,8 @@ export function createRectangleRigidGroup(
     const physicalId = createRigidRectangle(options);
     RigidBodyRef.addComponent(world, eid, physicalId);
     RigidBodyState.addComponent(world, eid);
+    Impulse.addComponent(world, eid);
+    TorqueImpulse.addComponent(world, eid);
     return [eid, physicalId];
 }
 

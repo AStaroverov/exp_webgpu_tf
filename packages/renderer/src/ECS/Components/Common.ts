@@ -48,11 +48,12 @@ export const Color = component({
         Color.a[eid] = a;
     }),
 
-    applyColorToArray: (eid: number, color: TColor) => {
+    applyColorToArray: <T extends TColor>(eid: number, color: T): T => {
         color[0] = Color.r[eid];
         color[1] = Color.g[eid];
         color[2] = Color.b[eid];
         color[3] = Color.a[eid];
+        return color;
     },
 });
 

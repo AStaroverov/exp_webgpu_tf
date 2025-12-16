@@ -1,6 +1,7 @@
 import { createLightTank } from './Light/LightTank.ts';
 import { createMediumTank } from './Medium/MediumTank.ts';
 import { createHeavyTank } from './Heavy/HeavyTank.ts';
+import { createPlayerTank } from './Player/PlayerTank.ts';
 import { TankType } from '../../Components/Tank.ts';
 import { EntityId } from 'bitecs';
 
@@ -8,6 +9,7 @@ type TankOptions =
     | { type: TankType.Light } & Parameters<typeof createLightTank>[0]
     | { type: TankType.Medium } & Parameters<typeof createMediumTank>[0]
     | { type: TankType.Heavy } & Parameters<typeof createHeavyTank>[0]
+    | { type: TankType.Player } & Parameters<typeof createPlayerTank>[0]
 
 export function createTank(options: TankOptions): EntityId {
     const type = options.type;
@@ -19,6 +21,8 @@ export function createTank(options: TankOptions): EntityId {
             return createMediumTank(options);
         case TankType.Heavy:
             return createHeavyTank(options);
+        case TankType.Player:
+            return createPlayerTank(options);
         default:
             throw new Error(`Unknown tank type ${ type }`);
     }

@@ -11,14 +11,16 @@ import { RenderDI } from './DI/RenderDI.ts';
 import { Hitable } from './ECS/Components/Hitable.ts';
 import { getEntityIdByPhysicalId, RigidBodyRef } from './ECS/Components/Physical.ts';
 import { GameSession } from './ECS/Entities/GameSession.ts';
+import { GameMap } from './ECS/Entities/GameMap.ts';
 import { SystemGroup } from './ECS/Plugins/systems.ts';
 import { createApplyRigidBodyToTransformSystem } from './ECS/Systems/createApplyRigidBodyToTransformSystem.ts';
 import { createSpawnerBulletsSystem } from './ECS/Systems/createBulletSystem.ts';
 import { createDestroyByTimeoutSystem } from './ECS/Systems/createDestroyByTimeoutSystem.ts';
+import { createDestroyBySpeedSystem } from './ECS/Systems/createDestroyBySpeedSystem.ts';
 import { createDestroyOutOfZoneSystem } from './ECS/Systems/createDestroyOutOfZoneSystem.ts';
 import { createDestroySystem } from './ECS/Systems/createDestroySystem.ts';
-import { createHitableSystem } from './ECS/Systems/createHitableSystem.ts';
 import { createRigidBodyStateSystem } from './ECS/Systems/createRigidBodyStateSystem.ts';
+import { createApplyImpulseSystem } from './ECS/Systems/createApplyImpulseSystem.ts';
 import {
     createPlayerTankBulletSystem,
     createPlayerTankPositionSystem,
@@ -29,7 +31,6 @@ import { createDrawMuzzleFlashSystem } from './ECS/Systems/Render/MuzzleFlash/cr
 import { createDrawHitFlashSystem } from './ECS/Systems/Render/HitFlash/createDrawHitFlashSystem.ts';
 import { createDrawExplosionSystem } from './ECS/Systems/Render/Explosion/createDrawExplosionSystem.ts';
 import { createPostEffect } from './ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
-import { createTankAliveSystem } from './ECS/Systems/Tank/createTankAliveSystem.ts';
 import { createTankDecayOutOfZoneSystem } from './ECS/Systems/Tank/createTankDecayOutOfZoneSystem.ts';
 import { createVisualizationTracksSystem } from './ECS/Systems/Tank/createVisualizationTracksSystem.ts';
 import { createSpawnTankTracksSystem } from './ECS/Systems/Tank/createSpawnTankTracksSystem.ts';
@@ -37,6 +38,13 @@ import { createUpdateTankTracksSystem } from './ECS/Systems/Tank/createUpdateTan
 import { createTankPositionSystem, createTankTurretRotationSystem } from './ECS/Systems/Tank/TankControllerSystems.ts';
 import { initPhysicalWorld } from './Physical/initPhysicalWorld.ts';
 import { createProgressSystem } from './ECS/Systems/createProgressSystem.ts';
+import { createCameraSystem, setCameraTarget, setInfiniteMapMode, initCameraPosition, CameraState } from './ECS/Systems/Camera/CameraSystem.ts';
+import { setCameraPosition } from '../../../renderer/src/ECS/Systems/ResizeSystem.ts';
+import { createSoundSystem, loadGameSounds, disposeSoundSystem, SoundManager, createTankMoveSoundSystem } from './ECS/Systems/Sound/index.ts';
+import { createDebrisCollectorSystem } from './ECS/Systems/createDebrisCollectorSystem.ts';
+import { createHitableSystem } from './ECS/Systems/createHitableSystem.ts';
+import { createTankAliveSystem } from './ECS/Systems/Tank/createTankAliveSystem.ts';
+import { SoundDI } from './DI/SoundDI.ts';
 
 export type Game = ReturnType<typeof createGame>;
 
@@ -52,6 +60,10 @@ export function createGame({ width, height }: {
     GameDI.world = world;
     GameDI.physicalWorld = physicalWorld;
 
+    // Initialize map offset to center (bounded mode default)
+    GameMap.setOffset(width / 2, height / 2);
+    initCameraPosition();
+
     // const updateMap = createMapSystem();
     const execTransformSystem = createTransformSystem(world);
 
@@ -60,9 +72,7 @@ export function createGame({ width, height }: {
 
     const syncRigidBodyState = createRigidBodyStateSystem();
     const applyRigidBodyDeltaToLocalTransform = createApplyRigidBodyToTransformSystem();
-
-    const updateHitableSystem = createHitableSystem();
-    const updateTankAliveSystem = createTankAliveSystem();
+    const applyImpulses = createApplyImpulseSystem();
 
     const eventQueue = new EventQueue(true);
     const physicalFrame = (delta: number) => {
@@ -70,6 +80,7 @@ export function createGame({ width, height }: {
         updateTankTurretRotation(delta);
 
         execTransformSystem();
+        applyImpulses();
         physicalWorld.step(eventQueue);
         syncRigidBodyState();
         applyRigidBodyDeltaToLocalTransform();
@@ -97,54 +108,61 @@ export function createGame({ width, height }: {
                 Hitable.hit$(eid2, eid1, forceMagnitude);
             }
         });
-
-        updateHitableSystem();
-        updateTankAliveSystem();
     };
 
     const spawnBullets = createSpawnerBulletsSystem();
+    const spawnTankTracks = createSpawnTankTracksSystem();
     const spawnFrame = (delta: number) => {
         spawnBullets(delta);
+        spawnTankTracks(delta);
     };
 
     const destroy = createDestroySystem();
     const destroyOutOfZone = createDestroyOutOfZoneSystem();
     const destroyByTimeout = createDestroyByTimeoutSystem();
+    const destroyBySpeed = createDestroyBySpeedSystem();
     const decayTankOnOutOfZone = createTankDecayOutOfZoneSystem();
 
     const destroyFrame = (delta: number) => {
         decayTankOnOutOfZone();
         destroyByTimeout(delta);
+        destroyBySpeed();
         destroyOutOfZone();
         destroy();
     };
 
     const visTracksUpdate = createVisualizationTracksSystem();
-    const spawnTankTracks = createSpawnTankTracksSystem();
     const updateTankTracks = createUpdateTankTracksSystem();
     const updateProgress = createProgressSystem();
+    const updateCamera = createCameraSystem();
+    const updateHitableSystem = createHitableSystem();
+    const updateTankAliveSystem = createTankAliveSystem();
+    const collectDebris = createDebrisCollectorSystem();
 
     GameDI.gameTick = (delta: number) => {
-        GameDI.plugins.systems[SystemGroup.Before].forEach(system => system(delta));
-
-        spawnFrame(delta);
-
         physicalFrame(delta);
 
+        GameDI.plugins.systems[SystemGroup.Before].forEach(system => system(delta));
+
+        updateHitableSystem(delta);
+        updateTankAliveSystem();
+        collectDebris(delta);
+
         visTracksUpdate(delta);
-        spawnTankTracks(delta);
         updateProgress(delta);
         updateTankTracks();
         // updateMap();
 
-        // stats.begin();
-        RenderDI.renderFrame?.(delta);
-        // stats.end();
-        // stats.update();
+        // Update camera before rendering
+        updateCamera(delta);
+        setCameraPosition(CameraState.x, CameraState.y);
 
         destroyFrame(delta);
+        spawnFrame(delta);
 
         PlayerEnvDI.inputFrame?.();
+        RenderDI.renderFrame?.(delta);
+        SoundDI.soundFrame?.(delta);
 
         GameDI.plugins.systems[SystemGroup.After].forEach(system => system(delta));
     };
@@ -160,6 +178,7 @@ export function createGame({ width, height }: {
         destroyChangeDetectorSystem(world);
 
         GameSession.reset();
+        GameMap.reset();
 
         GameDI.width = null!;
         GameDI.height = null!;
@@ -168,9 +187,38 @@ export function createGame({ width, height }: {
         GameDI.gameTick = null!;
         GameDI.destroy = null!;
 
+        SoundDI.destroy?.();
         RenderDI.destroy?.();
         PlayerEnvDI.destroy?.();
     };
+
+    GameDI.enableSound = async () => {
+        if (SoundDI.enabled) {
+            return;
+        }
+
+        SoundDI.enabled = true;
+
+        const updateSounds = createSoundSystem();
+        const updateTankMoveSounds = createTankMoveSoundSystem();
+
+        // Load sounds asynchronously
+        loadGameSounds().catch(console.error);
+
+        SoundDI.soundFrame = (delta: number) => {
+            updateSounds(delta);
+            updateTankMoveSounds(delta);
+        };
+
+        SoundDI.destroy = () => {
+            disposeSoundSystem();
+            SoundManager.dispose();
+
+            SoundDI.enabled = false;
+            SoundDI.destroy = undefined;
+            SoundDI.soundFrame = undefined;
+        };
+    }
 
     GameDI.setRenderTarget = async (canvas: null | undefined | HTMLCanvasElement) => {
         if (canvas === RenderDI.canvas) {
@@ -185,6 +233,9 @@ export function createGame({ width, height }: {
         }
 
         RenderDI.canvas = canvas;
+
+        // Initialize camera position for first render
+        setCameraPosition(CameraState.x, CameraState.y);
 
         const { device, context } = await initWebGPU(canvas);
         RenderDI.device = device;
@@ -218,6 +269,7 @@ export function createGame({ width, height }: {
         };
 
         RenderDI.destroy = () => {
+            RenderDI.enabled = false;
             RenderDI.canvas = null!;
             RenderDI.device = null!;
             RenderDI.context = null!;
@@ -254,6 +306,12 @@ export function createGame({ width, height }: {
     };
     GameDI.setPlayerTank = (tankEid: null | EntityId) => {
         PlayerEnvDI.tankEid = tankEid;
+    };
+    GameDI.setCameraTarget = (tankEid: null | EntityId) => {
+        setCameraTarget(tankEid);
+    };
+    GameDI.setInfiniteMapMode = (enabled: boolean) => {
+        setInfiniteMapMode(enabled);
     };
 
     return GameDI;

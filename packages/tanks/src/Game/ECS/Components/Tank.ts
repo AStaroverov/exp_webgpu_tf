@@ -8,6 +8,7 @@ export enum TankType {
     Light = 0,
     Medium = 1,
     Heavy = 2,
+    Player = 3,  // Special player tank - medium size but faster
 }
 
 export const Tank = component({

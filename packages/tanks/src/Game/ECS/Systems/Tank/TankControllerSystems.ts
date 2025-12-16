@@ -2,23 +2,26 @@ import { GameDI } from '../../../DI/GameDI.ts';
 import { TankController } from '../../Components/TankController.ts';
 import { RevoluteImpulseJoint, Vector2 } from '@dimforge/rapier2d-simd';
 import { Tank } from '../../Components/Tank.ts';
-import { RigidBodyRef, RigidBodyState } from '../../Components/Physical.ts';
+import { RigidBodyState } from '../../Components/Physical.ts';
 import { applyRotationToVector } from '../../../Physical/applyRotationToVector.ts';
 import { query } from 'bitecs';
-import { TankPart } from '../../Components/TankPart.ts';
 import { normalizeAngle } from '../../../../../../../lib/math.ts';
 import { TankTurret } from '../../Components/TankTurret.ts';
+import { TankPart } from '../../Components/TankPart.ts';
+import { Impulse, TorqueImpulse } from '../../Components/Impulse.ts';
 
 export enum TankEngineType {
     v6,
     v8,
-    v12
+    v12,
+    v8_turbo,  // Player special engine - faster than v8
 }
 
 export const mapTankEngineLabel = {
     [TankEngineType.v6]: 'v6',
     [TankEngineType.v8]: 'v8',
     [TankEngineType.v12]: 'v12',
+    [TankEngineType.v8_turbo]: 'v8 Turbo',
 };
 
 const IMPULSE_FACTOR = 15000000000;
@@ -36,11 +39,15 @@ const mapTypeToFeatures = {
         impulseFactor: IMPULSE_FACTOR * 2,
         rotationImpulseFactor: ROTATION_IMPULSE_FACTOR * 3,
     },
+    [TankEngineType.v8_turbo]: {
+        impulseFactor: IMPULSE_FACTOR * 2,
+        rotationImpulseFactor: ROTATION_IMPULSE_FACTOR * 2,
+    },
 };
 
-export function createTankPositionSystem({ world, physicalWorld } = GameDI) {
-    const nextLinvel = new Vector2(0, 0);
+const nextLinvel = new Vector2(0, 0);
 
+export function createTankPositionSystem({ world } = GameDI) {
     return (delta: number) => {
         const tankEids = query(world, [Tank, TankController]);
 
@@ -61,11 +68,10 @@ export function createTankPositionSystem({ world, physicalWorld } = GameDI) {
             nextLinvel.y = -moveDirection * impulseFactor * delta / 1000;
             applyRotationToVector(nextLinvel, nextLinvel, rotation);
 
-            const rb = physicalWorld.getRigidBody(RigidBodyRef.id[tankEid]);
-            // Применяем импульс для движения
-            rb.applyImpulse(nextLinvel, false);
-            // Применяем крутящий момент для поворота
-            rb.applyTorqueImpulse(rotationDirection * rotationImpulseFactor * delta / 1000, false);
+            // Add linear impulse for movement (will be applied by system)
+            Impulse.add(tankEid, nextLinvel.x, nextLinvel.y);
+            // Add torque impulse for rotation (will be applied by system)
+            TorqueImpulse.add(tankEid, rotationDirection * rotationImpulseFactor * delta / 1000);
         }
     };
 }
