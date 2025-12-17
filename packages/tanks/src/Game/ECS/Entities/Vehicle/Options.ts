@@ -3,9 +3,9 @@ import { TColor } from '../../../../../../renderer/src/ECS/Components/Common.ts'
 import { VehicleType } from '../../Components/Vehicle.ts';
 import { VehicleEngineType } from '../../Systems/Vehicle/VehicleControllerSystems.ts';
 
-export type VehicleOptions = typeof mutatedOptions;
+export type VehicleOptions = typeof mutatedVehicleOptions;
 
-export const mutatedOptions = {
+export const mutatedVehicleOptions = {
     teamId: -1,
     playerId: -1,
 
@@ -38,7 +38,7 @@ export const mutatedOptions = {
     engineType: VehicleEngineType.v6,
 };
 
-export const defaultOptions = structuredClone(mutatedOptions);
+export const defaultVehicleOptions = Object.freeze(structuredClone(mutatedVehicleOptions));
 
 export type VehicleCreationOpts = {
     playerId: number;
@@ -50,35 +50,35 @@ export type VehicleCreationOpts = {
 };
 
 export const resetOptions = (target: VehicleOptions, source?: Partial<VehicleCreationOpts>) => {
-    target.teamId = source?.teamId ?? defaultOptions.teamId;
-    target.playerId = source?.playerId ?? defaultOptions.playerId;
+    target.teamId = source?.teamId ?? defaultVehicleOptions.teamId;
+    target.playerId = source?.playerId ?? defaultVehicleOptions.playerId;
 
-    target.x = source?.x ?? defaultOptions.x;
-    target.y = source?.y ?? defaultOptions.y;
-    target.z = defaultOptions.z;
-    target.width = defaultOptions.width;
-    target.height = defaultOptions.height;
-    target.radius = defaultOptions.radius;
-    target.rotation = source?.rotation ?? defaultOptions.rotation;
-    target.speedX = defaultOptions.speedX;
-    target.speedY = defaultOptions.speedY;
-    (target.color as Float32Array).set(source?.color ?? defaultOptions.color, 0);
-    (target.shadow as Float32Array).set(defaultOptions.shadow, 0);
-    target.density = defaultOptions.density;
-    target.linearDamping = defaultOptions.linearDamping;
-    target.angularDamping = defaultOptions.angularDamping;
-    target.belongsSolverGroup = defaultOptions.belongsSolverGroup;
-    target.interactsSolverGroup = defaultOptions.interactsSolverGroup;
-    target.belongsCollisionGroup = defaultOptions.belongsCollisionGroup;
-    target.interactsCollisionGroup = defaultOptions.interactsCollisionGroup;
+    target.x = source?.x ?? defaultVehicleOptions.x;
+    target.y = source?.y ?? defaultVehicleOptions.y;
+    target.z = defaultVehicleOptions.z;
+    target.width = defaultVehicleOptions.width;
+    target.height = defaultVehicleOptions.height;
+    target.radius = defaultVehicleOptions.radius;
+    target.rotation = source?.rotation ?? defaultVehicleOptions.rotation;
+    target.speedX = defaultVehicleOptions.speedX;
+    target.speedY = defaultVehicleOptions.speedY;
+    (target.color as Float32Array).set(source?.color ?? defaultVehicleOptions.color, 0);
+    (target.shadow as Float32Array).set(defaultVehicleOptions.shadow, 0);
+    target.density = defaultVehicleOptions.density;
+    target.linearDamping = defaultVehicleOptions.linearDamping;
+    target.angularDamping = defaultVehicleOptions.angularDamping;
+    target.belongsSolverGroup = defaultVehicleOptions.belongsSolverGroup;
+    target.interactsSolverGroup = defaultVehicleOptions.interactsSolverGroup;
+    target.belongsCollisionGroup = defaultVehicleOptions.belongsCollisionGroup;
+    target.interactsCollisionGroup = defaultVehicleOptions.interactsCollisionGroup;
 
-    target.partsCount = defaultOptions.partsCount;
-    target.size = defaultOptions.size;
-    target.padding = defaultOptions.padding;
-    target.approximateColliderRadius = defaultOptions.approximateColliderRadius;
+    target.partsCount = defaultVehicleOptions.partsCount;
+    target.size = defaultVehicleOptions.size;
+    target.padding = defaultVehicleOptions.padding;
+    target.approximateColliderRadius = defaultVehicleOptions.approximateColliderRadius;
 
-    target.vehicleType = defaultOptions.vehicleType;
-    target.engineType = defaultOptions.engineType;
+    target.vehicleType = defaultVehicleOptions.vehicleType;
+    target.engineType = defaultVehicleOptions.engineType;
 
     return target;
 };

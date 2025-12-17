@@ -8,7 +8,7 @@ import { Hitable } from '../../Components/Hitable.ts';
 import { Parent } from '../../Components/Parent.ts';
 import { Children } from '../../Components/Children.ts';
 import { VehiclePart, VehiclePartCaterpillar } from '../../Components/VehiclePart.ts';
-import { VehicleOptions } from './Options.ts';
+import { defaultVehicleOptions, VehicleOptions } from './Options.ts';
 import { randomRangeFloat } from '../../../../../../../lib/random.ts';
 import { clamp } from 'lodash-es';
 import { addComponent, addEntity, EntityId, hasComponent } from 'bitecs';
@@ -91,18 +91,19 @@ export function fillAllSlots(parentEId: EntityId, options: VehicleOptions): void
 
 const jointParentAnchor = new Vector2(0, 0);
 const jointChildAnchor = new Vector2(0, 0);
-
+const fillSlotOptions: VehicleOptions = structuredClone(defaultVehicleOptions);
 export function fillSlot(
     slotEid: EntityId,
     options: VehicleOptions,
     { world, physicalWorld } = GameDI,
-): EntityId | null {
+) {
     if (isNaN(options.x) || isNaN(options.y) || isNaN(options.rotation)) {
         throw new Error('Some options are not set');
     }
     if (isSlotFilled(slotEid)) {
-        return null; // Slot already filled
+        return;
     }
+    Object.assign(fillSlotOptions, options);
 
     // Slot's parent is Vehicle or Turret (the physical body to attach to)
     const vehicleOrTurretEid = Parent.id[slotEid];
@@ -112,35 +113,33 @@ export function fillSlot(
         ? vehicleOrTurretEid 
         : VehicleTurret.vehicleEId[vehicleOrTurretEid];
     const vehicleType = Vehicle.type[vehicleEid] as VehicleType;
-
-    const rbId = RigidBodyRef.id[vehicleOrTurretEid];
-
-    const anchorX = Slot.anchorX[slotEid];
-    const anchorY = Slot.anchorY[slotEid];
     
     // Get config from slot's part type and vehicle type
     const partType = Slot.partType[slotEid] as SlotPartType;
     const config = getSlotPartConfig(partType, vehicleType);
+    const anchorX = Slot.anchorX[slotEid];
+    const anchorY = Slot.anchorY[slotEid];
 
-    // // Transform anchor from local to world space
-    const worldX = anchorX * cos(options.rotation) - anchorY * sin(options.rotation);
-    const worldY = anchorX * sin(options.rotation) + anchorY * cos(options.rotation);
+    // Transform anchor from local to world space
+    const worldX = anchorX * cos(fillSlotOptions.rotation) - anchorY * sin(fillSlotOptions.rotation);
+    const worldY = anchorX * sin(fillSlotOptions.rotation) + anchorY * cos(fillSlotOptions.rotation);
 
-    options.x += worldX;
-    options.y += worldY;
-    options.z = config.z;
-    options.width = Slot.width[slotEid];
-    options.height = Slot.height[slotEid];
+    fillSlotOptions.x += worldX;
+    fillSlotOptions.y += worldY;
+    fillSlotOptions.z = config.z;
+    fillSlotOptions.width = Slot.width[slotEid];
+    fillSlotOptions.height = Slot.height[slotEid];
 
-    options.density = config.density;
-    options.belongsSolverGroup = config.belongsSolverGroup;
-    options.interactsSolverGroup = config.interactsSolverGroup;
-    options.belongsCollisionGroup = config.belongsCollisionGroup;
-    options.interactsCollisionGroup = config.interactsCollisionGroup;
-    options.shadow[1] = config.shadowY;
-    options.color = Color.applyColorToArray(slotEid, new Float32Array(4));
+    fillSlotOptions.density = config.density;
+    fillSlotOptions.belongsSolverGroup = config.belongsSolverGroup;
+    fillSlotOptions.interactsSolverGroup = config.interactsSolverGroup;
+    fillSlotOptions.belongsCollisionGroup = config.belongsCollisionGroup;
+    fillSlotOptions.interactsCollisionGroup = config.interactsCollisionGroup;
+    fillSlotOptions.shadow[1] = config.shadowY;
+    fillSlotOptions.color = Color.applyColorToArray(slotEid, new Float32Array(4));
     // Create the physical part at the correct world position
-    const [eid, pid] = createRectangleRR(options);
+    const rbId = RigidBodyRef.id[vehicleOrTurretEid];
+    const [eid, pid] = createRectangleRR(fillSlotOptions);
 
     jointParentAnchor.x = anchorX;
     jointParentAnchor.y = anchorY;
@@ -152,26 +151,20 @@ export function fillSlot(
         false,
     );
     
-    // Add components
     VehiclePart.addComponent(world, eid, joint.handle);
 
-    PlayerRef.addComponent(world, eid, options.playerId);
-    TeamRef.addComponent(world, eid, options.teamId);
-    Hitable.addComponent(world, eid, min(options.width, options.height));
-    Damagable.addComponent(world, eid, min(options.width, options.height) / 20);
+    PlayerRef.addComponent(world, eid, fillSlotOptions.playerId);
+    TeamRef.addComponent(world, eid, fillSlotOptions.teamId);
+    Hitable.addComponent(world, eid, min(fillSlotOptions.width, fillSlotOptions.height));
+    Damagable.addComponent(world, eid, min(fillSlotOptions.width, fillSlotOptions.height) / 20);
     
     // VehiclePart is child of Slot (not vehicle/turret directly)
     Parent.addComponent(world, eid, slotEid);
-    if (Children.entitiesCount[slotEid] !== 0) {
-        debugger
-    }
     Children.addChildren(slotEid, eid);
 
     if (partType === SlotPartType.Caterpillar) {
         addComponent(world, eid, VehiclePartCaterpillar);
     }
-
-    return eid;
 }
 
 export function getEmptySlotsCount(parentEId: EntityId): number {

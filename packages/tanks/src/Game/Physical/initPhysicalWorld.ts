@@ -8,7 +8,7 @@ export function initPhysicalWorld() {
 
     // skip id == 0 because it's the default value for empty memory data
     createRigidRectangle(
-        { width: 10, height: 10, x: 0, y: 0 },
+        { enabled: false, width: 10, height: 10, x: 0, y: 0 },
         // @ts-ignore
         { physicalWorld: world }
     );

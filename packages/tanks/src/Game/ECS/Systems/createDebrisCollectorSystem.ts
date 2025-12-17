@@ -11,7 +11,7 @@ import { HeuristicsData } from '../Components/HeuristicsData.ts';
 import { getTankTotalSlotCount, getTankCurrentPartsCount } from '../Entities/Tank/TankUtils.ts';
 import { spawnSoundAtPosition, SoundType } from './Sound/index.ts';
 import { fillSlot, findFirstEmptySlot, getEmptySlotsCount } from '../Entities/Vehicle/VehicleParts.ts';
-import { mutatedOptions, resetOptions } from '../Entities/Vehicle/Options.ts';
+import { mutatedVehicleOptions, resetOptions } from '../Entities/Vehicle/Options.ts';
 import { PlayerRef } from '../Components/PlayerRef.ts';
 import { TeamRef } from '../Components/TeamRef.ts';
 import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
@@ -103,13 +103,14 @@ export function createDebrisCollectorSystem({ world, physicalWorld } = GameDI) {
 
 function fillSlots(vehicleEid: number, debrisEids: EntityId[]) {
     const turretEid = Tank.turretEId[vehicleEid];
-    const options = resetOptions(mutatedOptions);
+    const options = resetOptions(mutatedVehicleOptions);
+
     options.playerId = PlayerRef.id[vehicleEid];
     options.teamId = TeamRef.id[vehicleEid];
     options.x = RigidBodyState.position.get(vehicleEid, 0);
     options.y = RigidBodyState.position.get(vehicleEid, 1);
     options.rotation = RigidBodyState.rotation[vehicleEid];
-    
+
     for (let i = 0; i < Math.floor(debrisEids.length / DEBRIS_FOR_HEAL); i++) {
         const emptySlotEid = findFirstEmptySlot(vehicleEid) ?? findFirstEmptySlot(turretEid);        
         if (emptySlotEid === null) break;

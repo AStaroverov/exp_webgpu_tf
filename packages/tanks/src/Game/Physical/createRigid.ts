@@ -16,6 +16,7 @@ export enum CollisionGroup {
 }
 
 type CommonRigidOptions = BodyOptions & {
+    enabled?: boolean,
     density?: number,
     belongsCollisionGroup?: 0 | CollisionGroup,
     interactsCollisionGroup?: 0 | CollisionGroup,
@@ -31,6 +32,7 @@ export function createCollisionGroups(belongs: 0 | CollisionGroup, interacts: 0 
 
 function prepareColliderDesc(shape: ColliderDesc, o: CommonRigidOptions): ColliderDesc {
     return shape
+        .setEnabled(o.enabled ?? true)
         .setDensity(o.density ?? 0)
         .setCollisionGroups(
             createCollisionGroups(

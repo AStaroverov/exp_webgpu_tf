@@ -1,6 +1,6 @@
 import { BulletCaliber } from '../../../Components/Bullet.ts';
 import {
-    mutatedOptions as vehicleMutatedOptions,
+    mutatedVehicleOptions as vehicleMutatedOptions,
     resetOptions as resetVehicleOptions,
     updateColorOptions,
     type VehicleOptions,

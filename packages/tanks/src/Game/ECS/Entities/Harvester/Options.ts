@@ -1,10 +1,8 @@
 import {
-    mutatedOptions as vehicleMutatedOptions,
-    defaultOptions as vehicleDefaultOptions,
-    resetOptions as resetVehicleOptions,
+    mutatedVehicleOptions as vehicleMutatedOptions, resetOptions as resetVehicleOptions,
     updateColorOptions,
     type VehicleOptions,
-    type VehicleCreationOpts,
+    type VehicleCreationOpts
 } from '../Vehicle/Options.ts';
 
 // Harvester-specific options that extend vehicle options
