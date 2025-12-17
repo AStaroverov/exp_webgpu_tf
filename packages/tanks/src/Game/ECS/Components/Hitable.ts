@@ -12,10 +12,9 @@ export const Hitable = component(({
     // [eid, forceMagnitude]
     hits: NestedArray.f64(2 * HITS_LIMIT, delegate.defaultSize),
 
-    addComponent: (world: World, eid: number, health: number) => {
-        Hitable.resetHits(eid);
-
+    addComponent: (world: World, eid: number, health: number) => {        
         addComponent(world, eid, Hitable);
+        Hitable.resetHits(eid);
         Hitable.health[eid] = health;
     },
     hit$: obs((eid: number, secondEid: EntityId, forceMagnitude: number) => {

@@ -5,7 +5,7 @@ import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
 import { VisTestEpisodeManager } from '../ml/src/PPO/VisTest/VisTestEpisodeManager.ts';
 import { GameDI } from '../tanks/src/Game/DI/GameDI.ts';
 import { RigidBodyState } from '../tanks/src/Game/ECS/Components/Physical.ts';
-import { Tank } from '../tanks/src/Game/ECS/Components/Tank.ts';
+import { Vehicle } from '../tanks/src/Game/ECS/Components/Vehicle.ts';
 import { TeamRef } from '../tanks/src/Game/ECS/Components/TeamRef.ts';
 import { CONFIG } from './config.ts';
 import { drawMetrics } from './Metrics/Browser/index.ts';
@@ -78,19 +78,19 @@ export function createTanksDebug(manager: VisTestEpisodeManager) {
         if (!GameDI.world) return '';
 
         let result = '';
-        const tanksEids = query(GameDI.world, [Tank, RigidBodyState]);
+        const vehicleEids = query(GameDI.world, [Vehicle, RigidBodyState]);
 
-        for (let i = 0; i < tanksEids.length; i++) {
+        for (let i = 0; i < vehicleEids.length; i++) {
 
-            const tankEid = tanksEids[i];
-            const teamId = TeamRef.id[tankEid];
-            const color = `rgba(${Color.r[tankEid] * 255}, ${Color.g[tankEid] * 255}, ${Color.b[tankEid] * 255}, ${Color.a[tankEid]})`;
+            const vehicleEid = vehicleEids[i];
+            const teamId = TeamRef.id[vehicleEid];
+            const color = `rgba(${Color.r[vehicleEid] * 255}, ${Color.g[vehicleEid] * 255}, ${Color.b[vehicleEid] * 255}, ${Color.a[vehicleEid]})`;
 
             result += `
                 <div style="background: ${color}; padding: 4px;">
-                    <div>Tank ${tankEid}</div>
+                    <div>Vehicle ${vehicleEid}</div>
                     <div>Team: ${teamId}</div>
-                    <div>Reward: ${manager.getRecentReward(tankEid).toFixed(2)} / ${manager.getDiscounterReward(tankEid).toFixed(2)}</div>
+                    <div>Reward: ${manager.getRecentReward(vehicleEid).toFixed(2)} / ${manager.getDiscounterReward(vehicleEid).toFixed(2)}</div>
                 </div>
                 <br>
             `;

@@ -51,6 +51,10 @@ export const RigidBodyState = component({
 
     addComponent: (world: World, eid: EntityId) => {
         addComponent(world, eid, RigidBodyState);
+        RigidBodyState.position.getBatch(eid).fill(0);
+        RigidBodyState.linvel.getBatch(eid).fill(0);
+        RigidBodyState.angvel[eid] = 0;
+        RigidBodyState.rotation[eid] = 0;
     },
 
     update: (

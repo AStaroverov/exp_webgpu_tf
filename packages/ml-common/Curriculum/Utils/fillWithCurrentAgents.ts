@@ -2,11 +2,11 @@ import { CurrentActorAgent } from '../../../tanks/src/Pilots/Agents/CurrentActor
 import { Scenario } from '../types.ts';
 
 export function fillWithCurrentAgents(episode: Scenario) {
-    const freeTanks = episode.getFreeTankEids();
+    const freeVehicles = episode.getFreeVehicleEids();
 
-    for (const tankEid of freeTanks) {
-        const agent = new CurrentActorAgent(tankEid, false);
-        episode.setPilot(tankEid, agent);
+    for (const vehicleEid of freeVehicles) {
+        const agent = new CurrentActorAgent(vehicleEid, false);
+        episode.setPilot(vehicleEid, agent);
     }
 }
 

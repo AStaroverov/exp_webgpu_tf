@@ -15,6 +15,7 @@ import {
     getMatrixTranslationY,
     GlobalTransform,
 } from '../../../../../renderer/src/ECS/Components/Transform.ts';
+import { Firearms } from '../Components/Firearms.ts';
 import { Tank } from '../Components/Tank.ts';
 import { ZIndex } from '../../consts.ts';
 import { ActiveEvents, RigidBodyType } from '@dimforge/rapier2d-simd';
@@ -22,7 +23,6 @@ import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { Bullet, BulletCaliber, mapBulletCaliber, MAX_BULLET_SPEED, MIN_BULLET_SPEED } from '../Components/Bullet.ts';
 import { TeamRef } from '../Components/TeamRef.ts';
 import { Color } from '../../../../../renderer/src/ECS/Components/Common.ts';
-import { TankTurret } from '../Components/TankTurret.ts';
 import { min } from '../../../../../../lib/math.ts';
 import { Damagable } from '../Components/Damagable.ts';
 
@@ -95,11 +95,11 @@ const optionsSpawnBullet = {
 const tmpMatrix = mat4.create();
 const tmpPosition = vec3.create() as Float32Array;
 
-export function spawnBullet(tankEid: number) {
-    const turretEid = Tank.turretEId[tankEid];
+export function spawnBullet(vehicleEid: number) {
+    const turretEid = Tank.turretEId[vehicleEid];
     const globalTransform = GlobalTransform.matrix.getBatch(turretEid);
-    const bulletPosition = TankTurret.bulletStartPosition.getBatch(turretEid);
-    const bulletCaliber = mapBulletCaliber[TankTurret.bulletCaliber[turretEid] as BulletCaliber];
+    const bulletPosition = Firearms.bulletStartPosition.getBatch(turretEid);
+    const bulletCaliber = mapBulletCaliber[Firearms.caliber[turretEid] as BulletCaliber];
 
     tmpPosition.set(bulletPosition);
     mat4.identity(tmpMatrix);
@@ -107,7 +107,7 @@ export function spawnBullet(tankEid: number) {
     mat4.multiply(tmpMatrix, globalTransform, tmpMatrix);
 
     // Dark color for bullets (30% of original brightness)
-    Color.applyColorToArray(tankEid, optionsSpawnBullet.color);
+    Color.applyColorToArray(vehicleEid, optionsSpawnBullet.color);
     optionsSpawnBullet.color[0] *= 0.3;
     optionsSpawnBullet.color[1] *= 0.3;
     optionsSpawnBullet.color[2] *= 0.3;
@@ -117,9 +117,9 @@ export function spawnBullet(tankEid: number) {
     optionsSpawnBullet.width = bulletCaliber.width;
     optionsSpawnBullet.height = bulletCaliber.height;
     optionsSpawnBullet.rotation = getMatrixRotationZ(tmpMatrix);
-    optionsSpawnBullet.calibre = TankTurret.bulletCaliber[turretEid] as BulletCaliber;
-    optionsSpawnBullet.teamId = TeamRef.id[tankEid];
-    optionsSpawnBullet.playerId = PlayerRef.id[tankEid];
+    optionsSpawnBullet.calibre = Firearms.caliber[turretEid] as BulletCaliber;
+    optionsSpawnBullet.teamId = TeamRef.id[vehicleEid];
+    optionsSpawnBullet.playerId = PlayerRef.id[vehicleEid];
 
     createBullet(optionsSpawnBullet);
 

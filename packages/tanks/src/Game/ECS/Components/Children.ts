@@ -9,9 +9,10 @@ export const Children = component({
     entitiesCount: new Float64Array(delegate.defaultSize),
     entitiesIds: NestedArray.f64(MAX_CHILDREN, delegate.defaultSize),
 
-    addComponent(world: World, eid: number, count: number = 0, ids: number[] | Float64Array = []): void {
+    addComponent(world: World, eid: number, ids: number[] | Float64Array = []): void {
         addComponent(world, eid, Children);
-        Children.entitiesCount[eid] = count;
+        Children.entitiesCount[eid] = ids.length;
+        Children.entitiesIds.getBatch(eid).fill(0);
         Children.entitiesIds.setBatch(eid, ids);
     },
 
@@ -28,6 +29,7 @@ export const Children = component({
 
     removeAllChildren(entity: number): void {
         Children.entitiesCount[entity] = 0;
+        Children.entitiesIds.getBatch(entity).fill(0);
     },
 
     removeChild(parentEid: number, childEid: number): void {
@@ -43,7 +45,6 @@ export const Children = component({
         if (index === -1) return;
 
         Children.entitiesCount[parentEid] -= 1;
-        children.set(children.subarray(0, index), 0);
         children.set(children.subarray(index + 1, length), index);
         children[Children.entitiesCount[parentEid]] = 0;
     },

@@ -1,6 +1,7 @@
 import { createGame } from '../../Game/createGame.ts';
 import { BehaviorSubject } from 'rxjs';
 import { createPilotsPlugin } from '../../Pilots/createPilotsPlugin.ts';
+import { createPlayer } from '../../Game/ECS/Entities/Player.ts';
 
 type Engine = ReturnType<typeof createGame> & {
     pilots: ReturnType<typeof createPilotsPlugin>
@@ -8,10 +9,11 @@ type Engine = ReturnType<typeof createGame> & {
 
 export const engine$ = new BehaviorSubject<undefined | Engine>(undefined);
 
-export const getEngine = (): Engine => {
+export function getEngine(): Engine {
     if (!engine$.value) {
-        // Use window size for the game zone (for infinite map, this defines the visible area)
         const core = createGame({ width: window.innerWidth, height: window.innerHeight });
+        const realPlayerId = createPlayer(0);
+        core.setPlayerId(realPlayerId);
         engine$.next({
             pilots: createPilotsPlugin(core),
             ...core,
@@ -21,7 +23,7 @@ export const getEngine = (): Engine => {
     return engine$.value as Engine;
 };
 
-export const destroyEngine = () => {
+export function destroyEngine() {
     engine$.value?.destroy();
     engine$.next(undefined);
 };

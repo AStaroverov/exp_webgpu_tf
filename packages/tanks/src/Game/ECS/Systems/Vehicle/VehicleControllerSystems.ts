@@ -1,45 +1,46 @@
 import { GameDI } from '../../../DI/GameDI.ts';
-import { TankController } from '../../Components/TankController.ts';
+import { TurretController } from '../../Components/TurretController.ts';
+import { VehicleController } from '../../Components/VehicleController.ts';
 import { RevoluteImpulseJoint, Vector2 } from '@dimforge/rapier2d-simd';
-import { Tank } from '../../Components/Tank.ts';
+import { Vehicle } from '../../Components/Vehicle.ts';
 import { RigidBodyState } from '../../Components/Physical.ts';
 import { applyRotationToVector } from '../../../Physical/applyRotationToVector.ts';
 import { query } from 'bitecs';
 import { normalizeAngle } from '../../../../../../../lib/math.ts';
-import { TankTurret } from '../../Components/TankTurret.ts';
-import { TankPart } from '../../Components/TankPart.ts';
+import { VehicleTurret } from '../../Components/VehicleTurret.ts';
+import { VehiclePart } from '../../Components/VehiclePart.ts';
 import { Impulse, TorqueImpulse } from '../../Components/Impulse.ts';
 
-export enum TankEngineType {
+export enum VehicleEngineType {
     v6,
     v8,
     v12,
     v8_turbo,  // Player special engine - faster than v8
 }
 
-export const mapTankEngineLabel = {
-    [TankEngineType.v6]: 'v6',
-    [TankEngineType.v8]: 'v8',
-    [TankEngineType.v12]: 'v12',
-    [TankEngineType.v8_turbo]: 'v8 Turbo',
+export const mapVehicleEngineLabel = {
+    [VehicleEngineType.v6]: 'v6',
+    [VehicleEngineType.v8]: 'v8',
+    [VehicleEngineType.v12]: 'v12',
+    [VehicleEngineType.v8_turbo]: 'v8 Turbo',
 };
 
 const IMPULSE_FACTOR = 15000000000;
 const ROTATION_IMPULSE_FACTOR = 150000000000;
 const mapTypeToFeatures = {
-    [TankEngineType.v6]: {
+    [VehicleEngineType.v6]: {
         impulseFactor: IMPULSE_FACTOR * 0.8,
         rotationImpulseFactor: ROTATION_IMPULSE_FACTOR * 0.9,
     },
-    [TankEngineType.v8]: {
+    [VehicleEngineType.v8]: {
         impulseFactor: IMPULSE_FACTOR,
         rotationImpulseFactor: ROTATION_IMPULSE_FACTOR,
     },
-    [TankEngineType.v12]: {
+    [VehicleEngineType.v12]: {
         impulseFactor: IMPULSE_FACTOR * 2,
         rotationImpulseFactor: ROTATION_IMPULSE_FACTOR * 3,
     },
-    [TankEngineType.v8_turbo]: {
+    [VehicleEngineType.v8_turbo]: {
         impulseFactor: IMPULSE_FACTOR * 2,
         rotationImpulseFactor: ROTATION_IMPULSE_FACTOR * 2,
     },
@@ -47,61 +48,60 @@ const mapTypeToFeatures = {
 
 const nextLinvel = new Vector2(0, 0);
 
-export function createTankPositionSystem({ world } = GameDI) {
+export function createVehiclePositionSystem({ world } = GameDI) {
     return (delta: number) => {
-        const tankEids = query(world, [Tank, TankController]);
+        const vehicleEids = query(world, [Vehicle, VehicleController]);
 
-        for (let i = 0; i < tankEids.length; i++) {
-            const tankEid = tankEids[i];
-            const moveDirection = TankController.move[tankEid];
-            const rotationDirection = TankController.rotation[tankEid];
+        for (let i = 0; i < vehicleEids.length; i++) {
+            const vehicleEid = vehicleEids[i];
+            const moveDirection = VehicleController.move[vehicleEid];
+            const rotationDirection = VehicleController.rotation[vehicleEid];
             const {
                 impulseFactor,
                 rotationImpulseFactor,
-            } = mapTypeToFeatures[Tank.engineType[tankEid] as TankEngineType];
+            } = mapTypeToFeatures[Vehicle.engineType[vehicleEid] as VehicleEngineType];
 
             if (moveDirection === 0 && rotationDirection === 0) continue;
 
-            const rotation = RigidBodyState.rotation[tankEid];
+            const rotation = RigidBodyState.rotation[vehicleEid];
             // Задаем направление движения
             nextLinvel.x = 0;
             nextLinvel.y = -moveDirection * impulseFactor * delta / 1000;
             applyRotationToVector(nextLinvel, nextLinvel, rotation);
 
             // Add linear impulse for movement (will be applied by system)
-            Impulse.add(tankEid, nextLinvel.x, nextLinvel.y);
+            Impulse.add(vehicleEid, nextLinvel.x, nextLinvel.y);
             // Add torque impulse for rotation (will be applied by system)
-            TorqueImpulse.add(tankEid, rotationDirection * rotationImpulseFactor * delta / 1000);
+            TorqueImpulse.add(vehicleEid, rotationDirection * rotationImpulseFactor * delta / 1000);
         }
     };
 }
 
-export function createTankTurretRotationSystem({ world } = GameDI) {
+export function createVehicleTurretRotationSystem({ world } = GameDI) {
     return (delta: number) => {
-        const tankPids = query(world, [Tank, TankController]);
+        const turretEids = query(world, [VehicleTurret, TurretController]);
 
-        for (let i = 0; i < tankPids.length; i++) {
-            rotateByMotor(tankPids[i], delta);
+        for (let i = 0; i < turretEids.length; i++) {
+            rotateByMotor(turretEids[i], delta);
         }
     };
 }
 
 const damping = 0.2;   // коэффициент демпфирования
 const stiffness = 1e6; // коэффициент жесткости (подбирается опытным путем)
-function rotateByMotor(tankEid: number, delta: number, { physicalWorld } = GameDI) {
-    // Получаем данные для башни
-    const turretEid = Tank.turretEId[tankEid];
-    const jointPid = TankPart.jointPid[turretEid];
+function rotateByMotor(turretEid: number, delta: number, { physicalWorld } = GameDI) {
+    const jointPid = VehiclePart.jointPid[turretEid];
     const turretJoint = physicalWorld.getImpulseJoint(jointPid) as RevoluteImpulseJoint;
     if (!turretJoint) return;
 
-    const tankRot = RigidBodyState.rotation[tankEid];
+    const vehicleEid = VehicleTurret.vehicleEId[turretEid];
+    const vehicleRot = RigidBodyState.rotation[vehicleEid];
     const turretRot = RigidBodyState.rotation[turretEid];
-    const turretRotDir = TankController.turretRotation[tankEid];
-    const maxRotationSpeed = TankTurret.rotationSpeed[turretEid];
+    const turretRotDir = TurretController.rotation[turretEid];
+    const maxRotationSpeed = VehicleTurret.rotationSpeed[turretEid];
 
     // Глобальный угол от дула к позиции цели
-    const relTurretRot = normalizeAngle(turretRot - tankRot);
+    const relTurretRot = normalizeAngle(turretRot - vehicleRot);
     // Ограничиваем изменение угла с учётом влияния мыши
     const deltaRot = turretRotDir * maxRotationSpeed * (delta / 1000);
     // Применяем новый угол к мотору
@@ -111,3 +111,4 @@ function rotateByMotor(tankEid: number, delta: number, { physicalWorld } = GameD
         damping,
     );
 }
+

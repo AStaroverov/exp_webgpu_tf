@@ -6,6 +6,7 @@ import { GameDI } from '../../Game/DI/GameDI.ts';
 import { getEntityIdByPhysicalId, RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
 import { PlayerRef } from '../../Game/ECS/Components/PlayerRef.ts';
 import { Tank } from '../../Game/ECS/Components/Tank.ts';
+import { Vehicle } from '../../Game/ECS/Components/Vehicle.ts';
 import { TeamRef } from '../../Game/ECS/Components/TeamRef.ts';
 import { GameMap } from '../../Game/ECS/Entities/GameMap.ts';
 import { CollisionGroup, createCollisionGroups } from '../../Game/Physical/createRigid.ts';
@@ -22,7 +23,7 @@ const tempAllyPosition = new Float64Array(2);
 const tempBulletPosition = new Float64Array(2);
 
 export function snapshotTankInputTensor({ world } = GameDI) {
-    const tankEids = query(world, [Tank, TankInputTensor, RigidBodyState]);
+    const vehicleEids = query(world, [Vehicle, TankInputTensor, RigidBodyState]);
     const offsetX = GameMap.offsetX;
     const offsetY = GameMap.offsetY;
 
@@ -30,21 +31,21 @@ export function snapshotTankInputTensor({ world } = GameDI) {
     TankInputTensor.resetAlliesCoords();
     TankInputTensor.resetBulletsCoords();
 
-    for (let i = 0; i < tankEids.length; i++) {
-        const tankEid = tankEids[i];
+    for (let i = 0; i < vehicleEids.length; i++) {
+        const vehicleEid = vehicleEids[i];
 
-        // Set tank data (with offset-adjusted position)
-        const health = getTankHealth(tankEid);
-        const position = RigidBodyState.position.getBatch(tankEid);
+        // Set vehicle data (with offset-adjusted position)
+        const health = getTankHealth(vehicleEid);
+        const position = RigidBodyState.position.getBatch(vehicleEid);
         tempPosition[0] = position[0] - offsetX;
         tempPosition[1] = position[1] - offsetY;
-        const rotation = RigidBodyState.rotation[tankEid];
-        const linvel = RigidBodyState.linvel.getBatch(tankEid);
-        const turretRotation = RigidBodyState.rotation[Tank.turretEId[tankEid]];
-        const approximateColliderRadius = HeuristicsData.approxColliderRadius[tankEid];
+        const rotation = RigidBodyState.rotation[vehicleEid];
+        const linvel = RigidBodyState.linvel.getBatch(vehicleEid);
+        const turretRotation = RigidBodyState.rotation[Tank.turretEId[vehicleEid]];
+        const approximateColliderRadius = HeuristicsData.approxColliderRadius[vehicleEid];
 
         TankInputTensor.setTankData(
-            tankEid,
+            vehicleEid,
             health,
             tempPosition,
             rotation,
@@ -54,7 +55,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
         );
 
         // Find closest enemies
-        const enemiesEids = findTankEnemiesEids(tankEid);
+        const enemiesEids = findTankEnemiesEids(vehicleEid);
 
         for (let j = 0; j < enemiesEids.length; j++) {
             const enemyEid = enemiesEids[j];
@@ -63,7 +64,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
             tempEnemyPosition[1] = enemyPosition[1] - offsetY;
 
             TankInputTensor.setEnemiesData(
-                tankEid,
+                vehicleEid,
                 j,
                 enemyEid,
                 getTankHealth(enemyEid),
@@ -76,7 +77,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
         }
 
         // Find closest allies
-        const alliesEids = findTankAlliesEids(tankEid);
+        const alliesEids = findTankAlliesEids(vehicleEid);
 
         for (let j = 0; j < alliesEids.length; j++) {
             const allyEid = alliesEids[j];
@@ -85,7 +86,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
             tempAllyPosition[1] = allyPosition[1] - offsetY;
 
             TankInputTensor.setAlliesData(
-                tankEid,
+                vehicleEid,
                 j,
                 allyEid,
                 getTankHealth(allyEid),
@@ -98,7 +99,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
         }
 
         // Find closest bullets
-        const bulletsEids = findTankDangerBullets(tankEid);
+        const bulletsEids = findTankDangerBullets(vehicleEid);
 
         for (let j = 0; j < bulletsEids.length; j++) {
             const bulletEid = bulletsEids[j];
@@ -107,7 +108,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
             tempBulletPosition[1] = bulletPosition[1] - offsetY;
 
             TankInputTensor.setBulletsData(
-                tankEid,
+                vehicleEid,
                 j,
                 bulletEid,
                 tempBulletPosition,

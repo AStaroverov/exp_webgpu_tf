@@ -5,10 +5,10 @@ import { MAX_BULLET_SPEED } from '../../../tanks/src/Game/ECS/Components/Bullet.
 import { HeuristicsData } from '../../../tanks/src/Game/ECS/Components/HeuristicsData.ts';
 import { RigidBodyState } from '../../../tanks/src/Game/ECS/Components/Physical.ts';
 import { Tank } from '../../../tanks/src/Game/ECS/Components/Tank.ts';
-import { TankController } from '../../../tanks/src/Game/ECS/Components/TankController.ts';
 import { getTankHealth, getTankScore } from '../../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
 import { ALLY_BUFFER, ENEMY_BUFFER, TankInputTensor } from '../../../tanks/src/Pilots/Components/TankState.ts';
 import { LEARNING_STEPS } from '../../../ml-common/consts.ts';
+import { TurretController } from '../../../tanks/src/Game/ECS/Components/TurretController.ts';
 
 export const getFramePenalty = (frame: number) =>
     -clamp(Math.log10(1 + frame), 0, 3) / 100;
@@ -71,33 +71,33 @@ function initializeStateRewards() {
 const EPSILON = 1e-6;
 
 export function calculateStateReward(
-    tankEid: number,
+    vehicleEid: number,
     width: number,
     height: number,
     strictness: number
 ): number {
-    const isShooting = TankController.shoot[tankEid] > 0;
-    // const moveDir = TankController.move[tankEid];
-    // const rotationDir = TankController.rotation[tankEid];
-    const [currentTankX, currentTankY] = RigidBodyState.position.getBatch(tankEid);
-    const [currentTankSpeedX, currentTankSpeedY] = RigidBodyState.linvel.getBatch(tankEid);
-    const turretRotation = RigidBodyState.rotation[Tank.turretEId[tankEid]];
-    // const currentShootings = TankController.shoot[tankEid] > 0;
-    // const currentEnemies = findTankEnemiesEids(tankEid);
-    // const currentAllies = findTankAlliesEids(tankEid);
-    // const currentDangerBullets = findTankDangerBullets(tankEid);
+    const isShooting = TurretController.shoot[Tank.turretEId[vehicleEid]] > 0;
+    // const moveDir = VehicleController.move[vehicleEid];
+    // const rotationDir = VehicleController.rotation[vehicleEid];
+    const [currentVehicleX, currentVehicleY] = RigidBodyState.position.getBatch(vehicleEid);
+    const [currentVehicleSpeedX, currentVehicleSpeedY] = RigidBodyState.linvel.getBatch(vehicleEid);
+    const turretRotation = RigidBodyState.rotation[Tank.turretEId[vehicleEid]];
+    // const currentShootings = VehicleController.shoot[vehicleEid] > 0;
+    // const currentEnemies = findTankEnemiesEids(vehicleEid);
+    // const currentAllies = findTankAlliesEids(vehicleEid);
+    // const currentDangerBullets = findTankDangerBullets(vehicleEid);
 
-    const beforePredictEnemiesData = TankInputTensor.enemiesData.getBatch(tankEid);
+    const beforePredictEnemiesData = TankInputTensor.enemiesData.getBatch(vehicleEid);
     const beforePredictEnemiesEids = beforePredictEnemiesData.reduce((acc, v, i) => {
         if (i % ENEMY_BUFFER === 0 && v !== 0) acc.push(v);
         return acc;
     }, [] as EntityId[]);
-    const beforePredictAlliesData = TankInputTensor.alliesData.getBatch(tankEid);
+    const beforePredictAlliesData = TankInputTensor.alliesData.getBatch(vehicleEid);
     const beforePredictAlliesEids = beforePredictAlliesData.reduce((acc, v, i) => {
         if (i % ALLY_BUFFER === 0 && v !== 0) acc.push(v);
         return acc;
     }, [] as EntityId[]);
-    // const beforePredictBulletsData = TankInputTensor.bulletsData.getBatch(tankEid);
+    // const beforePredictBulletsData = TankInputTensor.bulletsData.getBatch(vehicleEid);
     // const beforePredictBulletsEids = beforePredictBulletsData.reduce((acc, v, i) => {
     //     if (i % BULLET_BUFFER === 0 && v !== 0) acc.push(v);
     //     return acc;
@@ -105,20 +105,20 @@ export function calculateStateReward(
 
     const rewards = initializeStateRewards();
 
-    rewards.moving.speed = calculateMovingReward(currentTankSpeedX, currentTankSpeedY);
+    rewards.moving.speed = calculateMovingReward(currentVehicleSpeedX, currentVehicleSpeedY);
 
-    rewards.positioning.mapAwareness = calculateTankMapAwarenessReward(
+    rewards.positioning.mapAwareness = calculateVehicleMapAwarenessReward(
         width,
         height,
-        currentTankX,
-        currentTankY,
-        HeuristicsData.approxColliderRadius[tankEid]
+        currentVehicleX,
+        currentVehicleY,
+        HeuristicsData.approxColliderRadius[vehicleEid]
     );
 
     // 3. Анализ целей и вычисление награды за прицеливание
     const aimingResult = analyzeAiming(
-        currentTankX,
-        currentTankY,
+        currentVehicleX,
+        currentVehicleY,
         turretRotation,
         beforePredictEnemiesEids,
         beforePredictAlliesEids,
@@ -136,14 +136,14 @@ export function calculateStateReward(
     );
 
     rewards.positioning.enemiesPositioning = calculateEnemyDistanceReward(
-        currentTankX,
-        currentTankY,
+        currentVehicleX,
+        currentVehicleY,
         beforePredictEnemiesEids,
     );
 
     rewards.positioning.alliesPositioning = calculateAllyDistanceReward(
-        currentTankX,
-        currentTankY,
+        currentVehicleX,
+        currentVehicleY,
         beforePredictAlliesEids,
     );
 
@@ -190,9 +190,9 @@ function initializeActionRewards() {
     };
 }
 
-export function calculateActionReward(tankEid: number): number {
-    const currentScore = getTankScore(tankEid);
-    const currentHealth = getTankHealth(tankEid);
+export function calculateActionReward(vehicleEid: number): number {
+    const currentScore = getTankScore(vehicleEid);
+    const currentHealth = getTankHealth(vehicleEid);
 
     const rewards = initializeActionRewards();
 
@@ -219,7 +219,7 @@ function calculateMovingReward(linvelX: number, linvelY: number): number {
     return WEIGHTS.MOVING.SPEED * speed / 100
 }
 
-function calculateTankMapAwarenessReward(
+function calculateVehicleMapAwarenessReward(
     width: number,
     height: number,
     x: number,
@@ -253,8 +253,8 @@ function distanceToMap(
 }
 
 function analyzeAiming(
-    tankX: number,
-    tankY: number,
+    vehicleX: number,
+    vehicleY: number,
     turretRotation: number,
     beforePredictEnemiesEids: number[],
     beforePredictAlliesEids: number[],
@@ -275,19 +275,19 @@ function analyzeAiming(
         const enemyVX = RigidBodyState.linvel.get(enemyId, 0);
         const enemyVY = RigidBodyState.linvel.get(enemyId, 1);
 
-        const distToEnemy = hypot(tankX - enemyX, tankY - enemyY);
+        const distToEnemy = hypot(vehicleX - enemyX, vehicleY - enemyY);
         const timeDistToEnemy = distToEnemy / MAX_BULLET_SPEED;
         const futureEnemyX = enemyX + enemyVX * timeDistToEnemy;
         const futureEnemyY = enemyY + enemyVY * timeDistToEnemy;
         const enemyColliderRadius = HeuristicsData.approxColliderRadius[enemyId];
 
-        const aimQuality = computeAimQuality(tankX, tankY, turretRotation, futureEnemyX, futureEnemyY, enemyColliderRadius);
+        const aimQuality = computeAimQuality(vehicleX, vehicleY, turretRotation, futureEnemyX, futureEnemyY, enemyColliderRadius);
 
         // Отслеживаем лучшее прицеливание
         if (aimQuality > bestEnemyAimQuality) {
             bestEnemyAimQuality = aimQuality;
             bestEnemyAimTargetId = enemyId;
-            bestEnemyDistance = hypot(tankX - enemyX, tankY - enemyY);
+            bestEnemyDistance = hypot(vehicleX - enemyX, vehicleY - enemyY);
         }
     }
 
@@ -299,13 +299,13 @@ function analyzeAiming(
         const allyVX = RigidBodyState.linvel.get(allyId, 0);
         const allyVY = RigidBodyState.linvel.get(allyId, 1);
 
-        const distToAlly = hypot(tankX - allyX, tankY - allyY);
+        const distToAlly = hypot(vehicleX - allyX, vehicleY - allyY);
         const timeDistToAlly = distToAlly / MAX_BULLET_SPEED;
         const futureAllyX = allyX + allyVX * timeDistToAlly;
         const futureAllyY = allyY + allyVY * timeDistToAlly;
         const allyColliderRadius = HeuristicsData.approxColliderRadius[allyId];
 
-        let aimQuality = computeAimQuality(tankX, tankY, turretRotation, futureAllyX, futureAllyY, allyColliderRadius);
+        let aimQuality = computeAimQuality(vehicleX, vehicleY, turretRotation, futureAllyX, futureAllyY, allyColliderRadius);
 
         if (bestEnemyAimQuality > 0 && distToAlly > bestEnemyDistance) {
             const distDiff = 1 - (distToAlly - bestEnemyDistance) / distToAlly;
@@ -323,21 +323,21 @@ function analyzeAiming(
 }
 
 function computeAimQuality(
-    tankX: number,
-    tankY: number,
+    vehicleX: number,
+    vehicleY: number,
     turretRotation: number,
     enemyX: number,
     enemyY: number,
     colliderRadius: number,
 ): number {
-    // 1. Вектор «танк → враг»
-    const tankToEnemyX = enemyX - tankX;
-    const tankToEnemyY = enemyY - tankY;
-    const tankToEnemyDist = hypot(tankToEnemyX, tankToEnemyY);
+    // 1. Вектор «vehicle → враг»
+    const vehicleToEnemyX = enemyX - vehicleX;
+    const vehicleToEnemyY = enemyY - vehicleY;
+    const vehicleToEnemyDist = hypot(vehicleToEnemyX, vehicleToEnemyY);
 
     // Нормализуем
-    const enemyNormX = tankToEnemyX / (tankToEnemyDist + EPSILON);
-    const enemyNormY = tankToEnemyY / (tankToEnemyDist + EPSILON);
+    const enemyNormX = vehicleToEnemyX / (vehicleToEnemyDist + EPSILON);
+    const enemyNormY = vehicleToEnemyY / (vehicleToEnemyDist + EPSILON);
 
     // 2. Вектор направления ствола
     //    turretDir = (cos φ, sin φ), φ = tankRot + turretRot
@@ -359,7 +359,7 @@ function computeAimQuality(
     const angleAimQuality = smoothstep(PI / 4, 0, abs(signedAngle));
 
     // 4. Оценка «касательного» выстрела
-    const tangentialDistance = sin(angle) * tankToEnemyDist;  // расстояние от луча до центра врага
+    const tangentialDistance = sin(angle) * vehicleToEnemyDist;  // расстояние от луча до центра врага
     const tangentialAimQuality = smoothstep(colliderRadius * 1.5, 0, abs(tangentialDistance));
 
     // 5. Итог
@@ -388,8 +388,8 @@ function calculateShootingReward(
 }
 
 function calculateEnemyDistanceReward(
-    tankX: number,
-    tankY: number,
+    vehicleX: number,
+    vehicleY: number,
     beforePredictEnemiesEids: number[],
 ): number {
     let positioningReward = 0;
@@ -400,7 +400,7 @@ function calculateEnemyDistanceReward(
         const enemyY = RigidBodyState.position.get(enemyId, 1);
         const colliderRadius = HeuristicsData.approxColliderRadius[enemyId];
 
-        const distToEnemy = hypot(tankX - enemyX, tankY - enemyY);
+        const distToEnemy = hypot(vehicleX - enemyX, vehicleY - enemyY);
         const minDist = colliderRadius * 2;
 
         if (distToEnemy < minDist) {
@@ -413,8 +413,8 @@ function calculateEnemyDistanceReward(
 }
 
 function calculateAllyDistanceReward(
-    tankX: number,
-    tankY: number,
+    vehicleX: number,
+    vehicleY: number,
     beforePredictAlliesEids: number[],
 ): number {
     let positioningReward = 0;
@@ -425,7 +425,7 @@ function calculateAllyDistanceReward(
         const allyY = RigidBodyState.position.get(allyId, 1);
         const colliderRadius = HeuristicsData.approxColliderRadius[allyId];
 
-        const distToAlly = hypot(tankX - allyX, tankY - allyY);
+        const distToAlly = hypot(vehicleX - allyX, vehicleY - allyY);
         const minDist = colliderRadius * 2;
 
         if (distToAlly < minDist) {

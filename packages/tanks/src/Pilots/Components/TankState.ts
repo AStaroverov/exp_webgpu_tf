@@ -29,6 +29,15 @@ export const TankInputTensor = component({
 
     addComponent(world: World, eid: number) {
         addComponent(world, eid, TankInputTensor);
+        TankInputTensor.health[eid] = 0;
+        TankInputTensor.position.getBatch(eid).fill(0);
+        TankInputTensor.rotation[eid] = 0;
+        TankInputTensor.speed.getBatch(eid).fill(0);
+        TankInputTensor.turretRotation[eid] = 0;
+        TankInputTensor.colliderRadius[eid] = 0;
+        TankInputTensor.enemiesData.getBatch(eid).fill(0);
+        TankInputTensor.alliesData.getBatch(eid).fill(0);
+        TankInputTensor.bulletsData.getBatch(eid).fill(0);
     },
 
     // Methods

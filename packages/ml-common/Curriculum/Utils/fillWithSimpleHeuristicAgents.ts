@@ -2,10 +2,10 @@ import { SimpleBot, SimpleBotFeatures } from '../../../tanks/src/Pilots/Agents/S
 import { Scenario } from '../types.ts';
 
 export function fillWithSimpleHeuristicAgents(episode: Scenario, features: SimpleBotFeatures) {
-    const freeTanks = episode.getFreeTankEids();
+    const freeVehicles = episode.getFreeVehicleEids();
 
-    for (const tankEid of freeTanks) {
-        const agent = new SimpleBot(tankEid, features);
-        episode.setPilot(tankEid, agent);
+    for (const vehicleEid of freeVehicles) {
+        const agent = new SimpleBot(vehicleEid, features);
+        episode.setPilot(vehicleEid, agent);
     }
 }

@@ -12,6 +12,7 @@ export const Rope = component({
 
     addComponent: (world: World, eid: number, points: ArrayLike<number> = []) => {
         addComponent(world, eid, Rope);
+        Rope.points.getBatch(eid).fill(0);
         Rope.points.setBatch(eid, points);
     },
     set$: obs((eid: number, points: ArrayLike<number>) => {

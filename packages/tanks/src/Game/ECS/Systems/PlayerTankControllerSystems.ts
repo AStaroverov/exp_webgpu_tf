@@ -1,6 +1,7 @@
-import { TankController } from '../Components/TankController.ts';
-import { clamp, isNil } from 'lodash-es';
 import { Tank } from '../Components/Tank.ts';
+import { TurretController } from '../Components/TurretController.ts';
+import { VehicleController } from '../Components/VehicleController.ts';
+import { clamp, isNil } from 'lodash-es';
 import { PlayerEnvDI } from '../../DI/PlayerEnvDI.ts';
 import { RenderDI } from '../../DI/RenderDI.ts';
 import { RigidBodyState } from '../Components/Physical.ts';
@@ -64,8 +65,8 @@ export function createPlayerTankPositionSystem({ document } = PlayerEnvDI) {
 
     const tick = () => {
         if (isPlayerExist() ) {
-            TankController.setMove$(PlayerEnvDI.tankEid!, move);
-            TankController.setRotate$(PlayerEnvDI.tankEid!, rotation);
+            VehicleController.setMove$(PlayerEnvDI.tankEid!, move);
+            VehicleController.setRotate$(PlayerEnvDI.tankEid!, rotation);
         }
     };
     const destroy = () => {
@@ -85,7 +86,7 @@ export function createPlayerTankTurretRotationSystem({ document } = PlayerEnvDI)
 
     const tick = () => {
         if (isPlayerExist() && lastEvent) {
-            const tankRot = RigidBodyState.rotation[PlayerEnvDI.tankEid!];
+            const vehicleRot = RigidBodyState.rotation[PlayerEnvDI.tankEid!];
             const turretRot = RigidBodyState.rotation[Tank.turretEId[PlayerEnvDI.tankEid!]];
             const turretPos = RigidBodyState.position.getBatch(Tank.turretEId[PlayerEnvDI.tankEid!]);
 
@@ -94,11 +95,12 @@ export function createPlayerTankTurretRotationSystem({ document } = PlayerEnvDI)
 
             // Глобальный угол от дула к позиции цели
             const targetRot = Math.atan2(worldY - turretPos[1], worldX - turretPos[0]) + Math.PI / 2;
-            const relTurretRot = normalizeAngle(turretRot - tankRot);
-            const relTargetTurretRot = normalizeAngle(targetRot - tankRot);
+            const relTurretRot = normalizeAngle(turretRot - vehicleRot);
+            const relTargetTurretRot = normalizeAngle(targetRot - vehicleRot);
             const deltaRot = normalizeAngle(relTargetTurretRot - relTurretRot);
 
-            TankController.setTurretRotation$(PlayerEnvDI.tankEid!, clamp(deltaRot, -1, 1));}
+            const turretEid = Tank.turretEId[PlayerEnvDI.tankEid!];
+            TurretController.setRotation$(turretEid, clamp(deltaRot, -1, 1));}
     };
     const destroy = () => {
         document.removeEventListener('mousemove', callback);
@@ -144,7 +146,10 @@ export function createPlayerTankBulletSystem({ document } = PlayerEnvDI, { canva
     canvas.addEventListener('mouseup', onMouseUp);
 
     const tick = () => {
-        isPlayerExist() && TankController.setShooting$(PlayerEnvDI.tankEid!, shooting);
+        if (isPlayerExist()) {
+            const turretEid = Tank.turretEId[PlayerEnvDI.tankEid!];
+            TurretController.setShooting$(turretEid, shooting);
+        }
     };
 
     const destroy = () => {
@@ -158,7 +163,7 @@ export function createPlayerTankBulletSystem({ document } = PlayerEnvDI, { canva
 }
 
 function isPlayerExist({ world } = GameDI, { tankEid } = PlayerEnvDI) {
-    return !isNil(tankEid) && entityExists(world,tankEid)
+    return !isNil(tankEid) && entityExists(world, tankEid) && entityExists(world, Tank.turretEId[tankEid])
 }
 
 function screenToWorld(screenX: number, screenY: number): [number, number] {

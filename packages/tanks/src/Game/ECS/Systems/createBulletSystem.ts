@@ -1,26 +1,23 @@
 import { query } from 'bitecs';
-import { GlobalTransform } from '../../../../../renderer/src/ECS/Components/Transform.ts';
 import { GameDI } from '../../DI/GameDI.ts';
-import { PlayerRef } from '../Components/PlayerRef.ts';
-import { Tank } from '../Components/Tank.ts';
-import { TankController } from '../Components/TankController.ts';
-
-import { TankTurret } from '../Components/TankTurret.ts';
+import { Firearms } from '../Components/Firearms.ts';
+import { TurretController } from '../Components/TurretController.ts';
+import { VehicleTurret } from '../Components/VehicleTurret.ts';
 import { spawnBullet } from '../Entities/Bullet.ts';
 
 export function createSpawnerBulletsSystem({ world } = GameDI) {
     return ((delta: number) => {
-        const tankEids = query(world, [PlayerRef, GlobalTransform, Tank, TankController]);
+        const turretEids = query(world, [VehicleTurret, TurretController, Firearms]);
 
-        for (let i = 0; i < tankEids.length; i++) {
-            const tankEid = tankEids[i];
-            const turretEid = Tank.turretEId[tankEid];
+        for (let i = 0; i < turretEids.length; i++) {
+            const turretEid = turretEids[i];
 
-            TankTurret.updateReloading(turretEid, delta);
-            if (!TankController.shouldShoot(tankEid) || TankTurret.isReloading(turretEid)) continue;
-            TankTurret.startReloading(turretEid);
+            Firearms.updateReloading(turretEid, delta);
+            if (!TurretController.shouldShoot(turretEid) || Firearms.isReloading(turretEid)) continue;
+            Firearms.startReloading(turretEid);
 
-            spawnBullet(tankEid);
+            const vehicleEid = VehicleTurret.vehicleEId[turretEid];
+            spawnBullet(vehicleEid);
         }
     });
 }

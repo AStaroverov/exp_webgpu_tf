@@ -1,6 +1,6 @@
 import { query } from 'bitecs';
 import { randomRangeInt } from '../../../lib/random.ts';
-import { Tank } from '../../tanks/src/Game/ECS/Components/Tank.ts';
+import { Vehicle } from '../../tanks/src/Game/ECS/Components/Vehicle.ts';
 import { getTankTeamId } from '../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
 import { CurrentActorAgent } from '../../tanks/src/Pilots/Agents/CurrentActorAgent.ts';
 import { createPilotsPlugin } from '../../tanks/src/Pilots/createPilotsPlugin.ts';
@@ -29,7 +29,7 @@ export function createScenarioBase(options: Parameters<typeof createBattlefield>
     const activeTeam = getTankTeamId(tanks[0]);
     const initialTeamHealth = getTeamHealth(tanks);
 
-    const getTankEids = () => query(game.world, [Tank]);
+    const getVehicleEids = () => query(game.world, [Vehicle]);
     const getSuccessRatio = () => computeSuccessRatio(activeTeam, initialTeamHealth, getTeamHealth(tanks));
     
     const scenario: Scenario = {
@@ -39,7 +39,7 @@ export function createScenarioBase(options: Parameters<typeof createBattlefield>
         index: options.index,
         isTrain,
 
-        getTankEids,
+        getVehicleEids,
         getTeamsCount,
         getSuccessRatio,
     }

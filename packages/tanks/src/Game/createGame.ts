@@ -35,7 +35,7 @@ import { createTankDecayOutOfZoneSystem } from './ECS/Systems/Tank/createTankDec
 import { createVisualizationTracksSystem } from './ECS/Systems/Tank/createVisualizationTracksSystem.ts';
 import { createSpawnTankTracksSystem } from './ECS/Systems/Tank/createSpawnTankTracksSystem.ts';
 import { createUpdateTankTracksSystem } from './ECS/Systems/Tank/createUpdateTankTracksSystem.ts';
-import { createTankPositionSystem, createTankTurretRotationSystem } from './ECS/Systems/Tank/TankControllerSystems.ts';
+import { createVehiclePositionSystem, createVehicleTurretRotationSystem } from './ECS/Systems/Vehicle/VehicleControllerSystems.ts';
 import { initPhysicalWorld } from './Physical/initPhysicalWorld.ts';
 import { createProgressSystem } from './ECS/Systems/createProgressSystem.ts';
 import { createCameraSystem, setCameraTarget, setInfiniteMapMode, initCameraPosition, CameraState } from './ECS/Systems/Camera/CameraSystem.ts';
@@ -67,8 +67,8 @@ export function createGame({ width, height }: {
     // const updateMap = createMapSystem();
     const execTransformSystem = createTransformSystem(world);
 
-    const updateTankPosition = createTankPositionSystem();
-    const updateTankTurretRotation = createTankTurretRotationSystem();
+    const updateVehiclePosition = createVehiclePositionSystem();
+    const updateVehicleTurretRotation = createVehicleTurretRotationSystem();
 
     const syncRigidBodyState = createRigidBodyStateSystem();
     const applyRigidBodyDeltaToLocalTransform = createApplyRigidBodyToTransformSystem();
@@ -76,8 +76,8 @@ export function createGame({ width, height }: {
 
     const eventQueue = new EventQueue(true);
     const physicalFrame = (delta: number) => {
-        updateTankPosition(delta);
-        updateTankTurretRotation(delta);
+        updateVehiclePosition(delta);
+        updateVehicleTurretRotation(delta);
 
         execTransformSystem();
         applyImpulses();
@@ -140,6 +140,8 @@ export function createGame({ width, height }: {
     const collectDebris = createDebrisCollectorSystem();
 
     GameDI.gameTick = (delta: number) => {
+        if (GameDI.world === null) return;
+
         physicalFrame(delta);
 
         GameDI.plugins.systems[SystemGroup.Before].forEach(system => system(delta));
@@ -298,11 +300,15 @@ export function createGame({ width, height }: {
             updatePlayerTankTurretRotation.destroy();
 
             PlayerEnvDI.tankEid = null;
+            PlayerEnvDI.playerId = null;
             PlayerEnvDI.document = null!;
             PlayerEnvDI.window = null!;
             PlayerEnvDI.destroy = null!;
             PlayerEnvDI.inputFrame = null!;
         };
+    };
+    GameDI.setPlayerId = (playerId: null | EntityId) => {
+        PlayerEnvDI.playerId = playerId;
     };
     GameDI.setPlayerTank = (tankEid: null | EntityId) => {
         PlayerEnvDI.tankEid = tankEid;

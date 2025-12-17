@@ -1,37 +1,38 @@
-import { hasComponent, query } from 'bitecs';
+import { query } from 'bitecs';
 import { GameDI } from '../../../DI/GameDI.ts';
 import { Tank } from '../../Components/Tank.ts';
-import { TankPart } from '../../Components/TankPart.ts';
+import { VehiclePart } from '../../Components/VehiclePart.ts';
 import { RigidBodyState } from '../../Components/Physical.ts';
 import { Vector2 } from '@dimforge/rapier2d-simd';
 import { abs, cos, PI, sign, sin } from '../../../../../../../lib/math.ts';
 import { Slot } from '../../Components/Slot.ts';
 import { SlotPartType } from '../../Components/SlotConfig.ts';
 import { Children } from '../../Components/Children.ts';
+import { getSlotFillerEid, isSlot } from '../../Utils/SlotUtils.ts';
 
 export function createVisualizationTracksSystem({ world, physicalWorld } = GameDI) {
     const vect2 = new Vector2(0, 0);
 
     return (_delta: number) => {
-        const tankEids = query(world, [Tank]);
+        const vehicleEids = query(world, [Tank]);
 
-        for (const tankEid of tankEids) {
-            const caterpillarsLimit = Tank.caterpillarsLength[tankEid] / 2;
-            const linvel = RigidBodyState.linvel.getBatch(tankEid);
-            const angvel = RigidBodyState.angvel[tankEid];
-            const rotation = RigidBodyState.rotation[tankEid];
+        for (const vehicleEid of vehicleEids) {
+            const caterpillarsLimit = Tank.caterpillarsLength[vehicleEid] / 2;
+            const linvel = RigidBodyState.linvel.getBatch(vehicleEid);
+            const angvel = RigidBodyState.angvel[vehicleEid];
+            const rotation = RigidBodyState.rotation[vehicleEid];
 
             const forwardX = cos(rotation - PI / 2);
             const forwardY = sin(rotation - PI / 2);
             const speed = linvel[0] * forwardX + linvel[1] * forwardY;
 
-            // Iterate children of tank, filter by Slot component
-            const childCount = Children.entitiesCount[tankEid];
+            // Iterate children of vehicle, filter by Slot component
+            const childCount = Children.entitiesCount[vehicleEid];
             for (let i = 0; i < childCount; i++) {
-                const slotEid = Children.entitiesIds.get(tankEid, i);
+                const slotEid = Children.entitiesIds.get(vehicleEid, i);
                 
                 // Skip non-slot children
-                if (!hasComponent(world, slotEid, Slot)) continue;
+                if (!isSlot(slotEid)) continue;
                 
                 // Skip non-caterpillar slots by partType
                 if (Slot.partType[slotEid] !== SlotPartType.Caterpillar) continue;
@@ -56,10 +57,10 @@ export function createVisualizationTracksSystem({ world, physicalWorld } = GameD
                 Slot.anchorY[slotEid] = anchorY;
 
                 // Get filler from slot's children (O(1))
-                const fillerEid = Slot.getFillerEid(slotEid);
+                const fillerEid = getSlotFillerEid(slotEid);
                 if (fillerEid === 0) continue;
 
-                const jointPid = TankPart.jointPid[fillerEid];
+                const jointPid = VehiclePart.jointPid[fillerEid];
                 const joint = physicalWorld.getImpulseJoint(jointPid);
 
                 if (jointPid === 0 || joint == null) continue;

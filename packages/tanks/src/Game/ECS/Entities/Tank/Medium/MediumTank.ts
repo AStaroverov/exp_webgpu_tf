@@ -2,11 +2,11 @@ import { PI } from '../../../../../../../../lib/math.ts';
 import { TColor } from '../../../../../../../renderer/src/ECS/Components/Common.ts';
 import { BulletCaliber } from '../../../Components/Bullet.ts';
 import { SlotPartType } from '../../../Components/SlotConfig.ts';
-import { TankType } from '../../../Components/Tank.ts';
-import { TankEngineType } from '../../../Systems/Tank/TankControllerSystems.ts';
+import { VehicleType } from '../../../Components/Vehicle.ts';
+import { VehicleEngineType } from '../../../Systems/Vehicle/VehicleControllerSystems.ts';
+import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../../Vehicle/VehicleParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from '../Common/Options.ts';
 import { createTankBase, createTankTurret } from '../Common/Tank.ts';
-import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../Common/TankParts.ts';
 import {
     caterpillarLength,
     caterpillarSetLeft,
@@ -37,8 +37,8 @@ export function createMediumTank(opts: {
     options.size = SIZE;
     options.padding = PADDING;
     options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
-    options.tankType = TankType.Medium;
-    options.engineType = TankEngineType.v8;
+    options.vehicleType = VehicleType.MediumTank;
+    options.engineType = VehicleEngineType.v8;
     options.caterpillarLength = caterpillarLength;
 
     options.density = DENSITY * 10;
@@ -50,9 +50,9 @@ export function createMediumTank(opts: {
     options.width = PADDING * 8;
     options.height = PADDING * 8;
     options.turret.rotationSpeed = PI * 0.6;
-    options.turret.reloadingDuration = 500;
-    options.turret.bulletCaliber = BulletCaliber.Medium;
-    options.turret.bulletStartPosition = [0, -13 * PADDING];
+    options.firearms.reloadingDuration = 500;
+    options.firearms.bulletCaliber = BulletCaliber.Medium;
+    options.firearms.bulletStartPosition = [0, -13 * PADDING];
     const [turretEid] = createTankTurret(options, tankEid, tankPid);
 
     createSlotEntities(tankEid, hullSet, options.color, SlotPartType.HullPart);

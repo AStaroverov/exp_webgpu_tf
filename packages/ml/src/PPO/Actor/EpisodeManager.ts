@@ -136,7 +136,7 @@ export class EpisodeManager {
         scenario: Scenario,
     ) {
         const actors = scenario.getAliveActors();
-        const currentTanks = scenario.getTankEids();
+        const currentTanks = scenario.getVehicleEids();
         const gameOverByActorCount = actors.length <= 0;
         const gameOverByTankCount = currentTanks.length <= 1;
         const gameOverByTeamWin = scenario.getTeamsCount() === 1;

@@ -4,7 +4,7 @@ import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 import { EntityId, hasComponent, onSet, query } from 'bitecs';
 import { Bullet, BulletCaliber, mapBulletCaliber } from '../Components/Bullet.ts';
 import { createChangeDetector } from '../../../../../renderer/src/ECS/Systems/ChangedDetectorSystem.ts';
-import { TankPart } from '../Components/TankPart.ts';
+import { VehiclePart } from '../Components/VehiclePart.ts';
 import { tearOffTankPart } from '../Entities/Tank/TankUtils.ts';
 import { Score } from '../Components/Score.ts';
 import { TeamRef } from '../Components/TeamRef.ts';
@@ -18,7 +18,7 @@ import {
 } from '../../../../../renderer/src/ECS/Components/Transform.ts';
 import { clamp } from 'lodash';
 import { Parent } from '../Components/Parent.ts';
-import { Tank } from '../Components/Tank.ts';
+import { Vehicle } from '../Components/Vehicle.ts';
 import { SoundType } from '../Components/Sound.ts';
 import { spawnSoundAtParent } from '../Entities/Sound.ts';
 
@@ -31,30 +31,30 @@ export function createHitableSystem({ world } = GameDI) {
 
         if (!hitableChanges.hasChanges()) return;
 
-        const tankPartEids = query(world, [TankPart, Hitable]);
-        const hittedTanks = new Set<EntityId>();
+        const vehiclePartEids = query(world, [VehiclePart, Hitable]);
+        const hittedVehicles = new Set<EntityId>();
         
-        for (let i = 0; i < tankPartEids.length; i++) {
-            const tankPartEid = tankPartEids[i];
-            if (!hitableChanges.has(tankPartEid)) continue;
+        for (let i = 0; i < vehiclePartEids.length; i++) {
+            const vehiclePartEid = vehiclePartEids[i];
+            if (!hitableChanges.has(vehiclePartEid)) continue;
 
-            const hitEids = Hitable.getHitEids(tankPartEid);
-            const tankEid = Parent.id[Parent.id[tankPartEid]];
+            const hitEids = Hitable.getHitEids(vehiclePartEid);
+            const vehicleEid = Parent.id[Parent.id[vehiclePartEid]];
 
-            applyDamage(tankPartEid);
-            applyScores(tankPartEid, hitEids);
+            applyDamage(vehiclePartEid);
+            applyScores(vehiclePartEid, hitEids);
 
-            if (hasComponent(world, tankEid, Tank)) {
-                hittedTanks.add(tankEid);
+            if (hasComponent(world, vehicleEid, Vehicle)) {
+                hittedVehicles.add(vehicleEid);
             }
             
-            if (!Hitable.isDestroyed(tankPartEid)) continue;
+            if (!Hitable.isDestroyed(vehiclePartEid)) continue;
 
-            tearOffTankPart(tankPartEid, true);
+            tearOffTankPart(vehiclePartEid, true);
         }
 
-        for (const tankEid of hittedTanks) {
-           throttledSpawnSoundAtParent(tankEid, time, 200);
+        for (const vehicleEid of hittedVehicles) {
+           throttledSpawnSoundAtParent(vehicleEid, time, 200);
         }
 
         const bulletIds = query(world, [Bullet, Hitable]);
@@ -104,18 +104,18 @@ function applyDamage(targetEid: number, { world } = GameDI) {
     Hitable.resetHits(targetEid);
 }
 
-function applyScores(tankPartEid: EntityId, hitEids: Float64Array, { world } = GameDI) {
+function applyScores(vehiclePartEid: EntityId, hitEids: Float64Array, { world } = GameDI) {
     for (const hitEid of hitEids) {
         if (
-            hasComponent(world, tankPartEid, TeamRef)
+            hasComponent(world, vehiclePartEid, TeamRef)
             && hasComponent(world, hitEid, TeamRef)
             && hasComponent(world, hitEid, PlayerRef)
         ) {
-            const tankPartTeamId = TeamRef.id[tankPartEid];
+            const vehiclePartTeamId = TeamRef.id[vehiclePartEid];
             const secondTeamId = TeamRef.id[hitEid];
             const playerId = PlayerRef.id[hitEid];
 
-            Score.updateScore(playerId, tankPartTeamId === secondTeamId ? -1 : 1);
+            Score.updateScore(playerId, vehiclePartTeamId === secondTeamId ? -1 : 1);
         }
     }
 

@@ -2,7 +2,7 @@ import { VariableKind, VariableMeta } from '../../../Struct/VariableMeta.ts';
 import { ShaderMeta } from '../../../WGSL/ShaderMeta.ts';
 import { wgsl } from '../../../WGSL/wgsl.ts';
 
-export const MAX_INSTANCE_COUNT = 10000;
+export const MAX_INSTANCE_COUNT = 10_000;
 
 export const shaderMeta = new ShaderMeta(
     {

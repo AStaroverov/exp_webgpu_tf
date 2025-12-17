@@ -6,20 +6,20 @@ import {
     getTankHealthAbs,
     syncRemoveTank,
 } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { addTank, getTankEids, getTankType } from './engineMethods.ts';
+import { addTank, getVehicleEids, getVehicleType } from './engineMethods.ts';
 import { dedobs, DEDOBS_REMOVE_DELAY, DEDOBS_RESET_DELAY } from '../../../../../../lib/Rx/dedobs.ts';
 import { EntityId } from 'bitecs';
 import { getEngine } from './engine.ts';
 import { hashArray } from '../../../../../../lib/hashArray.ts';
-import { TankType } from '../../../Game/ECS/Components/Tank.ts';
+import { TankVehicleType } from '../../../Game/ECS/Entities/Tank/createTank.ts';
 import { PLAYER_TEAM_ID } from './playerMethods.ts';
 import { CurrentActorAgent } from '../../../Pilots/Agents/CurrentActorAgent.ts';
 
 export const mapSlotToEid$ = new BehaviorSubject(new Map<number, number>());
 
-export function changeTankType(tankEid: EntityId, slot: number, tankType: TankType) {
-    syncRemoveTank(tankEid);
-    addTank(slot, PLAYER_TEAM_ID, tankType);
+export function changeTankType(vehicleEid: EntityId, slot: number, vehicleType: TankVehicleType) {
+    syncRemoveTank(vehicleEid);
+    addTank(slot, PLAYER_TEAM_ID, vehicleType);
 }
 
 // export function changeTankPilot(tankEid: EntityId, slot: number, pilot: number) {
@@ -27,15 +27,15 @@ export function changeTankType(tankEid: EntityId, slot: number, tankType: TankTy
 //
 // }
 
-export const tankEids$ = frameInterval(160).pipe(
-    map(() => Array.from(getTankEids())),
+export const vehicleEids$ = frameInterval(160).pipe(
+    map(() => Array.from(getVehicleEids())),
     distinctUntilChanged((a, b) => {
         if (a.length !== b.length) return false;
         return hashArray(a) === hashArray(b);
     }),
 );
 
-export const getTankState$ = dedobs(
+export const getVehicleState$ = dedobs(
     (id: number) => {
         return frameInterval(32 * 100).pipe(
             map(() => {
@@ -54,10 +54,10 @@ export const getTankState$ = dedobs(
     },
 );
 
-export const getTankType$ = dedobs(
+export const getVehicleType$ = dedobs(
     (id: number) => {
         return frameInterval(32 * 100).pipe(
-            map(() => getTankType(id)),
+            map(() => getVehicleType(id)),
         );
     },
     {
@@ -67,15 +67,15 @@ export const getTankType$ = dedobs(
 );
 
 export const finalizeGameState = async () => {
-    const playerTeamEids = Array.from(getTankEids());
+    const playerTeamEids = Array.from(getVehicleEids());
 
     for (let i = 0; i < playerTeamEids.length; i++) {
-        addTank(i, 1, getTankType(playerTeamEids[i]));
+        addTank(i, 1, getVehicleType(playerTeamEids[i]) as TankVehicleType);
     }
 
-    for (const tankEid of getTankEids()) {
-        const agent = new CurrentActorAgent(tankEid, false);
-        getEngine().pilots.setPilot(tankEid, agent);
+    for (const vehicleEid of getVehicleEids()) {
+        const agent = new CurrentActorAgent(vehicleEid, false);
+        getEngine().pilots.setPilot(vehicleEid, agent);
     }
 
     // Sync all AI agents to load TensorFlow models

@@ -14,7 +14,7 @@ export enum BulletCaliber {
 const BulletLightCaliber = {
     width: 3,
     height: 8,
-    speed: 300,
+    speed: 500,
     density: 3_000,
     damage: 3,
     linearDamping: 0.4, // Light bullets lose speed quickly
@@ -22,7 +22,7 @@ const BulletLightCaliber = {
 const BulletMediumCaliber = {
     width: 5,
     height: 10,
-    speed: 350,
+    speed: 550,
     density: 6_000,
     damage: 6,
     linearDamping: 0.2, // Medium bullets have moderate drag
@@ -30,7 +30,7 @@ const BulletMediumCaliber = {
 const BulletHeavyCaliber = {
     width: 7,
     height: 14,
-    speed: 450,
+    speed: 650,
     density: 10_000,
     damage: 10,
     linearDamping: 0.075, // Heavy bullets maintain speed longer

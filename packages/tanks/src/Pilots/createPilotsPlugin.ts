@@ -13,10 +13,10 @@ export function createPilotsPlugin(game: typeof GameDI) {
         Pilot.dispose();
     });
 
-    const setPlayerPilot = (tankEid: number) => {
+    const setPlayerPilot = (vehicleEid: number) => {
         // TODO: Move impl to createPilotsManager
         GameDI.enablePlayer();
-        GameDI.setPlayerTank(tankEid);
+        GameDI.setPlayerTank(vehicleEid);
     };
 
     return {
@@ -27,10 +27,10 @@ export function createPilotsPlugin(game: typeof GameDI) {
         getPilots,
         getAliveActors,
         getAlivePilots,
-        getFreeTankEids,
+        getFreeVehicleEids: getFreeTankEids,
     };
 }
 
-function setPilot(tankEid: EntityId, agent: TankAgent, { world } = GameDI) {
-    Pilot.addComponent(world, tankEid, agent);
+function setPilot(vehicleEid: EntityId, agent: TankAgent, { world } = GameDI) {
+    Pilot.addComponent(world, vehicleEid, agent);
 }

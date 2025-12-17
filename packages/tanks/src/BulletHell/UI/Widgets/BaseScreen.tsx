@@ -18,7 +18,7 @@ export function BaseScreen({ className, style }: { className?: string, style?: C
 
     const handleStart = useCallback(async () => {
         setIsLoading(true);
-        await startBulletHellGame();
+        await startBulletHellGame(3);
         toggleBulletHellGame(true);
         setIsLoading(false);
     }, []);

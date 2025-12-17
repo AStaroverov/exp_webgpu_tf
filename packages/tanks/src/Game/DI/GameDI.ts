@@ -13,6 +13,7 @@ export const GameDI: {
     enableSound: () => void;
     setRenderTarget: (canvas: undefined | null | HTMLCanvasElement) => void;
     enablePlayer: () => void
+    setPlayerId: (playerId: null | EntityId) => void
     setPlayerTank: (tankEid: null | EntityId) => void
     setCameraTarget: (tankEid: null | EntityId) => void
     setInfiniteMapMode: (enabled: boolean) => void
@@ -28,6 +29,7 @@ export const GameDI: {
     enableSound: null as any,
     setRenderTarget: null as any,
     enablePlayer: null as any,
+    setPlayerId: null as any,
     setPlayerTank: null as any,
     setCameraTarget: null as any,
     setInfiniteMapMode: null as any,

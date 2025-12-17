@@ -1,7 +1,7 @@
 import { addComponent, EntityId, Not, query, World } from 'bitecs';
 import { isFunction } from 'lodash-es';
 import { GameDI } from '../../Game/DI/GameDI.ts';
-import { Tank } from '../../Game/ECS/Components/Tank.ts';
+import { Vehicle } from '../../Game/ECS/Components/Vehicle.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { CurrentActorAgent, TankAgent } from '../Agents/CurrentActorAgent.ts';
 
@@ -44,5 +44,5 @@ export function getPilots(): readonly TankAgent[] {
 }
 
 export function getFreeTankEids({ world } = GameDI) {
-    return query(world, [Tank, Not(Pilot)]);
+    return query(world, [Vehicle, Not(Pilot)]);
 }

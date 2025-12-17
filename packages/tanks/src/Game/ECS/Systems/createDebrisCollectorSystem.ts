@@ -5,12 +5,13 @@ import { PlayerEnvDI } from '../../DI/PlayerEnvDI.ts';
 import { Debris } from '../Components/Debris.ts';
 import { getEntityIdByPhysicalId, RigidBodyState } from '../Components/Physical.ts';
 import { Tank } from '../Components/Tank.ts';
+import { Vehicle } from '../Components/Vehicle.ts';
 import { CollisionGroup, createCollisionGroups } from '../../Physical/createRigid.ts';
 import { HeuristicsData } from '../Components/HeuristicsData.ts';
 import { getTankTotalSlotCount, getTankCurrentPartsCount } from '../Entities/Tank/TankUtils.ts';
 import { spawnSoundAtPosition, SoundType } from './Sound/index.ts';
-import { fillSlot, findFirstEmptySlot, getEmptySlotsCount } from '../Entities/Tank/Common/TankParts.ts';
-import { mutatedOptions, resetOptions } from '../Entities/Tank/Common/Options.ts';
+import { fillSlot, findFirstEmptySlot, getEmptySlotsCount } from '../Entities/Vehicle/VehicleParts.ts';
+import { mutatedOptions, resetOptions } from '../Entities/Vehicle/Options.ts';
 import { PlayerRef } from '../Components/PlayerRef.ts';
 import { TeamRef } from '../Components/TeamRef.ts';
 import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
@@ -32,8 +33,8 @@ export function createDebrisCollectorSystem({ world, physicalWorld } = GameDI) {
         const emptySlotsCount = getEmptySlotsCount(playerTankEid);
         if (emptySlotsCount === 0) return;
 
-        // Check if player tank exists
-        if (!hasComponent(world, playerTankEid, Tank)) return;
+        // Check if player vehicle exists
+        if (!hasComponent(world, playerTankEid, Vehicle)) return;
 
         // Check if tank has empty slots
         const totalSlots = getTankTotalSlotCount(playerTankEid);
@@ -100,14 +101,17 @@ export function createDebrisCollectorSystem({ world, physicalWorld } = GameDI) {
     };
 }
 
-function fillSlots(tankEid: number, debrisEids: EntityId[]) {
-    const turretEid = Tank.turretEId[tankEid];
+function fillSlots(vehicleEid: number, debrisEids: EntityId[]) {
+    const turretEid = Tank.turretEId[vehicleEid];
     const options = resetOptions(mutatedOptions);
-    options.playerId = PlayerRef.id[tankEid];
-    options.teamId = TeamRef.id[tankEid];    
+    options.playerId = PlayerRef.id[vehicleEid];
+    options.teamId = TeamRef.id[vehicleEid];
+    options.x = RigidBodyState.position.get(vehicleEid, 0);
+    options.y = RigidBodyState.position.get(vehicleEid, 1);
+    options.rotation = RigidBodyState.rotation[vehicleEid];
     
     for (let i = 0; i < Math.floor(debrisEids.length / DEBRIS_FOR_HEAL); i++) {
-        const emptySlotEid = findFirstEmptySlot(tankEid) ?? findFirstEmptySlot(turretEid);        
+        const emptySlotEid = findFirstEmptySlot(vehicleEid) ?? findFirstEmptySlot(turretEid);        
         if (emptySlotEid === null) break;
         mixColors(emptySlotEid, debrisEids.slice(i * DEBRIS_FOR_HEAL, i * DEBRIS_FOR_HEAL + DEBRIS_FOR_HEAL));
         fillSlot(emptySlotEid, options);

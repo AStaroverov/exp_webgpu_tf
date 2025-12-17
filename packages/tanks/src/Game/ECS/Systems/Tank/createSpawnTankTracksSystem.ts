@@ -1,8 +1,8 @@
 import { hasComponent, query } from 'bitecs';
 import { GameDI } from '../../../DI/GameDI.ts';
-import { Tank } from '../../Components/Tank.ts';
+import { Vehicle } from '../../Components/Vehicle.ts';
 import { Children } from '../../Components/Children.ts';
-import { TankPartCaterpillar } from '../../Components/TankPart.ts';
+import { VehiclePartCaterpillar } from '../../Components/VehiclePart.ts';
 import { RigidBodyState } from '../../Components/Physical.ts';
 import { abs, cos, PI, sin } from '../../../../../../../lib/math.ts';
 import { random } from '../../../../../../../lib/random.ts';
@@ -13,7 +13,7 @@ import {
     getMatrixTranslationY,
     getMatrixRotationZ,
 } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
-import { Slot } from '../../Components/Slot.ts';
+import { getSlotFillerEid, isSlot } from '../../Utils/SlotUtils.ts';
 
 // Base chance for a caterpillar element to leave a track per frame
 const BASE_TRACK_CHANCE = 0.01;
@@ -27,23 +27,23 @@ export function createSpawnTankTracksSystem({ world } = GameDI) {
     return (delta: number) => {
         currentTime += delta;
 
-        const tankEids = query(world, [Tank]);
+        const vehicleEids = query(world, [Vehicle]);
 
-        for (const tankEid of tankEids) {
+        for (const vehicleEid of vehicleEids) {
             if (random() > 0.5) continue;
 
-            const childrenEids = Children.entitiesIds.getBatch(tankEid);
-            const childrenCount = Children.entitiesCount[tankEid];
-            const linvel = RigidBodyState.linvel.getBatch(tankEid);
-            const angvel = RigidBodyState.angvel[tankEid];
-            const tankRotation = RigidBodyState.rotation[tankEid];
+            const childrenEids = Children.entitiesIds.getBatch(vehicleEid);
+            const childrenCount = Children.entitiesCount[vehicleEid];
+            const linvel = RigidBodyState.linvel.getBatch(vehicleEid);
+            const angvel = RigidBodyState.angvel[vehicleEid];
+            const vehicleRotation = RigidBodyState.rotation[vehicleEid];
 
             // Calculate speed
-            const forwardX = cos(tankRotation - PI / 2);
-            const forwardY = sin(tankRotation - PI / 2);
+            const forwardX = cos(vehicleRotation - PI / 2);
+            const forwardY = sin(vehicleRotation - PI / 2);
             const speed = abs(linvel[0] * forwardX + linvel[1] * forwardY);
 
-            // Only spawn tracks when tank is moving
+            // Only spawn tracks when vehicle is moving
             if (speed < 0.5 && abs(angvel) < 0.1) {
                 continue;
             }
@@ -54,9 +54,10 @@ export function createSpawnTankTracksSystem({ world } = GameDI) {
 
             for (let i = 0; i < childrenCount; i++) {
                 const slotEid = childrenEids[i];
-                const childEid = Slot.getFillerEid(slotEid);
+                if (!isSlot(slotEid)) continue;
 
-                if (!hasComponent(world, childEid, TankPartCaterpillar)) continue;
+                const childEid = getSlotFillerEid(slotEid);
+                if (childEid === 0 || !hasComponent(world, childEid, VehiclePartCaterpillar)) continue;
 
                 // Random chance to spawn track
                 if (random() > trackChance) continue;

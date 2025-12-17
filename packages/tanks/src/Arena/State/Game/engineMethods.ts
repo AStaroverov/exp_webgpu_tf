@@ -2,9 +2,9 @@ import { GameDI } from '../../../Game/DI/GameDI.ts';
 import { PI } from '../../../../../../lib/math.ts';
 import { randomRangeFloat } from '../../../../../../lib/random.ts';
 import { EntityId, innerQuery } from 'bitecs';
-import { Tank, TankType } from '../../../Game/ECS/Components/Tank.ts';
+import { Vehicle, VehicleType } from '../../../Game/ECS/Components/Vehicle.ts';
 import { engine$, getEngine } from './engine.ts';
-import { createTank } from '../../../Game/ECS/Entities/Tank/createTank.ts';
+import { createTank, TankVehicleType } from '../../../Game/ECS/Entities/Tank/createTank.ts';
 import { createPlayer } from '../../../Game/ECS/Entities/Player.ts';
 import { map, shareReplay } from 'rxjs';
 import { getValue } from '../../../../../../lib/Rx/getValue.ts';
@@ -16,13 +16,13 @@ export const playerId$ = engine$.pipe(
     shareReplay(1),
 );
 
-export function addTank(slot: number, teamId: number, tankType: TankType) {
+export function addTank(slot: number, teamId: number, vehicleType: TankVehicleType) {
     const x = GameDI.width * 0.2 + (teamId === 1 ? GameDI.width * 0.6 : 0);
     const dy = (GameDI.height - GameDI.height * 0.4) / (GAME_MAX_TEAM_TANKS - 1);
     const y = GameDI.height * 0.2 + slot * dy;
 
     return createTank({
-        type: tankType,
+        type: vehicleType,
         playerId: getValue(playerId$),
         teamId,
         x,
@@ -32,10 +32,10 @@ export function addTank(slot: number, teamId: number, tankType: TankType) {
     });
 }
 
-export function getTankEids() {
-    return innerQuery(getEngine().world, [Tank]);
+export function getVehicleEids() {
+    return innerQuery(getEngine().world, [Vehicle]);
 }
 
-export function getTankType(tankEid: EntityId) {
-    return Tank.type[tankEid] as TankType;
+export function getVehicleType(vehicleEid: EntityId) {
+    return Vehicle.type[vehicleEid] as VehicleType;
 }

@@ -111,7 +111,6 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         return token;
     }
    
-    debugger
     const strategy1 = getStrategyToken(modelName + '_strategy1', false);
     const strategy2 = getStrategyToken(modelName + '_strategy2', true);
     const strategies = tf.layers.concatenate({ name: modelName + '_strategiesConcat', axis: -1 })
