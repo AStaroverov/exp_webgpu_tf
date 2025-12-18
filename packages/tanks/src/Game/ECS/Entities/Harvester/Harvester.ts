@@ -15,6 +15,7 @@ import {
     PADDING,
     PARTS_COUNT,
     scoopSet,
+    shieldSet,
     SIZE,
 } from './HarvesterParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from './Options.ts';
@@ -23,6 +24,7 @@ import { mutatedOptions, resetOptions, updateColorOptions } from './Options.ts';
 const TRACKS_COLOR = new Float32Array([0.4, 0.4, 0.4, 1]);
 const BARRIER_COLOR = new Float32Array([0.8, 0.6, 0.2, 1]); // Orange/yellow warning color
 const SCOOP_COLOR = new Float32Array([0.6, 0.5, 0.3, 1]);   // Rusty metal color
+const SHIELD_COLOR = new Float32Array([0.3, 0.7, 1.0, 0.6]); // Cyan semi-transparent energy shield
 const APPROXIMATE_COLLIDER_RADIUS = 85;
 
 export function createHarvester(opts: {
@@ -39,7 +41,7 @@ export function createHarvester(opts: {
     options.padding = PADDING;
     options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
     options.vehicleType = VehicleType.Harvester;
-    options.engineType = VehicleEngineType.v8; // Powerful engine for bulldozer
+    options.engineType = VehicleEngineType.v12;
     options.caterpillarLength = caterpillarLength;
 
     // Heavy base for bulldozer
@@ -49,7 +51,7 @@ export function createHarvester(opts: {
     const [harvesterEid, harvesterPid] = createHarvesterBase(options);
 
     // Barrier "turret" - slower rotation than tank turrets, no shooting
-    options.density = DENSITY;
+    options.density = DENSITY * 2;
     options.width = PADDING * 10;
     options.height = PADDING * 6;
     options.turret.rotationSpeed = PI * 0.4; // Slower rotation for heavy barrier
@@ -70,6 +72,10 @@ export function createHarvester(opts: {
     // Impenetrable barrier on the "turret"
     updateColorOptions(options, BARRIER_COLOR);
     createSlotEntities(barrierEid, barrierSet, options.color, SlotPartType.Barrier);
+
+    // Energy shield arc - semi-transparent cyan, bullet-only collision
+    updateColorOptions(options, SHIELD_COLOR);
+    createSlotEntities(barrierEid, shieldSet, options.color, SlotPartType.Shield);
 
     updateSlotsBrightness(harvesterEid);
     fillAllSlots(harvesterEid, options);

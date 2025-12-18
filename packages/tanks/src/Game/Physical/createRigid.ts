@@ -5,13 +5,15 @@ import { RigidBodyRef } from '../ECS/Components/Physical.ts';
 import { PhysicalWorld } from './initPhysicalWorld.ts';
 
 export enum CollisionGroup {
+    NONE = 0,
     ALL = 0xFFFF,
-    WALL = 0b0000001,
-    BULLET = 0b0000010,
-    TANK_BASE = 0b0000100,
-    TANK_HULL_PARTS = 0b0001000,
-    TANK_TURRET_HEAD_PARTS = 0b0100000,
-    TANK_TURRET_GUN_PARTS = 0b1000000,
+    WALL = 0b00000001,
+    BULLET = 0b00000010,
+    TANK_BASE = 0b00000100,
+    TANK_HULL_PARTS = 0b00001000,
+    TANK_TURRET_HEAD_PARTS = 0b00100000,
+    TANK_TURRET_GUN_PARTS = 0b01000000,
+    SHIELD = 0b10000000, // Shield parts - only interact with bullets, not with each other
     TANK_PARTS = CollisionGroup.TANK_HULL_PARTS | CollisionGroup.TANK_TURRET_HEAD_PARTS | CollisionGroup.TANK_TURRET_GUN_PARTS,
 }
 

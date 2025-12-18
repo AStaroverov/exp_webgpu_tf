@@ -7,6 +7,7 @@ import { createTank, TankVehicleType } from '../../Game/ECS/Entities/Tank/create
 import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
 import { PlayerEnvDI } from '../../Game/DI/PlayerEnvDI.ts';
 import { createPlayer } from '../../Game/ECS/Entities/Player.ts';
+import { createHarvester } from '../../Game/ECS/Entities/Harvester/Harvester.ts';
 
 // Player team = 0, Enemy team = 1
 export const PLAYER_TEAM_ID = 0;
@@ -17,8 +18,7 @@ export function spawnPlayerTank(vehicleType: TankVehicleType = VehicleType.Light
         throw new Error('Player ID is not set');
     }
 
-    const eid = createTank({
-        type: vehicleType,
+    const eid = createHarvester({
         playerId: PlayerEnvDI.playerId,
         teamId: PLAYER_TEAM_ID,
         x: 0,

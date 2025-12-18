@@ -44,6 +44,7 @@ import { createSoundSystem, loadGameSounds, disposeSoundSystem, SoundManager, cr
 import { createDebrisCollectorSystem } from './ECS/Systems/createDebrisCollectorSystem.ts';
 import { createHitableSystem } from './ECS/Systems/createHitableSystem.ts';
 import { createTankAliveSystem } from './ECS/Systems/Tank/createTankAliveSystem.ts';
+import { createShieldRegenerationSystem } from './ECS/Systems/createShieldRegenerationSystem.ts';
 import { SoundDI } from './DI/SoundDI.ts';
 
 export type Game = ReturnType<typeof createGame>;
@@ -138,6 +139,7 @@ export function createGame({ width, height }: {
     const updateHitableSystem = createHitableSystem();
     const updateTankAliveSystem = createTankAliveSystem();
     const collectDebris = createDebrisCollectorSystem();
+    const regenerateShields = createShieldRegenerationSystem();
 
     GameDI.gameTick = (delta: number) => {
         if (GameDI.world === null) return;
@@ -149,6 +151,7 @@ export function createGame({ width, height }: {
         updateHitableSystem(delta);
         updateTankAliveSystem();
         collectDebris(delta);
+        regenerateShields(delta);
 
         visTracksUpdate(delta);
         updateProgress(delta);
