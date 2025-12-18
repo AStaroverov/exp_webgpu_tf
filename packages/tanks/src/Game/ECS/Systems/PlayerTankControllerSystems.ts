@@ -77,7 +77,7 @@ export function createPlayerTankPositionSystem({ document } = PlayerEnvDI) {
     return { tick, destroy };
 }
 
-export function createPlayerTankTurretRotationSystem({ document } = PlayerEnvDI) {
+export function createPlayerTankTurretRotationSystem({ document } = PlayerEnvDI, { world } = GameDI) {
     let lastEvent: undefined | MouseEvent;
     let callback = (event: MouseEvent) => {
         lastEvent = event;
@@ -85,7 +85,7 @@ export function createPlayerTankTurretRotationSystem({ document } = PlayerEnvDI)
     document.addEventListener('mousemove', callback);
 
     const tick = () => {
-        if (isPlayerExist() && lastEvent) {
+        if (isPlayerExist() && entityExists(world, Tank.turretEId[PlayerEnvDI.tankEid!]) && lastEvent) {
             const vehicleRot = RigidBodyState.rotation[PlayerEnvDI.tankEid!];
             const turretRot = RigidBodyState.rotation[Tank.turretEId[PlayerEnvDI.tankEid!]];
             const turretPos = RigidBodyState.position.getBatch(Tank.turretEId[PlayerEnvDI.tankEid!]);
@@ -110,8 +110,7 @@ export function createPlayerTankTurretRotationSystem({ document } = PlayerEnvDI)
     return { tick, destroy };
 }
 
-export function createPlayerTankBulletSystem({ document } = PlayerEnvDI, { canvas } = RenderDI,
-) {
+export function createPlayerTankBulletSystem({ document } = PlayerEnvDI, { canvas } = RenderDI, { world } = GameDI) {
     let shooting = 0;
     const onKeyDown = (event: KeyboardEvent) => {
         event.preventDefault();
@@ -146,7 +145,7 @@ export function createPlayerTankBulletSystem({ document } = PlayerEnvDI, { canva
     canvas.addEventListener('mouseup', onMouseUp);
 
     const tick = () => {
-        if (isPlayerExist()) {
+        if (isPlayerExist() && entityExists(world, Tank.turretEId[PlayerEnvDI.tankEid!])) {
             const turretEid = Tank.turretEId[PlayerEnvDI.tankEid!];
             TurretController.setShooting$(turretEid, shooting);
         }
@@ -163,7 +162,7 @@ export function createPlayerTankBulletSystem({ document } = PlayerEnvDI, { canva
 }
 
 function isPlayerExist({ world } = GameDI, { tankEid } = PlayerEnvDI) {
-    return !isNil(tankEid) && entityExists(world, tankEid) && entityExists(world, Tank.turretEId[tankEid])
+    return !isNil(tankEid) && entityExists(world, tankEid)
 }
 
 function screenToWorld(screenX: number, screenY: number): [number, number] {

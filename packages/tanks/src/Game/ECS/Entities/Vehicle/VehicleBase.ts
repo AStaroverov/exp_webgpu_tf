@@ -19,6 +19,15 @@ import { VehicleOptions } from './Options.ts';
 import { spawnSoundAtParent } from '../Sound.ts';
 import { SoundParentRelative, SoundType } from '../../Components/Sound.ts';
 
+const volumeByType: Record<VehicleType, number> = {
+    [VehicleType.LightTank]: 0.6,
+    [VehicleType.MediumTank]: 0.8,
+    [VehicleType.HeavyTank]: 1.0,
+    [VehicleType.PlayerTank]: 0.8,
+    [VehicleType.Harvester]: 1.0,
+    [VehicleType.MeleeCar]: 0.7,
+};
+
 export function createVehicleBase(options: VehicleOptions, { world } = GameDI): [number, number] {
     options.belongsCollisionGroup = CollisionGroup.TANK_BASE;
     options.interactsCollisionGroup = CollisionGroup.TANK_BASE;
@@ -27,7 +36,6 @@ export function createVehicleBase(options: VehicleOptions, { world } = GameDI): 
     Vehicle.addComponent(world, vehicleEid, options.vehicleType);
     Vehicle.setEngineType(vehicleEid, options.engineType);
 
-    // Добавление базовых компонентов
     addTransformComponents(world, vehicleEid);
     Children.addComponent(world, vehicleEid);
     TeamRef.addComponent(world, vehicleEid, options.teamId);
@@ -38,15 +46,6 @@ export function createVehicleBase(options: VehicleOptions, { world } = GameDI): 
 
     VehicleInputTensor.addComponent(world, vehicleEid);
 
-    // Spawn movement sound entity attached to vehicle
-    // Volume based on vehicle type
-    const volumeByType: Record<VehicleType, number> = {
-        [VehicleType.LightTank]: 0.6,
-        [VehicleType.MediumTank]: 0.8,
-        [VehicleType.HeavyTank]: 1.0,
-        [VehicleType.PlayerTank]: 0.8,
-        [VehicleType.Harvester]: 1.0,
-    };
     const soundEid = spawnSoundAtParent({
         parentEid: vehicleEid,
         type: SoundType.TankMove,

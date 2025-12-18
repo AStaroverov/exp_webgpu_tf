@@ -10,6 +10,7 @@ export enum VehicleType {
     HeavyTank = 2,
     PlayerTank = 3,  // Special player tank - medium size but faster
     Harvester = 4,   // Bulldozer with barrier and scoop for collecting debris
+    MeleeCar = 5,    // Fast 4-wheeled car for ramming
 }
 
 export const Vehicle = component({
