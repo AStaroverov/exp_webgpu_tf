@@ -67,7 +67,7 @@ const BASE_SLOT_PART_CONFIGS: Record<SlotPartType, Omit<SlotPartConfig, 'density
         interactsSolverGroup: CollisionGroup.ALL,
         belongsCollisionGroup: CollisionGroup.TANK_HULL_PARTS,
         interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_HULL_PARTS,
-        shadowY: 3,
+        shadowY: 3 * 3,
     },
     [SlotPartType.Caterpillar]: {
         z: ZIndex.TankCaterpillar,
@@ -75,7 +75,7 @@ const BASE_SLOT_PART_CONFIGS: Record<SlotPartType, Omit<SlotPartConfig, 'density
         interactsSolverGroup: CollisionGroup.ALL,
         belongsCollisionGroup: CollisionGroup.TANK_HULL_PARTS,
         interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_HULL_PARTS,
-        shadowY: 3,
+        shadowY: 3 * 3,
     },
     [SlotPartType.TurretHead]: {
         z: ZIndex.TankTurret,
@@ -83,7 +83,7 @@ const BASE_SLOT_PART_CONFIGS: Record<SlotPartType, Omit<SlotPartConfig, 'density
         interactsSolverGroup: CollisionGroup.ALL,
         belongsCollisionGroup: CollisionGroup.TANK_TURRET_HEAD_PARTS,
         interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_TURRET_HEAD_PARTS | CollisionGroup.TANK_TURRET_GUN_PARTS,
-        shadowY: 3,
+        shadowY: 3 * 3,
     },
     [SlotPartType.TurretGun]: {
         z: ZIndex.TankTurret,
@@ -91,7 +91,7 @@ const BASE_SLOT_PART_CONFIGS: Record<SlotPartType, Omit<SlotPartConfig, 'density
         interactsSolverGroup: CollisionGroup.ALL,
         belongsCollisionGroup: CollisionGroup.TANK_TURRET_GUN_PARTS,
         interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_TURRET_HEAD_PARTS | CollisionGroup.TANK_TURRET_GUN_PARTS,
-        shadowY: 4,
+        shadowY: 4 * 3,
     },
     [SlotPartType.Barrier]: {
         z: ZIndex.TankTurret,
@@ -100,7 +100,7 @@ const BASE_SLOT_PART_CONFIGS: Record<SlotPartType, Omit<SlotPartConfig, 'density
         // Barrier blocks bullets but is impenetrable (no BULLET in interacts means no damage)
         belongsCollisionGroup: CollisionGroup.TANK_TURRET_HEAD_PARTS,
         interactsCollisionGroup: CollisionGroup.WALL | CollisionGroup.TANK_TURRET_HEAD_PARTS,
-        shadowY: 4,
+        shadowY: 4 * 3,
     },
     [SlotPartType.Scoop]: {
         z: ZIndex.TankHull,
@@ -109,7 +109,7 @@ const BASE_SLOT_PART_CONFIGS: Record<SlotPartType, Omit<SlotPartConfig, 'density
         belongsCollisionGroup: CollisionGroup.TANK_HULL_PARTS,
         // Scoop interacts with debris to collect them
         interactsCollisionGroup: CollisionGroup.WALL | CollisionGroup.TANK_HULL_PARTS,
-        shadowY: 2,
+        shadowY: 2 * 3,
     },
     [SlotPartType.Shield]: {
         z: ZIndex.Shield,
@@ -119,7 +119,7 @@ const BASE_SLOT_PART_CONFIGS: Record<SlotPartType, Omit<SlotPartConfig, 'density
         // Shield only collides with bullets - not with each other, not with walls, not with tank parts
         belongsCollisionGroup: CollisionGroup.SHIELD,
         interactsCollisionGroup: CollisionGroup.BULLET,
-        shadowY: 0, // No shadow for energy shield
+        shadowY: 0 * 3, // No shadow for energy shield
     },
     [SlotPartType.Wheel]: {
         z: ZIndex.TankCaterpillar,
@@ -127,7 +127,7 @@ const BASE_SLOT_PART_CONFIGS: Record<SlotPartType, Omit<SlotPartConfig, 'density
         interactsSolverGroup: CollisionGroup.ALL,
         belongsCollisionGroup: CollisionGroup.TANK_HULL_PARTS,
         interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_HULL_PARTS,
-        shadowY: 2,
+        shadowY: 2 * 3,
     },
     [SlotPartType.Detail]: {
         z: ZIndex.TankHull,
@@ -135,7 +135,7 @@ const BASE_SLOT_PART_CONFIGS: Record<SlotPartType, Omit<SlotPartConfig, 'density
         interactsSolverGroup: CollisionGroup.ALL,
         belongsCollisionGroup: CollisionGroup.TANK_HULL_PARTS,
         interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_HULL_PARTS,
-        shadowY: 2,
+        shadowY: 2 * 3,
     },
 };
 
