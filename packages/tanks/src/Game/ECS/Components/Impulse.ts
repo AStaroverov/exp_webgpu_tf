@@ -92,3 +92,77 @@ export const TorqueImpulse = component({
     },
 });
 
+/**
+ * Maximum number of impulse-at-point entries per entity.
+ * Used for tracks/wheels that apply force at specific positions.
+ */
+const MAX_IMPULSE_POINTS = 4;
+
+/**
+ * ImpulseAtPoint component for applying impulses at specific world positions.
+ * This creates realistic physics where force applied off-center creates rotation.
+ * Multiple impulses can be queued (e.g., for left and right tracks).
+ */
+export const ImpulseAtPoint = component({
+    // Impulse vectors (x, y) for each point
+    impulseX: TypedArray.f64(delegate.defaultSize * MAX_IMPULSE_POINTS),
+    impulseY: TypedArray.f64(delegate.defaultSize * MAX_IMPULSE_POINTS),
+    // World positions where impulses are applied
+    pointX: TypedArray.f64(delegate.defaultSize * MAX_IMPULSE_POINTS),
+    pointY: TypedArray.f64(delegate.defaultSize * MAX_IMPULSE_POINTS),
+    // Number of queued impulses
+    count: TypedArray.i8(delegate.defaultSize),
+
+    addComponent(world: World, eid: EntityId) {
+        addComponent(world, eid, ImpulseAtPoint);
+        ImpulseAtPoint.count[eid] = 0;
+    },
+
+    /**
+     * Queue an impulse to be applied at a specific world position.
+     * @param eid - Entity to apply impulse to
+     * @param impulseX - Impulse X component
+     * @param impulseY - Impulse Y component  
+     * @param worldX - World X position where force is applied
+     * @param worldY - World Y position where force is applied
+     */
+    add(eid: EntityId, impulseX: number, impulseY: number, worldX: number, worldY: number) {
+        const idx = ImpulseAtPoint.count[eid];
+        if (idx >= MAX_IMPULSE_POINTS) return;
+        
+        const offset = eid * MAX_IMPULSE_POINTS + idx;
+        ImpulseAtPoint.impulseX[offset] = impulseX;
+        ImpulseAtPoint.impulseY[offset] = impulseY;
+        ImpulseAtPoint.pointX[offset] = worldX;
+        ImpulseAtPoint.pointY[offset] = worldY;
+        ImpulseAtPoint.count[eid] = idx + 1;
+    },
+
+    /**
+     * Get impulse data at index.
+     */
+    get(eid: EntityId, index: number): [impulseX: number, impulseY: number, pointX: number, pointY: number] {
+        const offset = eid * MAX_IMPULSE_POINTS + index;
+        return [
+            ImpulseAtPoint.impulseX[offset],
+            ImpulseAtPoint.impulseY[offset],
+            ImpulseAtPoint.pointX[offset],
+            ImpulseAtPoint.pointY[offset],
+        ];
+    },
+
+    /**
+     * Reset all queued impulses.
+     */
+    reset(eid: EntityId) {
+        ImpulseAtPoint.count[eid] = 0;
+    },
+
+    /**
+     * Check if there are any impulses to apply.
+     */
+    hasImpulse(eid: EntityId): boolean {
+        return ImpulseAtPoint.count[eid] > 0;
+    },
+});
+

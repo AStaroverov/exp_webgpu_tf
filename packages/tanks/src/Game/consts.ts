@@ -1,6 +1,6 @@
 export enum ZIndex {
     Background = 0,
-    TankTrack = 0.0005,
+    TreadMark = 0.0005,
     TankHull = 0.001,
     TankCaterpillar = 0.001,
     TankTurret = 0.0011,

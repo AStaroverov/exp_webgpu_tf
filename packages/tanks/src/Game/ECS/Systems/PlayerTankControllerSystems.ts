@@ -7,10 +7,10 @@ import { RenderDI } from '../../DI/RenderDI.ts';
 import { RigidBodyState } from '../Components/Physical.ts';
 import { normalizeAngle } from '../../../../../../lib/math.ts';
 import { GameMap } from '../Entities/GameMap.ts';
-import { entityExists } from 'bitecs';
+import { entityExists, hasComponent } from 'bitecs';
 import { GameDI } from '../../DI/GameDI.ts';
 
-export function createPlayerTankPositionSystem({ document } = PlayerEnvDI) {
+export function createPlayerTankPositionSystem({ document } = PlayerEnvDI, { world } = GameDI) {
     let move = 0;
     let rotation = 0;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -64,9 +64,13 @@ export function createPlayerTankPositionSystem({ document } = PlayerEnvDI) {
     document.addEventListener('keyup', onKeyUp);
 
     const tick = () => {
-        if (isPlayerExist() ) {
-            VehicleController.setMove$(PlayerEnvDI.tankEid!, move);
-            VehicleController.setRotate$(PlayerEnvDI.tankEid!, rotation);
+        if (isPlayerExist()) {
+            const tankEid = PlayerEnvDI.tankEid!;
+            
+            if (hasComponent(world, tankEid, VehicleController)) {
+                VehicleController.setMove$(tankEid, move);
+                VehicleController.setRotate$(tankEid, rotation);
+            }
         }
     };
     const destroy = () => {

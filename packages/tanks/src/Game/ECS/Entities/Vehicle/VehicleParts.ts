@@ -8,17 +8,17 @@ import { Hitable } from '../../Components/Hitable.ts';
 import { Parent } from '../../Components/Parent.ts';
 import { Children } from '../../Components/Children.ts';
 import { VehiclePart, VehiclePartCaterpillar } from '../../Components/VehiclePart.ts';
+import { Joint } from '../../Components/Joint.ts';
 import { defaultVehicleOptions, VehicleOptions } from './Options.ts';
 import { randomRangeFloat } from '../../../../../../../lib/random.ts';
 import { clamp } from 'lodash-es';
-import { addComponent, addEntity, EntityId, hasComponent } from 'bitecs';
+import { addEntity, EntityId, hasComponent } from 'bitecs';
 import { TeamRef } from '../../Components/TeamRef.ts';
 import { Damagable } from '../../Components/Damagable.ts';
 import { cos, min, sin } from '../../../../../../../lib/math.ts';
 import { Slot } from '../../Components/Slot.ts';
 import { Tank } from '../../Components/Tank.ts';
 import { Vehicle, VehicleType } from '../../Components/Vehicle.ts';
-import { VehicleTurret } from '../../Components/VehicleTurret.ts';
 import { getSlotPartConfig, SlotPartType } from '../../Components/SlotConfig.ts';
 import { isSlot, isSlotEmpty, isSlotFilled } from '../../Utils/SlotUtils.ts';
 
@@ -111,7 +111,7 @@ export function fillSlot(
     // Parent of slot can be Vehicle (for hull/caterpillar) or VehicleTurret (for turret parts)
     const vehicleEid = hasComponent(world, vehicleOrTurretEid, Vehicle) 
         ? vehicleOrTurretEid 
-        : VehicleTurret.vehicleEId[vehicleOrTurretEid];
+        : Parent.id[vehicleOrTurretEid];
     const vehicleType = Vehicle.type[vehicleEid] as VehicleType;
     
     // Get config from slot's part type and vehicle type
@@ -151,7 +151,8 @@ export function fillSlot(
         false,
     );
     
-    VehiclePart.addComponent(world, eid, joint.handle);
+    VehiclePart.addComponent(world, eid);
+    Joint.addComponent(world, eid, joint.handle);
 
     PlayerRef.addComponent(world, eid, fillSlotOptions.playerId);
     TeamRef.addComponent(world, eid, fillSlotOptions.teamId);
@@ -163,7 +164,7 @@ export function fillSlot(
     Children.addChildren(slotEid, eid);
 
     if (partType === SlotPartType.Caterpillar) {
-        addComponent(world, eid, VehiclePartCaterpillar);
+        VehiclePartCaterpillar.addComponent(world, eid);
     }
 }
 

@@ -1,5 +1,5 @@
 import { GameDI } from '../../DI/GameDI.ts';
-import { TankTrack } from '../Components/TankTrack.ts';
+import { TreadMark } from '../Components/TreadMark.ts';
 import { Progress } from '../Components/Progress.ts';
 import { DestroyByTimeout } from '../Components/Destroy.ts';
 import { createRectangle } from '../../../../../renderer/src/ECS/Entities/Shapes.ts';
@@ -10,12 +10,12 @@ import {
 import { ZIndex } from '../../consts.ts';
 import { RenderDI } from '../../DI/RenderDI.ts';
 
-export const TRACK_DURATION = 10_000; // 10 seconds
+export const TREAD_MARK_DURATION = 10_000; // 10 seconds
 
-// Dark brown track color
-const TRACK_COLOR: [number, number, number, number] = [0.35, 0.28, 0.2, 0.4];
+// Dark brown tread mark color
+const TREAD_MARK_COLOR: [number, number, number, number] = [0.35, 0.28, 0.2, 0.4];
 
-export interface TankTrackOptions {
+export interface TreadMarkOptions {
     x: number;
     y: number;
     width: number;
@@ -23,16 +23,16 @@ export interface TankTrackOptions {
     rotation?: number;
 }
 
-export function spawnTankTrack(options: TankTrackOptions, { world } = GameDI, { enabled } = RenderDI) {
+export function spawnTreadMark(options: TreadMarkOptions, { world } = GameDI, { enabled } = RenderDI) {
     if (!enabled) return;
     // Use the standard shape rendering system
     const eid = createRectangle(world, {
         x: options.x,
         y: options.y,
-        z: ZIndex.TankTrack,
+        z: ZIndex.TreadMark,
         width: options.width,
         height: options.height,
-        color: TRACK_COLOR,
+        color: TREAD_MARK_COLOR,
     });
 
     // Apply rotation if provided
@@ -40,8 +40,9 @@ export function spawnTankTrack(options: TankTrackOptions, { world } = GameDI, { 
         applyMatrixRotateZ(LocalTransform.matrix.getBatch(eid), options.rotation);
     }
 
-    // Add TankTrack and Progress components
-    TankTrack.addComponent(world, eid);
-    Progress.addComponent(world, eid, TRACK_DURATION);
-    DestroyByTimeout.addComponent(world, eid, TRACK_DURATION);
+    // Add TreadMark and Progress components
+    TreadMark.addComponent(world, eid);
+    Progress.addComponent(world, eid, TREAD_MARK_DURATION);
+    DestroyByTimeout.addComponent(world, eid, TREAD_MARK_DURATION);
 }
+

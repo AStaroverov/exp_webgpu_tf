@@ -9,7 +9,7 @@ import {
 
 // Tank-specific options that extend vehicle options
 export const tankOptions = {
-    caterpillarLength: 0,
+    trackLength: 0,
 
     turret: {
         rotationSpeed: 0,
@@ -35,7 +35,7 @@ export const mutatedOptions: TankOptions = {
 export const resetOptions = (target: TankOptions, source?: Partial<VehicleCreationOpts>): TankOptions => {
     resetVehicleOptions(target, source);
 
-    target.caterpillarLength = defaultTankOptions.caterpillarLength;
+    target.trackLength = defaultTankOptions.trackLength;
     target.turret.rotationSpeed = defaultTankOptions.turret.rotationSpeed;
     target.firearms.reloadingDuration = defaultTankOptions.firearms.reloadingDuration;
     target.firearms.bulletStartPosition = defaultTankOptions.firearms.bulletStartPosition;

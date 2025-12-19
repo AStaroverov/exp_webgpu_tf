@@ -9,15 +9,17 @@ import { HeuristicsData } from '../../Components/HeuristicsData.ts';
 import { Parent } from '../../Components/Parent.ts';
 import { PlayerRef } from '../../Components/PlayerRef.ts';
 import { createRectangleRigidGroup } from '../../Components/RigidGroup.ts';
+import { ImpulseAtPoint } from '../../Components/Impulse.ts';
 import { TurretController } from '../../Components/TurretController.ts';
 import { Vehicle, VehicleType } from '../../Components/Vehicle.ts';
-import { VehicleController } from '../../Components/VehicleController.ts';
-import { VehiclePart } from '../../Components/VehiclePart.ts';
+import { Joint } from '../../Components/Joint.ts';
+import { JointMotor } from '../../Components/JointMotor.ts';
 import { VehicleTurret } from '../../Components/VehicleTurret.ts';
 import { TeamRef } from '../../Components/TeamRef.ts';
 import { VehicleOptions } from './Options.ts';
 import { spawnSoundAtParent } from '../Sound.ts';
 import { SoundParentRelative, SoundType } from '../../Components/Sound.ts';
+import { VehicleController } from '../../Components/VehicleController.ts';
 
 const volumeByType: Record<VehicleType, number> = {
     [VehicleType.LightTank]: 0.6,
@@ -28,6 +30,10 @@ const volumeByType: Record<VehicleType, number> = {
     [VehicleType.MeleeCar]: 0.7,
 };
 
+/**
+ * Creates base vehicle entity with all common components.
+ * Tracks and wheels are added as children.
+ */
 export function createVehicleBase(options: VehicleOptions, { world } = GameDI): [number, number] {
     options.belongsCollisionGroup = CollisionGroup.TANK_BASE;
     options.interactsCollisionGroup = CollisionGroup.TANK_BASE;
@@ -40,11 +46,16 @@ export function createVehicleBase(options: VehicleOptions, { world } = GameDI): 
     Children.addComponent(world, vehicleEid);
     TeamRef.addComponent(world, vehicleEid, options.teamId);
     PlayerRef.addComponent(world, vehicleEid, options.playerId);
-    VehicleController.addComponent(world, vehicleEid);
     HeuristicsData.addComponent(world, vehicleEid, options.approximateColliderRadius);
     Color.addComponent(world, vehicleEid, ...options.color);
 
     VehicleInputTensor.addComponent(world, vehicleEid);
+
+    // Add ImpulseAtPoint for realistic physics (force applied at track/wheel positions)
+    ImpulseAtPoint.addComponent(world, vehicleEid);
+    
+    // All vehicles use VehicleController for movement input
+    VehicleController.addComponent(world, vehicleEid);
 
     const soundEid = spawnSoundAtParent({
         parentEid: vehicleEid,
@@ -76,7 +87,7 @@ export function createVehicleTurret(
     options.interactsCollisionGroup = 0;
 
     const [turretEid, turretPid] = createRectangleRigidGroup(options);
-    VehicleTurret.addComponent(world, turretEid, vehicleEid);
+    VehicleTurret.addComponent(world, turretEid);
     VehicleTurret.setRotationSpeed(turretEid, turretOptions.rotationSpeed);
     TurretController.addComponent(world, turretEid);
 
@@ -91,7 +102,8 @@ export function createVehicleTurret(
         physicalWorld.getRigidBody(turretPid),
         false,
     );
-    VehiclePart.addComponent(world, turretEid, joint.handle);
+    Joint.addComponent(world, turretEid, joint.handle);
+    JointMotor.addComponent(world, turretEid);
 
     addTransformComponents(world, turretEid);
     Parent.addComponent(world, turretEid, vehicleEid);

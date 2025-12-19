@@ -95,7 +95,7 @@ export const scoopSet: PartsData[] = createUScoopSet(
     SCOOP_FRONT_LENGTH,
     SIZE,
     PADDING,
-    -(PADDING * 10 + 3), // Offset forward
+    -PADDING * 11.5,
 );
 
 // Caterpillar configuration - heavy duty tracks
@@ -103,20 +103,25 @@ export const CATERPILLAR_SIZE = 4;
 export const CATERPILLAR_PADDING = CATERPILLAR_SIZE + 1;
 export const CATERPILLAR_LINE_COUNT = 20;
 export const caterpillarLength = CATERPILLAR_LINE_COUNT * CATERPILLAR_PADDING;
+
+// Track anchor position (distance from harvester center to track center)
+export const TRACK_ANCHOR_X = PADDING * 6 + SIZE * 0.3;
+
+// Caterpillar parts - local coordinates relative to track entity (centered at 0,0)
 export const caterpillarSet = createRectangleSet(
     2, CATERPILLAR_LINE_COUNT,
     SIZE, PADDING,
     CATERPILLAR_SIZE, CATERPILLAR_PADDING,
 );
+
+// Left track caterpillar parts (local to left track)
 export const caterpillarSetLeft: PartsData[] = caterpillarSet.map((set) => {
-    set = set.slice() as PartsData;
-    set[0] += PADDING * 6 + SIZE * 0.3;
-    return set;
+    return set.slice() as PartsData; // Already centered at track origin
 });
+
+// Right track caterpillar parts (local to right track)
 export const caterpillarSetRight: PartsData[] = caterpillarSet.map((set) => {
-    set = set.slice() as PartsData;
-    set[0] -= PADDING * 6 + SIZE * 0.3;
-    return set;
+    return set.slice() as PartsData; // Already centered at track origin
 });
 
 // Shield arc - energy barrier in front of the turret

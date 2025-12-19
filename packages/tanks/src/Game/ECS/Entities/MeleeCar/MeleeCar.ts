@@ -1,16 +1,22 @@
+import { PI } from '../../../../../../../lib/math.ts';
 import { TColor } from '../../../../../../renderer/src/ECS/Components/Common.ts';
 import { SlotPartType } from '../../Components/SlotConfig.ts';
 import { VehicleType } from '../../Components/Vehicle.ts';
 import { VehicleEngineType } from '../../Systems/Vehicle/VehicleControllerSystems.ts';
 import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../Vehicle/VehicleParts.ts';
-import { createMeleeCarBase } from './MeleeCarBase.ts';
+import { createMeleeCarBase, createMeleeCarWheels } from './MeleeCarBase.ts';
 import {
-    DENSITY, detailSet, hullSet,
+    DENSITY,
+    detailSet,
+    hullSet,
     PADDING,
     PARTS_COUNT,
     SIZE,
+    WHEEL_ANCHORS,
+    WHEEL_HEIGHT,
+    WHEEL_WIDTH,
     wheelBase,
-    wheelSet
+    wheelSlotSet,
 } from './MeleeCarParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from './Options.ts';
 
@@ -42,21 +48,48 @@ export function createMeleeCar(opts: {
     options.height = PADDING * 10;
     options.linearDamping = 3; // Less friction than tanks
     options.angularDamping = 4; // Quick turning
-    const [carEid] = createMeleeCarBase(options);
+    const [carEid, carPid] = createMeleeCarBase(options);
+
+    // Create 4 wheels as independent entities
+    // Front wheels are steerable, rear wheels are drive wheels
+    const [frontLeftEid, frontRightEid, rearLeftEid, rearRightEid] = createMeleeCarWheels(
+        options,
+        {
+            ...WHEEL_ANCHORS,
+            wheelWidth: WHEEL_WIDTH,
+            wheelHeight: WHEEL_HEIGHT,
+            maxSteeringAngle: PI / 5, // ~36 degrees max steering
+            steeringSpeed: PI * 3, // Fast steering response
+        },
+        carEid,
+        carPid,
+    );
 
     // Hull parts - main car body
     createSlotEntities(carEid, hullSet, options.color, SlotPartType.HullPart);
 
-    // 4 wheels at corners
+    // Wheel visual parts attached to each wheel entity
     updateColorOptions(options, WHEEL_COLOR);
-    createSlotEntities(carEid, wheelSet, options.color, SlotPartType.Wheel);
+    createSlotEntities(frontLeftEid, wheelSlotSet, options.color, SlotPartType.Wheel);
+    createSlotEntities(frontRightEid, wheelSlotSet, options.color, SlotPartType.Wheel);
+    createSlotEntities(rearLeftEid, wheelSlotSet, options.color, SlotPartType.Wheel);
+    createSlotEntities(rearRightEid, wheelSlotSet, options.color, SlotPartType.Wheel);
 
-    // Decorative details
+    // Decorative details on car body
     updateColorOptions(options, DETAIL_COLOR);
     createSlotEntities(carEid, detailSet, options.color, SlotPartType.Detail);
 
+    // Fill all slots with physical parts
     updateSlotsBrightness(carEid);
     fillAllSlots(carEid, options);
+    updateSlotsBrightness(frontLeftEid);
+    fillAllSlots(frontLeftEid, options);
+    updateSlotsBrightness(frontRightEid);
+    fillAllSlots(frontRightEid, options);
+    updateSlotsBrightness(rearLeftEid);
+    fillAllSlots(rearLeftEid, options);
+    updateSlotsBrightness(rearRightEid);
+    fillAllSlots(rearRightEid, options);
 
     return carEid;
 }

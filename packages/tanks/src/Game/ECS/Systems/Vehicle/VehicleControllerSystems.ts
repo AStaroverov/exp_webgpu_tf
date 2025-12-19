@@ -1,15 +1,16 @@
 import { GameDI } from '../../../DI/GameDI.ts';
 import { TurretController } from '../../Components/TurretController.ts';
 import { VehicleController } from '../../Components/VehicleController.ts';
-import { RevoluteImpulseJoint, Vector2 } from '@dimforge/rapier2d-simd';
+import { Vector2 } from '@dimforge/rapier2d-simd';
 import { Vehicle } from '../../Components/Vehicle.ts';
 import { RigidBodyState } from '../../Components/Physical.ts';
 import { applyRotationToVector } from '../../../Physical/applyRotationToVector.ts';
 import { query } from 'bitecs';
 import { normalizeAngle } from '../../../../../../../lib/math.ts';
 import { VehicleTurret } from '../../Components/VehicleTurret.ts';
-import { VehiclePart } from '../../Components/VehiclePart.ts';
+import { Parent } from '../../Components/Parent.ts';
 import { Impulse, TorqueImpulse } from '../../Components/Impulse.ts';
+import { JointMotor } from '../../Components/JointMotor.ts';
 
 export enum VehicleEngineType {
     v6,
@@ -79,36 +80,21 @@ export function createVehiclePositionSystem({ world } = GameDI) {
 
 export function createVehicleTurretRotationSystem({ world } = GameDI) {
     return (delta: number) => {
-        const turretEids = query(world, [VehicleTurret, TurretController]);
+        const turretEids = query(world, [VehicleTurret, TurretController, JointMotor]);
 
         for (let i = 0; i < turretEids.length; i++) {
-            rotateByMotor(turretEids[i], delta);
+            const turretEid = turretEids[i];
+            const vehicleEid = Parent.id[turretEid];
+            const vehicleRot = RigidBodyState.rotation[vehicleEid];
+            const turretRot = RigidBodyState.rotation[turretEid];
+            const turretRotDir = TurretController.rotation[turretEid];
+            const maxRotationSpeed = VehicleTurret.rotationSpeed[turretEid];
+
+            const relTurretRot = normalizeAngle(turretRot - vehicleRot);
+            const deltaRot = turretRotDir * maxRotationSpeed * (delta / 1000);
+
+            JointMotor.setTargetPosition$(turretEid, normalizeAngle(relTurretRot + deltaRot));
         }
     };
-}
-
-const damping = 0.2;   // коэффициент демпфирования
-const stiffness = 1e6; // коэффициент жесткости (подбирается опытным путем)
-function rotateByMotor(turretEid: number, delta: number, { physicalWorld } = GameDI) {
-    const jointPid = VehiclePart.jointPid[turretEid];
-    const turretJoint = physicalWorld.getImpulseJoint(jointPid) as RevoluteImpulseJoint;
-    if (!turretJoint) return;
-
-    const vehicleEid = VehicleTurret.vehicleEId[turretEid];
-    const vehicleRot = RigidBodyState.rotation[vehicleEid];
-    const turretRot = RigidBodyState.rotation[turretEid];
-    const turretRotDir = TurretController.rotation[turretEid];
-    const maxRotationSpeed = VehicleTurret.rotationSpeed[turretEid];
-
-    // Глобальный угол от дула к позиции цели
-    const relTurretRot = normalizeAngle(turretRot - vehicleRot);
-    // Ограничиваем изменение угла с учётом влияния мыши
-    const deltaRot = turretRotDir * maxRotationSpeed * (delta / 1000);
-    // Применяем новый угол к мотору
-    turretJoint.configureMotorPosition(
-        normalizeAngle(relTurretRot + deltaRot),
-        stiffness,
-        damping,
-    );
 }
 

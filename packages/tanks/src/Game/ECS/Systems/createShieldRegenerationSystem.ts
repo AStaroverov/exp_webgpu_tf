@@ -3,6 +3,7 @@ import { GameDI } from '../../DI/GameDI.ts';
 import { Vehicle, VehicleType } from '../Components/Vehicle.ts';
 import { Children } from '../Components/Children.ts';
 import { VehicleTurret } from '../Components/VehicleTurret.ts';
+import { Parent } from '../Components/Parent.ts';
 import { Slot } from '../Components/Slot.ts';
 import { SlotPartType } from '../Components/SlotConfig.ts';
 import { RigidBodyState } from '../Components/Physical.ts';
@@ -30,7 +31,7 @@ export function createShieldRegenerationSystem({ world } = GameDI) {
 
         for (let i = 0; i < turretEids.length; i++) {
             const turretEid = turretEids[i];
-            const vehicleEid = VehicleTurret.vehicleEId[turretEid];
+            const vehicleEid = Parent.id[turretEid];
 
             // Only process harvesters
             if (Vehicle.type[vehicleEid] !== VehicleType.Harvester) continue;

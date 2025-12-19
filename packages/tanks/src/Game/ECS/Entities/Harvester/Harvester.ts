@@ -4,7 +4,7 @@ import { SlotPartType } from '../../Components/SlotConfig.ts';
 import { VehicleType } from '../../Components/Vehicle.ts';
 import { VehicleEngineType } from '../../Systems/Vehicle/VehicleControllerSystems.ts';
 import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../Vehicle/VehicleParts.ts';
-import { createHarvesterBase, createHarvesterTurret } from './HarvesterBase.ts';
+import { createHarvesterBase, createHarvesterTracks, createHarvesterTurret } from './HarvesterBase.ts';
 import {
     barrierSet,
     caterpillarLength,
@@ -17,6 +17,7 @@ import {
     scoopSet,
     shieldSet,
     SIZE,
+    TRACK_ANCHOR_X,
 } from './HarvesterParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from './Options.ts';
 
@@ -42,28 +43,41 @@ export function createHarvester(opts: {
     options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
     options.vehicleType = VehicleType.Harvester;
     options.engineType = VehicleEngineType.v12;
-    options.caterpillarLength = caterpillarLength;
+    options.trackLength = caterpillarLength;
 
     // Heavy base for bulldozer
-    options.density = DENSITY * 12;
-    options.width = PADDING * 16;
-    options.height = PADDING * 14;
+    options.density = DENSITY * 16;
+    options.width = PADDING * 10;
+    options.height = PADDING * 10;
     const [harvesterEid, harvesterPid] = createHarvesterBase(options);
 
-    // Barrier "turret" - slower rotation than tank turrets, no shooting
+    // Create left and right tracks as independent entities
+    const [leftTrackEid, rightTrackEid] = createHarvesterTracks(
+        options,
+        {
+            leftAnchorX: TRACK_ANCHOR_X,
+            rightAnchorX: -TRACK_ANCHOR_X,
+            anchorY: 0,
+            trackWidth: PADDING * 2,
+            trackHeight: options.trackLength,
+        },
+        harvesterEid,
+        harvesterPid,
+    );
+
     options.density = DENSITY * 2;
     options.width = PADDING * 10;
     options.height = PADDING * 6;
     options.turret.rotationSpeed = PI * 0.4; // Slower rotation for heavy barrier
     const [barrierEid] = createHarvesterTurret(options, harvesterEid, harvesterPid);
 
-    // Hull parts
+    // Hull parts attached to harvester body
     createSlotEntities(harvesterEid, hullSet, options.color, SlotPartType.HullPart);
     
-    // Heavy duty caterpillars
+    // Caterpillar parts attached to track entities
     updateColorOptions(options, TRACKS_COLOR);
-    createSlotEntities(harvesterEid, caterpillarSetLeft, options.color, SlotPartType.Caterpillar);
-    createSlotEntities(harvesterEid, caterpillarSetRight, options.color, SlotPartType.Caterpillar);
+    createSlotEntities(leftTrackEid, caterpillarSetLeft, options.color, SlotPartType.Caterpillar);
+    createSlotEntities(rightTrackEid, caterpillarSetRight, options.color, SlotPartType.Caterpillar);
 
     // Front scoop for collecting debris
     updateColorOptions(options, SCOOP_COLOR);
@@ -77,8 +91,13 @@ export function createHarvester(opts: {
     updateColorOptions(options, SHIELD_COLOR);
     createSlotEntities(barrierEid, shieldSet, options.color, SlotPartType.Shield);
 
+    // Fill all slots with physical parts
     updateSlotsBrightness(harvesterEid);
     fillAllSlots(harvesterEid, options);
+    updateSlotsBrightness(leftTrackEid);
+    fillAllSlots(leftTrackEid, options);
+    updateSlotsBrightness(rightTrackEid);
+    fillAllSlots(rightTrackEid, options);
     updateSlotsBrightness(barrierEid);
     fillAllSlots(barrierEid, options);
 

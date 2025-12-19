@@ -7,7 +7,7 @@ import {
 
 // Harvester-specific options that extend vehicle options
 export const harvesterOptions = {
-    caterpillarLength: 0,
+    trackLength: 0,
 
     turret: {
         rotationSpeed: 0,
@@ -27,7 +27,7 @@ export const mutatedOptions: HarvesterOptions = {
 export const resetOptions = (target: HarvesterOptions, source?: Partial<VehicleCreationOpts>): HarvesterOptions => {
     resetVehicleOptions(target, source);
 
-    target.caterpillarLength = defaultHarvesterOptions.caterpillarLength;
+    target.trackLength = defaultHarvesterOptions.trackLength;
     target.turret.rotationSpeed = defaultHarvesterOptions.turret.rotationSpeed;
 
     return target;

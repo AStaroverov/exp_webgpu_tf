@@ -41,8 +41,8 @@ export function createTankMoveSoundSystem({ world } = GameDI) {
 
             const parentEid = Parent.id[soundEid];
 
-            // Check if parent is a vehicle with controller
-            if (!hasComponent(world, parentEid, Vehicle) || !hasComponent(world, parentEid, VehicleController)) {
+            // Check if parent is a vehicle
+            if (!hasComponent(world, parentEid, Vehicle)) {
                 continue;
             }
 

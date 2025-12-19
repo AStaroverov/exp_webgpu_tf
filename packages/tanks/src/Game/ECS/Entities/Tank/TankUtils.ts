@@ -12,6 +12,7 @@ import { Score } from '../../Components/Score.ts';
 import { Tank } from '../../Components/Tank.ts';
 import { Vehicle } from '../../Components/Vehicle.ts';
 import { VehiclePart, VehiclePartCaterpillar } from '../../Components/VehiclePart.ts';
+import { Joint } from '../../Components/Joint.ts';
 import { TeamRef } from '../../Components/TeamRef.ts';
 import { mapVehicleEngineLabel, VehicleEngineType } from '../../Systems/Vehicle/VehicleControllerSystems.ts';
 import { recursiveTypicalRemoveEntity, scheduleRemoveEntity } from '../../Utils/typicalRemoveEntity.ts';
@@ -88,9 +89,12 @@ export function tearOffTankPart(vehiclePartEid: number, shouldBreakConnection: b
         Children.removeChild(slotEid, vehiclePartEid);
     }
 
-    const jointPid = hasComponent(world, vehiclePartEid, VehiclePart) ? VehiclePart.jointPid[vehiclePartEid] : 0;
+    const jointPid = hasComponent(world, vehiclePartEid, Joint) ? Joint.pid[vehiclePartEid] : 0;
     if (jointPid > 0) {
-        removeComponent(world, vehiclePartEid, VehiclePart);
+        Joint.removeComponent(world, vehiclePartEid);
+        if (hasComponent(world, vehiclePartEid, VehiclePart)) {
+            VehiclePart.removeComponent(world, vehiclePartEid);
+        }
         resetVehiclePartJointComponent(vehiclePartEid);
         // @todo: remove bullet collision in game, keep only for training
         setPhysicalCollisionGroup(vehiclePartEid, CollisionGroup.ALL & ~CollisionGroup.TANK_BASE & ~CollisionGroup.BULLET);
@@ -108,7 +112,7 @@ export function tearOffTankPart(vehiclePartEid: number, shouldBreakConnection: b
 }
 
 export function resetVehiclePartJointComponent(vehiclePartEid: number, { world } = GameDI) {
-    VehiclePart.resetComponent(vehiclePartEid);
+    Joint.resetComponent(vehiclePartEid);
     VehiclePartCaterpillar.removeComponent(world, vehiclePartEid);
 }
 

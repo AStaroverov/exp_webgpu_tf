@@ -1,17 +1,17 @@
 import { query } from 'bitecs';
 import { GameDI } from '../../../DI/GameDI.ts';
-import { TankTrack } from '../../Components/TankTrack.ts';
+import { TreadMark } from '../../Components/TreadMark.ts';
 import { Progress } from '../../Components/Progress.ts';
 import { Color } from '../../../../../../renderer/src/ECS/Components/Common.ts';
 
-// Initial alpha value for tracks
+// Initial alpha value for tread marks
 const INITIAL_ALPHA = 0.4;
 
-export function createUpdateTankTracksSystem({ world } = GameDI) {
+export function createUpdateTreadMarksSystem({ world } = GameDI) {
     return () => {
-        const trackEids = query(world, [TankTrack, Progress]);
+        const treadMarkEids = query(world, [TreadMark, Progress]);
 
-        for (const eid of trackEids) {
+        for (const eid of treadMarkEids) {
             // Calculate fade based on age progress
             const progress = Progress.getProgress(eid);
             const alpha = INITIAL_ALPHA * (1 - progress);
@@ -23,3 +23,4 @@ export function createUpdateTankTracksSystem({ world } = GameDI) {
         }
     };
 }
+

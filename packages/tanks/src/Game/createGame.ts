@@ -33,9 +33,13 @@ import { createDrawExplosionSystem } from './ECS/Systems/Render/Explosion/create
 import { createPostEffect } from './ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
 import { createTankDecayOutOfZoneSystem } from './ECS/Systems/Tank/createTankDecayOutOfZoneSystem.ts';
 import { createVisualizationTracksSystem } from './ECS/Systems/Tank/createVisualizationTracksSystem.ts';
-import { createSpawnTankTracksSystem } from './ECS/Systems/Tank/createSpawnTankTracksSystem.ts';
-import { createUpdateTankTracksSystem } from './ECS/Systems/Tank/createUpdateTankTracksSystem.ts';
-import { createVehiclePositionSystem, createVehicleTurretRotationSystem } from './ECS/Systems/Vehicle/VehicleControllerSystems.ts';
+import { createSpawnTreadMarksSystem } from './ECS/Systems/Tank/createSpawnTreadMarksSystem.ts';
+import { createUpdateTreadMarksSystem } from './ECS/Systems/Tank/createUpdateTreadMarksSystem.ts';
+import { createSpawnWheelTreadMarksSystem } from './ECS/Systems/Vehicle/createSpawnWheelTreadMarksSystem.ts';
+import { createVehicleTurretRotationSystem } from './ECS/Systems/Vehicle/VehicleControllerSystems.ts';
+import { createTrackControlSystem } from './ECS/Systems/Vehicle/TrackControlSystem.ts';
+import { createWheelControlSystem } from './ECS/Systems/Vehicle/WheelControlSystem.ts';
+import { createJointMotorSystem } from './ECS/Systems/Physical/createJointMotorSystem.ts';
 import { initPhysicalWorld } from './Physical/initPhysicalWorld.ts';
 import { createProgressSystem } from './ECS/Systems/createProgressSystem.ts';
 import { createCameraSystem, setCameraTarget, setInfiniteMapMode, initCameraPosition, CameraState } from './ECS/Systems/Camera/CameraSystem.ts';
@@ -68,20 +72,26 @@ export function createGame({ width, height }: {
     // const updateMap = createMapSystem();
     const execTransformSystem = createTransformSystem(world);
 
-    const updateVehiclePosition = createVehiclePositionSystem();
+    // Vehicle control systems - tracks for tanks/harvesters, wheels for cars
+    const updateTrackControl = createTrackControlSystem();
+    const updateWheelControl = createWheelControlSystem();
     const updateVehicleTurretRotation = createVehicleTurretRotationSystem();
 
     const syncRigidBodyState = createRigidBodyStateSystem();
     const applyRigidBodyDeltaToLocalTransform = createApplyRigidBodyToTransformSystem();
     const applyImpulses = createApplyImpulseSystem();
+    const applyJointMotors = createJointMotorSystem();
 
     const eventQueue = new EventQueue(true);
     const physicalFrame = (delta: number) => {
-        updateVehiclePosition(delta);
+        // Update vehicle controls - tracks and wheels
+        updateTrackControl(delta);
+        updateWheelControl(delta);
         updateVehicleTurretRotation(delta);
 
         execTransformSystem();
         applyImpulses();
+        applyJointMotors(delta);
         physicalWorld.step(eventQueue);
         syncRigidBodyState();
         applyRigidBodyDeltaToLocalTransform();
@@ -112,10 +122,12 @@ export function createGame({ width, height }: {
     };
 
     const spawnBullets = createSpawnerBulletsSystem();
-    const spawnTankTracks = createSpawnTankTracksSystem();
+    const spawnTreadMarks = createSpawnTreadMarksSystem();
+    const spawnWheelTreadMarks = createSpawnWheelTreadMarksSystem();
     const spawnFrame = (delta: number) => {
         spawnBullets(delta);
-        spawnTankTracks(delta);
+        spawnTreadMarks(delta);
+        spawnWheelTreadMarks(delta);
     };
 
     const destroy = createDestroySystem();
@@ -133,7 +145,7 @@ export function createGame({ width, height }: {
     };
 
     const visTracksUpdate = createVisualizationTracksSystem();
-    const updateTankTracks = createUpdateTankTracksSystem();
+    const updateTreadMarks = createUpdateTreadMarksSystem();
     const updateProgress = createProgressSystem();
     const updateCamera = createCameraSystem();
     const updateHitableSystem = createHitableSystem();
@@ -155,7 +167,7 @@ export function createGame({ width, height }: {
 
         visTracksUpdate(delta);
         updateProgress(delta);
-        updateTankTracks();
+        updateTreadMarks();
         // updateMap();
 
         // Update camera before rendering

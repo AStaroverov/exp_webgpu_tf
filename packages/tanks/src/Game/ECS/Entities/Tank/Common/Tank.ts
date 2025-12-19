@@ -1,17 +1,62 @@
 import { GameDI } from '../../../../DI/GameDI.ts';
 import { Firearms } from '../../../Components/Firearms.ts';
 import { Tank } from '../../../Components/Tank.ts';
+import { TrackSide } from '../../../Components/Track.ts';
 import { createVehicleBase, createVehicleTurret } from '../../Vehicle/VehicleBase.ts';
+import { createTrack, TrackOptions } from '../../Track/createTrack.ts';
 import { type TankOptions } from './Options.ts';
+
+export type TankTracksConfig = {
+    leftAnchorX: number;
+    rightAnchorX: number;
+    anchorY: number;
+    trackWidth: number;
+    trackHeight: number;
+};
 
 export function createTankBase(options: TankOptions, { world } = GameDI): [number, number] {
     const [vehicleEid, vehiclePid] = createVehicleBase(options);
 
     // Add Tank-specific components
     Tank.addComponent(world, vehicleEid);
-    Tank.setCaterpillarsLength(vehicleEid, options.caterpillarLength);
 
     return [vehicleEid, vehiclePid];
+}
+
+/**
+ * Creates left and right track entities for a tank.
+ * Tracks are attached to the tank body via fixed joints.
+ */
+export function createTankTracks(
+    options: TankOptions,
+    tracksConfig: TankTracksConfig,
+    tankEid: number,
+    tankPid: number,
+): [leftTrackEid: number, rightTrackEid: number] {
+    const trackOptions: TrackOptions = {
+        ...options,
+        width: tracksConfig.trackWidth,
+        height: tracksConfig.trackHeight,
+        trackSide: TrackSide.Left,
+        trackLength: options.trackLength,
+        anchorX: tracksConfig.leftAnchorX,
+        anchorY: tracksConfig.anchorY,
+        density: options.density * 0.1, // Tracks are lighter than main body
+    };
+
+    trackOptions.trackSide = TrackSide.Left;
+    trackOptions.anchorX = tracksConfig.leftAnchorX;
+    trackOptions.x = options.x;
+    trackOptions.y = options.y;
+    const [leftTrackEid] = createTrack(trackOptions, tankEid, tankPid);
+
+    trackOptions.trackSide = TrackSide.Right;
+    trackOptions.anchorX = tracksConfig.rightAnchorX;
+    trackOptions.x = options.x;
+    trackOptions.y = options.y;
+    const [rightTrackEid] = createTrack(trackOptions, tankEid, tankPid);
+
+    return [leftTrackEid, rightTrackEid];
 }
 
 export function createTankTurret(

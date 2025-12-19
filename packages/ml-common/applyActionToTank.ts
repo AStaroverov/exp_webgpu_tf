@@ -1,8 +1,8 @@
 import { abs, sign } from '../../lib/math.ts';
 import { ACTION_HEAD_DIMS } from '../ml/src/Models/Create.ts';
 import { Tank } from '../tanks/src/Game/ECS/Components/Tank.ts';
-import { TurretController } from '../tanks/src/Game/ECS/Components/TurretController.ts';
 import { VehicleController } from '../tanks/src/Game/ECS/Components/VehicleController.ts';
+import { TurretController } from '../tanks/src/Game/ECS/Components/TurretController.ts';
 
 export type Actions = Float32Array | [number, number, number, number];
 
@@ -17,6 +17,7 @@ export function applyActionToTank(
     const turretShoot = isContinuous ? actions[2] : actions[2] - 0.5;
     const turretRot = isContinuous ? actions[3] : toAction(actions, 3);
 
+    // Apply movement
     VehicleController.setMove$(vehicleEid, move);
     VehicleController.setRotate$(vehicleEid, rotate);
     

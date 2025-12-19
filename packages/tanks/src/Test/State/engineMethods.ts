@@ -3,22 +3,51 @@ import { randomRangeFloat } from '../../../../../lib/random.ts';
 import { innerQuery } from 'bitecs';
 import { Vehicle, VehicleType } from '../../Game/ECS/Components/Vehicle.ts';
 import { getEngine } from './engine.ts';
-import { createTank, TankVehicleType } from '../../Game/ECS/Entities/Tank/createTank.ts';
+import { createTank } from '../../Game/ECS/Entities/Tank/createTank.ts';
+import { createMeleeCar } from '../../Game/ECS/Entities/MeleeCar/MeleeCar.ts';
+import { createHarvester } from '../../Game/ECS/Entities/Harvester/Harvester.ts';
 import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
 import { PlayerEnvDI } from '../../Game/DI/PlayerEnvDI.ts';
 import { createPlayer } from '../../Game/ECS/Entities/Player.ts';
-import { createMeleeCar } from '../../Game/ECS/Entities/MeleeCar/MeleeCar.ts';
-
 // Player team = 0, Enemy team = 1
 export const PLAYER_TEAM_ID = 0;
 export const ENEMY_TEAM_ID = 1;
 
-export function spawnPlayerTank(vehicleType: TankVehicleType = VehicleType.LightTank) {
+// All spawnable vehicle types
+export type SpawnableVehicleType = VehicleType;
+
+function createVehicle(type: VehicleType, opts: {
+    playerId: number,
+    teamId: number,
+    x: number,
+    y: number,
+    rotation: number,
+    color: [number, number, number, number],
+}) {
+    switch (type) {
+        case VehicleType.LightTank:
+            return createTank({ type: VehicleType.LightTank, ...opts });
+        case VehicleType.MediumTank:
+            return createTank({ type: VehicleType.MediumTank, ...opts });
+        case VehicleType.HeavyTank:
+            return createTank({ type: VehicleType.HeavyTank, ...opts });
+        case VehicleType.PlayerTank:
+            return createTank({ type: VehicleType.PlayerTank, ...opts });
+        case VehicleType.MeleeCar:
+            return createMeleeCar(opts);
+        case VehicleType.Harvester:
+            return createHarvester(opts);
+        default:
+            throw new Error(`Unknown vehicle type ${type}`);
+    }
+}
+
+export function spawnPlayerTank(vehicleType: VehicleType = VehicleType.LightTank) {
     if (PlayerEnvDI.playerId === null) {
         throw new Error('Player ID is not set');
     }
 
-    const eid = createMeleeCar({
+    const eid = createVehicle(vehicleType, {
         playerId: PlayerEnvDI.playerId,
         teamId: PLAYER_TEAM_ID,
         x: 0,
@@ -30,7 +59,7 @@ export function spawnPlayerTank(vehicleType: TankVehicleType = VehicleType.Light
     return eid;
 }
 
-export function spawnEnemyAtRandomPosition(vehicleType: TankVehicleType = VehicleType.LightTank) {
+export function spawnEnemyAtRandomPosition(vehicleType: VehicleType = VehicleType.LightTank) {
     // Get player position
     let playerX = 0;
     let playerY = 0;
@@ -52,8 +81,7 @@ export function spawnEnemyAtRandomPosition(vehicleType: TankVehicleType = Vehicl
     // Face towards player
     const rotationToPlayer = Math.atan2(playerY - y, playerX - x);
 
-    return createTank({
-        type: vehicleType,
+    return createVehicle(vehicleType, {
         playerId: createPlayer(ENEMY_TEAM_ID),
         teamId: ENEMY_TEAM_ID,
         x,

@@ -8,7 +8,7 @@ import { VehicleType } from '../../../Components/Vehicle.ts';
 import { VehicleEngineType } from '../../../Systems/Vehicle/VehicleControllerSystems.ts';
 import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../../Vehicle/VehicleParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from '../Common/Options.ts';
-import { createTankBase, createTankTurret } from '../Common/Tank.ts';
+import { createTankBase, createTankTracks, createTankTurret } from '../Common/Tank.ts';
 import { SIZE } from '../Medium/MediumTankParts.ts';
 import {
     caterpillarLength,
@@ -18,6 +18,7 @@ import {
     hullSet,
     PADDING,
     PARTS_COUNT,
+    TRACK_ANCHOR_X,
     turretGunSet,
     turretHeadSet,
 } from './LightTankParts.ts';
@@ -41,12 +42,26 @@ export function createLightTank(opts: {
     options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
     options.vehicleType = VehicleType.LightTank;
     options.engineType = VehicleEngineType.v6;
-    options.caterpillarLength = caterpillarLength;
+    options.trackLength = caterpillarLength;
 
-    options.density = DENSITY * 10;
-    options.width = PADDING * 12;
-    options.height = PADDING * 12;
+    options.density = DENSITY * 14;
+    options.width = PADDING * 8;
+    options.height = PADDING * 10;
     const [tankEid, tankPid] = createTankBase(options);
+
+    // Create left and right tracks as independent entities
+    const [leftTrackEid, rightTrackEid] = createTankTracks(
+        options,
+        {
+            leftAnchorX: TRACK_ANCHOR_X,
+            rightAnchorX: -TRACK_ANCHOR_X,
+            anchorY: 0,
+            trackWidth: PADDING * 2,
+            trackHeight: caterpillarLength,
+        },
+        tankEid,
+        tankPid,
+    );
 
     options.density = DENSITY;
     options.width = PADDING * 6;
@@ -57,18 +72,26 @@ export function createLightTank(opts: {
     options.firearms.bulletStartPosition = [0, -9 * PADDING];
     const [turretEid] = createTankTurret(options, tankEid, tankPid);
 
+    // Hull parts attached to tank body
     createSlotEntities(tankEid, hullSet, options.color, SlotPartType.HullPart);
 
+    // Caterpillar parts attached to track entities
     updateColorOptions(options, TRACKS_COLOR);
-    createSlotEntities(tankEid, caterpillarSetLeft, options.color, SlotPartType.Caterpillar);
-    createSlotEntities(tankEid, caterpillarSetRight, options.color, SlotPartType.Caterpillar);
+    createSlotEntities(leftTrackEid, caterpillarSetLeft, options.color, SlotPartType.Caterpillar);
+    createSlotEntities(rightTrackEid, caterpillarSetRight, options.color, SlotPartType.Caterpillar);
 
+    // Turret parts
     updateColorOptions(options, TURRET_COLOR);
     createSlotEntities(turretEid, turretGunSet, options.color, SlotPartType.TurretGun);
     createSlotEntities(turretEid, turretHeadSet, options.color, SlotPartType.TurretHead);
 
+    // Fill all slots with physical parts
     updateSlotsBrightness(tankEid);
     fillAllSlots(tankEid, options);
+    updateSlotsBrightness(leftTrackEid);
+    fillAllSlots(leftTrackEid, options);
+    updateSlotsBrightness(rightTrackEid);
+    fillAllSlots(rightTrackEid, options);
     updateSlotsBrightness(turretEid);
     fillAllSlots(turretEid, options);
 
