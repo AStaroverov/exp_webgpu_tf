@@ -4,6 +4,7 @@ import { SlotPartType } from '../../Components/SlotConfig.ts';
 import { VehicleType } from '../../Components/Vehicle.ts';
 import { VehicleEngineType } from '../../Systems/Vehicle/VehicleControllerSystems.ts';
 import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../Vehicle/VehicleParts.ts';
+import { addTankExhaustPipes } from '../ExhaustPipe.ts';
 import { createHarvesterBase, createHarvesterTracks, createHarvesterTurret } from './HarvesterBase.ts';
 import {
     barrierSet,
@@ -100,6 +101,9 @@ export function createHarvester(opts: {
     fillAllSlots(rightTrackEid, options);
     updateSlotsBrightness(barrierEid);
     fillAllSlots(barrierEid, options);
+
+    // Add exhaust pipes
+    addTankExhaustPipes(harvesterEid, PADDING * 10, PADDING * 10);
 
     return harvesterEid;
 }

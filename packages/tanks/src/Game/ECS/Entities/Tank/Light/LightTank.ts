@@ -9,6 +9,7 @@ import { VehicleEngineType } from '../../../Systems/Vehicle/VehicleControllerSys
 import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../../Vehicle/VehicleParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from '../Common/Options.ts';
 import { createTankBase, createTankTracks, createTankTurret } from '../Common/Tank.ts';
+import { addTankExhaustPipes } from '../../ExhaustPipe.ts';
 import { SIZE } from '../Medium/MediumTankParts.ts';
 import {
     caterpillarLength,
@@ -94,6 +95,9 @@ export function createLightTank(opts: {
     fillAllSlots(rightTrackEid, options);
     updateSlotsBrightness(turretEid);
     fillAllSlots(turretEid, options);
+
+    // Add exhaust pipes
+    addTankExhaustPipes(tankEid, PADDING * 8, PADDING * 10);
 
     return tankEid;
 }

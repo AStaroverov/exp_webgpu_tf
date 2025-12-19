@@ -30,12 +30,14 @@ import { createDrawGrassSystem } from './ECS/Systems/Render/Grass/createDrawGras
 import { createDrawMuzzleFlashSystem } from './ECS/Systems/Render/MuzzleFlash/createDrawMuzzleFlashSystem.ts';
 import { createDrawHitFlashSystem } from './ECS/Systems/Render/HitFlash/createDrawHitFlashSystem.ts';
 import { createDrawExplosionSystem } from './ECS/Systems/Render/Explosion/createDrawExplosionSystem.ts';
+import { createDrawExhaustSmokeSystem } from './ECS/Systems/Render/ExhaustSmoke/createDrawExhaustSmokeSystem.ts';
 import { createPostEffect } from './ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
 import { createTankDecayOutOfZoneSystem } from './ECS/Systems/Tank/createTankDecayOutOfZoneSystem.ts';
 import { createVisualizationTracksSystem } from './ECS/Systems/Tank/createVisualizationTracksSystem.ts';
 import { createSpawnTreadMarksSystem } from './ECS/Systems/Tank/createSpawnTreadMarksSystem.ts';
 import { createUpdateTreadMarksSystem } from './ECS/Systems/Tank/createUpdateTreadMarksSystem.ts';
 import { createSpawnWheelTreadMarksSystem } from './ECS/Systems/Vehicle/createSpawnWheelTreadMarksSystem.ts';
+import { createExhaustSmokeSpawnSystem } from './ECS/Systems/Vehicle/createExhaustSmokeSpawnSystem.ts';
 import { createVehicleTurretRotationSystem } from './ECS/Systems/Vehicle/VehicleControllerSystems.ts';
 import { createTrackControlSystem } from './ECS/Systems/Vehicle/TrackControlSystem.ts';
 import { createWheelControlSystem } from './ECS/Systems/Vehicle/WheelControlSystem.ts';
@@ -124,10 +126,12 @@ export function createGame({ width, height }: {
     const spawnBullets = createSpawnerBulletsSystem();
     const spawnTreadMarks = createSpawnTreadMarksSystem();
     const spawnWheelTreadMarks = createSpawnWheelTreadMarksSystem();
+    const spawnExhaustSmoke = createExhaustSmokeSpawnSystem();
     const spawnFrame = (delta: number) => {
         spawnBullets(delta);
         spawnTreadMarks(delta);
         spawnWheelTreadMarks(delta);
+        spawnExhaustSmoke(delta);
     };
 
     const destroy = createDestroySystem();
@@ -262,6 +266,7 @@ export function createGame({ width, height }: {
         const drawMuzzleFlash = createDrawMuzzleFlashSystem();
         const drawHitFlash = createDrawHitFlashSystem();
         const drawExplosion = createDrawExplosionSystem();
+        const drawExhaustSmoke = createDrawExhaustSmokeSystem();
         const drawShape = createDrawShapeSystem(world, device);
         const { renderFrame, renderTexture } = createFrameTick({
             canvas,
@@ -272,6 +277,7 @@ export function createGame({ width, height }: {
         }, ({ passEncoder, delta }) => {
             drawGrass(passEncoder, delta);
             drawShape(passEncoder);
+            drawExhaustSmoke(passEncoder);
             drawExplosion(passEncoder);
             drawHitFlash(passEncoder);
             drawMuzzleFlash(passEncoder);

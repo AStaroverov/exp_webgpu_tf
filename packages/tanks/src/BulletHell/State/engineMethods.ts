@@ -49,7 +49,6 @@ export function spawnEnemyOffScreen(vehicleType: TankVehicleType = VehicleType.L
     
     // Random angle
     const angle = randomRangeFloat(0, PI * 2);
-    
     const x = playerX + Math.cos(angle) * spawnDistance;
     const y = playerY + Math.sin(angle) * spawnDistance;
     

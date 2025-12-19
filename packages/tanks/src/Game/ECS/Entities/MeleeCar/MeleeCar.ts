@@ -4,6 +4,7 @@ import { SlotPartType } from '../../Components/SlotConfig.ts';
 import { VehicleType } from '../../Components/Vehicle.ts';
 import { VehicleEngineType } from '../../Systems/Vehicle/VehicleControllerSystems.ts';
 import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../Vehicle/VehicleParts.ts';
+import { addCarExhaustPipe } from '../ExhaustPipe.ts';
 import { createMeleeCarBase, createMeleeCarWheels } from './MeleeCarBase.ts';
 import {
     DENSITY,
@@ -90,6 +91,9 @@ export function createMeleeCar(opts: {
     fillAllSlots(rearLeftEid, options);
     updateSlotsBrightness(rearRightEid);
     fillAllSlots(rearRightEid, options);
+
+    // Add exhaust pipe
+    addCarExhaustPipe(carEid, PADDING * 6, PADDING * 10);
 
     return carEid;
 }

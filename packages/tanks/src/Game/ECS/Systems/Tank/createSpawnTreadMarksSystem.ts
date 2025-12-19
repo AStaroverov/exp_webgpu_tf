@@ -4,7 +4,7 @@ import { VehiclePartCaterpillar } from '../../Components/VehiclePart.ts';
 import { RigidBodyState } from '../../Components/Physical.ts';
 import { abs } from '../../../../../../../lib/math.ts';
 import { random } from '../../../../../../../lib/random.ts';
-import { spawnTreadMark } from '../../Entities/TreadMark.ts';
+import { spawnTreadMark, TreadMarkOptions } from '../../Entities/TreadMark.ts';
 import {
     GlobalTransform,
     getMatrixTranslationX,
@@ -19,6 +19,14 @@ const ANGVEL_MULTIPLIER = 0.025;
 // Minimum speed to spawn tread marks
 const MIN_SPEED = 0.5;
 const MIN_ANGVEL = 0.1;
+
+const treadMarkOptions: TreadMarkOptions = {
+    x: 0,
+    y: 0,
+    width: 3,
+    height: 5,
+    rotation: 0,
+};
 
 export function createSpawnTreadMarksSystem({ world } = GameDI) {
     return (_delta: number) => {
@@ -50,16 +58,11 @@ export function createSpawnTreadMarksSystem({ world } = GameDI) {
             const rotation = getMatrixRotationZ(globalMatrix);
 
             // Caterpillar tread marks are typically small rectangles
-            const treadMarkWidth = 3;
-            const treadMarkHeight = 5;
-
-            spawnTreadMark({
-                x,
-                y,
-                width: treadMarkWidth,
-                height: treadMarkHeight,
-                rotation,
-            });
+            
+            treadMarkOptions.x = x;
+            treadMarkOptions.y = y;
+            treadMarkOptions.rotation = rotation;
+            spawnTreadMark(treadMarkOptions);
         }
     };
 }
