@@ -26,7 +26,8 @@ import {
     createPlayerTankPositionSystem,
     createPlayerTankTurretRotationSystem,
 } from './ECS/Systems/PlayerTankControllerSystems.ts';
-import { createDrawGrassSystem } from './ECS/Systems/Render/Grass/createDrawGrassSystem.ts';
+import { createDrawFaunaSystem } from './ECS/Systems/Render/Fauna/createDrawFaunaSystem.ts';
+import { createSandstormSystem } from './ECS/Systems/Render/PostEffect/Sandstorm/createSandstormSystem.ts';
 import { createDrawMuzzleFlashSystem } from './ECS/Systems/Render/MuzzleFlash/createDrawMuzzleFlashSystem.ts';
 import { createDrawHitFlashSystem } from './ECS/Systems/Render/HitFlash/createDrawHitFlashSystem.ts';
 import { createDrawExplosionSystem } from './ECS/Systems/Render/Explosion/createDrawExplosionSystem.ts';
@@ -262,7 +263,8 @@ export function createGame({ width, height }: {
         RenderDI.device = device;
         RenderDI.context = context;
 
-        const drawGrass = createDrawGrassSystem();
+        const drawFauna = createDrawFaunaSystem();
+        const drawSandstorm = createSandstormSystem();
         const drawMuzzleFlash = createDrawMuzzleFlashSystem();
         const drawHitFlash = createDrawHitFlashSystem();
         const drawExplosion = createDrawExplosionSystem();
@@ -272,15 +274,16 @@ export function createGame({ width, height }: {
             canvas,
             device,
             context,
-            background: [173, 193, 120, 255].map(v => v / 255),
+            background: [226, 192, 146, 255].map(v => v / 255),
             getPixelRatio: () => window.devicePixelRatio,
         }, ({ passEncoder, delta }) => {
-            drawGrass(passEncoder, delta);
+            drawFauna(passEncoder, delta);
             drawShape(passEncoder);
             drawExhaustSmoke(passEncoder);
             drawExplosion(passEncoder);
             drawHitFlash(passEncoder);
             drawMuzzleFlash(passEncoder);
+            drawSandstorm(passEncoder, delta);
         });
         const postEffectFrame = createPostEffect(device, context, renderTexture);
 
