@@ -1,2 +1,2 @@
-import './src/Test/UI';
+import './src/Test/UI/index.ts';
 
