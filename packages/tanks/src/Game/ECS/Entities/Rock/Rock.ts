@@ -1,4 +1,4 @@
-import { addEntity, EntityId } from 'bitecs';
+import { addEntity } from 'bitecs';
 import { randomRangeFloat, randomRangeInt } from '../../../../../../../lib/random.ts';
 import { TColor } from '../../../../../../renderer/src/ECS/Components/Common.ts';
 import { addTransformComponents } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
@@ -26,22 +26,17 @@ export type CreateRockOptions = {
  * Create a rock entity made of small destructible pieces.
  * Uses a grid-based approach with noise to create varied shapes.
  */
-export function createRock(opts: CreateRockOptions, { world } = GameDI): EntityId {
-    const cols = opts.cols ?? randomRangeInt(10, 30);
-    const rows = opts.rows ?? randomRangeInt(10, 30);
-    const cellSize = opts.cellSize ?? 6;
-    const partSize = opts.partSize ?? 7;
+export function createRock(opts: CreateRockOptions, { world } = GameDI) {
+    const cols = opts.cols ?? randomRangeInt(5, 20);
+    const rows = opts.rows ?? randomRangeInt(5, 20);
+    const cellSize = opts.cellSize ?? randomRangeInt(5, 10);
+    const partSize = opts.partSize ?? randomRangeInt(5, 10);
     const rotation = opts.rotation ?? randomRangeFloat(0, Math.PI * 2);
+    const noiseScale = opts.noiseScale ?? randomRangeFloat(0.03, 0.08);
+    const emptyThreshold = opts.emptyThreshold ?? randomRangeFloat(0.5, 0.8);
+    
     const color = opts.color ?? getRandomStoneColor();
-    const noiseScale = opts.noiseScale ?? 0.05;
-    const emptyThreshold = opts.emptyThreshold ?? 0.5;
     const density = opts.density ?? 1000;
-
-    // Create rock entity (just a container for parts, no physics body)
-    const rockEid = addEntity(world);
-    Rock.addComponent(world, rockEid, 0);
-    addTransformComponents(world, rockEid);
-    Children.addComponent(world, rockEid);
 
     // Generate rock shape using grid + noise
     const partsData = generateGridRockShape({
@@ -54,29 +49,17 @@ export function createRock(opts: CreateRockOptions, { world } = GameDI): EntityI
         emptyThreshold,
     });
 
+    if (partsData.length === 0) return;
+
+    // Create rock entity (just a container for parts, no physics body)
+    const rockEid = addEntity(world);
+    Rock.addComponent(world, rockEid, 0);
+    addTransformComponents(world, rockEid);
+    Children.addComponent(world, rockEid);
+
     // Create the rock parts
     createRockParts(rockEid, opts.x, opts.y, partsData, color, {
         rotation,
         density,
     });
-
-    return rockEid;
-}
-
-export function createRockField(
-    centerX: number,
-    centerY: number,
-    areaWidth: number,
-    areaHeight: number,
-    count: number,
-): EntityId[] {
-    const rocks: EntityId[] = [];
-
-    for (let i = 0; i < count; i++) {
-        const x = centerX + randomRangeFloat(-areaWidth / 2, areaWidth / 2);
-        const y = centerY + randomRangeFloat(-areaHeight / 2, areaHeight / 2);
-        rocks.push(createRock({ x, y }));
-    }
-
-    return rocks;
 }

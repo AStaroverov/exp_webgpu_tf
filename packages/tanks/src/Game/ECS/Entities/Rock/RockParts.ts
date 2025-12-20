@@ -99,7 +99,7 @@ export function createRockParts(
         // Combine rock rotation with part's own rotation
         partOptions.rotation = options.rotation + partRotation;
         partOptions.density = options.density;
-        partOptions.shadow[1] = (width + height) / 2 * 2;
+        partOptions.shadow[1] = ((width + height) / 4) ** 2;
 
         const rrOptions = {
             ...partOptions,
