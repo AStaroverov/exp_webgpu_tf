@@ -7,14 +7,14 @@ import { PhysicalWorld } from './initPhysicalWorld.ts';
 export enum CollisionGroup {
     NONE = 0,
     ALL = 0xFFFF,
-    WALL = 0b00000001,
+    OBSTACLE = 0b00000001,
     BULLET = 0b00000010,
-    TANK_BASE = 0b00000100,
-    TANK_HULL_PARTS = 0b00001000,
+    VEHICALE_BASE = 0b00000100,
+    VEHICALE_HULL_PARTS = 0b00001000,
     TANK_TURRET_HEAD_PARTS = 0b00100000,
     TANK_TURRET_GUN_PARTS = 0b01000000,
-    SHIELD = 0b10000000, // Shield parts - only interact with bullets, not with each other
-    TANK_PARTS = CollisionGroup.TANK_HULL_PARTS | CollisionGroup.TANK_TURRET_HEAD_PARTS | CollisionGroup.TANK_TURRET_GUN_PARTS,
+    TANK_PARTS = CollisionGroup.VEHICALE_HULL_PARTS | CollisionGroup.TANK_TURRET_HEAD_PARTS | CollisionGroup.TANK_TURRET_GUN_PARTS,
+    SHIELD = 0b10000000,
 }
 
 type CommonRigidOptions = BodyOptions & {

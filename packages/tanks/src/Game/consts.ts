@@ -1,6 +1,7 @@
 export enum ZIndex {
     Background = 0,
     TreadMark = 0.0005,
+    Rock = 0.0008,  // Rocks are below tank parts
     TankHull = 0.001,
     TankCaterpillar = 0.001,
     TankTurret = 0.0011,

@@ -97,7 +97,7 @@ export function tearOffTankPart(vehiclePartEid: number, shouldBreakConnection: b
         }
         resetVehiclePartJointComponent(vehiclePartEid);
         // @todo: remove bullet collision in game, keep only for training
-        setPhysicalCollisionGroup(vehiclePartEid, CollisionGroup.ALL & ~CollisionGroup.TANK_BASE & ~CollisionGroup.BULLET);
+        setPhysicalCollisionGroup(vehiclePartEid, CollisionGroup.ALL & ~CollisionGroup.VEHICALE_BASE & ~CollisionGroup.BULLET);
         removePhysicalJoint(jointPid);
         // changePhysicalDensity(vehiclePartEid, 8);
     }

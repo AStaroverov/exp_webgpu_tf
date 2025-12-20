@@ -2,6 +2,7 @@ import GUI from 'lil-gui';
 import { VehicleType } from '../../Game/ECS/Components/Vehicle.ts';
 import { TestGameState$, TestGameStateEffects, incrementEnemyCount } from '../State/GameState.ts';
 import { startTestGame, spawnEnemy, exitTestGame, spawnPlayerVehicle } from '../State/gameMethods.ts';
+import { spawnRockAtRandomPosition } from '../State/engineMethods.ts';
 import { setRenderTarget } from '../State/RenderTarget.ts';
 import { upsertModels } from '../../../../ml/src/Models/Trained/restore.ts';
 import { initTensorFlow } from '../../../../ml-common/initTensorFlow.ts';
@@ -37,6 +38,10 @@ const state = {
         await spawnEnemy(type);
         incrementEnemyCount();
         this.enemyCount = TestGameState$.value.enemyCount;
+    },
+    
+    spawnRock() {
+        spawnRockAtRandomPosition();
     },
     
     exit() {
@@ -100,6 +105,10 @@ async function init() {
         });
     enemyFolder.add(state, 'spawnEnemy').name('➕ Add Enemy');
     
+    // Rock folder
+    const rockFolder = gui.addFolder('🪨 Rocks');
+    rockFolder.add(state, 'spawnRock').name('➕ Add Rock');
+    
     // Subscribe to state updates
     TestGameState$.subscribe(({ enemyCount }) => {
         state.enemyCount = enemyCount;
@@ -114,4 +123,3 @@ async function init() {
 }
 
 init();
-

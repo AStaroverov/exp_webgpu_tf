@@ -14,7 +14,6 @@ export enum SlotPartType {
     Scoop = 5,        // Harvester's front scoop for collecting debris
     Shield = 6,       // Energy shield - arc of small parts, bullet-only collision, regenerates
     Wheel = 7,        // MeleeCar's wheels
-    Detail = 8,       // Small decorative details
 }
 
 /**
@@ -54,7 +53,6 @@ const PART_DENSITY_MULTIPLIER: Record<SlotPartType, number> = {
     [SlotPartType.Scoop]: 8,    // Heavy scoop for pushing debris
     [SlotPartType.Shield]: 0.1, // Very light energy shield parts
     [SlotPartType.Wheel]: 2,    // Wheels - moderate density
-    [SlotPartType.Detail]: 0.5, // Light decorative details
 };
 
 /**
@@ -65,16 +63,16 @@ const BASE_SLOT_PART_CONFIGS: Record<SlotPartType, Omit<SlotPartConfig, 'density
         z: ZIndex.TankHull,
         belongsSolverGroup: CollisionGroup.ALL,
         interactsSolverGroup: CollisionGroup.ALL,
-        belongsCollisionGroup: CollisionGroup.TANK_HULL_PARTS,
-        interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_HULL_PARTS,
+        belongsCollisionGroup: CollisionGroup.VEHICALE_HULL_PARTS,
+        interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.OBSTACLE | CollisionGroup.VEHICALE_HULL_PARTS,
         shadowY: 3 * 3,
     },
     [SlotPartType.Caterpillar]: {
         z: ZIndex.TankCaterpillar,
         belongsSolverGroup: CollisionGroup.ALL,
         interactsSolverGroup: CollisionGroup.ALL,
-        belongsCollisionGroup: CollisionGroup.TANK_HULL_PARTS,
-        interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_HULL_PARTS,
+        belongsCollisionGroup: CollisionGroup.VEHICALE_HULL_PARTS,
+        interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.OBSTACLE | CollisionGroup.VEHICALE_HULL_PARTS,
         shadowY: 3 * 3,
     },
     [SlotPartType.TurretHead]: {
@@ -82,7 +80,7 @@ const BASE_SLOT_PART_CONFIGS: Record<SlotPartType, Omit<SlotPartConfig, 'density
         belongsSolverGroup: CollisionGroup.ALL,
         interactsSolverGroup: CollisionGroup.ALL,
         belongsCollisionGroup: CollisionGroup.TANK_TURRET_HEAD_PARTS,
-        interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_TURRET_HEAD_PARTS | CollisionGroup.TANK_TURRET_GUN_PARTS,
+        interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.OBSTACLE | CollisionGroup.TANK_TURRET_HEAD_PARTS | CollisionGroup.TANK_TURRET_GUN_PARTS,
         shadowY: 3 * 3,
     },
     [SlotPartType.TurretGun]: {
@@ -90,33 +88,29 @@ const BASE_SLOT_PART_CONFIGS: Record<SlotPartType, Omit<SlotPartConfig, 'density
         belongsSolverGroup: CollisionGroup.ALL,
         interactsSolverGroup: CollisionGroup.ALL,
         belongsCollisionGroup: CollisionGroup.TANK_TURRET_GUN_PARTS,
-        interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_TURRET_HEAD_PARTS | CollisionGroup.TANK_TURRET_GUN_PARTS,
+        interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.OBSTACLE | CollisionGroup.TANK_TURRET_HEAD_PARTS | CollisionGroup.TANK_TURRET_GUN_PARTS,
         shadowY: 4 * 3,
     },
     [SlotPartType.Barrier]: {
         z: ZIndex.TankTurret,
         belongsSolverGroup: CollisionGroup.ALL,
         interactsSolverGroup: CollisionGroup.ALL,
-        // Barrier blocks bullets but is impenetrable (no BULLET in interacts means no damage)
         belongsCollisionGroup: CollisionGroup.TANK_TURRET_HEAD_PARTS,
-        interactsCollisionGroup: CollisionGroup.WALL | CollisionGroup.TANK_TURRET_HEAD_PARTS,
+        interactsCollisionGroup: CollisionGroup.OBSTACLE | CollisionGroup.TANK_TURRET_HEAD_PARTS,
         shadowY: 4 * 3,
     },
     [SlotPartType.Scoop]: {
         z: ZIndex.TankHull,
         belongsSolverGroup: CollisionGroup.ALL,
         interactsSolverGroup: CollisionGroup.ALL,
-        belongsCollisionGroup: CollisionGroup.TANK_HULL_PARTS,
-        // Scoop interacts with debris to collect them
-        interactsCollisionGroup: CollisionGroup.WALL | CollisionGroup.TANK_HULL_PARTS,
+        belongsCollisionGroup: CollisionGroup.VEHICALE_HULL_PARTS,
+        interactsCollisionGroup: CollisionGroup.OBSTACLE | CollisionGroup.VEHICALE_HULL_PARTS,
         shadowY: 2 * 3,
     },
     [SlotPartType.Shield]: {
         z: ZIndex.Shield,
-        // Shield has no physical push effect - bullets pass through after collision
         belongsSolverGroup: CollisionGroup.ALL,
         interactsSolverGroup: CollisionGroup.ALL,
-        // Shield only collides with bullets - not with each other, not with walls, not with tank parts
         belongsCollisionGroup: CollisionGroup.SHIELD,
         interactsCollisionGroup: CollisionGroup.BULLET,
         shadowY: 0 * 3, // No shadow for energy shield
@@ -125,16 +119,8 @@ const BASE_SLOT_PART_CONFIGS: Record<SlotPartType, Omit<SlotPartConfig, 'density
         z: ZIndex.TankCaterpillar,
         belongsSolverGroup: CollisionGroup.ALL,
         interactsSolverGroup: CollisionGroup.ALL,
-        belongsCollisionGroup: CollisionGroup.TANK_HULL_PARTS,
-        interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_HULL_PARTS,
-        shadowY: 2 * 3,
-    },
-    [SlotPartType.Detail]: {
-        z: ZIndex.TankHull,
-        belongsSolverGroup: CollisionGroup.ALL,
-        interactsSolverGroup: CollisionGroup.ALL,
-        belongsCollisionGroup: CollisionGroup.TANK_HULL_PARTS,
-        interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.WALL | CollisionGroup.TANK_HULL_PARTS,
+        belongsCollisionGroup: CollisionGroup.VEHICALE_HULL_PARTS,
+        interactsCollisionGroup: CollisionGroup.BULLET | CollisionGroup.OBSTACLE | CollisionGroup.VEHICALE_HULL_PARTS,
         shadowY: 2 * 3,
     },
 };

@@ -35,8 +35,8 @@ const volumeByType: Record<VehicleType, number> = {
  * Tracks and wheels are added as children.
  */
 export function createVehicleBase(options: VehicleOptions, { world } = GameDI): [number, number] {
-    options.belongsCollisionGroup = CollisionGroup.TANK_BASE;
-    options.interactsCollisionGroup = CollisionGroup.TANK_BASE;
+    options.belongsCollisionGroup = CollisionGroup.VEHICALE_BASE;
+    options.interactsCollisionGroup = CollisionGroup.VEHICALE_BASE;
 
     const [vehicleEid, vehiclePid] = createRectangleRigidGroup(options);
     Vehicle.addComponent(world, vehicleEid, options.vehicleType);

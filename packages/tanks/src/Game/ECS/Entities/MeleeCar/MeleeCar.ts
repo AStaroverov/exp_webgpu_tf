@@ -7,9 +7,7 @@ import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../Vehi
 import { addCarExhaustPipe } from '../ExhaustPipe.ts';
 import { createMeleeCarBase, createMeleeCarWheels } from './MeleeCarBase.ts';
 import {
-    DENSITY,
-    detailSet,
-    hullSet,
+    DENSITY, hullSet,
     PADDING,
     PARTS_COUNT,
     SIZE,
@@ -17,13 +15,12 @@ import {
     WHEEL_HEIGHT,
     WHEEL_WIDTH,
     wheelBase,
-    wheelSlotSet,
+    wheelSlotSet
 } from './MeleeCarParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from './Options.ts';
 
 // MeleeCar colors - aggressive sporty look
 const WHEEL_COLOR = new Float32Array([0.2, 0.2, 0.2, 1]);     // Dark rubber
-const DETAIL_COLOR = new Float32Array([1.0, 0.3, 0.1, 1]);    // Orange/red accents
 const APPROXIMATE_COLLIDER_RADIUS = 45;
 
 export function createMeleeCar(opts: {
@@ -75,10 +72,6 @@ export function createMeleeCar(opts: {
     createSlotEntities(frontRightEid, wheelSlotSet, options.color, SlotPartType.Wheel);
     createSlotEntities(rearLeftEid, wheelSlotSet, options.color, SlotPartType.Wheel);
     createSlotEntities(rearRightEid, wheelSlotSet, options.color, SlotPartType.Wheel);
-
-    // Decorative details on car body
-    updateColorOptions(options, DETAIL_COLOR);
-    createSlotEntities(carEid, detailSet, options.color, SlotPartType.Detail);
 
     // Fill all slots with physical parts
     updateSlotsBrightness(carEid);

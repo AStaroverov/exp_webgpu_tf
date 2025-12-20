@@ -7,9 +7,6 @@ export const PADDING = SIZE + 1;
 // Compact rectangular hull - like a car body
 export const hullSet = createRectangleSet(6, 10, SIZE, PADDING);
 
-// Decorative detail parts
-export const detailSet: PartsData[] = [];
-
 // Wheel configuration - 4 wheels at the corners
 export const WHEEL_SIZE = 6;
 export const WHEEL_PADDING = WHEEL_SIZE + 1;

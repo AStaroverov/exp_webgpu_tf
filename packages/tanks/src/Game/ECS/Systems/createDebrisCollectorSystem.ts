@@ -80,7 +80,7 @@ export function createDebrisCollectorSystem({ world, physicalWorld } = GameDI) {
             },
             undefined,
             // Look for parts that are not part of tanks anymore
-            createCollisionGroups(CollisionGroup.ALL, CollisionGroup.TANK_HULL_PARTS | CollisionGroup.TANK_TURRET_HEAD_PARTS),
+            createCollisionGroups(CollisionGroup.ALL, CollisionGroup.VEHICALE_HULL_PARTS | CollisionGroup.TANK_TURRET_HEAD_PARTS),
         );
 
         if (debrisEids.length === 0) return;

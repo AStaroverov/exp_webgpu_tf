@@ -9,6 +9,7 @@ import { createHarvester } from '../../Game/ECS/Entities/Harvester/Harvester.ts'
 import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
 import { PlayerEnvDI } from '../../Game/DI/PlayerEnvDI.ts';
 import { createPlayer } from '../../Game/ECS/Entities/Player.ts';
+import { createRock } from '../../Game/ECS/Entities/Rock/Rock.ts';
 // Player team = 0, Enemy team = 1
 export const PLAYER_TEAM_ID = 0;
 export const ENEMY_TEAM_ID = 1;
@@ -97,5 +98,30 @@ export function getVehicleEids() {
 
 export function getEnemyCount() {
     return getVehicleEids().length - 1;
+}
+
+/**
+ * Spawn a rock at random position near the player
+ */
+export function spawnRockAtRandomPosition() {
+    // Get player position
+    let playerX = 0;
+    let playerY = 0;
+    
+    if (PlayerEnvDI.tankEid !== null) {
+        playerX = RigidBodyState.position.get(PlayerEnvDI.tankEid, 0);
+        playerY = RigidBodyState.position.get(PlayerEnvDI.tankEid, 1);
+    }
+    
+    // Spawn at random distance from player (150-500 units away)
+    const spawnDistance = randomRangeFloat(150, 500);
+    
+    // Random angle
+    const angle = randomRangeFloat(0, PI * 2);
+    
+    const x = playerX + Math.cos(angle) * spawnDistance;
+    const y = playerY + Math.sin(angle) * spawnDistance;
+
+    return createRock({ x, y });
 }
 

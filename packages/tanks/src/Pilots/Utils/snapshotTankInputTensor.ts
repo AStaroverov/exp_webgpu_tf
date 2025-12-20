@@ -157,7 +157,7 @@ export function findTankNeighboursEids(tankEid: EntityId, limit: number, select:
                 return result.length < limit;
             },
             undefined,
-            createCollisionGroups(CollisionGroup.TANK_BASE, CollisionGroup.TANK_BASE),
+            createCollisionGroups(CollisionGroup.VEHICALE_BASE, CollisionGroup.VEHICALE_BASE),
         );
         if (result.length >= limit) {
             break;
