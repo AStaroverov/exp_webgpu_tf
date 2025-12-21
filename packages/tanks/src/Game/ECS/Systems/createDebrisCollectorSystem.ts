@@ -120,17 +120,17 @@ function fillSlots(vehicleEid: number, debrisEids: EntityId[]) {
 }
 
 function mixColors(baseColorEid: EntityId, mixEids: EntityId[]) {
-    Color.r[baseColorEid] *= 3;
-    Color.g[baseColorEid] *= 3;
-    Color.b[baseColorEid] *= 3;
+    let r = Color.getR(baseColorEid) * 3;
+    let g = Color.getG(baseColorEid) * 3;
+    let b = Color.getB(baseColorEid) * 3;
     for (let i = 0; i < mixEids.length; i++) {
-        Color.r[baseColorEid] += Color.r[mixEids[i]];
-        Color.g[baseColorEid] += Color.g[mixEids[i]];
-        Color.b[baseColorEid] += Color.b[mixEids[i]];
+        r += Color.getR(mixEids[i]);
+        g += Color.getG(mixEids[i]);
+        b += Color.getB(mixEids[i]);
     }
-    Color.r[baseColorEid] /= (DEBRIS_FOR_HEAL + 4);
-    Color.g[baseColorEid] /= (DEBRIS_FOR_HEAL + 4);
-    Color.b[baseColorEid] /= (DEBRIS_FOR_HEAL + 4);
+    Color.setR$(baseColorEid, r / (DEBRIS_FOR_HEAL + 4));
+    Color.setG$(baseColorEid, g / (DEBRIS_FOR_HEAL + 4));
+    Color.setB$(baseColorEid, b / (DEBRIS_FOR_HEAL + 4));
 }
 
 

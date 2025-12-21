@@ -22,10 +22,6 @@ export function changeTankType(vehicleEid: EntityId, slot: number, vehicleType: 
     addTank(slot, PLAYER_TEAM_ID, vehicleType);
 }
 
-// export function changeTankPilot(tankEid: EntityId, slot: number, pilot: number) {
-//     const tankEid = mapSlotToEid$.value.get(slot);
-//
-// }
 
 export const vehicleEids$ = frameInterval(160).pipe(
     map(() => Array.from(getVehicleEids())),

@@ -241,8 +241,12 @@ export function getVehicleFilledSlotCount(vehicleEid: EntityId): number {
 
 function adjustBrightness(eid: EntityId, start: number, end: number) {
     const factor = -1 * randomRangeFloat(start, end);
-    Color.r[eid] = clamp(Color.r[eid] + factor, 0, 1);
-    Color.g[eid] = clamp(Color.g[eid] + factor, 0, 1);
-    Color.b[eid] = clamp(Color.b[eid] + factor, 0, 1);
+    Color.set$(
+        eid,
+        clamp(Color.getR(eid) + factor, 0, 1),
+        clamp(Color.getG(eid) + factor, 0, 1),
+        clamp(Color.getB(eid) + factor, 0, 1),
+        Color.getA(eid),
+    );
 }
 

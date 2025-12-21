@@ -1,5 +1,5 @@
 import { delegate } from '../../delegate.ts';
-import { TypedArray } from '../../utils.ts';
+import { NestedArray, TypedArray } from '../../utils.ts';
 import { addComponent, World } from 'bitecs';
 import { component, obs } from '../utils.ts';
 
@@ -29,30 +29,32 @@ export const Roundness = component({
 
 export type TColor = [number, number, number, number] | Float32Array;
 export const Color = component({
-    r: new Float64Array(delegate.defaultSize),
-    g: new Float64Array(delegate.defaultSize),
-    b: new Float64Array(delegate.defaultSize),
-    a: new Float64Array(delegate.defaultSize),
+    rgba: NestedArray.f64(4, delegate.defaultSize),
 
     addComponent(world: World, eid: number, r = 0, g = 0, b = 0, a = 1) {
         addComponent(world, eid, Color);
-        Color.r[eid] = r;
-        Color.g[eid] = g;
-        Color.b[eid] = b;
-        Color.a[eid] = a;
+        Color.rgba.set(eid, 0, r).set(eid, 1, g).set(eid, 2, b).set(eid, 3, a);
     },
     set$: obs((eid: number, r: number, g: number, b: number, a: number) => {
-        Color.r[eid] = r;
-        Color.g[eid] = g;
-        Color.b[eid] = b;
-        Color.a[eid] = a;
+        Color.rgba.set(eid, 0, r).set(eid, 1, g).set(eid, 2, b).set(eid, 3, a);
     }),
 
+    getArray: (eid: number) => Color.rgba.getBatch(eid),
+    getR: (eid: number) => Color.rgba.get(eid, 0),
+    getG: (eid: number) => Color.rgba.get(eid, 1),
+    getB: (eid: number) => Color.rgba.get(eid, 2),
+    getA: (eid: number) => Color.rgba.get(eid, 3),
+
+    setR$: obs((eid: number, v: number) => Color.rgba.set(eid, 0, v)),
+    setG$: obs((eid: number, v: number) => Color.rgba.set(eid, 1, v)),
+    setB$: obs((eid: number, v: number) => Color.rgba.set(eid, 2, v)),
+    setA$: obs((eid: number, v: number) => Color.rgba.set(eid, 3, v)),
+
     applyColorToArray: <T extends TColor>(eid: number, color: T): T => {
-        color[0] = Color.r[eid];
-        color[1] = Color.g[eid];
-        color[2] = Color.b[eid];
-        color[3] = Color.a[eid];
+        color[0] = Color.rgba.get(eid, 0);
+        color[1] = Color.rgba.get(eid, 1);
+        color[2] = Color.rgba.get(eid, 2);
+        color[3] = Color.rgba.get(eid, 3);
         return color;
     },
 });

@@ -32,10 +32,7 @@ export function createDrawRopeSystem(world: World, device: GPUDevice) {
             // f32
             thinnessCollect[i] = Thinness.value[id];
             // [f32, 4]
-            colorCollect[i * 4 + 0] = Color.r[id];
-            colorCollect[i * 4 + 1] = Color.g[id];
-            colorCollect[i * 4 + 2] = Color.b[id];
-            colorCollect[i * 4 + 3] = Color.a[id];
+            colorCollect.set(Color.getArray(id), i * 4);
         }
 
         device.queue.writeBuffer(gpuShader.uniforms.projection.getGPUBuffer(device), 0, projectionMatrix as BufferSource);

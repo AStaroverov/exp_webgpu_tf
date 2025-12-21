@@ -17,8 +17,8 @@ export function createUpdateTreadMarksSystem({ world } = GameDI) {
             const alpha = INITIAL_ALPHA * (1 - progress);
 
             // Update color alpha
-            if (alpha - Color.a[eid] > 0.05) {
-                Color.set$(eid, Color.r[eid], Color.g[eid], Color.b[eid], alpha);
+            if (alpha - Color.getA(eid) > 0.05) {
+                Color.setA$(eid, alpha);
             }
         }
     };
