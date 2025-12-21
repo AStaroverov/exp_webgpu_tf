@@ -12,10 +12,10 @@ import { PI } from '../../../../../lib/math.ts';
 
 export const BulletSpeedConfig = {
     /** Maximum allowed bullet speed */
-    max: 400,
+    max: 2000,
     
     /** Minimum speed before bullet is destroyed */
-    min: 80,
+    min: 200,
 } as const;
 
 // =============================================================================
@@ -63,7 +63,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     [BulletCaliber.Medium]: {
         width: 5,
         height: 10,
-        speed: 550,
+        speed: 650,
         density: 6_000,
         damage: 6,
         linearDamping: 0.2, // Medium bullets have moderate drag
@@ -72,7 +72,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     [BulletCaliber.Heavy]: {
         width: 7,
         height: 14,
-        speed: 650,
+        speed: 800,
         density: 10_000,
         damage: 10,
         linearDamping: 0.075, // Heavy bullets maintain speed longer
@@ -113,16 +113,16 @@ export const TurretSpeedConfig = {
  */
 export const ReloadConfig = {
     /** Light tank - fast reload */
-    light: 300,
+    light: 400,
     
     /** Medium tank - balanced reload */
-    medium: 500,
+    medium: 600,
     
     /** Heavy tank - slow reload */
-    heavy: 700,
+    heavy: 800,
     
     /** Player tank - enhanced reload */
-    player: 350,
+    player: 300,
 } as const;
 
 export type BulletSpeedType = typeof BulletSpeedConfig;
