@@ -1,6 +1,6 @@
 import { addEntity } from 'bitecs';
 import { GameDI } from '../../DI/GameDI.ts';
-import { ExhaustSmoke } from '../Components/ExhaustSmoke.ts';
+import { VFX, VFXType } from '../Components/VFX.ts';
 import { Progress } from '../Components/Progress.ts';
 import { DestroyByTimeout } from '../Components/Destroy.ts';
 import {
@@ -44,9 +44,8 @@ export function spawnExhaustSmoke(options: ExhaustSmokeOptions, { world } = Game
     smokeVelocityY[eid % 1024] = options.velocityY;
 
     Progress.addComponent(world, eid, EXHAUST_SMOKE_DURATION);
-    ExhaustSmoke.addComponent(world, eid);
+    VFX.addComponent(world, eid, VFXType.ExhaustSmoke);
     DestroyByTimeout.addComponent(world, eid, EXHAUST_SMOKE_DURATION);
 
     return eid;
 }
-

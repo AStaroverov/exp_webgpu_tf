@@ -29,7 +29,7 @@ export const ZIndexConfig = {
     TankTurret: 8,
     
     /** Bullets flying through the air */
-    Bullet: 8,
+    Bullet: 1,
     
     // === Effects without shadow mapping ===
     

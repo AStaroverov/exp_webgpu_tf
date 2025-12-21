@@ -1,6 +1,6 @@
 import { addEntity } from 'bitecs';
 import { GameDI } from '../../DI/GameDI.ts';
-import { MuzzleFlash } from '../Components/MuzzleFlash.ts';
+import { VFX, VFXType } from '../Components/VFX.ts';
 import { Progress } from '../Components/Progress.ts';
 import { DestroyByTimeout } from '../Components/Destroy.ts';
 import { addTransformComponents, applyMatrixTranslate, applyMatrixRotateZ, applyMatrixScale, LocalTransform } from '../../../../../renderer/src/ECS/Components/Transform.ts';
@@ -27,7 +27,7 @@ export function spawnMuzzleFlash(options: MuzzleFlashOptions, { world } = GameDI
     }
     applyMatrixScale(LocalTransform.matrix.getBatch(eid), options.size, options.size);
 
-    MuzzleFlash.addComponent(world, eid);
+    VFX.addComponent(world, eid, VFXType.MuzzleFlash);
     Progress.addComponent(world, eid, options.duration);
     DestroyByTimeout.addComponent(world, eid, options.duration);
 }

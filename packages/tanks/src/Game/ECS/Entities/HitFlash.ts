@@ -1,6 +1,6 @@
 import { addEntity } from 'bitecs';
 import { GameDI } from '../../DI/GameDI.ts';
-import { HitFlash } from '../Components/HitFlash.ts';
+import { VFX, VFXType } from '../Components/VFX.ts';
 import { Progress } from '../Components/Progress.ts';
 import { DestroyByTimeout } from '../Components/Destroy.ts';
 import { addTransformComponents, applyMatrixTranslate, applyMatrixScale, LocalTransform } from '../../../../../renderer/src/ECS/Components/Transform.ts';
@@ -23,7 +23,7 @@ export function spawnHitFlash(options: HitFlashOptions, { world } = GameDI, { en
     applyMatrixTranslate(LocalTransform.matrix.getBatch(eid), options.x, options.y, ZIndex.HitFlash);
     applyMatrixScale(LocalTransform.matrix.getBatch(eid), options.size, options.size);
 
-    HitFlash.addComponent(world, eid);
+    VFX.addComponent(world, eid, VFXType.HitFlash);
     Progress.addComponent(world, eid, options.duration);
     DestroyByTimeout.addComponent(world, eid, options.duration);
 }

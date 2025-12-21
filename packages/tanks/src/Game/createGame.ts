@@ -28,10 +28,7 @@ import {
 } from './ECS/Systems/PlayerTankControllerSystems.ts';
 import { createDrawFaunaSystem } from './ECS/Systems/Render/Fauna/createDrawFaunaSystem.ts';
 import { createSandstormSystem } from './ECS/Systems/Render/PostEffect/Sandstorm/createSandstormSystem.ts';
-import { createDrawMuzzleFlashSystem } from './ECS/Systems/Render/MuzzleFlash/createDrawMuzzleFlashSystem.ts';
-import { createDrawHitFlashSystem } from './ECS/Systems/Render/HitFlash/createDrawHitFlashSystem.ts';
-import { createDrawExplosionSystem } from './ECS/Systems/Render/Explosion/createDrawExplosionSystem.ts';
-import { createDrawExhaustSmokeSystem } from './ECS/Systems/Render/ExhaustSmoke/createDrawExhaustSmokeSystem.ts';
+import { createDrawVFXSystem } from './ECS/Systems/Render/VFX/createDrawVFXSystem.ts';
 import { createPostEffect } from './ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
 import { createTankDecayOutOfZoneSystem } from './ECS/Systems/Tank/createTankDecayOutOfZoneSystem.ts';
 import { createVisualizationTracksSystem } from './ECS/Systems/Tank/createVisualizationTracksSystem.ts';
@@ -272,10 +269,7 @@ export function createGame({ width, height }: {
         });
         const drawFauna = createDrawFaunaSystem();
         const drawSandstorm = createSandstormSystem();
-        const drawMuzzleFlash = createDrawMuzzleFlashSystem();
-        const drawHitFlash = createDrawHitFlashSystem();
-        const drawExplosion = createDrawExplosionSystem();
-        const drawExhaustSmoke = createDrawExhaustSmokeSystem();
+        const drawVFX = createDrawVFXSystem();
         
         // First create frame tick to get shadowMapTexture
         const frameTick = createFrameTick(
@@ -290,10 +284,7 @@ export function createGame({ width, height }: {
             ({ passEncoder, delta }) => {
                 drawFauna(passEncoder, delta);
                 shapeSystem.drawShapes(passEncoder);
-                drawExhaustSmoke(passEncoder);
-                drawExplosion(passEncoder);
-                drawHitFlash(passEncoder);
-                drawMuzzleFlash(passEncoder);
+                drawVFX(passEncoder);
                 drawSandstorm(passEncoder, delta);
             },
             // Shadow map pass callback
