@@ -21,13 +21,17 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
     }
     
     // Pipeline for shadow map pass (r32float, no depth, no blending)
-    // Use autoLayout to avoid requiring shadow map texture bind group
+    // Uses autoLayout with explicit bindGroups since it doesn't use all uniforms
     const pipelineShadowMap = shadowMapTexture 
         ? gpuShader.getRenderPipeline(device, 'vs_shadow_map', 'fs_shadow_map', { 
-            withDepth: false, 
             targetFormat: 'r32float',
-            withBlending: false,
             autoLayout: true,
+            withBlending: false,
+            withDepth: false,
+            bindGroups: {
+                0: ['projection'],
+                1: ['transform', 'kind', 'values', 'roundness'],
+            },
         })
         : null;
     
@@ -42,29 +46,9 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
     const bindGroup1 = gpuShader.getBindGroup(device, 1);
     const bindGroup2 = shadowMapTexture ? gpuShader.getBindGroup(device, 2) : null;
     
-    // Shadow map pass uses auto layout - create bind groups from pipeline layout
-    // The auto layout only includes uniforms actually used by the shader
-    // vs_shadow_map/fs_shadow_map use: projection, transform, kind, values, roundness (NOT color, NOT shadowMap)
-    let shadowMapBindGroup0: GPUBindGroup | null = null;
-    let shadowMapBindGroup1: GPUBindGroup | null = null;
-    if (pipelineShadowMap) {
-        shadowMapBindGroup0 = device.createBindGroup({
-            layout: pipelineShadowMap.getBindGroupLayout(0),
-            entries: [
-                { binding: shaderMeta.uniforms.projection.binding, resource: { buffer: gpuShader.uniforms.projection.getGPUBuffer(device) } },
-            ],
-        });
-        shadowMapBindGroup1 = device.createBindGroup({
-            layout: pipelineShadowMap.getBindGroupLayout(1),
-            entries: [
-                { binding: shaderMeta.uniforms.transform.binding, resource: { buffer: gpuShader.uniforms.transform.getGPUBuffer(device) } },
-                { binding: shaderMeta.uniforms.kind.binding, resource: { buffer: gpuShader.uniforms.kind.getGPUBuffer(device) } },
-                // color (binding 2) is NOT used by shadow map shader
-                { binding: shaderMeta.uniforms.values.binding, resource: { buffer: gpuShader.uniforms.values.getGPUBuffer(device) } },
-                { binding: shaderMeta.uniforms.roundness.binding, resource: { buffer: gpuShader.uniforms.roundness.getGPUBuffer(device) } },
-            ],
-        });
-    }
+    // Shadow map pass bind groups (cached during pipeline creation)
+    const shadowMapBindGroup0 = pipelineShadowMap ? gpuShader.getBindGroup(device, 0, 'vs_shadow_map', 'fs_shadow_map') : null;
+    const shadowMapBindGroup1 = pipelineShadowMap ? gpuShader.getBindGroup(device, 1, 'vs_shadow_map', 'fs_shadow_map') : null;
 
     const transformCollect = getTypeTypedArray(shaderMeta.uniforms.transform.type);
     const kindCollect = getTypeTypedArray(shaderMeta.uniforms.kind.type);
@@ -136,11 +120,9 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
         // Set shadow map bind group (group 2) - only needed for main shapes pass
         if (bindGroup2) {
             renderPass.setBindGroup(2, bindGroup2);
+            renderPass.setPipeline(pipelineShadow);
+            renderPass.draw(6, entityCount, 0, 0);
         }
-
-        // Visual shadow effect (soft shadow glow on ground)
-        renderPass.setPipeline(pipelineShadow);
-        renderPass.draw(6, entityCount, 0, 0);
 
         // Main shapes (samples shadow map for object-to-object shadows)
         renderPass.setPipeline(pipelineSdf);

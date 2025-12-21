@@ -8,7 +8,7 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
     private shaderModule?: GPUShaderModule;
     private pipelineLayout?: GPUPipelineLayout;
     private mapRenderPipeline: Map<string, GPURenderPipeline> = new Map();
-    private mapBindGroup: Map<number, GPUBindGroup> = new Map();
+    private mapBindGroup: Map<string, GPUBindGroup> = new Map();
     private mapGPUBindGroupLayout: Map<number, GPUBindGroupLayout> = new Map();
 
     constructor(public shaderMeta: M) {
@@ -37,17 +37,21 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
             targetFormat?: GPUTextureFormat,
             withBlending?: boolean,
             autoLayout?: boolean,
+            /** For autoLayout pipelines: specify which uniforms to include in each bind group */
+            bindGroups?: Record<number, (keyof M['uniforms'])[]>,
         },
     ): GPURenderPipeline {
         const withDepth = options?.withDepth ?? false;
         const targetFormat = options?.targetFormat ?? navigator.gpu.getPreferredCanvasFormat();
         const withBlending = options?.withBlending ?? true;
         const autoLayout = options?.autoLayout ?? false;
-        const key = `${ vertexName }-${ fragmentName }-${ withDepth }-${ targetFormat }-${ withBlending }-${ autoLayout }`;
+        const bindGroups = options?.bindGroups;
+        const pipelineKey = `${ vertexName }-${ fragmentName }`;
+        const key = `${ pipelineKey }-${ withDepth }-${ targetFormat }-${ withBlending }-${ autoLayout }`;
         const shaderModule = options?.shaderModule ?? this.getShaderModule(device);
 
         if (!this.mapRenderPipeline.has(key)) {
-            const value = device.createRenderPipeline({
+            const pipeline = device.createRenderPipeline({
                 layout: autoLayout ? 'auto' : this.getGPUPipelineLayout(device),
                 primitive: {
                     topology: 'triangle-list',
@@ -83,25 +87,55 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
                     depthWriteEnabled: true,
                 } : undefined,
             });
-            this.mapRenderPipeline.set(key, value);
+            this.mapRenderPipeline.set(key, pipeline);
+
+            // Create and cache bind groups for autoLayout pipelines
+            if (autoLayout && bindGroups) {
+                for (const [groupStr, uniformKeys] of Object.entries(bindGroups)) {
+                    const group = Number(groupStr);
+                    const bindGroupKey = `${ pipelineKey }-${ group }`;
+                    const bindGroup = device.createBindGroup({
+                        layout: pipeline.getBindGroupLayout(group),
+                        entries: uniformKeys.map((uniformKey) => 
+                            this.uniforms[uniformKey].getBindGroupEntry(device)
+                        ),
+                    });
+                    this.mapBindGroup.set(bindGroupKey, bindGroup);
+                }
+            }
         }
 
         return this.mapRenderPipeline.get(key)!;
     }
 
-    getBindGroup(device: GPUDevice, group: number): GPUBindGroup {
-        if (!this.mapBindGroup.has(group)) {
-            const bindGroupLayout = device.createBindGroup({
+    /**
+     * Gets a cached bind group.
+     * @param group - bind group index
+     * @param vertexName - for autoLayout pipelines, specify entry point names to get the correct bind group
+     * @param fragmentName - for autoLayout pipelines, specify entry point names to get the correct bind group
+     */
+    getBindGroup(device: GPUDevice, group: number, vertexName?: string, fragmentName?: string): GPUBindGroup {
+        const key = vertexName && fragmentName 
+            ? `${ vertexName }-${ fragmentName }-${ group }`
+            : `default-${ group }`;
+
+        if (!this.mapBindGroup.has(key)) {
+            // Only create default bind groups (non-autoLayout)
+            if (vertexName && fragmentName) {
+                throw new Error(`Bind group for ${ key } not found. Make sure to pass bindGroups option to getRenderPipeline.`);
+            }
+            
+            const bindGroup = device.createBindGroup({
                 layout: this.createBindGroupLayout(device, group),
                 entries: Object.entries(this.uniforms)
-                    .filter(([key]) => this.shaderMeta.uniforms[key].group === group)
+                    .filter(([uniformKey]) => this.shaderMeta.uniforms[uniformKey].group === group)
                     .map(([_, value]) => value.getBindGroupEntry(device)),
             });
 
-            this.mapBindGroup.set(group, bindGroupLayout);
+            this.mapBindGroup.set(key, bindGroup);
         }
 
-        return this.mapBindGroup.get(group)!;
+        return this.mapBindGroup.get(key)!;
     }
 
     createBindGroupLayout(device: GPUDevice, group: number): GPUBindGroupLayout {
