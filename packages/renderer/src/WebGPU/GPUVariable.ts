@@ -34,7 +34,11 @@ export class GPUVariable {
 
     getBindGroupLayoutEntrySpecific(): Pick<GPUBindGroupLayoutEntry, 'buffer' | 'texture' | 'sampler'> {
         if (this.variable.kind === VariableKind.Texture) {
-            return { texture: {} };
+            return { 
+                texture: this.variable.textureSampleType 
+                    ? { sampleType: this.variable.textureSampleType } 
+                    : {} 
+            };
         }
         if (this.variable.kind === VariableKind.Sampler) {
             return { sampler: {} };

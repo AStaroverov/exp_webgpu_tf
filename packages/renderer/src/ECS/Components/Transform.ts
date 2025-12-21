@@ -58,7 +58,7 @@ export function getMatrixTranslationY(m: mat4) {
 }
 
 export function getMatrixTranslation(m: mat4) {
-    return (m as Float32Array).subarray(12, 14);
+    return (m as Float32Array).subarray(12, 15);
 }
 
 export function getMatrixRotationZ(m: mat4) {

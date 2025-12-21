@@ -93,7 +93,8 @@ export function createRockParts(
 
         partOptions.x = rockX + worldX;
         partOptions.y = rockY + worldY;
-        partOptions.z = ZIndex.Rock;
+        partOptions.z = ZIndex.Rock + (width + height) / 2;
+        
         partOptions.width = width;
         partOptions.height = height;
         // Combine rock rotation with part's own rotation

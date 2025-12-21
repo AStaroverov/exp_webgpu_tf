@@ -33,6 +33,7 @@ export function createRock(opts: CreateRockOptions, { world } = GameDI) {
     const partSize = opts.partSize ?? randomRangeInt(5, 10);
     const rotation = opts.rotation ?? randomRangeFloat(0, Math.PI * 2);
     const noiseScale = opts.noiseScale ?? randomRangeFloat(0.03, 0.08);
+    const noiseOctaves = opts.noiseOctaves ?? randomRangeInt(1, 5);
     const emptyThreshold = opts.emptyThreshold ?? randomRangeFloat(0.5, 0.8);
     
     const color = opts.color ?? getRandomStoneColor();
@@ -45,7 +46,7 @@ export function createRock(opts: CreateRockOptions, { world } = GameDI) {
         cellSize,
         partSize,
         noiseScale,
-        noiseOctaves: 3,
+        noiseOctaves,
         emptyThreshold,
     });
 

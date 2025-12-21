@@ -1,13 +1,16 @@
+// All this Zindex is just a baseline/min value for the entities.
+// Zindex is used to sort the entities for rendering and shadow mapping.
 export enum ZIndex {
     Background = 0,
-    TreadMark = 0.0005,
-    Rock = 0.0008,  // Rocks are below tank parts
-    TankHull = 0.001,
-    TankCaterpillar = 0.001,
-    TankTurret = 0.0011,
-    Shield = 0.0012,
-    Bullet = 0.002,
-    Explosion = 0.003,
-    HitFlash = 0.0035,
-    MuzzleFlash = 0.004,
+    TreadMark = 0.001,
+    Rock = 1, // more related with terrain/size
+    TankHull = 4,
+    TankCaterpillar = 4,
+    TankTurret = 8,
+    Shield = 6,
+    Bullet = 8,
+    // w/o shadow mapping
+    Explosion = 100,
+    HitFlash = 100,
+    MuzzleFlash = 100,
 }

@@ -1,45 +1,89 @@
 import { createResizeSystem } from '../ECS/Systems/ResizeSystem.ts';
 
-export function createFrameTick(
-    { canvas, device, context, background, getPixelRatio }: {
-        canvas: HTMLCanvasElement,
-        device: GPUDevice,
-        context: GPUCanvasContext,
-        background: GPUColor,
-        getPixelRatio: () => number,
-    }, callback: (options: {
-        delta: number,
-        context: GPUCanvasContext,
-        device: GPUDevice,
-        passEncoder: GPURenderPassEncoder
-    }) => void) {
-    const resizeSystem = createResizeSystem(canvas, getPixelRatio);
-
-    const arg = {
-        delta: 0,
-        context,
-        device,
-        passEncoder: null as unknown as GPURenderPassEncoder,
-    };
+export function createFrameTextures(device: GPUDevice, canvas: HTMLCanvasElement) {
+    const renderTexture = device.createTexture({
+        size: [canvas.width, canvas.height, 1],
+        format: 'bgra8unorm',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
 
     const depthTexture = device.createTexture({
         size: [canvas.width, canvas.height, 1],
         format: 'depth32float',
         usage: GPUTextureUsage.RENDER_ATTACHMENT,
     });
-    const renderTexture = device.createTexture({
+    
+    // Shadow map texture - stores Z height of shadow casters (r32float for max Z value)
+    const shadowMapTexture = device.createTexture({
         size: [canvas.width, canvas.height, 1],
-        format: 'bgra8unorm',
+        format: 'r32float',
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
+
+    return { renderTexture, depthTexture, shadowMapTexture };
+}
+
+export function createFrameTick(
+    { renderTexture, depthTexture, shadowMapTexture, canvas, device, background, getPixelRatio }: ReturnType<typeof createFrameTextures> & {
+        canvas: HTMLCanvasElement,
+        device: GPUDevice,
+        background: GPUColor,
+        getPixelRatio: () => number,
+    }, 
+    mainCallback: (options: {
+        delta: number,
+        device: GPUDevice,
+        passEncoder: GPURenderPassEncoder,
+    }) => void,
+    shadowMapCallback: (options: {
+        delta: number,
+        device: GPUDevice,
+        passEncoder: GPURenderPassEncoder,
+    }) => void,
+) {
+    const resizeSystem = createResizeSystem(canvas, getPixelRatio);
+    
+    const shadowMapArg = {
+        delta: 0,
+        device,
+        passEncoder: null as unknown as GPURenderPassEncoder,
+    };
+    
+    const mainArg = {
+        delta: 0,
+        device,
+        passEncoder: null as unknown as GPURenderPassEncoder,
+    };
+    
     const renderFrame = (commandEncoder: GPUCommandEncoder, delta: number) => {
+        resizeSystem();
+
+        // === Shadow Map Pass (separate command buffer for synchronization) ===
+        const shadowMapEncoder = device.createCommandEncoder();
+        const shadowMapView = shadowMapTexture.createView();
+        const shadowMapPassEncoder = shadowMapEncoder.beginRenderPass({
+            colorAttachments: [{
+                view: shadowMapView,
+                clearValue: [0, 0, 0, 0], // Z = 0 means no shadow
+                loadOp: 'clear',
+                storeOp: 'store',
+            }],
+        });
+        
+        shadowMapArg.delta = delta;
+        shadowMapArg.passEncoder = shadowMapPassEncoder;
+        shadowMapCallback(shadowMapArg);
+        shadowMapPassEncoder.end();
+        // Submit shadow map pass first (creates synchronization barrier)
+        device.queue.submit([shadowMapEncoder.finish()]);
+        
+        // === Main Render Pass ===
         const depthView = depthTexture.createView();
         const textureView = renderTexture.createView();
 
         const passEncoder = commandEncoder.beginRenderPass({
             colorAttachments: [
                 {
-                    // view: context.getCurrentTexture().createView(),
                     view: textureView,
                     clearValue: background,
                     loadOp: 'clear',
@@ -54,16 +98,13 @@ export function createFrameTick(
             },
         });
 
-        arg.delta = delta;
-        arg.passEncoder = passEncoder;
-
-        resizeSystem();
-        callback(arg);
-
+        mainArg.delta = delta;
+        mainArg.passEncoder = passEncoder;
+        mainCallback(mainArg);
         passEncoder.end();
 
         return { renderTexture, depthTexture };
     };
 
-    return { renderFrame, renderTexture };
+    return renderFrame;
 }

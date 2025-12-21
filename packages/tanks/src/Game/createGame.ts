@@ -4,7 +4,7 @@ import { destroyChangeDetectorSystem } from '../../../renderer/src/ECS/Systems/C
 import { createDrawShapeSystem } from '../../../renderer/src/ECS/Systems/SDFSystem/createDrawShapeSystem.ts';
 import { createTransformSystem } from '../../../renderer/src/ECS/Systems/TransformSystem.ts';
 import { initWebGPU } from '../../../renderer/src/gpu.ts';
-import { createFrameTick } from '../../../renderer/src/WGSL/createFrame.ts';
+import { createFrameTextures, createFrameTick } from '../../../renderer/src/WGSL/createFrame.ts';
 import { GameDI } from './DI/GameDI.ts';
 import { PlayerEnvDI } from './DI/PlayerEnvDI.ts';
 import { RenderDI } from './DI/RenderDI.ts';
@@ -263,33 +263,51 @@ export function createGame({ width, height }: {
         RenderDI.device = device;
         RenderDI.context = context;
 
+        const textures = createFrameTextures(device, canvas);
+
+        const shapeSystem = createDrawShapeSystem({
+            world,
+            device,
+            shadowMapTexture: textures.shadowMapTexture,
+        });
         const drawFauna = createDrawFaunaSystem();
         const drawSandstorm = createSandstormSystem();
         const drawMuzzleFlash = createDrawMuzzleFlashSystem();
         const drawHitFlash = createDrawHitFlashSystem();
         const drawExplosion = createDrawExplosionSystem();
         const drawExhaustSmoke = createDrawExhaustSmokeSystem();
-        const drawShape = createDrawShapeSystem(world, device);
-        const { renderFrame, renderTexture } = createFrameTick({
-            canvas,
-            device,
-            context,
-            background: [226, 192, 146, 255].map(v => v / 255),
-            getPixelRatio: () => window.devicePixelRatio,
-        }, ({ passEncoder, delta }) => {
-            drawFauna(passEncoder, delta);
-            drawShape(passEncoder);
-            drawExhaustSmoke(passEncoder);
-            drawExplosion(passEncoder);
-            drawHitFlash(passEncoder);
-            drawMuzzleFlash(passEncoder);
-            drawSandstorm(passEncoder, delta);
-        });
-        const postEffectFrame = createPostEffect(device, context, renderTexture);
+        
+        // First create frame tick to get shadowMapTexture
+        const frameTick = createFrameTick(
+            {
+                ...textures,
+                canvas,
+                device,
+                background: [226, 192, 146, 255].map(v => v / 255),
+                getPixelRatio: () => window.devicePixelRatio,
+            }, 
+            // Main render pass callback
+            ({ passEncoder, delta }) => {
+                drawFauna(passEncoder, delta);
+                shapeSystem.drawShapes(passEncoder);
+                drawExhaustSmoke(passEncoder);
+                drawExplosion(passEncoder);
+                drawHitFlash(passEncoder);
+                drawMuzzleFlash(passEncoder);
+                drawSandstorm(passEncoder, delta);
+            },
+            // Shadow map pass callback
+            ({ passEncoder: shadowMapPassEncoder }) => {
+                shapeSystem.drawShadowMap(shadowMapPassEncoder);
+            }
+        );
+        
+        // Create shape system with shadowMapTexture
+        const postEffectFrame = createPostEffect(device, context, textures.renderTexture);
 
         RenderDI.renderFrame = (delta: number) => {
             const commandEncoder = device.createCommandEncoder();
-            renderFrame(commandEncoder, delta);
+            frameTick(commandEncoder, delta);
             postEffectFrame(commandEncoder);
             device.queue.submit([commandEncoder.finish()]);
         };

@@ -2,7 +2,6 @@ import { GPUShader } from '../../../../../../../renderer/src/WGSL/GPUShader.ts';
 import { shaderMeta } from './desert.shader.ts';
 import { getTypeTypedArray } from '../../../../../../../renderer/src/Shader';
 import { sin } from '../../../../../../../../lib/math.ts';
-import { random, randomSign } from '../../../../../../../../lib/random.ts';
 import { RenderDI } from '../../../../DI/RenderDI.ts';
 import { GameMap } from '../../../Entities/GameMap.ts';
 import { GameDI } from '../../../../DI/GameDI.ts';

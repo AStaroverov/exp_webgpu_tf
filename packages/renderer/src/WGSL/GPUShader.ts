@@ -34,15 +34,21 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
         options?: {
             withDepth?: boolean,
             shaderModule?: GPUShaderModule,
+            targetFormat?: GPUTextureFormat,
+            withBlending?: boolean,
+            autoLayout?: boolean,
         },
     ): GPURenderPipeline {
-        const key = `${ vertexName }-${ fragmentName }`;
         const withDepth = options?.withDepth ?? false;
+        const targetFormat = options?.targetFormat ?? navigator.gpu.getPreferredCanvasFormat();
+        const withBlending = options?.withBlending ?? true;
+        const autoLayout = options?.autoLayout ?? false;
+        const key = `${ vertexName }-${ fragmentName }-${ withDepth }-${ targetFormat }-${ withBlending }-${ autoLayout }`;
         const shaderModule = options?.shaderModule ?? this.getShaderModule(device);
 
         if (!this.mapRenderPipeline.has(key)) {
             const value = device.createRenderPipeline({
-                layout: this.getGPUPipelineLayout(device),
+                layout: autoLayout ? 'auto' : this.getGPUPipelineLayout(device),
                 primitive: {
                     topology: 'triangle-list',
                 },
@@ -55,8 +61,8 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
                     entryPoint: fragmentName,
                     targets: [
                         {
-                            format: navigator.gpu.getPreferredCanvasFormat(),
-                            blend: {
+                            format: targetFormat,
+                            blend: withBlending ? {
                                 color: {
                                     srcFactor: 'src-alpha',
                                     dstFactor: 'one-minus-src-alpha',
@@ -67,7 +73,7 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
                                     dstFactor: 'one-minus-src-alpha',
                                     operation: 'add',
                                 },
-                            },
+                            } : undefined,
                         },
                     ],
                 },
