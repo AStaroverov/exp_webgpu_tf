@@ -56,20 +56,3 @@ export const Color = component({
         return color;
     },
 });
-
-export type TShadow = [fadeStart: number, fadeEnd: number] | Float32Array;
-export const Shadow = component({
-    fadeStart: new Float64Array(delegate.defaultSize),
-    fadeEnd: new Float64Array(delegate.defaultSize),
-
-    addComponent(world: World, eid: number, fadeStart = 0, fadeEnd = 0) {
-        addComponent(world, eid, Shadow);
-        Shadow.fadeStart[eid] = fadeStart;
-        Shadow.fadeEnd[eid] = fadeEnd;
-    },
-    set$: obs((eid: number, fadeStart: number, fadeEnd: number) => {
-        Shadow.fadeStart[eid] = fadeStart;
-        Shadow.fadeEnd[eid] = fadeEnd;
-    }),
-});
-

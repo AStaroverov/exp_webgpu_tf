@@ -1,46 +1,18 @@
 import { addComponent, EntityId, World } from 'bitecs';
 import { TypedArray } from '../../../../../renderer/src/utils.ts';
 import { delegate } from '../../../../../renderer/src/delegate.ts';
+import {
+    BulletSpeedConfig,
+    BulletCaliber,
+    BulletCaliberConfig,
+} from '../../Config/index.ts';
 
-export const MAX_BULLET_SPEED = 400;
-export const MIN_BULLET_SPEED = 80;
+export const MAX_BULLET_SPEED = BulletSpeedConfig.max;
+export const MIN_BULLET_SPEED = BulletSpeedConfig.min;
 
-export enum BulletCaliber {
-    Light,
-    Medium,
-    Heavy,
-}
+export { BulletCaliber };
 
-const BulletLightCaliber = {
-    width: 3,
-    height: 8,
-    speed: 500,
-    density: 3_000,
-    damage: 3,
-    linearDamping: 0.4, // Light bullets lose speed quickly
-};
-const BulletMediumCaliber = {
-    width: 5,
-    height: 10,
-    speed: 550,
-    density: 6_000,
-    damage: 6,
-    linearDamping: 0.2, // Medium bullets have moderate drag
-};
-const BulletHeavyCaliber = {
-    width: 7,
-    height: 14,
-    speed: 650,
-    density: 10_000,
-    damage: 10,
-    linearDamping: 0.075, // Heavy bullets maintain speed longer
-};
-
-export const mapBulletCaliber = {
-    [BulletCaliber.Light]: BulletLightCaliber,
-    [BulletCaliber.Medium]: BulletMediumCaliber,
-    [BulletCaliber.Heavy]: BulletHeavyCaliber,
-};
+export const mapBulletCaliber = BulletCaliberConfig;
 
 export const Bullet = {
     caliber: TypedArray.i8(delegate.defaultSize),

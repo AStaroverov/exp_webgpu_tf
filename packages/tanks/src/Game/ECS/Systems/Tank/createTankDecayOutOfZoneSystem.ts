@@ -11,9 +11,7 @@ import { isOutOfGameZone } from '../utils/isOutOfGameZone.ts';
 import { scheduleRemoveEntity } from '../../Utils/typicalRemoveEntity.ts';
 import { random } from '../../../../../../../lib/random.ts';
 import { getSlotFillerEid, isSlot, isSlotEmpty } from '../../Utils/SlotUtils.ts';
-
-// Distance beyond game zone boundary where decay starts
-const DECAY_DISTANCE_THRESHOLD = 400;
+import { GameZoneConfig } from '../../../Config/index.ts';
 
 export function createTankDecayOutOfZoneSystem({ world } = GameDI) {
     return () => {
@@ -25,7 +23,7 @@ export function createTankDecayOutOfZoneSystem({ world } = GameDI) {
             const x = getMatrixTranslationX(globalTransform);
             const y = getMatrixTranslationY(globalTransform);
             
-            if (isOutOfGameZone(x, y, DECAY_DISTANCE_THRESHOLD) && random() < 0.3) {
+            if (isOutOfGameZone(x, y, GameZoneConfig.decayDistanceThreshold) && random() < GameZoneConfig.decayProbability) {
                 const childrenEids = Children.entitiesIds.getBatch(vehicleEid);
                 const childrenCount = Children.entitiesCount[vehicleEid];
 
@@ -37,7 +35,7 @@ export function createTankDecayOutOfZoneSystem({ world } = GameDI) {
                     const partEid = getSlotFillerEid(slotEid);
                     if (partEid === 0) continue;
 
-                    if (random() < 0.05) {
+                    if (random() < GameZoneConfig.partDecayProbability) {
                         scheduleRemoveEntity(partEid);
                         break;
                     }

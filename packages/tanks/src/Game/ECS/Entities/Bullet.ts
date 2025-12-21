@@ -25,6 +25,7 @@ import { TeamRef } from '../Components/TeamRef.ts';
 import { Color } from '../../../../../renderer/src/ECS/Components/Common.ts';
 import { min } from '../../../../../../lib/math.ts';
 import { Damagable } from '../Components/Damagable.ts';
+import { ExplosionConfig, SoundConfig } from '../../Config/index.ts';
 
 type Options = Parameters<typeof createRectangleRR>[0];
 const optionsBulletRR: Options = {
@@ -37,7 +38,6 @@ const optionsBulletRR: Options = {
     speedY: 0,
     rotation: 0,
     color: new Float32Array([1, 0, 0, 1]),
-    shadow: new Float32Array([0, 2]),
     bodyType: RigidBodyType.Dynamic,
     density: 10_000,
     angularDamping: 0.1,
@@ -127,12 +127,12 @@ export function spawnBullet(vehicleEid: number) {
     spawnMuzzleFlash({
         x: optionsSpawnBullet.x,
         y: optionsSpawnBullet.y,
-        size: bulletCaliber.width * 5,
-        duration: 1050,
+        size: bulletCaliber.width * ExplosionConfig.muzzleFlashSizeMult,
+        duration: ExplosionConfig.muzzleFlashDuration,
         rotation: optionsSpawnBullet.rotation,
     });
 
-    const soundVolume = 0.4 + (bulletCaliber.width / 7) * 0.6;
+    const soundVolume = SoundConfig.shootBaseVolume + (bulletCaliber.width * SoundConfig.shootVolumePerWidth);
     spawnSoundAtPosition({
         type: SoundType.TankShoot,
         x: optionsSpawnBullet.x,

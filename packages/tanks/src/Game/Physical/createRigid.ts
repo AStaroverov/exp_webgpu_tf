@@ -3,32 +3,30 @@ import { GameDI } from '../DI/GameDI.ts';
 import { BodyOptions, createBody } from './createBody.ts';
 import { RigidBodyRef } from '../ECS/Components/Physical.ts';
 import { PhysicalWorld } from './initPhysicalWorld.ts';
+import { CollisionGroupConfig, TANK_PARTS_MASK } from '../Config/index.ts';
 
-export enum CollisionGroup {
-    NONE = 0,
-    ALL = 0xFFFF,
-    OBSTACLE = 0b00000001,
-    BULLET = 0b00000010,
-    VEHICALE_BASE = 0b00000100,
-    VEHICALE_HULL_PARTS = 0b00001000,
-    TANK_TURRET_HEAD_PARTS = 0b00100000,
-    TANK_TURRET_GUN_PARTS = 0b01000000,
-    TANK_PARTS = CollisionGroup.VEHICALE_HULL_PARTS | CollisionGroup.TANK_TURRET_HEAD_PARTS | CollisionGroup.TANK_TURRET_GUN_PARTS,
-    SHIELD = 0b10000000,
-}
+export const CollisionGroup = {
+    ...CollisionGroupConfig,
+    // Legacy naming compatibility
+    VEHICALE_BASE: CollisionGroupConfig.VEHICLE_BASE,
+    VEHICALE_HULL_PARTS: CollisionGroupConfig.VEHICLE_HULL_PARTS,
+    TANK_PARTS: TANK_PARTS_MASK,
+} as const;
+
+type CollisionGroupValue = typeof CollisionGroup[keyof typeof CollisionGroup];
 
 type CommonRigidOptions = BodyOptions & {
     enabled?: boolean,
     density?: number,
-    belongsCollisionGroup?: 0 | CollisionGroup,
-    interactsCollisionGroup?: 0 | CollisionGroup,
-    belongsSolverGroup?: 0 | CollisionGroup,
-    interactsSolverGroup?: 0 | CollisionGroup,
+    belongsCollisionGroup?: 0 | CollisionGroupValue,
+    interactsCollisionGroup?: 0 | CollisionGroupValue,
+    belongsSolverGroup?: 0 | CollisionGroupValue,
+    interactsSolverGroup?: 0 | CollisionGroupValue,
     collisionEvent?: ActiveEvents
     activeCollisionTypes?: ActiveCollisionTypes
 }
 
-export function createCollisionGroups(belongs: 0 | CollisionGroup, interacts: 0 | CollisionGroup) {
+export function createCollisionGroups(belongs: 0 | number, interacts: 0 | number) {
     return (belongs << 16) | interacts;
 }
 

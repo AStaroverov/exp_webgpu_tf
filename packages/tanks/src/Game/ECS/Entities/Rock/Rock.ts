@@ -10,6 +10,7 @@ import {
     getRandomStoneColor,
 } from './RockParts.ts';
 import { generateGridRockShape, RockGridOptions } from './generateGridRockShape.ts';
+import { RockConfig } from '../../../Config/index.ts';
 
 /**
  * Options for creating a rock
@@ -27,17 +28,17 @@ export type CreateRockOptions = {
  * Uses a grid-based approach with noise to create varied shapes.
  */
 export function createRock(opts: CreateRockOptions, { world } = GameDI) {
-    const cols = opts.cols ?? randomRangeInt(5, 20);
-    const rows = opts.rows ?? randomRangeInt(5, 20);
-    const cellSize = opts.cellSize ?? randomRangeInt(5, 10);
-    const partSize = opts.partSize ?? randomRangeInt(5, 10);
+    const cols = opts.cols ?? randomRangeInt(...RockConfig.colsRange);
+    const rows = opts.rows ?? randomRangeInt(...RockConfig.rowsRange);
+    const cellSize = opts.cellSize ?? randomRangeInt(...RockConfig.cellSizeRange);
+    const partSize = opts.partSize ?? randomRangeInt(...RockConfig.partSizeRange);
     const rotation = opts.rotation ?? randomRangeFloat(0, Math.PI * 2);
-    const noiseScale = opts.noiseScale ?? randomRangeFloat(0.03, 0.08);
-    const noiseOctaves = opts.noiseOctaves ?? randomRangeInt(1, 5);
-    const emptyThreshold = opts.emptyThreshold ?? randomRangeFloat(0.5, 0.8);
+    const noiseScale = opts.noiseScale ?? randomRangeFloat(...RockConfig.noiseScaleRange);
+    const noiseOctaves = opts.noiseOctaves ?? randomRangeInt(...RockConfig.noiseOctavesRange);
+    const emptyThreshold = opts.emptyThreshold ?? randomRangeFloat(...RockConfig.emptyThresholdRange);
     
     const color = opts.color ?? getRandomStoneColor();
-    const density = opts.density ?? 1000;
+    const density = opts.density ?? RockConfig.defaultDensity;
 
     // Generate rock shape using grid + noise
     const partsData = generateGridRockShape({

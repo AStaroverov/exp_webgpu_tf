@@ -12,9 +12,10 @@ import { TeamRef } from '../Components/TeamRef.ts';
 import { fillSlot } from '../Entities/Vehicle/VehicleParts.ts';
 import { mutatedVehicleOptions, resetOptions } from '../Entities/Vehicle/Options.ts';
 import { isSlot, isSlotEmpty } from '../Utils/SlotUtils.ts';
+import { ShieldConfig } from '../../Config/index.ts';
 
 // Shield regeneration interval in milliseconds
-const SHIELD_REGEN_INTERVAL = 100; // 2 seconds per shield element
+const SHIELD_REGEN_INTERVAL = ShieldConfig.regenInterval;
 
 /**
  * System that regenerates shield parts for harvesters

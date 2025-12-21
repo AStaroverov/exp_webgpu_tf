@@ -41,7 +41,6 @@ export type RockPartOptions = {
     rotation: number;
     color: TColor;
     density: number;
-    shadow: Float32Array;
 };
 
 const defaultPartOptions: RockPartOptions = {
@@ -53,7 +52,6 @@ const defaultPartOptions: RockPartOptions = {
     rotation: 0,
     color: new Float32Array([0.4, 0.38, 0.35, 1]),
     density: 500,
-    shadow: new Float32Array([0, 3]),
 };
 
 const partOptions = { ...defaultPartOptions };
@@ -100,7 +98,6 @@ export function createRockParts(
         // Combine rock rotation with part's own rotation
         partOptions.rotation = options.rotation + partRotation;
         partOptions.density = options.density;
-        partOptions.shadow[1] = ((width + height) / 4) ** 2;
 
         const rrOptions = {
             ...partOptions,

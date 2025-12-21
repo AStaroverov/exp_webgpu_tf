@@ -2,6 +2,7 @@ import { RigidBodyType } from '@dimforge/rapier2d-simd';
 import { TColor } from '../../../../../../renderer/src/ECS/Components/Common.ts';
 import { VehicleType } from '../../Components/Vehicle.ts';
 import { VehicleEngineType } from '../../Systems/Vehicle/VehicleControllerSystems.ts';
+import { DampingConfig } from '../../../Config/index.ts';
 
 export type VehicleOptions = typeof mutatedVehicleOptions;
 
@@ -19,11 +20,10 @@ export const mutatedVehicleOptions = {
     speedX: 0,
     speedY: 0,
     color: new Float32Array([1, 0, 0, 1]),
-    shadow: new Float32Array([0, 3]),
     bodyType: RigidBodyType.Dynamic,
     density: 0,
-    linearDamping: 5,
-    angularDamping: 5,
+    linearDamping: DampingConfig.vehicleLinear,
+    angularDamping: DampingConfig.vehicleAngular,
     belongsSolverGroup: 0,
     interactsSolverGroup: 0,
     belongsCollisionGroup: 0,
@@ -63,7 +63,6 @@ export const resetOptions = (target: VehicleOptions, source?: Partial<VehicleCre
     target.speedX = defaultVehicleOptions.speedX;
     target.speedY = defaultVehicleOptions.speedY;
     (target.color as Float32Array).set(source?.color ?? defaultVehicleOptions.color, 0);
-    (target.shadow as Float32Array).set(defaultVehicleOptions.shadow, 0);
     target.density = defaultVehicleOptions.density;
     target.linearDamping = defaultVehicleOptions.linearDamping;
     target.angularDamping = defaultVehicleOptions.angularDamping;

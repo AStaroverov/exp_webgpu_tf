@@ -135,7 +135,6 @@ export function fillSlot(
     fillSlotOptions.interactsSolverGroup = config.interactsSolverGroup;
     fillSlotOptions.belongsCollisionGroup = config.belongsCollisionGroup;
     fillSlotOptions.interactsCollisionGroup = config.interactsCollisionGroup;
-    fillSlotOptions.shadow[1] = config.shadowY;
     fillSlotOptions.color = Color.applyColorToArray(slotEid, new Float32Array(4));
     // Create the physical part at the correct world position
     const rbId = RigidBodyRef.id[vehicleOrTurretEid];

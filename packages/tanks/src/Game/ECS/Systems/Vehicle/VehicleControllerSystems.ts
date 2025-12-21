@@ -11,39 +11,36 @@ import { VehicleTurret } from '../../Components/VehicleTurret.ts';
 import { Parent } from '../../Components/Parent.ts';
 import { Impulse, TorqueImpulse } from '../../Components/Impulse.ts';
 import { JointMotor } from '../../Components/JointMotor.ts';
+import {
+    EngineType,
+    EngineLabels,
+    EngineConfig,
+    MovementConfig,
+} from '../../../Config/index.ts';
 
-export enum VehicleEngineType {
-    v6,
-    v8,
-    v12,
-    v8_turbo,  // Player special engine - faster than v8
-}
+export { EngineType as VehicleEngineType };
 
-export const mapVehicleEngineLabel = {
-    [VehicleEngineType.v6]: 'v6',
-    [VehicleEngineType.v8]: 'v8',
-    [VehicleEngineType.v12]: 'v12',
-    [VehicleEngineType.v8_turbo]: 'v8 Turbo',
-};
+export const mapVehicleEngineLabel = EngineLabels;
 
-const IMPULSE_FACTOR = 15000000000;
-const ROTATION_IMPULSE_FACTOR = 150000000000;
+const IMPULSE_FACTOR = MovementConfig.baseImpulseFactor;
+const ROTATION_IMPULSE_FACTOR = MovementConfig.baseRotationImpulseFactor;
+
 const mapTypeToFeatures = {
-    [VehicleEngineType.v6]: {
-        impulseFactor: IMPULSE_FACTOR * 0.8,
-        rotationImpulseFactor: ROTATION_IMPULSE_FACTOR * 0.9,
+    [EngineType.v6]: {
+        impulseFactor: IMPULSE_FACTOR * EngineConfig[EngineType.v6].impulseMult,
+        rotationImpulseFactor: ROTATION_IMPULSE_FACTOR * EngineConfig[EngineType.v6].rotationMult,
     },
-    [VehicleEngineType.v8]: {
-        impulseFactor: IMPULSE_FACTOR,
-        rotationImpulseFactor: ROTATION_IMPULSE_FACTOR,
+    [EngineType.v8]: {
+        impulseFactor: IMPULSE_FACTOR * EngineConfig[EngineType.v8].impulseMult,
+        rotationImpulseFactor: ROTATION_IMPULSE_FACTOR * EngineConfig[EngineType.v8].rotationMult,
     },
-    [VehicleEngineType.v12]: {
-        impulseFactor: IMPULSE_FACTOR * 2,
-        rotationImpulseFactor: ROTATION_IMPULSE_FACTOR * 3,
+    [EngineType.v12]: {
+        impulseFactor: IMPULSE_FACTOR * EngineConfig[EngineType.v12].impulseMult,
+        rotationImpulseFactor: ROTATION_IMPULSE_FACTOR * EngineConfig[EngineType.v12].rotationMult,
     },
-    [VehicleEngineType.v8_turbo]: {
-        impulseFactor: IMPULSE_FACTOR * 2,
-        rotationImpulseFactor: ROTATION_IMPULSE_FACTOR * 2,
+    [EngineType.v8_turbo]: {
+        impulseFactor: IMPULSE_FACTOR * EngineConfig[EngineType.v8_turbo].impulseMult,
+        rotationImpulseFactor: ROTATION_IMPULSE_FACTOR * EngineConfig[EngineType.v8_turbo].rotationMult,
     },
 };
 
@@ -60,7 +57,7 @@ export function createVehiclePositionSystem({ world } = GameDI) {
             const {
                 impulseFactor,
                 rotationImpulseFactor,
-            } = mapTypeToFeatures[Vehicle.engineType[vehicleEid] as VehicleEngineType];
+            } = mapTypeToFeatures[Vehicle.engineType[vehicleEid] as EngineType];
 
             if (moveDirection === 0 && rotationDirection === 0) continue;
 
@@ -97,4 +94,3 @@ export function createVehicleTurretRotationSystem({ world } = GameDI) {
         }
     };
 }
-

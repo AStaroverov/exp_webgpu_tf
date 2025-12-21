@@ -6,6 +6,7 @@ import { VehicleEngineType } from '../../Systems/Vehicle/VehicleControllerSystem
 import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../Vehicle/VehicleParts.ts';
 import { addCarExhaustPipe } from '../ExhaustPipe.ts';
 import { createMeleeCarBase, createMeleeCarWheels } from './MeleeCarBase.ts';
+import { DampingConfig } from '../../../Config/index.ts';
 import {
     DENSITY, hullSet,
     PADDING,
@@ -44,8 +45,8 @@ export function createMeleeCar(opts: {
     options.density = DENSITY * 8;
     options.width = PADDING * 6;
     options.height = PADDING * 10;
-    options.linearDamping = 3; // Less friction than tanks
-    options.angularDamping = 4; // Quick turning
+    options.linearDamping = DampingConfig.carLinear;
+    options.angularDamping = DampingConfig.carAngular;
     const [carEid, carPid] = createMeleeCarBase(options);
 
     // Create 4 wheels as independent entities
