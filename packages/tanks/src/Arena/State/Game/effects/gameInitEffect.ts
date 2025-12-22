@@ -4,7 +4,7 @@ import { distinctUntilChanged, filter, map, merge, switchMap, tap } from "rxjs";
 import { frameInterval } from "../../../../../../../lib/Rx/frameInterval";
 import { getEngine } from "../engine";
 import { min } from "../../../../../../../lib/math";
-import { addHarvester } from "../engineMethods";
+import { addFauna, addHarvester } from "../gameMethods";
 
 const gameStoped$ = gameState$.pipe(
     distinctUntilChanged((a, b) => a.isStarted === b.isStarted),
@@ -26,13 +26,19 @@ const gameTicker = gameState$.pipe(
     }),
 );
 
-const resetSlots$ = gameStoped$.pipe(
+const resetSlotsOnInit$ = gameStoped$.pipe(
     tap(() => {
         clearSlots();
     })
 );
 
-const fillPlayerSlots$ = gameStoped$.pipe(
+const addFaunaOnStart$ = gameStarted$.pipe(
+    tap(() => {
+        addFauna();
+    })
+);
+
+const fillPlayerSlotsOnInit$ = gameStoped$.pipe(
     tap(() => {
         const engine = getEngine();
         const harvesterEid = addHarvester()
@@ -49,8 +55,9 @@ const enablePlayerOnStart$ = gameStarted$.pipe(
 export function initGameInitEffect() {
     return merge(
         gameTicker,
-        resetSlots$,
-        fillPlayerSlots$,
+        addFaunaOnStart$,
+        resetSlotsOnInit$,
+        fillPlayerSlotsOnInit$,
         enablePlayerOnStart$,
     );
 }
