@@ -39,9 +39,19 @@ export const CollisionGroupConfig = {
     
     /** Energy shield (blocks only bullets) */
     SHIELD: 0b10000000,
+    
+    /** Spice resources (interacts only with harvester scoop and collectors) */
+    SPICE: 0b100000000,
+    
+    /** Spice collector sensor (detects spice intersection) */
+    SPICE_COLLECTOR: 0b1000000000,
 } as const;
 
-/** Combined mask for all tank parts */
+export const ALL_VEHICLE_PARTS_MASK = 
+    CollisionGroupConfig.VEHICLE_HULL_PARTS | 
+    CollisionGroupConfig.TANK_TURRET_HEAD_PARTS | 
+    CollisionGroupConfig.TANK_TURRET_GUN_PARTS;
+
 export const TANK_PARTS_MASK = 
     CollisionGroupConfig.VEHICLE_HULL_PARTS | 
     CollisionGroupConfig.TANK_TURRET_HEAD_PARTS | 

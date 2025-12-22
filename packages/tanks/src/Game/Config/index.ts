@@ -4,6 +4,7 @@ export * from './weapons.ts';
 export * from './vehicles.ts';
 export * from './parts.ts';
 export * from './obstacles.ts';
+export * from './spice.ts';
 export * from './sound.ts';
 export * from './vfx.ts';
 export * from './gameplay.ts';

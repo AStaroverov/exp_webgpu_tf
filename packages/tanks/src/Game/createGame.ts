@@ -46,6 +46,7 @@ import { createCameraSystem, setCameraTarget, setInfiniteMapMode, initCameraPosi
 import { setCameraPosition } from '../../../renderer/src/ECS/Systems/ResizeSystem.ts';
 import { createSoundSystem, loadGameSounds, disposeSoundSystem, SoundManager, createTankMoveSoundSystem } from './ECS/Systems/Sound/index.ts';
 import { createDebrisCollectorSystem } from './ECS/Systems/createDebrisCollectorSystem.ts';
+import { createCollectorCollisionHandler } from './ECS/Systems/createSpiceCollectorSystem.ts';
 import { createHitableSystem } from './ECS/Systems/createHitableSystem.ts';
 import { createTankAliveSystem } from './ECS/Systems/Tank/createTankAliveSystem.ts';
 import { createShieldRegenerationSystem } from './ECS/Systems/createShieldRegenerationSystem.ts';
@@ -83,6 +84,8 @@ export function createGame({ width, height }: {
     const applyJointMotors = createJointMotorSystem();
 
     const eventQueue = new EventQueue(true);
+    const handleCollectorCollision = createCollectorCollisionHandler();
+    
     const physicalFrame = (delta: number) => {
         // Update vehicle controls - tracks and wheels
         updateTrackControl(delta);
@@ -96,9 +99,10 @@ export function createGame({ width, height }: {
         syncRigidBodyState();
         applyRigidBodyDeltaToLocalTransform();
 
-        // eventQueue.drainCollisionEvents((handle1, handle2, started) => {
-        //     console.log('Collision event:', handle1, handle2, started);
-        // });
+        // Handle collision events (sensors like spice collectors)
+        eventQueue.drainCollisionEvents((handle1, handle2, started) => {
+            handleCollectorCollision(handle1, handle2, started);
+        });
 
         eventQueue.drainContactForceEvents(event => {
             const handle1 = event.collider1(); // Handle of the first collider involved in the event.

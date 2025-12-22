@@ -22,8 +22,10 @@ type CommonRigidOptions = BodyOptions & {
     interactsCollisionGroup?: 0 | CollisionGroupValue,
     belongsSolverGroup?: 0 | CollisionGroupValue,
     interactsSolverGroup?: 0 | CollisionGroupValue,
-    collisionEvent?: ActiveEvents
-    activeCollisionTypes?: ActiveCollisionTypes
+    collisionEvent?: ActiveEvents,
+    activeCollisionTypes?: ActiveCollisionTypes,
+    /** If true, collider is a sensor (detects intersections but no physics response) */
+    sensor?: boolean,
 }
 
 export function createCollisionGroups(belongs: 0 | number, interacts: 0 | number) {
@@ -34,6 +36,7 @@ function prepareColliderDesc(shape: ColliderDesc, o: CommonRigidOptions): Collid
     return shape
         .setEnabled(o.enabled ?? true)
         .setDensity(o.density ?? 0)
+        .setSensor(o.sensor ?? false)
         .setCollisionGroups(
             createCollisionGroups(
                 o.belongsCollisionGroup ?? CollisionGroup.ALL,

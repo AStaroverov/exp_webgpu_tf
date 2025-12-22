@@ -23,8 +23,6 @@ import {
     GlobalTransform,
 } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
 import { getFilledSlotCount, getSlotCount } from '../Vehicle/VehicleParts.ts';
-import { DestroyByTimeout } from '../../Components/Destroy.ts';
-import { randomRangeFloat } from '../../../../../../../lib/random.ts';
 import { applyExplosionImpulse } from '../../../Physical/applyExplosionImpulse.ts';
 import { getSlotFillerEid, isSlot, isSlotEmpty } from '../../Utils/SlotUtils.ts';
 
@@ -104,10 +102,6 @@ export function tearOffTankPart(vehiclePartEid: number, shouldBreakConnection: b
 
     if (!hasComponent(world, vehiclePartEid, Debris)) {
         Debris.addComponent(world, vehiclePartEid);
-    }
-
-    if (!hasComponent(world, vehiclePartEid, DestroyByTimeout)) {
-        DestroyByTimeout.addComponent(world, vehiclePartEid, 5_000 + randomRangeFloat(0, 5_000));
     }
 }
 

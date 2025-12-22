@@ -2,7 +2,6 @@ import { EntityId, hasComponent } from 'bitecs';
 import { randomRangeFloat } from '../../../../../../../lib/random.ts';
 import { GameDI } from '../../../DI/GameDI.ts';
 import { Children } from '../../Components/Children.ts';
-import { Debris } from '../../Components/Debris.ts';
 import { DestroyByTimeout } from '../../Components/Destroy.ts';
 import { Parent } from '../../Components/Parent.ts';
 import { RockPart } from '../../Components/Rock.ts';
@@ -21,10 +20,6 @@ export function tearOffRockPart(rockPartEid: EntityId, shouldBreakConnection: bo
 
     if (hasComponent(world, rockPartEid, RockPart)) {
         RockPart.removeComponent(world, rockPartEid);
-    }
-
-    if (!hasComponent(world, rockPartEid, Debris)) {
-        Debris.addComponent(world, rockPartEid);
     }
 
     if (!hasComponent(world, rockPartEid, DestroyByTimeout)) {

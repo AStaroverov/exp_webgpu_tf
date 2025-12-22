@@ -96,7 +96,8 @@ export const PartPhysicsConfig: Record<SlotPartType, SlotPartPhysics> = {
         interactsCollisionGroup: 
             CollisionGroupConfig.BULLET | 
             CollisionGroupConfig.OBSTACLE | 
-            CollisionGroupConfig.VEHICLE_HULL_PARTS,
+            CollisionGroupConfig.VEHICLE_HULL_PARTS |
+            CollisionGroupConfig.SPICE_COLLECTOR,
     },
     
     [SlotPartType.Caterpillar]: {
@@ -107,7 +108,8 @@ export const PartPhysicsConfig: Record<SlotPartType, SlotPartPhysics> = {
         interactsCollisionGroup: 
             CollisionGroupConfig.BULLET | 
             CollisionGroupConfig.OBSTACLE | 
-            CollisionGroupConfig.VEHICLE_HULL_PARTS,
+            CollisionGroupConfig.VEHICLE_HULL_PARTS |
+            CollisionGroupConfig.SPICE_COLLECTOR,
     },
     
     [SlotPartType.TurretHead]: {
@@ -119,7 +121,8 @@ export const PartPhysicsConfig: Record<SlotPartType, SlotPartPhysics> = {
             CollisionGroupConfig.BULLET | 
             CollisionGroupConfig.OBSTACLE | 
             CollisionGroupConfig.TANK_TURRET_HEAD_PARTS | 
-            CollisionGroupConfig.TANK_TURRET_GUN_PARTS,
+            CollisionGroupConfig.TANK_TURRET_GUN_PARTS |
+            CollisionGroupConfig.SPICE_COLLECTOR,
     },
     
     [SlotPartType.TurretGun]: {
@@ -131,7 +134,8 @@ export const PartPhysicsConfig: Record<SlotPartType, SlotPartPhysics> = {
             CollisionGroupConfig.BULLET | 
             CollisionGroupConfig.OBSTACLE | 
             CollisionGroupConfig.TANK_TURRET_HEAD_PARTS | 
-            CollisionGroupConfig.TANK_TURRET_GUN_PARTS,
+            CollisionGroupConfig.TANK_TURRET_GUN_PARTS |
+            CollisionGroupConfig.SPICE_COLLECTOR,
     },
     
     [SlotPartType.Barrier]: {
@@ -151,7 +155,8 @@ export const PartPhysicsConfig: Record<SlotPartType, SlotPartPhysics> = {
         belongsCollisionGroup: CollisionGroupConfig.VEHICLE_HULL_PARTS,
         interactsCollisionGroup: 
             CollisionGroupConfig.OBSTACLE | 
-            CollisionGroupConfig.VEHICLE_HULL_PARTS,
+            CollisionGroupConfig.VEHICLE_HULL_PARTS |
+            CollisionGroupConfig.SPICE,
     },
     
     [SlotPartType.Shield]: {
@@ -170,7 +175,8 @@ export const PartPhysicsConfig: Record<SlotPartType, SlotPartPhysics> = {
         interactsCollisionGroup: 
             CollisionGroupConfig.BULLET | 
             CollisionGroupConfig.OBSTACLE | 
-            CollisionGroupConfig.VEHICLE_HULL_PARTS,
+            CollisionGroupConfig.VEHICLE_HULL_PARTS |
+            CollisionGroupConfig.SPICE_COLLECTOR,
     },
 };
 

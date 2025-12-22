@@ -23,6 +23,8 @@ import { createHarvester } from '../../../Game/ECS/Entities/Harvester/Harvester.
 import { createRock } from '../../../Game/ECS/Entities/Rock/Rock.ts';
 import { getTeamSpawnPosition, allocateSpawnCell, CellContent, findNextAvailableSlot, getSpawnGrid, isCellEmpty, getCellWorldPosition, setCellContent } from './SpawnGrid.ts';
 import { getValue } from '../../../../../../lib/Rx/getValue.ts';
+import { spawnSpiceCluster } from '../../../Game/ECS/Entities/Spice/Spice.ts';
+import { createSpiceCollector } from '../../../Game/ECS/Entities/SpiceCollector/SpiceCollector.ts';
 
 export function addTank(slot: number, teamId: number, vehicleType: TankVehicleType) {
     const { x, y } = getTeamSpawnPosition(teamId, slot + 1);
@@ -59,22 +61,37 @@ export function addHarvester(teamId: number = PLAYER_TEAM_ID) {
         color: [teamId, randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1],
     });
 
+    createSpiceCollector({
+        x,
+        y,
+        teamId,
+    });
+
     allocateSpawnCell(teamId, slot, CellContent.Vehicle, entity);
 
     return entity;
 }
 
-export function addFauna(rockProbability: number = 0.3) {
+export function addFauna() {
+    const spawnProbability = {
+        rock: 0.3,
+        spice: 0.1,
+    }
+
     const grid = getSpawnGrid();
 
     for (let row = 1; row < grid.rows - 1; row++) {
         for (let col = 1; col < grid.cols - 1; col++) {
             if (!isCellEmpty(col, row)) continue;
-            if (Math.random() > rockProbability) continue;
-
-            const { x, y } = getCellWorldPosition(col, row);
-            createRock({ x, y });
-            setCellContent(col, row, CellContent.Obstacle);
+            if (Math.random() < spawnProbability.rock) {
+                const { x, y } = getCellWorldPosition(col, row);
+                createRock({ x, y });
+                setCellContent(col, row, CellContent.Obstacle);
+            } else if (Math.random() < spawnProbability.spice) {
+                const { x, y } = getCellWorldPosition(col, row);
+                spawnSpiceCluster({ x, y });
+                setCellContent(col, row, CellContent.Obstacle);
+            }
         }
     }
 }
