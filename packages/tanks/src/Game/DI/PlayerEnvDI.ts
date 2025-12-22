@@ -4,15 +4,13 @@ import { EntityId } from 'bitecs';
 export const PlayerEnvDI: {
     playerId: null | EntityId,
     tankEid: null | EntityId,
-    document: Document,
-    window: Window,
+    eventTarget: HTMLElement,
     destroy: VoidFunction,
     inputFrame: VoidFunction,
 } = {
     playerId: null,
     tankEid: null,
-    document: null as any,
-    window: null as any,
+    eventTarget: null as any,
     destroy: null as any,
     inputFrame: null as any,
 };

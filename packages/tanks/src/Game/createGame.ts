@@ -314,8 +314,6 @@ export function createGame({ width, height }: {
 
     GameDI.enablePlayer = () => {
         PlayerEnvDI.destroy?.();
-        PlayerEnvDI.document = document;
-        PlayerEnvDI.window = window;
 
         const updatePlayerBullet = createPlayerTankBulletSystem();
         const updatePlayerTankPosition = createPlayerTankPositionSystem();
@@ -334,8 +332,6 @@ export function createGame({ width, height }: {
 
             PlayerEnvDI.tankEid = null;
             PlayerEnvDI.playerId = null;
-            PlayerEnvDI.document = null!;
-            PlayerEnvDI.window = null!;
             PlayerEnvDI.destroy = null!;
             PlayerEnvDI.inputFrame = null!;
         };
@@ -343,7 +339,7 @@ export function createGame({ width, height }: {
     GameDI.setPlayerId = (playerId: null | EntityId) => {
         PlayerEnvDI.playerId = playerId;
     };
-    GameDI.setPlayerTank = (tankEid: null | EntityId) => {
+    GameDI.setPlayerVehicle = (tankEid: null | EntityId) => {
         PlayerEnvDI.tankEid = tankEid;
     };
     GameDI.setCameraTarget = (tankEid: null | EntityId) => {

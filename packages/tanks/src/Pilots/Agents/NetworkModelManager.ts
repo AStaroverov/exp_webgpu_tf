@@ -7,7 +7,9 @@ import { batchAct } from "../../../../ml/src/PPO/train";
 import { TankAgent } from "./CurrentActorAgent";
 import { random } from '../../../../../lib/random';
 
-export const NetworkModelManager = (getter: () => Promise<tf.LayersModel>) => {
+export type NetworkModelManager = ReturnType<typeof createNetworkModelManager>;
+
+export const createNetworkModelManager = (getter: () => Promise<tf.LayersModel>) => {
     let network: undefined | tf.LayersModel = undefined;
     let promiseNetwork: undefined | Promise<tf.LayersModel> = undefined;
     let dateRequestNetwork: number = 0;

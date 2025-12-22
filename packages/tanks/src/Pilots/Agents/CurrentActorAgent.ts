@@ -8,7 +8,7 @@ import { Model } from '../../../../ml/src/Models/def.ts';
 import { getNetwork } from '../../../../ml/src/Models/Utils.ts';
 import { calculateActionReward, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { NetworkModelManager } from './NetworkModelManager.ts';
+import { createNetworkModelManager } from './NetworkModelManager.ts';
 import { ColoredNoiseApprox } from '../../../../ml-common/ColoredNoiseApprox.ts';
 import { ACTION_HEAD_DIMS } from '../../../../ml/src/Models/Create.ts';
 import { randomRangeFloat } from '../../../../../lib/random.ts';
@@ -35,7 +35,7 @@ export type LearnableAgent = {
     evaluateTankBehaviour(width: number, height: number, frame: number, successRatio: number): void;
 }
 
-const currentActorUpdater = NetworkModelManager(() => getNetwork(Model.Policy));
+const currentActorUpdater = createNetworkModelManager(() => getNetwork(Model.Policy));
 
 export class CurrentActorAgent implements TankAgent<DownloadableAgent & LearnableAgent> {
     private memory = new AgentMemory();

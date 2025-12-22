@@ -1,7 +1,7 @@
 import { BehaviorSubject, combineLatest } from 'rxjs';
 import { engine$ } from './engine.ts';
 
-const targetCanvas$ = new BehaviorSubject<HTMLCanvasElement | null>(null);
+export const targetCanvas$ = new BehaviorSubject<HTMLCanvasElement | null>(null);
 
 combineLatest([engine$, targetCanvas$]).subscribe(([engine, canvas]) => {
     engine?.setRenderTarget(canvas);

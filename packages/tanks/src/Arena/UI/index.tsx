@@ -4,8 +4,8 @@ import { createRoot } from 'react-dom/client';
 
 import { BaseScreen } from './Widgets/BaseScreen.tsx';
 import { GameMenuEffects } from './Effects/GameMenu.ts';
-import { GameStateEffects } from '../State/Game/GameState.ts';
 import { HeroUIProvider } from '@heroui/react';
+import { initGameInitEffect } from '../State/Game/effects/gameInitEffect.ts';
 
 createRoot(document.getElementById('ui')!).render(
     <StrictMode>
@@ -15,5 +15,5 @@ createRoot(document.getElementById('ui')!).render(
     </StrictMode>,
 );
 
-GameStateEffects().subscribe();
+initGameInitEffect().subscribe();
 GameMenuEffects().subscribe();

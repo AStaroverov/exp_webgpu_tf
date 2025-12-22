@@ -9,7 +9,7 @@ import { snapshotTankInputTensor } from '../tanks/src/Pilots/Utils/snapshotTankI
 import { calculateActionReward, calculateStateReward } from './src/Reward/calculateReward.ts';
 
 const game = createGame({ width: 1200, height: 1000 });
-const { gameTick, setRenderTarget } = game;
+const { gameTick, setRenderTarget, enablePlayer, setPlayerVehicle } = game;
 const pilotsPlugin = createPilotsPlugin(game);
 pilotsPlugin.toggle(true);
 
@@ -44,7 +44,8 @@ const tanks = [
     }),
 ];
 
-pilotsPlugin.setPlayerPilot(tanks[0]);
+enablePlayer(document.querySelector('canvas') as HTMLCanvasElement);
+setPlayerVehicle(tanks[0]);
 
 console.log('>> TANKS ', tanks);
 

@@ -10,7 +10,7 @@ import { GameMap } from '../Entities/GameMap.ts';
 import { entityExists, hasComponent } from 'bitecs';
 import { GameDI } from '../../DI/GameDI.ts';
 
-export function createPlayerTankPositionSystem({ document } = PlayerEnvDI, { world } = GameDI) {
+export function createPlayerTankPositionSystem({ world } = GameDI) {
     let move = 0;
     let rotation = 0;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -81,7 +81,7 @@ export function createPlayerTankPositionSystem({ document } = PlayerEnvDI, { wor
     return { tick, destroy };
 }
 
-export function createPlayerTankTurretRotationSystem({ document } = PlayerEnvDI, { world } = GameDI) {
+export function createPlayerTankTurretRotationSystem({ world } = GameDI) {
     let lastEvent: undefined | MouseEvent;
     let callback = (event: MouseEvent) => {
         lastEvent = event;
@@ -114,7 +114,7 @@ export function createPlayerTankTurretRotationSystem({ document } = PlayerEnvDI,
     return { tick, destroy };
 }
 
-export function createPlayerTankBulletSystem({ document } = PlayerEnvDI, { canvas } = RenderDI, { world } = GameDI) {
+export function createPlayerTankBulletSystem({ world } = GameDI) {
     let shooting = 0;
     const onKeyDown = (event: KeyboardEvent) => {
         event.preventDefault();
@@ -145,8 +145,8 @@ export function createPlayerTankBulletSystem({ document } = PlayerEnvDI, { canva
 
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
-    canvas.addEventListener('mousedown', onMouseDown);
-    canvas.addEventListener('mouseup', onMouseUp);
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mouseup', onMouseUp);
 
     const tick = () => {
         if (isPlayerExist() && entityExists(world, Tank.turretEId[PlayerEnvDI.tankEid!])) {
@@ -158,8 +158,8 @@ export function createPlayerTankBulletSystem({ document } = PlayerEnvDI, { canva
     const destroy = () => {
         document.removeEventListener('keydown', onKeyDown);
         document.removeEventListener('keyup', onKeyUp);
-        canvas.removeEventListener('mousedown', onMouseDown);
-        canvas.removeEventListener('mouseup', onMouseUp);
+        document.removeEventListener('mousedown', onMouseDown);
+        document.removeEventListener('mouseup', onMouseUp);
     };
 
     return { tick, destroy };

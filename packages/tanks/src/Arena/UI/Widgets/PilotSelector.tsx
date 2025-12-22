@@ -1,26 +1,48 @@
 import { ChangeEvent, useCallback } from 'react';
-import { changeTankType } from '../../State/Game/gameMethods.ts';
 import { Select, SelectItem } from '../Components/Selector.tsx';
+import { getLoadedAgent, LoadedAgent } from '../../../Pilots/Agents/LoadedAgent.ts';
+import { changeTankPilot, getPilotAgent$ } from '../../State/Game/gameMethods.ts';
+import { useObservable } from 'react-use';
+import { CurrentActorAgent, TankAgent } from '../../../Pilots/Agents/CurrentActorAgent.ts';
 
 const pilots = [
-    { key: 0, label: 'Player' },
-    { key: 1, label: 'Pilot v1' },
+    { key: 'current', label: 'Pilot last' },
+    { key: '/assets/models/v1', label: 'Pilot v1' },
 ];
 
-export function PilotSelector({ className, tankEid, slot }: { className?: string, tankEid: number, slot: number }) {
+export function PilotSelector({ className, tankEid }: { className?: string, tankEid: number }) {
+    const pilot = useObservable(getPilotAgent$(tankEid));
     const handleChangePilot = useCallback((event: ChangeEvent<{ value: string }>) => {
-        changeTankType(tankEid, slot, Number(event.target.value));
-    }, [tankEid, slot]);
+        if (event.target.value === 'current') {
+            changeTankPilot(tankEid, new CurrentActorAgent(tankEid, false));
+        }
+        if (event.target.value.includes('/assets/models/')) {
+            const agent = getLoadedAgent(tankEid, event.target.value);
+            changeTankPilot(tankEid, agent);
+        }
+    }, [tankEid]);
+    
     return (
         <div className={ `${ className } gap-2` }>
             <Select
                 className="max-w-xs"
                 label="Pilot"
-                defaultSelectedKeys={ [0] }
+                value={ getPilotKey(pilot) }
                 onChange={ handleChangePilot }
             >
                 { pilots.map((item) => <SelectItem key={ item.key }>{ item.label }</SelectItem>) }
             </Select>
         </div>
     );
+}
+
+
+function getPilotKey(agent: undefined | TankAgent | LoadedAgent) {
+    if (agent instanceof LoadedAgent) {
+        return agent.path;
+    }
+    if (agent instanceof CurrentActorAgent) {
+        return 'current';
+    }
+    return 'player';
 }

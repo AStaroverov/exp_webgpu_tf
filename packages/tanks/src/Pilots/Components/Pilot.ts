@@ -1,48 +1,47 @@
 import { addComponent, EntityId, Not, query, World } from 'bitecs';
-import { isFunction } from 'lodash-es';
 import { GameDI } from '../../Game/DI/GameDI.ts';
 import { Vehicle } from '../../Game/ECS/Components/Vehicle.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { CurrentActorAgent, TankAgent } from '../Agents/CurrentActorAgent.ts';
 
 export const Pilot = {
-    agent: {} as Record<EntityId, TankAgent>,
+    agent: new Map<EntityId, TankAgent>(),
 
     dispose() {
-        getPilots().forEach(agent => agent?.dispose?.());
-        Pilot.agent = {};
+        getPilotAgents().forEach(agent => agent?.dispose?.());
+        Pilot.agent.clear();
     },
 
     addComponent(world: World, eid: EntityId, agent: TankAgent) {
         addComponent(world, eid, Pilot);
-        Pilot.agent[eid] = agent;
+        Pilot.agent.set(eid, agent);
     },
 
-    isSynced() {
-        return getPilots().every(pilot => isFunction(pilot.isSynced) ? pilot.isSynced() : true);
+    getAgent(eid: EntityId) {
+        return Pilot.agent.get(eid);
+    },
+
+    disposeAgent(eid: EntityId) {
+        Pilot.agent.get(eid)?.dispose?.();
+        Pilot.agent.delete(eid);
     },
 };
 
-export function getPilot(tankEid: EntityId) {
-    return Pilot.agent[tankEid];
+export function getPilotAgents({ world } = GameDI) {
+    return query(world, [Pilot]).map((eid) => Pilot.agent.get(eid)!);
 }
 
 export function getAliveActors({ world } = GameDI) {
     return query(world, [Pilot])
-        .map((eid) => Pilot.agent[eid])
-        .filter((agent) => agent instanceof CurrentActorAgent && getTankHealth(agent.tankEid) > 0);
+        .map((eid) => Pilot.agent.get(eid))
+        .filter((agent): agent is CurrentActorAgent => agent instanceof CurrentActorAgent && getTankHealth(agent.tankEid) > 0);
 }
 
-export function getAlivePilots({ world } = GameDI) {
-    return query(world, [Pilot])
-        .map((eid) => Pilot.agent[eid])
-        .filter((agent) => agent != null && getTankHealth(agent.tankEid) > 0);
+export function getAlivePilots() {
+    return getPilotAgents()
+        .filter((agent): agent is TankAgent => agent != null && getTankHealth(agent.tankEid) > 0);
 }
 
-export function getPilots(): readonly TankAgent[] {
-    return Object.values(Pilot.agent);
-}
-
-export function getFreeTankEids({ world } = GameDI) {
+export function getFreeVehicaleEids({ world } = GameDI) {
     return query(world, [Vehicle, Not(Pilot)]);
 }

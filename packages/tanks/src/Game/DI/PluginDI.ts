@@ -9,10 +9,6 @@ export const PluginDI = {
     addSystem(group: SystemGroup, system: (delta: number) => void, dispose?: VoidFunction) {
         PluginDI.systems[group].push(system);
         dispose && PluginDI.disposes.push(dispose);
-        return () => {
-            // dispose single system
-            throw new Error('Not implemented');
-        };
     },
     addDestroy(destroy: VoidFunction) {
         PluginDI.disposes.push(destroy);

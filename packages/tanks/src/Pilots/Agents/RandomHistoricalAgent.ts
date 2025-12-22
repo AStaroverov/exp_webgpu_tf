@@ -1,10 +1,10 @@
 import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { getRandomHistoricalNetwork } from '../../../../ml/src/Models/Utils.ts';
-import { NetworkModelManager } from './NetworkModelManager.ts';
+import { createNetworkModelManager } from './NetworkModelManager.ts';
 import { DownloadableAgent, TankAgent } from './CurrentActorAgent.ts';
 
-const historcalActorUpdater = NetworkModelManager(() => getRandomHistoricalNetwork(Model.Policy));
+const historcalActorUpdater = createNetworkModelManager(() => getRandomHistoricalNetwork(Model.Policy));
 
 export class RandomHistoricalAgent implements TankAgent<DownloadableAgent> {
     constructor(public readonly tankEid: number) {

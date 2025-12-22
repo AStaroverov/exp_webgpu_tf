@@ -56,3 +56,4 @@ export function createDrawFaunaSystem({ canvas, device } = RenderDI) {
     };
 }
 
+

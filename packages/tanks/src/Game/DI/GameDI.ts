@@ -14,7 +14,7 @@ export const GameDI: {
     setRenderTarget: (canvas: undefined | null | HTMLCanvasElement) => void;
     enablePlayer: () => void
     setPlayerId: (playerId: null | EntityId) => void
-    setPlayerTank: (tankEid: null | EntityId) => void
+    setPlayerVehicle: (vehicleEid: null | EntityId) => void
     setCameraTarget: (tankEid: null | EntityId) => void
     setInfiniteMapMode: (enabled: boolean) => void
 
@@ -30,7 +30,7 @@ export const GameDI: {
     setRenderTarget: null as any,
     enablePlayer: null as any,
     setPlayerId: null as any,
-    setPlayerTank: null as any,
+    setPlayerVehicle: null as any,
     setCameraTarget: null as any,
     setInfiniteMapMode: null as any,
 

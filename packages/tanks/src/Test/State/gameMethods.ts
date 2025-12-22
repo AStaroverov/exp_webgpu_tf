@@ -8,6 +8,7 @@ import { randomRangeInt } from '../../../../../lib/random.ts';
 import { PlayerEnvDI } from '../../Game/DI/PlayerEnvDI.ts';
 import { CurrentActorAgent } from '../../Pilots/Agents/CurrentActorAgent.ts';
 import { Pilot } from '../../Pilots/Components/Pilot.ts';
+import { setPilotAgent } from '../../Arena/State/Game/engineMethods.ts';
 
 const ENEMY_VEHICLE_TYPES: VehicleType[] = [
     VehicleType.LightTank, 
@@ -29,8 +30,7 @@ export function spawnPlayerVehicle(vehicleType: VehicleType) {
     if (PlayerEnvDI.tankEid !== null) {
         const oldEid = PlayerEnvDI.tankEid;
         // Dispose agent if exists
-        Pilot.agent[oldEid]?.dispose?.();
-        delete Pilot.agent[oldEid];
+        Pilot.disposeAgent(oldEid);
         // Remove tank entity
         syncRemoveTank(oldEid);
         PlayerEnvDI.tankEid = null;
@@ -38,7 +38,7 @@ export function spawnPlayerVehicle(vehicleType: VehicleType) {
     
     // Create new player tank
     const playerTankEid = spawnPlayerTank(vehicleType);
-    engine.pilots.setPlayerPilot(playerTankEid);
+    engine.setPlayerVehicle(playerTankEid);
     engine.setInfiniteMapMode(true);
     engine.setCameraTarget(playerTankEid);
     
@@ -53,7 +53,7 @@ export async function spawnEnemy(vehicleType?: VehicleType) {
     const enemyEid = spawnEnemyAtRandomPosition(type);
 
     const agent = new CurrentActorAgent(enemyEid, false);
-    engine.pilots.setPilot(enemyEid, agent);
+    setPilotAgent(enemyEid, agent);
     engine.pilots.toggle(true);
 
     if (agent.sync) { await agent.sync(); }

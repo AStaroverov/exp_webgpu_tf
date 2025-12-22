@@ -1,8 +1,6 @@
-import { EntityId } from 'bitecs';
 import { GameDI } from '../Game/DI/GameDI.ts';
 import { SystemGroup } from '../Game/ECS/Plugins/systems.ts';
-import { TankAgent } from './Agents/CurrentActorAgent.ts';
-import { getAliveActors, getAlivePilots, getFreeTankEids, getPilot, getPilots, Pilot } from './Components/Pilot.ts';
+import { Pilot } from './Components/Pilot.ts';
 import { PilotsState } from './Singelton/PilotsState.ts';
 import { createPilotSystem } from './Systems/createPilotSystem.ts';
 
@@ -13,24 +11,5 @@ export function createPilotsPlugin(game: typeof GameDI) {
         Pilot.dispose();
     });
 
-    const setPlayerPilot = (vehicleEid: number) => {
-        // TODO: Move impl to createPilotsManager
-        GameDI.enablePlayer();
-        GameDI.setPlayerTank(vehicleEid);
-    };
-
-    return {
-        ...PilotsState,
-        setPlayerPilot,
-        setPilot,
-        getPilot,
-        getPilots,
-        getAliveActors,
-        getAlivePilots,
-        getFreeVehicleEids: getFreeTankEids,
-    };
-}
-
-function setPilot(vehicleEid: EntityId, agent: TankAgent, { world } = GameDI) {
-    Pilot.addComponent(world, vehicleEid, agent);
+    return PilotsState;
 }

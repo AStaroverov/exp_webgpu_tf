@@ -4,7 +4,7 @@ import { useObservable } from '../../../../../../lib/React/useSyncObservable.ts'
 import { changeTankType, getVehicleType$ } from '../../State/Game/gameMethods.ts';
 import { EMPTY } from 'rxjs';
 import { ChangeEvent, useCallback } from 'react';
-import { getTankEidBySlot$ } from '../../State/Game/playerMethods.ts';
+import { getSlot$ } from '../../State/Game/modules/lobbySlots.ts';
 
 const vehicleTypes = [
     { key: VehicleType.LightTank, label: 'Light' },
@@ -13,10 +13,9 @@ const vehicleTypes = [
 ];
 
 export function TankSelector({ className, slot }: { className?: string, slot: number, }) {
-    const vehicleEid = useObservable(getTankEidBySlot$(slot));
+    const vehicleEid = useObservable(getSlot$(slot));
     const vehicleType = useObservable(vehicleEid ? getVehicleType$(vehicleEid) : EMPTY);
     const handleChangeVehicleType = useCallback((event: ChangeEvent<{ value: string }>) => {
-        if (vehicleEid == null) return;
         changeTankType(vehicleEid, slot, Number(event.target.value));
     }, [vehicleEid]);
 

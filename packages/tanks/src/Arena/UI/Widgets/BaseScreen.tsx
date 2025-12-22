@@ -2,15 +2,15 @@ import { CSSProperties, useEffect, useRef } from 'react';
 import { GarageScreen } from './GarageScreen.tsx';
 import { EscMenu } from './EscMenu.tsx';
 import { useObservable } from '../../../../../../lib/React/useSyncObservable.ts';
-import { GameState$ } from '../../State/Game/GameState.ts';
 import { setRenderTarget } from '../../State/Game/RenderTarget.ts';
 
 import { GAME_MAP_SIZE } from '../../State/Game/def.ts';
+import { gameState$ } from '../../State/Game/modules/gameState.ts';
 
 export function BaseScreen({ className, style }: { className?: string, style?: CSSProperties }) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const canvasScale = Math.min(window.innerWidth / (canvasRef.current?.offsetWidth ?? 1), window.innerHeight / (canvasRef.current?.offsetHeight ?? 1));
-    const { isStarted } = useObservable(GameState$, GameState$.value);
+    const { isStarted } = useObservable(gameState$, gameState$.value);
 
     useEffect(() => {
         setRenderTarget(canvasRef.current);
