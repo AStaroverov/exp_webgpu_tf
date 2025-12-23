@@ -7,6 +7,7 @@ import { SNAPSHOT_EVERY, TICK_TIME_SIMULATION } from '../../../../ml-common/cons
 import { createScenarioByCurriculumState } from '../../../../ml-common/Curriculum/createScenarioByCurriculumState.ts';
 import { CurriculumState, Scenario } from '../../../../ml-common/Curriculum/types.ts';
 import { agentSampleChannel, curriculumStateChannel, episodeSampleChannel, queueSizeChannel } from '../channels.ts';
+import { getAliveActors, getPilotAgents } from '../../../../tanks/src/Pilots/Components/Pilot.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -52,7 +53,7 @@ export class EpisodeManager {
     protected afterEpisode(episode: Scenario) {
         const successRatio = episode.getSuccessRatio();
         const isReference = !episode.isTrain;
-        const pilots = episode.getPilots();
+        const pilots = getPilotAgents();
 
         episodeSampleChannel.emit({
             maxNetworkVersion: max(...pilots.map(p => p.getVersion?.() ?? 0)),
@@ -89,7 +90,7 @@ export class EpisodeManager {
         const episode = await this.beforeEpisode();
 
         try {
-            await this.awaitAgentsSync(episode);
+            await this.awaitAgentsSync();
             await this.runGameLoop(episode);
             this.afterEpisode(episode);
         } catch (error) {
@@ -99,8 +100,8 @@ export class EpisodeManager {
         }
     }
 
-    protected awaitAgentsSync(episode: Scenario) {
-        return Promise.all(episode.getPilots().map(agent => agent.sync?.()));
+    protected awaitAgentsSync() {
+        return Promise.all(getPilotAgents().map(agent => agent.sync?.()));
     }
 
     protected runGameLoop(episode: Scenario) {
@@ -135,7 +136,7 @@ export class EpisodeManager {
         deltaTime: number,
         scenario: Scenario,
     ) {
-        const actors = scenario.getAliveActors();
+        const actors = getAliveActors();
         const currentTanks = scenario.getVehicleEids();
         const gameOverByActorCount = actors.length <= 0;
         const gameOverByTankCount = currentTanks.length <= 1;

@@ -61,6 +61,8 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
                 bulletsToken,
                 tokens.alliesTok,
                 tokens.enemiesTok,
+                tokens.envRaysTok,
+                tokens.turretRaysTok,
             ]) as tf.SymbolicTensor;
     }
 
@@ -69,6 +71,8 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const getContextMask = (name: string, i: number) => {
         const oneMask = maskLike.apply(tokens.tankTok) as tf.SymbolicTensor;
         const bulletsMask = maskSquash.apply(inputs.bulletsMaskInput) as tf.SymbolicTensor;
+        const envRaysMask = maskLike.apply(tokens.envRaysTok) as tf.SymbolicTensor;
+        const turretRaysMask = maskLike.apply(tokens.turretRaysTok) as tf.SymbolicTensor;
         return tf.layers.concatenate({name: name + '_contextTokenMask' + i, axis: 1 })
             .apply([
                 oneMask,
@@ -76,6 +80,8 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
                 bulletsMask,
                 inputs.alliesMaskInput,
                 inputs.enemiesMaskInput,
+                envRaysMask,
+                turretRaysMask,
             ]) as tf.SymbolicTensor;
     };
 

@@ -113,13 +113,13 @@ export const TurretSpeedConfig = {
  */
 export const ReloadConfig = {
     /** Light tank - fast reload */
-    light: 400,
+    light: 800,
     
     /** Medium tank - balanced reload */
-    medium: 600,
+    medium: 1200,
     
     /** Heavy tank - slow reload */
-    heavy: 800,
+    heavy: 1600,
     
     /** Player tank - enhanced reload */
     player: 300,

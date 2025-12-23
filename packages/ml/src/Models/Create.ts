@@ -4,22 +4,40 @@ import {
     MAX_ALLIES,
     MAX_BULLETS,
     MAX_ENEMIES,
+    ENV_RAYS_TOTAL,
+    TURRET_RAYS_COUNT,
+    RAY_HIT_TYPE_COUNT,
 } from '../../../tanks/src/Pilots/Components/TankState.ts';
 
-import { createDenseLayer } from "./ApplyLayers.ts";
-import { Model } from './def.ts';
-import { createNetwork } from './Networks/v9.ts';
-import { AdamW } from './Optimizer/AdamW.ts';
+export { RAY_HIT_TYPE_COUNT };
 
-export const CONTROLLER_FEATURES_DIM = 4;
-export const BATTLE_FEATURES_DIM = 6;
+    import { createDenseLayer } from "./ApplyLayers.ts";
+    import { Model } from './def.ts';
+    import { createNetwork } from './Networks/v9.ts';
+    import { AdamW } from './Optimizer/AdamW.ts';
+
+export const BATTLE_FEATURES_DIM = 2;
 export const TANK_FEATURES_DIM = 10;
+
+// Enemies: [hp, x, y]
 export const ENEMY_SLOTS = MAX_ENEMIES;
-export const ENEMY_FEATURES_DIM = 10;
+export const ENEMY_FEATURES_DIM = 3;
+
+// Allies: [hp, x, y]
 export const ALLY_SLOTS = MAX_ALLIES;
-export const ALLY_FEATURES_DIM = 10;
+export const ALLY_FEATURES_DIM = 3;
+
+// Bullets: [x, y, vx, vy]
 export const BULLET_SLOTS = MAX_BULLETS;
 export const BULLET_FEATURES_DIM = 4;
+
+// Environment rays: [x, y, radius, distance] = 4 features per ray + hitType for embedding
+export const ENV_RAY_SLOTS = ENV_RAYS_TOTAL;
+export const ENV_RAY_FEATURES_DIM = 4;
+
+// Turret rays: [distance, aimingError] = 2 features per ray + hitType for embedding
+export const TURRET_RAY_SLOTS = TURRET_RAYS_COUNT;
+export const TURRET_RAY_FEATURES_DIM = 2;
 
 export const ACTION_HEAD_DIMS = [15, 15, 2, 31];
 

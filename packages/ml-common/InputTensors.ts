@@ -1,10 +1,16 @@
 import * as tf from '@tensorflow/tfjs';
 import {
     ALLY_FEATURES_DIM,
-    ALLY_SLOTS, BULLET_FEATURES_DIM,
-    BULLET_SLOTS, ENEMY_FEATURES_DIM,
+    ALLY_SLOTS,
+    BULLET_FEATURES_DIM,
+    BULLET_SLOTS,
+    ENEMY_FEATURES_DIM,
     ENEMY_SLOTS,
-    TANK_FEATURES_DIM
+    ENV_RAY_FEATURES_DIM,
+    ENV_RAY_SLOTS,
+    TANK_FEATURES_DIM,
+    TURRET_RAY_FEATURES_DIM,
+    TURRET_RAY_SLOTS,
 } from '../ml/src/Models/Create.ts';
 import { InputArrays } from './InputArrays.ts';
 import { flatTypedArray } from './flat.ts';
@@ -12,12 +18,7 @@ import { flatTypedArray } from './flat.ts';
 export function createInputTensors(
     state: InputArrays[],
 ): tf.Tensor[] {
-    //[controller, battleInput, tankInput, enemiesInput, enemiesMaskInput, alliesInput, alliesMaskInput, bulletsInput, bulletsMaskInput],
     return [
-        // controller
-        // tf.tensor2d(flatTypedArray(state.map((s) => s.controllerFeatures)), [state.length, CONTROLLER_FEATURES_DIM]),
-        // battle
-        // tf.tensor2d(flatTypedArray(state.map((s) => s.battleFeatures)), [state.length, BATTLE_FEATURES_DIM]),
         // tank
         tf.tensor2d(flatTypedArray(state.map((s) => s.tankFeatures)), [state.length, TANK_FEATURES_DIM]),
         // enemies + mask
@@ -47,29 +48,51 @@ export function createInputTensors(
             flatTypedArray(state.map((s) => s.bulletsMask)),
             [state.length, BULLET_SLOTS],
         ),
+        // environment rays features + hit types
+        tf.tensor3d(
+            flatTypedArray(state.map((s) => s.envRaysFeatures)),
+            [state.length, ENV_RAY_SLOTS, ENV_RAY_FEATURES_DIM],
+        ),
+        tf.tensor2d(
+            flatTypedArray(state.map((s) => s.envRaysTypes)),
+            [state.length, ENV_RAY_SLOTS],
+        ),
+        // turret rays features + hit types
+        tf.tensor3d(
+            flatTypedArray(state.map((s) => s.turretRaysFeatures)),
+            [state.length, TURRET_RAY_SLOTS, TURRET_RAY_FEATURES_DIM],
+        ),
+        tf.tensor2d(
+            flatTypedArray(state.map((s) => s.turretRaysTypes)),
+            [state.length, TURRET_RAY_SLOTS],
+        ),
     ];
 }
 
+const INPUT_TENSORS_COUNT = 11;
+
 export function sliceInputTensors(tensors: tf.Tensor[], start: number, size: number): tf.Tensor[] {
-    if (tensors.length !== 9) {
-        throw new Error('Invalid input tensors length');
+    if (tensors.length !== INPUT_TENSORS_COUNT) {
+        throw new Error(`Invalid input tensors length: expected ${INPUT_TENSORS_COUNT}, got ${tensors.length}`);
     }
 
     return [
-        // controller
-        // tensors[0].slice([start, 0], [size, -1]),
-        // battle
-        // tensors[1].slice([start, 0], [size, -1]),
         // tank
-        tensors[2].slice([start, 0], [size, -1]),
+        tensors[0].slice([start, 0], [size, -1]),
         // enemies + mask
+        tensors[1].slice([start, 0, 0], [size, -1, -1]),
+        tensors[2].slice([start, 0], [size, -1]),
+        // allies + mask
         tensors[3].slice([start, 0, 0], [size, -1, -1]),
         tensors[4].slice([start, 0], [size, -1]),
-        // allies + mask
+        // bullets + mask
         tensors[5].slice([start, 0, 0], [size, -1, -1]),
         tensors[6].slice([start, 0], [size, -1]),
-        // bullets + mask
+        // environment rays features + hit types
         tensors[7].slice([start, 0, 0], [size, -1, -1]),
         tensors[8].slice([start, 0], [size, -1]),
+        // turret rays features + hit types
+        tensors[9].slice([start, 0, 0], [size, -1, -1]),
+        tensors[10].slice([start, 0], [size, -1]),
     ];
 }

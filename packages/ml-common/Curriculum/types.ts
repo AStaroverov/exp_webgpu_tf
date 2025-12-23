@@ -1,5 +1,4 @@
 import { EntityId } from 'bitecs';
-import { TankAgent } from '../../tanks/src/Pilots/Agents/CurrentActorAgent.ts';
 import { createBattlefield } from './createBattlefield.ts';
 
 export type CurriculumState = {
@@ -18,13 +17,5 @@ export type Scenario = Awaited<ReturnType<typeof createBattlefield>> & {
 
     getVehicleEids(): readonly EntityId[];
     getTeamsCount(): number;
-
-    getAlivePilots(): readonly TankAgent[];
-    getAliveActors(): readonly TankAgent[];
     getSuccessRatio(): number;
-
-    setPilot(vehicleEid: EntityId, agent: TankAgent): void;
-    getPilot(vehicleEid: EntityId): TankAgent | undefined;
-    getPilots(): readonly TankAgent[];
-    getFreeVehicleEids(): readonly EntityId[];
 }

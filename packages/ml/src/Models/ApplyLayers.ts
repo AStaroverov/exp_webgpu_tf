@@ -7,7 +7,12 @@ import {
     ALLY_SLOTS, BULLET_FEATURES_DIM,
     BULLET_SLOTS, ENEMY_FEATURES_DIM,
     ENEMY_SLOTS,
-    TANK_FEATURES_DIM
+    ENV_RAY_FEATURES_DIM,
+    ENV_RAY_SLOTS,
+    TANK_FEATURES_DIM,
+    TURRET_RAY_FEATURES_DIM,
+    TURRET_RAY_SLOTS,
+    RAY_HIT_TYPE_COUNT,
 } from './Create.ts';
 import { MaskLikeLayer } from './Layers/MaskLikeLayer.ts';
 import { MultiHeadAttentionLayer } from './Layers/MultiHeadAttentionLayer.ts';
@@ -23,6 +28,10 @@ export function createInputs(name: string) {
     const alliesMaskInput = tf.input({name: name + '_alliesMaskInput', shape: [ALLY_SLOTS]});
     const bulletsInput = tf.input({name: name + '_bulletsInput', shape: [BULLET_SLOTS, BULLET_FEATURES_DIM]});
     const bulletsMaskInput = tf.input({name: name + '_bulletsMaskInput', shape: [BULLET_SLOTS]});
+    const envRaysInput = tf.input({name: name + '_envRaysInput', shape: [ENV_RAY_SLOTS, ENV_RAY_FEATURES_DIM]});
+    const envRaysTypes = tf.input({name: name + '_envRaysTypes', shape: [ENV_RAY_SLOTS]});
+    const turretRaysInput = tf.input({name: name + '_turretRaysInput', shape: [TURRET_RAY_SLOTS, TURRET_RAY_FEATURES_DIM]});
+    const turretRaysTypes = tf.input({name: name + '_turretRaysTypes', shape: [TURRET_RAY_SLOTS]});
 
     return {
         tankInput,
@@ -32,6 +41,10 @@ export function createInputs(name: string) {
         alliesMaskInput,
         bulletsInput,
         bulletsMaskInput,
+        envRaysInput,
+        envRaysTypes,
+        turretRaysInput,
+        turretRaysTypes,
     };
 }
 
@@ -142,6 +155,10 @@ export function convertInputsToTokens(
         enemiesInput,
         alliesInput,
         bulletsInput,
+        envRaysInput,
+        envRaysTypes,
+        turretRaysInput,
+        turretRaysTypes,
     }: ReturnType<typeof createInputs>,
     dModel: number,
 ) {
@@ -162,13 +179,35 @@ export function convertInputsToTokens(
     const tankTok = reshape(addTypeEmbedding(tokenProj(tankInput, dModel, tankInput.name)));
     const alliesTok = addTypeEmbedding(tokenProj(alliesInput, dModel, alliesInput.name));
     const enemiesTok = addTypeEmbedding(tokenProj(enemiesInput, dModel, enemiesInput.name));
-    const bulletsTok = (tokenProj(bulletsInput, dModel, bulletsInput.name));
+    const bulletsTok = tokenProj(bulletsInput, dModel, bulletsInput.name);
+
+    // Shared hit type embedding for all rays (same semantic: NONE, OBSTACLE, ENEMY_VEHICLE, ALLY_VEHICLE)
+    const rayHitTypeEmbedding = tf.layers.embedding({
+        name: 'rayHitType_sharedEmbedding',
+        inputDim: RAY_HIT_TYPE_COUNT,
+        outputDim: dModel,
+        embeddingsInitializer: 'glorotNormal',
+    });
+
+    // Environment rays: project features and add hit type embedding
+    const envRaysProj = tokenProj(envRaysInput, dModel, envRaysInput.name);
+    const envRaysTypeEmb = rayHitTypeEmbedding.apply(envRaysTypes) as tf.SymbolicTensor;
+    const envRaysTok = tf.layers.add({ name: 'envRays_withHitTypeEmbedding' })
+        .apply([envRaysProj, envRaysTypeEmb]) as tf.SymbolicTensor;
+
+    // Turret rays: project features and add hit type embedding
+    const turretRaysProj = tokenProj(turretRaysInput, dModel, turretRaysInput.name);
+    const turretRaysTypeEmb = rayHitTypeEmbedding.apply(turretRaysTypes) as tf.SymbolicTensor;
+    const turretRaysTok = tf.layers.add({ name: 'turretRays_withHitTypeEmbedding' })
+        .apply([turretRaysProj, turretRaysTypeEmb]) as tf.SymbolicTensor;
 
     return {
         tankTok,
         alliesTok,
         enemiesTok,
         bulletsTok,
+        envRaysTok,
+        turretRaysTok,
     };
 }
 

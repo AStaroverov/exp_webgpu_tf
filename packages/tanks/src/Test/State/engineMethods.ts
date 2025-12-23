@@ -56,6 +56,10 @@ export function spawnPlayerTank(vehicleType: VehicleType = VehicleType.LightTank
         rotation: -PI / 2, // Facing up
         color: [0.2, 0.8, 0.2, 1], // Green player
     });
+
+    getEngine().enablePlayer();
+    getEngine().setPlayerVehicle(eid);
+    getEngine().setCameraTarget(eid);
     
     return eid;
 }

@@ -10,6 +10,7 @@ import { getSuccessRatio as computeSuccessRatio, getTeamHealth } from './utils.t
 import { addRandomTanks } from './Utils/addRandomTanks.ts';
 import { fillAlliesWithAgents } from './Utils/fillAlliesWithAgents.ts';
 import { getTeamsCount } from '../../tanks/src/Game/ECS/Components/TeamRef.ts';
+import { Pilot } from '../../tanks/src/Pilots/Components/Pilot.ts';
 
 export const indexScenarioWithAlliesStatic = 1;
 
@@ -44,7 +45,7 @@ export function createScenarioBase(options: Parameters<typeof createBattlefield>
         getSuccessRatio,
     }
 
-    pilots.setPilot(tanks[0], new CurrentActorAgent(tanks[0], isTrain), game);
+    Pilot.addComponent(game.world, tanks[0], new CurrentActorAgent(tanks[0], isTrain));
     pilots.toggle(true);
     
     fillAlliesWithAgents(scenario, isTrain);

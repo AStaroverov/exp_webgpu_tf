@@ -22,11 +22,11 @@ type policyNetworkConfig = NetworkConfig
 const policyNetworkConfig: policyNetworkConfig = {
     dim: 16,
     heads: 1,
-    depth: 12,
+    depth: 8,
 };
 
 const valueNetworkConfig: NetworkConfig = {
-    dim: 16,
+    dim: 8,
     heads: 1,
     depth: 2,
 };
@@ -34,6 +34,9 @@ const valueNetworkConfig: NetworkConfig = {
 export function createNetwork(modelName: Model, config: NetworkConfig = modelName === Model.Policy ? policyNetworkConfig : valueNetworkConfig) {
     const inputs = createInputs(modelName);
     const tokens = convertInputsToTokens(inputs, config.dim);
+
+    tokens.envRaysTok
+    tokens.turretRaysTok
 
     const clsBulletsToken = new VariableLayer({
         name: modelName + '_clsBulletsToken',
@@ -59,9 +62,11 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
             .apply([
                 clsToken,
                 tokens.tankTok,
+                bulletsToken,
+                tokens.envRaysTok,
+                tokens.turretRaysTok,
                 tokens.alliesTok,
                 tokens.enemiesTok,
-                bulletsToken,
             ]) as tf.SymbolicTensor;
     }
 
@@ -69,13 +74,17 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const maskSquash = new MaskSquashLayer({ name: modelName + '_maskSquash' });
     const getContextMask = (name: string, i: number) => {
         const oneMask = maskLike.apply(tokens.tankTok) as tf.SymbolicTensor;
+        const envRaysMask = maskLike.apply(tokens.envRaysTok) as tf.SymbolicTensor;
+        const turretRaysMask = maskLike.apply(tokens.turretRaysTok) as tf.SymbolicTensor;
         return tf.layers.concatenate({name: name + '_contextTokenMask' + i, axis: 1 })
             .apply([
                 oneMask,
                 oneMask,
+                maskSquash.apply(inputs.bulletsMaskInput) as tf.SymbolicTensor,
+                envRaysMask,
+                turretRaysMask,
                 inputs.alliesMaskInput,
                 inputs.enemiesMaskInput,
-                maskSquash.apply(inputs.bulletsMaskInput) as tf.SymbolicTensor,
             ]) as tf.SymbolicTensor;
     };
 

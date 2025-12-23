@@ -11,6 +11,8 @@ export function createPilotSystem() {
     let currentPilots = [] as TankAgent[];
 
     return () => {
+        snapshotTankInputTensor();
+
         if (!PilotsState.enabled) return;
         if (!getPilotAgents().every(isSynced)) return;
 
