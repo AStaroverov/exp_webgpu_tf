@@ -28,7 +28,7 @@ export const CONFIG = {
             target: 0.01,
             low: 0.007,
         },
-        initial: 1e-4,
+        initial: 5e-4,
         multHigh: 0.95,
         multLow: 1.01,
         min: 1e-5,
@@ -43,9 +43,9 @@ export const CONFIG = {
     },
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
-    episodeFrames: Math.round(60 * 1000 / TICK_TIME_SIMULATION),
+    episodeFrames: Math.round(2 * 60 * 1000 / TICK_TIME_SIMULATION),
     // Workers
-    workerCount: 4,
+    workerCount: 8,
     backpressureQueueSize: 2,
     // Training control
     savePath: 'PPO_MHA',

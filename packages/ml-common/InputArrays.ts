@@ -18,11 +18,7 @@ import {
     ALLY_BUFFER,
     BULLET_BUFFER,
     ENEMY_BUFFER,
-    ENV_RAY_BUFFER,
-    ENV_RAY_LENGTH,
-    TURRET_RAY_BUFFER,
-    TURRET_RAY_LENGTH,
-    TankInputTensor,
+    ENV_RAY_BUFFER, TURRET_RAY_BUFFER, TankInputTensor
 } from '../tanks/src/Pilots/Components/TankState.ts';
 
 function norm(v: number, size: number): number {
@@ -180,7 +176,7 @@ export function prepareInputArrays(
     }
 
     // ---- Environment rays features ----
-    // Format: [hitType, x, y, radius, distance] -> features: [locX, locY, radius, distance] + hitType for embedding
+    // Format: [rayDirX, rayDirY, hitType, x, y, radius, distance] -> features: [locRayDirX, locRayDirY, locX, locY, radius, distance] + hitType for embedding
     const envRaysFeatures = new Float32Array(ENV_RAY_SLOTS * ENV_RAY_FEATURES_DIM);
     const envRaysTypes = new Int32Array(ENV_RAY_SLOTS);
     const envRaysBuffer = TankInputTensor.envRaysData.getBatch(tankEid);
@@ -189,26 +185,33 @@ export function prepareInputArrays(
         const dstOffset = r * ENV_RAY_FEATURES_DIM;
         const srcOffset = r * ENV_RAY_BUFFER;
 
-        const hitType = envRaysBuffer[srcOffset];
-        const rX = envRaysBuffer[srcOffset + 1];
-        const rY = envRaysBuffer[srcOffset + 2];
-        const rRadius = envRaysBuffer[srcOffset + 3];
-        const rDistance = envRaysBuffer[srcOffset + 4];
+        const rRayDirX = envRaysBuffer[srcOffset + 0];
+        const rRayDirY = envRaysBuffer[srcOffset + 1];
+        const hitType = envRaysBuffer[srcOffset + 2];
+        const rX = envRaysBuffer[srcOffset + 3];
+        const rY = envRaysBuffer[srcOffset + 4];
+        const rRadius = envRaysBuffer[srcOffset + 5];
+        const rDistance = envRaysBuffer[srcOffset + 6];
 
         // Store hit type for embedding (0=none, 1=obstacle, 2=vehicle)
         envRaysTypes[r] = hitType;
 
+        // rayDir is always present (even for misses)
+        const [locRayDirX, locRayDirY] = rotateVector(rRayDirX, rRayDirY, invRotation);
+        envRaysFeatures[dstOffset + 0] = locRayDirX; // already normalized (unit vector)
+        envRaysFeatures[dstOffset + 1] = locRayDirY;
+
         if (hitType !== 0) {
             const [locX, locY] = rotateVector(rX - tankX, rY - tankY, invRotation);
-            envRaysFeatures[dstOffset + 0] = norm(locX, QUANT);
-            envRaysFeatures[dstOffset + 1] = norm(locY, QUANT);
-            envRaysFeatures[dstOffset + 2] = norm(rRadius, QUANT);
-            envRaysFeatures[dstOffset + 3] = norm(rDistance, ENV_RAY_LENGTH);
+            envRaysFeatures[dstOffset + 2] = norm(locX, QUANT);
+            envRaysFeatures[dstOffset + 3] = norm(locY, QUANT);
+            envRaysFeatures[dstOffset + 4] = norm(rRadius, QUANT);
+            envRaysFeatures[dstOffset + 5] = norm(rDistance, QUANT);
         }
     }
 
     // ---- Turret rays features ----
-    // Format: [hitType, distance, aimingErrorDegrees] -> features: [distance, aimingError] + hitType for embedding
+    // Format: [rayDirX, rayDirY, hitType, x, y, vx, vy, radius, distance, aimingError] -> features: [locRayDirX, locRayDirY, locX, locY, locVx, locVy, radius, distance, aimingError] + hitType for embedding
     const turretRaysFeatures = new Float32Array(TURRET_RAY_SLOTS * TURRET_RAY_FEATURES_DIM);
     const turretRaysTypes = new Int32Array(TURRET_RAY_SLOTS);
     const turretRaysBuffer = TankInputTensor.turretRaysData.getBatch(tankEid);
@@ -217,15 +220,36 @@ export function prepareInputArrays(
         const dstOffset = r * TURRET_RAY_FEATURES_DIM;
         const srcOffset = r * TURRET_RAY_BUFFER;
 
-        const hitType = turretRaysBuffer[srcOffset];
-        const tDistance = turretRaysBuffer[srcOffset + 1];
-        const tAimingError = turretRaysBuffer[srcOffset + 2];
+        const tRayDirX = turretRaysBuffer[srcOffset + 0];
+        const tRayDirY = turretRaysBuffer[srcOffset + 1];
+        const hitType = turretRaysBuffer[srcOffset + 2];
+        const tX = turretRaysBuffer[srcOffset + 3];
+        const tY = turretRaysBuffer[srcOffset + 4];
+        const tVx = turretRaysBuffer[srcOffset + 5];
+        const tVy = turretRaysBuffer[srcOffset + 6];
+        const tRadius = turretRaysBuffer[srcOffset + 7];
+        const tDistance = turretRaysBuffer[srcOffset + 8];
+        const tAimingError = turretRaysBuffer[srcOffset + 9];
 
         // Store hit type for embedding
         turretRaysTypes[r] = hitType;
 
-        turretRaysFeatures[dstOffset + 0] = norm(tDistance, TURRET_RAY_LENGTH);
-        turretRaysFeatures[dstOffset + 1] = tAimingError / 180; // normalize degrees to [-1, 1]
+        // rayDir is always present (even for misses)
+        const [locRayDirX, locRayDirY] = rotateVector(tRayDirX, tRayDirY, invRotation);
+        turretRaysFeatures[dstOffset + 0] = locRayDirX; // already normalized (unit vector)
+        turretRaysFeatures[dstOffset + 1] = locRayDirY;
+
+        if (hitType !== 0) {
+            const [locX, locY] = rotateVector(tX - tankX, tY - tankY, invRotation);
+            const [locVx, locVy] = rotateVector(tVx - speedX, tVy - speedY, invRotation);
+            turretRaysFeatures[dstOffset + 2] = norm(locX, QUANT);
+            turretRaysFeatures[dstOffset + 3] = norm(locY, QUANT);
+            turretRaysFeatures[dstOffset + 4] = norm(locVx, QUANT);
+            turretRaysFeatures[dstOffset + 5] = norm(locVy, QUANT);
+            turretRaysFeatures[dstOffset + 6] = norm(tRadius, QUANT);
+            turretRaysFeatures[dstOffset + 7] = norm(tDistance, QUANT);
+            turretRaysFeatures[dstOffset + 8] = tAimingError;
+        }
     }
 
     const result = {

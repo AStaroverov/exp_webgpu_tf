@@ -7,10 +7,12 @@ import { createPilotsPlugin } from '../../tanks/src/Pilots/createPilotsPlugin.ts
 import { createBattlefield } from './createBattlefield.ts';
 import { Scenario } from './types.ts';
 import { getSuccessRatio as computeSuccessRatio, getTeamHealth } from './utils.ts';
-import { addRandomTanks } from './Utils/addRandomTanks.ts';
+import { addTanksWithGrid } from './Utils/addTanksWithGrid.ts';
+import { addFauna } from './Utils/addFauna.ts';
 import { fillAlliesWithAgents } from './Utils/fillAlliesWithAgents.ts';
 import { getTeamsCount } from '../../tanks/src/Game/ECS/Components/TeamRef.ts';
 import { Pilot } from '../../tanks/src/Pilots/Components/Pilot.ts';
+import { resetSpawnGrid } from '../../tanks/src/Arena/State/Game/SpawnGrid.ts';
 
 export const indexScenarioWithAlliesStatic = 1;
 
@@ -26,7 +28,11 @@ export function createScenarioBase(options: Parameters<typeof createBattlefield>
     const isTrain = options.train ?? true;
     const alliesCount = options.alliesCount ?? randomRangeInt(1, 3);
     const enemiesCount = options.enemiesCount ?? alliesCount;
-    const tanks = addRandomTanks([[0, alliesCount], [1, enemiesCount]]);
+    
+    resetSpawnGrid();
+    const tanks = addTanksWithGrid([[0, alliesCount], [1, enemiesCount]]);
+    addFauna();
+
     const activeTeam = getTankTeamId(tanks[0]);
     const initialTeamHealth = getTeamHealth(tanks);
 

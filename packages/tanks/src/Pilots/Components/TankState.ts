@@ -16,14 +16,14 @@ export const ENV_RAYS_BACKWARD = 5;
 export const ENV_RAYS_LEFT = 1;
 export const ENV_RAYS_RIGHT = 1;
 export const ENV_RAYS_TOTAL = ENV_RAYS_FORWARD + ENV_RAYS_BACKWARD + ENV_RAYS_LEFT + ENV_RAYS_RIGHT;
-export const ENV_RAY_BUFFER = 5; // [hitType, x, y, radius, distance]
+export const ENV_RAY_BUFFER = 7; // [rayDirX, rayDirY, hitType, x, y, radius, distance]
 export const ENV_RAY_LENGTH = 400;
 export const ENV_RAY_SECTOR_ANGLE = Math.PI / 3; // 60 degrees
 
 // Turret rays configuration
 export const TURRET_RAY_LENGTH = 800;
 export const TURRET_RAYS_COUNT = 1;
-export const TURRET_RAY_BUFFER = 3; // [hitType, distance, aimingErrorDegrees]
+export const TURRET_RAY_BUFFER = 10; // [rayDirX, rayDirY, hitType, x, y, vx, vy, radius, distance, aimingError]
 export const TURRET_RAY_ANGLE_OFFSET = Math.PI / 36; // 5 degrees offset for side rays
 
 // Hit types for rays
@@ -141,6 +141,8 @@ export const TankInputTensor = component({
     setEnvRayData(
         eid: number,
         index: number,
+        rayDirX: number,
+        rayDirY: number,
         hitType: RayHitType,
         x: number,
         y: number,
@@ -148,11 +150,13 @@ export const TankInputTensor = component({
         distance: number,
     ) {
         const offset = index * ENV_RAY_BUFFER;
-        TankInputTensor.envRaysData.set(eid, offset, hitType);
-        TankInputTensor.envRaysData.set(eid, offset + 1, x);
-        TankInputTensor.envRaysData.set(eid, offset + 2, y);
-        TankInputTensor.envRaysData.set(eid, offset + 3, radius);
-        TankInputTensor.envRaysData.set(eid, offset + 4, distance);
+        TankInputTensor.envRaysData.set(eid, offset + 0, rayDirX);
+        TankInputTensor.envRaysData.set(eid, offset + 1, rayDirY);
+        TankInputTensor.envRaysData.set(eid, offset + 2, hitType);
+        TankInputTensor.envRaysData.set(eid, offset + 3, x);
+        TankInputTensor.envRaysData.set(eid, offset + 4, y);
+        TankInputTensor.envRaysData.set(eid, offset + 5, radius);
+        TankInputTensor.envRaysData.set(eid, offset + 6, distance);
     },
     resetEnvRaysData() {
         TankInputTensor.envRaysData.fill(0);
@@ -161,14 +165,28 @@ export const TankInputTensor = component({
     setTurretRayData(
         eid: number,
         index: number,
+        rayDirX: number,
+        rayDirY: number,
         hitType: RayHitType,
+        x: number,
+        y: number,
+        vx: number,
+        vy: number,
+        radius: number,
         distance: number,
-        aimingErrorDegrees: number,
+        aimingError: number,
     ) {
         const offset = index * TURRET_RAY_BUFFER;
-        TankInputTensor.turretRaysData.set(eid, offset, hitType);
-        TankInputTensor.turretRaysData.set(eid, offset + 1, distance);
-        TankInputTensor.turretRaysData.set(eid, offset + 2, aimingErrorDegrees);
+        TankInputTensor.turretRaysData.set(eid, offset + 0, rayDirX);
+        TankInputTensor.turretRaysData.set(eid, offset + 1, rayDirY);
+        TankInputTensor.turretRaysData.set(eid, offset + 2, hitType);
+        TankInputTensor.turretRaysData.set(eid, offset + 3, x);
+        TankInputTensor.turretRaysData.set(eid, offset + 4, y);
+        TankInputTensor.turretRaysData.set(eid, offset + 5, vx);
+        TankInputTensor.turretRaysData.set(eid, offset + 6, vy);
+        TankInputTensor.turretRaysData.set(eid, offset + 7, radius);
+        TankInputTensor.turretRaysData.set(eid, offset + 8, distance);
+        TankInputTensor.turretRaysData.set(eid, offset + 9, aimingError);
     },
     resetTurretRaysData() {
         TankInputTensor.turretRaysData.fill(0);

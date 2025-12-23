@@ -190,13 +190,13 @@ export function convertInputsToTokens(
     });
 
     // Environment rays: project features and add hit type embedding
-    const envRaysProj = tokenProj(envRaysInput, dModel, envRaysInput.name);
+    const envRaysProj = addTypeEmbedding(tokenProj(envRaysInput, dModel, envRaysInput.name));
     const envRaysTypeEmb = rayHitTypeEmbedding.apply(envRaysTypes) as tf.SymbolicTensor;
     const envRaysTok = tf.layers.add({ name: 'envRays_withHitTypeEmbedding' })
         .apply([envRaysProj, envRaysTypeEmb]) as tf.SymbolicTensor;
 
     // Turret rays: project features and add hit type embedding
-    const turretRaysProj = tokenProj(turretRaysInput, dModel, turretRaysInput.name);
+    const turretRaysProj = addTypeEmbedding(tokenProj(turretRaysInput, dModel, turretRaysInput.name));
     const turretRaysTypeEmb = rayHitTypeEmbedding.apply(turretRaysTypes) as tf.SymbolicTensor;
     const turretRaysTok = tf.layers.add({ name: 'turretRays_withHitTypeEmbedding' })
         .apply([turretRaysProj, turretRaysTypeEmb]) as tf.SymbolicTensor;

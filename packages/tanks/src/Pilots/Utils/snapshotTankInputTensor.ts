@@ -159,7 +159,6 @@ export function snapshotTankInputTensor({ world } = GameDI) {
  */
 function createExcludeOwnVehiclePredicate(
     vehicleEid: EntityId,
-    { world } = GameDI,
 ): (collider: Collider) => boolean {
     return (collider: Collider): boolean => {
         const rigidBody = collider.parent();
@@ -172,7 +171,7 @@ function createExcludeOwnVehiclePredicate(
         if (eid === vehicleEid) return false;
         
         // Check if this entity belongs to the vehicle (via Parent chain)
-        const ownerVehicleEid = findVehicleFromPart(eid, world);
+        const ownerVehicleEid = findVehicleFromPart(eid);
         if (ownerVehicleEid === vehicleEid) return false;
         
         return true;
@@ -236,6 +235,8 @@ function castEnvironmentRays(
             TankInputTensor.setEnvRayData(
                 vehicleEid,
                 indexOffset + i,
+                rayDir.x,
+                rayDir.y,
                 rayHit.hitType,
                 rayHit.x,
                 rayHit.y,
@@ -278,20 +279,23 @@ function castTurretRays(
     if (hit) {
         const collider = hit.collider;
         const eid = getEntityIdByPhysicalId(collider.handle);
+        const rayHit = processRayHit(eid, myTeamId);
+        const aimingError = calculateAimingError(posX, posY, turretRotation, rayHit.x, rayHit.y);
         
-        // Determine hit type
-        const hitType = getHitType(eid, myTeamId);
-        
-        // Calculate aiming error - angle from turret center to target center
-        const aimingErrorDegrees = calculateAimingError(
-            posX,
-            posY, 
-            turretRotation, 
-            eid, 
-            hitType,
+        TankInputTensor.setTurretRayData(
+            vehicleEid, 
+            0, 
+            rayDir.x,
+            rayDir.y,
+            rayHit.hitType, 
+            rayHit.x - GameMap.offsetX,
+            rayHit.y - GameMap.offsetY,
+            rayHit.vx,
+            rayHit.vy,
+            rayHit.radius,
+            hit.timeOfImpact, 
+            aimingError,
         );
-        
-        TankInputTensor.setTurretRayData(vehicleEid, 0, hitType, hit.timeOfImpact, aimingErrorDegrees);
     }
 }
 
@@ -303,26 +307,9 @@ function calculateAimingError(
     posX: number,
     posY: number,
     turretRotation: number,
-    targetEid: EntityId,
-    hitType: RayHitType,
-    { world } = GameDI,
+    targetX: number,
+    targetY: number,
 ): number {
-    if (hitType === RayHitType.NONE) return 0;
-    
-    // Get target center position
-    let targetX: number;
-    let targetY: number;
-    
-    if (hitType === RayHitType.ENEMY_VEHICLE || hitType === RayHitType.ALLY_VEHICLE) {
-        // For vehicle parts, get the vehicle center
-        const vehicleEid = findVehicleFromPart(targetEid, world);
-        if (vehicleEid === 0) return 0;
-        [targetX, targetY] = RigidBodyState.position.getBatch(vehicleEid);
-    } else {
-        // For obstacles, use the obstacle position
-        [targetX, targetY] = RigidBodyState.position.getBatch(targetEid);
-    }
-    
     // Calculate angle from our position to target center
     const dx = targetX - posX;
     const dy = targetY - posY;
@@ -333,24 +320,24 @@ function calculateAimingError(
     while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
     while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
     
-    // Convert to degrees
-    const RAD_TO_DEG = 180 / Math.PI;
-    return angleDiff * RAD_TO_DEG;
+    return angleDiff
 }
 
 // Reusable result object to avoid allocations
-const rayHitResult = { hitType: RayHitType.NONE as RayHitType, x: 0, y: 0, radius: 0 };
+const rayHitResult = { hitType: RayHitType.NONE as RayHitType, x: 0, y: 0, vx: 0, vy: 0, radius: 0 };
 
 /**
  * Process ray hit and extract entity data (returns reusable object - do not store reference!)
  * @param eid - Entity ID of the hit collider
  * @param myTeamId - Team ID of the vehicle casting the ray (to determine enemy vs ally)
  */
-function processRayHit(eid: EntityId, myTeamId: number, { world } = GameDI): typeof rayHitResult {
+function processRayHit(eid: EntityId, myTeamId: number): typeof rayHitResult {
     const collisionGroup = getCollisionGroupFromEntity(eid);
     rayHitResult.hitType = RayHitType.NONE;
     rayHitResult.x = 0;
     rayHitResult.y = 0;
+    rayHitResult.vx = 0;
+    rayHitResult.vy = 0;
     rayHitResult.radius = 0;
 
     if (collisionGroup === 0) {
@@ -359,14 +346,17 @@ function processRayHit(eid: EntityId, myTeamId: number, { world } = GameDI): typ
 
     if (collisionGroup & ALL_VEHICLE_PARTS_MASK) {
         // It's a vehicle part - traverse parent to get vehicle
-        const vehicleEid = findVehicleFromPart(eid, world);
+        const vehicleEid = findVehicleFromPart(eid);
         if (vehicleEid === 0) return rayHitResult;
 
         const pos = RigidBodyState.position.getBatch(vehicleEid);
+        const vel = RigidBodyState.linvel.getBatch(vehicleEid);
         const hitTeamId = TeamRef.id[vehicleEid];
         rayHitResult.hitType = hitTeamId === myTeamId ? RayHitType.ALLY_VEHICLE : RayHitType.ENEMY_VEHICLE;
         rayHitResult.x = pos[0];
         rayHitResult.y = pos[1];
+        rayHitResult.vx = vel[0];
+        rayHitResult.vy = vel[1];
         rayHitResult.radius = HeuristicsData.approxColliderRadius[vehicleEid];
         return rayHitResult;
     }
@@ -374,38 +364,17 @@ function processRayHit(eid: EntityId, myTeamId: number, { world } = GameDI): typ
     if (collisionGroup & CollisionGroupConfig.OBSTACLE) {
         // It's an obstacle - get its position and approximate radius
         const pos = RigidBodyState.position.getBatch(eid);
+        const vel = RigidBodyState.linvel.getBatch(eid);
         rayHitResult.hitType = RayHitType.OBSTACLE;
         rayHitResult.x = pos[0];
         rayHitResult.y = pos[1];
+        rayHitResult.vx = vel[0];
+        rayHitResult.vy = vel[1];
         rayHitResult.radius = getApproxRadius(eid);
         return rayHitResult;
     }
 
     return rayHitResult;
-}
-
-/**
- * Get hit type from entity
- * @param eid - Entity ID of the hit collider
- * @param myTeamId - Team ID of the vehicle casting the ray (to determine enemy vs ally)
- */
-function getHitType(eid: EntityId, myTeamId: number, { world } = GameDI): RayHitType {
-    if (eid === 0) return RayHitType.NONE;
-
-    const collisionGroup = getCollisionGroupFromEntity(eid);
-    
-    if (collisionGroup & ALL_VEHICLE_PARTS_MASK) {
-        const vehicleEid = findVehicleFromPart(eid, world);
-        if (vehicleEid === 0) return RayHitType.NONE;
-        const hitTeamId = TeamRef.id[vehicleEid];
-        return hitTeamId === myTeamId ? RayHitType.ALLY_VEHICLE : RayHitType.ENEMY_VEHICLE;
-    }
-    
-    if (collisionGroup & CollisionGroupConfig.OBSTACLE) {
-        return RayHitType.OBSTACLE;
-    }
-
-    return RayHitType.NONE;
 }
 
 /**
@@ -429,7 +398,7 @@ function getCollisionGroupFromEntity(eid: EntityId, { physicalWorld } = GameDI):
 /**
  * Traverse parent hierarchy to find vehicle entity
  */
-function findVehicleFromPart(partEid: EntityId, world: any): EntityId {
+function findVehicleFromPart(partEid: EntityId, { world } = GameDI): EntityId {
     let currentEid = partEid;
     const maxDepth = 5; // Prevent infinite loops, should 2 enough for most cases
     
@@ -468,50 +437,35 @@ function getApproxRadius(eid: EntityId): number {
 
 export function findTankEnemiesEids(tankEid: EntityId) {
     const tankTeamId = TeamRef.id[tankEid];
-    return findTankNeighboursEids(tankEid, MAX_ENEMIES, (eid: EntityId) => tankTeamId !== TeamRef.id[eid]);
+    return findAllTankEids(tankEid, MAX_ENEMIES, (eid) => TeamRef.id[eid] !== tankTeamId);
 }
 
 export function findTankAlliesEids(tankEid: EntityId) {
     const tankTeamId = TeamRef.id[tankEid];
-    return findTankNeighboursEids(tankEid, MAX_ALLIES, (eid: EntityId) => tankTeamId === TeamRef.id[eid]);
+    return findAllTankEids(tankEid, MAX_ALLIES, (eid) => TeamRef.id[eid] === tankTeamId);
 }
 
-export function findTankNeighboursEids(tankEid: EntityId, limit: number, select: (eid: EntityId) => boolean, { physicalWorld } = GameDI) {
-    // Find enemies
-    const position = {
-        x: RigidBodyState.position.get(tankEid, 0),
-        y: RigidBodyState.position.get(tankEid, 1),
-    };
-    const rotation = RigidBodyState.rotation[tankEid];
-    const tested = new Set<EntityId>();
+function findAllTankEids(
+    tankEid: EntityId, 
+    limit: number, 
+    select: (eid: EntityId) => boolean, 
+    { world } = GameDI,
+): EntityId[] {
+    const allVehicles = query(world, [Vehicle, TankInputTensor]);
     const result: EntityId[] = [];
-
-    for (let j = 1; j < 5; j++) {
-        const radius = 10 ** j;
-        physicalWorld.intersectionsWithShape(
-            position,
-            rotation,
-            new Ball(radius),
-            (collider: Collider) => {
-                const eid = getEntityIdByPhysicalId(collider.handle);
-                if (tested.has(eid) || eid === 0 || tankEid === eid) return true;
-
-                tested.add(eid);
-
-                if (!select(eid)) return true;
-
-                result.push(eid);
-
-                return result.length < limit;
-            },
-            undefined,
-            createCollisionGroups(CollisionGroup.VEHICALE_BASE, CollisionGroup.VEHICALE_BASE),
-        );
-        if (result.length >= limit) {
-            break;
+    
+    for (let i = 0; i < allVehicles.length; i++) {
+        const eid = allVehicles[i];
+        if (eid !== tankEid && select(eid)) {
+            result.push(eid);
         }
     }
-
+    
+    if (result.length > limit) {
+        shuffle(result);
+        result.length = limit;
+    }
+    
     return result;
 }
 

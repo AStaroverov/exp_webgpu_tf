@@ -73,6 +73,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         const bulletsMask = maskSquash.apply(inputs.bulletsMaskInput) as tf.SymbolicTensor;
         const envRaysMask = maskLike.apply(tokens.envRaysTok) as tf.SymbolicTensor;
         const turretRaysMask = maskLike.apply(tokens.turretRaysTok) as tf.SymbolicTensor;
+        
         return tf.layers.concatenate({name: name + '_contextTokenMask' + i, axis: 1 })
             .apply([
                 oneMask,
