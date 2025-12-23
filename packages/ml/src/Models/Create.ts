@@ -9,12 +9,13 @@ import {
     RAY_HIT_TYPE_COUNT,
 } from '../../../tanks/src/Pilots/Components/TankState.ts';
 
-export { RAY_HIT_TYPE_COUNT };
 
-    import { createDenseLayer } from "./ApplyLayers.ts";
-    import { Model } from './def.ts';
-    import { createNetwork } from './Networks/v9.ts';
-    import { AdamW } from './Optimizer/AdamW.ts';
+import { createDenseLayer } from "./ApplyLayers.ts";
+import { Model } from './def.ts';
+import { createNetwork } from './Networks/v9.ts';
+import { AdamW } from './Optimizer/AdamW.ts';
+
+export { RAY_HIT_TYPE_COUNT };
 
 export const BATTLE_FEATURES_DIM = 2;
 export const TANK_FEATURES_DIM = 10;

@@ -35,9 +35,6 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const inputs = createInputs(modelName);
     const tokens = convertInputsToTokens(inputs, config.dim);
 
-    tokens.envRaysTok
-    tokens.turretRaysTok
-
     const clsBulletsToken = new VariableLayer({
         name: modelName + '_clsBulletsToken',
         shape: [1, config.dim],

@@ -19,15 +19,15 @@ type NetworkConfig = {
 type policyNetworkConfig = NetworkConfig
 
 const policyNetworkConfig: policyNetworkConfig = {
-    dim: 64,
-    heads: 4,
-    depth: 16,
+    dim: 16,
+    heads: 1,
+    depth: 12,
 };
 
 const valueNetworkConfig: NetworkConfig = {
-    dim: 16,
+    dim: 8,
     heads: 1,
-    depth: 2,
+    depth: 3,
 };
 
 export function createNetwork(modelName: Model, config: NetworkConfig = modelName === Model.Policy ? policyNetworkConfig : valueNetworkConfig) {
@@ -58,11 +58,11 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
             .apply([
                 clsToken,
                 tokens.tankTok,
+                tokens.turretRaysTok,
                 bulletsToken,
+                tokens.envRaysTok,
                 tokens.alliesTok,
                 tokens.enemiesTok,
-                tokens.envRaysTok,
-                tokens.turretRaysTok,
             ]) as tf.SymbolicTensor;
     }
 
@@ -77,11 +77,11 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
             .apply([
                 oneMask,
                 oneMask,
+                turretRaysMask,
                 bulletsMask,
+                envRaysMask,
                 inputs.alliesMaskInput,
                 inputs.enemiesMaskInput,
-                envRaysMask,
-                turretRaysMask,
             ]) as tf.SymbolicTensor;
     };
 
@@ -99,7 +99,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const finalToken = new SliceLayer({
         name: modelName + '_finalToken',
         beginSlice: [0, 0, 0],
-        sliceSize: [-1, 1, -1],
+        sliceSize: [-1, 2, -1],
     }).apply(transformer) as tf.SymbolicTensor;
 
     const flattenedFinalToken = tf.layers.flatten({ name: modelName + '_flattenedFinalToken' })
@@ -109,7 +109,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const heads = Array.from({ length: len }, (_, i) => {
         return applyLaNLayer({
             name: modelName + '_head' + i,
-            units: config.dim,
+            units: config.dim * 2,
             preNorm: true
         }, flattenedFinalToken);
     });
