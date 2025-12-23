@@ -6,7 +6,7 @@ import {
     getTankHealthAbs,
     syncRemoveTank,
 } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { getPilotAgent, getVehicleEids, getVehicleType, playerId$, setPilotAgent } from './engineMethods.ts';
+import { getPilotAgent, getPlayerScore, getTankEids, getTankInfo, getVehicleEids, getVehicleType, playerId$, setPilotAgent } from './engineMethods.ts';
 import { dedobs, DEDOBS_REMOVE_DELAY, DEDOBS_RESET_DELAY } from '../../../../../../lib/Rx/dedobs.ts';
 import { EntityId } from 'bitecs';
 import { getEngine } from './engine.ts';
@@ -159,6 +159,30 @@ export const getPilotAgent$ = dedobs(
         removeDelay: DEDOBS_REMOVE_DELAY,
         resetDelay: DEDOBS_RESET_DELAY,
     },
+);
+
+export const tankEids$ = frameInterval(160).pipe(
+    map(() => getTankEids()),
+    distinctUntilChanged((a, b) => {
+        if (a.length !== b.length) return false;
+        return hashArray(a) === hashArray(b);
+    }),
+);
+
+export const getTankInfo$ = dedobs(
+    (eid: number) => {
+        return frameInterval(100).pipe(
+            map(() => getTankInfo(eid)),
+        );
+    },
+    {
+        removeDelay: DEDOBS_REMOVE_DELAY,
+        resetDelay: DEDOBS_RESET_DELAY,
+    },
+);
+
+export const playerScore$ = frameInterval(100).pipe(
+    map(() => getPlayerScore(getValue(playerId$))),
 );
 
 export const finalizeGameState = async () => {

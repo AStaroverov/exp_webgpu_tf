@@ -1,6 +1,7 @@
 import { CSSProperties, useEffect, useRef } from 'react';
 import { GarageScreen } from './GarageScreen.tsx';
 import { EscMenu } from './EscMenu.tsx';
+import { BattleHUD } from './BattleHUD.tsx';
 import { useObservable } from '../../../../../../lib/React/useSyncObservable.ts';
 import { setRenderTarget } from '../../State/Game/RenderTarget.ts';
 
@@ -31,6 +32,7 @@ export function BaseScreen({ className, style }: { className?: string, style?: C
                 } }
             />
             <GarageScreen className={ `absolute transition-all ${ isStarted ? 'left-0 opacity-0 ' : 'right-60' }` }/>
+            { isStarted && <BattleHUD className="absolute inset-0" /> }
             <EscMenu/>
         </div>
     );
