@@ -77,6 +77,7 @@ export const createNetworkModelManager = (getter: () => Promise<tf.LayersModel>)
                 });
             }
 
+            noises?.forEach(noise => tf.dispose(noise));
             scheduledAgents = [];
         }
         
