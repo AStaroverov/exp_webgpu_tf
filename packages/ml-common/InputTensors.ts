@@ -19,21 +19,33 @@ export function createInputTensors(
     state: InputArrays[],
 ): tf.Tensor[] {
     return [
-        // tank
+        // tank features + type
         tf.tensor2d(flatTypedArray(state.map((s) => s.tankFeatures)), [state.length, TANK_FEATURES_DIM]),
-        // enemies + mask
+        tf.tensor2d(
+            flatTypedArray(state.map((s) => s.tankType)),
+            [state.length, 1],
+        ),
+        // enemies features + types + mask
         tf.tensor3d(
             flatTypedArray(state.map((s) => s.enemiesFeatures)),
             [state.length, ENEMY_SLOTS, ENEMY_FEATURES_DIM],
         ),
         tf.tensor2d(
+            flatTypedArray(state.map((s) => s.enemiesTypes)),
+            [state.length, ENEMY_SLOTS],
+        ),
+        tf.tensor2d(
             flatTypedArray(state.map((s) => s.enemiesMask)),
             [state.length, ENEMY_SLOTS],
         ),
-        // allies + mask
+        // allies features + types + mask
         tf.tensor3d(
             flatTypedArray(state.map((s) => s.alliesFeatures)),
             [state.length, ALLY_SLOTS, ALLY_FEATURES_DIM],
+        ),
+        tf.tensor2d(
+            flatTypedArray(state.map((s) => s.alliesTypes)),
+            [state.length, ALLY_SLOTS],
         ),
         tf.tensor2d(
             flatTypedArray(state.map((s) => s.alliesMask)),
@@ -69,7 +81,7 @@ export function createInputTensors(
     ];
 }
 
-const INPUT_TENSORS_COUNT = 11;
+const INPUT_TENSORS_COUNT = 14;
 
 export function sliceInputTensors(tensors: tf.Tensor[], start: number, size: number): tf.Tensor[] {
     if (tensors.length !== INPUT_TENSORS_COUNT) {
@@ -77,22 +89,25 @@ export function sliceInputTensors(tensors: tf.Tensor[], start: number, size: num
     }
 
     return [
-        // tank
+        // tank features + type
         tensors[0].slice([start, 0], [size, -1]),
-        // enemies + mask
-        tensors[1].slice([start, 0, 0], [size, -1, -1]),
-        tensors[2].slice([start, 0], [size, -1]),
-        // allies + mask
-        tensors[3].slice([start, 0, 0], [size, -1, -1]),
+        tensors[1].slice([start, 0], [size, -1]),
+        // enemies features + types + mask
+        tensors[2].slice([start, 0, 0], [size, -1, -1]),
+        tensors[3].slice([start, 0], [size, -1]),
         tensors[4].slice([start, 0], [size, -1]),
-        // bullets + mask
+        // allies features + types + mask
         tensors[5].slice([start, 0, 0], [size, -1, -1]),
         tensors[6].slice([start, 0], [size, -1]),
+        tensors[7].slice([start, 0], [size, -1]),
+        // bullets + mask
+        tensors[8].slice([start, 0, 0], [size, -1, -1]),
+        tensors[9].slice([start, 0], [size, -1]),
         // environment rays features + hit types
-        tensors[7].slice([start, 0, 0], [size, -1, -1]),
-        tensors[8].slice([start, 0], [size, -1]),
+        tensors[10].slice([start, 0, 0], [size, -1, -1]),
+        tensors[11].slice([start, 0], [size, -1]),
         // turret rays features + hit types
-        tensors[9].slice([start, 0, 0], [size, -1, -1]),
-        tensors[10].slice([start, 0], [size, -1]),
+        tensors[12].slice([start, 0, 0], [size, -1, -1]),
+        tensors[13].slice([start, 0], [size, -1]),
     ];
 }

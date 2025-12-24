@@ -23,6 +23,7 @@ export enum VehicleType {
     Harvester = 4,   // Bulldozer with barrier and scoop for collecting debris
     MeleeCar = 5,    // Fast 4-wheeled car for ramming
 }
+export const VEHICLE_TYPE_COUNT = 6;
 
 // =============================================================================
 // ENGINE TYPES

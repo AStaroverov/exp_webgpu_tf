@@ -19,12 +19,16 @@ import { MultiHeadAttentionLayer } from './Layers/MultiHeadAttentionLayer.ts';
 import { RMSNormConfig, RMSNormLayer } from "./Layers/RMSNormLayer.ts";
 import { VariableLayer } from './Layers/VariableLayer.ts';
 import { NoisyDenseLayer } from './Layers/NoisyDenseLayer.ts';
+import { VEHICLE_TYPE_COUNT } from '../../../tanks/src/Game/Config/vehicles.ts';
 
 export function createInputs(name: string) {
     const tankInput = tf.input({name: name + '_tankInput', shape: [TANK_FEATURES_DIM]});
+    const tankTypeInput = tf.input({name: name + '_tankTypeInput', shape: [1]});
     const enemiesInput = tf.input({name: name + '_enemiesInput', shape: [ENEMY_SLOTS, ENEMY_FEATURES_DIM]});
+    const enemiesTypesInput = tf.input({name: name + '_enemiesTypesInput', shape: [ENEMY_SLOTS]});
     const enemiesMaskInput = tf.input({name: name + '_enemiesMaskInput', shape: [ENEMY_SLOTS]});
     const alliesInput = tf.input({name: name + '_alliesInput', shape: [ALLY_SLOTS, ALLY_FEATURES_DIM]});
+    const alliesTypesInput = tf.input({name: name + '_alliesTypesInput', shape: [ALLY_SLOTS]});
     const alliesMaskInput = tf.input({name: name + '_alliesMaskInput', shape: [ALLY_SLOTS]});
     const bulletsInput = tf.input({name: name + '_bulletsInput', shape: [BULLET_SLOTS, BULLET_FEATURES_DIM]});
     const bulletsMaskInput = tf.input({name: name + '_bulletsMaskInput', shape: [BULLET_SLOTS]});
@@ -35,9 +39,12 @@ export function createInputs(name: string) {
 
     return {
         tankInput,
+        tankTypeInput,
         enemiesInput,
+        enemiesTypesInput,
         enemiesMaskInput,
         alliesInput,
+        alliesTypesInput,
         alliesMaskInput,
         bulletsInput,
         bulletsMaskInput,
@@ -152,8 +159,11 @@ export function tokenProj(x: tf.SymbolicTensor, dModel: number, name: string): S
 export function convertInputsToTokens(
     {
         tankInput,
+        tankTypeInput,
         enemiesInput,
+        enemiesTypesInput,
         alliesInput,
+        alliesTypesInput,
         bulletsInput,
         envRaysInput,
         envRaysTypes,
@@ -162,12 +172,12 @@ export function convertInputsToTokens(
     }: ReturnType<typeof createInputs>,
     dModel: number,
 ) {
-    const addTypeEmbedding = (x: tf.SymbolicTensor) => {
+    const addTokenTypeEmbedding = (x: tf.SymbolicTensor) => {
         const typeEmb = new VariableLayer({
-            name: `${x.name}_typeEmbedding`,
+            name: `${x.name}_tokenTypeEmbedding`,
             shape: [dModel],
         }).apply(x) as tf.SymbolicTensor;
-        return tf.layers.add({ name: `${x.name}_withTypeEmbedding` }).apply([x, typeEmb]) as tf.SymbolicTensor;
+        return tf.layers.add({ name: `${x.name}_withTokenTypeEmbedding` }).apply([x, typeEmb]) as tf.SymbolicTensor;
     }
     const reshape = (x: tf.SymbolicTensor) => {
         return tf.layers.reshape({
@@ -176,9 +186,32 @@ export function convertInputsToTokens(
         }).apply(x) as tf.SymbolicTensor;
     };
 
-    const tankTok = reshape(addTypeEmbedding(tokenProj(tankInput, dModel, tankInput.name)));
-    const alliesTok = addTypeEmbedding(tokenProj(alliesInput, dModel, alliesInput.name));
-    const enemiesTok = addTypeEmbedding(tokenProj(enemiesInput, dModel, enemiesInput.name));
+    // Shared vehicle type embedding for tank, enemies, allies
+    const vehicleTypeEmbedding = tf.layers.embedding({
+        name: 'vehicleType_sharedEmbedding',
+        inputDim: VEHICLE_TYPE_COUNT,
+        outputDim: dModel,
+        embeddingsInitializer: 'glorotNormal',
+    });
+
+    // Tank: project features + add vehicle type embedding
+    const tankProj = reshape(addTokenTypeEmbedding(tokenProj(tankInput, dModel, tankInput.name)));
+    const tankTypeEmb = vehicleTypeEmbedding.apply(tankTypeInput) as tf.SymbolicTensor;
+    const tankTok = tf.layers.add({ name: 'tank_withVehicleTypeEmbedding' })
+        .apply([tankProj, tankTypeEmb]) as tf.SymbolicTensor;
+
+    // Enemies: project features + add vehicle type embedding
+    const enemiesProj = addTokenTypeEmbedding(tokenProj(enemiesInput, dModel, enemiesInput.name));
+    const enemiesTypeEmb = vehicleTypeEmbedding.apply(enemiesTypesInput) as tf.SymbolicTensor;
+    const enemiesTok = tf.layers.add({ name: 'enemies_withVehicleTypeEmbedding' })
+        .apply([enemiesProj, enemiesTypeEmb]) as tf.SymbolicTensor;
+
+    // Allies: project features + add vehicle type embedding
+    const alliesProj = addTokenTypeEmbedding(tokenProj(alliesInput, dModel, alliesInput.name));
+    const alliesTypeEmb = vehicleTypeEmbedding.apply(alliesTypesInput) as tf.SymbolicTensor;
+    const alliesTok = tf.layers.add({ name: 'allies_withVehicleTypeEmbedding' })
+        .apply([alliesProj, alliesTypeEmb]) as tf.SymbolicTensor;
+
     const bulletsTok = tokenProj(bulletsInput, dModel, bulletsInput.name);
 
     // Shared hit type embedding for all rays (same semantic: NONE, OBSTACLE, ENEMY_VEHICLE, ALLY_VEHICLE)
@@ -190,13 +223,13 @@ export function convertInputsToTokens(
     });
 
     // Environment rays: project features and add hit type embedding
-    const envRaysProj = addTypeEmbedding(tokenProj(envRaysInput, dModel, envRaysInput.name));
+    const envRaysProj = addTokenTypeEmbedding(tokenProj(envRaysInput, dModel, envRaysInput.name));
     const envRaysTypeEmb = rayHitTypeEmbedding.apply(envRaysTypes) as tf.SymbolicTensor;
     const envRaysTok = tf.layers.add({ name: 'envRays_withHitTypeEmbedding' })
         .apply([envRaysProj, envRaysTypeEmb]) as tf.SymbolicTensor;
 
     // Turret rays: project features and add hit type embedding
-    const turretRaysProj = addTypeEmbedding(tokenProj(turretRaysInput, dModel, turretRaysInput.name));
+    const turretRaysProj = addTokenTypeEmbedding(tokenProj(turretRaysInput, dModel, turretRaysInput.name));
     const turretRaysTypeEmb = rayHitTypeEmbedding.apply(turretRaysTypes) as tf.SymbolicTensor;
     const turretRaysTok = tf.layers.add({ name: 'turretRays_withHitTypeEmbedding' })
         .apply([turretRaysProj, turretRaysTypeEmb]) as tf.SymbolicTensor;

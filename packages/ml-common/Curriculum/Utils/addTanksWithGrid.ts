@@ -1,17 +1,21 @@
 import { PI } from '../../../../lib/math.ts';
 import { randomRangeFloat, randomRangeInt } from '../../../../lib/random.ts';
 import { createPlayer } from '../../../tanks/src/Game/ECS/Entities/Player.ts';
-import { createMediumTank } from '../../../tanks/src/Game/ECS/Entities/Tank/Medium/MediumTank.ts';
 import {
     getSpawnGrid,
     getCellWorldPosition,
     setCellContent,
     CellContent,
 } from '../../../tanks/src/Arena/State/Game/SpawnGrid.ts';
+import { createTank } from '../../../tanks/src/Game/ECS/Entities/Tank/createTank.ts';
+import { VehicleType } from '../../../tanks/src/Game/Config/vehicles.ts';
 
 /**
  * Add tanks at random positions on the grid.
  */
+
+const allowedTankTypes = [VehicleType.LightTank, VehicleType.MediumTank, VehicleType.HeavyTank] as const;
+
 export function addTanksWithGrid(teamIdAndCount: [number, number][]) {
     const tanks = [];
     const grid = getSpawnGrid();
@@ -37,7 +41,8 @@ export function addTanksWithGrid(teamIdAndCount: [number, number][]) {
             const { x, y } = getCellWorldPosition(col, row);
             const playerId = createPlayer(teamId);
 
-            const tank = createMediumTank({
+            const tank = createTank({
+                type: allowedTankTypes[randomRangeInt(0, allowedTankTypes.length - 1)],
                 playerId,
                 teamId,
                 x,

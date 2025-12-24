@@ -70,9 +70,11 @@ export function snapshotTankInputTensor({ world } = GameDI) {
         const linvel = RigidBodyState.linvel.getBatch(vehicleEid);
         const approximateColliderRadius = HeuristicsData.approxColliderRadius[vehicleEid];
         const turretRotation = RigidBodyState.rotation[Tank.turretEId[vehicleEid]];
+        const tankType = Vehicle.type[vehicleEid];
 
         TankInputTensor.setTankData(
             vehicleEid,
+            tankType,
             health,
             tempPosition,
             rotation,
@@ -96,6 +98,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
                 vehicleEid,
                 j,
                 enemyEid,
+                Vehicle.type[enemyEid],
                 getTankHealth(enemyEid),
                 tempEnemyPosition,
             );
@@ -114,6 +117,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
                 vehicleEid,
                 j,
                 allyEid,
+                Vehicle.type[allyEid],
                 getTankHealth(allyEid),
                 tempAllyPosition,
             );

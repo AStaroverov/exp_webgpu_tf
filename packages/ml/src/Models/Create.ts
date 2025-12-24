@@ -15,7 +15,7 @@ import { Model } from './def.ts';
 import { createNetwork } from './Networks/v9.ts';
 import { AdamW } from './Optimizer/AdamW.ts';
 
-export { RAY_HIT_TYPE_COUNT };
+export { RAY_HIT_TYPE_COUNT }; // LightTank, MediumTank, HeavyTank, PlayerTank, Harvester, MeleeCar
 
 export const BATTLE_FEATURES_DIM = 2;
 export const TANK_FEATURES_DIM = 10;

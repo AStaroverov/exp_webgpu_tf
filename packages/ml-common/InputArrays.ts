@@ -39,9 +39,12 @@ const BULLETS_INDEXES = new Uint32Array(Array.from({ length: BULLET_SLOTS }, (_,
 export type InputArrays = {
     battleFeatures: Float32Array,
     tankFeatures: Float32Array,
+    tankType: Int32Array,          // tank type for embedding
     enemiesFeatures: Float32Array,
+    enemiesTypes: Int32Array,      // enemy tank types for embedding
     enemiesMask: Float32Array,
     alliesFeatures: Float32Array,
+    alliesTypes: Int32Array,       // ally tank types for embedding
     alliesMask: Float32Array,
     bulletsFeatures: Float32Array,
     bulletsMask: Float32Array,
@@ -65,6 +68,8 @@ export function prepareInputArrays(
 
     // ---- Tank features ----
     const tankFeatures = new Float32Array(TANK_FEATURES_DIM);
+    const tankType = new Int32Array(1);
+    tankType[0] = TankInputTensor.tankType[tankEid];
     let ti = 0;
 
     const tankX = TankInputTensor.position.get(tankEid, 0);
@@ -91,8 +96,9 @@ export function prepareInputArrays(
     tankFeatures[ti++] = norm(colliderRadius, QUANT); // collider radius
 
     // ---- Enemies features ----
-    // New format: [id, hp, x, y] -> features: [hp, locX, locY]
+    // New format: [id, type, hp, x, y] -> features: [hp, locX, locY] + type for embedding
     const enemiesMask = new Float32Array(ENEMY_SLOTS);
+    const enemiesTypes = new Int32Array(ENEMY_SLOTS);
     const enemiesFeatures = new Float32Array(ENEMY_SLOTS * ENEMY_FEATURES_DIM);
     const enemiesBuffer = TankInputTensor.enemiesData.getBatch(tankEid);
 
@@ -107,19 +113,22 @@ export function prepareInputArrays(
             continue;
         }
 
-        const eX = enemiesBuffer[srcOffset + 2];
-        const eY = enemiesBuffer[srcOffset + 3];
+        const eType = enemiesBuffer[srcOffset + 1];
+        const eX = enemiesBuffer[srcOffset + 3];
+        const eY = enemiesBuffer[srcOffset + 4];
         const [locX, locY] = rotateVector(eX - tankX, eY - tankY, invRotation);
 
         enemiesMask[w] = 1;
-        enemiesFeatures[dstOffset + 0] = enemiesBuffer[srcOffset + 1]; // hp
+        enemiesTypes[w] = eType;
+        enemiesFeatures[dstOffset + 0] = enemiesBuffer[srcOffset + 2]; // hp
         enemiesFeatures[dstOffset + 1] = norm(locX, QUANT); // x
         enemiesFeatures[dstOffset + 2] = norm(locY, QUANT); // y
     }
 
     // ---- Allies features ----
-    // New format: [id, hp, x, y] -> features: [hp, locX, locY]
+    // New format: [id, type, hp, x, y] -> features: [hp, locX, locY] + type for embedding
     const alliesMask = new Float32Array(ALLY_SLOTS);
+    const alliesTypes = new Int32Array(ALLY_SLOTS);
     const alliesFeatures = new Float32Array(ALLY_SLOTS * ALLY_FEATURES_DIM);
     const alliesBuffer = TankInputTensor.alliesData.getBatch(tankEid);
 
@@ -134,12 +143,14 @@ export function prepareInputArrays(
             continue;
         }
 
-        const aX = alliesBuffer[srcOffset + 2];
-        const aY = alliesBuffer[srcOffset + 3];
+        const aType = alliesBuffer[srcOffset + 1];
+        const aX = alliesBuffer[srcOffset + 3];
+        const aY = alliesBuffer[srcOffset + 4];
         const [locX, locY] = rotateVector(aX - tankX, aY - tankY, invRotation);
 
         alliesMask[w] = 1;
-        alliesFeatures[dstOffset + 0] = alliesBuffer[srcOffset + 1]; // hp
+        alliesTypes[w] = aType;
+        alliesFeatures[dstOffset + 0] = alliesBuffer[srcOffset + 2]; // hp
         alliesFeatures[dstOffset + 1] = norm(locX, QUANT); // x
         alliesFeatures[dstOffset + 2] = norm(locY, QUANT); // y
     }
@@ -255,15 +266,18 @@ export function prepareInputArrays(
     const result = {
         battleFeatures,
         tankFeatures,
+        tankType,
         enemiesFeatures,
+        enemiesTypes,
         enemiesMask,
         alliesFeatures,
+        alliesTypes,
         alliesMask,
         bulletsFeatures,
         bulletsMask,
         envRaysTypes,
         envRaysFeatures,
-        turretRaysTypes: turretRaysTypes,
+        turretRaysTypes,
         turretRaysFeatures,
     };
 
@@ -277,10 +291,13 @@ export function prepareInputArrays(
 export function prepareRandomInputArrays(): InputArrays {
     const battleFeatures = new Float32Array(BATTLE_FEATURES_DIM).map(() => random());
     const tankFeatures = new Float32Array(TANK_FEATURES_DIM).map(() => random());
+    const tankType = new Int32Array(1).map(() => randomRangeInt(0, 5));
     const enemiesMask = new Float32Array(ENEMY_SLOTS).map(() => randomRangeInt(0, 1));
     const enemiesFeatures = new Float32Array(ENEMY_SLOTS * ENEMY_FEATURES_DIM).map(() => random());
+    const enemiesTypes = new Int32Array(ENEMY_SLOTS).map(() => randomRangeInt(0, 5));
     const alliesMask = new Float32Array(ALLY_SLOTS).map(() => randomRangeInt(0, 1));
     const alliesFeatures = new Float32Array(ALLY_SLOTS * ALLY_FEATURES_DIM).map(() => random());
+    const alliesTypes = new Int32Array(ALLY_SLOTS).map(() => randomRangeInt(0, 5));
     const bulletsMask = new Float32Array(BULLET_SLOTS).map(() => randomRangeInt(0, 1));
     const bulletsFeatures = new Float32Array(BULLET_SLOTS * BULLET_FEATURES_DIM).map(() => random());
     const envRaysFeatures = new Float32Array(ENV_RAY_SLOTS * ENV_RAY_FEATURES_DIM).map(() => random());
@@ -291,9 +308,12 @@ export function prepareRandomInputArrays(): InputArrays {
     return {
         battleFeatures,
         tankFeatures,
+        tankType,
         enemiesFeatures,
+        enemiesTypes,
         enemiesMask,
         alliesFeatures,
+        alliesTypes,
         alliesMask,
         bulletsFeatures,
         bulletsMask,
@@ -307,9 +327,12 @@ export function prepareRandomInputArrays(): InputArrays {
 export function checkInputArrays(inputArray: InputArrays): boolean {
     return inputArray.battleFeatures.every(Number.isFinite)
         && inputArray.tankFeatures.every(Number.isFinite)
+        && inputArray.tankType.every(Number.isFinite)
         && inputArray.enemiesFeatures.every(Number.isFinite)
+        && inputArray.enemiesTypes.every(Number.isFinite)
         && inputArray.enemiesMask.every(Number.isFinite)
         && inputArray.alliesFeatures.every(Number.isFinite)
+        && inputArray.alliesTypes.every(Number.isFinite)
         && inputArray.alliesMask.every(Number.isFinite)
         && inputArray.bulletsFeatures.every(Number.isFinite)
         && inputArray.bulletsMask.every(Number.isFinite)
