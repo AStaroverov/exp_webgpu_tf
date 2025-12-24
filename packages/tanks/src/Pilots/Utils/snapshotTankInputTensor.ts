@@ -6,6 +6,7 @@ import { GameDI } from '../../Game/DI/GameDI.ts';
 import { getEntityIdByPhysicalId, RigidBodyRef, RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
 import { PlayerRef } from '../../Game/ECS/Components/PlayerRef.ts';
 import { Tank } from '../../Game/ECS/Components/Tank.ts';
+import { Firearms } from '../../Game/ECS/Components/Firearms.ts';
 import { Vehicle } from '../../Game/ECS/Components/Vehicle.ts';
 import { TeamRef } from '../../Game/ECS/Components/TeamRef.ts';
 import { GameMap } from '../../Game/ECS/Entities/GameMap.ts';
@@ -38,6 +39,7 @@ const tempEnemyPosition = new Float64Array(2);
 const tempAllyPosition = new Float64Array(2);
 const tempBulletPosition = new Float64Array(2);
 
+
 // Reusable ray objects
 const rayOrigin = new Vector2(0, 0);
 const rayDir = new Vector2(0, 0);
@@ -67,7 +69,6 @@ export function snapshotTankInputTensor({ world } = GameDI) {
         const rotation = RigidBodyState.rotation[vehicleEid];
         const linvel = RigidBodyState.linvel.getBatch(vehicleEid);
         const approximateColliderRadius = HeuristicsData.approxColliderRadius[vehicleEid];
-        const turretPosition = RigidBodyState.position.getBatch(Tank.turretEId[vehicleEid]);
         const turretRotation = RigidBodyState.rotation[Tank.turretEId[vehicleEid]];
 
         TankInputTensor.setTankData(
@@ -144,11 +145,18 @@ export function snapshotTankInputTensor({ world } = GameDI) {
             rotation - PI / 2,
         );
 
+        // Transform local bullet start position to world coordinates
+        const turretEid = Tank.turretEId[vehicleEid];
+        const turretPosition = RigidBodyState.position.getBatch(turretEid);
+        const bulletOffset = Firearms.bulletStartPosition.getBatch(turretEid);
+        const cosR = cos(turretRotation);
+        const sinR = sin(turretRotation);
+
         castTurretRays(
             vehicleEid,
             myTeamId,
-            turretPosition[0],
-            turretPosition[1],
+            turretPosition[0] + bulletOffset[0] * cosR - bulletOffset[1] * sinR,
+            turretPosition[1] + bulletOffset[0] * sinR + bulletOffset[1] * cosR,
             turretRotation - PI / 2,
         );
     }

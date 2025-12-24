@@ -137,8 +137,9 @@ export function batchAct(
  *
  * @param logitsHeads - массив логитов для каждой головы, shape [B, A_i] или [A_i]
  * @param opts.greedy - если true, выбираем argmax (детерминированно)
- * @param opts.epsilon - ε-greedy: π_mix = (1 - ε) * softmax + ε * uniform
- * @param noiseTensors - опциональный colored noise для каждой головы
+ * @param opts.epsilon - если есть noise: вес Dirichlet-шума (π_mix = (1-ε)*softmax + ε*noise)
+ *                       если noise нет: классический ε-greedy с uniform
+ * @param noiseTensors - опциональный Dirichlet noise для каждой головы, shape [A_i] или [1, A_i]
  *
  * @returns actions [numHeads], logitsFlat [sum(A_i)]
  */
@@ -150,15 +151,13 @@ export function sampleActionsFromLogits(
     const { greedy = false, epsilon = 0 } = opts ?? {};
 
     return tf.tidy(() => {
-        // Нормализуем все головы к shape [1, A_i]
+        // Нормализуем все головы к shape [1, A_i] (предполагаем batch=1)
         const heads2d = logitsHeads.map(h => (h.rank === 1 ? h.expandDims(0) : h) as tf.Tensor2D);
 
         const sampledActions = heads2d.map((logits, headIdx) => {
-            if (greedy) {
-                return tf.argMax(logits, -1).squeeze();
-            }
-            const headNoise = noiseTensors?.[headIdx];
-            return sampleCategorical(logits, epsilon, headNoise);
+            return greedy
+                ? tf.argMax(logits, -1).squeeze()
+                : sampleCategorical(logits, epsilon, noiseTensors?.[headIdx]);
         });
 
         return {
@@ -169,33 +168,41 @@ export function sampleActionsFromLogits(
 }
 
 /**
- * Сэмплирование из categorical распределения с опциональным ε-greedy и colored noise.
- * Colored noise добавляется к логитам перед сэмплированием для создания 
- * временной корреляции в исследовании.
+ * Сэмплирование из categorical распределения.
+ *
+ * Если передан noise (уже сэмплированный Dirichlet-вектор по действиям):
+ *   π = softmax(logits)
+ *   π_mix = (1 - epsilon) * π + epsilon * noise
+ *
+ * Если noise нет и epsilon > 0:
+ *   π = softmax(logits)
+ *   π_mix = (1 - epsilon) * π + epsilon * uniform
+ *
+ * Далее сэмплим из π_mix через multinomial.
  */
-function sampleCategorical(logits: tf.Tensor2D, epsilon: number, coloredNoise?: tf.Tensor): tf.Tensor {
+function sampleCategorical(
+    logits: tf.Tensor2D,
+    epsilon: number,
+    noise?: tf.Tensor, // Dirichlet noise по действиям
+): tf.Tensor {
     return tf.tidy(() => {
         const numActions = logits.shape[1]!;
+        let probs = tf.softmax(logits) as tf.Tensor2D; // [1, A]
 
-        // Добавляем colored noise к логитам если он предоставлен
-        if (coloredNoise != null) {
-            // coloredNoise shape [numActions], logits shape [1, numActions]
-            const noiseReshaped = coloredNoise.reshape([1, numActions]);
-            logits = logits.add(noiseReshaped) as tf.Tensor2D;
-            return tf.argMax(logits, -1).squeeze();
+        if (noise != null) {
+            // Dirichlet-вектор: shape [A] или [1, A]
+            const noise2d = noise.rank === 1
+                ? (noise.reshape([1, numActions]))
+                : noise;
+            probs = probs.mul(1 - epsilon).add(noise2d.mul(epsilon));
+        } else if (epsilon > 0) {
+            const uniform = tf.fill(probs.shape, 1 / numActions);
+            probs = probs.mul(1 - epsilon).add(uniform.mul(epsilon));
         }
 
-        // ε-greedy: смешиваем логиты с uniform
-        if (epsilon > 0) {
-            const probs = tf.softmax(logits) as tf.Tensor2D;
-            const uniform = tf.fill(probs.shape, 1 / numActions) as tf.Tensor2D;
-            const mixedProbs = tf.add(probs.mul(1 - epsilon), uniform.mul(epsilon)) as tf.Tensor2D;
-            // Конвертируем обратно в логиты для multinomial
-            logits = tf.log(mixedProbs.clipByValue(1e-8, 1)) as tf.Tensor2D;
-        }
-
-        // multinomial принимает логиты и сэмплирует из categorical
-        return tf.multinomial(logits, 1).squeeze();
+        // multinomial принимает логиты, поэтому конвертим probs обратно в логиты
+        const logitsForSampling = tf.log(probs.clipByValue(1e-8, 1));
+        return tf.multinomial(logitsForSampling as tf.Tensor2D, 1).squeeze();
     });
 }
 
@@ -208,12 +215,9 @@ export function pureAct(
     return tf.tidy(() => {
         const predicted = policyNetwork.apply(createInputTensors([state])) as tf.Tensor | tf.Tensor[];
         const logitsHeads = parsePolicyOutput(predicted);
-        
-        // Use argmax for deterministic action selection
-        const actions = tf.concat(
-            logitsHeads.map(logits => tf.argMax(logits, -1).expandDims(-1)),
-            -1
-        ).squeeze([0]);
+        const actions = tf
+            .concat(logitsHeads.map(logits => tf.argMax(logits, -1).expandDims(-1)), -1)
+            .squeeze([0]);
 
         return {
             actions: syncUnwrapTensor(actions) as Float32Array,

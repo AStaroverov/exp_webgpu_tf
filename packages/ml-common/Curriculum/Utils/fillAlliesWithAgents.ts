@@ -1,11 +1,11 @@
 import { getTankTeamId } from '../../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
 import { CurrentActorAgent } from '../../../tanks/src/Pilots/Agents/CurrentActorAgent.ts';
-import { getFreeVehicaleEids, getPilotAgents, Pilot } from '../../../tanks/src/Pilots/Components/Pilot.ts';
+import { getRegistratedAgents, getFreeVehicaleEids, Pilot } from '../../../tanks/src/Pilots/Components/Pilot.ts';
 import { Scenario } from '../types.ts';
 
 export function fillAlliesWithAgents(scenario: Scenario, train: boolean) {
     const vehicleEids = getFreeVehicaleEids();
-    const firstAgent = getPilotAgents();
+    const firstAgent = getRegistratedAgents();
     const activeTeam = getTankTeamId(firstAgent[0].tankEid);
 
     for (let i = 0; i < vehicleEids.length; i++) {

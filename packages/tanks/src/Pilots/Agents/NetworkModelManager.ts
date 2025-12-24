@@ -62,11 +62,11 @@ export const createNetworkModelManager = (getter: () => Promise<tf.LayersModel>)
 
         if (scheduledAgents.length > 0) {
             const states = scheduledAgents.map(({width, height, agent}) => prepareInputArrays(agent.tankEid, width, height));
-            // const noises = train
-            //     ? scheduledAgents.map(({agent}) => agent.getNoise?.())
-            //     : undefined;
+            const noises = train
+                ? scheduledAgents.map(({agent}) => agent.getNoise?.())
+                : undefined;
             const options = train 
-                ? { greedy: false, epsilon: 0 } 
+                ? { greedy: false, epsilon: 0.25, noises } 
                 : { greedy: true };
             const result = batchAct(network, states, options);
             

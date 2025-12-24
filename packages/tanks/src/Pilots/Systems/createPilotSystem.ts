@@ -2,7 +2,7 @@ import { isFunction } from 'lodash';
 import { SNAPSHOT_EVERY } from '../../../../ml-common/consts.ts';
 import { GameDI } from '../../Game/DI/GameDI.ts';
 import { TankAgent } from '../Agents/CurrentActorAgent.ts';
-import { getAlivePilots, getPilotAgents } from '../Components/Pilot.ts';
+import { getAlivePilotAgents, getPilotAgents } from '../Components/Pilot.ts';
 import { PilotsState } from '../Singelton/PilotsState.ts';
 import { snapshotTankInputTensor } from '../Utils/snapshotTankInputTensor.ts';
 
@@ -25,7 +25,7 @@ export function createPilotSystem() {
         if (shouldAction) {
             snapshotTankInputTensor();
 
-            currentPilots = getAlivePilots();
+            currentPilots = getAlivePilotAgents();
 
             for (const agent of currentPilots) {
                 agent.scheduleUpdateTankBehaviour(GameDI.width, GameDI.height, frame);

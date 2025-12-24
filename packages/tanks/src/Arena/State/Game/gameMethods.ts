@@ -14,7 +14,7 @@ import { hashArray } from '../../../../../../lib/hashArray.ts';
 import { createTank, TankVehicleType } from '../../../Game/ECS/Entities/Tank/createTank.ts';
 import { CurrentActorAgent, TankAgent } from '../../../Pilots/Agents/CurrentActorAgent.ts';
 import { Nil } from '../../../../../../lib/Types/index.ts';
-import { getPilotAgents } from '../../../Pilots/Components/Pilot.ts';
+import { getRegistratedAgents } from '../../../Pilots/Components/Pilot.ts';
 import { PLAYER_TEAM_ID } from './def.ts';
 import { fillSlot, mapSlotToEid$ } from './modules/lobbySlots.ts';
 import { PI } from '../../../../../../lib/math.ts';
@@ -196,8 +196,8 @@ export const finalizeGameState = async () => {
     }
 
     // Sync all AI agents to load TensorFlow models
-    const pilots = getPilotAgents();
-    await Promise.all(pilots.map(pilot => pilot?.sync ? pilot.sync() : Promise.resolve())); 
+    const agents = getRegistratedAgents();
+    await Promise.all(agents.map(agent => agent?.sync ? agent.sync() : Promise.resolve())); 
 };
 
 export function activateBots() {

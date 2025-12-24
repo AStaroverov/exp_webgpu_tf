@@ -3,7 +3,6 @@ import { min } from '../../../lib/math.ts';
 import { random } from '../../../lib/random.ts';
 import { createScenarioAgentsVsBots1 } from './createScenarioAgentsVsBots1.ts';
 import { createScenarioBase } from './createScenarioBase.ts';
-import { createScenarioWithCurrentAgents } from './createScenarioWithCurrentAgents.ts';
 import { createScenarioWithHistoricalAgents } from './createScenarioWithHistoricalAgents.ts';
 import { createStaticScenarioAgentsVsBots0 } from './createStaticScenarioAgentsVsBots0.ts';
 import { CurriculumState, Scenario } from './types.ts';
@@ -14,7 +13,7 @@ const mapEntries = [
     [0, createStaticScenarioAgentsVsBots0],
     [1, createScenarioAgentsVsBots1],
     [2, createScenarioWithHistoricalAgents],
-    [3, createScenarioWithCurrentAgents],
+    // [3, createScenarioWithCurrentAgents],
 ] as const;
 const mapIndexToConstructor = new Map<number, (options: ScenarioOptions) => Scenario>(mapEntries);
 

@@ -7,7 +7,7 @@ import { SNAPSHOT_EVERY, TICK_TIME_SIMULATION } from '../../../../ml-common/cons
 import { createScenarioByCurriculumState } from '../../../../ml-common/Curriculum/createScenarioByCurriculumState.ts';
 import { CurriculumState, Scenario } from '../../../../ml-common/Curriculum/types.ts';
 import { agentSampleChannel, curriculumStateChannel, episodeSampleChannel, queueSizeChannel } from '../channels.ts';
-import { getAliveActors, getPilotAgents } from '../../../../tanks/src/Pilots/Components/Pilot.ts';
+import { getRegistratedAgents, getAliveLearnableAgents, Pilot } from '../../../../tanks/src/Pilots/Components/Pilot.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -53,7 +53,7 @@ export class EpisodeManager {
     protected afterEpisode(episode: Scenario) {
         const successRatio = episode.getSuccessRatio();
         const isReference = !episode.isTrain;
-        const pilots = getPilotAgents();
+        const pilots = Array.from(Pilot.agent.values());
 
         episodeSampleChannel.emit({
             maxNetworkVersion: max(...pilots.map(p => p.getVersion?.() ?? 0)),
@@ -70,7 +70,6 @@ export class EpisodeManager {
             }
 
             const networkVersion = agent.getVersion();
-            // const rewardBias = getFinalReward(successRatio, networkVersion);
             const memoryBatch = agent.getMemoryBatch(0);
 
             if (memoryBatch == null) return;
@@ -101,7 +100,7 @@ export class EpisodeManager {
     }
 
     protected awaitAgentsSync() {
-        return Promise.all(getPilotAgents().map(agent => agent.sync?.()));
+        return Promise.all(getRegistratedAgents().map(agent => agent.sync?.()));
     }
 
     protected runGameLoop(episode: Scenario) {
@@ -136,7 +135,7 @@ export class EpisodeManager {
         deltaTime: number,
         scenario: Scenario,
     ) {
-        const actors = getAliveActors();
+        const actors = getAliveLearnableAgents();
         const currentTanks = scenario.getVehicleEids();
         const gameOverByActorCount = actors.length <= 0;
         const gameOverByTankCount = currentTanks.length <= 1;

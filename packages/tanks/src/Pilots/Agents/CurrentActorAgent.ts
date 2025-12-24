@@ -9,9 +9,8 @@ import { getNetwork } from '../../../../ml/src/Models/Utils.ts';
 import { calculateActionReward, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { createNetworkModelManager } from './NetworkModelManager.ts';
-import { ColoredNoiseApprox } from '../../../../ml-common/ColoredNoiseApprox.ts';
 import { ACTION_HEAD_DIMS } from '../../../../ml/src/Models/Create.ts';
-import { randomRangeFloat } from '../../../../../lib/random.ts';
+import { DirichletNoise } from '../../../../ml-common/DirichletNoise.ts';
 
 export type TankAgent<A = Partial<DownloadableAgent> & Partial<LearnableAgent>> = A & {
     tankEid: number;
@@ -39,7 +38,7 @@ const currentActorUpdater = createNetworkModelManager(() => getNetwork(Model.Pol
 
 export class CurrentActorAgent implements TankAgent<DownloadableAgent & LearnableAgent> {
     private memory = new AgentMemory();
-    private noise = new ColoredNoiseApprox(ACTION_HEAD_DIMS, randomRangeFloat(0, 1));
+    private noise = new DirichletNoise(ACTION_HEAD_DIMS, { alpha: 0.3 });
 
     private initialActionReward?: number;
 
@@ -54,7 +53,7 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
     }
 
     public getNoise() {
-        return this.noise.sample().map(t => t.mul(0.1));
+        return this.noise.sample();
     }
 
     public getMemory(): undefined | AgentMemory {
