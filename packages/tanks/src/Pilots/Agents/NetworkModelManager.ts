@@ -5,7 +5,7 @@ import { patientAction } from "../../../../ml-common/utils";
 import { disposeNetwork } from "../../../../ml/src/Models/Utils";
 import { batchAct } from "../../../../ml/src/PPO/train";
 import { TankAgent } from "./CurrentActorAgent";
-import { random } from '../../../../../lib/random';
+import { random, randomRangeFloat } from '../../../../../lib/random';
 
 export type NetworkModelManager = ReturnType<typeof createNetworkModelManager>;
 
@@ -66,7 +66,7 @@ export const createNetworkModelManager = (getter: () => Promise<tf.LayersModel>)
                 ? scheduledAgents.map(({agent}) => agent.getNoise?.())
                 : undefined;
             const options = train 
-                ? { greedy: false, epsilon: 0.25, noises } 
+                ? { greedy: false, epsilon: randomRangeFloat(0.05, 0.3), noises } 
                 : { greedy: true };
             const result = batchAct(network, states, options);
             

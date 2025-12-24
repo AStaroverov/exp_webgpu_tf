@@ -6,7 +6,7 @@ export function fillWithCurrentAgents(scenario: Scenario) {
     const freeVehicles = getFreeVehicaleEids();
 
     for (const vehicleEid of freeVehicles) {
-        const agent = new CurrentActorAgent(vehicleEid, false);
+        const agent = new CurrentActorAgent(vehicleEid, true);
         Pilot.addComponent(scenario.world, vehicleEid, agent);
     }
 }
