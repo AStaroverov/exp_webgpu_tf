@@ -240,20 +240,20 @@ function castEnvironmentRays(
                 filterPredicate,
             );
 
-            if (hit == null) continue;
-            
-            const eid = getEntityIdByPhysicalId(hit.collider.handle);
-            const rayHit = processRayHit(eid, myTeamId);
+            const rayHit = hit && processRayHit(
+                getEntityIdByPhysicalId(hit.collider.handle),
+                myTeamId
+            );
             TankInputTensor.setEnvRayData(
                 vehicleEid,
                 indexOffset + i,
                 rayDir.x,
                 rayDir.y,
-                rayHit.hitType,
-                rayHit.x,
-                rayHit.y,
-                rayHit.radius,
-                hit.timeOfImpact,
+                rayHit?.hitType ?? RayHitType.NONE,
+                rayHit?.x ?? 0,
+                rayHit?.y ?? 0,
+                rayHit?.radius ?? 0,
+                hit?.timeOfImpact ?? ENV_RAY_LENGTH,
             );
         }
     }
@@ -288,27 +288,23 @@ function castTurretRays(
         filterPredicate,
     );
 
-    if (hit) {
-        const collider = hit.collider;
-        const eid = getEntityIdByPhysicalId(collider.handle);
-        const rayHit = processRayHit(eid, myTeamId);
-        const aimingError = calculateAimingError(posX, posY, turretRotation, rayHit.x, rayHit.y);
-        
-        TankInputTensor.setTurretRayData(
-            vehicleEid, 
-            0, 
-            rayDir.x,
-            rayDir.y,
-            rayHit.hitType, 
-            rayHit.x - GameMap.offsetX,
-            rayHit.y - GameMap.offsetY,
-            rayHit.vx,
-            rayHit.vy,
-            rayHit.radius,
-            hit.timeOfImpact, 
-            aimingError,
-        );
-    }
+    const rayHit = hit && processRayHit(getEntityIdByPhysicalId(hit.collider.handle), myTeamId);
+    const aimingError = rayHit ? calculateAimingError(posX, posY, turretRotation, rayHit.x, rayHit.y) : 0;
+    
+    TankInputTensor.setTurretRayData(
+        vehicleEid, 
+        0, 
+        rayDir.x,
+        rayDir.y,
+        rayHit ? rayHit.hitType : RayHitType.NONE,
+        rayHit ? (rayHit.x - GameMap.offsetX) : 0,
+        rayHit ? (rayHit.y - GameMap.offsetY) : 0,
+        rayHit ? (rayHit.vx) : 0,
+        rayHit ? (rayHit.vy) : 0,
+        rayHit ? (rayHit.radius) : 0,
+        hit?.timeOfImpact ?? TURRET_RAY_LENGTH, 
+        aimingError,
+    );
 }
 
 /**

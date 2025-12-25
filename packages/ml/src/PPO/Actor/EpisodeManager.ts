@@ -45,7 +45,7 @@ export class EpisodeManager {
 
     protected beforeEpisode() {
         return createScenarioByCurriculumState(this.curriculumState, {
-            train: random() < 0.95,
+            train: random() < 0.9,
             iteration: this.curriculumState.iteration,
         });
     }

@@ -36,3 +36,38 @@ export const RockConfig = {
 
 export type RockType = typeof RockConfig;
 
+// =============================================================================
+// BUILDING GENERATION (Abandoned/Ruined Buildings)
+// =============================================================================
+
+export const BuildingConfig = {
+    /** Column count range [min, max] - number of rooms horizontally */
+    colsRange: [4, 10] as [number, number],
+
+    /** Row count range [min, max] - number of rooms vertically */
+    rowsRange: [4, 10] as [number, number],
+
+    /** Cell/room size range [min, max] */
+    cellSizeRange: [20, 40] as [number, number],
+
+    /** Wall thickness range [min, max] */
+    wallThicknessRange: [8, 16] as [number, number],
+
+    /** Noise scale range for procedural destruction */
+    noiseScaleRange: [0.1, 0.2] as [number, number],
+
+    /** Noise octaves range */
+    noiseOctavesRange: [2, 4] as [number, number],
+
+    /** Destruction threshold range (higher = more destruction) */
+    destructionThresholdRange: [0.1, 0.3] as [number, number],
+
+    /** Interior wall chance range */
+    interiorWallChanceRange: [0.2, 0.5] as [number, number],
+
+    /** Default building density */
+    defaultDensity: 1200,
+} as const;
+
+export type BuildingType = typeof BuildingConfig;
+

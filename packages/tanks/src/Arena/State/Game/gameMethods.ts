@@ -21,6 +21,7 @@ import { PI } from '../../../../../../lib/math.ts';
 import { randomRangeFloat } from '../../../../../../lib/random.ts';
 import { createHarvester } from '../../../Game/ECS/Entities/Harvester/Harvester.ts';
 import { createRock } from '../../../Game/ECS/Entities/Rock/Rock.ts';
+import { createBuilding } from '../../../Game/ECS/Entities/Building/index.ts';
 import { getTeamSpawnPosition, allocateSpawnCell, CellContent, findNextAvailableSlot, getSpawnGrid, isCellEmpty, getCellWorldPosition, setCellContent } from './SpawnGrid.ts';
 import { getValue } from '../../../../../../lib/Rx/getValue.ts';
 import { spawnSpiceCluster } from '../../../Game/ECS/Entities/Spice/Spice.ts';
@@ -74,6 +75,7 @@ export function addHarvester(teamId: number = PLAYER_TEAM_ID) {
 
 export function addFauna() {
     const spawnProbability = {
+        building: 0.05,
         rock: 0.3,
         spice: 0.1,
     }
@@ -83,11 +85,17 @@ export function addFauna() {
     for (let row = 1; row < grid.rows - 1; row++) {
         for (let col = 1; col < grid.cols - 1; col++) {
             if (!isCellEmpty(col, row)) continue;
-            if (Math.random() < spawnProbability.rock) {
+            
+            const rand = Math.random();
+            if (rand < spawnProbability.building) {
+                const { x, y } = getCellWorldPosition(col, row);
+                createBuilding({ x, y });
+                setCellContent(col, row, CellContent.Obstacle);
+            } else if (rand < spawnProbability.building + spawnProbability.rock) {
                 const { x, y } = getCellWorldPosition(col, row);
                 createRock({ x, y });
                 setCellContent(col, row, CellContent.Obstacle);
-            } else if (Math.random() < spawnProbability.spice) {
+            } else if (rand < spawnProbability.building + spawnProbability.rock + spawnProbability.spice) {
                 const { x, y } = getCellWorldPosition(col, row);
                 spawnSpiceCluster({ x, y });
                 setCellContent(col, row, CellContent.Obstacle);

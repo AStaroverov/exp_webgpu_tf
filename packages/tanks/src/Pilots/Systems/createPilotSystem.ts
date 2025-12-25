@@ -32,7 +32,7 @@ export function createPilotSystem() {
             }
 
             for (const agent of currentPilots) {
-                agent.applyUpdateTankBehaviour();
+                agent.applyUpdateTankBehaviour(GameDI.width, GameDI.height, frame);
             }
         }
     };

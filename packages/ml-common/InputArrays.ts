@@ -1,3 +1,4 @@
+import { cos, PI, round, sin } from '../../lib/math.ts';
 import { random, randomRangeInt } from '../../lib/random.ts';
 import { shuffle } from '../../lib/shuffle.ts';
 import {
@@ -74,10 +75,10 @@ export function prepareInputArrays(
 
     const tankX = TankInputTensor.position.get(tankEid, 0);
     const tankY = TankInputTensor.position.get(tankEid, 1);
-    const rotation = TankInputTensor.rotation[tankEid];
+    const rotation = TankInputTensor.rotation[tankEid] - PI / 2;
     const speedX = TankInputTensor.speed.get(tankEid, 0);
     const speedY = TankInputTensor.speed.get(tankEid, 1);
-    const turretRot = TankInputTensor.turretRotation[tankEid];
+    const turretRot = TankInputTensor.turretRotation[tankEid] - PI / 2;
     const colliderRadius = TankInputTensor.colliderRadius[tankEid];
 
     const invRotation = -rotation;
@@ -87,12 +88,12 @@ export function prepareInputArrays(
     tankFeatures[ti++] = TankInputTensor.health[tankEid]; // hp
     tankFeatures[ti++] = norm(tankX, width / 2); // x
     tankFeatures[ti++] = norm(tankY, height / 2); // y
-    tankFeatures[ti++] = Math.sin(rotation); // body rotation sin
-    tankFeatures[ti++] = Math.cos(rotation); // body rotation cos
+    tankFeatures[ti++] = cos(rotation); // body rotation cos
+    tankFeatures[ti++] = sin(rotation); // body rotation sin
     tankFeatures[ti++] = norm(locSpeedX, QUANT); // speedX
     tankFeatures[ti++] = norm(locSpeedY, QUANT); // speedY
-    tankFeatures[ti++] = Math.sin(turretRel); // turret rotation sin
-    tankFeatures[ti++] = Math.cos(turretRel); // turret rotation cos
+    tankFeatures[ti++] = cos(turretRel); // turret rotation cos
+    tankFeatures[ti++] = sin(turretRel); // turret rotation sin
     tankFeatures[ti++] = norm(colliderRadius, QUANT); // collider radius
 
     // ---- Enemies features ----
@@ -116,13 +117,12 @@ export function prepareInputArrays(
         const eType = enemiesBuffer[srcOffset + 1];
         const eX = enemiesBuffer[srcOffset + 3];
         const eY = enemiesBuffer[srcOffset + 4];
-        const [locX, locY] = rotateVector(eX - tankX, eY - tankY, invRotation);
 
         enemiesMask[w] = 1;
         enemiesTypes[w] = eType;
         enemiesFeatures[dstOffset + 0] = enemiesBuffer[srcOffset + 2]; // hp
-        enemiesFeatures[dstOffset + 1] = norm(locX, QUANT); // x
-        enemiesFeatures[dstOffset + 2] = norm(locY, QUANT); // y
+        enemiesFeatures[dstOffset + 1] = round(norm(eX, width / 2) * 10) / 10;
+        enemiesFeatures[dstOffset + 2] = round(norm(eY, width / 2) * 10) / 10;
     }
 
     // ---- Allies features ----
@@ -146,13 +146,12 @@ export function prepareInputArrays(
         const aType = alliesBuffer[srcOffset + 1];
         const aX = alliesBuffer[srcOffset + 3];
         const aY = alliesBuffer[srcOffset + 4];
-        const [locX, locY] = rotateVector(aX - tankX, aY - tankY, invRotation);
 
         alliesMask[w] = 1;
         alliesTypes[w] = aType;
         alliesFeatures[dstOffset + 0] = alliesBuffer[srcOffset + 2]; // hp
-        alliesFeatures[dstOffset + 1] = norm(locX, QUANT); // x
-        alliesFeatures[dstOffset + 2] = norm(locY, QUANT); // y
+        alliesFeatures[dstOffset + 1] = round(norm(aX, width / 2) * 10) / 10;
+        alliesFeatures[dstOffset + 2] = round(norm(aY, width / 2) * 10) / 10;
     }
 
     // ---- Bullets features ----
@@ -209,15 +208,15 @@ export function prepareInputArrays(
 
         // rayDir is always present (even for misses)
         const [locRayDirX, locRayDirY] = rotateVector(rRayDirX, rRayDirY, invRotation);
-        envRaysFeatures[dstOffset + 0] = locRayDirX; // already normalized (unit vector)
+        envRaysFeatures[dstOffset + 0] = locRayDirX;
         envRaysFeatures[dstOffset + 1] = locRayDirY;
+        envRaysFeatures[dstOffset + 5] = norm(rDistance, QUANT);
 
         if (hitType !== 0) {
             const [locX, locY] = rotateVector(rX - tankX, rY - tankY, invRotation);
             envRaysFeatures[dstOffset + 2] = norm(locX, QUANT);
             envRaysFeatures[dstOffset + 3] = norm(locY, QUANT);
             envRaysFeatures[dstOffset + 4] = norm(rRadius, QUANT);
-            envRaysFeatures[dstOffset + 5] = norm(rDistance, QUANT);
         }
     }
 
@@ -247,8 +246,9 @@ export function prepareInputArrays(
 
         // rayDir is always present (even for misses)
         const [locRayDirX, locRayDirY] = rotateVector(tRayDirX, tRayDirY, invRotation);
-        turretRaysFeatures[dstOffset + 0] = locRayDirX; // already normalized (unit vector)
+        turretRaysFeatures[dstOffset + 0] = locRayDirX;
         turretRaysFeatures[dstOffset + 1] = locRayDirY;
+        turretRaysFeatures[dstOffset + 7] = norm(tDistance, QUANT);
 
         if (hitType !== 0) {
             const [locX, locY] = rotateVector(tX - tankX, tY - tankY, invRotation);
@@ -258,7 +258,6 @@ export function prepareInputArrays(
             turretRaysFeatures[dstOffset + 4] = norm(locVx, QUANT);
             turretRaysFeatures[dstOffset + 5] = norm(locVy, QUANT);
             turretRaysFeatures[dstOffset + 6] = norm(tRadius, QUANT);
-            turretRaysFeatures[dstOffset + 7] = norm(tDistance, QUANT);
             turretRaysFeatures[dstOffset + 8] = tAimingError;
         }
     }

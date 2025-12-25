@@ -1,5 +1,4 @@
 import { query } from 'bitecs';
-import { randomRangeInt } from '../../../lib/random.ts';
 import { Vehicle } from '../../tanks/src/Game/ECS/Components/Vehicle.ts';
 import { getTankTeamId } from '../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
 import { CurrentActorAgent } from '../../tanks/src/Pilots/Agents/CurrentActorAgent.ts';
@@ -26,7 +25,7 @@ export function createScenarioBase(options: Parameters<typeof createBattlefield>
     const pilots = createPilotsPlugin(game);
 
     const isTrain = options.train ?? true;
-    const alliesCount = options.alliesCount ?? randomRangeInt(1, 3);
+    const alliesCount = options.alliesCount ?? 3;
     const enemiesCount = options.enemiesCount ?? alliesCount;
     
     resetSpawnGrid();

@@ -11,7 +11,7 @@ export function createBattlefield(options?: { size?: number, iteration?: number 
         MIN_SIZE,
         MAX_SIZE,
         isNumber(options?.iteration)
-            ? clamp((options.iteration / (LEARNING_STEPS * 0.4)), 0, 1)
+            ? clamp((options.iteration / LEARNING_STEPS), 0, 1)
             : 1
     );
     const game = createGame({ width: size, height: size });

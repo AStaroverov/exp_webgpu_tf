@@ -6,7 +6,7 @@ import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
 import { getNetworkExpIteration } from '../../../../ml-common/utils.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { getNetwork } from '../../../../ml/src/Models/Utils.ts';
-import { calculateActionReward, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
+import { calculateReward, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { createNetworkModelManager } from './NetworkModelManager.ts';
 import { ACTION_HEAD_DIMS } from '../../../../ml/src/Models/Create.ts';
@@ -15,7 +15,7 @@ import { DirichletNoise } from '../../../../ml-common/DirichletNoise.ts';
 export type TankAgent<A = Partial<DownloadableAgent> & Partial<LearnableAgent>> = A & {
     tankEid: number;
     scheduleUpdateTankBehaviour(width: number, height: number, frame: number): void;
-    applyUpdateTankBehaviour(): void;
+    applyUpdateTankBehaviour(width: number, height: number, frame: number): void;
 }
 
 export type DownloadableAgent = {
@@ -84,7 +84,7 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         currentActorUpdater.schedule(width, height, this);
     }
 
-    public applyUpdateTankBehaviour() {
+    public applyUpdateTankBehaviour(width: number, height: number) {
         const result = currentActorUpdater.get(
             this,
             this.train ||
@@ -102,7 +102,7 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
                 result.logits,
                 result.logProb,
             );
-            this.initialActionReward = calculateActionReward(this.tankEid);
+            this.initialActionReward = calculateReward(this.tankEid, width, height);
         }
     }
 
@@ -114,28 +114,14 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         if (!this.train || this.memory.size() === 0) return;
 
         const isDead = getTankHealth(this.tankEid) <= 0;
-        // const version = this.getVersion();
-
-        const stateRewardMultiplier = 0.5;//; - 0.5 * clamp(unlerp(0, LEARNING_STEPS * 0.4, version), 0, 1);
-        const actionRewardMultiplier = 1;// clamp(unlerp(0, LEARNING_STEPS * 0.2, version), 0.3, 1);
-
-        const stateReward = 0
-        //  calculateStateReward(
-        //     this.tankEid,
-        //     width,
-        //     height,
-        //     clamp(version / (LEARNING_STEPS * 0.2), 0, 1)
-        // );
+        const frameReward = getFramePenalty(frame);
         const actionReward = this.initialActionReward === undefined
             ? 0
-            : calculateActionReward(this.tankEid) - this.initialActionReward;
-        
-        const frameReward = getFramePenalty(frame);
- 
+            : calculateReward(this.tankEid, width, height) - this.initialActionReward;
+
         // it's not all reward, also we have final reward for lose/win in the end of episode
-        const reward = clamp(
-            stateReward * stateRewardMultiplier
-            + actionReward * actionRewardMultiplier
+        const reward = clamp(0
+            + actionReward
             + frameReward,
             -10,
             +10

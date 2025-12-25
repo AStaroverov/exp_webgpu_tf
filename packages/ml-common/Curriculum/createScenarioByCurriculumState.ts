@@ -29,7 +29,7 @@ const edge = 0.15; // success ratio to unlock next scenario
 export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: Omit<ScenarioOptions, 'index'>): Promise<Scenario> {
     const constructorOptions = options as ScenarioOptions;
 
-    if (random() < 0.5) {
+    if (random() < 0.75) {
         constructorOptions.index = 3
         return createScenarioSelfPlay(constructorOptions);
     }

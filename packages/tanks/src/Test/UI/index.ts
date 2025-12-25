@@ -2,7 +2,7 @@ import GUI from 'lil-gui';
 import { VehicleType } from '../../Game/ECS/Components/Vehicle.ts';
 import { TestGameState$, TestGameStateEffects, incrementEnemyCount } from '../State/GameState.ts';
 import { startTestGame, spawnEnemy, exitTestGame, spawnPlayerVehicle } from '../State/gameMethods.ts';
-import { spawnRockAtRandomPosition } from '../State/engineMethods.ts';
+import { spawnRockAtRandomPosition, spawnBuildingAtRandomPosition, BuildingSize } from '../State/engineMethods.ts';
 import { setRenderTarget } from '../State/RenderTarget.ts';
 import { upsertModels } from '../../../../ml/src/Models/Trained/restore.ts';
 import { initTensorFlow } from '../../../../ml-common/initTensorFlow.ts';
@@ -42,6 +42,12 @@ const state = {
     
     spawnRock() {
         spawnRockAtRandomPosition();
+    },
+
+    buildingSize: 'random' as BuildingSize,
+    
+    spawnBuilding() {
+        spawnBuildingAtRandomPosition(this.buildingSize);
     },
     
     exit() {
@@ -108,6 +114,12 @@ async function init() {
     // Rock folder
     const rockFolder = gui.addFolder('🪨 Rocks');
     rockFolder.add(state, 'spawnRock').name('➕ Add Rock');
+
+    // Building folder
+    const buildingFolder = gui.addFolder('🏚️ Buildings');
+    buildingFolder.add(state, 'buildingSize', ['small', 'medium', 'large', 'random'])
+        .name('Size');
+    buildingFolder.add(state, 'spawnBuilding').name('➕ Add Ruin');
     
     // Subscribe to state updates
     TestGameState$.subscribe(({ enemyCount }) => {
