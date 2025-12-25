@@ -20,13 +20,13 @@ export { RAY_HIT_TYPE_COUNT }; // LightTank, MediumTank, HeavyTank, PlayerTank, 
 export const BATTLE_FEATURES_DIM = 2;
 export const TANK_FEATURES_DIM = 10;
 
-// Enemies: [hp, x, y]
+// Enemies: [hp, x, y, vx, vy]
 export const ENEMY_SLOTS = MAX_ENEMIES;
-export const ENEMY_FEATURES_DIM = 3;
+export const ENEMY_FEATURES_DIM = 5;
 
-// Allies: [hp, x, y]
+// Allies: [hp, x, y, vx, vy]
 export const ALLY_SLOTS = MAX_ALLIES;
-export const ALLY_FEATURES_DIM = 3;
+export const ALLY_FEATURES_DIM = 5;
 
 // Bullets: [x, y, vx, vy]
 export const BULLET_SLOTS = MAX_BULLETS;

@@ -42,13 +42,13 @@ export type RockType = typeof RockConfig;
 
 export const BuildingConfig = {
     /** Column count range [min, max] - number of rooms horizontally */
-    colsRange: [4, 10] as [number, number],
+    colsRange: [4, 8] as [number, number],
 
     /** Row count range [min, max] - number of rooms vertically */
-    rowsRange: [4, 10] as [number, number],
+    rowsRange: [4, 8] as [number, number],
 
     /** Cell/room size range [min, max] */
-    cellSizeRange: [20, 40] as [number, number],
+    cellSizeRange: [20, 35] as [number, number],
 
     /** Wall thickness range [min, max] */
     wallThicknessRange: [8, 16] as [number, number],

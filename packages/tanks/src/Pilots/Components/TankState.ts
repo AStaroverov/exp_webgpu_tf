@@ -4,9 +4,9 @@ import { delegate } from 'renderer/src/delegate.ts';
 import { component } from 'renderer/src/ECS/utils.ts';
 
 export const MAX_ENEMIES = 5;
-export const ENEMY_BUFFER = 5; // [id, type, hp, x, y]
+export const ENEMY_BUFFER = 7; // [id, type, hp, x, y, vx, vy]
 export const MAX_ALLIES = 5;
-export const ALLY_BUFFER = 5; // [id, type, hp, x, y]
+export const ALLY_BUFFER = 7; // [id, type, hp, x, y, vx, vy]
 export const MAX_BULLETS = 8;
 export const BULLET_BUFFER = 5; // [id, x, y, vx, vy]
 
@@ -103,6 +103,7 @@ export const TankInputTensor = component({
         tankType: number,
         hp: number,
         coord: Float64Array,
+        velocity: Float64Array,
     ) {
         const offset = index * ENEMY_BUFFER;
         TankInputTensor.enemiesData.set(eid, offset, enemyEid);
@@ -110,6 +111,8 @@ export const TankInputTensor = component({
         TankInputTensor.enemiesData.set(eid, offset + 2, hp);
         TankInputTensor.enemiesData.set(eid, offset + 3, coord[0]);
         TankInputTensor.enemiesData.set(eid, offset + 4, coord[1]);
+        TankInputTensor.enemiesData.set(eid, offset + 5, velocity[0]);
+        TankInputTensor.enemiesData.set(eid, offset + 6, velocity[1]);
     },
     resetEnemiesCoords() {
         TankInputTensor.enemiesData.fill(0);
@@ -122,6 +125,7 @@ export const TankInputTensor = component({
         tankType: number,
         hp: number,
         coord: Float64Array,
+        velocity: Float64Array,
     ) {
         const offset = index * ALLY_BUFFER;
         TankInputTensor.alliesData.set(eid, offset, allyEid);
@@ -129,6 +133,8 @@ export const TankInputTensor = component({
         TankInputTensor.alliesData.set(eid, offset + 2, hp);
         TankInputTensor.alliesData.set(eid, offset + 3, coord[0]);
         TankInputTensor.alliesData.set(eid, offset + 4, coord[1]);
+        TankInputTensor.alliesData.set(eid, offset + 5, velocity[0]);
+        TankInputTensor.alliesData.set(eid, offset + 6, velocity[1]);
     },
     resetAlliesCoords() {
         TankInputTensor.alliesData.fill(0);

@@ -101,6 +101,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
                 Vehicle.type[enemyEid],
                 getTankHealth(enemyEid),
                 tempEnemyPosition,
+                RigidBodyState.linvel.getBatch(enemyEid),
             );
         }
 
@@ -120,6 +121,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
                 Vehicle.type[allyEid],
                 getTankHealth(allyEid),
                 tempAllyPosition,
+                RigidBodyState.linvel.getBatch(allyEid),
             );
         }
 

@@ -117,12 +117,16 @@ export function prepareInputArrays(
         const eType = enemiesBuffer[srcOffset + 1];
         const eX = enemiesBuffer[srcOffset + 3];
         const eY = enemiesBuffer[srcOffset + 4];
+        const eVx = enemiesBuffer[srcOffset + 5];
+        const eVy = enemiesBuffer[srcOffset + 6];
 
         enemiesMask[w] = 1;
         enemiesTypes[w] = eType;
         enemiesFeatures[dstOffset + 0] = enemiesBuffer[srcOffset + 2]; // hp
         enemiesFeatures[dstOffset + 1] = round(norm(eX, width / 2) * 10) / 10;
         enemiesFeatures[dstOffset + 2] = round(norm(eY, width / 2) * 10) / 10;
+        enemiesFeatures[dstOffset + 3] = round(norm(eVx, QUANT) * 10) / 10;
+        enemiesFeatures[dstOffset + 4] = round(norm(eVy, QUANT) * 10) / 10;
     }
 
     // ---- Allies features ----
@@ -146,12 +150,16 @@ export function prepareInputArrays(
         const aType = alliesBuffer[srcOffset + 1];
         const aX = alliesBuffer[srcOffset + 3];
         const aY = alliesBuffer[srcOffset + 4];
+        const aVx = alliesBuffer[srcOffset + 5];
+        const aVy = alliesBuffer[srcOffset + 6];
 
         alliesMask[w] = 1;
         alliesTypes[w] = aType;
         alliesFeatures[dstOffset + 0] = alliesBuffer[srcOffset + 2]; // hp
         alliesFeatures[dstOffset + 1] = round(norm(aX, width / 2) * 10) / 10;
         alliesFeatures[dstOffset + 2] = round(norm(aY, width / 2) * 10) / 10;
+        alliesFeatures[dstOffset + 3] = round(norm(aVx, QUANT) * 10) / 10;
+        alliesFeatures[dstOffset + 4] = round(norm(aVy, QUANT) * 10) / 10;
     }
 
     // ---- Bullets features ----
