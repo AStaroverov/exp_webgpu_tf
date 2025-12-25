@@ -30,8 +30,8 @@ export function createVisualizationTracksSystem({ world, physicalWorld } = GameD
             const rotation = RigidBodyState.rotation[trackEid];
             
             // Calculate linear speed in vehicle's forward direction
-            const forwardX = -sin(rotation);
-            const forwardY = cos(rotation);
+            const forwardX = cos(rotation);
+            const forwardY = -sin(rotation);
             const forwardSpeed = linvel[0] * forwardX + linvel[1] * forwardY;
             
             // Calculate rotation contribution based on track side
@@ -60,11 +60,11 @@ export function createVisualizationTracksSystem({ world, physicalWorld } = GameD
                 let anchorX = Slot.anchorX[slotEid];
                 let anchorY = Slot.anchorY[slotEid];
 
-                anchorY += delta;
-                anchorY -= anchorY % 0.01;
+                anchorX += delta;
+                anchorX -= anchorX % 0.01;
 
-                if (abs(anchorY) > trackLimit) {
-                    anchorY = -sign(anchorY) * (trackLimit + (trackLimit - abs(anchorY)));
+                if (abs(anchorX) > trackLimit) {
+                    anchorX = -sign(anchorX) * (trackLimit + (trackLimit - abs(anchorX)));
                 }
 
                 Slot.anchorX[slotEid] = anchorX;

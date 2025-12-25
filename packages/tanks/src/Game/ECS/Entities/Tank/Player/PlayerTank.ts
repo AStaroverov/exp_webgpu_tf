@@ -7,7 +7,7 @@ import { VehicleEngineType } from '../../../Systems/Vehicle/VehicleControllerSys
 import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../../Vehicle/VehicleParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from '../Common/Options.ts';
 import { createTankBase, createTankTracks, createTankTurret } from '../Common/Tank.ts';
-import { addTankExhaustPipes } from '../../ExhaustPipe.ts';
+import { createTankExhaustPipes } from '../../ExhaustPipe.ts';
 // Use Medium tank parts as base
 import {
     caterpillarLength,
@@ -18,7 +18,7 @@ import {
     PADDING,
     PARTS_COUNT,
     SIZE,
-    TRACK_ANCHOR_X,
+    TRACK_ANCHOR_Y,
     turretGunSet,
     turretHeadSet,
 } from '../Medium/MediumTankParts.ts';
@@ -51,17 +51,17 @@ export function createPlayerTank(opts: {
     options.trackLength = caterpillarLength;
 
     options.density = DENSITY * 14;
-    options.width = PADDING * 8;
-    options.height = PADDING * 10;
+    options.width = PADDING * 12;
+    options.height = PADDING * 8;
     const [tankEid, tankPid] = createTankBase(options);
 
     // Create left and right tracks as independent entities
     const [leftTrackEid, rightTrackEid] = createTankTracks(
         options,
         {
-            leftAnchorX: TRACK_ANCHOR_X,
-            rightAnchorX: -TRACK_ANCHOR_X,
-            anchorY: 0,
+            leftAnchorY: TRACK_ANCHOR_Y,
+            rightAnchorY: -TRACK_ANCHOR_Y,
+            anchorX: 0,
             trackWidth: PADDING * 2,
             trackHeight: caterpillarLength,
         },
@@ -75,7 +75,7 @@ export function createPlayerTank(opts: {
     options.turret.rotationSpeed = PI * 0.8;        // Faster turret (was 0.6)
     options.firearms.reloadingDuration = 350;        // Faster reload (was 500)
     options.firearms.bulletCaliber = BulletCaliber.Medium;
-    options.firearms.bulletStartPosition = [0, -13 * PADDING];
+    options.firearms.bulletStartPosition = [13 * PADDING, 0];
     const [turretEid] = createTankTurret(options, tankEid, tankPid);
 
     // Hull parts attached to tank body
@@ -102,7 +102,7 @@ export function createPlayerTank(opts: {
     fillAllSlots(turretEid, options);
 
     // Add exhaust pipes
-    addTankExhaustPipes(tankEid, PADDING * 8, PADDING * 10);
+    createTankExhaustPipes(tankEid, PADDING * 12, PADDING * 8);
 
     return tankEid;
 }

@@ -81,8 +81,8 @@ function applyWheelDrive(
     if (accelerate === 0) return;
     
     const steeringAngle = RigidBodyState.rotation[wheelEid];    
-    impulseVector.x = 0;
-    impulseVector.y = -accelerate * impulseFactor * delta / 1000;
+    impulseVector.x = accelerate * impulseFactor * delta / 1000;
+    impulseVector.y = 0;
     
     applyRotationToVector(impulseVector, impulseVector, steeringAngle);
 

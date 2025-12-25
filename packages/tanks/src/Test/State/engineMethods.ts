@@ -54,7 +54,7 @@ export function spawnPlayerTank(vehicleType: VehicleType = VehicleType.LightTank
         teamId: PLAYER_TEAM_ID,
         x: 0,
         y: 0,
-        rotation: -PI / 2, // Facing up
+        rotation: 0, // Facing up
         color: [0.2, 0.8, 0.2, 1], // Green player
     });
 

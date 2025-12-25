@@ -9,6 +9,7 @@ import { VehicleEngineType } from './VehicleControllerSystems.ts';
 import { applyRotationToVector } from '../../../Physical/applyRotationToVector.ts';
 import { Impulse } from '../../Components/Impulse.ts';
 import { Children } from '../../Components/Children.ts';
+import { Tank } from '../../Components/Tank.ts';
 
 const TRACK_IMPULSE_FACTOR = 7500000000; // Half of original since we have 2 tracks
 
@@ -21,20 +22,9 @@ const mapTypeToTrackImpulse = {
 
 const impulseVector = new Vector2(0, 0);
 
-/**
- * System that controls tracked vehicles.
- * Translates vehicle movement/rotation input into individual track powers.
- * 
- * Each track applies force at its physical position on the vehicle.
- * When tracks have different powers, this creates natural rotation
- * because forces are applied at different points relative to center of mass.
- * 
- * Movement: Both tracks get equal power → vehicle moves straight
- * Rotation: Differential power → asymmetric forces → natural torque
- */
 export function createTrackControlSystem({ world } = GameDI) {
     return (delta: number) => {
-        const vehicleEids = query(world, [Vehicle, VehicleController, Children]);
+        const vehicleEids = query(world, [Tank, Vehicle, VehicleController, Children]);
 
         for (let i = 0; i < vehicleEids.length; i++) {
             const vehicleEid = vehicleEids[i];
@@ -85,10 +75,6 @@ export function createTrackControlSystem({ world } = GameDI) {
     };
 }
 
-/**
- * Apply impulse to vehicle at the track's world position.
- * Force applied off-center creates both linear and angular acceleration.
- */
 function applyTrackImpulse(
     trackEid: number,
     impulseFactor: number,
@@ -96,8 +82,8 @@ function applyTrackImpulse(
     delta: number,
 ) {
     if (impulseFactor === 0) return;
-    impulseVector.x = 0;
-    impulseVector.y = -impulseFactor * delta / 1000;
+    impulseVector.x = impulseFactor * delta / 1000;
+    impulseVector.y = 0;
     applyRotationToVector(impulseVector, impulseVector, vehicleRotation);
     Impulse.add(trackEid, impulseVector.x, impulseVector.y);
 }

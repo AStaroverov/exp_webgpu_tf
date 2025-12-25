@@ -7,9 +7,9 @@ import { createTrack, TrackOptions } from '../../Track/createTrack.ts';
 import { type TankOptions } from './Options.ts';
 
 export type TankTracksConfig = {
-    leftAnchorX: number;
-    rightAnchorX: number;
-    anchorY: number;
+    anchorX: number;
+    leftAnchorY: number;
+    rightAnchorY: number;
     trackWidth: number;
     trackHeight: number;
 };
@@ -39,19 +39,19 @@ export function createTankTracks(
         height: tracksConfig.trackHeight,
         trackSide: TrackSide.Left,
         trackLength: options.trackLength,
-        anchorX: tracksConfig.leftAnchorX,
-        anchorY: tracksConfig.anchorY,
+        anchorX: tracksConfig.anchorX,
+        anchorY: tracksConfig.leftAnchorY,
         density: options.density * 0.1, // Tracks are lighter than main body
     };
 
     trackOptions.trackSide = TrackSide.Left;
-    trackOptions.anchorX = tracksConfig.leftAnchorX;
+    trackOptions.anchorY = tracksConfig.leftAnchorY;
     trackOptions.x = options.x;
     trackOptions.y = options.y;
     const [leftTrackEid] = createTrack(trackOptions, tankEid, tankPid);
 
     trackOptions.trackSide = TrackSide.Right;
-    trackOptions.anchorX = tracksConfig.rightAnchorX;
+    trackOptions.anchorY = tracksConfig.rightAnchorY;
     trackOptions.x = options.x;
     trackOptions.y = options.y;
     const [rightTrackEid] = createTrack(trackOptions, tankEid, tankPid);

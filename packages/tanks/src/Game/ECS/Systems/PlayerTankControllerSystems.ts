@@ -98,7 +98,7 @@ export function createPlayerTankTurretRotationSystem({ world } = GameDI) {
             const [worldX, worldY] = screenToWorld(lastEvent.clientX, lastEvent.clientY);
 
             // Глобальный угол от дула к позиции цели
-            const targetRot = Math.atan2(worldY - turretPos[1], worldX - turretPos[0]) + Math.PI / 2;
+            const targetRot = Math.atan2(worldY - turretPos[1], worldX - turretPos[0]);
             const relTurretRot = normalizeAngle(turretRot - vehicleRot);
             const relTargetTurretRot = normalizeAngle(targetRot - vehicleRot);
             const deltaRot = normalizeAngle(relTargetTurretRot - relTurretRot);

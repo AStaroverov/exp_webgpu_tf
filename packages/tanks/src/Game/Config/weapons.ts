@@ -52,8 +52,8 @@ export type BulletCaliberStats = {
  */
 export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     [BulletCaliber.Light]: {
-        width: 3,
-        height: 8,
+        width: 8,
+        height: 3,
         speed: 500,
         density: 3_000,
         damage: 3,
@@ -61,8 +61,8 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     },
     
     [BulletCaliber.Medium]: {
-        width: 5,
-        height: 10,
+        width: 10,
+        height: 5,
         speed: 650,
         density: 6_000,
         damage: 6,
@@ -70,8 +70,8 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     },
     
     [BulletCaliber.Heavy]: {
-        width: 7,
-        height: 14,
+        width: 14,
+        height: 7,
         speed: 800,
         density: 10_000,
         damage: 10,

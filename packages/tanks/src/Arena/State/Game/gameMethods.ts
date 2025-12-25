@@ -36,7 +36,7 @@ export function addTank(slot: number, teamId: number, vehicleType: TankVehicleTy
         teamId,
         x,
         y,
-        rotation: PI / 2 + randomRangeFloat(-PI / 4, PI / 4),
+        rotation: randomRangeFloat(-PI / 4, PI / 4),
         color: [teamId, randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1],
     });
 
@@ -58,7 +58,7 @@ export function addHarvester(teamId: number = PLAYER_TEAM_ID) {
         teamId,
         x,
         y,
-        rotation: PI / 2 + randomRangeFloat(-PI / 4, PI / 4),
+        rotation: randomRangeFloat(-PI / 4, PI / 4),
         color: [teamId, randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1],
     });
 

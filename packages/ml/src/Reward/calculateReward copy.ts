@@ -1,6 +1,6 @@
 import { EntityId } from 'bitecs';
 import { clamp } from 'lodash';
-import { abs, acos, cos, hypot, max, min, normalizeAngle, PI, sin, smoothstep } from '../../../../lib/math.ts';
+import { abs, acos, cos, hypot, max, min, PI, sin, smoothstep } from '../../../../lib/math.ts';
 import { MAX_BULLET_SPEED } from '../../../tanks/src/Game/ECS/Components/Bullet.ts';
 import { HeuristicsData } from '../../../tanks/src/Game/ECS/Components/HeuristicsData.ts';
 import { RigidBodyState } from '../../../tanks/src/Game/ECS/Components/Physical.ts';
@@ -341,7 +341,7 @@ function computeAimQuality(
 
     // 2. Вектор направления ствола
     //    turretDir = (cos φ, sin φ), φ = tankRot + turretRot
-    const turretAngle = normalizeAngle(turretRotation - Math.PI / 2);
+    const turretAngle = turretRotation
     const turretNormX = cos(turretAngle);
     const turretNormY = sin(turretAngle);
 

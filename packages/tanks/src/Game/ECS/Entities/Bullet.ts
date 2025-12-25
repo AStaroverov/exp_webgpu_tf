@@ -23,7 +23,7 @@ import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { Bullet, BulletCaliber, mapBulletCaliber, MAX_BULLET_SPEED, MIN_BULLET_SPEED } from '../Components/Bullet.ts';
 import { TeamRef } from '../Components/TeamRef.ts';
 import { Color } from '../../../../../renderer/src/ECS/Components/Common.ts';
-import { min } from '../../../../../../lib/math.ts';
+import { min, PI } from '../../../../../../lib/math.ts';
 import { Damagable } from '../Components/Damagable.ts';
 import { ExplosionConfig, SoundConfig } from '../../Config/index.ts';
 
@@ -61,8 +61,8 @@ export function createBullet(options: Partial<Options> & {
     const speed = min(bulletCaliber.speed, MAX_BULLET_SPEED);
 
     if (isNumber(speed) && speed > 0) {
-        tmpSpeed[0] = 0;
-        tmpSpeed[1] = -speed;
+        tmpSpeed[0] = speed;
+        tmpSpeed[1] = 0;
         applyRotationToVector(tmpSpeed, tmpSpeed, options.rotation ?? 0);
         optionsBulletRR.speedX = tmpSpeed[0];
         optionsBulletRR.speedY = tmpSpeed[1];
@@ -129,7 +129,7 @@ export function spawnBullet(vehicleEid: number) {
         y: optionsSpawnBullet.y,
         size: bulletCaliber.width * ExplosionConfig.muzzleFlashSizeMult,
         duration: ExplosionConfig.muzzleFlashDuration,
-        rotation: optionsSpawnBullet.rotation,
+        rotation: optionsSpawnBullet.rotation + PI / 2,
     });
 
     const soundVolume = SoundConfig.shootBaseVolume + (bulletCaliber.width * SoundConfig.shootVolumePerWidth);

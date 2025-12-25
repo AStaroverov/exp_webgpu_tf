@@ -1,6 +1,6 @@
 import { Ball, Collider, Ray, Vector2 } from '@dimforge/rapier2d-simd';
 import { EntityId, hasComponent, query } from 'bitecs';
-import { cos, hypot, PI, sin } from '../../../../../lib/math.ts';
+import { cos, hypot, sin } from '../../../../../lib/math.ts';
 import { shuffle } from '../../../../../lib/shuffle.ts';
 import { GameDI } from '../../Game/DI/GameDI.ts';
 import { getEntityIdByPhysicalId, RigidBodyRef, RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
@@ -146,7 +146,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
             myTeamId,
             position[0],
             position[1],
-            rotation - PI / 2,
+            rotation,
         );
 
         // Transform local bullet start position to world coordinates
@@ -161,7 +161,7 @@ export function snapshotTankInputTensor({ world } = GameDI) {
             myTeamId,
             turretPosition[0] + bulletOffset[0] * cosR - bulletOffset[1] * sinR,
             turretPosition[1] + bulletOffset[0] * sinR + bulletOffset[1] * cosR,
-            turretRotation - PI / 2,
+            turretRotation,
         );
     }
 }

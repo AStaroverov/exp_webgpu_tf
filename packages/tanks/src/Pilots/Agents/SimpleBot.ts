@@ -108,7 +108,7 @@ export class SimpleBot implements TankAgent<{}> {
         const currentTurret = RigidBodyState.rotation[Tank.turretEId[this.tankEid]];   // [-π, π]
         const targetTurret = atan2(dy, dx);                        // [-π, π]
 
-        let turretRot = normalizeAngle(targetTurret - currentTurret + PI / 2);
+        let turretRot = normalizeAngle(targetTurret - currentTurret);
         const misalign = abs(turretRot) < 0.2;
 
         turretRot += this.ouNoiseRot.next() * aimError;
@@ -139,7 +139,7 @@ export class SimpleBot implements TankAgent<{}> {
         const bodyAngle = RigidBodyState.rotation[this.tankEid];
 
         // --- разница углов, нормализованная к [-π, π] ---
-        const delta = wrapPi(targetAngle - bodyAngle + PI / 2);    // -π … π
+        const delta = wrapPi(targetAngle - bodyAngle);    // -π … π
 
         // --- преобразуем в диапазон [-1; 1] ---
         return (delta / PI);                // -1 … 1

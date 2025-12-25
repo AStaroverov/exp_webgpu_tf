@@ -4,7 +4,7 @@ import { SlotPartType } from '../../Components/SlotConfig.ts';
 import { VehicleType } from '../../Components/Vehicle.ts';
 import { VehicleEngineType } from '../../Systems/Vehicle/VehicleControllerSystems.ts';
 import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../Vehicle/VehicleParts.ts';
-import { addTankExhaustPipes } from '../ExhaustPipe.ts';
+import { createTankExhaustPipes } from '../ExhaustPipe.ts';
 import { createHarvesterBase, createHarvesterTracks, createHarvesterTurret } from './HarvesterBase.ts';
 import {
     barrierSet,
@@ -18,7 +18,7 @@ import {
     scoopSet,
     shieldSet,
     SIZE,
-    TRACK_ANCHOR_X,
+    TRACK_ANCHOR_Y,
 } from './HarvesterParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from './Options.ts';
 
@@ -56,9 +56,9 @@ export function createHarvester(opts: {
     const [leftTrackEid, rightTrackEid] = createHarvesterTracks(
         options,
         {
-            leftAnchorX: TRACK_ANCHOR_X,
-            rightAnchorX: -TRACK_ANCHOR_X,
-            anchorY: 0,
+            anchorX: 0,
+            leftAnchorY: TRACK_ANCHOR_Y,
+            rightAnchorY: -TRACK_ANCHOR_Y,
             trackWidth: PADDING * 2,
             trackHeight: options.trackLength,
         },
@@ -103,7 +103,7 @@ export function createHarvester(opts: {
     fillAllSlots(barrierEid, options);
 
     // Add exhaust pipes
-    addTankExhaustPipes(harvesterEid, PADDING * 10, PADDING * 10);
+    createTankExhaustPipes(harvesterEid, PADDING * 10, PADDING * 10);
 
     return harvesterEid;
 }

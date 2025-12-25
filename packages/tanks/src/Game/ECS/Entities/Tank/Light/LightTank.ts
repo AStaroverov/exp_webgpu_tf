@@ -9,7 +9,7 @@ import { VehicleEngineType } from '../../../Systems/Vehicle/VehicleControllerSys
 import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../../Vehicle/VehicleParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from '../Common/Options.ts';
 import { createTankBase, createTankTracks, createTankTurret } from '../Common/Tank.ts';
-import { addTankExhaustPipes } from '../../ExhaustPipe.ts';
+import { createTankExhaustPipes } from '../../ExhaustPipe.ts';
 import { SIZE } from '../Medium/MediumTankParts.ts';
 import {
     caterpillarLength,
@@ -19,7 +19,7 @@ import {
     hullSet,
     PADDING,
     PARTS_COUNT,
-    TRACK_ANCHOR_X,
+    TRACK_ANCHOR_Y,
     turretGunSet,
     turretHeadSet,
 } from './LightTankParts.ts';
@@ -46,17 +46,17 @@ export function createLightTank(opts: {
     options.trackLength = caterpillarLength;
 
     options.density = DENSITY * 14;
-    options.width = PADDING * 8;
-    options.height = PADDING * 10;
+    options.width = PADDING * 10;
+    options.height = PADDING * 8;
     const [tankEid, tankPid] = createTankBase(options);
 
     // Create left and right tracks as independent entities
     const [leftTrackEid, rightTrackEid] = createTankTracks(
         options,
         {
-            leftAnchorX: TRACK_ANCHOR_X,
-            rightAnchorX: -TRACK_ANCHOR_X,
-            anchorY: 0,
+            leftAnchorY: TRACK_ANCHOR_Y,
+            rightAnchorY: -TRACK_ANCHOR_Y,
+            anchorX: 0,
             trackWidth: PADDING * 2,
             trackHeight: caterpillarLength,
         },
@@ -70,7 +70,7 @@ export function createLightTank(opts: {
     options.turret.rotationSpeed = PI * 0.8;
     options.firearms.reloadingDuration = 300;
     options.firearms.bulletCaliber = BulletCaliber.Light;
-    options.firearms.bulletStartPosition = [0, -9 * PADDING];
+    options.firearms.bulletStartPosition = [9 * PADDING, 0];
     const [turretEid] = createTankTurret(options, tankEid, tankPid);
 
     // Hull parts attached to tank body
@@ -97,7 +97,7 @@ export function createLightTank(opts: {
     fillAllSlots(turretEid, options);
 
     // Add exhaust pipes
-    addTankExhaustPipes(tankEid, PADDING * 8, PADDING * 10);
+    createTankExhaustPipes(tankEid, PADDING * 10, PADDING * 8);
 
     return tankEid;
 }

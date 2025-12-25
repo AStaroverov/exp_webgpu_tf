@@ -5,23 +5,23 @@ export const SIZE = 4;
 export const PADDING = SIZE + 1;
 
 // Compact rectangular hull - like a car body
-export const hullSet = createRectangleSet(6, 10, SIZE, PADDING);
+export const hullSet = createRectangleSet(10, 6, SIZE, PADDING);
 
 // Wheel configuration - 4 wheels at the corners
 export const WHEEL_SIZE = 6;
 export const WHEEL_PADDING = WHEEL_SIZE + 1;
 
 // Hull dimensions for wheel positioning
-const HULL_HALF_WIDTH = (6 * PADDING) / 2 + WHEEL_SIZE * 0.5;
-const FRONT_Y = -(10 * PADDING) / 2 + WHEEL_SIZE * 1.5;
-const REAR_Y = (10 * PADDING) / 2 - WHEEL_SIZE * 1.5;
+const HULL_HALF_HEIGHT = (6 * PADDING) / 2 + WHEEL_SIZE * 0.5;
+const FRONT_X = (10 * PADDING) / 2 - WHEEL_SIZE * 1.5;
+const REAR_X = -(10 * PADDING) / 2 + WHEEL_SIZE * 1.5;
 
 // Wheel anchor positions (x, y from car center)
 export const WHEEL_ANCHORS = {
-    frontLeft: { x: -HULL_HALF_WIDTH, y: FRONT_Y },
-    frontRight: { x: HULL_HALF_WIDTH, y: FRONT_Y },
-    rearLeft: { x: -HULL_HALF_WIDTH, y: REAR_Y },
-    rearRight: { x: HULL_HALF_WIDTH, y: REAR_Y },
+    frontLeft: { x: FRONT_X, y: -HULL_HALF_HEIGHT },
+    frontRight: { x: FRONT_X, y: HULL_HALF_HEIGHT },
+    rearLeft: { x: REAR_X, y: -HULL_HALF_HEIGHT },
+    rearRight: { x: REAR_X, y: HULL_HALF_HEIGHT },
 };
 
 // Wheel visual dimensions
@@ -40,7 +40,7 @@ function createWheelSet(): PartsData[] {
 export const wheelSlotSet = createWheelSet();
 
 // Calculate wheel base (distance between front and rear axle centers)
-export const wheelBase = REAR_Y - FRONT_Y;
+export const wheelBase = FRONT_X - REAR_X;
 
 export const PARTS_COUNT = hullSet.length + 4; // 4 wheels
 

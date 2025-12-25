@@ -1,4 +1,4 @@
-import { cos, PI, round, sin } from '../../lib/math.ts';
+import { cos, round, sin } from '../../lib/math.ts';
 import { random, randomRangeInt } from '../../lib/random.ts';
 import { shuffle } from '../../lib/shuffle.ts';
 import {
@@ -75,10 +75,10 @@ export function prepareInputArrays(
 
     const tankX = TankInputTensor.position.get(tankEid, 0);
     const tankY = TankInputTensor.position.get(tankEid, 1);
-    const rotation = TankInputTensor.rotation[tankEid] - PI / 2;
+    const rotation = TankInputTensor.rotation[tankEid];
     const speedX = TankInputTensor.speed.get(tankEid, 0);
     const speedY = TankInputTensor.speed.get(tankEid, 1);
-    const turretRot = TankInputTensor.turretRotation[tankEid] - PI / 2;
+    const turretRot = TankInputTensor.turretRotation[tankEid];
     const colliderRadius = TankInputTensor.colliderRadius[tankEid];
 
     const invRotation = -rotation;
