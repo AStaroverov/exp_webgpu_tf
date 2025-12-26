@@ -6,7 +6,7 @@ import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
 import { getNetworkExpIteration } from '../../../../ml-common/utils.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { getNetwork } from '../../../../ml/src/Models/Utils.ts';
-import { calculateReward, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
+import { calculateActionReward, calculateStateReward, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { createNetworkModelManager } from './NetworkModelManager.ts';
 import { ACTION_HEAD_DIMS } from '../../../../ml/src/Models/Create.ts';
@@ -102,7 +102,7 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
                 result.logits,
                 result.logProb,
             );
-            this.initialActionReward = calculateReward(this.tankEid, width, height);
+            this.initialActionReward = calculateActionReward(this.tankEid, width, height);
         }
     }
 
@@ -117,11 +117,13 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         const frameReward = getFramePenalty(frame);
         const actionReward = this.initialActionReward === undefined
             ? 0
-            : calculateReward(this.tankEid, width, height) - this.initialActionReward;
+            : calculateActionReward(this.tankEid, width, height) - this.initialActionReward;
+        const stateReward = calculateStateReward(this.tankEid, width, height);
 
         // it's not all reward, also we have final reward for lose/win in the end of episode
         const reward = clamp(0
             + actionReward
+            + stateReward
             + frameReward,
             -10,
             +10

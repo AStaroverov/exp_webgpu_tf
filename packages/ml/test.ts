@@ -6,7 +6,7 @@ import { createPlayer } from '../tanks/src/Game/ECS/Entities/Player.ts';
 import { createMediumTank } from '../tanks/src/Game/ECS/Entities/Tank/Medium/MediumTank.ts';
 import { createPilotsPlugin } from '../tanks/src/Pilots/createPilotsPlugin.ts';
 import { snapshotTankInputTensor } from '../tanks/src/Pilots/Utils/snapshotTankInputTensor.ts';
-import { calculateReward } from './src/Reward/calculateReward.ts';
+import { calculateActionReward, calculateStateReward } from './src/Reward/calculateReward.ts';
 import { createBuilding } from '../tanks/src/Game/ECS/Entities/Building/Building.ts';
 
 const game = createGame({ width: 1200, height: 1000 });
@@ -71,8 +71,8 @@ frameTasks.addInterval(() => {
     gameTick(16.66);
 
     if (i > 10 && i % 3 === 0) {
-        const newActionReward = calculateReward(tanks[0], GameDI.width, GameDI.height);
-        const reward = (actionReward ? newActionReward - actionReward : 0);
+        const newActionReward = calculateActionReward(tanks[0], GameDI.width, GameDI.height);
+        const reward = calculateStateReward(tanks[0], GameDI.width, GameDI.height) +(actionReward ? newActionReward - actionReward : 0);
         actionReward = newActionReward;
 
         snapshotTankInputTensor();
