@@ -19,15 +19,15 @@ type NetworkConfig = {
 type policyNetworkConfig = NetworkConfig
 
 const policyNetworkConfig: policyNetworkConfig = {
-    dim: 16,
+    dim: 32,
     heads: 1,
     depth: 12,
 };
 
 const valueNetworkConfig: NetworkConfig = {
-    dim: 8,
+    dim: 32,
     heads: 1,
-    depth: 3,
+    depth: 4,
 };
 
 export function createNetwork(modelName: Model, config: NetworkConfig = modelName === Model.Policy ? policyNetworkConfig : valueNetworkConfig) {

@@ -32,13 +32,13 @@ export const ALLY_FEATURES_DIM = 5;
 export const BULLET_SLOTS = MAX_BULLETS;
 export const BULLET_FEATURES_DIM = 4;
 
-// Environment rays: [locRayDirX, locRayDirY, locX, locY, radius, distance] = 6 features per ray + hitType for embedding
+// Environment rays: [locRayDirX, locRayDirY, distance] = 3 features per ray + hitType for embedding
 export const ENV_RAY_SLOTS = ENV_RAYS_TOTAL;
-export const ENV_RAY_FEATURES_DIM = 6;
+export const ENV_RAY_FEATURES_DIM = 3;
 
-// Turret rays: [locRayDirX, locRayDirY, locX, locY, locVx, locVy, radius, distance, aimingError] = 9 features per ray + hitType for embedding
+// Turret rays: [locRayDirX, locRayDirY, distance] = 3 features per ray + hitType for embedding
 export const TURRET_RAY_SLOTS = TURRET_RAYS_COUNT;
-export const TURRET_RAY_FEATURES_DIM = 9;
+export const TURRET_RAY_FEATURES_DIM = 3;
 
 export const ACTION_HEAD_DIMS = [15, 15, 2, 31];
 

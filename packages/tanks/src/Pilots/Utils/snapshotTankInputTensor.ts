@@ -30,7 +30,6 @@ import {
 import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { Parent } from '../../Game/ECS/Components/Parent.ts';
-import { Shape, ShapeKind } from 'renderer/src/ECS/Components/Shape.ts';
 import { ALL_VEHICLE_PARTS_MASK, CollisionGroupConfig } from '../../Game/Config/physics.ts';
 
 // Temp arrays for offset-adjusted positions
@@ -242,7 +241,7 @@ function castEnvironmentRays(
                 filterPredicate,
             );
 
-            const rayHit = hit && processRayHit(
+            const rayHitType = hit && getRayHitType(
                 getEntityIdByPhysicalId(hit.collider.handle),
                 myTeamId
             );
@@ -251,10 +250,7 @@ function castEnvironmentRays(
                 indexOffset + i,
                 rayDir.x,
                 rayDir.y,
-                rayHit?.hitType ?? RayHitType.NONE,
-                rayHit?.x ?? 0,
-                rayHit?.y ?? 0,
-                rayHit?.radius ?? 0,
+                rayHitType ?? RayHitType.NONE,
                 hit?.timeOfImpact ?? ENV_RAY_LENGTH,
             );
         }
@@ -290,101 +286,39 @@ function castTurretRays(
         filterPredicate,
     );
 
-    const rayHit = hit && processRayHit(getEntityIdByPhysicalId(hit.collider.handle), myTeamId);
-    const aimingError = rayHit ? calculateAimingError(posX, posY, turretRotation, rayHit.x, rayHit.y) : 0;
+    const rayHitType = hit && getRayHitType(getEntityIdByPhysicalId(hit.collider.handle), myTeamId);
     
     TankInputTensor.setTurretRayData(
         vehicleEid, 
         0, 
         rayDir.x,
         rayDir.y,
-        rayHit ? rayHit.hitType : RayHitType.NONE,
-        rayHit ? (rayHit.x - GameMap.offsetX) : 0,
-        rayHit ? (rayHit.y - GameMap.offsetY) : 0,
-        rayHit ? (rayHit.vx) : 0,
-        rayHit ? (rayHit.vy) : 0,
-        rayHit ? (rayHit.radius) : 0,
-        hit?.timeOfImpact ?? TURRET_RAY_LENGTH, 
-        aimingError,
+        rayHitType ?? RayHitType.NONE,
+        hit?.timeOfImpact ?? TURRET_RAY_LENGTH,
     );
 }
 
-/**
- * Calculate aiming error in degrees - angle between turret direction and direction to target center
- * Positive = target is to the right, Negative = target is to the left
- */
-function calculateAimingError(
-    posX: number,
-    posY: number,
-    turretRotation: number,
-    targetX: number,
-    targetY: number,
-): number {
-    // Calculate angle from our position to target center
-    const dx = targetX - posX;
-    const dy = targetY - posY;
-    const angleToTarget = Math.atan2(dy, dx);
-    
-    // Calculate angle difference (normalize to -PI to PI)
-    let angleDiff = angleToTarget - turretRotation;
-    while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-    while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-    
-    return angleDiff
-}
-
-// Reusable result object to avoid allocations
-const rayHitResult = { hitType: RayHitType.NONE as RayHitType, x: 0, y: 0, vx: 0, vy: 0, radius: 0 };
-
-/**
- * Process ray hit and extract entity data (returns reusable object - do not store reference!)
- * @param eid - Entity ID of the hit collider
- * @param myTeamId - Team ID of the vehicle casting the ray (to determine enemy vs ally)
- */
-function processRayHit(eid: EntityId, myTeamId: number): typeof rayHitResult {
+function getRayHitType(eid: EntityId, myTeamId: number): RayHitType {
     const collisionGroup = getCollisionGroupFromEntity(eid);
-    rayHitResult.hitType = RayHitType.NONE;
-    rayHitResult.x = 0;
-    rayHitResult.y = 0;
-    rayHitResult.vx = 0;
-    rayHitResult.vy = 0;
-    rayHitResult.radius = 0;
 
     if (collisionGroup === 0) {
-        return rayHitResult;
+        return RayHitType.NONE;
     }
 
     if (collisionGroup & ALL_VEHICLE_PARTS_MASK) {
         // It's a vehicle part - traverse parent to get vehicle
         const vehicleEid = findVehicleFromPart(eid);
-        if (vehicleEid === 0) return rayHitResult;
+        if (vehicleEid === 0) return RayHitType.NONE;
 
-        const pos = RigidBodyState.position.getBatch(vehicleEid);
-        const vel = RigidBodyState.linvel.getBatch(vehicleEid);
         const hitTeamId = TeamRef.id[vehicleEid];
-        rayHitResult.hitType = hitTeamId === myTeamId ? RayHitType.ALLY_VEHICLE : RayHitType.ENEMY_VEHICLE;
-        rayHitResult.x = pos[0];
-        rayHitResult.y = pos[1];
-        rayHitResult.vx = vel[0];
-        rayHitResult.vy = vel[1];
-        rayHitResult.radius = HeuristicsData.approxColliderRadius[vehicleEid];
-        return rayHitResult;
+        return hitTeamId === myTeamId ? RayHitType.ALLY_VEHICLE : RayHitType.ENEMY_VEHICLE;
     }
     
     if (collisionGroup & CollisionGroupConfig.OBSTACLE) {
-        // It's an obstacle - get its position and approximate radius
-        const pos = RigidBodyState.position.getBatch(eid);
-        const vel = RigidBodyState.linvel.getBatch(eid);
-        rayHitResult.hitType = RayHitType.OBSTACLE;
-        rayHitResult.x = pos[0];
-        rayHitResult.y = pos[1];
-        rayHitResult.vx = vel[0];
-        rayHitResult.vy = vel[1];
-        rayHitResult.radius = getApproxRadius(eid);
-        return rayHitResult;
+        return RayHitType.OBSTACLE;
     }
 
-    return rayHitResult;
+    return RayHitType.NONE;
 }
 
 /**
@@ -425,24 +359,6 @@ function findVehicleFromPart(partEid: EntityId, { world } = GameDI): EntityId {
     }
     
     return 0;
-}
-
-/**
- * Get approximate collider radius from entity shape
- */
-function getApproxRadius(eid: EntityId): number {
-    const kind = Shape.kind[eid];
-    
-    if (kind === ShapeKind.Circle) {
-        return Shape.values.get(eid, 0); // radius
-    } else if (kind === ShapeKind.Rectangle) {
-        const width = Shape.values.get(eid, 0);
-        const height = Shape.values.get(eid, 1);
-        return Math.max(width, height) / 2;
-    }
-    
-    // Fallback: use HeuristicsData if available
-    return HeuristicsData.approxColliderRadius[eid] || 10;
 }
 
 export function findTankEnemiesEids(tankEid: EntityId) {

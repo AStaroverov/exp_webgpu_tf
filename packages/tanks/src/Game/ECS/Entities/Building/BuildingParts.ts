@@ -13,6 +13,7 @@ import { Parent } from '../../Components/Parent.ts';
 import { createRectangleRR } from '../../Components/RigidRender.ts';
 import { BuildingPart } from '../../Components/Building.ts';
 import { BuildingPartType } from './generateBuildingShape.ts';
+import { Obstacle } from '../../Components/Obstacle.ts';
 
 export type BuildingPartData = {
     x: number;
@@ -166,6 +167,7 @@ export function createBuildingParts(
         const [partEid, _partPid] = createRectangleRR(rrOptions);
 
         // Add components
+        Obstacle.addComponent(world, partEid);
         BuildingPart.addComponent(world, partEid);
         Parent.addComponent(world, partEid, buildingEid);
         Children.addChildren(buildingEid, partEid);

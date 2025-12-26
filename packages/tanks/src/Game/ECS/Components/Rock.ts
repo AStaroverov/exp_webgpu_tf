@@ -1,6 +1,4 @@
 import { addComponent, EntityId, removeComponent, World } from 'bitecs';
-import { delegate } from '../../../../../renderer/src/delegate.ts';
-import { TypedArray } from '../../../../../renderer/src/utils.ts';
 import { component } from '../../../../../renderer/src/ECS/utils.ts';
 
 /**
@@ -8,17 +6,12 @@ import { component } from '../../../../../renderer/src/ECS/utils.ts';
  * Rocks are made of small destructible pieces connected via joints.
  */
 export const Rock = component({
-    // Total number of parts in this rock
-    partsCount: TypedArray.i32(delegate.defaultSize),
-
-    addComponent(world: World, eid: EntityId, partsCount: number) {
+    addComponent(world: World, eid: EntityId) {
         addComponent(world, eid, Rock);
-        Rock.partsCount[eid] = partsCount;
     },
 
     removeComponent(world: World, eid: EntityId) {
         removeComponent(world, eid, Rock);
-        Rock.partsCount[eid] = 0;
     },
 });
 

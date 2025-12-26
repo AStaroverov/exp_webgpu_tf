@@ -26,6 +26,10 @@ function norm(v: number, size: number): number {
     return v / size;
 }
 
+function stepify(v: number, step = 10): number {
+    return round(v * step) / step;
+}
+
 function rotateVector(x: number, y: number, angle: number): [number, number] {
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
@@ -120,13 +124,16 @@ export function prepareInputArrays(
         const eVx = enemiesBuffer[srcOffset + 5];
         const eVy = enemiesBuffer[srcOffset + 6];
 
+        const [locX, locY] = rotateVector(eX - tankX, eY - tankY, invRotation);
+        const [locVx, locVy] = rotateVector(eVx - speedX, eVy - speedY, invRotation);
+
         enemiesMask[w] = 1;
         enemiesTypes[w] = eType;
         enemiesFeatures[dstOffset + 0] = enemiesBuffer[srcOffset + 2]; // hp
-        enemiesFeatures[dstOffset + 1] = round(norm(eX, width / 2) * 10) / 10;
-        enemiesFeatures[dstOffset + 2] = round(norm(eY, width / 2) * 10) / 10;
-        enemiesFeatures[dstOffset + 3] = round(norm(eVx, QUANT) * 10) / 10;
-        enemiesFeatures[dstOffset + 4] = round(norm(eVy, QUANT) * 10) / 10;
+        enemiesFeatures[dstOffset + 1] = norm(locX, QUANT);
+        enemiesFeatures[dstOffset + 2] = norm(locY, QUANT);
+        enemiesFeatures[dstOffset + 3] = norm(locVx, QUANT);
+        enemiesFeatures[dstOffset + 4] = norm(locVy, QUANT);
     }
 
     // ---- Allies features ----
@@ -153,13 +160,16 @@ export function prepareInputArrays(
         const aVx = alliesBuffer[srcOffset + 5];
         const aVy = alliesBuffer[srcOffset + 6];
 
+        const [locX, locY] = rotateVector(aX - tankX, aY - tankY, invRotation);
+        const [locVx, locVy] = rotateVector(aVx - speedX, aVy - speedY, invRotation);
+
         alliesMask[w] = 1;
         alliesTypes[w] = aType;
         alliesFeatures[dstOffset + 0] = alliesBuffer[srcOffset + 2]; // hp
-        alliesFeatures[dstOffset + 1] = round(norm(aX, width / 2) * 10) / 10;
-        alliesFeatures[dstOffset + 2] = round(norm(aY, width / 2) * 10) / 10;
-        alliesFeatures[dstOffset + 3] = round(norm(aVx, QUANT) * 10) / 10;
-        alliesFeatures[dstOffset + 4] = round(norm(aVy, QUANT) * 10) / 10;
+        alliesFeatures[dstOffset + 1] = norm(locX, QUANT);
+        alliesFeatures[dstOffset + 2] = norm(locY, QUANT);
+        alliesFeatures[dstOffset + 3] = norm(locVx, QUANT);
+        alliesFeatures[dstOffset + 4] = norm(locVy, QUANT);
     }
 
     // ---- Bullets features ----
@@ -194,7 +204,7 @@ export function prepareInputArrays(
     }
 
     // ---- Environment rays features ----
-    // Format: [rayDirX, rayDirY, hitType, x, y, radius, distance] -> features: [locRayDirX, locRayDirY, locX, locY, radius, distance] + hitType for embedding
+    // Format: [rayDirX, rayDirY, hitType, distance] -> features: [locRayDirX, locRayDirY, distance] + hitType for embedding
     const envRaysFeatures = new Float32Array(ENV_RAY_SLOTS * ENV_RAY_FEATURES_DIM);
     const envRaysTypes = new Int32Array(ENV_RAY_SLOTS);
     const envRaysBuffer = TankInputTensor.envRaysData.getBatch(tankEid);
@@ -206,10 +216,7 @@ export function prepareInputArrays(
         const rRayDirX = envRaysBuffer[srcOffset + 0];
         const rRayDirY = envRaysBuffer[srcOffset + 1];
         const hitType = envRaysBuffer[srcOffset + 2];
-        const rX = envRaysBuffer[srcOffset + 3];
-        const rY = envRaysBuffer[srcOffset + 4];
-        const rRadius = envRaysBuffer[srcOffset + 5];
-        const rDistance = envRaysBuffer[srcOffset + 6];
+        const rDistance = envRaysBuffer[srcOffset + 3];
 
         // Store hit type for embedding (0=none, 1=obstacle, 2=vehicle)
         envRaysTypes[r] = hitType;
@@ -218,18 +225,11 @@ export function prepareInputArrays(
         const [locRayDirX, locRayDirY] = rotateVector(rRayDirX, rRayDirY, invRotation);
         envRaysFeatures[dstOffset + 0] = locRayDirX;
         envRaysFeatures[dstOffset + 1] = locRayDirY;
-        envRaysFeatures[dstOffset + 5] = norm(rDistance, QUANT);
-
-        if (hitType !== 0) {
-            const [locX, locY] = rotateVector(rX - tankX, rY - tankY, invRotation);
-            envRaysFeatures[dstOffset + 2] = norm(locX, QUANT);
-            envRaysFeatures[dstOffset + 3] = norm(locY, QUANT);
-            envRaysFeatures[dstOffset + 4] = norm(rRadius, QUANT);
-        }
+        envRaysFeatures[dstOffset + 2] = norm(rDistance, QUANT);
     }
 
     // ---- Turret rays features ----
-    // Format: [rayDirX, rayDirY, hitType, x, y, vx, vy, radius, distance, aimingError] -> features: [locRayDirX, locRayDirY, locX, locY, locVx, locVy, radius, distance, aimingError] + hitType for embedding
+    // Format: [rayDirX, rayDirY, hitType, distance] -> features: [locRayDirX, locRayDirY, distance] + hitType for embedding
     const turretRaysFeatures = new Float32Array(TURRET_RAY_SLOTS * TURRET_RAY_FEATURES_DIM);
     const turretRaysTypes = new Int32Array(TURRET_RAY_SLOTS);
     const turretRaysBuffer = TankInputTensor.turretRaysData.getBatch(tankEid);
@@ -241,13 +241,7 @@ export function prepareInputArrays(
         const tRayDirX = turretRaysBuffer[srcOffset + 0];
         const tRayDirY = turretRaysBuffer[srcOffset + 1];
         const hitType = turretRaysBuffer[srcOffset + 2];
-        const tX = turretRaysBuffer[srcOffset + 3];
-        const tY = turretRaysBuffer[srcOffset + 4];
-        const tVx = turretRaysBuffer[srcOffset + 5];
-        const tVy = turretRaysBuffer[srcOffset + 6];
-        const tRadius = turretRaysBuffer[srcOffset + 7];
-        const tDistance = turretRaysBuffer[srcOffset + 8];
-        const tAimingError = turretRaysBuffer[srcOffset + 9];
+        const tDistance = turretRaysBuffer[srcOffset + 3];
 
         // Store hit type for embedding
         turretRaysTypes[r] = hitType;
@@ -256,18 +250,7 @@ export function prepareInputArrays(
         const [locRayDirX, locRayDirY] = rotateVector(tRayDirX, tRayDirY, invRotation);
         turretRaysFeatures[dstOffset + 0] = locRayDirX;
         turretRaysFeatures[dstOffset + 1] = locRayDirY;
-        turretRaysFeatures[dstOffset + 7] = norm(tDistance, QUANT);
-
-        if (hitType !== 0) {
-            const [locX, locY] = rotateVector(tX - tankX, tY - tankY, invRotation);
-            const [locVx, locVy] = rotateVector(tVx - speedX, tVy - speedY, invRotation);
-            turretRaysFeatures[dstOffset + 2] = norm(locX, QUANT);
-            turretRaysFeatures[dstOffset + 3] = norm(locY, QUANT);
-            turretRaysFeatures[dstOffset + 4] = norm(locVx, QUANT);
-            turretRaysFeatures[dstOffset + 5] = norm(locVy, QUANT);
-            turretRaysFeatures[dstOffset + 6] = norm(tRadius, QUANT);
-            turretRaysFeatures[dstOffset + 8] = tAimingError;
-        }
+        turretRaysFeatures[dstOffset + 2] = norm(tDistance, QUANT);
     }
 
     const result = {

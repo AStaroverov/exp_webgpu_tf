@@ -172,67 +172,94 @@ export function convertInputsToTokens(
     }: ReturnType<typeof createInputs>,
     dModel: number,
 ) {
-    const addTokenTypeEmbedding = (x: tf.SymbolicTensor) => {
-        const typeEmb = new VariableLayer({
-            name: `${x.name}_tokenTypeEmbedding`,
-            shape: [dModel],
-        }).apply(x) as tf.SymbolicTensor;
-        return tf.layers.add({ name: `${x.name}_withTokenTypeEmbedding` }).apply([x, typeEmb]) as tf.SymbolicTensor;
-    }
-    const reshape = (x: tf.SymbolicTensor) => {
+    const EMBEDDING_DIM = 3;
+
+    // Utility: reshape 2D [batch, features] to 3D [batch, 1, features]
+    const to3D = (x: tf.SymbolicTensor): tf.SymbolicTensor => {
+        const lastDim = x.shape[x.shape.length - 1] as number;
         return tf.layers.reshape({
-            name: `${x.name}_reshape`,
-            targetShape: [1, dModel],
+            name: `${x.name}_3d`,
+            targetShape: [1, lastDim],
         }).apply(x) as tf.SymbolicTensor;
     };
 
-    // Shared vehicle type embedding for tank, enemies, allies
+    // Token type embedding: learnable vector broadcast to match input sequence length
+    const applyTokenTypeEmbedding = (name: string, input: tf.SymbolicTensor): tf.SymbolicTensor => {
+        const seqLen = input.shape[1] as number;
+        const emb = new VariableLayer({
+            name: `${name}_tokenTypeEmbedding`,
+            shape: [EMBEDDING_DIM],
+        }).apply(input) as tf.SymbolicTensor;
+        return tf.layers.repeatVector({
+            name: `${name}_tokenTypeEmb_repeat`,
+            n: seqLen,
+        }).apply(emb) as tf.SymbolicTensor;
+    };
+
+    // Project input concatenated with embeddings to dModel
+    const projectWithEmbeddings = (
+        name: string,
+        input: tf.SymbolicTensor,
+        ...typeEmbs: tf.SymbolicTensor[]
+    ): tf.SymbolicTensor => {
+        const parts = [input, ...typeEmbs];
+        const concat = tf.layers.concatenate({ name: `${name}_concat`, axis: -1 })
+            .apply(parts) as tf.SymbolicTensor;
+            
+        return createDenseLayer({
+            name: `${name}_tokProj`,
+            units: dModel,
+            useBias: false,
+            activation: 'linear',
+        }).apply(concat) as tf.SymbolicTensor;
+    };
+
+    // Shared vehicle type embedding for tank, enemies, allies (small axial embedding)
     const vehicleTypeEmbedding = tf.layers.embedding({
         name: 'vehicleType_sharedEmbedding',
         inputDim: VEHICLE_TYPE_COUNT,
-        outputDim: dModel,
+        outputDim: EMBEDDING_DIM,
         embeddingsInitializer: 'glorotNormal',
     });
 
-    // Tank: project features + add vehicle type embedding
-    const tankProj = reshape(addTokenTypeEmbedding(tokenProj(tankInput, dModel, tankInput.name)));
-    const tankTypeEmb = vehicleTypeEmbedding.apply(tankTypeInput) as tf.SymbolicTensor;
-    const tankTok = tf.layers.add({ name: 'tank_withVehicleTypeEmbedding' })
-        .apply([tankProj, tankTypeEmb]) as tf.SymbolicTensor;
+    // Tank: expand to 3D [batch, 1, features], concat with embeddings, then project
+    // All outputs must be 3D for transformer
+    const tankInput3D = to3D(tankInput);
+    const tankTokenTypeEmb = applyTokenTypeEmbedding('tank', tankInput3D);
+    const tankVehicleEmb = vehicleTypeEmbedding.apply(tankTypeInput) as tf.SymbolicTensor;
+    const tankTok = projectWithEmbeddings('tank', tankInput3D, tankTokenTypeEmb, tankVehicleEmb);
 
-    // Enemies: project features + add vehicle type embedding
-    const enemiesProj = addTokenTypeEmbedding(tokenProj(enemiesInput, dModel, enemiesInput.name));
-    const enemiesTypeEmb = vehicleTypeEmbedding.apply(enemiesTypesInput) as tf.SymbolicTensor;
-    const enemiesTok = tf.layers.add({ name: 'enemies_withVehicleTypeEmbedding' })
-        .apply([enemiesProj, enemiesTypeEmb]) as tf.SymbolicTensor;
+    // Enemies: concat input + token type emb + vehicle type emb, then project
+    const enemiesTokenTypeEmb = applyTokenTypeEmbedding('enemies', enemiesInput);
+    const enemiesVehicleEmb = vehicleTypeEmbedding.apply(enemiesTypesInput) as tf.SymbolicTensor;
+    const enemiesTok = projectWithEmbeddings('enemies', enemiesInput, enemiesTokenTypeEmb, enemiesVehicleEmb);
 
-    // Allies: project features + add vehicle type embedding
-    const alliesProj = addTokenTypeEmbedding(tokenProj(alliesInput, dModel, alliesInput.name));
-    const alliesTypeEmb = vehicleTypeEmbedding.apply(alliesTypesInput) as tf.SymbolicTensor;
-    const alliesTok = tf.layers.add({ name: 'allies_withVehicleTypeEmbedding' })
-        .apply([alliesProj, alliesTypeEmb]) as tf.SymbolicTensor;
+    // Allies: concat input + token type emb + vehicle type emb, then project
+    const alliesTokenTypeEmb = applyTokenTypeEmbedding('allies', alliesInput);
+    const alliesVehicleEmb = vehicleTypeEmbedding.apply(alliesTypesInput) as tf.SymbolicTensor;
+    const alliesTok = projectWithEmbeddings('allies', alliesInput, alliesTokenTypeEmb, alliesVehicleEmb);
 
-    const bulletsTok = tokenProj(bulletsInput, dModel, bulletsInput.name);
+    // Bullets: concat input + token type emb, then project (no categorical embedding)
+    const bulletsTokenTypeEmb = applyTokenTypeEmbedding('bullets', bulletsInput);
+    const bulletsTok = projectWithEmbeddings('bullets', bulletsInput, bulletsTokenTypeEmb);
 
-    // Shared hit type embedding for all rays (same semantic: NONE, OBSTACLE, ENEMY_VEHICLE, ALLY_VEHICLE)
+    // Shared hit type embedding for all rays (small axial embedding)
     const rayHitTypeEmbedding = tf.layers.embedding({
         name: 'rayHitType_sharedEmbedding',
         inputDim: RAY_HIT_TYPE_COUNT,
-        outputDim: dModel,
+        outputDim: EMBEDDING_DIM,
         embeddingsInitializer: 'glorotNormal',
     });
 
-    // Environment rays: project features and add hit type embedding
-    const envRaysProj = addTokenTypeEmbedding(tokenProj(envRaysInput, dModel, envRaysInput.name));
-    const envRaysTypeEmb = rayHitTypeEmbedding.apply(envRaysTypes) as tf.SymbolicTensor;
-    const envRaysTok = tf.layers.add({ name: 'envRays_withHitTypeEmbedding' })
-        .apply([envRaysProj, envRaysTypeEmb]) as tf.SymbolicTensor;
+    // Environment rays: concat input + token type emb + hit type emb, then project
+    const envRaysTokenTypeEmb = applyTokenTypeEmbedding('envRays', envRaysInput);
+    const envRaysHitEmb = rayHitTypeEmbedding.apply(envRaysTypes) as tf.SymbolicTensor;
+    const envRaysTok = projectWithEmbeddings('envRays', envRaysInput, envRaysTokenTypeEmb, envRaysHitEmb);
 
-    // Turret rays: project features and add hit type embedding
-    const turretRaysProj = addTokenTypeEmbedding(tokenProj(turretRaysInput, dModel, turretRaysInput.name));
-    const turretRaysTypeEmb = rayHitTypeEmbedding.apply(turretRaysTypes) as tf.SymbolicTensor;
-    const turretRaysTok = tf.layers.add({ name: 'turretRays_withHitTypeEmbedding' })
-        .apply([turretRaysProj, turretRaysTypeEmb]) as tf.SymbolicTensor;
+    // Turret rays: concat input + token type emb + hit type emb, then project
+    const turretRaysTokenTypeEmb = applyTokenTypeEmbedding('turretRays', turretRaysInput);
+    const turretRaysHitEmb = rayHitTypeEmbedding.apply(turretRaysTypes) as tf.SymbolicTensor;
+    const turretRaysTok = projectWithEmbeddings('turretRays', turretRaysInput, turretRaysTokenTypeEmb, turretRaysHitEmb);
 
     return {
         tankTok,

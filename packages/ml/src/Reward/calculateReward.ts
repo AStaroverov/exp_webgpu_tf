@@ -1,7 +1,6 @@
 import { clamp } from 'lodash';
 import { hypot, max, min, smoothstep } from '../../../../lib/math.ts';
 import { HeuristicsData } from '../../../tanks/src/Game/ECS/Components/HeuristicsData.ts';
-import { RigidBodyState } from '../../../tanks/src/Game/ECS/Components/Physical.ts';
 import { getTankHealth, getTankScore } from '../../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
 import { ENV_RAY_BUFFER, ENV_RAYS_TOTAL, TankInputTensor } from '../../../tanks/src/Pilots/Components/TankState.ts';
 import { LEARNING_STEPS } from '../../../ml-common/consts.ts';
@@ -22,29 +21,29 @@ const WEIGHTS = ({
     MAP_BORDER: {
         PENALTY: -1,
     },
-    MAP_BORDER_MULTIPLIER: 1,
+    MAP_BORDER_MULTIPLIER: 0.1,
 
     DISTANCE: {
         TOO_CLOSE_PENALTY: -1,
     },
-    DISTANCE_MULTIPLIER: 0.5,
+    DISTANCE_MULTIPLIER: 1,
 });
 
 export function calculateReward(vehicleEid: number, width: number, height: number): number {
     const currentScore = getTankScore(vehicleEid);
     const currentHealth = getTankHealth(vehicleEid);
     const envRaysBuffer = TankInputTensor.envRaysData.getBatch(vehicleEid);
-    const [currentVehicleX, currentVehicleY] = RigidBodyState.position.getBatch(vehicleEid);
+    // const [currentVehicleX, currentVehicleY] = RigidBodyState.position.getBatch(vehicleEid);
 
     const scoreReward = WEIGHTS.COMMON.SCORE * currentScore * 0.33;
     const healthReward = WEIGHTS.COMMON.HEALTH * currentHealth * 10;
 
-    const mapAwarenessReward = WEIGHTS.MAP_BORDER_MULTIPLIER * calculateVehicleMapAwarenessReward(
-        width,
-        height,
-        currentVehicleX,
-        currentVehicleY,
-    );
+    // const mapAwarenessReward = WEIGHTS.MAP_BORDER_MULTIPLIER * calculateVehicleMapAwarenessReward(
+    //     width,
+    //     height,
+    //     currentVehicleX,
+    //     currentVehicleY,
+    // );
 
     const envRayPositioningReward = WEIGHTS.DISTANCE_MULTIPLIER * calculateEnvRayPositioningReward(
         envRaysBuffer,
@@ -54,7 +53,7 @@ export function calculateReward(vehicleEid: number, width: number, height: numbe
     return (0
         + scoreReward
         + healthReward
-        + mapAwarenessReward
+        // + mapAwarenessReward
         + envRayPositioningReward
     );
 }

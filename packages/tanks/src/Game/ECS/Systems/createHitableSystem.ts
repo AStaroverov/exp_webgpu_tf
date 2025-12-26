@@ -21,6 +21,7 @@ import { Parent } from '../Components/Parent.ts';
 import { Vehicle } from '../Components/Vehicle.ts';
 import { SoundType } from '../Components/Sound.ts';
 import { spawnSoundAtParent } from '../Entities/Sound.ts';
+import { Obstacle } from '../Components/Obstacle.ts';
 
 export function createHitableSystem({ world } = GameDI) {
     const hitableChanges = createChangeDetector(world, [onSet(Hitable)]);
@@ -87,7 +88,10 @@ export function createHitableSystem({ world } = GameDI) {
             const eid = restEids[i];
             if (!hitableChanges.has(eid)) continue;
 
+            const hitEids = Hitable.getHitEids(eid);
+            applyScores(eid, hitEids);
             applyDamage(eid);
+            
             if (!Hitable.isDestroyed(eid)) continue;
 
             scheduleRemoveEntity(eid);
@@ -115,16 +119,21 @@ function applyDamage(targetEid: number, { world } = GameDI) {
     Hitable.resetHits(targetEid);
 }
 
-function applyScores(vehiclePartEid: EntityId, hitEids: Float64Array, { world } = GameDI) {
+function applyScores(
+    hittableEid: EntityId, // entity that was hit
+    hitEids: Float64Array, // entities that hit the hittable
+    { world } = GameDI,
+) {
     for (const hitEid of hitEids) {
-        if (
-            hasComponent(world, vehiclePartEid, TeamRef)
-            && hasComponent(world, hitEid, TeamRef)
-            && hasComponent(world, hitEid, PlayerRef)
-        ) {
-            const vehiclePartTeamId = TeamRef.id[vehiclePartEid];
+        if (!hasComponent(world, hitEid, PlayerRef)) continue;
+        
+        const playerId = PlayerRef.id[hitEid];
+        
+        if (hasComponent(world, hittableEid, Obstacle)) {
+            Score.updateScore(playerId, -0.3); // penalty for hitting an obstacle
+        } else if (hasComponent(world, hitEid, TeamRef) && hasComponent(world, hittableEid, TeamRef)) {
+            const vehiclePartTeamId = TeamRef.id[hittableEid];
             const secondTeamId = TeamRef.id[hitEid];
-            const playerId = PlayerRef.id[hitEid];
 
             Score.updateScore(playerId, vehiclePartTeamId === secondTeamId ? -1 : 1);
         }
