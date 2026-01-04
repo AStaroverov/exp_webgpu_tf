@@ -4,9 +4,10 @@ import {
     MAX_ALLIES,
     MAX_BULLETS,
     MAX_ENEMIES,
-    ENV_RAYS_TOTAL,
-    TURRET_RAYS_COUNT,
+    RAYS_COUNT,
     RAY_HIT_TYPE_COUNT,
+    RAY_BUFFER,
+    MAX_TURRETS,
 } from '../../../tanks/src/Pilots/Components/TankState.ts';
 
 
@@ -18,27 +19,26 @@ import { AdamW } from './Optimizer/AdamW.ts';
 export { RAY_HIT_TYPE_COUNT }; // LightTank, MediumTank, HeavyTank, PlayerTank, Harvester, MeleeCar
 
 export const BATTLE_FEATURES_DIM = 2;
-export const TANK_FEATURES_DIM = 10;
+export const TANK_FEATURES_DIM = 8;
+
+export const TURRET_SLOTS = MAX_TURRETS;
+export const TURRET_FEATURES_DIM = 4;
 
 // Enemies: [hp, x, y, vx, vy]
 export const ENEMY_SLOTS = MAX_ENEMIES;
-export const ENEMY_FEATURES_DIM = 5;
+export const ENEMY_FEATURES_DIM = 5 + 1; // 1 type embedding
 
 // Allies: [hp, x, y, vx, vy]
 export const ALLY_SLOTS = MAX_ALLIES;
-export const ALLY_FEATURES_DIM = 5;
+export const ALLY_FEATURES_DIM = 5 + 1; // 1 type embedding
 
 // Bullets: [x, y, vx, vy]
 export const BULLET_SLOTS = MAX_BULLETS;
 export const BULLET_FEATURES_DIM = 4;
 
-// Environment rays: [locRayDirX, locRayDirY, distance] = 3 features per ray + hitType for embedding
-export const ENV_RAY_SLOTS = ENV_RAYS_TOTAL;
-export const ENV_RAY_FEATURES_DIM = 3;
-
-// Turret rays: [locRayDirX, locRayDirY, distance] = 3 features per ray + hitType for embedding
-export const TURRET_RAY_SLOTS = TURRET_RAYS_COUNT;
-export const TURRET_RAY_FEATURES_DIM = 3;
+// Unified rays (environment + turret rays combined)
+export const RAY_SLOTS = RAYS_COUNT;
+export const RAY_FEATURES_DIM = RAY_BUFFER - 1 + 2; // [locRootX, locRootY, locDirX, locDirY, distance, hitObstacle, hitVehicle]
 
 export const ACTION_HEAD_DIMS = [15, 15, 2, 31];
 
@@ -58,9 +58,10 @@ export function createPolicyNetwork(): tf.LayersModel {
             useBias: true,
             activation: 'linear',
             biasInitializer: 'zeros',
-            kernelInitializer: tf.initializers.randomUniform({minval: -0.03, maxval: 0.03}), 
-            noisy: true,
-            sigma: 0.03,
+            // kernelInitializer: tf.initializers.truncatedNormal({ mean: 0, stddev: 1 }),
+            // kernelInitializer: tf.initializers.randomUniform({minval: -0.03, maxval: 0.03}), 
+            // noisy: true,
+            // sigma: 0.03,
         }).apply(head) as tf.SymbolicTensor;
     });
 

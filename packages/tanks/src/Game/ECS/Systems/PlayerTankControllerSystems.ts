@@ -6,7 +6,6 @@ import { PlayerEnvDI } from '../../DI/PlayerEnvDI.ts';
 import { RenderDI } from '../../DI/RenderDI.ts';
 import { RigidBodyState } from '../Components/Physical.ts';
 import { normalizeAngle } from '../../../../../../lib/math.ts';
-import { GameMap } from '../Entities/GameMap.ts';
 import { entityExists, hasComponent } from 'bitecs';
 import { GameDI } from '../../DI/GameDI.ts';
 
@@ -95,9 +94,8 @@ export function createPlayerTankTurretRotationSystem({ world } = GameDI) {
             const turretPos = RigidBodyState.position.getBatch(Tank.turretEId[PlayerEnvDI.tankEid!]);
 
             // Convert screen coordinates to world coordinates
-            const [worldX, worldY] = screenToWorld(lastEvent.clientX, lastEvent.clientY);
+            const [worldX, worldY] = screenToWorld(lastEvent.clientX, lastEvent.clientY, turretPos);
 
-            // Глобальный угол от дула к позиции цели
             const targetRot = Math.atan2(worldY - turretPos[1], worldX - turretPos[0]);
             const relTurretRot = normalizeAngle(turretRot - vehicleRot);
             const relTargetTurretRot = normalizeAngle(targetRot - vehicleRot);
@@ -169,7 +167,7 @@ function isPlayerExist({ world } = GameDI, { tankEid } = PlayerEnvDI) {
     return !isNil(tankEid) && entityExists(world, tankEid)
 }
 
-function screenToWorld(screenX: number, screenY: number): [number, number] {
+function screenToWorld(screenX: number, screenY: number, turretPos: Float64Array): [number, number] {
     if (!RenderDI.canvas) return [screenX, screenY];
 
     const rect = RenderDI.canvas.getBoundingClientRect();
@@ -179,8 +177,8 @@ function screenToWorld(screenX: number, screenY: number): [number, number] {
     const normalizedY = (screenY - rect.top) / rect.height - 0.5;
     
     // Convert to world coordinates relative to camera (canvas center = camera position)
-    const worldX = GameMap.offsetX + normalizedX * rect.width;
-    const worldY = GameMap.offsetY + normalizedY * rect.height;
+    const worldX = turretPos[0] + normalizedX * rect.width;
+    const worldY = turretPos[1] + normalizedY * rect.height;
 
     return [worldX, worldY];
 }

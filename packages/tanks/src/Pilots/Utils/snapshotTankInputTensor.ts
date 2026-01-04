@@ -6,7 +6,6 @@ import { GameDI } from '../../Game/DI/GameDI.ts';
 import { getEntityIdByPhysicalId, RigidBodyRef, RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
 import { PlayerRef } from '../../Game/ECS/Components/PlayerRef.ts';
 import { Tank } from '../../Game/ECS/Components/Tank.ts';
-import { Firearms } from '../../Game/ECS/Components/Firearms.ts';
 import { Vehicle } from '../../Game/ECS/Components/Vehicle.ts';
 import { TeamRef } from '../../Game/ECS/Components/TeamRef.ts';
 import { GameMap } from '../../Game/ECS/Entities/GameMap.ts';
@@ -17,23 +16,23 @@ import {
     MAX_BULLETS,
     MAX_ENEMIES,
     TankInputTensor,
-    ENV_RAYS_FORWARD,
-    ENV_RAYS_BACKWARD,
-    ENV_RAYS_LEFT,
-    ENV_RAYS_RIGHT,
-    ENV_RAY_LENGTH,
-    ENV_RAY_SECTOR_ANGLE,
-    RayHitType,
-    TURRET_RAY_LENGTH,
+    ENV_RAYS_COUNT,
+    ENV_RAYS_OFFSET,
+    TARGET_RAYS_COUNT,
+    TARGET_RAYS_OFFSET,
+    RAY_LENGTH,
+    RayHitType
 } from '../Components/TankState.ts';
 
 import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { Parent } from '../../Game/ECS/Components/Parent.ts';
 import { ALL_VEHICLE_PARTS_MASK, CollisionGroupConfig } from '../../Game/Config/physics.ts';
+import { randomRangeInt } from '../../../../../lib/random.ts';
 
 // Temp arrays for offset-adjusted positions
-const tempPosition = new Float64Array(2);
+const tempTankPosition = new Float64Array(2);
+const tempTurretPosition = new Float64Array(2);
 const tempEnemyPosition = new Float64Array(2);
 const tempAllyPosition = new Float64Array(2);
 const tempBulletPosition = new Float64Array(2);
@@ -47,42 +46,51 @@ const rayDir = new Vector2(0, 0);
 const ENV_RAY_COLLISION_MASK = CollisionGroupConfig.OBSTACLE | ALL_VEHICLE_PARTS_MASK;
 
 export function snapshotTankInputTensor({ world } = GameDI) {
-    const vehicleEids = query(world, [Vehicle, TankInputTensor, RigidBodyState]);
-    const offsetX = GameMap.offsetX;
-    const offsetY = GameMap.offsetY;
-
+    TankInputTensor.resetRaysData();
+    TankInputTensor.resetTurretsData();
     TankInputTensor.resetEnemiesCoords();
     TankInputTensor.resetAlliesCoords();
     TankInputTensor.resetBulletsCoords();
-    TankInputTensor.resetEnvRaysData();
-    TankInputTensor.resetTurretRaysData();
+    
+    const vehicleEids = query(world, [Vehicle, TankInputTensor, RigidBodyState]);
 
     for (let i = 0; i < vehicleEids.length; i++) {
         const vehicleEid = vehicleEids[i];
+        const turretEid = Tank.turretEId[vehicleEid];
+        const myTeamId = TeamRef.id[vehicleEid];
 
         // Set vehicle data (with offset-adjusted position)
         const health = getTankHealth(vehicleEid);
         const position = RigidBodyState.position.getBatch(vehicleEid);
-        tempPosition[0] = position[0] - offsetX;
-        tempPosition[1] = position[1] - offsetY;
         const rotation = RigidBodyState.rotation[vehicleEid];
         const linvel = RigidBodyState.linvel.getBatch(vehicleEid);
         const approximateColliderRadius = HeuristicsData.approxColliderRadius[vehicleEid];
-        const turretRotation = RigidBodyState.rotation[Tank.turretEId[vehicleEid]];
         const tankType = Vehicle.type[vehicleEid];
-
+        
+        tempTankPosition[0] = position[0] - GameMap.offsetX;
+        tempTankPosition[1] = position[1] - GameMap.offsetY;
         TankInputTensor.setTankData(
             vehicleEid,
             tankType,
             health,
-            tempPosition,
+            tempTankPosition,
             rotation,
             linvel,
-            turretRotation,
             approximateColliderRadius,
         );
+        
+        const turretPosition = RigidBodyState.position.getBatch(turretEid);
+        const turretRotation = RigidBodyState.rotation[turretEid];
 
-        const myTeamId = TeamRef.id[vehicleEid];
+        tempTurretPosition[0] = turretPosition[0] - GameMap.offsetX;
+        tempTurretPosition[1] = turretPosition[1] - GameMap.offsetY;
+        TankInputTensor.setTurretsData(
+            vehicleEid,
+            0,
+            turretEid,
+            tempTurretPosition,
+            turretRotation,
+        );
 
         // Find closest enemies
         const enemiesEids = findTankEnemiesEids(vehicleEid);
@@ -90,8 +98,8 @@ export function snapshotTankInputTensor({ world } = GameDI) {
         for (let j = 0; j < enemiesEids.length; j++) {
             const enemyEid = enemiesEids[j];
             const enemyPosition = RigidBodyState.position.getBatch(enemyEid);
-            tempEnemyPosition[0] = enemyPosition[0] - offsetX;
-            tempEnemyPosition[1] = enemyPosition[1] - offsetY;
+            tempEnemyPosition[0] = enemyPosition[0] - GameMap.offsetX;
+            tempEnemyPosition[1] = enemyPosition[1] - GameMap.offsetY;
 
             TankInputTensor.setEnemiesData(
                 vehicleEid,
@@ -110,8 +118,8 @@ export function snapshotTankInputTensor({ world } = GameDI) {
         for (let j = 0; j < alliesEids.length; j++) {
             const allyEid = alliesEids[j];
             const allyPosition = RigidBodyState.position.getBatch(allyEid);
-            tempAllyPosition[0] = allyPosition[0] - offsetX;
-            tempAllyPosition[1] = allyPosition[1] - offsetY;
+            tempAllyPosition[0] = allyPosition[0] - GameMap.offsetX;
+            tempAllyPosition[1] = allyPosition[1] - GameMap.offsetY;
 
             TankInputTensor.setAlliesData(
                 vehicleEid,
@@ -124,14 +132,32 @@ export function snapshotTankInputTensor({ world } = GameDI) {
             );
         }
 
+        // Cast rays
+        castEnvironmentRays(
+            vehicleEid,
+            myTeamId,
+            position[0],
+            position[1],
+            rotation,
+        );
+        
+        // Cast direct rays to enemies and allies
+        castDirectRaysToTargets(
+            vehicleEid,
+            myTeamId,
+            position[0],
+            position[1],
+            [...enemiesEids, ...alliesEids],
+        );
+
         // Find closest bullets
         const bulletsEids = findTankDangerBullets(vehicleEid);
 
         for (let j = 0; j < bulletsEids.length; j++) {
             const bulletEid = bulletsEids[j];
             const bulletPosition = RigidBodyState.position.getBatch(bulletEid);
-            tempBulletPosition[0] = bulletPosition[0] - offsetX;
-            tempBulletPosition[1] = bulletPosition[1] - offsetY;
+            tempBulletPosition[0] = bulletPosition[0] - GameMap.offsetX;
+            tempBulletPosition[1] = bulletPosition[1] - GameMap.offsetY;
 
             TankInputTensor.setBulletsData(
                 vehicleEid,
@@ -141,29 +167,6 @@ export function snapshotTankInputTensor({ world } = GameDI) {
                 RigidBodyState.linvel.getBatch(bulletEid),
             );
         }
-
-        castEnvironmentRays(
-            vehicleEid,
-            myTeamId,
-            position[0],
-            position[1],
-            rotation,
-        );
-
-        // Transform local bullet start position to world coordinates
-        const turretEid = Tank.turretEId[vehicleEid];
-        const turretPosition = RigidBodyState.position.getBatch(turretEid);
-        const bulletOffset = Firearms.bulletStartPosition.getBatch(turretEid);
-        const cosR = cos(turretRotation);
-        const sinR = sin(turretRotation);
-
-        castTurretRays(
-            vehicleEid,
-            myTeamId,
-            turretPosition[0] + bulletOffset[0] * cosR - bulletOffset[1] * sinR,
-            turretPosition[1] + bulletOffset[0] * sinR + bulletOffset[1] * cosR,
-            turretRotation,
-        );
     }
 }
 
@@ -191,110 +194,152 @@ function createExcludeOwnVehiclePredicate(
     };
 }
 
-/**
- * Cast 12 rays around the agent: 5 forward, 5 backward, 1 left, 1 right
- * Forward/backward groups cover sector angle, left/right are single perpendicular rays
- */
-function castEnvironmentRays(
-    vehicleEid: EntityId,
+function castRays(
+    parentEid: EntityId,
     myTeamId: number,
     posX: number,
     posY: number,
     rotation: number,
+    config: typeof envRayConfig,
     { physicalWorld } = GameDI,
 ) {
     rayOrigin.x = posX;
     rayOrigin.y = posY;
 
-    const filterPredicate = createExcludeOwnVehiclePredicate(vehicleEid);
+    const filterPredicate = createExcludeOwnVehiclePredicate(parentEid);
 
-    // Ray sectors: [centerAngle, rayCount, indexOffset]
-    const sectors: [number, number, number][] = [
-        // Forward
-        [rotation, ENV_RAYS_FORWARD, 0],                                                            
-        // Backward
-        [rotation + Math.PI, ENV_RAYS_BACKWARD, ENV_RAYS_FORWARD],                                  
-        // Left
-        [rotation - Math.PI / 2, ENV_RAYS_LEFT, ENV_RAYS_FORWARD + ENV_RAYS_BACKWARD],              
-        // Right
-        [rotation + Math.PI / 2, ENV_RAYS_RIGHT, ENV_RAYS_FORWARD + ENV_RAYS_BACKWARD + ENV_RAYS_LEFT],
-    ];
+    for (let i = 0; i < config.raysCount; i++) {
+        const angle = config.getAngle(rotation, i);
+        rayDir.x = cos(angle);
+        rayDir.y = sin(angle);
 
-    for (const [centerAngle, rayCount, indexOffset] of sectors) {
-        // For single rays, just cast at center angle; for multiple rays, spread across sector
-        const startAngle = rayCount === 1 ? centerAngle : centerAngle - ENV_RAY_SECTOR_ANGLE / 2;
-        const angleStep = rayCount === 1 ? 0 : ENV_RAY_SECTOR_ANGLE / (rayCount - 1);
+        const ray = new Ray(rayOrigin, rayDir);
+        const hit = physicalWorld.castRay(
+            ray,
+            config.rayLength,
+            true,
+            undefined,
+            createCollisionGroups(CollisionGroup.ALL, ENV_RAY_COLLISION_MASK),
+            undefined,
+            undefined,
+            filterPredicate,
+        );
 
-        for (let i = 0; i < rayCount; i++) {
-            const angle = startAngle + i * angleStep;
-            rayDir.x = cos(angle);
-            rayDir.y = sin(angle);
-            const ray = new Ray(rayOrigin, rayDir);
-            const hit = physicalWorld.castRay(
-                ray,
-                ENV_RAY_LENGTH,
-                true,
-                undefined,
-                createCollisionGroups(CollisionGroup.ALL, ENV_RAY_COLLISION_MASK),
-                undefined,
-                undefined,
-                filterPredicate,
-            );
-
-            const rayHitType = hit && getRayHitType(
-                getEntityIdByPhysicalId(hit.collider.handle),
-                myTeamId
-            );
-            TankInputTensor.setEnvRayData(
-                vehicleEid,
-                indexOffset + i,
-                rayDir.x,
-                rayDir.y,
-                rayHitType ?? RayHitType.NONE,
-                hit?.timeOfImpact ?? ENV_RAY_LENGTH,
-            );
-        }
+        const rayHitType = hit && getRayHitType(
+            getEntityIdByPhysicalId(hit.collider.handle),
+            myTeamId,
+        );
+        const distance = hit?.timeOfImpact ?? config.rayLength;
+        TankInputTensor.setRayData(
+            parentEid,
+            config.indexOffset + i,
+            rayHitType ?? RayHitType.NONE,
+            rayOrigin.x - GameMap.offsetX,
+            rayOrigin.y - GameMap.offsetY,
+            rayDir.x,
+            rayDir.y,
+            distance,
+        );
     }
 }
 
 /**
- * Cast ray in turret direction
+ * Cast N rays evenly distributed around the agent (360 degrees)
+ * First ray points forward (in direction of rotation)
  */
-function castTurretRays(
-    vehicleEid: EntityId,
+const ENV_ANGLE_STEP = (2 * Math.PI) / ENV_RAYS_COUNT;
+const envRayConfig = {
+    raysCount: ENV_RAYS_COUNT,
+    rayLength: RAY_LENGTH,
+    indexOffset: ENV_RAYS_OFFSET,
+    getAngle: (rotation: number, i: number) => rotation + i * ENV_ANGLE_STEP,
+};
+function castEnvironmentRays(
+    parentEid: EntityId,
     myTeamId: number,
     posX: number,
     posY: number,
-    turretRotation: number,
+    rotation: number,
+) {
+    castRays(parentEid, myTeamId, posX, posY, rotation, envRayConfig);
+}
+
+/**
+ * Cast direct rays from the agent to each enemy and ally.
+ * These rays provide line-of-sight information to specific targets.
+ */
+function castDirectRaysToTargets(
+    parentEid: EntityId,
+    myTeamId: number,
+    posX: number,
+    posY: number,
+    targetEids: EntityId[],
+) {
+    for (let i = 0; i < TARGET_RAYS_COUNT; i++) {
+        const targetEid = targetEids[i] ?? targetEids[randomRangeInt(0, targetEids.length - 1)];
+        const targetPosition = RigidBodyState.position.getBatch(targetEid);
+        castDirectRayToTarget(
+            parentEid,
+            myTeamId,
+            posX,
+            posY,
+            targetPosition[0],
+            targetPosition[1],
+            TARGET_RAYS_OFFSET + i,
+        );
+    }
+}
+
+/**
+ * Cast a single ray from origin to target position
+ */
+function castDirectRayToTarget(
+    parentEid: EntityId,
+    myTeamId: number,
+    posX: number,
+    posY: number,
+    targetX: number,
+    targetY: number,
+    rayIndex: number,
     { physicalWorld } = GameDI,
 ) {
+    const dx = targetX - posX;
+    const dy = targetY - posY;
+    const distance = hypot(dx, dy);
+
+    rayDir.x = dx / distance;
+    rayDir.y = dy / distance;
     rayOrigin.x = posX;
     rayOrigin.y = posY;
-    rayDir.x = cos(turretRotation);
-    rayDir.y = sin(turretRotation);
-    // Create filter to exclude own vehicle parts
-    const filterPredicate = createExcludeOwnVehiclePredicate(vehicleEid);
+
+    const filterPredicate = createExcludeOwnVehiclePredicate(parentEid);
     const ray = new Ray(rayOrigin, rayDir);
     const hit = physicalWorld.castRay(
         ray,
-        TURRET_RAY_LENGTH,
+        distance,  // Ray length is the distance to target
         true,
-        undefined, // filterFlags
+        undefined,
         createCollisionGroups(CollisionGroup.ALL, ENV_RAY_COLLISION_MASK),
-        undefined, // filterExcludeCollider
-        undefined, // filterExcludeRigidBody
+        undefined,
+        undefined,
         filterPredicate,
     );
 
-    const rayHitType = hit && getRayHitType(getEntityIdByPhysicalId(hit.collider.handle), myTeamId);
+    const rayHitType = hit && getRayHitType(
+        getEntityIdByPhysicalId(hit.collider.handle),
+        myTeamId,
+    );
+    const hitDistance = hit?.timeOfImpact ?? distance;
     
-    TankInputTensor.setTurretRayData(
-        vehicleEid, 
-        0, 
+    TankInputTensor.setRayData(
+        parentEid,
+        rayIndex,
+        rayHitType ?? RayHitType.NONE,
+        posX - GameMap.offsetX,
+        posY - GameMap.offsetY,
         rayDir.x,
         rayDir.y,
-        rayHitType ?? RayHitType.NONE,
-        hit?.timeOfImpact ?? TURRET_RAY_LENGTH,
+        hitDistance,
     );
 }
 

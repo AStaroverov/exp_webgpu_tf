@@ -12,7 +12,7 @@ import { EntityId } from 'bitecs';
 import { getEngine } from './engine.ts';
 import { hashArray } from '../../../../../../lib/hashArray.ts';
 import { createTank, TankVehicleType } from '../../../Game/ECS/Entities/Tank/createTank.ts';
-import { CurrentActorAgent, TankAgent } from '../../../Pilots/Agents/CurrentActorAgent.ts';
+import { TankAgent } from '../../../Pilots/Agents/CurrentActorAgent.ts';
 import { Nil } from '../../../../../../lib/Types/index.ts';
 import { getRegistratedAgents } from '../../../Pilots/Components/Pilot.ts';
 import { PLAYER_TEAM_ID } from './def.ts';
@@ -26,6 +26,7 @@ import { getTeamSpawnPosition, allocateSpawnCell, CellContent, findNextAvailable
 import { getValue } from '../../../../../../lib/Rx/getValue.ts';
 import { spawnSpiceCluster } from '../../../Game/ECS/Entities/Spice/Spice.ts';
 import { createSpiceCollector } from '../../../Game/ECS/Entities/SpiceCollector/SpiceCollector.ts';
+import { getLoadedAgent } from '../../../Pilots/Agents/LoadedAgent.ts';
 
 export function addTank(slot: number, teamId: number, vehicleType: TankVehicleType) {
     const { x, y } = getTeamSpawnPosition(teamId, slot + 1);
@@ -199,7 +200,7 @@ export const finalizeGameState = async () => {
 
     for (let i = 0; i < playerTeamEids.length; i++) {
         const vehicleEid = addTank(i, 1, getVehicleType(playerTeamEids[i]) as TankVehicleType);
-        const agent = new CurrentActorAgent(vehicleEid, false);
+        const agent = getLoadedAgent(vehicleEid, '/assets/models/v1');
         setPilotAgent(vehicleEid, agent);
     }
 

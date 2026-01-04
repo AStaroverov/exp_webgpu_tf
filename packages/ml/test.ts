@@ -6,7 +6,7 @@ import { createPlayer } from '../tanks/src/Game/ECS/Entities/Player.ts';
 import { createMediumTank } from '../tanks/src/Game/ECS/Entities/Tank/Medium/MediumTank.ts';
 import { createPilotsPlugin } from '../tanks/src/Pilots/createPilotsPlugin.ts';
 import { snapshotTankInputTensor } from '../tanks/src/Pilots/Utils/snapshotTankInputTensor.ts';
-import { calculateActionReward, calculateStateReward } from './src/Reward/calculateReward.ts';
+import { calculateActionReward, WEIGHTS } from './src/Reward/calculateReward.ts';
 import { createBuilding } from '../tanks/src/Game/ECS/Entities/Building/Building.ts';
 
 const game = createGame({ width: 1200, height: 1000 });
@@ -15,8 +15,8 @@ const pilotsPlugin = createPilotsPlugin(game);
 pilotsPlugin.toggle(true);
 
 createBuilding({
-    x: 100,
-    y: 100,
+    x: 500,
+    y: 300,
     rotation: 0,
     color: [1, 0, 0, 1],
 });
@@ -30,7 +30,7 @@ const tanks = [
         playerId: createPlayer(0),
         teamId: 0,
         x: 300,
-        y: 100,
+        y: 300,
         rotation: 0,
         color: [1, 0, 0.5, 1],
     }),
@@ -45,7 +45,7 @@ const tanks = [
     createMediumTank({
         playerId: createPlayer(1),
         teamId: 1,
-        x: 400,
+        x: 800,
         y: 300,
         rotation: Math.PI / 1.3,
         color: [1, 1, 0, 1],
@@ -71,8 +71,13 @@ frameTasks.addInterval(() => {
     gameTick(16.66);
 
     if (i > 10 && i % 3 === 0) {
-        const newActionReward = calculateActionReward(tanks[0], GameDI.width, GameDI.height);
-        const reward = calculateStateReward(tanks[0], GameDI.width, GameDI.height) +(actionReward ? newActionReward - actionReward : 0);
+        const newActionReward = calculateActionReward(tanks[0], WEIGHTS);
+        const reward = (actionReward !== undefined ? newActionReward - actionReward : 0);
+        
+        if (Math.abs(reward) > 0.01) {
+            console.log(reward.toFixed(2));
+        }
+        
         actionReward = newActionReward;
 
         snapshotTankInputTensor();

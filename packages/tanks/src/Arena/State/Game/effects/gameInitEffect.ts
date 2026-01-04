@@ -43,6 +43,7 @@ const fillPlayerSlotsOnInit$ = gameStoped$.pipe(
         const engine = getEngine();
         const harvesterEid = addHarvester()
         engine.setPlayerVehicle(harvesterEid);
+        engine.setCameraTarget(harvesterEid);
     }),
 );
 

@@ -1,16 +1,14 @@
-import { clamp } from 'lodash';
-import { lerp } from '../../lib/math.ts';
-import { LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
+import { TICK_TIME_SIMULATION } from './consts.ts';
 
 export const CONFIG = {
-    clipNorm: 5,
+    clipNorm: 1,
 
     gamma: (iteration: number) => {
-        return 0.97;//lerp(0.97, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
+        return 0.97;//lerp(0.95, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
     },
 
     policyEntropy: (iteration: number) => {
-        return lerp(0.01, 0.1, 1 - clamp(iteration / LEARNING_STEPS, 0, 1));
+        return 0;//lerp(0.01, 0.1, 1 - clamp(iteration / LEARNING_STEPS, 0, 1));
     },
 
     policyEpochs: (_iter: number) => 4,
@@ -28,7 +26,7 @@ export const CONFIG = {
             target: 0.01,
             low: 0.007,
         },
-        initial: 5e-4,
+        initial: 1e-5,
         multHigh: 0.95,
         multLow: 1.01,
         min: 1e-5,

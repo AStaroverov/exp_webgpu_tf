@@ -8,7 +8,6 @@ import { Children } from '../../Components/Children.ts';
 import { Debris } from '../../Components/Debris.ts';
 import { Parent } from '../../Components/Parent.ts';
 import { PlayerRef } from '../../Components/PlayerRef.ts';
-import { Score } from '../../Components/Score.ts';
 import { Tank } from '../../Components/Tank.ts';
 import { Vehicle } from '../../Components/Vehicle.ts';
 import { VehiclePart, VehiclePartCaterpillar } from '../../Components/VehiclePart.ts';
@@ -137,12 +136,6 @@ export function getTankHealth(tankEid: number): number {
     const health = smoothstep(HEALTH_THRESHOLD, 1, absHealth);
 
     return health;
-}
-
-export function getTankScore(tankEid: number): number {
-    const playerId = PlayerRef.id[tankEid];
-    const score = Score.positiveScore[playerId] + Score.negativeScore[playerId] * 1.3;
-    return score;
 }
 
 export function getTankTeamId(tankEid: number) {

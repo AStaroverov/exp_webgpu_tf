@@ -38,9 +38,9 @@ export function createSandstormSystem({ canvas, device } = RenderDI) {
         device.queue.writeBuffer(gpuShader.uniforms.windDirection.getGPUBuffer(device), 0, windDirectionBuffer);
         device.queue.writeBuffer(gpuShader.uniforms.uMapOffset.getGPUBuffer(device), 0, mapOffsetBuffer);
 
-        renderPass.setBindGroup(0, bindGroup);
-        renderPass.setPipeline(pipeline);
-        renderPass.draw(6, 1, 0, 0);
+        // renderPass.setBindGroup(0, bindGroup);
+        // renderPass.setPipeline(pipeline);
+        // renderPass.draw(6, 1, 0, 0);
     };
 }
 

@@ -3,6 +3,9 @@ import { NestedArray, TypedArray } from 'renderer/src/utils.ts';
 import { delegate } from 'renderer/src/delegate.ts';
 import { component } from 'renderer/src/ECS/utils.ts';
 
+export const MAX_TURRETS = 1;
+export const TURRET_BUFFER = 4; // [eid, x, y, rotation]
+
 export const MAX_ENEMIES = 5;
 export const ENEMY_BUFFER = 7; // [id, type, hp, x, y, vx, vy]
 export const MAX_ALLIES = 5;
@@ -10,21 +13,20 @@ export const ALLY_BUFFER = 7; // [id, type, hp, x, y, vx, vy]
 export const MAX_BULLETS = 8;
 export const BULLET_BUFFER = 5; // [id, x, y, vx, vy]
 
-// Environment rays configuration
-export const ENV_RAYS_FORWARD = 5;
-export const ENV_RAYS_BACKWARD = 5;
-export const ENV_RAYS_LEFT = 1;
-export const ENV_RAYS_RIGHT = 1;
-export const ENV_RAYS_TOTAL = ENV_RAYS_FORWARD + ENV_RAYS_BACKWARD + ENV_RAYS_LEFT + ENV_RAYS_RIGHT;
-export const ENV_RAY_BUFFER = 4; // [rayDirX, rayDirY, hitType, distance]
-export const ENV_RAY_LENGTH = 800;
-export const ENV_RAY_SECTOR_ANGLE = Math.PI / 3; // 60 degrees
+// Rays configuration
+export const RAY_LENGTH = 1200;
+export const RAY_BUFFER = 6; // [hitType, rootX, rootY, dirX, dirY, distance]
 
-// Turret rays configuration
-export const TURRET_RAY_LENGTH = 1200;
-export const TURRET_RAYS_COUNT = 1;
-export const TURRET_RAY_BUFFER = 4; // [rayDirX, rayDirY, hitType, distance]
-export const TURRET_RAY_ANGLE_OFFSET = Math.PI / 36; // 5 degrees offset for side rays
+// Environment rays - evenly distributed around the tank (first 32 rays)
+export const ENV_RAYS_COUNT = 32;
+export const ENV_RAYS_OFFSET = 0;
+
+// Direct rays to targets (enemies + allies)
+export const TARGET_RAYS_COUNT = MAX_ENEMIES + MAX_ALLIES;
+export const TARGET_RAYS_OFFSET = ENV_RAYS_COUNT;
+
+// Total rays count
+export const RAYS_COUNT = ENV_RAYS_COUNT + TARGET_RAYS_COUNT;
 
 // Hit types for rays
 export const enum RayHitType {
@@ -36,29 +38,29 @@ export const enum RayHitType {
 export const RAY_HIT_TYPE_COUNT = 4;
 
 export const TankInputTensor = component({
-    // Tank
+    // ---- Tank ----
     tankType: TypedArray.f64(delegate.defaultSize),
     health: TypedArray.f64(delegate.defaultSize),
     position: NestedArray.f64(2, delegate.defaultSize),
     rotation: TypedArray.f64(delegate.defaultSize),
     speed: NestedArray.f64(2, delegate.defaultSize),
-    turretRotation: TypedArray.f64(delegate.defaultSize),
     colliderRadius: TypedArray.f64(delegate.defaultSize),
+    
+    // ---- Rays (environment + turret combined) ----
+    raysData: NestedArray.f64(RAY_BUFFER * RAYS_COUNT, delegate.defaultSize),
 
-    // Enemies [id, hp, x, y]
+    // ---- Turrets ----
+    turretsData: NestedArray.f64(TURRET_BUFFER * MAX_TURRETS, delegate.defaultSize),
+
+    // ---- Enemies ----
     enemiesData: NestedArray.f64(ENEMY_BUFFER * MAX_ENEMIES, delegate.defaultSize),
 
-    // Allies [id, hp, x, y]
+    // ---- Allies ----
     alliesData: NestedArray.f64(ALLY_BUFFER * MAX_ALLIES, delegate.defaultSize),
 
-    // Bullets [id, x, y, vx, vy]
+    // ---- Bullets ----
     bulletsData: NestedArray.f64(BULLET_BUFFER * MAX_BULLETS, delegate.defaultSize),
 
-    // Environment rays [rayDirX, rayDirY, hitType, distance] * ENV_RAYS_TOTAL
-    envRaysData: NestedArray.f64(ENV_RAY_BUFFER * ENV_RAYS_TOTAL, delegate.defaultSize),
-
-    // Turret rays [rayDirX, rayDirY, hitType, distance] * TURRET_RAYS_COUNT
-    turretRaysData: NestedArray.f64(TURRET_RAY_BUFFER * TURRET_RAYS_COUNT, delegate.defaultSize),
 
     addComponent(world: World, eid: number) {
         addComponent(world, eid, TankInputTensor);
@@ -67,13 +69,14 @@ export const TankInputTensor = component({
         TankInputTensor.position.getBatch(eid).fill(0);
         TankInputTensor.rotation[eid] = 0;
         TankInputTensor.speed.getBatch(eid).fill(0);
-        TankInputTensor.turretRotation[eid] = 0;
         TankInputTensor.colliderRadius[eid] = 0;
+        TankInputTensor.raysData.getBatch(eid).fill(0);
+
+        TankInputTensor.turretsData.getBatch(eid).fill(0);
+
         TankInputTensor.enemiesData.getBatch(eid).fill(0);
         TankInputTensor.alliesData.getBatch(eid).fill(0);
         TankInputTensor.bulletsData.getBatch(eid).fill(0);
-        TankInputTensor.envRaysData.getBatch(eid).fill(0);
-        TankInputTensor.turretRaysData.getBatch(eid).fill(0);
     },
 
     // Methods
@@ -84,7 +87,6 @@ export const TankInputTensor = component({
         position: Float64Array,
         rotation: number,
         speed: Float64Array,
-        turretRotation: number,
         colliderRadius: number,
     ) {
         TankInputTensor.tankType[eid] = tankType;
@@ -92,8 +94,24 @@ export const TankInputTensor = component({
         TankInputTensor.position.setBatch(eid, position);
         TankInputTensor.rotation[eid] = rotation;
         TankInputTensor.speed.setBatch(eid, speed);
-        TankInputTensor.turretRotation[eid] = turretRotation;
         TankInputTensor.colliderRadius[eid] = colliderRadius;
+    },
+
+    setTurretsData(
+        eid: number,
+        index: number,
+        turretEid: EntityId,
+        position: Float64Array,
+        rotation: number,
+    ) {
+        const offset = index * TURRET_BUFFER;
+        TankInputTensor.turretsData.set(eid, offset + 0, turretEid);
+        TankInputTensor.turretsData.set(eid, offset + 1, position[0]);
+        TankInputTensor.turretsData.set(eid, offset + 2, position[1]);
+        TankInputTensor.turretsData.set(eid, offset + 3, rotation);
+    },
+    resetTurretsData() {
+        TankInputTensor.turretsData.fill(0);
     },
 
     setEnemiesData(
@@ -152,39 +170,25 @@ export const TankInputTensor = component({
         TankInputTensor.bulletsData.fill(0);
     },
 
-    setEnvRayData(
+    setRayData(
         eid: number,
         index: number,
-        rayDirX: number,
-        rayDirY: number,
         hitType: RayHitType,
+        rootX: number,
+        rootY: number,
+        dirX: number,
+        dirY: number,
         distance: number,
     ) {
-        const offset = index * ENV_RAY_BUFFER;
-        TankInputTensor.envRaysData.set(eid, offset + 0, rayDirX);
-        TankInputTensor.envRaysData.set(eid, offset + 1, rayDirY);
-        TankInputTensor.envRaysData.set(eid, offset + 2, hitType);
-        TankInputTensor.envRaysData.set(eid, offset + 3, distance);
+        const offset = index * RAY_BUFFER;
+        TankInputTensor.raysData.set(eid, offset + 0, hitType);
+        TankInputTensor.raysData.set(eid, offset + 1, rootX);
+        TankInputTensor.raysData.set(eid, offset + 2, rootY);
+        TankInputTensor.raysData.set(eid, offset + 3, dirX);
+        TankInputTensor.raysData.set(eid, offset + 4, dirY);
+        TankInputTensor.raysData.set(eid, offset + 5, distance);
     },
-    resetEnvRaysData() {
-        TankInputTensor.envRaysData.fill(0);
-    },
-
-    setTurretRayData(
-        eid: number,
-        index: number,
-        rayDirX: number,
-        rayDirY: number,
-        hitType: RayHitType,
-        distance: number,
-    ) {
-        const offset = index * TURRET_RAY_BUFFER;
-        TankInputTensor.turretRaysData.set(eid, offset + 0, rayDirX);
-        TankInputTensor.turretRaysData.set(eid, offset + 1, rayDirY);
-        TankInputTensor.turretRaysData.set(eid, offset + 2, hitType);
-        TankInputTensor.turretRaysData.set(eid, offset + 3, distance);
-    },
-    resetTurretRaysData() {
-        TankInputTensor.turretRaysData.fill(0);
+    resetRaysData() {
+        TankInputTensor.raysData.fill(0);
     },
 });

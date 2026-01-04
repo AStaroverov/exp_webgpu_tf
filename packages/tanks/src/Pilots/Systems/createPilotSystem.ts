@@ -13,27 +13,22 @@ export function createPilotSystem() {
     return () => {
         if (!PilotsState.enabled) return;
         if (!getPilotAgents().every(isSynced)) return;
-
-        const shouldAction = frame++ % SNAPSHOT_EVERY === 0;
-
-        if (shouldAction) {
-            for (const agent of currentPilots) {
-                agent.evaluateTankBehaviour?.(GameDI.width, GameDI.height, frame, 0);
-            }
+        if (frame++ % SNAPSHOT_EVERY !== 0) return;
+        
+        for (const agent of currentPilots) {
+            agent.evaluateTankBehaviour?.(GameDI.width, GameDI.height, frame, 0);
         }
 
-        if (shouldAction) {
-            snapshotTankInputTensor();
+        snapshotTankInputTensor();
 
-            currentPilots = getAlivePilotAgents();
+        currentPilots = getAlivePilotAgents();
 
-            for (const agent of currentPilots) {
-                agent.scheduleUpdateTankBehaviour(GameDI.width, GameDI.height, frame);
-            }
+        for (const agent of currentPilots) {
+            agent.scheduleUpdateTankBehaviour(GameDI.width, GameDI.height, frame);
+        }
 
-            for (const agent of currentPilots) {
-                agent.applyUpdateTankBehaviour(GameDI.width, GameDI.height, frame);
-            }
+        for (const agent of currentPilots) {
+            agent.applyUpdateTankBehaviour(GameDI.width, GameDI.height, frame);
         }
     };
 }

@@ -5,14 +5,9 @@ import { noiseWGSL } from '../noise.wgsl.ts';
 
 export const shaderMeta = new ShaderMeta(
     {
-        screenSize: new VariableMeta('uScreenSize', VariableKind.Uniform, `vec2<f32>`),
         time: new VariableMeta('uTime', VariableKind.Uniform, `f32`),
-        mapOffset: new VariableMeta('uMapOffset', VariableKind.Uniform, `vec2<f32>`),
-        tileSize: new VariableMeta('uTileSize', VariableKind.Uniform, `f32`),
-        pixelSize: new VariableMeta('uPixelSize', VariableKind.Uniform, `f32`),
-        density: new VariableMeta('uDensity', VariableKind.Uniform, `f32`),
-        windStrength: new VariableMeta('uWindStrength', VariableKind.Uniform, `f32`),
-        windDirection: new VariableMeta('uWindDirection', VariableKind.Uniform, `vec2<f32>`),
+        cameraPos: new VariableMeta('uCameraPos', VariableKind.Uniform, `vec2<f32>`),
+        screenSize: new VariableMeta('uScreenSize', VariableKind.Uniform, `vec2<f32>`),
     },
     {},
     // language=WGSL
@@ -44,11 +39,14 @@ export const shaderMeta = new ShaderMeta(
         }
 
         @fragment
-        fn fs_main(@builtin(position) fragCoord: vec4<f32>, @location(0) uv: vec2f) -> @location(0) vec4f {
-            let coord = vec2f(fragCoord.x, -fragCoord.y);
-            
-            // World-space coordinates - pixel scale for crisp texture
-            let worldPos = coord + vec2f(uMapOffset.x, -uMapOffset.y);
+        fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+            // uv: (0,0) = bottom-left, (1,1) = top-right
+            // Convert to world coordinates:
+            // - uScreenSize = (canvas.offsetWidth, canvas.offsetHeight) in world units
+            // - uCameraPos = camera position (center of screen in world)
+            // - screenOffset = (uv - 0.5) * screenSize = position relative to center
+            let screenOffset = (uv - 0.5) * uScreenSize;
+            let worldPos = (uCameraPos + screenOffset) * 4.0; // 4x smaller grain
             
             // === DESERT PALETTE - Warm saturated tones ===
             let darkBrown = vec3f(0.58, 0.38, 0.22);      // Dark earthy brown

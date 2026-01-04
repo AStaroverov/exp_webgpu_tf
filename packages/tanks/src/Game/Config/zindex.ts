@@ -20,7 +20,7 @@ export const ZIndexConfig = {
     Building: 2,
     
     /** Spice resources on the ground */
-    Spice: 0,
+    Spice: 0.5,
     
     /** Tank hull body */
     TankHull: 4,

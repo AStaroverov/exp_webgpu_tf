@@ -22,14 +22,15 @@ export function BaseScreen({ className, style }: { className?: string, style?: C
         <div className={ `${ className } flex items-center justify-center` } style={ style }>
             <canvas
                 ref={ canvasRef }
-                className={ `absolute transition-all origin-left
-                    ${ isStarted ? 'left-0' : 'left-20' }
-                ` }
-                style={ {
-                    width: `${ GAME_MAP_SIZE }px`,
-                    height: `${ GAME_MAP_SIZE }px`,
-                    transform: `scale(${ isStarted ? canvasScale : '50%' })`,
-                } }
+                className={ `absolute transition-all ${ isStarted ? 'inset-0' : 'origin-left left-20' }` }
+                style={ isStarted 
+                    ? { width: '100%', height: '100%' }
+                    : {
+                        width: `${ GAME_MAP_SIZE }px`,
+                        height: `${ GAME_MAP_SIZE }px`,
+                        transform: 'scale(50%)',
+                    }
+                }
             />
             <GarageScreen className={ `absolute transition-all ${ isStarted ? 'left-0 opacity-0 ' : 'right-60' }` }/>
             { isStarted && <BattleHUD className="absolute inset-0" /> }

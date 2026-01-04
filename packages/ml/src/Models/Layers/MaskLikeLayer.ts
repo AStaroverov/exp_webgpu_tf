@@ -18,11 +18,13 @@ export class MaskLikeLayer extends tf.layers.Layer {
     }
 
     call(inputs: tf.Tensor | tf.Tensor[]): tf.Tensor {
-        const input = Array.isArray(inputs) ? inputs[0] : inputs;
-        const [batch, seqLen] = input.shape;
+        return tf.tidy(() => {
+            const input = Array.isArray(inputs) ? inputs[0] : inputs;
+            const [batch, seqLen] = input.shape;
 
-        // Create a mask filled with ones
-        return tf.ones([batch, seqLen]);
+            // Create a mask filled with ones
+            return tf.ones([batch, seqLen]);
+        });
     }
 
     getConfig() {
