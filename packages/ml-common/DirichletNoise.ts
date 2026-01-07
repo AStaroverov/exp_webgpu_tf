@@ -3,6 +3,7 @@ import * as tf from '@tensorflow/tfjs';
 type DirichletNoiseOpts = {
     alpha?: number;           // concentration parameter (default 0.3)
     epsilon?: number;         // minimum value to avoid division issues
+    repeatInterval?: [min: number, max: number];  // range for caching: start trying reset at min, force at max
 };
 
 /**
@@ -21,26 +22,78 @@ export class DirichletNoise {
     private headDims: number[];
     private alpha: number;
     private epsilon: number;
+    private repeatMin: number;
+    private repeatMax: number;
     private disposed = false;
+
+    // Caching state
+    private cachedSamples: tf.Tensor[] | null = null;
+    private sampleCount = 0;
 
     constructor(headDims: number[], opts: DirichletNoiseOpts = {}) {
         const {
             alpha = 0.3,
             epsilon = 1e-10,
+            repeatInterval = [1, 1],
         } = opts;
 
         this.headDims = headDims;
         this.alpha = alpha;
         this.epsilon = epsilon;
+        this.repeatMin = Math.max(1, repeatInterval[0]);
+        this.repeatMax = Math.max(this.repeatMin, repeatInterval[1]);
     }
 
     /**
      * Sample Dirichlet noise for each head dimension.
      * Returns array of tensors, each summing to 1.
+     * 
+     * Uses caching based on repeatInterval [min, max]:
+     * - Before min: always returns cached sample
+     * - From min to max: probability of reset grows linearly (0 → 1)
+     * - At max: forced reset
      */
     sample(): tf.Tensor[] {
         if (this.disposed) throw new Error('DirichletNoise: disposed');
 
+        // Check if we need to generate new samples
+        const needNewSample = this.cachedSamples === null || this.shouldResetCache();
+
+        if (needNewSample) {
+            this.resetCache();
+            this.cachedSamples = this.generateFreshSample();
+            this.sampleCount = 0;
+        }
+
+        this.sampleCount++;
+
+        // Return clones of cached tensors to prevent external modification
+        return this.cachedSamples!.map(t => t.clone());
+    }
+
+    /**
+     * Check if cache should be reset based on interval range.
+     * - Before min: never reset (probability = 0)
+     * - At min to max: probability grows linearly from 0 to 1
+     * - At max: always reset (probability = 1)
+     */
+    private shouldResetCache(): boolean {
+        if (this.sampleCount < this.repeatMin) {
+            return false;
+        }
+        if (this.sampleCount >= this.repeatMax) {
+            return true;
+        }
+        // Linear interpolation: probability grows from 0 at min to 1 at max
+        const range = this.repeatMax - this.repeatMin;
+        const progress = (this.sampleCount - this.repeatMin) / range;
+        return Math.random() < progress;
+    }
+
+    /**
+     * Generate fresh Dirichlet samples for all heads
+     */
+    private generateFreshSample(): tf.Tensor[] {
         return this.headDims.map(dim => {
             return tf.tidy(() => {
                 const gamma = this.sampleGamma([dim], this.alpha);
@@ -48,6 +101,24 @@ export class DirichletNoise {
                 return gamma.div(sum);
             });
         });
+    }
+
+    /**
+     * Clear cached samples and free memory
+     */
+    private resetCache(): void {
+        if (this.cachedSamples) {
+            this.cachedSamples.forEach(t => t.dispose());
+            this.cachedSamples = null;
+        }
+    }
+
+    /**
+     * Force reset of cached samples (useful for manual control)
+     */
+    forceReset(): void {
+        this.resetCache();
+        this.sampleCount = 0;
     }
 
     /**
@@ -116,7 +187,7 @@ export class DirichletNoise {
     dispose() {
         if (this.disposed) return;
         this.disposed = true;
-        // No persistent tensors to dispose
+        this.resetCache();
     }
 }
 

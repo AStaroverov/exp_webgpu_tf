@@ -47,7 +47,7 @@ export class VisTestEpisodeManager extends EpisodeManager {
     protected beforeEpisode() {
         return createScenarioByCurriculumState(this.curriculumState, {
             iteration: this.curriculumState.iteration,
-            train: false,
+            train: true,
         })
             .then((scenario) => {
                 (this.currentScenario = scenario);

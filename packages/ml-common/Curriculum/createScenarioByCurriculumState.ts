@@ -1,6 +1,9 @@
 import { clamp } from 'lodash';
 import { min } from '../../../lib/math.ts';
 import { random } from '../../../lib/random.ts';
+import { createScenario1v1Random } from './createScenario1v1Random.ts';
+import { createScenarioDiagonal } from './createScenarioDiagonal.ts';
+import { createScenarioDiagonalWall } from './createScenarioDiagonalWall.ts';
 import { createScenarioAgentsVsBots1 } from './createScenarioAgentsVsBots1.ts';
 import { createScenarioBase } from './createScenarioBase.ts';
 import { createScenarioWithHistoricalAgents as createScenarioFrozenSelfPlay } from './createScenarioWithHistoricalAgents.ts';
@@ -11,11 +14,14 @@ import { createScenarioWithCurrentAgents as createScenarioSelfPlay } from './cre
 type ScenarioOptions = Parameters<typeof createScenarioBase>[0];
 
 const mapEntries = [
-    [0, createStaticScenarioAgentsVsBots0],
-    [1, createScenarioAgentsVsBots1],
-    [2, createScenarioFrozenSelfPlay],
-    [3, createScenarioSelfPlay],
-] as const;
+    createScenario1v1Random,       // 1v1 random positions, simplest bot
+    createScenarioDiagonal,        // 1v1 diagonal with center obstacle
+    createScenarioDiagonalWall,    // 1v1 diagonal with 3-building wall
+    createStaticScenarioAgentsVsBots0,
+    createScenarioAgentsVsBots1,
+    createScenarioFrozenSelfPlay,
+    createScenarioSelfPlay,
+].map((constructor, index) => ([index, constructor] as const));
 const mapIndexToConstructor = new Map<number, (options: ScenarioOptions) => Scenario>(mapEntries);
 
 if (mapIndexToConstructor.size !== mapEntries.length) {
@@ -24,17 +30,17 @@ if (mapIndexToConstructor.size !== mapEntries.length) {
 
 export const scenariosCount = mapIndexToConstructor.size;
 
-const edge = 0.3; // success ratio to unlock next scenario
+const edge = 0.5; // success ratio to unlock next scenario
 
 export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: Omit<ScenarioOptions, 'index'>): Promise<Scenario> {
     const constructorOptions = options as ScenarioOptions;
 
-    if (random() < 0.5) {
-        constructorOptions.index = 3
-        return createScenarioSelfPlay(constructorOptions);
-    }
+    // if (random() < 0.5) {
+    //     constructorOptions.index = 3
+    //     return createScenarioSelfPlay(constructorOptions);
+    // }
 
-    let constructor = createStaticScenarioAgentsVsBots0;
+    let constructor = createScenario1v1Random;
 
     let weights = [];
     let totalWeight = 0;
@@ -48,7 +54,7 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
 
         successRatio ??= 0;
 
-        const weight = clamp(1 - successRatio, 0.2, 1);
+        const weight = clamp(0.9 - successRatio, 0.1, 1);
 
         weights.push(weight);
         totalWeight += weight;
@@ -60,9 +66,9 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
         if (r < weight) {
             constructorOptions.index = i;
             constructor = mapIndexToConstructor.get(i) ?? (() => {
-                console.error(`Scenario ${i} not found, using default scenario static`);
+                console.error(`Scenario ${i} not found, using default scenario 1v1`);
                 constructorOptions.index = 0;
-                return createStaticScenarioAgentsVsBots0;
+                return createScenario1v1Random;
             })();
             break;
         }

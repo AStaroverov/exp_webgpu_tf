@@ -1,4 +1,5 @@
 import { createGame } from '../../tanks/src/Game/createGame.ts';
+import { createMLPlugin } from '../../tanks/src/ML/createMlPlugin.ts';
 
 const MAX_SIZE = 1600;
 const MIN_SIZE = 1000;
@@ -13,7 +14,8 @@ export function createBattlefield(options?: { size?: number, iteration?: number 
     //         : 1
     // );
     const game = createGame({ width: size, height: size });
+    const ml = createMLPlugin(game);
 
-    return game;
+    return { ...game, ml };
 }
 

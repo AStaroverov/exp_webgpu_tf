@@ -13,7 +13,7 @@ import {
 
 import { createDenseLayer } from "./ApplyLayers.ts";
 import { Model } from './def.ts';
-import { createNetwork } from './Networks/v9.ts';
+import { createNetwork } from './Networks/v10.ts';
 import { AdamW } from './Optimizer/AdamW.ts';
 
 export { RAY_HIT_TYPE_COUNT }; // LightTank, MediumTank, HeavyTank, PlayerTank, Harvester, MeleeCar

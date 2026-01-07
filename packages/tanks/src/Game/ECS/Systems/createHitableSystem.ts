@@ -130,7 +130,7 @@ function applyScores(
         const playerId = PlayerRef.id[hitEid];
         
         if (hasComponent(world, hittableEid, Obstacle)) {
-            Score.updateScore(playerId, -0.3); // penalty for hitting an obstacle
+            Score.updateScore(playerId, -0.3); // penalty for hitting an obstacle, just for ML
         } else if (hasComponent(world, hitEid, TeamRef) && hasComponent(world, hittableEid, TeamRef)) {
             const vehiclePartTeamId = TeamRef.id[hittableEid];
             const secondTeamId = TeamRef.id[hitEid];

@@ -16,10 +16,7 @@ import {
     MAX_BULLETS,
     MAX_ENEMIES,
     TankInputTensor,
-    ENV_RAYS_COUNT,
-    ENV_RAYS_OFFSET,
-    TARGET_RAYS_COUNT,
-    TARGET_RAYS_OFFSET,
+    RAYS_COUNT,
     RAY_LENGTH,
     RayHitType
 } from '../Components/TankState.ts';
@@ -28,7 +25,6 @@ import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { Parent } from '../../Game/ECS/Components/Parent.ts';
 import { ALL_VEHICLE_PARTS_MASK, CollisionGroupConfig } from '../../Game/Config/physics.ts';
-import { randomRangeInt } from '../../../../../lib/random.ts';
 
 // Temp arrays for offset-adjusted positions
 const tempTankPosition = new Float64Array(2);
@@ -132,21 +128,13 @@ export function snapshotTankInputTensor({ world } = GameDI) {
             );
         }
 
-        // Cast rays
-        castEnvironmentRays(
+        // Cast unified rays - environment rays with direct rays to targets integrated
+        castUnifiedRays(
             vehicleEid,
             myTeamId,
             position[0],
             position[1],
             rotation,
-        );
-        
-        // Cast direct rays to enemies and allies
-        castDirectRaysToTargets(
-            vehicleEid,
-            myTeamId,
-            position[0],
-            position[1],
             [...enemiesEids, ...alliesEids],
         );
 
@@ -194,13 +182,38 @@ function createExcludeOwnVehiclePredicate(
     };
 }
 
-function castRays(
+/**
+ * Angle step for unified ray system (64 rays covering 360 degrees)
+ */
+const UNIFIED_ANGLE_STEP = (2 * Math.PI) / RAYS_COUNT;
+
+/**
+ * Pre-allocated array for ray angles override.
+ * NaN means no override (use default environment ray angle).
+ */
+const targetRayAngles = new Float64Array(RAYS_COUNT);
+
+/**
+ * Reset target ray angles to default (evenly distributed)
+ */
+function resetTargetRayAngles() {
+    for (let i = 0; i < RAYS_COUNT; i++) {
+        targetRayAngles[i] = i * UNIFIED_ANGLE_STEP;
+    }
+}
+
+/**
+ * Cast unified rays - 64 rays evenly distributed around the agent.
+ * For each target (enemy/ally), the ray at the closest angle slot is overridden
+ * to point directly at that target. All rays use standard RAY_LENGTH.
+ */
+function castUnifiedRays(
     parentEid: EntityId,
     myTeamId: number,
     posX: number,
     posY: number,
     rotation: number,
-    config: typeof envRayConfig,
+    targetEids: EntityId[],
     { physicalWorld } = GameDI,
 ) {
     rayOrigin.x = posX;
@@ -208,15 +221,37 @@ function castRays(
 
     const filterPredicate = createExcludeOwnVehiclePredicate(parentEid);
 
-    for (let i = 0; i < config.raysCount; i++) {
-        const angle = config.getAngle(rotation, i);
+    // Reset and populate target ray angles
+    resetTargetRayAngles();
+    
+    for (let i = 0; i < targetEids.length; i++) {
+        const targetEid = targetEids[i];
+        const targetPosition = RigidBodyState.position.getBatch(targetEid);
+        
+        const dx = targetPosition[0] - posX;
+        const dy = targetPosition[1] - posY;
+        const angleToTarget = Math.atan2(dy, dx);
+        
+        // Find which ray slot this angle corresponds to (relative to forward direction)
+        let relativeAngle = angleToTarget - rotation;
+        while (relativeAngle < 0) relativeAngle += 2 * Math.PI;
+        while (relativeAngle >= 2 * Math.PI) relativeAngle -= 2 * Math.PI;
+        
+        const rayIndex = Math.round(relativeAngle / UNIFIED_ANGLE_STEP) % RAYS_COUNT;
+        targetRayAngles[rayIndex] = relativeAngle;
+    }
+
+    // Cast all 64 rays
+    for (let i = 0; i < RAYS_COUNT; i++) {
+        const angle = rotation + targetRayAngles[i];
+        
         rayDir.x = cos(angle);
         rayDir.y = sin(angle);
 
         const ray = new Ray(rayOrigin, rayDir);
         const hit = physicalWorld.castRay(
             ray,
-            config.rayLength,
+            RAY_LENGTH,
             true,
             undefined,
             createCollisionGroups(CollisionGroup.ALL, ENV_RAY_COLLISION_MASK),
@@ -225,15 +260,15 @@ function castRays(
             filterPredicate,
         );
 
-        const rayHitType = hit && getRayHitType(
-            getEntityIdByPhysicalId(hit.collider.handle),
-            myTeamId,
-        );
-        const distance = hit?.timeOfImpact ?? config.rayLength;
+        const hitEid = hit ? getEntityIdByPhysicalId(hit.collider.handle) : 0;
+        const rayHitType = hit && getRayHitType(hitEid, myTeamId);
+        const distance = hit?.timeOfImpact ?? RAY_LENGTH;
+        
         TankInputTensor.setRayData(
             parentEid,
-            config.indexOffset + i,
+            i,
             rayHitType ?? RayHitType.NONE,
+            hitEid,
             rayOrigin.x - GameMap.offsetX,
             rayOrigin.y - GameMap.offsetY,
             rayDir.x,
@@ -241,106 +276,6 @@ function castRays(
             distance,
         );
     }
-}
-
-/**
- * Cast N rays evenly distributed around the agent (360 degrees)
- * First ray points forward (in direction of rotation)
- */
-const ENV_ANGLE_STEP = (2 * Math.PI) / ENV_RAYS_COUNT;
-const envRayConfig = {
-    raysCount: ENV_RAYS_COUNT,
-    rayLength: RAY_LENGTH,
-    indexOffset: ENV_RAYS_OFFSET,
-    getAngle: (rotation: number, i: number) => rotation + i * ENV_ANGLE_STEP,
-};
-function castEnvironmentRays(
-    parentEid: EntityId,
-    myTeamId: number,
-    posX: number,
-    posY: number,
-    rotation: number,
-) {
-    castRays(parentEid, myTeamId, posX, posY, rotation, envRayConfig);
-}
-
-/**
- * Cast direct rays from the agent to each enemy and ally.
- * These rays provide line-of-sight information to specific targets.
- */
-function castDirectRaysToTargets(
-    parentEid: EntityId,
-    myTeamId: number,
-    posX: number,
-    posY: number,
-    targetEids: EntityId[],
-) {
-    for (let i = 0; i < TARGET_RAYS_COUNT; i++) {
-        const targetEid = targetEids[i] ?? targetEids[randomRangeInt(0, targetEids.length - 1)];
-        const targetPosition = RigidBodyState.position.getBatch(targetEid);
-        castDirectRayToTarget(
-            parentEid,
-            myTeamId,
-            posX,
-            posY,
-            targetPosition[0],
-            targetPosition[1],
-            TARGET_RAYS_OFFSET + i,
-        );
-    }
-}
-
-/**
- * Cast a single ray from origin to target position
- */
-function castDirectRayToTarget(
-    parentEid: EntityId,
-    myTeamId: number,
-    posX: number,
-    posY: number,
-    targetX: number,
-    targetY: number,
-    rayIndex: number,
-    { physicalWorld } = GameDI,
-) {
-    const dx = targetX - posX;
-    const dy = targetY - posY;
-    const distance = hypot(dx, dy);
-
-    rayDir.x = dx / distance;
-    rayDir.y = dy / distance;
-    rayOrigin.x = posX;
-    rayOrigin.y = posY;
-
-    const filterPredicate = createExcludeOwnVehiclePredicate(parentEid);
-    const ray = new Ray(rayOrigin, rayDir);
-    const hit = physicalWorld.castRay(
-        ray,
-        distance,  // Ray length is the distance to target
-        true,
-        undefined,
-        createCollisionGroups(CollisionGroup.ALL, ENV_RAY_COLLISION_MASK),
-        undefined,
-        undefined,
-        filterPredicate,
-    );
-
-    const rayHitType = hit && getRayHitType(
-        getEntityIdByPhysicalId(hit.collider.handle),
-        myTeamId,
-    );
-    const hitDistance = hit?.timeOfImpact ?? distance;
-    
-    TankInputTensor.setRayData(
-        parentEid,
-        rayIndex,
-        rayHitType ?? RayHitType.NONE,
-        posX - GameMap.offsetX,
-        posY - GameMap.offsetY,
-        rayDir.x,
-        rayDir.y,
-        hitDistance,
-    );
 }
 
 function getRayHitType(eid: EntityId, myTeamId: number): RayHitType {
@@ -387,7 +322,7 @@ function getCollisionGroupFromEntity(eid: EntityId, { physicalWorld } = GameDI):
 /**
  * Traverse parent hierarchy to find vehicle entity
  */
-function findVehicleFromPart(partEid: EntityId, { world } = GameDI): EntityId {
+export function findVehicleFromPart(partEid: EntityId, { world } = GameDI): EntityId {
     let currentEid = partEid;
     const maxDepth = 5; // Prevent infinite loops, should 2 enough for most cases
     

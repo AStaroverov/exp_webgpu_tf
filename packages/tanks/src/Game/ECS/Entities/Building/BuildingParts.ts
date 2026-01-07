@@ -185,7 +185,7 @@ export function createBuildingParts(
             // Make parts hitable and damageable
             // Walls are tougher than debris
             const healthMultiplier = type === 'wall' ? 1.5 : 0.5;
-            const health = min(width, height) * 2 * healthMultiplier;
+            const health = min(width, height) * 10 * healthMultiplier;
             Hitable.addComponent(world, partEid, health);
             Damagable.addComponent(world, partEid, min(width, height) / 8);
         }

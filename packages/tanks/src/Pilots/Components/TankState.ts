@@ -15,18 +15,13 @@ export const BULLET_BUFFER = 5; // [id, x, y, vx, vy]
 
 // Rays configuration
 export const RAY_LENGTH = 1200;
-export const RAY_BUFFER = 6; // [hitType, rootX, rootY, dirX, dirY, distance]
+export const RAY_BUFFER = 7; // [hitType, hitEid, rootX, rootY, dirX, dirY, distance]
 
-// Environment rays - evenly distributed around the tank (first 32 rays)
-export const ENV_RAYS_COUNT = 32;
-export const ENV_RAYS_OFFSET = 0;
+// Total rays count - all rays are unified, targets replace environment rays at their angle
+export const RAYS_COUNT = 64;
 
-// Direct rays to targets (enemies + allies)
-export const TARGET_RAYS_COUNT = MAX_ENEMIES + MAX_ALLIES;
-export const TARGET_RAYS_OFFSET = ENV_RAYS_COUNT;
-
-// Total rays count
-export const RAYS_COUNT = ENV_RAYS_COUNT + TARGET_RAYS_COUNT;
+// Maximum number of direct target rays (enemies + allies)
+export const MAX_TARGET_RAYS = MAX_ENEMIES + MAX_ALLIES;
 
 // Hit types for rays
 export const enum RayHitType {
@@ -174,6 +169,7 @@ export const TankInputTensor = component({
         eid: number,
         index: number,
         hitType: RayHitType,
+        hitEid: number,
         rootX: number,
         rootY: number,
         dirX: number,
@@ -182,11 +178,12 @@ export const TankInputTensor = component({
     ) {
         const offset = index * RAY_BUFFER;
         TankInputTensor.raysData.set(eid, offset + 0, hitType);
-        TankInputTensor.raysData.set(eid, offset + 1, rootX);
-        TankInputTensor.raysData.set(eid, offset + 2, rootY);
-        TankInputTensor.raysData.set(eid, offset + 3, dirX);
-        TankInputTensor.raysData.set(eid, offset + 4, dirY);
-        TankInputTensor.raysData.set(eid, offset + 5, distance);
+        TankInputTensor.raysData.set(eid, offset + 1, hitEid);
+        TankInputTensor.raysData.set(eid, offset + 2, rootX);
+        TankInputTensor.raysData.set(eid, offset + 3, rootY);
+        TankInputTensor.raysData.set(eid, offset + 4, dirX);
+        TankInputTensor.raysData.set(eid, offset + 5, dirY);
+        TankInputTensor.raysData.set(eid, offset + 6, distance);
     },
     resetRaysData() {
         TankInputTensor.raysData.fill(0);

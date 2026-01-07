@@ -8,9 +8,11 @@ import { createPilotsPlugin } from '../tanks/src/Pilots/createPilotsPlugin.ts';
 import { snapshotTankInputTensor } from '../tanks/src/Pilots/Utils/snapshotTankInputTensor.ts';
 import { calculateActionReward, WEIGHTS } from './src/Reward/calculateReward.ts';
 import { createBuilding } from '../tanks/src/Game/ECS/Entities/Building/Building.ts';
+import { createMLPlugin } from '../tanks/src/ML/createMlPlugin.ts';
 
 const game = createGame({ width: 1200, height: 1000 });
 const { gameTick, setRenderTarget, enablePlayer, setPlayerVehicle } = game;
+const mlPlugin = createMLPlugin(game);
 const pilotsPlugin = createPilotsPlugin(game);
 pilotsPlugin.toggle(true);
 

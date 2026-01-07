@@ -98,6 +98,7 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         
         applyActionToTank(this.tankEid, result.actions, false);
 
+        
         if (this.train && result.logProb != null && result.logits != null) {
             this.memory.addFirstPart(
                 result.state,
@@ -114,7 +115,7 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         height: number,
         frame: number,
     ) {
-        if (!this.train || this.memory.size() === 0) return;
+        if (this.memory.size() === 0) return;
 
         const isDead = getTankHealth(this.tankEid) <= 0;
         const frameReward = getFramePenalty(frame);

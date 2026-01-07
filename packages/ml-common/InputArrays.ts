@@ -326,11 +326,11 @@ function encodeRayFeatures(
     invRotation: number,
 ): void {
     const hitType = raysBuffer[srcOffset + 0];
-    const rootX = raysBuffer[srcOffset + 1];
-    const rootY = raysBuffer[srcOffset + 2];
-    const dirX = raysBuffer[srcOffset + 3];
-    const dirY = raysBuffer[srcOffset + 4];
-    const distance = raysBuffer[srcOffset + 5];
+    const rootX = raysBuffer[srcOffset + 2];
+    const rootY = raysBuffer[srcOffset + 3];
+    const dirX = raysBuffer[srcOffset + 4];
+    const dirY = raysBuffer[srcOffset + 5];
+    const distance = raysBuffer[srcOffset + 6];
     const [locRootX, locRootY] = rotateVector(rootX - tankX, rootY - tankY, invRotation);
     const [locDirX, locDirY] = rotateVector(dirX, dirY, invRotation);
     

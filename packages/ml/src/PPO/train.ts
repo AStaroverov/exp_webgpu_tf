@@ -119,9 +119,7 @@ export function batchAct(
             const stateLogitsHeads = logitsHeads.map(logits => logits.slice([i], [1]));
             const noiseTensors = options?.noises?.[i];
             const sample = sampleActionsFromLogits(stateLogitsHeads.map(h => h.squeeze()), options, noiseTensors);
-
-            const noisyHeadsForLogProb = sample.noisyLogitsHeads.map(h => h.rank === 1 ? h.expandDims(0) : h);
-            const logProb = computeLogProbCategorical(sample.actions.expandDims(0), noisyHeadsForLogProb);
+            const logProb = computeLogProbCategorical(sample.actions.expandDims(0), stateLogitsHeads);
             
             results.push({
                 logits: syncUnwrapTensor(sample.logitsFlat) as Float32Array,
@@ -138,7 +136,7 @@ export function sampleActionsFromLogits(
     heads: tf.Tensor[],
     opts?: { greedy?: boolean; epsilon?: number },
     noises?: tf.Tensor[],
-): { actions: tf.Tensor; logitsFlat: tf.Tensor; noisyLogitsHeads: tf.Tensor[] } {
+): { actions: tf.Tensor; logitsFlat: tf.Tensor } {
     const { greedy = false, epsilon = 0 } = opts ?? {};
 
     return tf.tidy(() => {
@@ -152,7 +150,6 @@ export function sampleActionsFromLogits(
         return {
             actions: tf.stack(results.map(r => r.action), -1),
             logitsFlat: tf.concat(heads, -1),
-            noisyLogitsHeads: results.map(r => r.noisyLogits),
         };
     });
 }
@@ -161,7 +158,7 @@ function sampleCategorical(
     logits: tf.Tensor,
     epsilon: number,
     dirichletNoise?: tf.Tensor,
-): { action: tf.Tensor; noisyLogits: tf.Tensor } {
+): { action: tf.Tensor } {
     return tf.tidy(() => {
         const numActions = logits.shape[logits.rank - 1]!;
         let noisyLogits = logits;
@@ -179,7 +176,7 @@ function sampleCategorical(
         }
 
         const action = tf.multinomial(noisyLogits as tf.Tensor1D, 1).squeeze();
-        return { action, noisyLogits };
+        return { action };
     });
 }
 
