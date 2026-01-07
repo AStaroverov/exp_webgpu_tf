@@ -68,10 +68,12 @@ export function createLightTank(opts: {
     options.width = PADDING * 6;
     options.height = PADDING * 6;
     options.turret.rotationSpeed = PI * 0.8;
+    options.turret.gunWidth = PADDING * 6;
+    options.turret.gunHeight = PADDING * 2;
     options.firearms.reloadingDuration = 300;
     options.firearms.bulletCaliber = BulletCaliber.Light;
     options.firearms.bulletStartPosition = [9 * PADDING, 0];
-    const [turretEid] = createTankTurret(options, tankEid, tankPid);
+    const [turretEid, gunEid] = createTankTurret(options, tankEid, tankPid);
 
     // Hull parts attached to tank body
     createSlotEntities(tankEid, hullSet, options.color, SlotPartType.HullPart);
@@ -83,8 +85,8 @@ export function createLightTank(opts: {
 
     // Turret parts
     updateColorOptions(options, TURRET_COLOR);
-    createSlotEntities(turretEid, turretGunSet, options.color, SlotPartType.TurretGun);
     createSlotEntities(turretEid, turretHeadSet, options.color, SlotPartType.TurretHead);
+    createSlotEntities(gunEid, turretGunSet, options.color, SlotPartType.TurretGun);
 
     // Fill all slots with physical parts
     updateSlotsBrightness(tankEid);
@@ -95,6 +97,8 @@ export function createLightTank(opts: {
     fillAllSlots(rightTrackEid, options);
     updateSlotsBrightness(turretEid);
     fillAllSlots(turretEid, options);
+    updateSlotsBrightness(gunEid);
+    fillAllSlots(gunEid, options);
 
     // Add exhaust pipes
     createTankExhaustPipes(tankEid, PADDING * 10, PADDING * 8);

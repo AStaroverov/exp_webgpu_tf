@@ -66,7 +66,7 @@ export const BuildingConfig = {
     interiorWallChanceRange: [0.2, 0.5] as [number, number],
 
     /** Default building density */
-    defaultDensity: 600,
+    defaultDensity: 5000,
 } as const;
 
 export type BuildingType = typeof BuildingConfig;

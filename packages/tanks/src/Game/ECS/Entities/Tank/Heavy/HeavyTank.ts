@@ -63,13 +63,15 @@ export function createHeavyTank(opts: {
     );
 
     options.density = DENSITY;
-    options.width = PADDING * 8;
-    options.height = PADDING * 8;
+    options.width = PADDING * 9;
+    options.height = PADDING * 7;
     options.turret.rotationSpeed = PI * 0.25;
+    options.turret.gunWidth = PADDING * 8;
+    options.turret.gunHeight = PADDING * 2;
     options.firearms.reloadingDuration = 700;
     options.firearms.bulletCaliber = BulletCaliber.Heavy;
     options.firearms.bulletStartPosition = [13 * PADDING, 0];
-    const [turretEid] = createTankTurret(options, tankEid, tankPid);
+    const [turretEid, gunEid] = createTankTurret(options, tankEid, tankPid);
 
     // Hull parts attached to tank body
     createSlotEntities(tankEid, hullSet, options.color, SlotPartType.HullPart);
@@ -81,7 +83,7 @@ export function createHeavyTank(opts: {
 
     // Turret parts
     updateColorOptions(options, TURRET_COLOR);
-    createSlotEntities(turretEid, turretGunSet, options.color, SlotPartType.TurretGun);
+    createSlotEntities(gunEid, turretGunSet, options.color, SlotPartType.TurretGun);
     createSlotEntities(turretEid, turretHeadSet, options.color, SlotPartType.TurretHead);
 
     // Fill all slots with physical parts
@@ -93,6 +95,8 @@ export function createHeavyTank(opts: {
     fillAllSlots(rightTrackEid, options);
     updateSlotsBrightness(turretEid);
     fillAllSlots(turretEid, options);
+    updateSlotsBrightness(gunEid);
+    fillAllSlots(gunEid, options);
 
     // Add exhaust pipes
     createTankExhaustPipes(tankEid, PADDING * 14, PADDING * 10);

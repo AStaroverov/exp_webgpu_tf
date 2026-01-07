@@ -6,10 +6,7 @@ export const PADDING = SIZE + 1;
 
 export const hullSet = createRectangleSet(14, 10, SIZE, PADDING);
 export const turretHeadSet = createRectangleSet(9, 7, SIZE, PADDING);
-export const turretGunSet = createRectangleSet(8, 2, SIZE, PADDING).map((set) => {
-    set[0] += (PADDING * 9 - SIZE / 2);
-    return set;
-});
+export const turretGunSet = createRectangleSet(8, 2, SIZE, PADDING);
 
 export const CATERPILLAR_SIZE = 5;
 export const CATERPILLAR_PADDING = CATERPILLAR_SIZE + 1;

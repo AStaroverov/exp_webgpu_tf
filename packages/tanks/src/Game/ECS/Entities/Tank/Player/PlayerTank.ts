@@ -73,10 +73,12 @@ export function createPlayerTank(opts: {
     options.width = PADDING * 8;
     options.height = PADDING * 8;
     options.turret.rotationSpeed = PI * 0.8;        // Faster turret (was 0.6)
+    options.turret.gunWidth = PADDING * 10;
+    options.turret.gunHeight = PADDING * 2;
     options.firearms.reloadingDuration = 350;        // Faster reload (was 500)
     options.firearms.bulletCaliber = BulletCaliber.Medium;
     options.firearms.bulletStartPosition = [13 * PADDING, 0];
-    const [turretEid] = createTankTurret(options, tankEid, tankPid);
+    const [turretEid, gunEid] = createTankTurret(options, tankEid, tankPid);
 
     // Hull parts attached to tank body
     createSlotEntities(tankEid, hullSet, options.color, SlotPartType.HullPart);
@@ -88,7 +90,7 @@ export function createPlayerTank(opts: {
 
     // Turret parts
     updateColorOptions(options, TURRET_COLOR);
-    createSlotEntities(turretEid, turretGunSet, options.color, SlotPartType.TurretGun);
+    createSlotEntities(gunEid, turretGunSet, options.color, SlotPartType.TurretGun);
     createSlotEntities(turretEid, turretHeadSet, options.color, SlotPartType.TurretHead);
 
     // Fill all slots with physical parts
@@ -100,6 +102,8 @@ export function createPlayerTank(opts: {
     fillAllSlots(rightTrackEid, options);
     updateSlotsBrightness(turretEid);
     fillAllSlots(turretEid, options);
+    updateSlotsBrightness(gunEid);
+    fillAllSlots(gunEid, options);
 
     // Add exhaust pipes
     createTankExhaustPipes(tankEid, PADDING * 12, PADDING * 8);

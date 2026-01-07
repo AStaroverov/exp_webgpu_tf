@@ -44,12 +44,12 @@ export enum SlotPartType {
  * Used as multiplier base for part densities.
  */
 export const VehicleBaseDensity: Record<VehicleType, number> = {
-    [VehicleType.LightTank]: 250,
-    [VehicleType.MediumTank]: 300,
-    [VehicleType.HeavyTank]: 350,
-    [VehicleType.PlayerTank]: 300,
-    [VehicleType.Harvester]: 350,
-    [VehicleType.MeleeCar]: 200,
+    [VehicleType.LightTank]: 25 * 3,
+    [VehicleType.MediumTank]: 30 * 3,
+    [VehicleType.HeavyTank]: 35 * 3,
+    [VehicleType.PlayerTank]: 30 * 3,
+    [VehicleType.Harvester]: 35 * 3,
+    [VehicleType.MeleeCar]: 20 * 3,
 };
 
 /**
@@ -57,14 +57,14 @@ export const VehicleBaseDensity: Record<VehicleType, number> = {
  * Final density = VehicleBaseDensity[vehicleType] * PartDensityMultiplier[partType]
  */
 export const PartDensityMultiplier: Record<SlotPartType, number> = {
-    [SlotPartType.HullPart]: 10,
+    [SlotPartType.HullPart]: 20,
     [SlotPartType.Caterpillar]: 5,
-    [SlotPartType.TurretHead]: 1,
-    [SlotPartType.TurretGun]: 1,
-    [SlotPartType.Barrier]: 15,    // Very heavy, impenetrable
-    [SlotPartType.Scoop]: 8,       // Heavy scoop for pushing
-    [SlotPartType.Shield]: 0.1,    // Very light energy
-    [SlotPartType.Wheel]: 2,       // Moderate weight
+    [SlotPartType.TurretHead]: 15,
+    [SlotPartType.TurretGun]: 10,
+    [SlotPartType.Barrier]: 30,    // Very heavy, impenetrable
+    [SlotPartType.Scoop]: 15,       // Heavy scoop for pushing
+    [SlotPartType.Shield]: 1,    // Very light energy
+    [SlotPartType.Wheel]: 4,       // Moderate weight
 };
 
 // =============================================================================
