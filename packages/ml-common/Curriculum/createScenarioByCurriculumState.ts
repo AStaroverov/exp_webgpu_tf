@@ -5,13 +5,13 @@ import { createScenario1v1Random } from './createScenario1v1Random.ts';
 import { createScenarioDiagonal } from './createScenarioDiagonal.ts';
 import { createScenarioDiagonalWall } from './createScenarioDiagonalWall.ts';
 import { createScenarioAgentsVsBots1 } from './createScenarioAgentsVsBots1.ts';
-import { createScenarioBase } from './createScenarioBase.ts';
+import { createScenarioGridBase } from './createScenarioGridBase.ts';
 import { createScenarioWithHistoricalAgents as createScenarioFrozenSelfPlay } from './createScenarioWithHistoricalAgents.ts';
 import { createStaticScenarioAgentsVsBots0 } from './createStaticScenarioAgentsVsBots0.ts';
 import { CurriculumState, Scenario } from './types.ts';
 import { createScenarioWithCurrentAgents as createScenarioSelfPlay } from './createScenarioWithCurrentAgents.ts';
 
-type ScenarioOptions = Parameters<typeof createScenarioBase>[0];
+type ScenarioOptions = Parameters<typeof createScenarioGridBase>[0];
 
 const mapEntries = [
     createScenario1v1Random,       // 1v1 random positions, simplest bot

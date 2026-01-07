@@ -13,7 +13,7 @@ export const DEFAULT_CURRICULUM_STATE: CurriculumState = {
 
 export type Scenario = Awaited<ReturnType<typeof createBattlefield>> & {
     index: number;
-    isTrain: boolean;
+    train: boolean;
 
     getVehicleEids(): readonly EntityId[];
     getTeamsCount(): number;

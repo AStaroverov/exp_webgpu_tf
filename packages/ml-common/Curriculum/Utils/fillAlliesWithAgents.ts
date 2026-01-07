@@ -3,7 +3,7 @@ import { CurrentActorAgent } from '../../../tanks/src/Pilots/Agents/CurrentActor
 import { getRegistratedAgents, getFreeVehicaleEids, Pilot } from '../../../tanks/src/Pilots/Components/Pilot.ts';
 import { Scenario } from '../types.ts';
 
-export function fillAlliesWithAgents(scenario: Scenario, train: boolean) {
+export function fillAlliesWithAgents(scenario: Scenario) {
     const vehicleEids = getFreeVehicaleEids();
     const firstAgent = getRegistratedAgents();
     const activeTeam = getTankTeamId(firstAgent[0].tankEid);
@@ -13,7 +13,7 @@ export function fillAlliesWithAgents(scenario: Scenario, train: boolean) {
 
         if (getTankTeamId(vehicleEid) !== activeTeam) continue;
 
-        const agent = new CurrentActorAgent(vehicleEid, train);
+        const agent = new CurrentActorAgent(vehicleEid, scenario.train);
         Pilot.addComponent(scenario.world, vehicleEid, agent);
     }
 }

@@ -121,7 +121,6 @@ export function getTankTotalSlotCount(vehicleEid: number) {
 
 export const HEALTH_THRESHOLD = 0.85;
 
-// return from 0 to 1
 export function getTankHealthAbs(tankEid: number): number {
     const health = getTankHealth(tankEid);
     const totalSlots = getTankTotalSlotCount(tankEid);

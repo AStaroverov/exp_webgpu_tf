@@ -31,7 +31,7 @@ export type LearnableAgent = {
     getVersion(): number;
     getMemory(): undefined | AgentMemory;
     getMemoryBatch(rewardBias: number): undefined | AgentMemoryBatch;
-    evaluateTankBehaviour(width: number, height: number, frame: number, successRatio: number): void;
+    evaluateTankBehaviour(width: number, height: number, frame: number): void;
 }
 
 const currentActorUpdater = createNetworkModelManager(() => getNetwork(Model.Policy));

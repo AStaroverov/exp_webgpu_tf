@@ -1,6 +1,7 @@
 import { getTankHealth, getTankTeamId } from '../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
+import { EntityId } from 'bitecs';
 
-export function getTeamHealth(tanks: number[]) {
+export function getTeamHealth(tanks: readonly EntityId[]): Record<number, number> {
     return tanks.reduce((acc, tankEid) => {
         const team = getTankTeamId(tankEid);
         const health = getTankHealth(tankEid);

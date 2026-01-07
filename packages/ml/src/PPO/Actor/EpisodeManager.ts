@@ -52,7 +52,7 @@ export class EpisodeManager {
 
     protected afterEpisode(episode: Scenario) {
         const successRatio = episode.getSuccessRatio();
-        const isReference = !episode.isTrain;
+        const isReference = !episode.train;
         const pilots = Array.from(Pilot.agent.values());
 
         episodeSampleChannel.emit({

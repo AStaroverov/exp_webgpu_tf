@@ -1,5 +1,5 @@
 export const PilotsState = {
-    enabled: false,
+    enabled: true,
     toggle: (on?: boolean) => {
         PilotsState.enabled = on ?? !PilotsState.enabled;
     },

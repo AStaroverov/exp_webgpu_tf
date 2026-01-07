@@ -16,7 +16,7 @@ export function createPilotSystem() {
         if (frame++ % SNAPSHOT_EVERY !== 0) return;
         
         for (const agent of currentPilots) {
-            agent.evaluateTankBehaviour?.(GameDI.width, GameDI.height, frame, 0);
+            agent.evaluateTankBehaviour?.(GameDI.width, GameDI.height, frame);
         }
 
         snapshotTankInputTensor();
