@@ -58,7 +58,7 @@ export const VehicleBaseDensity: Record<VehicleType, number> = {
  */
 export const PartDensityMultiplier: Record<SlotPartType, number> = {
     [SlotPartType.HullPart]: 10,
-    [SlotPartType.Caterpillar]: 1,
+    [SlotPartType.Caterpillar]: 5,
     [SlotPartType.TurretHead]: 1,
     [SlotPartType.TurretGun]: 1,
     [SlotPartType.Barrier]: 15,    // Very heavy, impenetrable

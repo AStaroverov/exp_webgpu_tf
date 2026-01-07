@@ -113,10 +113,11 @@ export function createBuildingParts(
         const sin = Math.sin(options.rotation);
         const worldX = anchorX * cos - anchorY * sin;
         const worldY = anchorX * sin + anchorY * cos;
+        const isFloor = type === 'floor';
 
         // Choose color based on part type
         let partColor: TColor;
-        if (type === 'floor') {
+        if (isFloor) {
             partColor = getRandomFloorColor();
         } else {
             partColor = baseColor;
@@ -128,32 +129,23 @@ export function createBuildingParts(
         partOptions.color[1] = Math.max(0, Math.min(1, partColor[1] + colorVariation));
         partOptions.color[2] = Math.max(0, Math.min(1, partColor[2] + colorVariation));
         // Floor tiles have random transparency for worn/faded look
-        partOptions.color[3] = type === 'floor' ? randomRangeFloat(0.3, 0.8) : 1;
+        partOptions.color[3] = isFloor ? randomRangeFloat(0.3, 0.8) : 1;
 
         partOptions.x = buildingX + worldX;
         partOptions.y = buildingY + worldY;
         
         // Z-ordering: floor (0, flat on ground) -> debris -> walls (highest)
-        if (type === 'floor') {
+        if (isFloor) {
             partOptions.z = 0;
         } else {
-            partOptions.z = ZIndex.Building + 1 + (width + height) / 4;
+            partOptions.z = ZIndex.Building + (width + height) / 4;
         }
 
         partOptions.width = width;
         partOptions.height = height;
         // Combine building rotation with part's own rotation
         partOptions.rotation = options.rotation + partRotation;
-        
-        // Density: floor is heavy (flat on ground), debris is light, walls are normal
-        if (type === 'floor') {
-            partOptions.density = options.density * 1.2;
-        } else {
-            partOptions.density = options.density;
-        }
-
-        // Floor tiles have no collision - purely decorative
-        const isFloor = type === 'floor';
+        partOptions.density = options.density;
         
         const rrOptions = {
             ...partOptions,
