@@ -4,7 +4,7 @@ import { TestGameState$, TestGameStateEffects, incrementEnemyCount } from '../St
 import { startTestGame, spawnEnemy, exitTestGame, spawnPlayerVehicle } from '../State/gameMethods.ts';
 import { spawnRockAtRandomPosition, spawnBuildingAtRandomPosition, BuildingSize } from '../State/engineMethods.ts';
 import { setRenderTarget } from '../State/RenderTarget.ts';
-import { upsertModels } from '../../../../ml/src/Models/Trained/restore.ts';
+import { upsertModels } from '../../../../ml/src/Models/restore.ts';
 import { initTensorFlow } from '../../../../ml-common/initTensorFlow.ts';
 
 import '../../../../ml/src/Models/Layers';
