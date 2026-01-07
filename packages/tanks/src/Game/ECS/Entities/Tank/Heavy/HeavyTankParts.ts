@@ -27,14 +27,10 @@ export const caterpillarSet = createRectangleSet(
 );
 
 // Left track caterpillar parts (local to left track)
-export const caterpillarSetLeft: PartsData[] = caterpillarSet.map((set) => {
-    return set.slice() as PartsData; // Already centered at track origin
-});
+export const caterpillarSetLeft: PartsData[] = caterpillarSet;
 
 // Right track caterpillar parts (local to right track)
-export const caterpillarSetRight: PartsData[] = caterpillarSet.map((set) => {
-    return set.slice() as PartsData; // Already centered at track origin
-});
+export const caterpillarSetRight: PartsData[] = caterpillarSet;
 
 export const PARTS_COUNT = hullSet.length + turretHeadSet.length + turretGunSet.length + CATERPILLAR_LINE_COUNT * 2 * 2;
 
