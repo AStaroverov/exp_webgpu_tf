@@ -24,7 +24,7 @@ import {
 
 const TRACKS_COLOR = new Float32Array([0.5, 0.5, 0.5, 1]);
 const TURRET_COLOR = new Float32Array([0.5, 1, 0.5, 1]);
-const APPROXIMATE_COLLIDER_RADIUS = 150;
+const APPROXIMATE_COLLIDER_RADIUS = 80;
 
 export function createHeavyTank(opts: {
     playerId: number,
@@ -44,8 +44,8 @@ export function createHeavyTank(opts: {
     options.trackLength = caterpillarLength;
 
     options.density = DENSITY * 14;
-    options.width = PADDING * 14;
-    options.height = PADDING * 10;
+    options.width = PADDING * 12;
+    options.height = PADDING * 8;
     const [tankEid, tankPid] = createTankBase(options);
 
     // Create left and right tracks as independent entities
@@ -56,17 +56,17 @@ export function createHeavyTank(opts: {
             rightAnchorY: -TRACK_ANCHOR_Y,
             anchorX: 0,
             trackWidth: PADDING * 2,
-            trackHeight: options.trackLength,
+            trackHeight: caterpillarLength,
         },
         tankEid,
         tankPid,
     );
 
     options.density = DENSITY;
-    options.width = PADDING * 9;
-    options.height = PADDING * 7;
-    options.turret.rotationSpeed = PI * 0.25;
-    options.turret.gunWidth = PADDING * 8;
+    options.width = PADDING * 7;
+    options.height = PADDING * 6;
+    options.turret.rotationSpeed = PI * 0.6;
+    options.turret.gunWidth = PADDING * 7;
     options.turret.gunHeight = PADDING * 2;
     options.firearms.reloadingDuration = 700;
     options.firearms.bulletCaliber = BulletCaliber.Heavy;
@@ -99,7 +99,7 @@ export function createHeavyTank(opts: {
     fillAllSlots(gunEid, options);
 
     // Add exhaust pipes
-    createTankExhaustPipes(tankEid, PADDING * 14, PADDING * 10);
+    createTankExhaustPipes(tankEid, PADDING * 12, PADDING * 8);
 
     return tankEid;
 }

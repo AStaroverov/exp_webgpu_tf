@@ -24,7 +24,7 @@ import {
 
 const TRACKS_COLOR = new Float32Array([0.5, 0.5, 0.5, 1]);
 const TURRET_COLOR = new Float32Array([0.5, 1, 0.5, 1]);
-const APPROXIMATE_COLLIDER_RADIUS = 80;
+const APPROXIMATE_COLLIDER_RADIUS = 60;
 
 export function createMediumTank(opts: {
     playerId: number,
@@ -44,8 +44,8 @@ export function createMediumTank(opts: {
     options.trackLength = caterpillarLength;
 
     options.density = DENSITY * 14;
-    options.width = PADDING * 12;
-    options.height = PADDING * 8;
+    options.width = PADDING * 11;
+    options.height = PADDING * 7;
     const [tankEid, tankPid] = createTankBase(options);
 
     // Create left and right tracks as independent entities
@@ -63,18 +63,18 @@ export function createMediumTank(opts: {
     );
 
     options.density = DENSITY;
-    options.width = PADDING * 7;
-    options.height = PADDING * 6;
-    options.turret.rotationSpeed = PI * 0.6;
-    options.turret.gunWidth = PADDING * 7;
+    options.width = PADDING * 6;
+    options.height = PADDING * 5;
+    options.turret.rotationSpeed = PI * 0.7;
+    options.turret.gunWidth = PADDING * 6;
     options.turret.gunHeight = PADDING * 2;
     options.firearms.bulletCaliber = BulletCaliber.Medium;
     options.firearms.reloadingDuration = 500;
-    options.firearms.bulletStartPosition = [13 * PADDING, 0];
+    options.firearms.bulletStartPosition = [11 * PADDING, 0];
     const [turretEid, gunEid] = createTankTurret(options, tankEid, tankPid);
 
     // Add exhaust pipes
-    createTankExhaustPipes(tankEid, PADDING * 12, PADDING * 8);
+    createTankExhaustPipes(tankEid, PADDING * 11, PADDING * 7);
 
     // Hull parts attached to tank body
     createSlotEntities(tankEid, hullSet, options.color, SlotPartType.HullPart);

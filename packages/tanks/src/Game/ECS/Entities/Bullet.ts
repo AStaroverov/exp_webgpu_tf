@@ -127,7 +127,7 @@ export function spawnBullet(vehicleEid: number) {
     spawnMuzzleFlash({
         x: optionsSpawnBullet.x,
         y: optionsSpawnBullet.y,
-        size: bulletCaliber.width * ExplosionConfig.muzzleFlashSizeMult,
+        size: bulletCaliber.height * ExplosionConfig.muzzleFlashSizeMult,
         duration: ExplosionConfig.muzzleFlashDuration,
         rotation: optionsSpawnBullet.rotation + PI / 2,
     });
