@@ -1,4 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
+
+import './Layers';
+
 import { isBrowser } from '../../../../lib/detect.ts';
 import { onReadyRead } from '../../../ml-common/Tensor.ts';
 import { getNetworkExpIteration } from '../../../ml-common/utils.ts';
