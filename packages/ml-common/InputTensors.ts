@@ -13,7 +13,7 @@ import {
 } from '../ml/src/Models/Create.ts';
 import { InputArrays } from './InputArrays.ts';
 import { flatTypedArray } from './flat.ts';
-import { MAX_TURRETS } from '../tanks/src/Pilots/Components/TankState.ts';
+import { MAX_TURRETS } from '../tanks/src/Plugins/Pilots/Components/TankState.ts';
 
 export { RAY_SLOTS };
 

@@ -1,6 +1,6 @@
 import { createGame } from '../../tanks/src/Game/createGame.ts';
-import { createMLPlugin } from '../../tanks/src/ML/createMlPlugin.ts';
-import { createPilotsPlugin } from '../../tanks/src/Pilots/createPilotsPlugin.ts';
+import { createMLPlugin } from '../../tanks/src/Plugins/ML/createMlPlugin.ts';
+import { createPilotsPlugin } from '../../tanks/src/Plugins/Pilots/createPilotsPlugin.ts';
 
 const MAX_SIZE = 1600;
 const MIN_SIZE = 1000;

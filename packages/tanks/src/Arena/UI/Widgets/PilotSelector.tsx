@@ -1,9 +1,9 @@
 import { ChangeEvent, useCallback } from 'react';
 import { Select, SelectItem } from '../Components/Selector.tsx';
-import { getLoadedAgent, LoadedAgent } from '../../../Pilots/Agents/LoadedAgent.ts';
+import { getLoadedAgent, LoadedAgent } from '../../../Plugins/Pilots/Agents/LoadedAgent.ts';
 import { changeTankPilot, getPilotAgent$ } from '../../State/Game/gameMethods.ts';
 import { useObservable } from 'react-use';
-import { CurrentActorAgent, TankAgent } from '../../../Pilots/Agents/CurrentActorAgent.ts';
+import { CurrentActorAgent, TankAgent } from '../../../Plugins/Pilots/Agents/CurrentActorAgent.ts';
 
 const pilots = [
     { key: 'current', label: 'Pilot last' },

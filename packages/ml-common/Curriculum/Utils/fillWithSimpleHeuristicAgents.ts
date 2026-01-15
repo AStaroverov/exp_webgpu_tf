@@ -1,5 +1,5 @@
-import { SimpleBot, SimpleBotFeatures } from '../../../tanks/src/Pilots/Agents/SimpleBot.ts';
-import { getFreeVehicaleEids, Pilot } from '../../../tanks/src/Pilots/Components/Pilot.ts';
+import { SimpleBot, SimpleBotFeatures } from '../../../tanks/src/Plugins/Pilots/Agents/SimpleBot.ts';
+import { getFreeVehicaleEids, Pilot } from '../../../tanks/src/Plugins/Pilots/Components/Pilot.ts';
 import { Scenario } from '../types.ts';
 
 export function fillWithSimpleHeuristicAgents(scenario: Scenario, features: SimpleBotFeatures) {

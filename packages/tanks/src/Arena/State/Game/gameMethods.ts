@@ -12,9 +12,9 @@ import { EntityId } from 'bitecs';
 import { getEngine } from './engine.ts';
 import { hashArray } from '../../../../../../lib/hashArray.ts';
 import { createTank, TankVehicleType } from '../../../Game/ECS/Entities/Tank/createTank.ts';
-import { TankAgent } from '../../../Pilots/Agents/CurrentActorAgent.ts';
+import { TankAgent } from '../../../Plugins/Pilots/Agents/CurrentActorAgent.ts';
 import { Nil } from '../../../../../../lib/Types/index.ts';
-import { getRegistratedAgents } from '../../../Pilots/Components/Pilot.ts';
+import { getRegistratedAgents } from '../../../Plugins/Pilots/Components/Pilot.ts';
 import { PLAYER_TEAM_ID } from './def.ts';
 import { fillSlot, mapSlotToEid$ } from './modules/lobbySlots.ts';
 import { PI } from '../../../../../../lib/math.ts';
@@ -26,7 +26,7 @@ import { getTeamSpawnPosition, allocateSpawnCell, CellContent, findNextAvailable
 import { getValue } from '../../../../../../lib/Rx/getValue.ts';
 import { spawnSpiceCluster } from '../../../Game/ECS/Entities/Spice/Spice.ts';
 import { createSpiceCollector } from '../../../Game/ECS/Entities/SpiceCollector/SpiceCollector.ts';
-import { getLoadedAgent } from '../../../Pilots/Agents/LoadedAgent.ts';
+import { getLoadedAgent } from '../../../Plugins/Pilots/Agents/LoadedAgent.ts';
 
 export function addTank(slot: number, teamId: number, vehicleType: TankVehicleType) {
     const { x, y } = getTeamSpawnPosition(teamId, slot + 1);

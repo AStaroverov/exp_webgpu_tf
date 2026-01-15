@@ -33,7 +33,7 @@ if (mapIndexToConstructor.size !== mapEntries.length) {
 
 export const scenariosCount = mapIndexToConstructor.size;
 
-const edge = 0.5; // success ratio to unlock next scenario
+const edge = 0.3; // success ratio to unlock next scenario
 
 export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: Omit<ScenarioOptions, 'index'>): Promise<Scenario> {
     const constructorOptions = options as ScenarioOptions;

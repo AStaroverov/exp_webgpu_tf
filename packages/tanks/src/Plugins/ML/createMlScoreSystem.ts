@@ -1,20 +1,20 @@
 import { EntityId, query } from "bitecs";
-import { Vehicle } from "../Game/ECS/Components/Vehicle";
+import { Vehicle } from "../../Game/ECS/Components/Vehicle";
 import { MLState } from "./MlState";
-import { GameDI } from "../Game/DI/GameDI";
-import { Score } from "../Game/ECS/Components/Score";
+import { GameDI } from "../../Game/DI/GameDI";
+import { Score } from "../../Game/ECS/Components/Score";
 import { RAYS_COUNT, RAY_BUFFER, RayHitType, TankInputTensor } from "../Pilots/Components/TankState";
-import { PlayerRef } from "../Game/ECS/Components/PlayerRef";
+import { PlayerRef } from "../../Game/ECS/Components/PlayerRef";
 import { findVehicleFromPart } from "../Pilots/Utils/snapshotTankInputTensor";
-import { RigidBodyState } from "../Game/ECS/Components/Physical";
-import { hypot } from "../../../../lib/math";
-import { VehicleController } from "../Game/ECS/Components/VehicleController";
+import { RigidBodyState } from "../../Game/ECS/Components/Physical";
+import { hypot } from "../../../../../lib/math";
+import { VehicleController } from "../../Game/ECS/Components/VehicleController";
 
 // Track previously detected enemies per vehicle: vehicleEid -> Set<enemyVehicleEid>
 const previouslyDetectedEnemies = new Map<EntityId, Set<EntityId>>();
 
 // Track last reward position per vehicle for exploration reward
-const EXPLORATION_DISTANCE = 100;
+const EXPLORATION_DISTANCE = 50;
 const lastRewardPosition = new Map<EntityId, { x: number; y: number }>();
 
 export function createMlScoreSystem({ world } = GameDI) {
@@ -122,7 +122,8 @@ function getExplorationReward(vehicleEid: EntityId): number {
 
     lastPos.x = x;
     lastPos.y = y;
-    return 0.3;
+    
+    return previouslyDetectedEnemies.get(vehicleEid)?.size ?? 0 > 0 ? 0.25 : 1;
 }
 
 
@@ -162,7 +163,7 @@ function getProximityPenalty(vehicleEid: EntityId, raysBuffer: Float64Array): nu
         // Only penalize if intended movement is TOWARD the obstacle
         
         if (dot > 0.5) {
-            return -0.1;
+            return -0.05;
         }
     }
 

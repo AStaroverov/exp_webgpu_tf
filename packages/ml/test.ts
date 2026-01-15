@@ -4,11 +4,11 @@ import { createGame } from '../tanks/src/Game/createGame.ts';
 import { GameDI } from '../tanks/src/Game/DI/GameDI.ts';
 import { createPlayer } from '../tanks/src/Game/ECS/Entities/Player.ts';
 import { createMediumTank } from '../tanks/src/Game/ECS/Entities/Tank/Medium/MediumTank.ts';
-import { createPilotsPlugin } from '../tanks/src/Pilots/createPilotsPlugin.ts';
-import { snapshotTankInputTensor } from '../tanks/src/Pilots/Utils/snapshotTankInputTensor.ts';
+import { createPilotsPlugin } from '../tanks/src/Plugins/Pilots/createPilotsPlugin.ts';
+import { snapshotTankInputTensor } from '../tanks/src/Plugins/Pilots/Utils/snapshotTankInputTensor.ts';
 import { calculateActionReward, WEIGHTS } from './src/Reward/calculateReward.ts';
 import { createBuilding } from '../tanks/src/Game/ECS/Entities/Building/Building.ts';
-import { createMLPlugin } from '../tanks/src/ML/createMlPlugin.ts';
+import { createMLPlugin } from '../tanks/src/Plugins/ML/createMlPlugin.ts';
 
 const game = createGame({ width: 1200, height: 1000 });
 const { gameTick, setRenderTarget, enablePlayer, setPlayerVehicle } = game;

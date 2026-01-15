@@ -1,11 +1,11 @@
 import * as tf from '@tensorflow/tfjs';
 
-import { InputArrays, prepareInputArrays } from "../../../../ml-common/InputArrays";
-import { patientAction } from "../../../../ml-common/utils";
-import { disposeNetwork } from "../../../../ml/src/Models/Utils";
-import { batchAct } from "../../../../ml/src/PPO/train";
+import { InputArrays, prepareInputArrays } from "../../../../../ml-common/InputArrays";
+import { patientAction } from "../../../../../ml-common/utils";
+import { disposeNetwork } from "../../../../../ml/src/Models/Utils";
+import { batchAct } from "../../../../../ml/src/PPO/train";
 import { TankAgent } from "./CurrentActorAgent";
-import { random, randomRangeFloat } from '../../../../../lib/random';
+import { random, randomRangeFloat } from '../../../../../../lib/random';
 
 export type NetworkModelManager = ReturnType<typeof createNetworkModelManager>;
 

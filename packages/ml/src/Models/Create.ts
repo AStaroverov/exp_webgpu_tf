@@ -8,7 +8,7 @@ import {
     RAY_HIT_TYPE_COUNT,
     RAY_BUFFER,
     MAX_TURRETS,
-} from '../../../tanks/src/Pilots/Components/TankState.ts';
+} from '../../../tanks/src/Plugins/Pilots/Components/TankState.ts';
 
 
 import { createDenseLayer } from "./ApplyLayers.ts";

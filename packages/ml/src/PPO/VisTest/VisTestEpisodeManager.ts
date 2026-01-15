@@ -8,7 +8,7 @@ import { createScenarioByCurriculumState } from '../../../../ml-common/Curriculu
 import { Scenario } from '../../../../ml-common/Curriculum/types.ts';
 import { getDrawState } from '../../../../ml-common/uiUtils.ts';
 import { EpisodeManager } from '../Actor/EpisodeManager.ts';
-import { getRegistratedAgents, Pilot } from '../../../../tanks/src/Pilots/Components/Pilot.ts';
+import { getRegistratedAgents, Pilot } from '../../../../tanks/src/Plugins/Pilots/Components/Pilot.ts';
 
 export class VisTestEpisodeManager extends EpisodeManager {
     private currentScenario?: Scenario;

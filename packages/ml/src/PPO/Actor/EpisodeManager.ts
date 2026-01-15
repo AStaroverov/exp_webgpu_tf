@@ -7,7 +7,7 @@ import { SNAPSHOT_EVERY, TICK_TIME_SIMULATION } from '../../../../ml-common/cons
 import { createScenarioByCurriculumState } from '../../../../ml-common/Curriculum/createScenarioByCurriculumState.ts';
 import { CurriculumState, Scenario } from '../../../../ml-common/Curriculum/types.ts';
 import { agentSampleChannel, curriculumStateChannel, episodeSampleChannel, queueSizeChannel } from '../channels.ts';
-import { getRegistratedAgents, getAliveLearnableAgents, Pilot } from '../../../../tanks/src/Pilots/Components/Pilot.ts';
+import { getRegistratedAgents, getAliveLearnableAgents, Pilot } from '../../../../tanks/src/Plugins/Pilots/Components/Pilot.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),

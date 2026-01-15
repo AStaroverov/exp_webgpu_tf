@@ -1,16 +1,16 @@
 import * as tf from '@tensorflow/tfjs';
 
 import { clamp } from 'lodash';
-import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
-import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
-import { getNetworkExpIteration } from '../../../../ml-common/utils.ts';
-import { Model } from '../../../../ml/src/Models/def.ts';
-import { getNetwork } from '../../../../ml/src/Models/Utils.ts';
-import { calculateActionReward, getFramePenalty, WEIGHTS } from '../../../../ml/src/Reward/calculateReward.ts';
-import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
+import { applyActionToTank } from '../../../../../ml-common/applyActionToTank.ts';
+import { AgentMemory, AgentMemoryBatch } from '../../../../../ml-common/Memory.ts';
+import { getNetworkExpIteration } from '../../../../../ml-common/utils.ts';
+import { Model } from '../../../../../ml/src/Models/def.ts';
+import { getNetwork } from '../../../../../ml/src/Models/Utils.ts';
+import { calculateActionReward, getFramePenalty, WEIGHTS } from '../../../../../ml/src/Reward/calculateReward.ts';
+import { getTankHealth } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { createNetworkModelManager } from './NetworkModelManager.ts';
-import { ACTION_HEAD_DIMS } from '../../../../ml/src/Models/Create.ts';
-import { DirichletNoise } from '../../../../ml-common/DirichletNoise.ts';
+import { ACTION_HEAD_DIMS } from '../../../../../ml/src/Models/Create.ts';
+import { DirichletNoise } from '../../../../../ml-common/DirichletNoise.ts';
 
 export type TankAgent<A = Partial<DownloadableAgent> & Partial<LearnableAgent>> = A & {
     tankEid: number;

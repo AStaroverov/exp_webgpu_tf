@@ -1,5 +1,5 @@
-import { CurrentActorAgent } from '../../tanks/src/Pilots/Agents/CurrentActorAgent.ts';
-import { Pilot } from '../../tanks/src/Pilots/Components/Pilot.ts';
+import { CurrentActorAgent } from '../../tanks/src/Plugins/Pilots/Agents/CurrentActorAgent.ts';
+import { Pilot } from '../../tanks/src/Plugins/Pilots/Components/Pilot.ts';
 import { resetSpawnGrid } from '../../tanks/src/Arena/State/Game/SpawnGrid.ts';
 import { createScenarioCore, ScenarioCoreOptions } from './createScenarioCore.ts';
 import { Scenario } from './types.ts';

@@ -1,6 +1,6 @@
-import { applyActionToTank } from '../../../../ml-common/applyActionToTank.ts';
-import { Model } from '../../../../ml/src/Models/def.ts';
-import { getRandomHistoricalNetwork } from '../../../../ml/src/Models/Utils.ts';
+import { applyActionToTank } from '../../../../../ml-common/applyActionToTank.ts';
+import { Model } from '../../../../../ml/src/Models/def.ts';
+import { getRandomHistoricalNetwork } from '../../../../../ml/src/Models/Utils.ts';
 import { createNetworkModelManager } from './NetworkModelManager.ts';
 import { DownloadableAgent, TankAgent } from './CurrentActorAgent.ts';
 

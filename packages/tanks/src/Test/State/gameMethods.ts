@@ -6,7 +6,7 @@ import { TestGameState$, toggleTestGame } from './GameState.ts';
 import { getTankHealth, syncRemoveTank } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { randomRangeInt } from '../../../../../lib/random.ts';
 import { PlayerEnvDI } from '../../Game/DI/PlayerEnvDI.ts';
-import { Pilot } from '../../Pilots/Components/Pilot.ts';
+import { Pilot } from '../../Plugins/Pilots/Components/Pilot.ts';
 
 const ENEMY_VEHICLE_TYPES: VehicleType[] = [
     VehicleType.LightTank, 

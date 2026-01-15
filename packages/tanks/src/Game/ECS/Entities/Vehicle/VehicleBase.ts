@@ -1,7 +1,7 @@
 import { JointData, Vector2 } from '@dimforge/rapier2d-simd';
 import { Color } from '../../../../../../renderer/src/ECS/Components/Common.ts';
 import { addTransformComponents } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
-import { VehicleInputTensor } from '../../../../Pilots/Components/VehicleState.ts';
+import { VehicleInputTensor } from '../../../../Plugins/Pilots/Components/VehicleState.ts';
 import { GameDI } from '../../../DI/GameDI.ts';
 import { CollisionGroup } from '../../../Physical/createRigid.ts';
 import { Children } from '../../Components/Children.ts';

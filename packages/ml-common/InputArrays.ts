@@ -23,7 +23,7 @@ import {
     RayHitType,
     TURRET_BUFFER, TankInputTensor,
     RAYS_COUNT
-} from '../tanks/src/Pilots/Components/TankState.ts';
+} from '../tanks/src/Plugins/Pilots/Components/TankState.ts';
 
 function norm(v: number, size: number): number {
     return v / size;

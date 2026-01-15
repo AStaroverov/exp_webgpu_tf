@@ -1,5 +1,5 @@
 import * as tf from '@tensorflow/tfjs';
-import { MAX_TURRETS } from "../../../tanks/src/Pilots/Components/TankState";
+import { MAX_TURRETS } from "../../../tanks/src/Plugins/Pilots/Components/TankState";
 import { TANK_FEATURES_DIM, TURRET_FEATURES_DIM, RAY_SLOTS, RAY_FEATURES_DIM, ALLY_FEATURES_DIM, ALLY_SLOTS, BULLET_FEATURES_DIM, BULLET_SLOTS, ENEMY_FEATURES_DIM, ENEMY_SLOTS } from "./Create";
 import { VEHICLE_TYPE_COUNT } from '../../../tanks/src/Game/Config';
 import { createDenseLayer } from './ApplyLayers';

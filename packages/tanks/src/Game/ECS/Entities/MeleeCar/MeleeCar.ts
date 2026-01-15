@@ -2,11 +2,10 @@ import { PI } from '../../../../../../../lib/math.ts';
 import { TColor } from '../../../../../../renderer/src/ECS/Components/Common.ts';
 import { SlotPartType } from '../../Components/SlotConfig.ts';
 import { VehicleType } from '../../Components/Vehicle.ts';
-import { VehicleEngineType } from '../../Systems/Vehicle/VehicleControllerSystems.ts';
 import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../Vehicle/VehicleParts.ts';
 import { addCarExhaustPipe } from '../ExhaustPipe.ts';
 import { createMeleeCarBase, createMeleeCarWheels } from './MeleeCarBase.ts';
-import { DampingConfig } from '../../../Config/index.ts';
+import { DampingConfig, EngineType } from '../../../Config/index.ts';
 import {
     DENSITY, hullSet,
     PADDING,
@@ -38,7 +37,7 @@ export function createMeleeCar(opts: {
     options.padding = PADDING;
     options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
     options.vehicleType = VehicleType.MeleeCar;
-    options.engineType = VehicleEngineType.v8; // Fast v8 engine
+    options.engineType = EngineType.v8; // Fast v8 engine
     options.wheelBase = wheelBase;
 
     // Light and fast base

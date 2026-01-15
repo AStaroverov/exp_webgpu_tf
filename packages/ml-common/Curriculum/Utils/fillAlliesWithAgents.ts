@@ -1,6 +1,6 @@
 import { getTankTeamId } from '../../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
-import { CurrentActorAgent } from '../../../tanks/src/Pilots/Agents/CurrentActorAgent.ts';
-import { getRegistratedAgents, getFreeVehicaleEids, Pilot } from '../../../tanks/src/Pilots/Components/Pilot.ts';
+import { CurrentActorAgent } from '../../../tanks/src/Plugins/Pilots/Agents/CurrentActorAgent.ts';
+import { getRegistratedAgents, getFreeVehicaleEids, Pilot } from '../../../tanks/src/Plugins/Pilots/Components/Pilot.ts';
 import { Scenario } from '../types.ts';
 
 export function fillAlliesWithAgents(scenario: Scenario) {

@@ -1,5 +1,5 @@
-import { GameDI } from '../Game/DI/GameDI.ts';
-import { SystemGroup } from '../Game/ECS/Plugins/systems.ts';
+import { GameDI } from '../../Game/DI/GameDI.ts';
+import { SystemGroup } from '../../Game/ECS/Plugins/systems.ts';
 import { createMlScoreSystem } from './createMlScoreSystem.ts';
 import { MLState } from './MlState.ts';
 

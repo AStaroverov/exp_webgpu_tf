@@ -1,5 +1,5 @@
-import { CurrentActorAgent } from '../../../tanks/src/Pilots/Agents/CurrentActorAgent.ts';
-import { getFreeVehicaleEids, Pilot } from '../../../tanks/src/Pilots/Components/Pilot.ts';
+import { CurrentActorAgent } from '../../../tanks/src/Plugins/Pilots/Agents/CurrentActorAgent.ts';
+import { getFreeVehicaleEids, Pilot } from '../../../tanks/src/Plugins/Pilots/Components/Pilot.ts';
 import { Scenario } from '../types.ts';
 
 export function fillWithCurrentAgents(scenario: Scenario) {

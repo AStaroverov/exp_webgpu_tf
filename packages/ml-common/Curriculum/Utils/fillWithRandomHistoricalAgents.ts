@@ -1,5 +1,5 @@
-import { RandomHistoricalAgent } from '../../../tanks/src/Pilots/Agents/RandomHistoricalAgent.ts';
-import { getFreeVehicaleEids, Pilot } from '../../../tanks/src/Pilots/Components/Pilot.ts';
+import { RandomHistoricalAgent } from '../../../tanks/src/Plugins/Pilots/Agents/RandomHistoricalAgent.ts';
+import { getFreeVehicaleEids, Pilot } from '../../../tanks/src/Plugins/Pilots/Components/Pilot.ts';
 import { Scenario } from '../types.ts';
 
 export function fillWithRandomHistoricalAgents(scenario: Scenario) {

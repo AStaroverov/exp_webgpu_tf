@@ -2,7 +2,6 @@ import { PI } from '../../../../../../../lib/math.ts';
 import { TColor } from '../../../../../../renderer/src/ECS/Components/Common.ts';
 import { SlotPartType } from '../../Components/SlotConfig.ts';
 import { VehicleType } from '../../Components/Vehicle.ts';
-import { VehicleEngineType } from '../../Systems/Vehicle/VehicleControllerSystems.ts';
 import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../Vehicle/VehicleParts.ts';
 import { createTankExhaustPipes } from '../ExhaustPipe.ts';
 import { createHarvesterBase, createHarvesterTracks, createHarvesterTurret } from './HarvesterBase.ts';
@@ -21,6 +20,7 @@ import {
     TRACK_ANCHOR_Y,
 } from './HarvesterParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from './Options.ts';
+import { EngineType } from '../../../Config/vehicles.ts';
 
 // Harvester colors - industrial/utility look
 const TRACKS_COLOR = new Float32Array([0.4, 0.4, 0.4, 1]);
@@ -43,7 +43,7 @@ export function createHarvester(opts: {
     options.padding = PADDING;
     options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
     options.vehicleType = VehicleType.Harvester;
-    options.engineType = VehicleEngineType.v12;
+    options.engineType = EngineType.v12;
     options.trackLength = caterpillarLength;
 
     // Heavy base for bulldozer

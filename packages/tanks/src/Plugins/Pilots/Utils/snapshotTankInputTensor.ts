@@ -1,16 +1,16 @@
 import { Ball, Collider, Ray, Vector2 } from '@dimforge/rapier2d-simd';
 import { EntityId, hasComponent, query } from 'bitecs';
-import { cos, hypot, sin } from '../../../../../lib/math.ts';
-import { shuffle } from '../../../../../lib/shuffle.ts';
-import { GameDI } from '../../Game/DI/GameDI.ts';
-import { getEntityIdByPhysicalId, RigidBodyRef, RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
-import { PlayerRef } from '../../Game/ECS/Components/PlayerRef.ts';
-import { Tank } from '../../Game/ECS/Components/Tank.ts';
-import { Vehicle } from '../../Game/ECS/Components/Vehicle.ts';
-import { TeamRef } from '../../Game/ECS/Components/TeamRef.ts';
-import { GameMap } from '../../Game/ECS/Entities/GameMap.ts';
-import { CollisionGroup, createCollisionGroups } from '../../Game/Physical/createRigid.ts';
-import { hasIntersectionVectorAndCircle } from '../../Game/Utils/intersections.ts';
+import { cos, hypot, sin } from '../../../../../../lib/math.ts';
+import { shuffle } from '../../../../../../lib/shuffle.ts';
+import { GameDI } from '../../../Game/DI/GameDI.ts';
+import { getEntityIdByPhysicalId, RigidBodyRef, RigidBodyState } from '../../../Game/ECS/Components/Physical.ts';
+import { PlayerRef } from '../../../Game/ECS/Components/PlayerRef.ts';
+import { Tank } from '../../../Game/ECS/Components/Tank.ts';
+import { Vehicle } from '../../../Game/ECS/Components/Vehicle.ts';
+import { TeamRef } from '../../../Game/ECS/Components/TeamRef.ts';
+import { GameMap } from '../../../Game/ECS/Entities/GameMap.ts';
+import { CollisionGroup, createCollisionGroups } from '../../../Game/Physical/createRigid.ts';
+import { hasIntersectionVectorAndCircle } from '../../../Game/Utils/intersections.ts';
 import {
     MAX_ALLIES,
     MAX_BULLETS,
@@ -21,10 +21,10 @@ import {
     RayHitType
 } from '../Components/TankState.ts';
 
-import { HeuristicsData } from '../../Game/ECS/Components/HeuristicsData.ts';
-import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
-import { Parent } from '../../Game/ECS/Components/Parent.ts';
-import { ALL_VEHICLE_PARTS_MASK, CollisionGroupConfig } from '../../Game/Config/physics.ts';
+import { HeuristicsData } from '../../../Game/ECS/Components/HeuristicsData.ts';
+import { getTankHealth } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
+import { Parent } from '../../../Game/ECS/Components/Parent.ts';
+import { ALL_VEHICLE_PARTS_MASK, CollisionGroupConfig } from '../../../Game/Config/physics.ts';
 
 // Temp arrays for offset-adjusted positions
 const tempTankPosition = new Float64Array(2);

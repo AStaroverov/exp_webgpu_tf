@@ -9,8 +9,8 @@ import { getTankHealth } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { engine$, getEngine } from './engine.ts';
 import { createPlayer } from '../../../Game/ECS/Entities/Player.ts';
 import { map, shareReplay } from 'rxjs';
-import { Pilot } from '../../../Pilots/Components/Pilot.ts';
-import { TankAgent } from '../../../Pilots/Agents/CurrentActorAgent.ts';
+import { Pilot } from '../../../Plugins/Pilots/Components/Pilot.ts';
+import { TankAgent } from '../../../Plugins/Pilots/Agents/CurrentActorAgent.ts';
 
 export const GAME_MAX_TEAM_TANKS = 5;
 

@@ -1,6 +1,6 @@
 import { createGame } from '../../Game/createGame.ts';
 import { BehaviorSubject } from 'rxjs';
-import { createPilotsPlugin } from '../../Pilots/createPilotsPlugin.ts';
+import { createPilotsPlugin } from '../../Plugins/Pilots/createPilotsPlugin.ts';
 import { createPlayer } from '../../Game/ECS/Entities/Player.ts';
 
 type Engine = ReturnType<typeof createGame> & {
