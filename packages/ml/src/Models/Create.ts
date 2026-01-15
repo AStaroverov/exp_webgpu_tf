@@ -24,13 +24,13 @@ export const TANK_FEATURES_DIM = 8;
 export const TURRET_SLOTS = MAX_TURRETS;
 export const TURRET_FEATURES_DIM = 4;
 
-// Enemies: [hp, x, y, vx, vy]
+// Enemies: [hp, x, y, vx, vy, turretRotationCos, turretRotationSin, colliderRadius]
 export const ENEMY_SLOTS = MAX_ENEMIES;
-export const ENEMY_FEATURES_DIM = 5 + 1; // 1 type embedding
+export const ENEMY_FEATURES_DIM = 8 + 1; // 1 type embedding
 
-// Allies: [hp, x, y, vx, vy]
+// Allies: [hp, x, y, vx, vy, turretRotationCos, turretRotationSin, colliderRadius]
 export const ALLY_SLOTS = MAX_ALLIES;
-export const ALLY_FEATURES_DIM = 5 + 1; // 1 type embedding
+export const ALLY_FEATURES_DIM = 8 + 1; // 1 type embedding
 
 // Bullets: [x, y, vx, vy]
 export const BULLET_SLOTS = MAX_BULLETS;

@@ -41,6 +41,7 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
     private memory = new AgentMemory();
     private noise = new DirichletNoise(ACTION_HEAD_DIMS, {
         alpha: 0.3,  // α < 1 for sparse, peaked samples (high exploration)
+        repeatInterval: [1, 6],
     });
 
     private initialActionReward?: number;

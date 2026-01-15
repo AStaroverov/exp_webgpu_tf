@@ -97,6 +97,10 @@ export function snapshotTankInputTensor({ world } = GameDI) {
             tempEnemyPosition[0] = enemyPosition[0] - GameMap.offsetX;
             tempEnemyPosition[1] = enemyPosition[1] - GameMap.offsetY;
 
+            const enemyTurretEid = Tank.turretEId[enemyEid];
+            const enemyTurretRotation = RigidBodyState.rotation[enemyTurretEid];
+            const enemyColliderRadius = HeuristicsData.approxColliderRadius[enemyEid];
+
             TankInputTensor.setEnemiesData(
                 vehicleEid,
                 j,
@@ -105,6 +109,8 @@ export function snapshotTankInputTensor({ world } = GameDI) {
                 getTankHealth(enemyEid),
                 tempEnemyPosition,
                 RigidBodyState.linvel.getBatch(enemyEid),
+                enemyTurretRotation,
+                enemyColliderRadius,
             );
         }
 
@@ -117,6 +123,10 @@ export function snapshotTankInputTensor({ world } = GameDI) {
             tempAllyPosition[0] = allyPosition[0] - GameMap.offsetX;
             tempAllyPosition[1] = allyPosition[1] - GameMap.offsetY;
 
+            const allyTurretEid = Tank.turretEId[allyEid];
+            const allyTurretRotation = RigidBodyState.rotation[allyTurretEid];
+            const allyColliderRadius = HeuristicsData.approxColliderRadius[allyEid];
+
             TankInputTensor.setAlliesData(
                 vehicleEid,
                 j,
@@ -125,6 +135,8 @@ export function snapshotTankInputTensor({ world } = GameDI) {
                 getTankHealth(allyEid),
                 tempAllyPosition,
                 RigidBodyState.linvel.getBatch(allyEid),
+                allyTurretRotation,
+                allyColliderRadius,
             );
         }
 

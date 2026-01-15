@@ -19,13 +19,13 @@ type policyNetworkConfig = NetworkConfig
 const policyNetworkConfig: policyNetworkConfig = {
     dim: 64,
     heads: 4,
-    depth: 6,
+    depth: 1,
 };
 
 const valueNetworkConfig: NetworkConfig = {
     dim: 32,
     heads: 1,
-    depth: 3,
+    depth: 0.5,
 };
 
 export function createNetwork(modelName: Model, config: NetworkConfig = modelName === Model.Policy ? policyNetworkConfig : valueNetworkConfig) {
@@ -83,7 +83,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const summarizedVehicle = summarize({
         name: modelName + '_summarizedVehicle',
         heads: config.heads,
-        depth: ceil(config.depth * 0.8),
+        depth: ceil(3 * config.depth),
         length: 4,
         token: getVehicleToken,
         mask: getVehicleMask,
@@ -93,7 +93,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const summarizedRays = summarize({
         name: modelName + '_summarizedRays',
         heads: config.heads,
-        depth: ceil(config.depth * 0.8),
+        depth: ceil(6 * config.depth),
         length: 4,
         token: tokens.raysTok,
     });
@@ -102,7 +102,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const summarizedProjectiles = summarize({
         name: modelName + '_summarizedProjectiles',
         heads: config.heads,
-        depth: ceil(config.depth * 0.4),
+        depth: ceil(2 * config.depth),
         length: 2,
         token: tokens.bulletsTok,
         mask: inputs.bulletsMaskInput,
@@ -122,7 +122,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const summarizedHeads = summarize({
         name: modelName + '_summarizedHeads',
         heads: config.heads,
-        depth: ceil(config.depth * 0.4),
+        depth: ceil(4 * config.depth),
         length: 4,
         token: getHeadsToken,
     });

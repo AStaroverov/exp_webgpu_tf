@@ -2,6 +2,7 @@ import { clamp } from 'lodash';
 import { min } from '../../../lib/math.ts';
 import { random } from '../../../lib/random.ts';
 import { createScenario1v1Random } from './createScenario1v1Random.ts';
+import { createScenario3v3Random } from './createScenario3v3Random.ts';
 import { createScenarioDiagonal } from './createScenarioDiagonal.ts';
 import { createScenarioDiagonalWall } from './createScenarioDiagonalWall.ts';
 import { createScenarioAgentsVsBots1 } from './createScenarioAgentsVsBots1.ts';
@@ -16,8 +17,10 @@ type ScenarioOptions = Parameters<typeof createScenarioGridBase>[0];
 const mapEntries = [
     createScenario1v1Random,       // 1v1 random positions, simplest bot
     createScenarioDiagonal,        // 1v1 diagonal with center obstacle
+    createScenario3v3Random.bind(null, 0),
     createScenarioDiagonalWall,    // 1v1 diagonal with 3-building wall
     createStaticScenarioAgentsVsBots0,
+    createScenario3v3Random.bind(null, 1),
     createScenarioAgentsVsBots1,
     createScenarioFrozenSelfPlay,
     createScenarioSelfPlay,
@@ -35,11 +38,6 @@ const edge = 0.5; // success ratio to unlock next scenario
 export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: Omit<ScenarioOptions, 'index'>): Promise<Scenario> {
     const constructorOptions = options as ScenarioOptions;
 
-    // if (random() < 0.5) {
-    //     constructorOptions.index = 3
-    //     return createScenarioSelfPlay(constructorOptions);
-    // }
-
     let constructor = createScenario1v1Random;
 
     let weights = [];
@@ -54,7 +52,7 @@ export async function createScenarioByCurriculumState(curriculumState: Curriculu
 
         successRatio ??= 0;
 
-        const weight = clamp(0.9 - successRatio, 0.1, 1);
+        const weight = clamp(0.9 - successRatio, 0.2, 1);
 
         weights.push(weight);
         totalWeight += weight;

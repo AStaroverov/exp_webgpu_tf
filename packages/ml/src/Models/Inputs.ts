@@ -60,7 +60,7 @@ export function convertInputsToTokens(
         ...typeEmbs: tf.SymbolicTensor[]
     ): tf.SymbolicTensor => {
         const token =  createDenseLayer({
-            name: `${name}_tokProj`,
+            name: `${name}_tokEmbedding`,
             units: dModel,
             // useBias: false, // bias is required for token type embedding
             useBias: true, // bias is required for token type embedding

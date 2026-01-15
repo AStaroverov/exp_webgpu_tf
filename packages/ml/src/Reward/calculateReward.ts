@@ -12,11 +12,9 @@ export const getFinalReward = (successRatio: number, networkVersion: number) =>
 
 // add randomised weights
 export const WEIGHTS = ({
-    HEALTH_MUL: 20,
-    SCORE_POSITIVE_MUL: 0.33,
-    SCORE_NEGATIVE_MUL: 0.66,
-    DETECT_ENEMY_MUL: 3,
-    BYPASS_MUL: 3,
+    HEALTH_MUL: 10 * 4,
+    SCORE_POSITIVE_MUL: 1,
+    SCORE_NEGATIVE_MUL: 2,
 });
 // export const getRandomWeights = (): typeof WEIGHTS => {
 //     const health = 0.5 + randomRangeFloat(0, 0.5);
@@ -51,15 +49,3 @@ function getTankScore(tankEid: number, weights: typeof WEIGHTS): number {
     );
     return score;
 }
-
-
-// function calculateRayDetectEnemyReward(raysBuffer: Float64Array,): number {
-//     let hitsCount = 0;
-//     for (let i = 0; i < RAYS_COUNT; i++) {
-//         const hitType = raysBuffer[i * RAY_BUFFER + 0];
-//         if (hitType === RayHitType.ENEMY_VEHICLE) hitsCount++;
-//         if (hitsCount >= 4) break;
-//     }
-
-//     return hitsCount > 1 ? hitsCount / 4 : 0;
-// }

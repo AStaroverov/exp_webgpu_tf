@@ -13,7 +13,7 @@ export class AdamW extends PatchedAdamOptimizer {
         beta1 = 0.9,
         beta2 = 0.999,
         epsilon?: number,
-        weightDecay = 1e-4
+        weightDecay = 1e-6
     ) {
         super(learningRate, beta1, beta2, epsilon);
         this.weightDecay = weightDecay;
@@ -25,6 +25,7 @@ export class AdamW extends PatchedAdamOptimizer {
         if (name.includes('/bias') || name.endsWith('bias')) return null;
         if (name.includes('layernorm') || name.includes('layer_norm')) return null; // γ/β
         if (name.includes('batchnorm') || name.includes('batch_normalization')) return null; // γ/β
+        // custom layers
         if (name.includes('rmsnormlayer')) return null;
         if (name.includes('noisydenselayer') && name.includes('sigma')) return null; // noisy layer sigmas
 

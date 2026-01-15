@@ -13,7 +13,6 @@ import { Vehicle } from '../../Components/Vehicle.ts';
 import { VehiclePart, VehiclePartCaterpillar } from '../../Components/VehiclePart.ts';
 import { Joint } from '../../Components/Joint.ts';
 import { TeamRef } from '../../Components/TeamRef.ts';
-import { mapVehicleEngineLabel, VehicleEngineType } from '../../Systems/Vehicle/VehicleControllerSystems.ts';
 import { recursiveTypicalRemoveEntity, scheduleRemoveEntity } from '../../Utils/typicalRemoveEntity.ts';
 import { spawnExplosion } from '../Explosion.ts';
 import {
@@ -24,6 +23,7 @@ import {
 import { getFilledSlotCount, getSlotCount } from '../Vehicle/VehicleParts.ts';
 import { applyExplosionImpulse } from '../../../Physical/applyExplosionImpulse.ts';
 import { getSlotFillerEid, isSlot, isSlotEmpty } from '../../Utils/SlotUtils.ts';
+import { EngineLabels, EngineType } from '../../../Config/vehicles.ts';
 
 
 export function destroyTank(vehicleEid: EntityId) {
@@ -143,7 +143,7 @@ export function getTankTeamId(tankEid: number) {
 }
 
 export function getTankEngineLabel(vehicleEid: number): string {
-    const engine = Vehicle.engineType[vehicleEid] as VehicleEngineType;
-    return mapVehicleEngineLabel[engine];
+    const engine = Vehicle.engineType[vehicleEid] as EngineType;
+    return EngineLabels[engine];
 }
 

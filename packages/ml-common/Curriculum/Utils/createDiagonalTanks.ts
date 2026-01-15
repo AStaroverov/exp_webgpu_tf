@@ -6,74 +6,76 @@ import { VehicleType } from '../../../tanks/src/Game/Config/vehicles.ts';
 
 const tankTypes = [VehicleType.LightTank, VehicleType.MediumTank, VehicleType.HeavyTank] as const;
 
+// Minimum distance between tanks to prevent overlap (based on HeavyTank colliderRadius = 150)
+const MIN_TANK_SPACING = 200;
+
 export type DiagonalTanksOptions = {
     fieldSize: number;
     edgeMargin: number;
     maxDeviation: number;
     spawnRadius?: number;
+    count?: number; // Number of tanks per team
 };
 
 export type DiagonalTanksResult = {
-    agentTankEid: number;
-    botTankEid: number;
     baseDiagonalAngle: number;
     centerX: number;
     centerY: number;
 };
 
 /**
- * Creates two tanks positioned diagonally from the center of the field.
- * Returns tank eids and geometry info for placing obstacles.
+ * Creates geometry info for diagonal tank placement.
  */
-export function createDiagonalTanks(options: DiagonalTanksOptions): DiagonalTanksResult {
-    const { fieldSize, edgeMargin, maxDeviation } = options;
-    const centerX = fieldSize / 2;
-    const centerY = fieldSize / 2;
-    const spawnRadius = options.spawnRadius ?? fieldSize * 0.4;
-
-    // Random base diagonal angle (0-360 degrees)
-    const baseDiagonalAngle = randomRangeFloat(0, 2 * PI);
-
-    // Create agent tank (team 0) - with independent deviation from diagonal
-    const deviation1 = randomRangeFloat(-maxDeviation, maxDeviation);
-    const angle1 = baseDiagonalAngle + deviation1;
-    const x1 = Math.max(edgeMargin, Math.min(fieldSize - edgeMargin, centerX + Math.cos(angle1) * spawnRadius));
-    const y1 = Math.max(edgeMargin, Math.min(fieldSize - edgeMargin, centerY + Math.sin(angle1) * spawnRadius));
-    const agentPlayerId = createPlayer(0);
-    const rotationToCenter1 = angle1 + PI;
-    const agentTankEid = createTank({
-        type: tankTypes[randomRangeInt(0, tankTypes.length - 1)],
-        playerId: agentPlayerId,
-        teamId: 0,
-        x: x1,
-        y: y1,
-        rotation: rotationToCenter1,
-        color: [0, randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1],
-    });
-
-    // Create enemy bot (team 1) - opposite side with its own independent deviation
-    const deviation2 = randomRangeFloat(-maxDeviation, maxDeviation);
-    const angle2 = baseDiagonalAngle + PI + deviation2;
-    const x2 = Math.max(edgeMargin, Math.min(fieldSize - edgeMargin, centerX + Math.cos(angle2) * spawnRadius));
-    const y2 = Math.max(edgeMargin, Math.min(fieldSize - edgeMargin, centerY + Math.sin(angle2) * spawnRadius));
-    const botPlayerId = createPlayer(1);
-    const rotationToCenter2 = angle2 + PI;
-    const botTankEid = createTank({
-        type: tankTypes[randomRangeInt(0, tankTypes.length - 1)],
-        playerId: botPlayerId,
-        teamId: 1,
-        x: x2,
-        y: y2,
-        rotation: rotationToCenter2,
-        color: [1, randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1],
-    });
-
+export function createDiagonalGeometry(options: DiagonalTanksOptions): DiagonalTanksResult {
+    const { fieldSize } = options;
     return {
-        agentTankEid,
-        botTankEid,
-        baseDiagonalAngle,
-        centerX,
-        centerY,
+        baseDiagonalAngle: randomRangeFloat(0, 2 * PI),
+        centerX: fieldSize / 2,
+        centerY: fieldSize / 2,
     };
 }
 
+/**
+ * Creates tanks for one team positioned diagonally from center.
+ */
+export function createDiagonalTeamTanks(
+    options: DiagonalTanksOptions,
+    geometry: DiagonalTanksResult,
+    teamId: number,
+): void {
+    const { fieldSize, edgeMargin, maxDeviation, count = 1 } = options;
+    const { centerX, centerY, baseDiagonalAngle } = geometry;
+    const spawnRadius = options.spawnRadius ?? fieldSize * 0.4;
+    const playerId = createPlayer(teamId);
+    const baseAngle = teamId === 0 ? baseDiagonalAngle : baseDiagonalAngle + PI;
+
+    // Calculate angular step to ensure minimum spacing between tanks
+    const angularStep = count > 1 ? MIN_TANK_SPACING / spawnRadius : 0;
+    const totalAngularSpread = angularStep * (count - 1);
+    const startAngleOffset = -totalAngularSpread / 2;
+
+    for (let i = 0; i < count; i++) {
+        const deviation = randomRangeFloat(-maxDeviation, maxDeviation);
+        const tankAngularPosition = startAngleOffset + i * angularStep;
+        const angularJitter = count > 1 ? randomRangeFloat(-angularStep * 0.3, angularStep * 0.3) : 0;
+        const radialJitter = randomRangeFloat(-20, 20);
+
+        const angle = baseAngle + deviation + tankAngularPosition + angularJitter;
+        const radius = spawnRadius + radialJitter;
+
+        const x = Math.max(edgeMargin, Math.min(fieldSize - edgeMargin, centerX + Math.cos(angle) * radius));
+        const y = Math.max(edgeMargin, Math.min(fieldSize - edgeMargin, centerY + Math.sin(angle) * radius));
+
+        createTank({
+            type: tankTypes[randomRangeInt(0, tankTypes.length - 1)],
+            playerId,
+            teamId,
+            x,
+            y,
+            rotation: angle + PI,
+            color: teamId === 0
+                ? [0, randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1]
+                : [1, randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1],
+        });
+    }
+}

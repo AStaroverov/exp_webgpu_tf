@@ -1,8 +1,8 @@
 import { RigidBodyType } from '@dimforge/rapier2d-simd';
 import { TColor } from '../../../../../../renderer/src/ECS/Components/Common.ts';
 import { VehicleType } from '../../Components/Vehicle.ts';
-import { VehicleEngineType } from '../../Systems/Vehicle/VehicleControllerSystems.ts';
-import { DampingConfig } from '../../../Config/index.ts';
+
+import { DampingConfig, EngineType } from '../../../Config/index.ts';
 
 export type VehicleOptions = typeof mutatedVehicleOptions;
 
@@ -35,7 +35,7 @@ export const mutatedVehicleOptions = {
     approximateColliderRadius: 0,
 
     vehicleType: VehicleType.LightTank,
-    engineType: VehicleEngineType.v6,
+    engineType: EngineType.v6,
 };
 
 export const defaultVehicleOptions = Object.freeze(structuredClone(mutatedVehicleOptions));

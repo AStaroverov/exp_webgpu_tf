@@ -7,9 +7,9 @@ export const MAX_TURRETS = 1;
 export const TURRET_BUFFER = 4; // [eid, x, y, rotation]
 
 export const MAX_ENEMIES = 5;
-export const ENEMY_BUFFER = 7; // [id, type, hp, x, y, vx, vy]
+export const ENEMY_BUFFER = 9; // [id, type, hp, x, y, vx, vy, turretRotation, colliderRadius]
 export const MAX_ALLIES = 5;
-export const ALLY_BUFFER = 7; // [id, type, hp, x, y, vx, vy]
+export const ALLY_BUFFER = 9; // [id, type, hp, x, y, vx, vy, turretRotation, colliderRadius]
 export const MAX_BULLETS = 8;
 export const BULLET_BUFFER = 5; // [id, x, y, vx, vy]
 
@@ -117,6 +117,8 @@ export const TankInputTensor = component({
         hp: number,
         coord: Float64Array,
         velocity: Float64Array,
+        turretRotation: number,
+        colliderRadius: number,
     ) {
         const offset = index * ENEMY_BUFFER;
         TankInputTensor.enemiesData.set(eid, offset, enemyEid);
@@ -126,6 +128,8 @@ export const TankInputTensor = component({
         TankInputTensor.enemiesData.set(eid, offset + 4, coord[1]);
         TankInputTensor.enemiesData.set(eid, offset + 5, velocity[0]);
         TankInputTensor.enemiesData.set(eid, offset + 6, velocity[1]);
+        TankInputTensor.enemiesData.set(eid, offset + 7, turretRotation);
+        TankInputTensor.enemiesData.set(eid, offset + 8, colliderRadius);
     },
     resetEnemiesCoords() {
         TankInputTensor.enemiesData.fill(0);
@@ -139,6 +143,8 @@ export const TankInputTensor = component({
         hp: number,
         coord: Float64Array,
         velocity: Float64Array,
+        turretRotation: number,
+        colliderRadius: number,
     ) {
         const offset = index * ALLY_BUFFER;
         TankInputTensor.alliesData.set(eid, offset, allyEid);
@@ -148,6 +154,8 @@ export const TankInputTensor = component({
         TankInputTensor.alliesData.set(eid, offset + 4, coord[1]);
         TankInputTensor.alliesData.set(eid, offset + 5, velocity[0]);
         TankInputTensor.alliesData.set(eid, offset + 6, velocity[1]);
+        TankInputTensor.alliesData.set(eid, offset + 7, turretRotation);
+        TankInputTensor.alliesData.set(eid, offset + 8, colliderRadius);
     },
     resetAlliesCoords() {
         TankInputTensor.alliesData.fill(0);

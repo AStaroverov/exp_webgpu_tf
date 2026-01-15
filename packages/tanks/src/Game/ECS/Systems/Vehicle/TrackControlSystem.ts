@@ -5,19 +5,19 @@ import { RigidBodyState } from '../../Components/Physical.ts';
 import { Track, TrackSide } from '../../Components/Track.ts';
 import { VehicleController } from '../../Components/VehicleController.ts';
 import { Vehicle } from '../../Components/Vehicle.ts';
-import { VehicleEngineType } from './VehicleControllerSystems.ts';
 import { applyRotationToVector } from '../../../Physical/applyRotationToVector.ts';
 import { Impulse } from '../../Components/Impulse.ts';
 import { Children } from '../../Components/Children.ts';
 import { Tank } from '../../Components/Tank.ts';
+import { EngineType } from '../../../Config/vehicles.ts';
 
-const TRACK_IMPULSE_FACTOR = 7500000000; // Half of original since we have 2 tracks
+const TRACK_IMPULSE_FACTOR = 3_000_000_000; // Half of original since we have 2 tracks
 
 const mapTypeToTrackImpulse = {
-    [VehicleEngineType.v6]: TRACK_IMPULSE_FACTOR * 0.8,
-    [VehicleEngineType.v8]: TRACK_IMPULSE_FACTOR,
-    [VehicleEngineType.v12]: TRACK_IMPULSE_FACTOR * 2,
-    [VehicleEngineType.v8_turbo]: TRACK_IMPULSE_FACTOR * 2,
+    [EngineType.v6]: TRACK_IMPULSE_FACTOR * 0.8,
+    [EngineType.v8]: TRACK_IMPULSE_FACTOR,
+    [EngineType.v12]: TRACK_IMPULSE_FACTOR * 2,
+    [EngineType.v8_turbo]: TRACK_IMPULSE_FACTOR * 2,
 };
 
 const impulseVector = new Vector2(0, 0);
@@ -31,7 +31,7 @@ export function createTrackControlSystem({ world } = GameDI) {
             const moveDirection = VehicleController.move[vehicleEid];
             const rotationDirection = VehicleController.rotation[vehicleEid];
             
-            const engineType = Vehicle.engineType[vehicleEid] as VehicleEngineType;
+            const engineType = Vehicle.engineType[vehicleEid] as EngineType;
             const impulseFactor = mapTypeToTrackImpulse[engineType];
             const vehicleRotation = RigidBodyState.rotation[vehicleEid];
 

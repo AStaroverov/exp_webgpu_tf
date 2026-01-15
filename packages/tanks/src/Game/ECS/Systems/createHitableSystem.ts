@@ -21,7 +21,6 @@ import { Parent } from '../Components/Parent.ts';
 import { Vehicle } from '../Components/Vehicle.ts';
 import { SoundType } from '../Components/Sound.ts';
 import { spawnSoundAtParent } from '../Entities/Sound.ts';
-import { Obstacle } from '../Components/Obstacle.ts';
 
 export function createHitableSystem({ world } = GameDI) {
     const hitableChanges = createChangeDetector(world, [onSet(Hitable)]);
@@ -88,8 +87,6 @@ export function createHitableSystem({ world } = GameDI) {
             const eid = restEids[i];
             if (!hitableChanges.has(eid)) continue;
 
-            const hitEids = Hitable.getHitEids(eid);
-            applyScores(eid, hitEids);
             applyDamage(eid);
             
             if (!Hitable.isDestroyed(eid)) continue;
@@ -129,9 +126,7 @@ function applyScores(
         
         const playerId = PlayerRef.id[hitEid];
         
-        if (hasComponent(world, hittableEid, Obstacle)) {
-            Score.updateScore(playerId, -0.3); // penalty for hitting an obstacle, just for ML
-        } else if (hasComponent(world, hitEid, TeamRef) && hasComponent(world, hittableEid, TeamRef)) {
+        if (hasComponent(world, hitEid, TeamRef) && hasComponent(world, hittableEid, TeamRef)) {
             const vehiclePartTeamId = TeamRef.id[hittableEid];
             const secondTeamId = TeamRef.id[hitEid];
 

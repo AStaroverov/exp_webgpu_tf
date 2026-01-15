@@ -3,7 +3,6 @@ import { TColor } from '../../../../../../../renderer/src/ECS/Components/Common.
 import { BulletCaliber } from '../../../Components/Bullet.ts';
 import { SlotPartType } from '../../../Components/SlotConfig.ts';
 import { VehicleType } from '../../../Components/Vehicle.ts';
-import { VehicleEngineType } from '../../../Systems/Vehicle/VehicleControllerSystems.ts';
 import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../../Vehicle/VehicleParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from '../Common/Options.ts';
 import { createTankBase, createTankTracks, createTankTurret } from '../Common/Tank.ts';
@@ -21,6 +20,7 @@ import {
     turretGunSet,
     turretHeadSet,
 } from './MediumTankParts.ts';
+import { EngineType } from '../../../../Config/vehicles.ts';
 
 const TRACKS_COLOR = new Float32Array([0.5, 0.5, 0.5, 1]);
 const TURRET_COLOR = new Float32Array([0.5, 1, 0.5, 1]);
@@ -40,7 +40,7 @@ export function createMediumTank(opts: {
     options.padding = PADDING;
     options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
     options.vehicleType = VehicleType.MediumTank;
-    options.engineType = VehicleEngineType.v8;
+    options.engineType = EngineType.v8;
     options.trackLength = caterpillarLength;
 
     options.density = DENSITY * 14;

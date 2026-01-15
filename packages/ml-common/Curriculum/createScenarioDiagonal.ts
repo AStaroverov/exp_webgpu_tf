@@ -2,8 +2,9 @@ import { PI } from '../../../lib/math.ts';
 import { randomRangeFloat } from '../../../lib/random.ts';
 import { createBuilding } from '../../tanks/src/Game/ECS/Entities/Building/index.ts';
 import { createScenarioCore, ScenarioCoreOptions } from './createScenarioCore.ts';
-import { createDiagonalTanks } from './Utils/createDiagonalTanks.ts';
-import { add1v1Pilots } from './Utils/add1v1Pilots.ts';
+import { createDiagonalGeometry, createDiagonalTeamTanks } from './Utils/createDiagonalTanks.ts';
+import { fillWithCurrentAgents } from './Utils/fillWithCurrentAgents.ts';
+import { fillWithSimpleHeuristicAgents } from './Utils/fillWithSimpleHeuristicAgents.ts';
 import { Scenario } from './types.ts';
 
 /**
@@ -13,18 +14,24 @@ import { Scenario } from './types.ts';
 export function createScenarioDiagonal(options: ScenarioCoreOptions): Scenario {
     const scenario = createScenarioCore(options);
 
-    // Create tanks
-    const { agentTankEid, botTankEid, centerX, centerY } = createDiagonalTanks({
+    const tankOptions = {
         fieldSize: scenario.width,
         edgeMargin: 300,
         maxDeviation: PI / 12,
-    });
+        count: 1,
+    };
+    const geometry = createDiagonalGeometry(tankOptions);
 
     // Create environment
-    createBuilding({ x: centerX, y: centerY });
+    createBuilding({ x: geometry.centerX, y: geometry.centerY });
 
-    // Add pilots
-    add1v1Pilots(scenario, agentTankEid, botTankEid, {
+    // Create agent tanks and fill with agents
+    createDiagonalTeamTanks(tankOptions, geometry, 0);
+    fillWithCurrentAgents(scenario);
+
+    // Create bot tanks and fill with bots
+    createDiagonalTeamTanks(tankOptions, geometry, 1);
+    fillWithSimpleHeuristicAgents(scenario, {
         move: randomRangeFloat(0, 0.05),
         aim: {
             aimError: randomRangeFloat(0.6, 0.9),

@@ -97,7 +97,7 @@ export function prepareInputArrays(
     tankFeatures[ti++] = sin(rotation); // body rotation sin
     tankFeatures[ti++] = norm(speedX, QUANT); // norm(locSpeedX, QUANT); // speeX
     tankFeatures[ti++] = norm(speedY, QUANT); // norm(locSpeedY, QUANT); // speeY
-    tankFeatures[ti++] = norm(colliderRadius, QUANT); // collider radis
+    tankFeatures[ti++] = logNorm(colliderRadius, QUANT); // collider radis
 
     const tankType = new Int32Array(1);
     tankType[0] = TankInputTensor.tankType[tankEid];
@@ -148,9 +148,12 @@ export function prepareInputArrays(
         const eY = enemiesBuffer[srcOffset + 4];
         const eVx = enemiesBuffer[srcOffset + 5];
         const eVy = enemiesBuffer[srcOffset + 6];
+        const eTurretRotation = enemiesBuffer[srcOffset + 7];
+        const eColliderRadius = enemiesBuffer[srcOffset + 8];
 
         const [locX, locY] = rotateVector(eX - tankX, eY - tankY, invRotation);
         const [locVx, locVy] = rotateVector(eVx - speedX, eVy - speedY, invRotation);
+        const eTurretRel = eTurretRotation - rotation;
 
         enemiesMask[w] = 1;
         enemiesTypes[w] = eType;
@@ -159,6 +162,9 @@ export function prepareInputArrays(
         enemiesFeatures[dstOffset + 2] = norm(locY, QUANT);
         enemiesFeatures[dstOffset + 3] = norm(locVx, QUANT);
         enemiesFeatures[dstOffset + 4] = norm(locVy, QUANT);
+        enemiesFeatures[dstOffset + 5] = cos(eTurretRel);
+        enemiesFeatures[dstOffset + 6] = sin(eTurretRel);
+        enemiesFeatures[dstOffset + 7] = logNorm(eColliderRadius, QUANT);
     }
 
     // ---- Allies features ----
@@ -184,9 +190,12 @@ export function prepareInputArrays(
         const aY = alliesBuffer[srcOffset + 4];
         const aVx = alliesBuffer[srcOffset + 5];
         const aVy = alliesBuffer[srcOffset + 6];
+        const aTurretRotation = alliesBuffer[srcOffset + 7];
+        const aColliderRadius = alliesBuffer[srcOffset + 8];
 
         const [locX, locY] = rotateVector(aX - tankX, aY - tankY, invRotation);
         const [locVx, locVy] = rotateVector(aVx - speedX, aVy - speedY, invRotation);
+        const aTurretRel = aTurretRotation - rotation;
 
         alliesMask[w] = 1;
         alliesTypes[w] = aType;
@@ -195,6 +204,9 @@ export function prepareInputArrays(
         alliesFeatures[dstOffset + 2] = norm(locY, QUANT);
         alliesFeatures[dstOffset + 3] = norm(locVx, QUANT);
         alliesFeatures[dstOffset + 4] = norm(locVy, QUANT);
+        alliesFeatures[dstOffset + 5] = cos(aTurretRel);
+        alliesFeatures[dstOffset + 6] = sin(aTurretRel);
+        alliesFeatures[dstOffset + 7] = logNorm(aColliderRadius, QUANT);
     }
 
     // ---- Bullets features ----

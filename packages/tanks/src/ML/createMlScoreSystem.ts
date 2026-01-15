@@ -8,6 +8,7 @@ import { PlayerRef } from "../Game/ECS/Components/PlayerRef";
 import { findVehicleFromPart } from "../Pilots/Utils/snapshotTankInputTensor";
 import { RigidBodyState } from "../Game/ECS/Components/Physical";
 import { hypot } from "../../../../lib/math";
+import { VehicleController } from "../Game/ECS/Components/VehicleController";
 
 // Track previously detected enemies per vehicle: vehicleEid -> Set<enemyVehicleEid>
 const previouslyDetectedEnemies = new Map<EntityId, Set<EntityId>>();
@@ -29,10 +30,12 @@ export function createMlScoreSystem({ world } = GameDI) {
             const raysBuffer = TankInputTensor.raysData.getBatch(vehicleEid);
             const adjacentEnemyRaysReward = getAdjacentEnemyRaysReward(vehicleEid, raysBuffer);
             const explorationReward = getExplorationReward(vehicleEid);
+            const proximityPenalty = getProximityPenalty(vehicleEid, raysBuffer);
 
             const totalReward = (0
                 + adjacentEnemyRaysReward
                 + explorationReward
+                + proximityPenalty
             );
             if (totalReward === 0) continue;
     
@@ -94,7 +97,7 @@ export function getAdjacentEnemyRaysReward(vehicleEid: EntityId, raysBuffer: Flo
 
     previouslyDetectedEnemies.set(vehicleEid, currentDetected);
 
-    return hasNewAdjacentEnemy ? 5 : 0;
+    return hasNewAdjacentEnemy ? 2 : 0;
 }
 
 function getExplorationReward(vehicleEid: EntityId): number {
@@ -119,5 +122,49 @@ function getExplorationReward(vehicleEid: EntityId): number {
 
     lastPos.x = x;
     lastPos.y = y;
-    return 1;
+    return 0.3;
+}
+
+
+const PROXIMITY_DANGER_MULT = 1;
+function getProximityPenalty(vehicleEid: EntityId, raysBuffer: Float64Array): number {
+    const move = VehicleController.move[vehicleEid];
+    
+    // Only penalize when moving
+    if (move === 0) return 0;
+
+    const rotation = RigidBodyState.rotation[vehicleEid];
+    const colliderRadius = TankInputTensor.colliderRadius[vehicleEid];
+    const dangerDistance = PROXIMITY_DANGER_MULT * colliderRadius;
+
+    // Intended movement direction based on rotation and move input
+    // move > 0: forward, move < 0: backward
+    const forwardX = Math.sin(rotation);
+    const forwardY = -Math.cos(rotation);
+    const moveX = move > 0 ? forwardX : -forwardX;
+    const moveY = move > 0 ? forwardY : -forwardY;
+
+    // Check if intended movement direction points toward any close obstacle
+    for (let i = 0; i < RAYS_COUNT; i++) {
+        const offset = i * RAY_BUFFER;
+        const distance = raysBuffer[offset + 6];
+
+        // Skip rays that are far enough
+        if (distance >= dangerDistance || distance === 0) continue;
+
+        // Get ray direction (points from tank to obstacle)
+        const dirX = raysBuffer[offset + 4];
+        const dirY = raysBuffer[offset + 5];
+
+        // Dot product: positive = moving toward obstacle, negative = moving away
+        const dot = dirX * moveX + dirY * moveY;
+        
+        // Only penalize if intended movement is TOWARD the obstacle
+        
+        if (dot > 0.5) {
+            return -0.1;
+        }
+    }
+
+    return 0;
 }

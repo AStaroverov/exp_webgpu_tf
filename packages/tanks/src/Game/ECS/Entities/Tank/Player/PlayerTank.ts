@@ -3,7 +3,6 @@ import { TColor } from '../../../../../../../renderer/src/ECS/Components/Common.
 import { BulletCaliber } from '../../../Components/Bullet.ts';
 import { SlotPartType } from '../../../Components/SlotConfig.ts';
 import { VehicleType } from '../../../Components/Vehicle.ts';
-import { VehicleEngineType } from '../../../Systems/Vehicle/VehicleControllerSystems.ts';
 import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../../Vehicle/VehicleParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from '../Common/Options.ts';
 import { createTankBase, createTankTracks, createTankTurret } from '../Common/Tank.ts';
@@ -22,6 +21,7 @@ import {
     turretGunSet,
     turretHeadSet,
 } from '../Medium/MediumTankParts.ts';
+import { EngineType } from '../../../../Config/vehicles.ts';
 
 const TRACKS_COLOR = new Float32Array([0.4, 0.4, 0.5, 1]);
 const TURRET_COLOR = new Float32Array([0.4, 0.8, 1, 1]);  // Bluish tint for player
@@ -47,7 +47,7 @@ export function createPlayerTank(opts: {
     options.padding = PADDING;
     options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
     options.vehicleType = VehicleType.PlayerTank;
-    options.engineType = VehicleEngineType.v8_turbo;  // Faster engine
+    options.engineType = EngineType.v8_turbo;  // Faster engine
     options.trackLength = caterpillarLength;
 
     options.density = DENSITY * 14;
