@@ -17,6 +17,7 @@ export const atan2 = Math.atan2;
 export const hypot = Math.hypot;
 export const tanh = Math.tanh;
 export const pow = Math.pow;
+export const log1p = Math.log1p;
 
 export function ufloor(n: number): number {
     return sign(n) * floor(abs(n));

@@ -15,9 +15,12 @@ export const ZIndexConfig = {
     
     /** Rocks and terrain obstacles - related to terrain/size */
     Rock: 1,
+
+    /** Ruined buildings and walls */
+    Building: 2,
     
     /** Spice resources on the ground */
-    Spice: 0,
+    Spice: 0.5,
     
     /** Tank hull body */
     TankHull: 4,

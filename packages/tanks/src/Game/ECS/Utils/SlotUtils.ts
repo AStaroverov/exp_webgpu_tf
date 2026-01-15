@@ -13,25 +13,13 @@ export function isSlot(eid: EntityId, { world } = GameDI): boolean {
 }
 
 export function isSlotFilled(slotEid: EntityId): boolean {
-    if (!isSlot(slotEid)) {
-        throw new Error(`Slot component not found for entity ${slotEid}`);
-    }
     return Children.entitiesCount[slotEid] > 0;
 }
 
 export function isSlotEmpty(slotEid: EntityId): boolean {
-    if (!isSlot(slotEid)) {
-        throw new Error(`Slot component not found for entity ${slotEid}`);
-    }
     return Children.entitiesCount[slotEid] === 0;
 }
 
 export function getSlotFillerEid(slotEid: EntityId): EntityId {
-    if (!isSlot(slotEid)) {
-        throw new Error(`Slot component not found for entity ${slotEid}`);
-    }
-    if (Children.entitiesCount[slotEid] === 0) {
-        return 0;
-    }
     return Children.entitiesIds.get(slotEid, 0);
 }

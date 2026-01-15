@@ -3,11 +3,10 @@ import { TColor } from '../../../../../../../renderer/src/ECS/Components/Common.
 import { BulletCaliber } from '../../../Components/Bullet.ts';
 import { SlotPartType } from '../../../Components/SlotConfig.ts';
 import { VehicleType } from '../../../Components/Vehicle.ts';
-import { VehicleEngineType } from '../../../Systems/Vehicle/VehicleControllerSystems.ts';
 import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../../Vehicle/VehicleParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from '../Common/Options.ts';
 import { createTankBase, createTankTracks, createTankTurret } from '../Common/Tank.ts';
-import { addTankExhaustPipes } from '../../ExhaustPipe.ts';
+import { createTankExhaustPipes } from '../../ExhaustPipe.ts';
 import {
     caterpillarLength,
     caterpillarSetLeft,
@@ -17,14 +16,15 @@ import {
     PADDING,
     PARTS_COUNT,
     SIZE,
-    TRACK_ANCHOR_X,
+    TRACK_ANCHOR_Y,
     turretGunSet,
     turretHeadSet,
 } from './MediumTankParts.ts';
+import { EngineType } from '../../../../Config/vehicles.ts';
 
 const TRACKS_COLOR = new Float32Array([0.5, 0.5, 0.5, 1]);
 const TURRET_COLOR = new Float32Array([0.5, 1, 0.5, 1]);
-const APPROXIMATE_COLLIDER_RADIUS = 80;
+const APPROXIMATE_COLLIDER_RADIUS = 60;
 
 export function createMediumTank(opts: {
     playerId: number,
@@ -40,21 +40,21 @@ export function createMediumTank(opts: {
     options.padding = PADDING;
     options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
     options.vehicleType = VehicleType.MediumTank;
-    options.engineType = VehicleEngineType.v8;
+    options.engineType = EngineType.v8;
     options.trackLength = caterpillarLength;
 
     options.density = DENSITY * 14;
-    options.width = PADDING * 8;
-    options.height = PADDING * 12;
+    options.width = PADDING * 11;
+    options.height = PADDING * 7;
     const [tankEid, tankPid] = createTankBase(options);
 
     // Create left and right tracks as independent entities
     const [leftTrackEid, rightTrackEid] = createTankTracks(
         options,
         {
-            leftAnchorX: TRACK_ANCHOR_X,
-            rightAnchorX: -TRACK_ANCHOR_X,
-            anchorY: 0,
+            leftAnchorY: TRACK_ANCHOR_Y,
+            rightAnchorY: -TRACK_ANCHOR_Y,
+            anchorX: 0,
             trackWidth: PADDING * 2,
             trackHeight: caterpillarLength,
         },
@@ -63,13 +63,18 @@ export function createMediumTank(opts: {
     );
 
     options.density = DENSITY;
-    options.width = PADDING * 8;
-    options.height = PADDING * 8;
-    options.turret.rotationSpeed = PI * 0.6;
-    options.firearms.reloadingDuration = 500;
+    options.width = PADDING * 6;
+    options.height = PADDING * 5;
+    options.turret.rotationSpeed = PI * 0.7;
+    options.turret.gunWidth = PADDING * 6;
+    options.turret.gunHeight = PADDING * 2;
     options.firearms.bulletCaliber = BulletCaliber.Medium;
-    options.firearms.bulletStartPosition = [0, -13 * PADDING];
-    const [turretEid] = createTankTurret(options, tankEid, tankPid);
+    options.firearms.reloadingDuration = 500;
+    options.firearms.bulletStartPosition = [11 * PADDING, 0];
+    const [turretEid, gunEid] = createTankTurret(options, tankEid, tankPid);
+
+    // Add exhaust pipes
+    createTankExhaustPipes(tankEid, PADDING * 11, PADDING * 7);
 
     // Hull parts attached to tank body
     createSlotEntities(tankEid, hullSet, options.color, SlotPartType.HullPart);
@@ -81,7 +86,7 @@ export function createMediumTank(opts: {
 
     // Turret parts
     updateColorOptions(options, TURRET_COLOR);
-    createSlotEntities(turretEid, turretGunSet, options.color, SlotPartType.TurretGun);
+    createSlotEntities(gunEid, turretGunSet, options.color, SlotPartType.TurretGun);
     createSlotEntities(turretEid, turretHeadSet, options.color, SlotPartType.TurretHead);
 
     // Fill all slots with physical parts
@@ -93,9 +98,8 @@ export function createMediumTank(opts: {
     fillAllSlots(rightTrackEid, options);
     updateSlotsBrightness(turretEid);
     fillAllSlots(turretEid, options);
-
-    // Add exhaust pipes
-    addTankExhaustPipes(tankEid, PADDING * 8, PADDING * 12);
+    updateSlotsBrightness(gunEid);
+    fillAllSlots(gunEid, options);
 
     return tankEid;
 }

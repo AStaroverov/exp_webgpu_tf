@@ -5,20 +5,20 @@ import { RigidBodyState } from '../../Components/Physical.ts';
 import { Wheel, WheelDrive, WheelSteerable } from '../../Components/Wheel.ts';
 import { VehicleController } from '../../Components/VehicleController.ts';
 import { Vehicle } from '../../Components/Vehicle.ts';
-import { VehicleEngineType } from './VehicleControllerSystems.ts';
 import { applyRotationToVector } from '../../../Physical/applyRotationToVector.ts';
 import { Impulse } from '../../Components/Impulse.ts';
 import { Children } from '../../Components/Children.ts';
 import { JointMotor } from '../../Components/JointMotor.ts';
 import { clamp } from 'lodash-es';
+import { EngineType } from '../../../Config/vehicles.ts';
 
 const WHEEL_IMPULSE_FACTOR = 4000000000; // Per wheel
 
 const mapTypeToWheelImpulse = {
-    [VehicleEngineType.v6]: WHEEL_IMPULSE_FACTOR * 0.8,
-    [VehicleEngineType.v8]: WHEEL_IMPULSE_FACTOR,
-    [VehicleEngineType.v12]: WHEEL_IMPULSE_FACTOR * 2,
-    [VehicleEngineType.v8_turbo]: WHEEL_IMPULSE_FACTOR * 2,
+    [EngineType.v6]: WHEEL_IMPULSE_FACTOR * 0.8,
+    [EngineType.v8]: WHEEL_IMPULSE_FACTOR,
+    [EngineType.v12]: WHEEL_IMPULSE_FACTOR * 2,
+    [EngineType.v8_turbo]: WHEEL_IMPULSE_FACTOR * 2,
 };
 
 const impulseVector = new Vector2(0, 0);
@@ -39,7 +39,7 @@ export function createWheelControlSystem({ world } = GameDI) {
             const accelerate = VehicleController.move[vehicleEid];
             const steering = VehicleController.rotation[vehicleEid];
             
-            const engineType = Vehicle.engineType[vehicleEid] as VehicleEngineType;
+            const engineType = Vehicle.engineType[vehicleEid] as EngineType;
             const impulseFactor = mapTypeToWheelImpulse[engineType];
 
             const childCount = Children.entitiesCount[vehicleEid];
@@ -81,8 +81,8 @@ function applyWheelDrive(
     if (accelerate === 0) return;
     
     const steeringAngle = RigidBodyState.rotation[wheelEid];    
-    impulseVector.x = 0;
-    impulseVector.y = -accelerate * impulseFactor * delta / 1000;
+    impulseVector.x = accelerate * impulseFactor * delta / 1000;
+    impulseVector.y = 0;
     
     applyRotationToVector(impulseVector, impulseVector, steeringAngle);
 

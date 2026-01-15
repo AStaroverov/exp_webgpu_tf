@@ -52,30 +52,30 @@ export type BulletCaliberStats = {
  */
 export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     [BulletCaliber.Light]: {
-        width: 3,
-        height: 8,
-        speed: 500,
+        width: 8,
+        height: 3,
+        speed: 450,
         density: 3_000,
         damage: 3,
         linearDamping: 0.4, // Light bullets lose speed quickly
     },
     
     [BulletCaliber.Medium]: {
-        width: 5,
-        height: 10,
-        speed: 650,
-        density: 6_000,
-        damage: 6,
-        linearDamping: 0.2, // Medium bullets have moderate drag
+        width: 10,
+        height: 4,
+        speed: 525,
+        density: 3_000,
+        damage: 4,
+        linearDamping: 0.3, // Medium bullets have moderate drag
     },
     
     [BulletCaliber.Heavy]: {
-        width: 7,
-        height: 14,
-        speed: 800,
-        density: 10_000,
-        damage: 10,
-        linearDamping: 0.075, // Heavy bullets maintain speed longer
+        width: 12,
+        height: 5,
+        speed: 600,
+        density: 3_000,
+        damage: 6,
+        linearDamping: 0.2, // Heavy bullets maintain speed longer
     },
 } as const;
 
@@ -113,13 +113,13 @@ export const TurretSpeedConfig = {
  */
 export const ReloadConfig = {
     /** Light tank - fast reload */
-    light: 400,
+    light: 800,
     
     /** Medium tank - balanced reload */
-    medium: 600,
+    medium: 1200,
     
     /** Heavy tank - slow reload */
-    heavy: 800,
+    heavy: 1600,
     
     /** Player tank - enhanced reload */
     player: 300,

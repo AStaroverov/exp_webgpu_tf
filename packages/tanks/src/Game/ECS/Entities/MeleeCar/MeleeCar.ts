@@ -43,8 +43,8 @@ export function createMeleeCar(opts: {
 
     // Light and fast base
     options.density = DENSITY * 8;
-    options.width = PADDING * 6;
-    options.height = PADDING * 10;
+    options.width = PADDING * 10;
+    options.height = PADDING * 6;
     options.linearDamping = DampingConfig.carLinear;
     options.angularDamping = DampingConfig.carAngular;
     const [carEid, carPid] = createMeleeCarBase(options);
@@ -87,7 +87,7 @@ export function createMeleeCar(opts: {
     fillAllSlots(rearRightEid, options);
 
     // Add exhaust pipe
-    addCarExhaustPipe(carEid, PADDING * 6, PADDING * 10);
+    addCarExhaustPipe(carEid, PADDING * 10, PADDING * 6);
 
     return carEid;
 }

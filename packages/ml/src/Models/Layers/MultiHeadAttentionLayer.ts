@@ -53,41 +53,43 @@ export class MultiHeadAttentionLayer extends tf.layers.Layer {
     }
 
     call(inputs: tf.Tensor | tf.Tensor[]) {
-        const inputArray = Array.isArray(inputs) ? inputs : [inputs];
-        
-        if (inputArray.length !== 4) {
-            throw new Error(`MultiHeadAttentionLayer expects exactly 4 inputs: [qTok, qMask, kvTok, kvMask], got ${inputArray.length}`);
-        }
-        
-        const [qTok, qMask, kvTok,  kvMask] = inputArray;
-        const [B, N, dModel] = qTok.shape;
+        return tf.tidy(() => {
+            const inputArray = Array.isArray(inputs) ? inputs : [inputs];
+            
+            if (inputArray.length !== 4) {
+                throw new Error(`MultiHeadAttentionLayer expects exactly 4 inputs: [qTok, qMask, kvTok, kvMask], got ${inputArray.length}`);
+            }
+            
+            const [qTok, qMask, kvTok,  kvMask] = inputArray;
+            const [B, N, dModel] = qTok.shape;
 
-        const q = write(qTok, this.wq);   // [b, qLen, heads*keyDim]
-        const k = write(kvTok, this.wk);   // [b, kLen, heads*keyDim]
-        const v = write(kvTok, this.wv);   // [b, vLen, heads*keyDim]
+            const q = write(qTok, this.wq);   // [b, qLen, heads*keyDim]
+            const k = write(kvTok, this.wk);   // [b, kLen, heads*keyDim]
+            const v = write(kvTok, this.wv);   // [b, vLen, heads*keyDim]
 
-        const split = (t: tf.Tensor) =>
-            t.reshape([B, t.shape[1]!, this.numHeads, this.keyDim])
-                .transpose([0, 2, 1, 3]); // → [B, H, Q or K, d_k]
+            const split = (t: tf.Tensor) =>
+                t.reshape([B, t.shape[1]!, this.numHeads, this.keyDim])
+                    .transpose([0, 2, 1, 3]); // → [B, H, Q or K, d_k]
 
-        const qh = split(q);
-        const kh = split(k);
-        const vh = split(v);
-        const kvMaskReshaped = kvMask.reshape([B, 1, 1, kvMask.shape[1]!]);
-        const qMaskReshaped = qMask.reshape([B, qMask.shape[1]!, 1]);
+            const qh = split(q);
+            const kh = split(k);
+            const vh = split(v);
+            const kvMaskReshaped = kvMask.reshape([B, 1, 1, kvMask.shape[1]!]);
+            const qMaskReshaped = qMask.reshape([B, qMask.shape[1]!, 1]);
 
-        const scores = tf.matMul(qh, kh, false, true)
-            .div(Math.sqrt(this.keyDim))
-            .add(kvMaskReshaped.sub(1).mul(1e9));
-        const weights = tf.softmax(scores).mul(kvMaskReshaped);
-        const context = tf.matMul(weights, vh);
-        const merged = context.transpose([0, 2, 1, 3]).reshape([B, N, dModel]);
-        const output = write(merged, this.wo);
+            const scores = tf.matMul(qh, kh, false, true)
+                .div(Math.sqrt(this.keyDim))
+                .add(kvMaskReshaped.sub(1).mul(1e9));
+            const weights = tf.softmax(scores).mul(kvMaskReshaped);
+            const context = tf.matMul(weights, vh);
+            const merged = context.transpose([0, 2, 1, 3]).reshape([B, N, dModel]);
+            const output = write(merged, this.wo);
 
-        // Apply qMask to output (mask out padding in query sequence)
-        const result = tf.mul(output, qMaskReshaped);
+            // Apply qMask to output (mask out padding in query sequence)
+            const result = tf.mul(output, qMaskReshaped);
 
-        return result;
+            return result;
+        });
     }
 
     getConfig() {

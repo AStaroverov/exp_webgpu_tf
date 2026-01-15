@@ -22,7 +22,7 @@ export const GameZoneConfig = {
     destructionPadding: 500,
     
     /** Distance beyond game zone where vehicle decay starts */
-    decayDistanceThreshold: 400,
+    decayDistanceThreshold: 0,
     
     /** Probability per frame for decay check */
     decayProbability: 0.3,

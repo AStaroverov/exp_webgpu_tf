@@ -2,8 +2,8 @@ import * as tf from '@tensorflow/tfjs';
 
 type MultiOUOpts = {
     K?: number;           // число фильтров (шкал), 6..12 обычно достаточно
-    tauMin?: number;      // минимальная "длина" шкалы в шагах
-    tauMax?: number;      // максимальная "длина" шкалы в шагах
+    tauMin: number;      // минимальная "длина" шкалы в шагах
+    tauMax: number;      // максимальная "длина" шкалы в шагах
 };
 
 export class ColoredNoiseApprox {
@@ -15,11 +15,11 @@ export class ColoredNoiseApprox {
     private states: tf.Tensor[];  // массив [K, headDim] для каждой головы
     private disposed = false;
 
-    constructor(headDims: number[], beta: number, opts: MultiOUOpts = {}) {
+    constructor(headDims: number[], beta: number, opts: MultiOUOpts) {
         const {
             K = 8,
-            tauMin = 16,
-            tauMax = 256,
+            tauMin,
+            tauMax,
         } = opts;
         this.headDims = headDims;
         this.K = K;
@@ -65,13 +65,14 @@ export class ColoredNoiseApprox {
 
                 return { state: s, out: y };
             });
-
+            
             states.push(state);
             outputs.push(out);
         }
 
         this.states.forEach(s => s.dispose());
         this.states = states;
+        
         return outputs;
     }
 

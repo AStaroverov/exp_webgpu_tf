@@ -8,13 +8,11 @@ import { Children } from '../../Components/Children.ts';
 import { Debris } from '../../Components/Debris.ts';
 import { Parent } from '../../Components/Parent.ts';
 import { PlayerRef } from '../../Components/PlayerRef.ts';
-import { Score } from '../../Components/Score.ts';
 import { Tank } from '../../Components/Tank.ts';
 import { Vehicle } from '../../Components/Vehicle.ts';
 import { VehiclePart, VehiclePartCaterpillar } from '../../Components/VehiclePart.ts';
 import { Joint } from '../../Components/Joint.ts';
 import { TeamRef } from '../../Components/TeamRef.ts';
-import { mapVehicleEngineLabel, VehicleEngineType } from '../../Systems/Vehicle/VehicleControllerSystems.ts';
 import { recursiveTypicalRemoveEntity, scheduleRemoveEntity } from '../../Utils/typicalRemoveEntity.ts';
 import { spawnExplosion } from '../Explosion.ts';
 import {
@@ -25,6 +23,7 @@ import {
 import { getFilledSlotCount, getSlotCount } from '../Vehicle/VehicleParts.ts';
 import { applyExplosionImpulse } from '../../../Physical/applyExplosionImpulse.ts';
 import { getSlotFillerEid, isSlot, isSlotEmpty } from '../../Utils/SlotUtils.ts';
+import { EngineLabels, EngineType } from '../../../Config/vehicles.ts';
 
 
 export function destroyTank(vehicleEid: EntityId) {
@@ -122,7 +121,6 @@ export function getTankTotalSlotCount(vehicleEid: number) {
 
 export const HEALTH_THRESHOLD = 0.85;
 
-// return from 0 to 1
 export function getTankHealthAbs(tankEid: number): number {
     const health = getTankHealth(tankEid);
     const totalSlots = getTankTotalSlotCount(tankEid);
@@ -139,19 +137,13 @@ export function getTankHealth(tankEid: number): number {
     return health;
 }
 
-export function getTankScore(tankEid: number): number {
-    const playerId = PlayerRef.id[tankEid];
-    const score = Score.positiveScore[playerId] + Score.negativeScore[playerId] * 1.3;
-    return score;
-}
-
 export function getTankTeamId(tankEid: number) {
     const teamId = TeamRef.id[tankEid];
     return teamId;
 }
 
 export function getTankEngineLabel(vehicleEid: number): string {
-    const engine = Vehicle.engineType[vehicleEid] as VehicleEngineType;
-    return mapVehicleEngineLabel[engine];
+    const engine = Vehicle.engineType[vehicleEid] as EngineType;
+    return EngineLabels[engine];
 }
 

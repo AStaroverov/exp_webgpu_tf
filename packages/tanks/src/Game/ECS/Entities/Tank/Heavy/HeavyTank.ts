@@ -3,11 +3,10 @@ import { TColor } from '../../../../../../../renderer/src/ECS/Components/Common.
 import { BulletCaliber } from '../../../Components/Bullet.ts';
 import { SlotPartType } from '../../../Components/SlotConfig.ts';
 import { VehicleType } from '../../../Components/Vehicle.ts';
-import { VehicleEngineType } from '../../../Systems/Vehicle/VehicleControllerSystems.ts';
 import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../../Vehicle/VehicleParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from '../Common/Options.ts';
 import { createTankBase, createTankTracks, createTankTurret } from '../Common/Tank.ts';
-import { addTankExhaustPipes } from '../../ExhaustPipe.ts';
+import { createTankExhaustPipes } from '../../ExhaustPipe.ts';
 import {
     caterpillarLength,
     caterpillarSetLeft,
@@ -17,14 +16,15 @@ import {
     PADDING,
     PARTS_COUNT,
     SIZE,
-    TRACK_ANCHOR_X,
+    TRACK_ANCHOR_Y,
     turretGunSet,
     turretHeadSet,
 } from './HeavyTankParts.ts';
+import { EngineType } from '../../../../Config/vehicles.ts';
 
 const TRACKS_COLOR = new Float32Array([0.5, 0.5, 0.5, 1]);
 const TURRET_COLOR = new Float32Array([0.5, 1, 0.5, 1]);
-const APPROXIMATE_COLLIDER_RADIUS = 150;
+const APPROXIMATE_COLLIDER_RADIUS = 80;
 
 export function createHeavyTank(opts: {
     playerId: number,
@@ -40,36 +40,38 @@ export function createHeavyTank(opts: {
     options.padding = PADDING;
     options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
     options.vehicleType = VehicleType.HeavyTank;
-    options.engineType = VehicleEngineType.v12;
+    options.engineType = EngineType.v12;
     options.trackLength = caterpillarLength;
 
     options.density = DENSITY * 14;
-    options.width = PADDING * 10;
-    options.height = PADDING * 14;
+    options.width = PADDING * 12;
+    options.height = PADDING * 8;
     const [tankEid, tankPid] = createTankBase(options);
 
     // Create left and right tracks as independent entities
     const [leftTrackEid, rightTrackEid] = createTankTracks(
         options,
         {
-            leftAnchorX: TRACK_ANCHOR_X,
-            rightAnchorX: -TRACK_ANCHOR_X,
-            anchorY: 0,
+            leftAnchorY: TRACK_ANCHOR_Y,
+            rightAnchorY: -TRACK_ANCHOR_Y,
+            anchorX: 0,
             trackWidth: PADDING * 2,
-            trackHeight: options.trackLength,
+            trackHeight: caterpillarLength,
         },
         tankEid,
         tankPid,
     );
 
     options.density = DENSITY;
-    options.width = PADDING * 8;
-    options.height = PADDING * 8;
-    options.turret.rotationSpeed = PI * 0.25;
+    options.width = PADDING * 7;
+    options.height = PADDING * 6;
+    options.turret.rotationSpeed = PI * 0.6;
+    options.turret.gunWidth = PADDING * 7;
+    options.turret.gunHeight = PADDING * 2;
     options.firearms.reloadingDuration = 700;
     options.firearms.bulletCaliber = BulletCaliber.Heavy;
-    options.firearms.bulletStartPosition = [0, -13 * PADDING];
-    const [turretEid] = createTankTurret(options, tankEid, tankPid);
+    options.firearms.bulletStartPosition = [13 * PADDING, 0];
+    const [turretEid, gunEid] = createTankTurret(options, tankEid, tankPid);
 
     // Hull parts attached to tank body
     createSlotEntities(tankEid, hullSet, options.color, SlotPartType.HullPart);
@@ -81,7 +83,7 @@ export function createHeavyTank(opts: {
 
     // Turret parts
     updateColorOptions(options, TURRET_COLOR);
-    createSlotEntities(turretEid, turretGunSet, options.color, SlotPartType.TurretGun);
+    createSlotEntities(gunEid, turretGunSet, options.color, SlotPartType.TurretGun);
     createSlotEntities(turretEid, turretHeadSet, options.color, SlotPartType.TurretHead);
 
     // Fill all slots with physical parts
@@ -93,9 +95,11 @@ export function createHeavyTank(opts: {
     fillAllSlots(rightTrackEid, options);
     updateSlotsBrightness(turretEid);
     fillAllSlots(turretEid, options);
+    updateSlotsBrightness(gunEid);
+    fillAllSlots(gunEid, options);
 
     // Add exhaust pipes
-    addTankExhaustPipes(tankEid, PADDING * 10, PADDING * 14);
+    createTankExhaustPipes(tankEid, PADDING * 12, PADDING * 8);
 
     return tankEid;
 }

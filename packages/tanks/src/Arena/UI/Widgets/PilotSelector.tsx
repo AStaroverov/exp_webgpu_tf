@@ -8,6 +8,7 @@ import { CurrentActorAgent, TankAgent } from '../../../Pilots/Agents/CurrentActo
 const pilots = [
     { key: 'current', label: 'Pilot last' },
     { key: '/assets/models/v1', label: 'Pilot v1' },
+    { key: '/assets/models/v2', label: 'Pilot v2' },
 ];
 
 export function PilotSelector({ className, tankEid }: { className?: string, tankEid: number }) {

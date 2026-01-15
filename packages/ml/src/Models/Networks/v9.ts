@@ -1,14 +1,13 @@
 import * as tf from '@tensorflow/tfjs';
-import {
-    applyCrossAttentionLayer, applyLaNLayer, applySelfTransformLayers,
-    convertInputsToTokens, createInputs
-} from '../ApplyLayers.ts';
-import { MaskLikeLayer } from '../Layers/MaskLikeLayer.ts';
-
+import { throwingError } from '../../../../../lib/throwingError.ts';
+import { ceil } from '../../../../../lib/math.ts';
 import { Model } from '../def.ts';
-import { VariableLayer } from '../Layers/VariableLayer.ts';
+import { MaskLikeLayer } from '../Layers/MaskLikeLayer.ts';
 import { SliceLayer } from '../Layers/SliceLayer.ts';
-import { MaskSquashLayer } from '../Layers/MaskSquashLayer.ts';
+import { applyPerceiverLayer } from '../Layers/PerceiverLayer.ts';
+import { VariableLayer } from '../Layers/VariableLayer.ts';
+import { applyLaNLayer } from '../ApplyLayers.ts';
+import { createInputs, convertInputsToTokens } from '../Inputs.ts';
 
 type NetworkConfig = {
     dim: number;
@@ -21,92 +20,105 @@ type policyNetworkConfig = NetworkConfig
 const policyNetworkConfig: policyNetworkConfig = {
     dim: 64,
     heads: 4,
-    depth: 16,
+    depth: 6,
 };
 
 const valueNetworkConfig: NetworkConfig = {
-    dim: 16,
+    dim: 32,
     heads: 1,
-    depth: 2,
+    depth: 3,
 };
 
 export function createNetwork(modelName: Model, config: NetworkConfig = modelName === Model.Policy ? policyNetworkConfig : valueNetworkConfig) {
     const inputs = createInputs(modelName);
     const tokens = convertInputsToTokens(inputs, config.dim);
 
-    const clsBulletsToken = new VariableLayer({
-        name: modelName + '_clsBulletsToken',
-        shape: [1, config.dim],
-        initializer: 'truncatedNormal'
-    }).apply(tokens.bulletsTok) as tf.SymbolicTensor;
-    const bulletsToken = applyCrossAttentionLayer({
-        name: modelName + '_clsBulletsAttention',
-        heads: config.heads,
-        qTok: clsBulletsToken,
-        kvTok: tokens.bulletsTok,
-        kvMask: inputs.bulletsMaskInput,
-    });
-
-    const clsToken = new VariableLayer({
-        name: modelName + '_clsToken',
-        shape: [1, config.dim],
-        initializer: 'truncatedNormal'
-    }).apply(tokens.tankTok) as tf.SymbolicTensor;
-    
     const getContextToken = (name: string, i: number) => {
         return tf.layers.concatenate({name: name + '_contextToken' + i, axis: 1 })
             .apply([
-                clsToken,
                 tokens.tankTok,
-                bulletsToken,
+                tokens.turretTok,
+                tokens.raysTok,
                 tokens.alliesTok,
                 tokens.enemiesTok,
+                tokens.bulletsTok,
             ]) as tf.SymbolicTensor;
     }
 
     const maskLike = new MaskLikeLayer({ name: modelName + '_maskLike' });
-    const maskSquash = new MaskSquashLayer({ name: modelName + '_maskSquash' });
     const getContextMask = (name: string, i: number) => {
-        const oneMask = maskLike.apply(tokens.tankTok) as tf.SymbolicTensor;
-        const bulletsMask = maskSquash.apply(inputs.bulletsMaskInput) as tf.SymbolicTensor;
+        const tankMask = maskLike.apply(tokens.tankTok) as tf.SymbolicTensor;
+        const turretMask = maskLike.apply(tokens.turretTok) as tf.SymbolicTensor;
+        const raysMask = maskLike.apply(tokens.raysTok) as tf.SymbolicTensor;
+        
         return tf.layers.concatenate({name: name + '_contextTokenMask' + i, axis: 1 })
             .apply([
-                oneMask,
-                oneMask,
-                bulletsMask,
+                tankMask,
+                turretMask,
+                raysMask,
                 inputs.alliesMaskInput,
                 inputs.enemiesMaskInput,
+                inputs.bulletsMaskInput,
             ]) as tf.SymbolicTensor;
     };
 
-    const transformer = applySelfTransformLayers(
-        modelName + '_inputTransformer',
-        {
-            heads: config.heads,
-            depth: config.depth,
-            token: getContextToken,
-            mask: getContextMask,
-            preNorm: true,
-        },
-    );
+    const latentQ = new VariableLayer({
+        name: modelName + '_latentQ',
+        shape: [12, config.dim],
+        initializer: 'truncatedNormal',
+    }).apply(tokens.tankTok) as tf.SymbolicTensor;
 
-    const finalToken = new SliceLayer({
-        name: modelName + '_finalToken',
-        beginSlice: [0, 0, 0],
-        sliceSize: [-1, 1, -1],
-    }).apply(transformer) as tf.SymbolicTensor;
-
-    const flattenedFinalToken = tf.layers.flatten({ name: modelName + '_flattenedFinalToken' })
-        .apply(finalToken) as tf.SymbolicTensor;
-
-    const len = modelName === Model.Policy ? 4 : 1;
-    const heads = Array.from({ length: len }, (_, i) => {
-        return applyLaNLayer({
-            name: modelName + '_head' + i,
-            units: config.dim,
-            preNorm: true
-        }, flattenedFinalToken);
+    const latentPerceiver = applyPerceiverLayer({
+        name: modelName + '_latentPerceiver',
+        depth: ceil(config.depth * 0.66),
+        heads: config.heads,
+        qTok: latentQ,
+        kvTok: getContextToken,
+        kvMask: getContextMask,
+        preNorm: true,
     });
 
-    return { inputs, heads };
+    const headsQ = new VariableLayer({
+        name: modelName + '_headsQ',
+        shape: [4, config.dim],
+        initializer: 'truncatedNormal',
+    }).apply(tokens.tankTok) as tf.SymbolicTensor;
+
+    const headsPerceiver = applyPerceiverLayer({
+        name: modelName + '_headsPerceiver',
+        depth: ceil(config.depth * 0.33),
+        heads: config.heads,
+        qTok: headsQ, 
+        kvTok: latentPerceiver,
+        preNorm: true,
+    });
+
+    const finalToken = applyLaNLayer({
+        name: modelName + '_finalToken',
+        units: config.dim,
+        preNorm: true
+    }, headsPerceiver);
+
+    if (modelName === Model.Policy) {
+        const heads = Array.from({ length: 4 }, (_, i) => {
+            const token = new SliceLayer({
+                name: modelName + '_headToken' + i,
+                beginSlice: [0, i, 0],
+                sliceSize: [-1, 1, -1],
+            }).apply(finalToken) as tf.SymbolicTensor;
+            return tf.layers
+                .flatten({ name: modelName + '_flattenedHeadToken' + i })
+                .apply(token) as tf.SymbolicTensor;
+        });
+        return { inputs, heads };
+    }
+
+     if (modelName === Model.Value) {
+        const averageToken = tf.layers
+            .globalAveragePooling1d({ name: modelName + '_averageToken' })
+            .apply(finalToken) as tf.SymbolicTensor;
+        return { inputs, heads: [averageToken] };
+     }
+
+     throwingError(`Invalid model name: ${modelName}`);
 }

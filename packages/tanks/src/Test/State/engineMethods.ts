@@ -10,6 +10,7 @@ import { RigidBodyState } from '../../Game/ECS/Components/Physical.ts';
 import { PlayerEnvDI } from '../../Game/DI/PlayerEnvDI.ts';
 import { createPlayer } from '../../Game/ECS/Entities/Player.ts';
 import { createRock } from '../../Game/ECS/Entities/Rock/Rock.ts';
+import { createSmallRuin, createMediumRuin, createLargeRuin } from '../../Game/ECS/Entities/Building/index.ts';
 // Player team = 0, Enemy team = 1
 export const PLAYER_TEAM_ID = 0;
 export const ENEMY_TEAM_ID = 1;
@@ -53,9 +54,13 @@ export function spawnPlayerTank(vehicleType: VehicleType = VehicleType.LightTank
         teamId: PLAYER_TEAM_ID,
         x: 0,
         y: 0,
-        rotation: -PI / 2, // Facing up
+        rotation: 0, // Facing up
         color: [0.2, 0.8, 0.2, 1], // Green player
     });
+
+    getEngine().enablePlayer();
+    getEngine().setPlayerVehicle(eid);
+    getEngine().setCameraTarget(eid);
     
     return eid;
 }
@@ -123,5 +128,48 @@ export function spawnRockAtRandomPosition() {
     const y = playerY + Math.sin(angle) * spawnDistance;
 
     return createRock({ x, y });
+}
+
+export type BuildingSize = 'small' | 'medium' | 'large' | 'random';
+
+/**
+ * Spawn a ruined building at random position near the player
+ */
+export function spawnBuildingAtRandomPosition(size: BuildingSize = 'random') {
+    // Get player position
+    let playerX = 0;
+    let playerY = 0;
+    
+    if (PlayerEnvDI.tankEid !== null) {
+        playerX = RigidBodyState.position.get(PlayerEnvDI.tankEid, 0);
+        playerY = RigidBodyState.position.get(PlayerEnvDI.tankEid, 1);
+    }
+    
+    // Spawn at random distance from player (200-600 units away)
+    const spawnDistance = randomRangeFloat(200, 600);
+    
+    // Random angle
+    const angle = randomRangeFloat(0, PI * 2);
+    
+    const x = playerX + Math.cos(angle) * spawnDistance;
+    const y = playerY + Math.sin(angle) * spawnDistance;
+
+    // Random 90 degree aligned rotation
+    const rotation = Math.floor(Math.random() * 4) * (PI / 2);
+
+    switch (size) {
+        case 'small':
+            return createSmallRuin(x, y, rotation);
+        case 'medium':
+            return createMediumRuin(x, y, rotation);
+        case 'large':
+            return createLargeRuin(x, y, rotation);
+        case 'random':
+        default:
+            const rand = Math.random();
+            if (rand < 0.4) return createSmallRuin(x, y, rotation);
+            if (rand < 0.8) return createMediumRuin(x, y, rotation);
+            return createLargeRuin(x, y, rotation);
+    }
 }
 

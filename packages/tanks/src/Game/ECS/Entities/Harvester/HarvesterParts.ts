@@ -26,9 +26,9 @@ export function createArcSet(
 
     for (let i = 0; i < count; i++) {
         const angle = startAngle + i * angleStep;
-        // Arc faces forward (negative Y direction)
-        const x = sin(angle) * radius;
-        const y = -cos(angle) * radius;
+        // Arc faces forward (positive X direction)
+        const x = cos(angle) * radius;
+        const y = sin(angle) * radius;
         result.push([x, y, partWidth, partHeight]);
     }
 
@@ -36,11 +36,11 @@ export function createArcSet(
 }
 
 // Hull - wider and slightly shorter than medium tank (bulldozer shape)
-export const hullSet = createRectangleSet(10, 12, SIZE, PADDING);
+export const hullSet = createRectangleSet(12, 10, SIZE, PADDING);
 
 // Barrier "turret" - wide shield that rotates, no gun barrel
 // Acts as impenetrable barrier instead of weapon
-export const barrierSet = createRectangleSet(8, 4, SIZE, PADDING);
+export const barrierSet = createRectangleSet(4, 8, SIZE, PADDING);
 
 /**
  * Creates a U-shaped scoop (square without one side - open at the front for collecting)
@@ -48,38 +48,38 @@ export const barrierSet = createRectangleSet(8, 4, SIZE, PADDING);
  * @param backLength - number of parts on the back wall
  * @param partSize - size of each part
  * @param partPadding - padding between parts
- * @param offsetY - vertical offset from center (negative = forward)
+ * @param offsetX - horizontal offset from center (positive = forward)
  */
 export function createUScoopSet(
     sideLength: number,
     backLength: number,
     partSize: number,
     partPadding: number,
-    offsetY: number,
+    offsetX: number,
 ): PartsData[] {
     const result: PartsData[] = [];
     
-    const halfWidth = (backLength * partPadding) / 2 - partSize / 2;
-    const backY = offsetY + (sideLength - 1) * partPadding; // Back wall position
+    const halfHeight = (backLength * partPadding) / 2 - partSize / 2;
+    const backX = offsetX - (sideLength - 1) * partPadding; // Back wall position
     
-    // Left side (vertical line, going from front to back)
+    // Top side (horizontal line, going from front to back)
     for (let i = 0; i < sideLength; i++) {
-        const x = -halfWidth;
-        const y = offsetY + i * partPadding;
+        const x = offsetX - i * partPadding;
+        const y = -halfHeight;
         result.push([x, y, partSize, partSize]);
     }
     
-    // Right side (vertical line, going from front to back)
+    // Bottom side (horizontal line, going from front to back)
     for (let i = 0; i < sideLength; i++) {
-        const x = halfWidth;
-        const y = offsetY + i * partPadding;
+        const x = offsetX - i * partPadding;
+        const y = halfHeight;
         result.push([x, y, partSize, partSize]);
     }
     
-    // Back wall (horizontal line at the back, excluding corners already placed)
+    // Back wall (vertical line at the back, excluding corners already placed)
     for (let i = 1; i < backLength - 1; i++) {
-        const x = i * partPadding - halfWidth;
-        const y = backY;
+        const x = backX;
+        const y = i * partPadding - halfHeight;
         result.push([x, y, partSize, partSize]);
     }
     
@@ -95,7 +95,7 @@ export const scoopSet: PartsData[] = createUScoopSet(
     SCOOP_FRONT_LENGTH,
     SIZE,
     PADDING,
-    -PADDING * 11.5,
+    PADDING * 11.5,
 );
 
 // Caterpillar configuration - heavy duty tracks
@@ -105,13 +105,13 @@ export const CATERPILLAR_LINE_COUNT = 20;
 export const caterpillarLength = CATERPILLAR_LINE_COUNT * CATERPILLAR_PADDING;
 
 // Track anchor position (distance from harvester center to track center)
-export const TRACK_ANCHOR_X = PADDING * 6 + SIZE * 0.3;
+export const TRACK_ANCHOR_Y = PADDING * 6 + SIZE * 0.3;
 
 // Caterpillar parts - local coordinates relative to track entity (centered at 0,0)
 export const caterpillarSet = createRectangleSet(
-    2, CATERPILLAR_LINE_COUNT,
-    SIZE, PADDING,
+    CATERPILLAR_LINE_COUNT, 2,
     CATERPILLAR_SIZE, CATERPILLAR_PADDING,
+    SIZE, PADDING,
 );
 
 // Left track caterpillar parts (local to left track)

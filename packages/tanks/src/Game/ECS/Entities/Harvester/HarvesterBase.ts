@@ -7,9 +7,9 @@ import { createVehicleBase, createVehicleTurret } from '../Vehicle/VehicleBase.t
 import { type HarvesterOptions } from './Options.ts';
 
 export type HarvesterTracksConfig = {
-    leftAnchorX: number;
-    rightAnchorX: number;
-    anchorY: number;
+    anchorX: number;
+    leftAnchorY: number;
+    rightAnchorY: number;
     trackWidth: number;
     trackHeight: number;
 };
@@ -39,14 +39,14 @@ export function createHarvesterTracks(
         height: tracksConfig.trackHeight,
         trackLength: options.trackLength,
         trackSide: TrackSide.Left,
-        anchorX: tracksConfig.leftAnchorX,
-        anchorY: tracksConfig.anchorY,
+        anchorX: tracksConfig.anchorX,
+        anchorY: tracksConfig.leftAnchorY,
         density: options.density * 0.1, // Tracks are lighter than main body
     };
 
     // Transform anchor positions to world space
-    const leftWorldX = tracksConfig.leftAnchorX * cos(options.rotation) - tracksConfig.anchorY * sin(options.rotation);
-    const leftWorldY = tracksConfig.leftAnchorX * sin(options.rotation) + tracksConfig.anchorY * cos(options.rotation);
+    const leftWorldX = tracksConfig.anchorX * cos(options.rotation) - tracksConfig.leftAnchorY * sin(options.rotation);
+    const leftWorldY = tracksConfig.anchorX * sin(options.rotation) + tracksConfig.leftAnchorY * cos(options.rotation);
     trackOptions.x = options.x + leftWorldX;
     trackOptions.y = options.y + leftWorldY;
 
@@ -54,10 +54,10 @@ export function createHarvesterTracks(
 
     // Create right track
     trackOptions.trackSide = TrackSide.Right;
-    trackOptions.anchorX = tracksConfig.rightAnchorX;
+    trackOptions.anchorY = tracksConfig.rightAnchorY;
     
-    const rightWorldX = tracksConfig.rightAnchorX * cos(options.rotation) - tracksConfig.anchorY * sin(options.rotation);
-    const rightWorldY = tracksConfig.rightAnchorX * sin(options.rotation) + tracksConfig.anchorY * cos(options.rotation);
+    const rightWorldX = tracksConfig.anchorX * cos(options.rotation) - tracksConfig.rightAnchorY * sin(options.rotation);
+    const rightWorldY = tracksConfig.anchorX * sin(options.rotation) + tracksConfig.rightAnchorY * cos(options.rotation);
     trackOptions.x = options.x + rightWorldX;
     trackOptions.y = options.y + rightWorldY;
 

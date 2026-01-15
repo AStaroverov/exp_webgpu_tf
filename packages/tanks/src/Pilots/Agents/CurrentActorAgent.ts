@@ -6,17 +6,16 @@ import { AgentMemory, AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
 import { getNetworkExpIteration } from '../../../../ml-common/utils.ts';
 import { Model } from '../../../../ml/src/Models/def.ts';
 import { getNetwork } from '../../../../ml/src/Models/Utils.ts';
-import { calculateActionReward, getFramePenalty } from '../../../../ml/src/Reward/calculateReward.ts';
+import { calculateActionReward, getFramePenalty, WEIGHTS } from '../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { createNetworkModelManager } from './NetworkModelManager.ts';
-import { ColoredNoiseApprox } from '../../../../ml-common/ColoredNoiseApprox.ts';
 import { ACTION_HEAD_DIMS } from '../../../../ml/src/Models/Create.ts';
-import { randomRangeFloat } from '../../../../../lib/random.ts';
+import { DirichletNoise } from '../../../../ml-common/DirichletNoise.ts';
 
 export type TankAgent<A = Partial<DownloadableAgent> & Partial<LearnableAgent>> = A & {
     tankEid: number;
     scheduleUpdateTankBehaviour(width: number, height: number, frame: number): void;
-    applyUpdateTankBehaviour(): void;
+    applyUpdateTankBehaviour(width: number, height: number, frame: number): void;
 }
 
 export type DownloadableAgent = {
@@ -32,14 +31,18 @@ export type LearnableAgent = {
     getVersion(): number;
     getMemory(): undefined | AgentMemory;
     getMemoryBatch(rewardBias: number): undefined | AgentMemoryBatch;
-    evaluateTankBehaviour(width: number, height: number, frame: number, successRatio: number): void;
+    evaluateTankBehaviour(width: number, height: number, frame: number): void;
 }
 
 const currentActorUpdater = createNetworkModelManager(() => getNetwork(Model.Policy));
 
 export class CurrentActorAgent implements TankAgent<DownloadableAgent & LearnableAgent> {
+    private rewardWeights = WEIGHTS;
     private memory = new AgentMemory();
-    private noise = new ColoredNoiseApprox(ACTION_HEAD_DIMS, randomRangeFloat(0, 1));
+    private noise = new DirichletNoise(ACTION_HEAD_DIMS, {
+        alpha: 0.3,  // α < 1 for sparse, peaked samples (high exploration)
+        repeatInterval: [1, 6],
+    });
 
     private initialActionReward?: number;
 
@@ -54,7 +57,7 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
     }
 
     public getNoise() {
-        return this.noise.sample().map(t => t.mul(0.1));
+        return this.noise.sample();
     }
 
     public getMemory(): undefined | AgentMemory {
@@ -85,7 +88,7 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         currentActorUpdater.schedule(width, height, this);
     }
 
-    public applyUpdateTankBehaviour() {
+    public applyUpdateTankBehaviour(width: number, height: number) {
         const result = currentActorUpdater.get(
             this,
             this.train ||
@@ -96,6 +99,7 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         
         applyActionToTank(this.tankEid, result.actions, false);
 
+        
         if (this.train && result.logProb != null && result.logits != null) {
             this.memory.addFirstPart(
                 result.state,
@@ -103,7 +107,7 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
                 result.logits,
                 result.logProb,
             );
-            this.initialActionReward = calculateActionReward(this.tankEid);
+            this.initialActionReward = calculateActionReward(this.tankEid, this.rewardWeights);
         }
     }
 
@@ -112,31 +116,19 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         height: number,
         frame: number,
     ) {
-        if (!this.train || this.memory.size() === 0) return;
+        if (this.memory.size() === 0) return;
 
         const isDead = getTankHealth(this.tankEid) <= 0;
-        // const version = this.getVersion();
-
-        const stateRewardMultiplier = 0.5;//; - 0.5 * clamp(unlerp(0, LEARNING_STEPS * 0.4, version), 0, 1);
-        const actionRewardMultiplier = 1;// clamp(unlerp(0, LEARNING_STEPS * 0.2, version), 0.3, 1);
-
-        const stateReward = 0
-        //  calculateStateReward(
-        //     this.tankEid,
-        //     width,
-        //     height,
-        //     clamp(version / (LEARNING_STEPS * 0.2), 0, 1)
-        // );
+        const frameReward = getFramePenalty(frame);
         const actionReward = this.initialActionReward === undefined
             ? 0
-            : calculateActionReward(this.tankEid) - this.initialActionReward;
-        
-        const frameReward = getFramePenalty(frame);
- 
+            : calculateActionReward(this.tankEid, this.rewardWeights) - this.initialActionReward;
+        // const stateReward = calculateStateReward(this.tankEid, this.rewardWeights);
+
         // it's not all reward, also we have final reward for lose/win in the end of episode
-        const reward = clamp(
-            stateReward * stateRewardMultiplier
-            + actionReward * actionRewardMultiplier
+        const reward = clamp(0
+            + actionReward
+            // + stateReward
             + frameReward,
             -10,
             +10

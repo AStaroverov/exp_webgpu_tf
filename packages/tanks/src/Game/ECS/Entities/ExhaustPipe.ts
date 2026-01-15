@@ -35,28 +35,28 @@ export function createExhaustPipe(options: ExhaustPipeOptions, { world } = GameD
 /**
  * Adds default exhaust pipes to a tank (rear-facing exhausts).
  */
-export function addTankExhaustPipes(
+export function createTankExhaustPipes(
     tankEid: number,
     tankWidth: number,
     tankHeight: number,
 ): [number, number] {
     // Add two exhaust pipes at the rear of the tank, facing backward
     // Front is at -Y (where gun points), rear is at +Y
-    const rearY = tankHeight / 2 + 2; // Behind the tank (positive Y is rear)
-    const offsetX = tankWidth / 4;
+    const rearX = -tankWidth / 2 + 2; // Behind the tank (positive Y is rear)
+    const offsetY = tankHeight / 4;
 
     const leftPipeEid = createExhaustPipe({
         vehicleEid: tankEid,
-        relativeX: -offsetX,
-        relativeY: rearY,
+        relativeX: rearX,
+        relativeY: offsetY,
         direction: PI / 2, // Pointing backward (positive Y direction)
         emissionRate: 5,
     });
 
     const rightPipeEid = createExhaustPipe({
         vehicleEid: tankEid,
-        relativeX: offsetX,
-        relativeY: rearY,
+        relativeX: rearX,
+        relativeY: -offsetY,
         direction: PI / 2,
         emissionRate: 5,
     });

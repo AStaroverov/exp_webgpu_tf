@@ -55,7 +55,7 @@ export function createRock(opts: CreateRockOptions, { world } = GameDI) {
 
     // Create rock entity (just a container for parts, no physics body)
     const rockEid = addEntity(world);
-    Rock.addComponent(world, rockEid, 0);
+    Rock.addComponent(world, rockEid);
     addTransformComponents(world, rockEid);
     Children.addComponent(world, rockEid);
 

@@ -7,6 +7,7 @@ import { SNAPSHOT_EVERY, TICK_TIME_SIMULATION } from '../../../../ml-common/cons
 import { createScenarioByCurriculumState } from '../../../../ml-common/Curriculum/createScenarioByCurriculumState.ts';
 import { CurriculumState, Scenario } from '../../../../ml-common/Curriculum/types.ts';
 import { agentSampleChannel, curriculumStateChannel, episodeSampleChannel, queueSizeChannel } from '../channels.ts';
+import { getRegistratedAgents, getAliveLearnableAgents, Pilot } from '../../../../tanks/src/Pilots/Components/Pilot.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -44,15 +45,15 @@ export class EpisodeManager {
 
     protected beforeEpisode() {
         return createScenarioByCurriculumState(this.curriculumState, {
-            train: random() < 0.95,
+            train: random() < 0.9,
             iteration: this.curriculumState.iteration,
         });
     }
 
     protected afterEpisode(episode: Scenario) {
         const successRatio = episode.getSuccessRatio();
-        const isReference = !episode.isTrain;
-        const pilots = episode.getPilots();
+        const isReference = !episode.train;
+        const pilots = Array.from(Pilot.agent.values());
 
         episodeSampleChannel.emit({
             maxNetworkVersion: max(...pilots.map(p => p.getVersion?.() ?? 0)),
@@ -69,7 +70,6 @@ export class EpisodeManager {
             }
 
             const networkVersion = agent.getVersion();
-            // const rewardBias = getFinalReward(successRatio, networkVersion);
             const memoryBatch = agent.getMemoryBatch(0);
 
             if (memoryBatch == null) return;
@@ -89,7 +89,7 @@ export class EpisodeManager {
         const episode = await this.beforeEpisode();
 
         try {
-            await this.awaitAgentsSync(episode);
+            await this.awaitAgentsSync();
             await this.runGameLoop(episode);
             this.afterEpisode(episode);
         } catch (error) {
@@ -99,8 +99,8 @@ export class EpisodeManager {
         }
     }
 
-    protected awaitAgentsSync(episode: Scenario) {
-        return Promise.all(episode.getPilots().map(agent => agent.sync?.()));
+    protected awaitAgentsSync() {
+        return Promise.all(getRegistratedAgents().map(agent => agent.sync?.()));
     }
 
     protected runGameLoop(episode: Scenario) {
@@ -135,7 +135,7 @@ export class EpisodeManager {
         deltaTime: number,
         scenario: Scenario,
     ) {
-        const actors = scenario.getAliveActors();
+        const actors = getAliveLearnableAgents();
         const currentTanks = scenario.getVehicleEids();
         const gameOverByActorCount = actors.length <= 0;
         const gameOverByTankCount = currentTanks.length <= 1;

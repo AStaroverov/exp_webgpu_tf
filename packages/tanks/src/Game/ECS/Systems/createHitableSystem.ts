@@ -1,7 +1,7 @@
 import { GameDI } from '../../DI/GameDI.ts';
 import { Hitable } from '../Components/Hitable.ts';
 import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
-import { EntityId, hasComponent, onSet, query } from 'bitecs';
+import { EntityId, hasComponent, Not, onSet, query } from 'bitecs';
 import { Bullet, BulletCaliber, mapBulletCaliber } from '../Components/Bullet.ts';
 import { createChangeDetector } from '../../../../../renderer/src/ECS/Systems/ChangedDetectorSystem.ts';
 import { VehiclePart } from '../Components/VehiclePart.ts';
@@ -21,8 +21,6 @@ import { Parent } from '../Components/Parent.ts';
 import { Vehicle } from '../Components/Vehicle.ts';
 import { SoundType } from '../Components/Sound.ts';
 import { spawnSoundAtParent } from '../Entities/Sound.ts';
-import { RockPart } from '../Components/Rock.ts';
-import { tearOffRockPart } from '../Entities/Rock/RockUtils.ts';
 
 export function createHitableSystem({ world } = GameDI) {
     const hitableChanges = createChangeDetector(world, [onSet(Hitable)]);
@@ -59,19 +57,6 @@ export function createHitableSystem({ world } = GameDI) {
            throttledSpawnSoundAtParent(vehicleEid, time, 200);
         }
 
-        // Handle rock parts
-        const rockPartEids = query(world, [RockPart, Hitable]);
-        for (let i = 0; i < rockPartEids.length; i++) {
-            const rockPartEid = rockPartEids[i];
-            if (!hitableChanges.has(rockPartEid)) continue;
-
-            applyDamage(rockPartEid);
-
-            if (!Hitable.isDestroyed(rockPartEid)) continue;
-
-            tearOffRockPart(rockPartEid, true);
-        }
-
         const bulletIds = query(world, [Bullet, Hitable]);
         for (let i = 0; i < bulletIds.length; i++) {
             const bulletId = bulletIds[i];
@@ -97,6 +82,18 @@ export function createHitableSystem({ world } = GameDI) {
             scheduleRemoveEntity(bulletId);
         }
 
+        const restEids = query(world, [Hitable, Not(VehiclePart), Not(Bullet)]);
+        for (let i = 0; i < restEids.length; i++) {
+            const eid = restEids[i];
+            if (!hitableChanges.has(eid)) continue;
+
+            applyDamage(eid);
+            
+            if (!Hitable.isDestroyed(eid)) continue;
+
+            scheduleRemoveEntity(eid);
+        }
+
         hitableChanges.clear();
     };
 }
@@ -119,16 +116,19 @@ function applyDamage(targetEid: number, { world } = GameDI) {
     Hitable.resetHits(targetEid);
 }
 
-function applyScores(vehiclePartEid: EntityId, hitEids: Float64Array, { world } = GameDI) {
+function applyScores(
+    hittableEid: EntityId, // entity that was hit
+    hitEids: Float64Array, // entities that hit the hittable
+    { world } = GameDI,
+) {
     for (const hitEid of hitEids) {
-        if (
-            hasComponent(world, vehiclePartEid, TeamRef)
-            && hasComponent(world, hitEid, TeamRef)
-            && hasComponent(world, hitEid, PlayerRef)
-        ) {
-            const vehiclePartTeamId = TeamRef.id[vehiclePartEid];
+        if (!hasComponent(world, hitEid, PlayerRef)) continue;
+        
+        const playerId = PlayerRef.id[hitEid];
+        
+        if (hasComponent(world, hitEid, TeamRef) && hasComponent(world, hittableEid, TeamRef)) {
+            const vehiclePartTeamId = TeamRef.id[hittableEid];
             const secondTeamId = TeamRef.id[hitEid];
-            const playerId = PlayerRef.id[hitEid];
 
             Score.updateScore(playerId, vehiclePartTeamId === secondTeamId ? -1 : 1);
         }

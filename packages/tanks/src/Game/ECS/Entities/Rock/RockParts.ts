@@ -11,7 +11,8 @@ import { Damagable } from '../../Components/Damagable.ts';
 import { Hitable } from '../../Components/Hitable.ts';
 import { Parent } from '../../Components/Parent.ts';
 import { createRectangleRR } from '../../Components/RigidRender.ts';
-import { Rock, RockPart } from '../../Components/Rock.ts';
+import { RockPart } from '../../Components/Rock.ts';
+import { Obstacle } from '../../Components/Obstacle.ts';
 
 export type RockPartData = [x: number, y: number, w: number, h: number, rotation: number];
 
@@ -111,6 +112,7 @@ export function createRockParts(
         const [partEid, _partPid] = createRectangleRR(rrOptions);
        
         // Add components
+        Obstacle.addComponent(world, partEid);
         RockPart.addComponent(world, partEid);
         Parent.addComponent(world, partEid, rockEid);
         Children.addChildren(rockEid, partEid);
@@ -123,8 +125,6 @@ export function createRockParts(
 
         partEids.push(partEid);
     }
-
-    Rock.partsCount[rockEid] = partsData.length;
 
     return partEids;
 }

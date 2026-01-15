@@ -36,7 +36,6 @@ import { createSpawnTreadMarksSystem } from './ECS/Systems/Tank/createSpawnTread
 import { createUpdateTreadMarksSystem } from './ECS/Systems/Tank/createUpdateTreadMarksSystem.ts';
 import { createSpawnWheelTreadMarksSystem } from './ECS/Systems/Vehicle/createSpawnWheelTreadMarksSystem.ts';
 import { createExhaustSmokeSpawnSystem } from './ECS/Systems/Vehicle/createExhaustSmokeSpawnSystem.ts';
-import { createVehicleTurretRotationSystem } from './ECS/Systems/Vehicle/VehicleControllerSystems.ts';
 import { createTrackControlSystem } from './ECS/Systems/Vehicle/TrackControlSystem.ts';
 import { createWheelControlSystem } from './ECS/Systems/Vehicle/WheelControlSystem.ts';
 import { createJointMotorSystem } from './ECS/Systems/Physical/createJointMotorSystem.ts';
@@ -51,6 +50,7 @@ import { createHitableSystem } from './ECS/Systems/createHitableSystem.ts';
 import { createTankAliveSystem } from './ECS/Systems/Tank/createTankAliveSystem.ts';
 import { createShieldRegenerationSystem } from './ECS/Systems/createShieldRegenerationSystem.ts';
 import { SoundDI } from './DI/SoundDI.ts';
+import { createVehicleTurretRotationSystem as createTurretRotationSystem } from './ECS/Systems/Vehicle/VehicleControllerSystems.ts';
 
 export type Game = ReturnType<typeof createGame>;
 
@@ -76,7 +76,7 @@ export function createGame({ width, height }: {
     // Vehicle control systems - tracks for tanks/harvesters, wheels for cars
     const updateTrackControl = createTrackControlSystem();
     const updateWheelControl = createWheelControlSystem();
-    const updateVehicleTurretRotation = createVehicleTurretRotationSystem();
+    const updateTurretRotation = createTurretRotationSystem();
 
     const syncRigidBodyState = createRigidBodyStateSystem();
     const applyRigidBodyDeltaToLocalTransform = createApplyRigidBodyToTransformSystem();
@@ -90,7 +90,7 @@ export function createGame({ width, height }: {
         // Update vehicle controls - tracks and wheels
         updateTrackControl(delta);
         updateWheelControl(delta);
-        updateVehicleTurretRotation(delta);
+        updateTurretRotation(delta);
 
         execTransformSystem();
         applyImpulses();

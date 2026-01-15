@@ -1,6 +1,6 @@
-import { loadLastNetworkFromDB, loadNetworkFromFS, saveNetworkToDB } from '../Transfer.ts';
-import { disposeNetwork } from '../Utils.ts';
-import { Model } from '../def.ts';
+import { loadLastNetworkFromDB, loadNetworkFromFS, saveNetworkToDB } from './Transfer.ts';
+import { disposeNetwork } from './Utils.ts';
+import { Model } from './def.ts';
 
 export function restoreModels(path: string) {
     return Promise.all([

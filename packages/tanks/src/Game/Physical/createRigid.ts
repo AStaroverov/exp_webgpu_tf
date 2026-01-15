@@ -73,7 +73,7 @@ export function createRigidCircle(
     },
     { physicalWorld }: { physicalWorld: PhysicalWorld } = GameDI,
 ) {
-    const body = createBody(o);
+    const body = createBody(o, { physicalWorld });
     const colliderDesc = prepareColliderDesc(ColliderDesc.ball(o.radius / 2), o);
     physicalWorld.createCollider(colliderDesc, body);
 

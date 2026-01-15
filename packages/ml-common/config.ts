@@ -1,12 +1,12 @@
-import { clamp } from 'lodash';
+import { clamp } from 'lodash-es';
 import { lerp } from '../../lib/math.ts';
 import { LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
 
 export const CONFIG = {
-    clipNorm: 5,
+    clipNorm: 1,
 
     gamma: (iteration: number) => {
-        return 0.97;//lerp(0.97, 0.997, clamp(iteration / LEARNING_STEPS, 0, 1))
+        return 0.99;
     },
 
     policyEntropy: (iteration: number) => {
@@ -14,7 +14,7 @@ export const CONFIG = {
     },
 
     policyEpochs: (_iter: number) => 4,
-    policyClipRatio: 0.6,
+    policyClipRatio: 0.2,
 
     valueEpochs: (_iter: number) => 4,
     valueClipRatio: 0.2,
@@ -43,7 +43,7 @@ export const CONFIG = {
     },
 
     // Training parameters - FRAMES = Nsec / TICK_TIME_SIMULATION
-    episodeFrames: Math.round(5 * 60 * 1000 / TICK_TIME_SIMULATION),
+    episodeFrames: Math.round(2 * 60 * 1000 / TICK_TIME_SIMULATION),
     // Workers
     workerCount: 8,
     backpressureQueueSize: 2,

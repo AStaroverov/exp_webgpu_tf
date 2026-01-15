@@ -6,9 +6,7 @@ import { TestGameState$, toggleTestGame } from './GameState.ts';
 import { getTankHealth, syncRemoveTank } from '../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { randomRangeInt } from '../../../../../lib/random.ts';
 import { PlayerEnvDI } from '../../Game/DI/PlayerEnvDI.ts';
-import { CurrentActorAgent } from '../../Pilots/Agents/CurrentActorAgent.ts';
 import { Pilot } from '../../Pilots/Components/Pilot.ts';
-import { setPilotAgent } from '../../Arena/State/Game/engineMethods.ts';
 
 const ENEMY_VEHICLE_TYPES: VehicleType[] = [
     VehicleType.LightTank, 
@@ -52,11 +50,11 @@ export async function spawnEnemy(vehicleType?: VehicleType) {
     const type = vehicleType ?? getRandomVehicleType();
     const enemyEid = spawnEnemyAtRandomPosition(type);
 
-    const agent = new CurrentActorAgent(enemyEid, false);
-    setPilotAgent(enemyEid, agent);
-    engine.pilots.toggle(true);
+    // const agent = new CurrentActorAgent(enemyEid, false);
+    // setPilotAgent(enemyEid, agent);
+    // engine.pilots.toggle(true);
 
-    if (agent.sync) { await agent.sync(); }
+    // if (agent.sync) { await agent.sync(); }
     
     return enemyEid;
 };

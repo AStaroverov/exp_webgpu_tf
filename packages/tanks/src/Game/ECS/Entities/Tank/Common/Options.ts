@@ -13,6 +13,8 @@ export const tankOptions = {
 
     turret: {
         rotationSpeed: 0,
+        gunWidth: 0,
+        gunHeight: 0,
     },
 
     firearms: {
@@ -37,6 +39,8 @@ export const resetOptions = (target: TankOptions, source?: Partial<VehicleCreati
 
     target.trackLength = defaultTankOptions.trackLength;
     target.turret.rotationSpeed = defaultTankOptions.turret.rotationSpeed;
+    target.turret.gunWidth = defaultTankOptions.turret.gunWidth;
+    target.turret.gunHeight = defaultTankOptions.turret.gunHeight;
     target.firearms.reloadingDuration = defaultTankOptions.firearms.reloadingDuration;
     target.firearms.bulletStartPosition = defaultTankOptions.firearms.bulletStartPosition;
     target.firearms.bulletCaliber = defaultTankOptions.firearms.bulletCaliber;

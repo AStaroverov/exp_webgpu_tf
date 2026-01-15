@@ -12,19 +12,21 @@ import { EntityId } from 'bitecs';
 import { getEngine } from './engine.ts';
 import { hashArray } from '../../../../../../lib/hashArray.ts';
 import { createTank, TankVehicleType } from '../../../Game/ECS/Entities/Tank/createTank.ts';
-import { CurrentActorAgent, TankAgent } from '../../../Pilots/Agents/CurrentActorAgent.ts';
+import { TankAgent } from '../../../Pilots/Agents/CurrentActorAgent.ts';
 import { Nil } from '../../../../../../lib/Types/index.ts';
-import { getPilotAgents } from '../../../Pilots/Components/Pilot.ts';
+import { getRegistratedAgents } from '../../../Pilots/Components/Pilot.ts';
 import { PLAYER_TEAM_ID } from './def.ts';
 import { fillSlot, mapSlotToEid$ } from './modules/lobbySlots.ts';
 import { PI } from '../../../../../../lib/math.ts';
 import { randomRangeFloat } from '../../../../../../lib/random.ts';
 import { createHarvester } from '../../../Game/ECS/Entities/Harvester/Harvester.ts';
 import { createRock } from '../../../Game/ECS/Entities/Rock/Rock.ts';
+import { createBuilding } from '../../../Game/ECS/Entities/Building/index.ts';
 import { getTeamSpawnPosition, allocateSpawnCell, CellContent, findNextAvailableSlot, getSpawnGrid, isCellEmpty, getCellWorldPosition, setCellContent } from './SpawnGrid.ts';
 import { getValue } from '../../../../../../lib/Rx/getValue.ts';
 import { spawnSpiceCluster } from '../../../Game/ECS/Entities/Spice/Spice.ts';
 import { createSpiceCollector } from '../../../Game/ECS/Entities/SpiceCollector/SpiceCollector.ts';
+import { getLoadedAgent } from '../../../Pilots/Agents/LoadedAgent.ts';
 
 export function addTank(slot: number, teamId: number, vehicleType: TankVehicleType) {
     const { x, y } = getTeamSpawnPosition(teamId, slot + 1);
@@ -35,7 +37,7 @@ export function addTank(slot: number, teamId: number, vehicleType: TankVehicleTy
         teamId,
         x,
         y,
-        rotation: PI / 2 + randomRangeFloat(-PI / 4, PI / 4),
+        rotation: randomRangeFloat(-PI / 4, PI / 4),
         color: [teamId, randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1],
     });
 
@@ -57,7 +59,7 @@ export function addHarvester(teamId: number = PLAYER_TEAM_ID) {
         teamId,
         x,
         y,
-        rotation: PI / 2 + randomRangeFloat(-PI / 4, PI / 4),
+        rotation: randomRangeFloat(-PI / 4, PI / 4),
         color: [teamId, randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1],
     });
 
@@ -74,6 +76,7 @@ export function addHarvester(teamId: number = PLAYER_TEAM_ID) {
 
 export function addFauna() {
     const spawnProbability = {
+        building: 0.05,
         rock: 0.3,
         spice: 0.1,
     }
@@ -83,11 +86,17 @@ export function addFauna() {
     for (let row = 1; row < grid.rows - 1; row++) {
         for (let col = 1; col < grid.cols - 1; col++) {
             if (!isCellEmpty(col, row)) continue;
-            if (Math.random() < spawnProbability.rock) {
+            
+            const rand = Math.random();
+            if (rand < spawnProbability.building) {
+                const { x, y } = getCellWorldPosition(col, row);
+                createBuilding({ x, y });
+                setCellContent(col, row, CellContent.Obstacle);
+            } else if (rand < spawnProbability.building + spawnProbability.rock) {
                 const { x, y } = getCellWorldPosition(col, row);
                 createRock({ x, y });
                 setCellContent(col, row, CellContent.Obstacle);
-            } else if (Math.random() < spawnProbability.spice) {
+            } else if (rand < spawnProbability.building + spawnProbability.rock + spawnProbability.spice) {
                 const { x, y } = getCellWorldPosition(col, row);
                 spawnSpiceCluster({ x, y });
                 setCellContent(col, row, CellContent.Obstacle);
@@ -191,13 +200,13 @@ export const finalizeGameState = async () => {
 
     for (let i = 0; i < playerTeamEids.length; i++) {
         const vehicleEid = addTank(i, 1, getVehicleType(playerTeamEids[i]) as TankVehicleType);
-        const agent = new CurrentActorAgent(vehicleEid, false);
+        const agent = getLoadedAgent(vehicleEid, '/assets/models/v1');
         setPilotAgent(vehicleEid, agent);
     }
 
     // Sync all AI agents to load TensorFlow models
-    const pilots = getPilotAgents();
-    await Promise.all(pilots.map(pilot => pilot?.sync ? pilot.sync() : Promise.resolve())); 
+    const agents = getRegistratedAgents();
+    await Promise.all(agents.map(agent => agent?.sync ? agent.sync() : Promise.resolve())); 
 };
 
 export function activateBots() {
