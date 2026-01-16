@@ -7,7 +7,7 @@ export const WEIGHTS = ({
     SCORE_POSITIVE_MUL: 1,
     SCORE_NEGATIVE_MUL: 2,
     // Death
-    DEATH_MUL: 10,
+    DEATH_MUL: 5,
     // Hit/Kill rewards
     KILL_REWARD: 5,
     HIT_REWARD: 0.5,
