@@ -15,16 +15,16 @@ import { createScenarioWithCurrentAgents as createScenarioSelfPlay } from './cre
 type ScenarioOptions = Parameters<typeof createScenarioGridBase>[0];
 
 const mapEntries = [
-    createScenario1v1Random,       // 1v1 random positions, simplest bot
-    createScenarioDiagonal,        // 1v1 diagonal with center obstacle
-    createScenario3v3Random.bind(null, 0),
-    createScenarioDiagonalWall,    // 1v1 diagonal with 3-building wall
-    createStaticScenarioAgentsVsBots0,
-    createScenario3v3Random.bind(null, 1),
-    createScenarioAgentsVsBots1,
-    createScenarioFrozenSelfPlay,
-    createScenarioSelfPlay,
-].map((constructor, index) => ([index, constructor] as const));
+    [0, createScenario1v1Random],       // 1v1 random positions, simplest bot
+    [1, createScenarioDiagonal],        // 1v1 diagonal with center obstacle
+    [2, createScenario3v3Random.bind(null, 0)],
+    [3, createScenarioDiagonalWall],    // 1v1 diagonal with 3-building wall
+    [4, createStaticScenarioAgentsVsBots0],
+    [5, createScenario3v3Random.bind(null, 1)],
+    [6, createScenarioAgentsVsBots1],
+    [7, createScenarioFrozenSelfPlay],
+    [8, createScenarioSelfPlay],
+] as const;
 const mapIndexToConstructor = new Map<number, (options: ScenarioOptions) => Scenario>(mapEntries);
 
 if (mapIndexToConstructor.size !== mapEntries.length) {

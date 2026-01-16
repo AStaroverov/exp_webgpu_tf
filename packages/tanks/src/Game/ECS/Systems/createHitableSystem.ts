@@ -5,7 +5,7 @@ import { EntityId, hasComponent, Not, onSet, query } from 'bitecs';
 import { Bullet, BulletCaliber, mapBulletCaliber } from '../Components/Bullet.ts';
 import { createChangeDetector } from '../../../../../renderer/src/ECS/Systems/ChangedDetectorSystem.ts';
 import { VehiclePart } from '../Components/VehiclePart.ts';
-import { tearOffTankPart } from '../Entities/Tank/TankUtils.ts';
+import { getTankHealth, tearOffTankPart } from '../Entities/Tank/TankUtils.ts';
 import { Score } from '../Components/Score.ts';
 import { TeamRef } from '../Components/TeamRef.ts';
 import { PlayerRef } from '../Components/PlayerRef.ts';
@@ -21,6 +21,8 @@ import { Parent } from '../Components/Parent.ts';
 import { Vehicle } from '../Components/Vehicle.ts';
 import { SoundType } from '../Components/Sound.ts';
 import { spawnSoundAtParent } from '../Entities/Sound.ts';
+import { LastHitters } from '../Components/LastHitters.ts';
+import { WEIGHTS } from '../../../../../ml/src/Reward/calculateReward.ts';
 
 export function createHitableSystem({ world } = GameDI) {
     const hitableChanges = createChangeDetector(world, [onSet(Hitable)]);
@@ -43,6 +45,7 @@ export function createHitableSystem({ world } = GameDI) {
 
             applyDamage(vehiclePartEid);
             applyScores(vehiclePartEid, hitEids);
+            saveHitters(vehiclePartEid, vehicleEid, hitEids);
 
             if (hasComponent(world, vehicleEid, Vehicle)) {
                 hittedVehicles.add(vehicleEid);
@@ -51,6 +54,10 @@ export function createHitableSystem({ world } = GameDI) {
             if (!Hitable.isDestroyed(vehiclePartEid)) continue;
 
             tearOffTankPart(vehiclePartEid, true);
+            
+            if (getTankHealth(vehicleEid) === 0) {
+                awardKillReward(vehicleEid);
+            }
         }
 
         for (const vehicleEid of hittedVehicles) {
@@ -117,23 +124,60 @@ function applyDamage(targetEid: number, { world } = GameDI) {
 }
 
 function applyScores(
-    hittableEid: EntityId, // entity that was hit
+    hittableEid: EntityId, // entity that was hit (vehicle part)
     hitEids: Float64Array, // entities that hit the hittable
     { world } = GameDI,
 ) {
     for (const hitEid of hitEids) {
         if (!hasComponent(world, hitEid, PlayerRef)) continue;
+        if (!hasComponent(world, hitEid, TeamRef)) continue;
+        if (!hasComponent(world, hittableEid, TeamRef)) continue;
         
-        const playerId = PlayerRef.id[hitEid];
-        
-        if (hasComponent(world, hitEid, TeamRef) && hasComponent(world, hittableEid, TeamRef)) {
-            const vehiclePartTeamId = TeamRef.id[hittableEid];
-            const secondTeamId = TeamRef.id[hitEid];
+        const attackerPlayerId = PlayerRef.id[hitEid];
+        const vehiclePartTeamId = TeamRef.id[hittableEid];
+        const attackerTeamId = TeamRef.id[hitEid];
+        const isFriendlyFire = vehiclePartTeamId === attackerTeamId;
 
-            Score.updateScore(playerId, vehiclePartTeamId === secondTeamId ? -1 : 1);
-        }
+        // Reduced hit reward (shifted focus to kills)
+        Score.updateScore(attackerPlayerId, isFriendlyFire ? (-2 * WEIGHTS.HIT_REWARD) : WEIGHTS.HIT_REWARD);
     }
 
+    // Penalize the hittable for being hit (trade efficiency)
+    const hittablePlayerId = PlayerRef.id[hittableEid];
+    Score.updateScore(hittablePlayerId, -0.1 * hitEids.length);
+}
+
+function saveHitters(
+    hittableEid: EntityId, // entity that was hit (vehicle part)
+    vehicleEid: EntityId, // vehicle that owns this part
+    hitEids: Float64Array, // entities that hit the hittable
+    { world } = GameDI,
+) {
+    if (!hasComponent(world, vehicleEid, LastHitters)) return;
+    if (!hasComponent(world, hittableEid, TeamRef)) return;
+    
+    const vehiclePartTeamId = TeamRef.id[hittableEid];
+    
+    for (const hitEid of hitEids) {
+        if (!hasComponent(world, hitEid, PlayerRef)) continue;
+        if (!hasComponent(world, hitEid, TeamRef)) continue;
+        
+        const attackerTeamId = TeamRef.id[hitEid];
+        if (attackerTeamId === vehiclePartTeamId) continue; // Skip friendly fire
+        
+        const attackerPlayerId = PlayerRef.id[hitEid];
+        LastHitters.addHitter(vehicleEid, attackerPlayerId);
+    }
+}
+
+function awardKillReward(destroyedVehicleEid: EntityId, { world } = GameDI) {
+    if (!hasComponent(world, destroyedVehicleEid, LastHitters)) return;
+    
+    const hitters = LastHitters.getAllHitters(destroyedVehicleEid);
+    
+    for (const playerId of hitters) {
+        Score.updateScore(playerId, WEIGHTS.KILL_REWARD);
+    }
 }
 
 const mapParentToLastSoundTime = new Map<EntityId, number>();

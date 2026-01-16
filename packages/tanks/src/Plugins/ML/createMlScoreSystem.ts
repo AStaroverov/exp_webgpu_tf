@@ -9,12 +9,12 @@ import { findVehicleFromPart } from "../Pilots/Utils/snapshotTankInputTensor";
 import { RigidBodyState } from "../../Game/ECS/Components/Physical";
 import { hypot } from "../../../../../lib/math";
 import { VehicleController } from "../../Game/ECS/Components/VehicleController";
+import { WEIGHTS } from "../../../../ml/src/Reward/calculateReward";
 
 // Track previously detected enemies per vehicle: vehicleEid -> Set<enemyVehicleEid>
 const previouslyDetectedEnemies = new Map<EntityId, Set<EntityId>>();
 
 // Track last reward position per vehicle for exploration reward
-const EXPLORATION_DISTANCE = 50;
 const lastRewardPosition = new Map<EntityId, { x: number; y: number }>();
 
 export function createMlScoreSystem({ world } = GameDI) {
@@ -97,9 +97,10 @@ export function getAdjacentEnemyRaysReward(vehicleEid: EntityId, raysBuffer: Flo
 
     previouslyDetectedEnemies.set(vehicleEid, currentDetected);
 
-    return hasNewAdjacentEnemy ? 2 : 0;
+    return hasNewAdjacentEnemy ? WEIGHTS.ADJACENT_ENEMY_REWARD : 0;
 }
 
+const EXPLORATION_DISTANCE = 50;
 function getExplorationReward(vehicleEid: EntityId): number {
     const pos = RigidBodyState.position.getBatch(vehicleEid);
     const x = pos[0];
@@ -123,11 +124,12 @@ function getExplorationReward(vehicleEid: EntityId): number {
     lastPos.x = x;
     lastPos.y = y;
     
-    return previouslyDetectedEnemies.get(vehicleEid)?.size ?? 0 > 0 ? 0.25 : 1;
+    return previouslyDetectedEnemies.get(vehicleEid)?.size ?? 0 > 0 
+        ? WEIGHTS.EXPLORATION_WITH_ENEMY_REWARD 
+        : WEIGHTS.EXPLORATION_WITHOUT_ENEMY_REWARD;
 }
 
 
-const PROXIMITY_DANGER_MULT = 1;
 function getProximityPenalty(vehicleEid: EntityId, raysBuffer: Float64Array): number {
     const move = VehicleController.move[vehicleEid];
     
@@ -136,7 +138,7 @@ function getProximityPenalty(vehicleEid: EntityId, raysBuffer: Float64Array): nu
 
     const rotation = RigidBodyState.rotation[vehicleEid];
     const colliderRadius = TankInputTensor.colliderRadius[vehicleEid];
-    const dangerDistance = PROXIMITY_DANGER_MULT * colliderRadius;
+    const dangerDistance = colliderRadius;
 
     // Intended movement direction based on rotation and move input
     // move > 0: forward, move < 0: backward
@@ -163,7 +165,7 @@ function getProximityPenalty(vehicleEid: EntityId, raysBuffer: Float64Array): nu
         // Only penalize if intended movement is TOWARD the obstacle
         
         if (dot > 0.5) {
-            return -0.05;
+            return WEIGHTS.PROXIMITY_PENALTY;
         }
     }
 

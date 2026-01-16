@@ -20,6 +20,7 @@ import { VehicleOptions } from './Options.ts';
 import { spawnSoundAtParent } from '../Sound.ts';
 import { SoundParentRelative, SoundType } from '../../Components/Sound.ts';
 import { VehicleController } from '../../Components/VehicleController.ts';
+import { LastHitters } from '../../Components/LastHitters.ts';
 
 const volumeByType: Record<VehicleType, number> = {
     [VehicleType.LightTank]: 0.6,
@@ -41,13 +42,14 @@ export function createVehicleBase(options: VehicleOptions, { world } = GameDI): 
     const [vehicleEid, vehiclePid] = createRectangleRigidGroup(options);
     Vehicle.addComponent(world, vehicleEid, options.vehicleType);
     Vehicle.setEngineType(vehicleEid, options.engineType);
-
+    
     addTransformComponents(world, vehicleEid);
     Children.addComponent(world, vehicleEid);
+    Color.addComponent(world, vehicleEid, ...options.color);
     TeamRef.addComponent(world, vehicleEid, options.teamId);
     PlayerRef.addComponent(world, vehicleEid, options.playerId);
+    LastHitters.addComponent(world, vehicleEid);
     HeuristicsData.addComponent(world, vehicleEid, options.approximateColliderRadius);
-    Color.addComponent(world, vehicleEid, ...options.color);
 
     VehicleInputTensor.addComponent(world, vehicleEid);
 

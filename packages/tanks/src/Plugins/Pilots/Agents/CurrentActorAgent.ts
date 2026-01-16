@@ -6,7 +6,7 @@ import { AgentMemory, AgentMemoryBatch } from '../../../../../ml-common/Memory.t
 import { getNetworkExpIteration } from '../../../../../ml-common/utils.ts';
 import { Model } from '../../../../../ml/src/Models/def.ts';
 import { getNetwork } from '../../../../../ml/src/Models/Utils.ts';
-import { calculateActionReward, getFramePenalty, WEIGHTS } from '../../../../../ml/src/Reward/calculateReward.ts';
+import { calculateActionReward, getDeathPenalty, getFramePenalty, WEIGHTS } from '../../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { createNetworkModelManager } from './NetworkModelManager.ts';
 import { ACTION_HEAD_DIMS } from '../../../../../ml/src/Models/Create.ts';
@@ -119,19 +119,18 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         if (this.memory.size() === 0) return;
 
         const isDead = getTankHealth(this.tankEid) <= 0;
+        const deathReward = getDeathPenalty(isDead);
         const frameReward = getFramePenalty(frame);
         const actionReward = this.initialActionReward === undefined
             ? 0
             : calculateActionReward(this.tankEid, this.rewardWeights) - this.initialActionReward;
-        // const stateReward = calculateStateReward(this.tankEid, this.rewardWeights);
 
-        // it's not all reward, also we have final reward for lose/win in the end of episode
-        const reward = clamp(0
+        const reward = clamp(
+            (0
+            + frameReward
+            + deathReward
             + actionReward
-            // + stateReward
-            + frameReward,
-            -10,
-            +10
+            ), -30, +30
         );
 
         this.memory.updateSecondPart(reward, isDead);
