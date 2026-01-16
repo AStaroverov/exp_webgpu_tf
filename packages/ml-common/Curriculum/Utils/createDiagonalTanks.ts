@@ -46,7 +46,6 @@ export function createDiagonalTeamTanks(
     const { fieldSize, edgeMargin, maxDeviation, count = 1 } = options;
     const { centerX, centerY, baseDiagonalAngle } = geometry;
     const spawnRadius = options.spawnRadius ?? fieldSize * 0.4;
-    const playerId = createPlayer(teamId);
     const baseAngle = teamId === 0 ? baseDiagonalAngle : baseDiagonalAngle + PI;
 
     // Calculate angular step to ensure minimum spacing between tanks
@@ -55,6 +54,7 @@ export function createDiagonalTeamTanks(
     const startAngleOffset = -totalAngularSpread / 2;
 
     for (let i = 0; i < count; i++) {
+        const playerId = createPlayer(teamId);
         const deviation = randomRangeFloat(-maxDeviation, maxDeviation);
         const tankAngularPosition = startAngleOffset + i * angularStep;
         const angularJitter = count > 1 ? randomRangeFloat(-angularStep * 0.3, angularStep * 0.3) : 0;
