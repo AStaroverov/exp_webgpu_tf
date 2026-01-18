@@ -2,7 +2,6 @@ import { clamp } from 'lodash';
 import { min } from '../../../lib/math.ts';
 import { random } from '../../../lib/random.ts';
 import { createScenario1v1Random } from './createScenario1v1Random.ts';
-import { createScenario3v3Random } from './createScenario3v3Random.ts';
 import { createScenarioDiagonal } from './createScenarioDiagonal.ts';
 import { createScenarioDiagonalWall } from './createScenarioDiagonalWall.ts';
 import { createScenarioAgentsVsBots1 } from './createScenarioAgentsVsBots1.ts';
@@ -11,6 +10,7 @@ import { createScenarioWithHistoricalAgents as createScenarioFrozenSelfPlay } fr
 import { createStaticScenarioAgentsVsBots0 } from './createStaticScenarioAgentsVsBots0.ts';
 import { CurriculumState, Scenario } from './types.ts';
 import { createScenarioWithCurrentAgents as createScenarioSelfPlay } from './createScenarioWithCurrentAgents.ts';
+import { createScenario3v3Random } from './createScenario3v3Random.ts';
 
 type ScenarioOptions = Parameters<typeof createScenarioGridBase>[0];
 

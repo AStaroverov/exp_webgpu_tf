@@ -90,6 +90,7 @@ export function createTanksDebug(manager: VisTestEpisodeManager) {
                 <div style="background: ${color}; padding: 4px;">
                     <div>Vehicle ${vehicleEid}</div>
                     <div>Team: ${teamId}</div>
+                    <div>Score: ${manager.getPositiveReward(vehicleEid).toFixed(2)} / ${manager.getNegativeReward(vehicleEid).toFixed(2)}</div>
                     <div>Reward: ${manager.getRecentReward(vehicleEid).toFixed(2)} / ${manager.getDiscounterReward(vehicleEid).toFixed(2)}</div>
                 </div>
                 <br>

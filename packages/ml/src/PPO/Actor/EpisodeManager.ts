@@ -8,6 +8,7 @@ import { createScenarioByCurriculumState } from '../../../../ml-common/Curriculu
 import { CurriculumState, Scenario } from '../../../../ml-common/Curriculum/types.ts';
 import { agentSampleChannel, curriculumStateChannel, episodeSampleChannel, queueSizeChannel } from '../channels.ts';
 import { getRegistratedAgents, getAliveLearnableAgents, Pilot } from '../../../../tanks/src/Plugins/Pilots/Components/Pilot.ts';
+import { calculateFinalReward } from '../../Reward/calculateReward.ts';
 
 const queueSize$ = queueSizeChannel.obs.pipe(
     startWith(0),
@@ -70,7 +71,8 @@ export class EpisodeManager {
             }
 
             const networkVersion = agent.getVersion();
-            const memoryBatch = agent.getMemoryBatch(0);
+            const finalReward = calculateFinalReward(agent.tankEid, successRatio, pilots);
+            const memoryBatch = agent.getMemoryBatch(finalReward);
 
             if (memoryBatch == null) return;
 

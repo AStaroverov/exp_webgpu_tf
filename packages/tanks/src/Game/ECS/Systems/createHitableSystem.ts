@@ -144,7 +144,7 @@ function applyScores(
 
     // Penalize the hittable for being hit (trade efficiency)
     const hittablePlayerId = PlayerRef.id[hittableEid];
-    Score.updateScore(hittablePlayerId, -0.1 * hitEids.length);
+    Score.updateScore(hittablePlayerId, -(0.5 * WEIGHTS.HIT_REWARD * hitEids.length));
 }
 
 function saveHitters(

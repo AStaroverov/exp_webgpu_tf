@@ -9,6 +9,8 @@ import { Scenario } from '../../../../ml-common/Curriculum/types.ts';
 import { getDrawState } from '../../../../ml-common/uiUtils.ts';
 import { EpisodeManager } from '../Actor/EpisodeManager.ts';
 import { getRegistratedAgents, Pilot } from '../../../../tanks/src/Plugins/Pilots/Components/Pilot.ts';
+import { Score } from '../../../../tanks/src/Game/ECS/Components/Score.ts';
+import { PlayerRef } from '../../../../tanks/src/Game/ECS/Components/PlayerRef.ts';
 
 export class VisTestEpisodeManager extends EpisodeManager {
     private currentScenario?: Scenario;
@@ -32,6 +34,14 @@ export class VisTestEpisodeManager extends EpisodeManager {
 
     public getRecentReward(tankEid: EntityId) {
         return this.getReward(tankEid, 10);
+    }
+
+    public getPositiveReward(tankEid: EntityId) {
+        return Score.positiveScore[PlayerRef.id[tankEid]];
+    }
+
+    public getNegativeReward(tankEid: EntityId) {
+        return Score.negativeScore[PlayerRef.id[tankEid]];
     }
 
     public getVersion() {

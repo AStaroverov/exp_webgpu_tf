@@ -165,7 +165,7 @@ function getProximityPenalty(vehicleEid: EntityId, raysBuffer: Float64Array): nu
         // Only penalize if intended movement is TOWARD the obstacle
         
         if (dot > 0.5) {
-            return WEIGHTS.PROXIMITY_PENALTY;
+            return -WEIGHTS.PROXIMITY_PENALTY;
         }
     }
 

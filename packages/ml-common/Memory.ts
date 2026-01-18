@@ -52,7 +52,7 @@ export class AgentMemory {
         this.dones.push(done);
     }
 
-    getBatch(rewardBias: number): undefined | AgentMemoryBatch {
+    getBatch(finalReward: number): undefined | AgentMemoryBatch {
         this.setMinLength();
 
         if (this.states.length === 0) {
@@ -60,7 +60,7 @@ export class AgentMemory {
         }
 
         const rewards = new Float32Array(this.rewards)
-            .map(v => v + rewardBias);
+        rewards[rewards.length - 1] += finalReward;
         
         // @ts-expect-error - js convertion
         const dones = new Float32Array(this.dones);

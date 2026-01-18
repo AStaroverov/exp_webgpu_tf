@@ -6,7 +6,7 @@ import { AgentMemory, AgentMemoryBatch } from '../../../../../ml-common/Memory.t
 import { getNetworkExpIteration } from '../../../../../ml-common/utils.ts';
 import { Model } from '../../../../../ml/src/Models/def.ts';
 import { getNetwork } from '../../../../../ml/src/Models/Utils.ts';
-import { calculateActionReward, getDeathPenalty, getFramePenalty, WEIGHTS } from '../../../../../ml/src/Reward/calculateReward.ts';
+import { calculateActionReward, getFramePenalty, WEIGHTS } from '../../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { createNetworkModelManager } from './NetworkModelManager.ts';
 import { ACTION_HEAD_DIMS } from '../../../../../ml/src/Models/Create.ts';
@@ -64,8 +64,8 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         return this.train ? this.memory : undefined;
     }
 
-    public getMemoryBatch(rewardBias: number): undefined | AgentMemoryBatch {
-        return this.train ? this.memory.getBatch(rewardBias) : undefined;
+    public getMemoryBatch(finalReward: number): undefined | AgentMemoryBatch {
+        return this.train ? this.memory.getBatch(finalReward) : undefined;
     }
 
     public dispose() {
@@ -119,7 +119,6 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         if (this.memory.size() === 0) return;
 
         const isDead = getTankHealth(this.tankEid) <= 0;
-        const deathReward = getDeathPenalty(isDead);
         const frameReward = getFramePenalty(frame);
         const actionReward = this.initialActionReward === undefined
             ? 0
@@ -128,7 +127,6 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         const reward = clamp(
             (0
             + frameReward
-            + deathReward
             + actionReward
             ), -30, +30
         );
