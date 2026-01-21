@@ -4,12 +4,13 @@ import { Color } from 'renderer/src/ECS/Components/Common.ts';
 import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
 import { VisTestEpisodeManager } from '../ml/src/PPO/VisTest/VisTestEpisodeManager.ts';
 import { GameDI } from '../tanks/src/Game/DI/GameDI.ts';
-import { RigidBodyState } from '../tanks/src/Game/ECS/Components/Physical.ts';
 import { Vehicle } from '../tanks/src/Game/ECS/Components/Vehicle.ts';
 import { TeamRef } from '../tanks/src/Game/ECS/Components/TeamRef.ts';
 import { CONFIG } from './config.ts';
 import { drawMetrics } from './Metrics/Browser/index.ts';
 import { getDrawState } from './uiUtils.ts';
+import { Pilot } from '../tanks/src/Plugins/Pilots/Components/Pilot.ts';
+import { CurrentActorAgent } from '../tanks/src/Plugins/Pilots/Agents/CurrentActorAgent.ts';
 
 // Generate debug visualization using HTML and CSS
 export function createDebugVisualization(container: HTMLElement, manager: VisTestEpisodeManager) {
@@ -78,11 +79,13 @@ export function createTanksDebug(manager: VisTestEpisodeManager) {
         if (!GameDI.world) return '';
 
         let result = '';
-        const vehicleEids = query(GameDI.world, [Vehicle, RigidBodyState]);
+        const vehicleEids = query(GameDI.world, [Vehicle, Pilot]);
 
         for (let i = 0; i < vehicleEids.length; i++) {
-
             const vehicleEid = vehicleEids[i];
+            const pilot = Pilot.getAgent(vehicleEid);
+            if (!(pilot instanceof CurrentActorAgent)) continue;
+
             const teamId = TeamRef.id[vehicleEid];
             const color = `rgba(${Color.getR(vehicleEid) * 255}, ${Color.getG(vehicleEid) * 255}, ${Color.getB(vehicleEid) * 255}, ${Color.getA(vehicleEid)})`;
 
@@ -90,8 +93,9 @@ export function createTanksDebug(manager: VisTestEpisodeManager) {
                 <div style="background: ${color}; padding: 4px;">
                     <div>Vehicle ${vehicleEid}</div>
                     <div>Team: ${teamId}</div>
-                    <div>Score: ${manager.getPositiveReward(vehicleEid).toFixed(2)} / ${manager.getNegativeReward(vehicleEid).toFixed(2)}</div>
                     <div>Reward: ${manager.getRecentReward(vehicleEid).toFixed(2)} / ${manager.getDiscounterReward(vehicleEid).toFixed(2)}</div>
+                    <div>Score: ${manager.getPositiveReward(vehicleEid).toFixed(2)} / ${manager.getNegativeReward(vehicleEid).toFixed(2)}</div>
+                    <div>Scores: ${Object.entries(manager.getAllRewards(vehicleEid)).map(([metric, value]) => `${metric}: ${value.toFixed(2)}`).join('<br>')}</div>
                 </div>
                 <br>
             `;

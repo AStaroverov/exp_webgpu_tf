@@ -6,7 +6,7 @@ import { AgentMemory, AgentMemoryBatch } from '../../../../../ml-common/Memory.t
 import { getNetworkExpIteration } from '../../../../../ml-common/utils.ts';
 import { Model } from '../../../../../ml/src/Models/def.ts';
 import { getNetwork } from '../../../../../ml/src/Models/Utils.ts';
-import { calculateActionReward, getFramePenalty, WEIGHTS } from '../../../../../ml/src/Reward/calculateReward.ts';
+import { calculateActionReward, getFramePenalty } from '../../../../../ml/src/Reward/calculateReward.ts';
 import { getTankHealth } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { createNetworkModelManager } from './NetworkModelManager.ts';
 import { ACTION_HEAD_DIMS } from '../../../../../ml/src/Models/Create.ts';
@@ -37,7 +37,6 @@ export type LearnableAgent = {
 const currentActorUpdater = createNetworkModelManager(() => getNetwork(Model.Policy));
 
 export class CurrentActorAgent implements TankAgent<DownloadableAgent & LearnableAgent> {
-    private rewardWeights = WEIGHTS;
     private memory = new AgentMemory();
     private noise = new DirichletNoise(ACTION_HEAD_DIMS, {
         alpha: 0.3,  // α < 1 for sparse, peaked samples (high exploration)
@@ -107,7 +106,7 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
                 result.logits,
                 result.logProb,
             );
-            this.initialActionReward = calculateActionReward(this.tankEid, this.rewardWeights);
+            this.initialActionReward = calculateActionReward(this.tankEid);
         }
     }
 
@@ -122,7 +121,7 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         const frameReward = getFramePenalty(frame);
         const actionReward = this.initialActionReward === undefined
             ? 0
-            : calculateActionReward(this.tankEid, this.rewardWeights) - this.initialActionReward;
+            : calculateActionReward(this.tankEid) - this.initialActionReward;
 
         const reward = clamp(
             (0

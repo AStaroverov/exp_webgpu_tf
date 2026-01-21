@@ -3,34 +3,64 @@ import { delegate } from '../../../../../renderer/src/delegate.ts';
 import { component } from '../../../../../renderer/src/ECS/utils.ts';
 import { TypedArray } from '../../../../../renderer/src/utils.ts';
 
+const POSITIVE_METRICS = [
+    'hitEnemy',
+    'killEnemy',
+    'adjacentEnemyDetection',
+    'exploration',
+    'spices',
+    'debris',
+] as const;
+const NEGATIVE_METRICS = [
+    'friendlyFire',
+    'gotHit',
+    'proximityPenalty',
+] as const;
+const METRICS = [...POSITIVE_METRICS, ...NEGATIVE_METRICS] as const;
+const ScoreData = METRICS.reduce(
+    (acc, metric) => ({ ...acc, ...addStore(metric) }),
+    {} as Record<(typeof METRICS)[number], Float64Array>
+);
+const ScoreMethods = METRICS.reduce(
+    (acc, metric) => ({ ...acc, ...addMethod(metric) }),
+    {} as Record<`add${Capitalize<(typeof METRICS)[number]>}`, (playerEid: number, amount: number) => void>
+);
 export const Score = component({
-    negativeScore: TypedArray.f64(delegate.defaultSize),
-    positiveScore: TypedArray.f64(delegate.defaultSize),
-    spices: TypedArray.f64(delegate.defaultSize),
-    debris: TypedArray.f64(delegate.defaultSize),
+    ...ScoreData,
+    ...ScoreMethods,
 
     addComponent(world: World, playerEid: EntityId): void {
         addComponent(world, playerEid, Score);
-        Score.negativeScore[playerEid] = 0;
-        Score.positiveScore[playerEid] = 0;
-        Score.spices[playerEid] = 0;
-        Score.debris[playerEid] = 0;
+        METRICS.forEach(metric => Score[metric][playerEid] = 0);
     },
 
-    updateScore(playerEid: number, delta: number) {
-        if (delta > 0) {
-            Score.positiveScore[playerEid] += delta;
-        } else {
-            Score.negativeScore[playerEid] += delta;
-        }
+    getAllScores(playerEid: number): Record<(typeof METRICS)[number], number> {
+        return METRICS.reduce((acc, metric) => ({ ...acc, [metric]: ScoreData[metric][playerEid] }), {} as Record<(typeof METRICS)[number], number>);
     },
 
-    addSpice(playerEid: number, amount: number = 1) {
-        Score.spices[playerEid] += amount;
+    getPositiveScore(playerEid: number): number {
+        return POSITIVE_METRICS.reduce((acc, metric) => acc + ScoreData[metric][playerEid], 0);
     },
 
-    addDebris(playerEid: number, amount: number = 1) {
-        Score.debris[playerEid] += amount;
+    getNegativeScore(playerEid: number): number {
+        return NEGATIVE_METRICS.reduce((acc, metric) => acc + ScoreData[metric][playerEid], 0);
+    },
+
+    getTotalScore(playerEid: number): number {
+        return Score.getPositiveScore(playerEid) + Score.getNegativeScore(playerEid);
     },
 });
 
+function capitalize(str: string) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function addStore(metric: (typeof METRICS)[number]) {
+    return { [metric]: TypedArray.f64(delegate.defaultSize) } as const;
+}
+
+function addMethod(metric: (typeof METRICS)[number]) {
+    return {
+        ['add' + capitalize(metric)]: (playerEid: number, amount: number) => { ScoreData[metric][playerEid] += amount; }
+    } as const;
+}

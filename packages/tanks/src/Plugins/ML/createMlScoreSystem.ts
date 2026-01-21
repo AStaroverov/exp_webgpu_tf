@@ -11,8 +11,14 @@ import { hypot } from "../../../../../lib/math";
 import { VehicleController } from "../../Game/ECS/Components/VehicleController";
 import { WEIGHTS } from "../../../../ml/src/Reward/calculateReward";
 
-// Track previously detected enemies per vehicle: vehicleEid -> Set<enemyVehicleEid>
-const previouslyDetectedEnemies = new Map<EntityId, Set<EntityId>>();
+// Track cooldown state per enemy: vehicleEid -> Map<enemyVehicleEid, lostVisibilityTime | -1>
+// -1 means on cooldown but still visible, positive number means time when enemy disappeared
+const enemyCooldownState = new Map<EntityId, Map<EntityId, number>>();
+const ADJACENT_ENEMY_COOLDOWN_MS = 3000;
+const COOLDOWN_VISIBLE = -1; // sentinel: on cooldown, enemy still visible
+
+// Track currently visible enemies per vehicle (for exploration reward)
+const currentlyVisibleEnemies = new Map<EntityId, Set<EntityId>>();
 
 // Track last reward position per vehicle for exploration reward
 const lastRewardPosition = new Map<EntityId, { x: number; y: number }>();
@@ -28,41 +34,49 @@ export function createMlScoreSystem({ world } = GameDI) {
             if (playerId === 0) continue;
 
             const raysBuffer = TankInputTensor.raysData.getBatch(vehicleEid);
+            
+            // Adjacent enemy detection reward
             const adjacentEnemyRaysReward = getAdjacentEnemyRaysReward(vehicleEid, raysBuffer);
+            if (adjacentEnemyRaysReward > 0) {
+                Score.addAdjacentEnemyDetection(playerId, adjacentEnemyRaysReward);
+            }
+            
+            // Exploration reward
             const explorationReward = getExplorationReward(vehicleEid);
+            if (explorationReward > 0) {
+                Score.addExploration(playerId, explorationReward);
+            }
+            
+            // Proximity penalty
             const proximityPenalty = getProximityPenalty(vehicleEid, raysBuffer);
-
-            const totalReward = (0
-                + adjacentEnemyRaysReward
-                + explorationReward
-                + proximityPenalty
-            );
-            if (totalReward === 0) continue;
-    
-            Score.updateScore(playerId, totalReward);
+            if (proximityPenalty > 0) {
+                Score.addProximityPenalty(playerId, -proximityPenalty);
+            }
         }
     };
 
     const dispose = () => {
         lastRewardPosition.clear();
-        previouslyDetectedEnemies.clear();
+        enemyCooldownState.clear();
+        currentlyVisibleEnemies.clear();
     };
 
     return { tick, dispose };
 }
 
 export function getAdjacentEnemyRaysReward(vehicleEid: EntityId, raysBuffer: Float64Array): number {
-    // Get or create the set of previously detected enemies for this vehicle
-    let prevDetected = previouslyDetectedEnemies.get(vehicleEid);
-    if (!prevDetected) {
-        prevDetected = new Set();
-        previouslyDetectedEnemies.set(vehicleEid, prevDetected);
+    const now = performance.now();
+    
+    // Get or create cooldown state map for this vehicle
+    let cooldowns = enemyCooldownState.get(vehicleEid);
+    if (!cooldowns) {
+        cooldowns = new Map();
+        enemyCooldownState.set(vehicleEid, cooldowns);
     }
 
-    // Collect currently detected enemy vehicle eids
-    const currentDetected = new Set<EntityId>();
+    // Collect adjacent enemy vehicle eids
+    const adjacentEnemies = new Set<EntityId>();
     let lastEnemyVehicleEid: EntityId = 0;
-    let hasNewAdjacentEnemy = false;
     
     // Loop from -1 to RAYS_COUNT to handle wrap-around (last ray -> first ray adjacency)
     for (let i = -1; i < RAYS_COUNT; i++) {
@@ -82,22 +96,54 @@ export function getAdjacentEnemyRaysReward(vehicleEid: EntityId, raysBuffer: Flo
             continue;
         }
         
-        const isAdjacent = lastEnemyVehicleEid === enemyVehicleEid;
-        const wasDetectedBefore = prevDetected.has(enemyVehicleEid);
-        
-        if (isAdjacent) {
-            if (!wasDetectedBefore) hasNewAdjacentEnemy = true;
-            currentDetected.add(enemyVehicleEid);
-        } else if (wasDetectedBefore) {
-            currentDetected.add(enemyVehicleEid);
+        // Check if this enemy is adjacent (same enemy in consecutive rays)
+        if (lastEnemyVehicleEid === enemyVehicleEid) {
+            adjacentEnemies.add(enemyVehicleEid);
         }
         
         lastEnemyVehicleEid = enemyVehicleEid;
     }
 
-    previouslyDetectedEnemies.set(vehicleEid, currentDetected);
+    // Track all visible enemies for exploration reward
+    currentlyVisibleEnemies.set(vehicleEid, adjacentEnemies);
 
-    return hasNewAdjacentEnemy ? WEIGHTS.ADJACENT_ENEMY_REWARD : 0;
+    // Update cooldown states for enemies that are no longer visible
+    // Cooldown timer only starts when NO enemies are visible at all
+    const noEnemiesVisible = adjacentEnemies.size === 0;
+    
+    for (const [enemyEid, state] of cooldowns) {
+        if (!adjacentEnemies.has(enemyEid)) {
+            if (state === COOLDOWN_VISIBLE && noEnemiesVisible) {
+                // No enemies visible at all - start countdown for this enemy
+                cooldowns.set(enemyEid, now);
+            } else if (state !== COOLDOWN_VISIBLE && now - state >= ADJACENT_ENEMY_COOLDOWN_MS) {
+                // Cooldown expired while enemy not visible - remove
+                cooldowns.delete(enemyEid);
+            }
+        }
+    }
+
+    // Check if reward can be given for each visible enemy
+    let totalReward = 0;
+    for (const enemyEid of adjacentEnemies) {
+        const state = cooldowns.get(enemyEid);
+        
+        if (state === undefined) {
+            // No cooldown - give reward and start cooldown
+            totalReward += WEIGHTS.ADJACENT_ENEMY_REWARD;
+            cooldowns.set(enemyEid, COOLDOWN_VISIBLE);
+        } else if (state !== COOLDOWN_VISIBLE && now - state >= ADJACENT_ENEMY_COOLDOWN_MS) {
+            // Was invisible, cooldown expired, now visible again - give reward
+            totalReward += WEIGHTS.ADJACENT_ENEMY_REWARD;
+            cooldowns.set(enemyEid, COOLDOWN_VISIBLE);
+        } else if (state !== COOLDOWN_VISIBLE) {
+            // Was invisible but cooldown not expired, now visible again - keep on cooldown
+            cooldowns.set(enemyEid, COOLDOWN_VISIBLE);
+        }
+        // else: state === COOLDOWN_VISIBLE - already on cooldown, no reward
+    }
+
+    return totalReward;
 }
 
 const EXPLORATION_DISTANCE = 50;
@@ -124,9 +170,8 @@ function getExplorationReward(vehicleEid: EntityId): number {
     lastPos.x = x;
     lastPos.y = y;
     
-    return previouslyDetectedEnemies.get(vehicleEid)?.size ?? 0 > 0 
-        ? WEIGHTS.EXPLORATION_WITH_ENEMY_REWARD 
-        : WEIGHTS.EXPLORATION_WITHOUT_ENEMY_REWARD;
+    const hasEnemy = (currentlyVisibleEnemies.get(vehicleEid)?.size ?? 0) > 0;
+    return hasEnemy ? WEIGHTS.EXPLORATION_WITH_ENEMY_REWARD : WEIGHTS.EXPLORATION_WITHOUT_ENEMY_REWARD;
 }
 
 
@@ -165,7 +210,7 @@ function getProximityPenalty(vehicleEid: EntityId, raysBuffer: Float64Array): nu
         // Only penalize if intended movement is TOWARD the obstacle
         
         if (dot > 0.5) {
-            return -WEIGHTS.PROXIMITY_PENALTY;
+            return WEIGHTS.PROXIMITY_PENALTY;
         }
     }
 

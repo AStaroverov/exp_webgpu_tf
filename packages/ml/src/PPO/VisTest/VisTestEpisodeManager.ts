@@ -37,11 +37,15 @@ export class VisTestEpisodeManager extends EpisodeManager {
     }
 
     public getPositiveReward(tankEid: EntityId) {
-        return Score.positiveScore[PlayerRef.id[tankEid]];
+        return Score.getPositiveScore(PlayerRef.id[tankEid]);
     }
 
     public getNegativeReward(tankEid: EntityId) {
-        return Score.negativeScore[PlayerRef.id[tankEid]];
+        return Score.getNegativeScore(PlayerRef.id[tankEid]);
+    }
+
+    public getAllRewards(tankEid: EntityId) {
+        return Score.getAllScores(PlayerRef.id[tankEid]);
     }
 
     public getVersion() {

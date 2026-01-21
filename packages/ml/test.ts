@@ -6,7 +6,7 @@ import { createPlayer } from '../tanks/src/Game/ECS/Entities/Player.ts';
 import { createMediumTank } from '../tanks/src/Game/ECS/Entities/Tank/Medium/MediumTank.ts';
 import { createPilotsPlugin } from '../tanks/src/Plugins/Pilots/createPilotsPlugin.ts';
 import { snapshotTankInputTensor } from '../tanks/src/Plugins/Pilots/Utils/snapshotTankInputTensor.ts';
-import { calculateActionReward, WEIGHTS } from './src/Reward/calculateReward.ts';
+import { calculateActionReward } from './src/Reward/calculateReward.ts';
 import { createBuilding } from '../tanks/src/Game/ECS/Entities/Building/Building.ts';
 import { createMLPlugin } from '../tanks/src/Plugins/ML/createMlPlugin.ts';
 
@@ -73,7 +73,7 @@ frameTasks.addInterval(() => {
     gameTick(16.66);
 
     if (i > 10 && i % 3 === 0) {
-        const newActionReward = calculateActionReward(tanks[0], WEIGHTS);
+        const newActionReward = calculateActionReward(tanks[0]);
         const reward = (actionReward !== undefined ? newActionReward - actionReward : 0);
         
         if (Math.abs(reward) > 0.01) {

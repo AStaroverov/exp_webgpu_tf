@@ -139,12 +139,16 @@ function applyScores(
         const isFriendlyFire = vehiclePartTeamId === attackerTeamId;
 
         // Reduced hit reward (shifted focus to kills)
-        Score.updateScore(attackerPlayerId, isFriendlyFire ? (-2 * WEIGHTS.HIT_REWARD) : WEIGHTS.HIT_REWARD);
+        if (isFriendlyFire) {
+            Score.addFriendlyFire(attackerPlayerId, -2 * WEIGHTS.HIT_REWARD);
+        } else {
+            Score.addHitEnemy(attackerPlayerId, WEIGHTS.HIT_REWARD);
+        }
     }
 
     // Penalize the hittable for being hit (trade efficiency)
     const hittablePlayerId = PlayerRef.id[hittableEid];
-    Score.updateScore(hittablePlayerId, -(0.5 * WEIGHTS.HIT_REWARD * hitEids.length));
+    Score.addGotHit(hittablePlayerId, -0.5 * WEIGHTS.HIT_REWARD * hitEids.length);
 }
 
 function saveHitters(
@@ -166,18 +170,21 @@ function saveHitters(
         if (attackerTeamId === vehiclePartTeamId) continue; // Skip friendly fire
         
         const attackerPlayerId = PlayerRef.id[hitEid];
-        LastHitters.addHitter(vehicleEid, attackerPlayerId);
+        LastHitters.addHit(vehicleEid, attackerPlayerId);
     }
 }
 
 function awardKillReward(destroyedVehicleEid: EntityId, { world } = GameDI) {
     if (!hasComponent(world, destroyedVehicleEid, LastHitters)) return;
     
-    const hitters = LastHitters.getAllHitters(destroyedVehicleEid);
+    const totalHits = LastHitters.getTotalHits(destroyedVehicleEid);
+    if (totalHits === 0) return;
     
-    for (const playerId of hitters) {
-        Score.updateScore(playerId, WEIGHTS.KILL_REWARD);
-    }
+    // Distribute kill reward proportionally to hit counts
+    LastHitters.forEachHitters(destroyedVehicleEid, (playerId, hitCount) => {
+        const proportion = hitCount / totalHits;
+        Score.addKillEnemy(playerId, WEIGHTS.KILL_REWARD * proportion);
+    });
 }
 
 const mapParentToLastSoundTime = new Map<EntityId, number>();
