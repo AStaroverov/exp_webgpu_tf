@@ -5,7 +5,7 @@ import { Model } from '../def.ts';
 import { SliceLayer } from '../Layers/SliceLayer.ts';
 import { applyPerceiverLayer } from '../Layers/PerceiverLayer.ts';
 import { VariableLayer } from '../Layers/VariableLayer.ts';
-import { applyLaNLayer } from '../ApplyLayers.ts';
+import { applySelfTransformLayers, createNormalizationLayer } from '../ApplyLayers.ts';
 import { createInputs, convertInputsToTokens } from '../Inputs.ts';
 
 type NetworkConfig = {
@@ -35,15 +35,17 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const summarize = ({
         name,
         heads,
-        depth,
         length,
         token,
         mask,
+        perceiverDepth,
+        transformerDepth,
     }: {
         name: string,
         heads: number,
-        depth: number,
         length: number,
+        perceiverDepth: number,
+        transformerDepth: number,
         token: tf.SymbolicTensor | ((name: string, i: number) => tf.SymbolicTensor),
         mask?: tf.SymbolicTensor | ((name: string, i: number) => tf.SymbolicTensor),
     }) => {
@@ -55,15 +57,22 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     
         const perceiver = applyPerceiverLayer({
             name: name + '_perceiverLayer',
-            depth,
+            depth: perceiverDepth,
             heads,
             qTok: latentQ,
             kvTok: token,
             kvMask: mask,
             preNorm: true,
         }); 
+
+        const transformer = transformerDepth > 0 ? applySelfTransformLayers(name + '_transformer', {
+            heads,
+            depth: transformerDepth,
+            token: perceiver,
+            preNorm: true,
+        }) : perceiver;
         
-        return perceiver;
+        return transformer;
     }
 
     const getVehicleToken = (name: string, i: number) => {
@@ -83,29 +92,32 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const summarizedVehicle = summarize({
         name: modelName + '_summarizedVehicle',
         heads: config.heads,
-        depth: ceil(3 * config.depth),
         length: 4,
         token: getVehicleToken,
         mask: getVehicleMask,
+        perceiverDepth: ceil(3 * config.depth),
+        transformerDepth: ceil(3 * config.depth),
     });
 
     // Rays Token
     const summarizedRays = summarize({
         name: modelName + '_summarizedRays',
         heads: config.heads,
-        depth: ceil(6 * config.depth),
         length: 4,
         token: tokens.raysTok,
+        perceiverDepth: ceil(4 * config.depth),
+        transformerDepth: ceil(4 * config.depth),
     });
 
     // Projectiles Token
     const summarizedProjectiles = summarize({
         name: modelName + '_summarizedProjectiles',
         heads: config.heads,
-        depth: ceil(2 * config.depth),
         length: 2,
         token: tokens.bulletsTok,
         mask: inputs.bulletsMaskInput,
+        perceiverDepth: ceil(1 * config.depth),
+        transformerDepth: ceil(1 * config.depth),
     });
 
     // Heads Token
@@ -122,16 +134,18 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const summarizedHeads = summarize({
         name: modelName + '_summarizedHeads',
         heads: config.heads,
-        depth: ceil(4 * config.depth),
         length: 4,
         token: getHeadsToken,
+        perceiverDepth: ceil(4 * config.depth),
+        transformerDepth: ceil(4 * config.depth),
     });
 
-    const finalToken = applyLaNLayer({
-        name: modelName + '_finalToken',
-        units: config.dim,
-        preNorm: true
-    }, summarizedHeads);
+    const finalToken = createNormalizationLayer({name: modelName + '_finalToken'}).apply(summarizedHeads) as tf.SymbolicTensor;
+    // applyLaNLayer({
+    //     name: modelName + '_finalToken',
+    //     units: config.dim,
+    //     preNorm: true
+    // }, summarizedHeads);
 
     if (modelName === Model.Policy) {
         const heads = Array.from({ length: 4 }, (_, i) => {

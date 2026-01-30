@@ -45,8 +45,12 @@ export function createDiagonalTeamTanks(
 ): void {
     const { fieldSize, edgeMargin, maxDeviation, count = 1 } = options;
     const { centerX, centerY, baseDiagonalAngle } = geometry;
-    const spawnRadius = options.spawnRadius ?? fieldSize * 0.4;
+    const rawSpawnRadius = options.spawnRadius ?? fieldSize * 0.4;
+    const maxSpawnRadius = fieldSize / 2 - edgeMargin;
+    const spawnRadius = Math.max(0, Math.min(rawSpawnRadius, maxSpawnRadius));
     const baseAngle = teamId === 0 ? baseDiagonalAngle : baseDiagonalAngle + PI;
+    const placedPositions: Array<{ x: number; y: number }> = [];
+    const minSpacingSq = MIN_TANK_SPACING * MIN_TANK_SPACING;
 
     // Calculate angular step to ensure minimum spacing between tanks
     const angularStep = count > 1 ? MIN_TANK_SPACING / spawnRadius : 0;
@@ -55,16 +59,47 @@ export function createDiagonalTeamTanks(
 
     for (let i = 0; i < count; i++) {
         const playerId = createPlayer(teamId);
-        const deviation = randomRangeFloat(-maxDeviation, maxDeviation);
         const tankAngularPosition = startAngleOffset + i * angularStep;
-        const angularJitter = count > 1 ? randomRangeFloat(-angularStep * 0.3, angularStep * 0.3) : 0;
-        const radialJitter = randomRangeFloat(-20, 20);
+        const maxAttempts = 24;
+        let x = 0;
+        let y = 0;
+        let angle = baseAngle + tankAngularPosition;
+        let radius = spawnRadius;
+        let placed = false;
 
-        const angle = baseAngle + deviation + tankAngularPosition + angularJitter;
-        const radius = spawnRadius + radialJitter;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const deviation = randomRangeFloat(-maxDeviation, maxDeviation);
+            const angularJitter = count > 1 ? randomRangeFloat(-angularStep * 0.3, angularStep * 0.3) : 0;
+            const radialJitter = randomRangeFloat(-20, 20);
+            angle = baseAngle + deviation + tankAngularPosition + angularJitter;
+            radius = Math.max(0, Math.min(maxSpawnRadius, spawnRadius + radialJitter));
 
-        const x = Math.max(edgeMargin, Math.min(fieldSize - edgeMargin, centerX + Math.cos(angle) * radius));
-        const y = Math.max(edgeMargin, Math.min(fieldSize - edgeMargin, centerY + Math.sin(angle) * radius));
+            x = centerX + Math.cos(angle) * radius;
+            y = centerY + Math.sin(angle) * radius;
+
+            if (x < edgeMargin || x > fieldSize - edgeMargin || y < edgeMargin || y > fieldSize - edgeMargin) {
+                continue;
+            }
+
+            const tooClose = placedPositions.some((pos) => {
+                const dx = pos.x - x;
+                const dy = pos.y - y;
+                return dx * dx + dy * dy < minSpacingSq;
+            });
+            if (!tooClose) {
+                placed = true;
+                break;
+            }
+        }
+
+        if (!placed) {
+            angle = baseAngle + tankAngularPosition;
+            radius = spawnRadius;
+            x = Math.max(edgeMargin, Math.min(fieldSize - edgeMargin, centerX + Math.cos(angle) * radius));
+            y = Math.max(edgeMargin, Math.min(fieldSize - edgeMargin, centerY + Math.sin(angle) * radius));
+        }
+
+        placedPositions.push({ x, y });
 
         createTank({
             type: tankTypes[randomRangeInt(0, tankTypes.length - 1)],

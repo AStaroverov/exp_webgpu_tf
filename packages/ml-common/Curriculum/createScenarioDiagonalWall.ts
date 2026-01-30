@@ -9,11 +9,13 @@ import { Scenario } from './types.ts';
 
 /**
  * Diagonal scenario with wall: 2 agents vs 2 simple bots positioned diagonally.
- * 3 buildings are placed perpendicular to the diagonal (forming a wall between teams).
+ * Randomized central obstacle:
+ * - 33%: two buildings placed symmetrically around the diagonal center.
+ * - 66%: five buildings extending from the center in one direction.
  */
 export function createScenarioDiagonalWall(options: ScenarioCoreOptions): Scenario {
     const scenario = createScenarioCore(options);
-    const buildingSpacing = 100;
+    const buildingSpacing = 150;
 
     const tankOptions = {
         fieldSize: scenario.width,
@@ -23,13 +25,29 @@ export function createScenarioDiagonalWall(options: ScenarioCoreOptions): Scenar
     };
     const geometry = createDiagonalGeometry(tankOptions);
 
-    // Create environment: wall of 3 buildings perpendicular to diagonal
+    // Create environment: randomized central wall perpendicular to diagonal
     const perpAngle = geometry.baseDiagonalAngle + PI / 2;
-    for (const offset of [-1, 0, 1]) {
-        createBuilding({
-            x: geometry.centerX + Math.cos(perpAngle) * offset * buildingSpacing,
-            y: geometry.centerY + Math.sin(perpAngle) * offset * buildingSpacing,
-        });
+    const perpX = Math.cos(perpAngle);
+    const perpY = Math.sin(perpAngle);
+    const random = Math.random();
+
+    if (random < 0.33) {
+        // Two buildings, centered around the diagonal center, spaced farther apart
+        for (const offset of [-1, 1]) {
+            createBuilding({
+                x: geometry.centerX + perpX * offset * buildingSpacing,
+                y: geometry.centerY + perpY * offset * buildingSpacing,
+            });
+        }
+    } else {
+        // Five buildings extending from the center in one direction
+        const direction = Math.random() < 0.5 ? -1 : 1;
+        for (const offset of [-1, 0, 1, 2, 3, 4]) {
+            createBuilding({
+                x: geometry.centerX + perpX * offset * direction * buildingSpacing,
+                y: geometry.centerY + perpY * offset * direction * buildingSpacing,
+            });
+        }
     }
 
     // Create agent tanks and fill with agents

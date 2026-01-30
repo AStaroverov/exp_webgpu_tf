@@ -79,7 +79,7 @@ export class MultiHeadAttentionLayer extends tf.layers.Layer {
 
             const scores = tf.matMul(qh, kh, false, true)
                 .div(Math.sqrt(this.keyDim))
-                .add(kvMaskReshaped.sub(1).mul(1e9));
+                .add(kvMaskReshaped.sub(1).mul(1e5));
             const weights = tf.softmax(scores).mul(kvMaskReshaped);
             const context = tf.matMul(weights, vh);
             const merged = context.transpose([0, 2, 1, 3]).reshape([B, N, dModel]);

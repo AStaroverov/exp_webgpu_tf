@@ -9,7 +9,7 @@ export const shaderMeta = new ShaderMeta(
     },
     {},
     // language=WGSL
-    wgsl`
+    wgsl/* wgsl */ `
 const POSITION = array<vec2f, 6>(
     vec2f(-1.0, -1.0),
     vec2f(1.0, -1.0),
