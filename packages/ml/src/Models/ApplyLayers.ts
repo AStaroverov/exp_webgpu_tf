@@ -3,7 +3,6 @@ import { SymbolicTensor } from '@tensorflow/tfjs-layers/dist/engine/topology';
 import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 import { DenseLayerArgs } from '@tensorflow/tfjs-layers/dist/layers/core';
 import { MaskLikeLayer } from './Layers/MaskLikeLayer.ts';
-import { MoELayer } from './Layers/MoELayer.ts';
 import { MultiHeadAttentionLayer } from './Layers/MultiHeadAttentionLayer.ts';
 import { RMSNormConfig, RMSNormLayer } from "./Layers/RMSNormLayer.ts";
 import { NoisyDenseLayer } from './Layers/NoisyDenseLayer.ts';
@@ -155,30 +154,8 @@ export function applyCrossAttentionLayer(
     return attention;
 }
 
-/** MoE (Mixture of Experts) configuration options */
-export interface MoEOptions {
-    /** Number of experts to route to per token (default: 2, as in Mixtral/GLaM) */
-    topK?: number;
-    /** Number of expert networks (default: 8, as in Mixtral) */
-    numExperts?: number;
-    /**
-     * Hidden dimension for each expert FFN. If not set, defaults to
-     * Math.round(dModel / numExperts) to keep total capacity comparable.
-     */
-    expertDim?: number;
-}
-
-const defaultMoE: Required<Pick<MoEOptions, 'numExperts' | 'topK'>> = {
-    numExperts: 16,
-    topK: 4,
-};
-
 /**
- * Apply a self-attention transformer layer with Mixture of Experts (MoE) FFN.
- * 
- * MoE replaces the standard FFN with multiple expert networks, routing each
- * token to the top-K experts. This increases model capacity without proportionally
- * increasing computation cost.
+ * Apply a self-attention transformer layer with standard FFN.
  */
 export function applySelfTransformerLayer(
     {
@@ -186,19 +163,16 @@ export function applySelfTransformerLayer(
         heads,
         token,
         mask,
-        moe = {},
         preNorm = false,
     }: {
         name: string,
         heads: number,
         token: tf.SymbolicTensor;
         mask?: tf.SymbolicTensor;
-        moe?: MoEOptions;
         preNorm?: boolean;
     },
 ) {
     const dModel = token.shape[token.shape.length - 1]!;
-    const { numExperts, topK, expertDim } = { ...defaultMoE, ...moe };
 
     const selfAttn = applyCrossAttentionLayer({
         name,
@@ -213,39 +187,44 @@ export function applySelfTransformerLayer(
     const attnResidual = tf.layers.add({name: `${name}_residual`})
         .apply([token, selfAttn]) as tf.SymbolicTensor;
 
-    const moeNorm = createNormalizationLayer({
+    const ffnNorm = createNormalizationLayer({
         name: `${name}_ln2`,
     }).apply(attnResidual) as tf.SymbolicTensor;
 
-    const moeOut = new MoELayer({
-        name: `${name}_moe`,
-        topK,
-        expertDim: expertDim ?? dModel,
-        numExperts,
-    }).apply(moeNorm) as tf.SymbolicTensor;
+    const ffnInner = createDenseLayer({
+        name: `${name}_ffn1`,
+        units: dModel * 4,
+        useBias: false,
+        activation: 'relu',
+    }).apply(ffnNorm) as tf.SymbolicTensor;
 
-    const finalOut = tf.layers.add({name: `${name}_moeAdd`})
-        .apply([attnResidual, moeOut]) as tf.SymbolicTensor;
+    const ffnOut = createDenseLayer({
+        name: `${name}_ffn2`,
+        units: dModel,
+        useBias: false,
+        activation: 'linear',
+    }).apply(ffnInner) as tf.SymbolicTensor;
+
+    const finalOut = tf.layers.add({name: `${name}_ffnAdd`})
+        .apply([attnResidual, ffnOut]) as tf.SymbolicTensor;
 
     return finalOut;
 }
 
 /**
- * Apply multiple self-attention transformer layers with MoE FFN.
+ * Apply multiple self-attention transformer layers with standard FFN.
  */
 export function applySelfTransformLayers(name: string, {
     depth,
     heads,
     token,
     mask,
-    moe = {},
     preNorm = false,
 }: {
     depth: number,
     heads: number,
     token: tf.SymbolicTensor | ((name: string, i: number) => tf.SymbolicTensor),
     mask?: tf.SymbolicTensor | ((name: string, i: number) => tf.SymbolicTensor),
-    moe?: MoEOptions,
     preNorm?: boolean,
 }) {
     let x = typeof token === 'function' ? token(name, 0) : token;
@@ -256,7 +235,6 @@ export function applySelfTransformLayers(name: string, {
             heads,
             token: x,
             mask: mask ? (typeof mask === 'function' ? mask(lName, i) : mask) : undefined,
-            moe,
             preNorm,
         });
     }
