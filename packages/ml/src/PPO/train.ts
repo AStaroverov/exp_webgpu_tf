@@ -237,15 +237,13 @@ function optimize(
     });
 }
 
-export function computeVTraceTargets(
+export function computeRetraceTargets(
     policyNetwork: tf.LayersModel,
     valueNetwork: tf.LayersModel,
     batch: AgentMemoryBatch,
     batchSize: number,
     gamma: number,
-    clipRho: number = 1,
-    clipC: number = 1,
-    clipRhoPG: number = 1,
+    lambda: number = 0.95,
 ): {
     advantages: Float32Array,
     tdErrors: Float32Array,
@@ -260,31 +258,29 @@ export function computeVTraceTargets(
         const actions = tf.tensor2d(flatTypedArray(batch.actions), [batch.size, ACTION_DIM]);
         const logProbCurrentTensor = computeLogProbCategorical(actions, logitsHeads);
         const logProbBehaviorTensor = tf.tensor1d(batch.logProbs);
-        const rhosTensor = computeRho(logProbBehaviorTensor, logProbCurrentTensor);
+        const rhosTensor = logProbCurrentTensor.sub(logProbBehaviorTensor).exp();
         const valuesTensor = (valueNetwork.predict(input, {batchSize}) as tf.Tensor).squeeze();
 
         const values = syncUnwrapTensor(valuesTensor) as Float32Array;
         const rhos = syncUnwrapTensor(rhosTensor) as Float32Array;
 
-        const {advantages, tdErrors, vTraces} = computeVTrace(
+        const {advantages, tdErrors, retraceReturns} = computeRetrace(
             batch.rewards,
             batch.dones,
             values,
             rhos,
             gamma,
-            clipRho,
-            clipC,
-            clipRhoPG,
+            lambda,
         );
 
         if (!arrayHealthCheck(advantages)) {
-            throw new Error('VTrace advantages are NaN');
+            throw new Error('Retrace advantages contain NaN');
         }
         if (!arrayHealthCheck(tdErrors)) {
-            throw new Error('VTrace tdErrors are NaN');
+            throw new Error('Retrace tdErrors contain NaN');
         }
-        if (!arrayHealthCheck(vTraces)) {
-            throw new Error('VTrace returns are NaN');
+        if (!arrayHealthCheck(retraceReturns)) {
+            throw new Error('Retrace returns contain NaN');
         }
 
         const normalizedAdvantages = normalize(advantages);
@@ -292,71 +288,63 @@ export function computeVTraceTargets(
         return {
             advantages: normalizedAdvantages,
             tdErrors: tdErrors,
-            returns: vTraces,
+            returns: retraceReturns,
             values: values,
-            // just for logs
             pureLogits: logitsHeads.map(syncUnwrapTensor) as Float32Array[],
         };
     });
 }
 
-function computeRho(
-    logProbBehavior: tf.Tensor,
-    logProbCurrent: tf.Tensor,
-): tf.Tensor {
-    const logRho = logProbCurrent.sub(logProbBehavior);
-    return logRho.exp(); // ρ_t = π_current / π_behavior
-}
-
-export function computeVTrace(
+/**
+ * Retrace(λ) — Munos et al., "Safe and Efficient Off-Policy RL", 2016
+ *
+ * Trace coefficient: c_t = λ · min(1, ρ_t)
+ * Target:  v^ret_t = V(s_t) + Δ_t
+ *   where  Δ_t = δ_t + γ · c_t · Δ_{t+1}
+ *          δ_t = r_t + γ · V(s_{t+1}) - V(s_t)
+ *
+ * No separate ρ̄ on δ_t — off-policy correction is entirely in the trace coefficients.
+ */
+export function computeRetrace(
     rewards: Float32Array,
     dones: Float32Array,
     values: Float32Array,
     rhos: Float32Array,
     gamma: number,
-    _clipRho: number,
-    clipC: number,
-    clipRhoPG: number,
-): { vTraces: Float32Array, tdErrors: Float32Array, advantages: Float32Array } {
+    lambda: number,
+): { retraceReturns: Float32Array, tdErrors: Float32Array, advantages: Float32Array } {
     const T = rewards.length;
-    // bootstrap v̂_{T} = values[T]
-    let nextVTrace = dones[T - 1] ? 0 : values[T];
-    if (nextVTrace === undefined) {
-        throw new Error('Implementation required last state as terminal');
+    if (dones[T - 1] !== 1) {
+        throw new Error('Retrace requires last state to be terminal');
     }
 
-    const vTraces = new Float32Array(T);
+    const retraceReturns = new Float32Array(T);
     const tdErrors = new Float32Array(T);
     const advantages = new Float32Array(T);
 
-    // bootstrap: v̂_T = done? 0 : V(s_T)
-    let nextAdv = 0; // A_{t+1}
+    let delta = 0; // Δ_{t+1}
 
     for (let t = T - 1; t >= 0; --t) {
         const nextValue = dones[t] ? 0 : values[t + 1];
         const discount = dones[t] ? 0 : gamma;
         const value = values[t];
 
-        const c = Math.min(rhos[t], clipC); // 0.95 * Math.min(rhos[t], clipC);
-        const rho = 1; // Math.min(rhos[t], clipRho);
-        const rhoPG = Math.min(rhos[t], clipRhoPG);
+        // c_t = λ · min(1, ρ_t)
+        const c = lambda * Math.min(1, rhos[t]);
 
-        // δ_t^V = r_t + γ V(s_{t+1}) - V(s_t)
+        // δ_t = r_t + γ V(s_{t+1}) - V(s_t)
         const tdError = rewards[t] + discount * nextValue - value;
         tdErrors[t] = tdError;
 
-        // v̂_t = V(s_t) + ρ̄_t δ_t^V + γ c̄_t (v̂_{t+1} - V(s_{t+1}))
-        vTraces[t] = value + rho * tdError + discount * c * (nextVTrace - nextValue);
+        // Δ_t = δ_t + γ · c_t · Δ_{t+1}
+        delta = tdError + discount * c * delta;
+        advantages[t] = delta;
 
-        // A_t = ρ̄_t^{PG} δ_t^V + γ c̄_t A_{t+1}
-        const adv = rhoPG * tdError + discount * c * nextAdv;
-        advantages[t] = adv;
-
-        nextVTrace = vTraces[t];
-        nextAdv = adv;
+        // v^ret_t = V(s_t) + Δ_t
+        retraceReturns[t] = value + delta;
     }
 
-    return {vTraces, advantages, tdErrors};
+    return {retraceReturns, advantages, tdErrors};
 }
 
 function parsePolicyOutput(prediction: tf.Tensor | tf.Tensor[]): tf.Tensor[] {

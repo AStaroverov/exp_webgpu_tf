@@ -12,7 +12,7 @@ import { getNetworkSettings } from '../../../../ml-common/utils.ts';
 import { Model } from '../../Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
 import { agentSampleChannel, learnProcessChannel, modelSettingsChannel, queueSizeChannel } from '../channels.ts';
-import { computeVTraceTargets } from '../train.ts';
+import { computeRetraceTargets } from '../train.ts';
 import { ACTION_HEAD_DIMS } from '../../Models/Create.ts';
 
 export type LearnData = AgentMemoryBatch & {
@@ -56,7 +56,7 @@ export function createLearnerManager() {
                         })
                         return b.memoryBatch
                     }));
-                    const {pureLogits, ...vTraceBatchData} = computeVTraceTargets(
+                    const {pureLogits, ...vTraceBatchData} = computeRetraceTargets(
                         policyNetwork,
                         valueNetwork,
                         batchData,
