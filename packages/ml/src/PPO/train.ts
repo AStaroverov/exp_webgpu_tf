@@ -92,8 +92,10 @@ export function computeKullbackLeiblerAprox(
         const predicted = policyNetwork.predict(states, {batchSize});
         const logitsHeads = parsePolicyOutput(predicted);
         const newLogProbs = computeLogProbCategorical(actions, logitsHeads);
-        const diff = oldLogProb.sub(newLogProbs);
-        const kl = diff.mean().abs();
+        // Schulman KL approximation: KL ≈ E[ratio - 1 - log(ratio)]
+        const logRatio = newLogProbs.sub(oldLogProb);
+        const ratio = logRatio.exp();
+        const kl = ratio.sub(1).sub(logRatio).mean();
         return kl;
     });
 }
