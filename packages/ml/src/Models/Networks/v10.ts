@@ -17,14 +17,14 @@ type NetworkConfig = {
 type policyNetworkConfig = NetworkConfig
 
 const policyNetworkConfig: policyNetworkConfig = {
-    dim: 64,
+    dim: 96,
     heads: 4,
     depth: 1,
 };
 
 const valueNetworkConfig: NetworkConfig = {
-    dim: 32,
-    heads: 1,
+    dim: 48,
+    heads: 2,
     depth: 0.5,
 };
 
@@ -92,11 +92,11 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const summarizedVehicle = summarize({
         name: modelName + '_summarizedVehicle',
         heads: config.heads,
-        length: 4,
+        length: 8,
         token: getVehicleToken,
         mask: getVehicleMask,
-        perceiverDepth: ceil(3 * config.depth),
-        transformerDepth: ceil(3 * config.depth),
+        perceiverDepth: ceil(1 * config.depth),
+        transformerDepth: ceil(1 * config.depth),
     });
 
     // Rays Token
@@ -105,8 +105,8 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         heads: config.heads,
         length: 4,
         token: tokens.raysTok,
-        perceiverDepth: ceil(4 * config.depth),
-        transformerDepth: ceil(4 * config.depth),
+        perceiverDepth: ceil(1 * config.depth),
+        transformerDepth: ceil(1 * config.depth),
     });
 
     // Projectiles Token
@@ -136,8 +136,8 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         heads: config.heads,
         length: 4,
         token: getHeadsToken,
-        perceiverDepth: ceil(4 * config.depth),
-        transformerDepth: ceil(4 * config.depth),
+        perceiverDepth: ceil(2 * config.depth),
+        transformerDepth: ceil(2 * config.depth),
     });
 
     const finalToken = createNormalizationLayer({name: modelName + '_finalToken'}).apply(summarizedHeads) as tf.SymbolicTensor;
