@@ -7,7 +7,7 @@ import { ACTION_DIM } from '../../../ml-common/consts.ts';
 import { flatTypedArray } from '../../../ml-common/flat.ts';
 import { type StateHistory, prepareRandomStateHistory } from '../../../ml-common/InputArrays.ts';
 import { createInputTensors } from '../../../ml-common/InputTensors.ts';
-import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
+import { PreparedBatch } from '../../../ml-common/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
 import { shouldNoiseLayer } from '../Models/Create.ts';
 
@@ -242,7 +242,7 @@ function optimize(
 export function computeRetraceTargets(
     policyNetwork: tf.LayersModel,
     valueNetwork: tf.LayersModel,
-    batch: AgentMemoryBatch,
+    batch: PreparedBatch,
     batchSize: number,
     gamma: number,
     lambda: number = 0.95,

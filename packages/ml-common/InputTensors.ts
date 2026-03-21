@@ -17,7 +17,6 @@ import { MAX_TURRETS } from '../tanks/src/Plugins/Pilots/Components/TankState.ts
 
 export { RAY_SLOTS };
 
-const T = HISTORY_LENGTH;
 
 // Pack field data from all histories directly into a single flat buffer.
 // Eliminates B intermediate arrays per field (was: B+1 allocations → now: 1).
@@ -27,6 +26,8 @@ function packF32(
     elemSize: number,
 ): Float32Array {
     const B = histories.length;
+    const T = HISTORY_LENGTH;
+    
     const buf = new Float32Array(B * T * elemSize);
     let offset = 0;
     for (let b = 0; b < B; b++) {
@@ -45,6 +46,8 @@ function packI32(
     elemSize: number,
 ): Int32Array {
     const B = histories.length;
+    const T = HISTORY_LENGTH;
+
     const buf = new Int32Array(B * T * elemSize);
     let offset = 0;
     for (let b = 0; b < B; b++) {
@@ -60,6 +63,7 @@ function packI32(
 export function createInputTensors(
     histories: StateHistory[],
 ): tf.Tensor[] {
+    const T = HISTORY_LENGTH;
     const B = histories.length;
 
     return [
