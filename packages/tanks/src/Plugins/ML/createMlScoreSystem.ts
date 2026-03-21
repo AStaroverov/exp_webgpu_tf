@@ -36,10 +36,10 @@ export function createMlScoreSystem({ world } = GameDI) {
             const raysBuffer = TankInputTensor.raysData.getBatch(vehicleEid);
             
             // Adjacent enemy detection reward
-            const adjacentEnemyRaysReward = getAdjacentEnemyRaysReward(vehicleEid, raysBuffer);
-            if (adjacentEnemyRaysReward > 0) {
-                Score.addAdjacentEnemyDetection(playerId, adjacentEnemyRaysReward);
-            }
+            // const adjacentEnemyRaysReward = getAdjacentEnemyRaysReward(vehicleEid, raysBuffer);
+            // if (adjacentEnemyRaysReward > 0) {
+            //     Score.addAdjacentEnemyDetection(playerId, adjacentEnemyRaysReward);
+            // }
             
             // Exploration reward
             const explorationReward = getExplorationReward(vehicleEid);
@@ -64,7 +64,7 @@ export function createMlScoreSystem({ world } = GameDI) {
     return { tick, dispose };
 }
 
-export function getAdjacentEnemyRaysReward(vehicleEid: EntityId, raysBuffer: Float64Array): number {
+function getAdjacentEnemyRaysReward(vehicleEid: EntityId, raysBuffer: Float64Array): number {
     const now = performance.now();
     
     // Get or create cooldown state map for this vehicle
@@ -170,8 +170,9 @@ function getExplorationReward(vehicleEid: EntityId): number {
     lastPos.x = x;
     lastPos.y = y;
     
-    const hasEnemy = (currentlyVisibleEnemies.get(vehicleEid)?.size ?? 0) > 0;
-    return hasEnemy ? WEIGHTS.EXPLORATION_WITH_ENEMY_REWARD : WEIGHTS.EXPLORATION_WITHOUT_ENEMY_REWARD;
+    return WEIGHTS.EXPLORATION_WITHOUT_ENEMY_REWARD;
+    // const hasEnemy = (currentlyVisibleEnemies.get(vehicleEid)?.size ?? 0) > 0;
+    // return hasEnemy ? WEIGHTS.EXPLORATION_WITH_ENEMY_REWARD : WEIGHTS.EXPLORATION_WITHOUT_ENEMY_REWARD;
 }
 
 

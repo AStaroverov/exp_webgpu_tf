@@ -195,7 +195,7 @@ function createExcludeOwnVehiclePredicate(
 }
 
 /**
- * Angle step for unified ray system (64 rays covering 360 degrees)
+ * Angle step for unified ray system covering 360 degrees
  */
 const UNIFIED_ANGLE_STEP = (2 * Math.PI) / RAYS_COUNT;
 
@@ -215,7 +215,7 @@ function resetTargetRayAngles() {
 }
 
 /**
- * Cast unified rays - 64 rays evenly distributed around the agent.
+ * Cast unified rays evenly distributed around the agent.
  * For each target (enemy/ally), the ray at the closest angle slot is overridden
  * to point directly at that target. All rays use standard RAY_LENGTH.
  */
@@ -253,7 +253,7 @@ function castUnifiedRays(
         targetRayAngles[rayIndex] = relativeAngle;
     }
 
-    // Cast all 64 rays
+    // Cast all rays
     for (let i = 0; i < RAYS_COUNT; i++) {
         const angle = rotation + targetRayAngles[i];
         

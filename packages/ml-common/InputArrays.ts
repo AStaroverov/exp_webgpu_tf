@@ -43,8 +43,8 @@ const ENEMIES_INDEXES = new Uint32Array(Array.from({ length: ENEMY_SLOTS }, (_, 
 const ALLIES_INDEXES = new Uint32Array(Array.from({ length: ALLY_SLOTS }, (_, i) => i));
 const BULLETS_INDEXES = new Uint32Array(Array.from({ length: BULLET_SLOTS }, (_, i) => i));
 
-import { HISTORY_LENGTH, HISTORY_STRIDE } from './historyConfig.ts';
-export { HISTORY_LENGTH, HISTORY_STRIDE };
+import { HISTORY_LENGTH, HISTORY_OFFSETS } from './historyConfig.ts';
+export { HISTORY_LENGTH, HISTORY_OFFSETS };
 export type StateHistory = InputArrays[];  // always length HISTORY_LENGTH: [t, t-3, t-6, t-9, t-12]
 
 export type InputArrays = {
@@ -293,7 +293,7 @@ export function assembleStateHistory(
 ): StateHistory {
     const history: InputArrays[] = [];
     for (let f = 0; f < HISTORY_LENGTH; f++) {
-        const targetIdx = stepIndex - f * HISTORY_STRIDE;
+        const targetIdx = stepIndex - HISTORY_OFFSETS[f];
         const clampedIdx = Math.max(0, targetIdx);
         history.push(episodeStates[clampedIdx]);
     }
@@ -312,7 +312,7 @@ export function assembleCurrentStateHistory(
     const lastIdx = pastStates.length;
     const history: InputArrays[] = [];
     for (let f = 0; f < HISTORY_LENGTH; f++) {
-        const targetIdx = Math.max(0, lastIdx - f * HISTORY_STRIDE);
+        const targetIdx = Math.max(0, lastIdx - HISTORY_OFFSETS[f]);
         history.push(targetIdx >= pastStates.length ? currentState : pastStates[targetIdx]);
     }
     return history;
