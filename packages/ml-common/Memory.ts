@@ -1,8 +1,8 @@
-import { InputArrays } from './InputArrays.ts';
+import { InputArrays, StateHistory, assembleStateHistory } from './InputArrays.ts';
 
 export type AgentMemoryBatch = {
     size: number,
-    states: InputArrays[],
+    states: StateHistory[],
     actions: Float32Array[],
     rewards: Float32Array,
     dones: Float32Array,
@@ -66,11 +66,15 @@ export class AgentMemory {
         const dones = new Float32Array(this.dones);
         dones[dones.length - 1] = 1.0;
 
+        const stateHistories: StateHistory[] = this.states.map((_, i) =>
+            assembleStateHistory(this.states, i)
+        );
+
         return {
             size: this.states.length,
-            states: (this.states),
-            actions: (this.actions),
-            logits: (this.logits),
+            states: stateHistories,
+            actions: this.actions.slice(),
+            logits: this.logits.slice(),
             logProbs: new Float32Array(this.logProbs),
             rewards: rewards,
             dones: dones,

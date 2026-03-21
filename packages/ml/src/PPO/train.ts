@@ -5,7 +5,7 @@ import { normalize } from '../../../../lib/math.ts';
 import { random } from '../../../../lib/random.ts';
 import { ACTION_DIM } from '../../../ml-common/consts.ts';
 import { flatTypedArray } from '../../../ml-common/flat.ts';
-import { InputArrays, prepareRandomInputArrays } from '../../../ml-common/InputArrays.ts';
+import { type StateHistory, prepareRandomStateHistory } from '../../../ml-common/InputArrays.ts';
 import { createInputTensors } from '../../../ml-common/InputTensors.ts';
 import { AgentMemoryBatch } from '../../../ml-common/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
@@ -102,7 +102,7 @@ export function computeKullbackLeiblerAprox(
 
 export function batchAct(
     policyNetwork: tf.LayersModel,
-    states: InputArrays[],
+    states: StateHistory[],
     options?: { greedy?: boolean; epsilon?: number; noises?: (tf.Tensor[] | undefined)[] },
 ): {
     actions: Float32Array,
@@ -114,9 +114,9 @@ export function batchAct(
         const noise = options?.greedy !== true ? shouldNoiseLayer : undefined;
         const predicted = policyNetwork.apply(createInputTensors(states), { noise }) as tf.Tensor | tf.Tensor[];
         const logitsHeads = parsePolicyOutput(predicted);
-        
+
         const results: {actions: Float32Array, logits: Float32Array, logProb: number}[] = [];
-        
+
         for (let i = 0; i < batchSize; i++) {
             const stateLogitsHeads = logitsHeads.map(logits => logits.slice([i], [1]));
             const noiseTensors = options?.noises?.[i];
@@ -184,7 +184,7 @@ function sampleCategorical(
 
 export function pureAct(
     policyNetwork: tf.LayersModel,
-    state: InputArrays,
+    state: StateHistory,
 ): {
     actions: Float32Array,
 } {
@@ -385,7 +385,7 @@ let randomInputTensors: tf.Tensor[];
 
 function getRandomInputTensors() {
     randomInputTensors = randomInputTensors == null || random() > 0.9
-        ? (tf.dispose(randomInputTensors), createInputTensors([prepareRandomInputArrays()]))
+        ? (tf.dispose(randomInputTensors), createInputTensors([prepareRandomStateHistory()]))
         : randomInputTensors;
 
     return randomInputTensors;

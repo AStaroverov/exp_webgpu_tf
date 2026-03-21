@@ -17,14 +17,14 @@ type NetworkConfig = {
 type policyNetworkConfig = NetworkConfig
 
 const policyNetworkConfig: policyNetworkConfig = {
-    dim: 192,
-    heads: 8,
+    dim: 128,
+    heads: 4,
     depth: 1,
 };
 
 const valueNetworkConfig: NetworkConfig = {
-    dim: 96,
-    heads: 4,
+    dim: 64,
+    heads: 2,
     depth: 0.5,
 };
 
@@ -92,7 +92,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const summarizedVehicle = summarize({
         name: modelName + '_summarizedVehicle',
         heads: config.heads,
-        length: 8,
+        length: 6,
         token: getVehicleToken,
         mask: getVehicleMask,
         perceiverDepth: ceil(2 * config.depth),
