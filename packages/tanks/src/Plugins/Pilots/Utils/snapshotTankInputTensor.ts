@@ -146,7 +146,6 @@ export function snapshotTankInputTensor({ world } = GameDI) {
             myTeamId,
             position[0],
             position[1],
-            rotation,
             [...enemiesEids, ...alliesEids],
         );
 
@@ -224,7 +223,6 @@ function castUnifiedRays(
     myTeamId: number,
     posX: number,
     posY: number,
-    rotation: number,
     targetEids: EntityId[],
     { physicalWorld } = GameDI,
 ) {
@@ -239,23 +237,19 @@ function castUnifiedRays(
     for (let i = 0; i < targetEids.length; i++) {
         const targetEid = targetEids[i];
         const targetPosition = RigidBodyState.position.getBatch(targetEid);
-        
+
         const dx = targetPosition[0] - posX;
         const dy = targetPosition[1] - posY;
-        const angleToTarget = Math.atan2(dy, dx);
-        
-        // Find which ray slot this angle corresponds to (relative to forward direction)
-        let relativeAngle = angleToTarget - rotation;
-        while (relativeAngle < 0) relativeAngle += 2 * Math.PI;
-        while (relativeAngle >= 2 * Math.PI) relativeAngle -= 2 * Math.PI;
-        
-        const rayIndex = Math.round(relativeAngle / UNIFIED_ANGLE_STEP) % RAYS_COUNT;
-        targetRayAngles[rayIndex] = relativeAngle;
+        let angleToTarget = Math.atan2(dy, dx);
+        while (angleToTarget < 0) angleToTarget += 2 * Math.PI;
+
+        const rayIndex = Math.round(angleToTarget / UNIFIED_ANGLE_STEP) % RAYS_COUNT;
+        targetRayAngles[rayIndex] = angleToTarget;
     }
 
-    // Cast all rays
+    // Cast all rays (absolute world angles)
     for (let i = 0; i < RAYS_COUNT; i++) {
-        const angle = rotation + targetRayAngles[i];
+        const angle = targetRayAngles[i];
         
         rayDir.x = cos(angle);
         rayDir.y = sin(angle);
