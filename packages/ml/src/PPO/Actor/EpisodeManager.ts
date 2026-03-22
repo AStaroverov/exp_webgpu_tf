@@ -71,7 +71,7 @@ export class EpisodeManager {
             }
 
             const networkVersion = agent.getVersion();
-            const finalReward = calculateFinalReward(agent.tankEid, successRatio, pilots);
+            const finalReward = calculateFinalReward(agent.tankEid, successRatio, pilots, episode.index);
             const memoryBatch = agent.getMemoryBatch(finalReward);
 
             if (memoryBatch == null) return;
