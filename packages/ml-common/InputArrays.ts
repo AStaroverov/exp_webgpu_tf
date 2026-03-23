@@ -10,6 +10,7 @@ import {
     BULLET_SLOTS,
     ENEMY_FEATURES_DIM,
     ENEMY_SLOTS,
+    GRID_CELLS,
     RAY_FEATURES_DIM,
     RAY_SLOTS,
     TANK_FEATURES_DIM,
@@ -62,12 +63,15 @@ export type InputArrays = {
     
     bulletsFeatures: Float32Array,
     bulletsMask: Float32Array,
+
+    obstacleGrid: Float32Array,  // GRID_CELLS = 256
 }
 
 export function prepareInputArrays(
     tankEid: number,
     width: number,
     height: number,
+    obstacleGrid: Float32Array,
 ): InputArrays {
     // ---- Battle features ----
     const battleFeatures = new Float32Array(BATTLE_FEATURES_DIM);
@@ -258,6 +262,8 @@ export function prepareInputArrays(
         
         bulletsFeatures,
         bulletsMask,
+
+        obstacleGrid,
     };
 
     if (!checkInputArrays(result)) {
@@ -320,26 +326,30 @@ export function prepareRandomInputArrays(): InputArrays {
 
     const bulletsMask = new Float32Array(BULLET_SLOTS).map(() => randomRangeInt(0, 1));
     const bulletsFeatures = new Float32Array(BULLET_SLOTS * BULLET_FEATURES_DIM).map(() => random());
-    
+
+    const obstacleGrid = new Float32Array(GRID_CELLS).map(() => randomRangeInt(0, 1));
+
     return {
         battleFeatures,
 
         tankFeatures,
         tankType,
         turretFeatures,
-        
+
         raysFeatures,
-        
+
         enemiesFeatures,
         enemiesTypes,
         enemiesMask,
-        
+
         alliesFeatures,
         alliesTypes,
         alliesMask,
-        
+
         bulletsFeatures,
         bulletsMask,
+
+        obstacleGrid,
     };
 }
 

@@ -40,6 +40,11 @@ export const BULLET_FEATURES_DIM = 4;
 export const RAY_SLOTS = RAYS_COUNT;
 export const RAY_FEATURES_DIM = RAY_BUFFER - 1 + 2; // [locRootX, locRootY, locDirX, locDirY, distance, hitObstacle, hitVehicle]
 
+// Obstacle spatial map (16×16 grid)
+export const GRID_SIZE = 16;
+export const GRID_CELL_FEATURES = 3;  // obstacle + cell_x + cell_y
+export const GRID_CELLS = GRID_SIZE * GRID_SIZE;  // 256
+
 export const ACTION_HEAD_DIMS = [15, 15, 2, 31];
 
 export const shouldNoiseLayer = (_name: string, _iteration?: number) => {

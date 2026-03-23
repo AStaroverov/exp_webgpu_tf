@@ -6,6 +6,8 @@ import { disposeNetwork } from "../../../../../ml/src/Models/Utils";
 import { batchAct } from "../../../../../ml/src/PPO/train";
 import { TankAgent } from "./CurrentActorAgent";
 import { random, randomRangeFloat } from '../../../../../../lib/random';
+import { computeObstacleGrid } from '../../../../../ml-common/computeObstacleGrid';
+import { GameDI } from '../../../Game/DI/GameDI';
 
 export type NetworkModelManager = ReturnType<typeof createNetworkModelManager>;
 
@@ -61,7 +63,8 @@ export const createNetworkModelManager = (getter: () => Promise<tf.LayersModel>)
         }
 
         if (scheduledAgents.length > 0) {
-            const currentStates = scheduledAgents.map(({width, height, agent}) => prepareInputArrays(agent.tankEid, width, height));
+            const obstacleGrid = computeObstacleGrid(GameDI.world, GameDI.width, GameDI.height);
+            const currentStates = scheduledAgents.map(({width, height, agent}) => prepareInputArrays(agent.tankEid, width, height, obstacleGrid));
 
             // Assemble state histories for each agent
             const stateHistories: StateHistory[] = scheduledAgents.map(({agent}, i) => {

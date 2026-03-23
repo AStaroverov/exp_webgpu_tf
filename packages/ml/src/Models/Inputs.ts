@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { MAX_TURRETS } from "../../../tanks/src/Plugins/Pilots/Components/TankState";
-import { TANK_FEATURES_DIM, TURRET_FEATURES_DIM, RAY_SLOTS, RAY_FEATURES_DIM, ALLY_FEATURES_DIM, ALLY_SLOTS, BULLET_FEATURES_DIM, BULLET_SLOTS, ENEMY_FEATURES_DIM, ENEMY_SLOTS } from "./Create";
+import { TANK_FEATURES_DIM, TURRET_FEATURES_DIM, RAY_SLOTS, RAY_FEATURES_DIM, ALLY_FEATURES_DIM, ALLY_SLOTS, BULLET_FEATURES_DIM, BULLET_SLOTS, ENEMY_FEATURES_DIM, ENEMY_SLOTS, GRID_CELLS, GRID_CELL_FEATURES } from "./Create";
 import { VEHICLE_TYPE_COUNT } from '../../../tanks/src/Game/Config';
 import { createDenseLayer } from './ApplyLayers';
 import { HISTORY_LENGTH } from '../../../ml-common/historyConfig';
@@ -31,6 +31,9 @@ export function createInputs(name: string) {
     const bulletsInput = tf.input({name: name + '_bulletsInput', shape: [T * BULLET_SLOTS, BULLET_FEATURES_DIM]});
     const bulletsMaskInput = tf.input({name: name + '_bulletsMaskInput', shape: [T * BULLET_SLOTS]});
 
+    // Obstacle grid: [B, GRID_CELLS, GRID_CELL_FEATURES] — static per episode
+    const obstacleGridInput = tf.input({name: name + '_obstacleGridInput', shape: [GRID_CELLS, GRID_CELL_FEATURES]});
+
     return {
         tankInput,
         tankTypeInput,
@@ -47,6 +50,8 @@ export function createInputs(name: string) {
 
         bulletsInput,
         bulletsMaskInput,
+
+        obstacleGridInput,
     };
 }
 
@@ -61,6 +66,7 @@ export function convertInputsToTokens(
         alliesInput,
         alliesTypesInput,
         bulletsInput,
+        obstacleGridInput,
     }: ReturnType<typeof createInputs>,
     dModel: number,
 ) {
@@ -106,6 +112,9 @@ export function convertInputsToTokens(
     // Bullets: [B, T * BULLET_SLOTS, BULLET_FEATURES_DIM]
     const bulletsTok = toToken('bullets', bulletsInput);
 
+    // Obstacle grid: [B, GRID_CELLS, dModel] — static per episode
+    const gridTok = toToken('grid', obstacleGridInput);
+
     return {
         tankTok,
         turretTok,
@@ -113,5 +122,6 @@ export function convertInputsToTokens(
         alliesTok,
         enemiesTok,
         bulletsTok,
+        gridTok,
     };
 }

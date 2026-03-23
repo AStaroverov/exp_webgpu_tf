@@ -109,6 +109,16 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         transformerDepth: ceil(2 * config.depth),
     });
 
+    // Grid Token
+    const summarizedGrid = summarize({
+        name: modelName + '_summarizedGrid',
+        heads: config.heads,
+        length: 4,
+        token: tokens.gridTok,
+        perceiverDepth: ceil(2 * config.depth),
+        transformerDepth: ceil(1 * config.depth),
+    });
+
     // Projectiles Token
     const summarizedProjectiles = summarize({
         name: modelName + '_summarizedProjectiles',
@@ -129,6 +139,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
                 summarizedVehicle,
                 summarizedRays,
                 summarizedProjectiles,
+                summarizedGrid,
             ]) as tf.SymbolicTensor;
     }
     const summarizedHeads = summarize({

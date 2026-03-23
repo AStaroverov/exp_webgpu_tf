@@ -1,5 +1,6 @@
 import { frameTasks } from '../../lib/TasksScheduler/frameTasks.ts';
 import { prepareInputArrays } from '../ml-common/InputArrays.ts';
+import { computeObstacleGrid } from '../ml-common/computeObstacleGrid.ts';
 import { createGame } from '../tanks/src/Game/createGame.ts';
 import { GameDI } from '../tanks/src/Game/DI/GameDI.ts';
 import { createPlayer } from '../tanks/src/Game/ECS/Entities/Player.ts';
@@ -84,7 +85,7 @@ frameTasks.addInterval(() => {
 
         snapshotTankInputTensor();
 
-        prepareInputArrays(tanks[0], GameDI.width, GameDI.height);
+        prepareInputArrays(tanks[0], GameDI.width, GameDI.height, computeObstacleGrid(GameDI.world, GameDI.width, GameDI.height));
     }
 
     // const enemyTankPosition = getMatrixTranslation(GlobalTransform.matrix.getBatch(enemyEid));

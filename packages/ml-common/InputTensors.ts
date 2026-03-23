@@ -6,6 +6,9 @@ import {
     BULLET_SLOTS,
     ENEMY_FEATURES_DIM,
     ENEMY_SLOTS,
+    GRID_CELL_FEATURES,
+    GRID_CELLS,
+    GRID_SIZE,
     RAY_FEATURES_DIM,
     RAY_SLOTS,
     TANK_FEATURES_DIM,
@@ -60,6 +63,25 @@ function packI32(
     return buf;
 }
 
+// Pack obstacle grid with positional features: [obstacle, cell_norm_x, cell_norm_y]
+// Static per episode — not multiplied by T.
+function packGridF32(histories: StateHistory[]): Float32Array {
+    const B = histories.length;
+    const buf = new Float32Array(B * GRID_CELLS * GRID_CELL_FEATURES);
+    let offset = 0;
+    for (let b = 0; b < B; b++) {
+        const grid = histories[b][0].obstacleGrid;
+        for (let row = 0; row < GRID_SIZE; row++) {
+            for (let col = 0; col < GRID_SIZE; col++) {
+                buf[offset++] = grid[row * GRID_SIZE + col];
+                buf[offset++] = (col + 0.5) / GRID_SIZE - 0.5;
+                buf[offset++] = (row + 0.5) / GRID_SIZE - 0.5;
+            }
+        }
+    }
+    return buf;
+}
+
 export function createInputTensors(
     histories: StateHistory[],
 ): tf.Tensor[] {
@@ -79,5 +101,6 @@ export function createInputTensors(
         tf.tensor2d(packF32(histories, s => s.alliesMask, ALLY_SLOTS), [B, T * ALLY_SLOTS]),
         tf.tensor3d(packF32(histories, s => s.bulletsFeatures, BULLET_SLOTS * BULLET_FEATURES_DIM), [B, T * BULLET_SLOTS, BULLET_FEATURES_DIM]),
         tf.tensor2d(packF32(histories, s => s.bulletsMask, BULLET_SLOTS), [B, T * BULLET_SLOTS]),
+        tf.tensor3d(packGridF32(histories), [B, GRID_CELLS, GRID_CELL_FEATURES]),
     ];
 }
