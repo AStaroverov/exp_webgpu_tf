@@ -4,7 +4,6 @@ import { TANK_FEATURES_DIM, TURRET_FEATURES_DIM, RAY_SLOTS, RAY_FEATURES_DIM, AL
 import { VEHICLE_TYPE_COUNT } from '../../../tanks/src/Game/Config';
 import { createDenseLayer } from './ApplyLayers';
 import { HISTORY_LENGTH } from '../../../ml-common/historyConfig';
-import { TemporalPositionLayer } from './Layers/TemporalPositionLayer';
 
 const T = HISTORY_LENGTH;
 
@@ -79,14 +78,6 @@ export function convertInputsToTokens(
         return typeEmbs.length > 0 ? tf.layers.add({ name: `${name}_concat` }).apply([token, ...typeEmbs]) as tf.SymbolicTensor : token;
     };
 
-    const addTemporalEncoding = (name: string, token: tf.SymbolicTensor, slotsPerFrame: number): tf.SymbolicTensor => {
-        return new TemporalPositionLayer({
-            name: `${name}_temporalPos`,
-            dModel,
-            slotsPerFrame,
-        }).apply(token) as tf.SymbolicTensor;
-    };
-
     const vehicleTypeEmbedding = tf.layers.embedding({
         name: 'vehicleTypeEmbedding',
         inputDim: VEHICLE_TYPE_COUNT,
@@ -94,26 +85,26 @@ export function convertInputsToTokens(
         embeddingsInitializer: 'zeros',
     });
 
-    // Tank: already [B, T, TANK_FEATURES_DIM] — 3D, no need for to3D
-    const tankVehicleEmb = vehicleTypeEmbedding.apply(tankTypeInput) as tf.SymbolicTensor; // [B, T, dModel]
-    const tankTok = addTemporalEncoding('tank', toToken('tank', tankInput, tankVehicleEmb), 1); // [B, T, dModel]
+    // Tank: [B, T, TANK_FEATURES_DIM]
+    const tankVehicleEmb = vehicleTypeEmbedding.apply(tankTypeInput) as tf.SymbolicTensor;
+    const tankTok = toToken('tank', tankInput, tankVehicleEmb);
 
     // Turret: [B, T * MAX_TURRETS, TURRET_FEATURES_DIM]
-    const turretTok = addTemporalEncoding('turret', toToken('turret', turretInput), MAX_TURRETS);
+    const turretTok = toToken('turret', turretInput);
 
     // Rays: [B, T * RAY_SLOTS, RAY_FEATURES_DIM]
-    const raysTok = addTemporalEncoding('rays', toToken('rays', raysInput), RAY_SLOTS);
+    const raysTok = toToken('rays', raysInput);
 
     // Enemies: [B, T * ENEMY_SLOTS, ENEMY_FEATURES_DIM]
     const enemiesVehicleEmb = vehicleTypeEmbedding.apply(enemiesTypesInput) as tf.SymbolicTensor;
-    const enemiesTok = addTemporalEncoding('enemies', toToken('enemies', enemiesInput, enemiesVehicleEmb), ENEMY_SLOTS);
+    const enemiesTok = toToken('enemies', enemiesInput, enemiesVehicleEmb);
 
     // Allies: [B, T * ALLY_SLOTS, ALLY_FEATURES_DIM]
     const alliesVehicleEmb = vehicleTypeEmbedding.apply(alliesTypesInput) as tf.SymbolicTensor;
-    const alliesTok = addTemporalEncoding('allies', toToken('allies', alliesInput, alliesVehicleEmb), ALLY_SLOTS);
+    const alliesTok = toToken('allies', alliesInput, alliesVehicleEmb);
 
     // Bullets: [B, T * BULLET_SLOTS, BULLET_FEATURES_DIM]
-    const bulletsTok = addTemporalEncoding('bullets', toToken('bullets', bulletsInput), BULLET_SLOTS);
+    const bulletsTok = toToken('bullets', bulletsInput);
 
     return {
         tankTok,
