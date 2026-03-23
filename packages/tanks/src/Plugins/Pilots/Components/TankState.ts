@@ -18,7 +18,7 @@ export const RAY_LENGTH = 1200;
 export const RAY_BUFFER = 7; // [hitType, hitEid, rootX, rootY, dirX, dirY, distance]
 
 // Total rays count - all rays are unified, targets replace environment rays at their angle
-export const RAYS_COUNT = 32;
+export const RAYS_COUNT = 128;
 
 // Maximum number of direct target rays (enemies + allies)
 export const MAX_TARGET_RAYS = MAX_ENEMIES + MAX_ALLIES;

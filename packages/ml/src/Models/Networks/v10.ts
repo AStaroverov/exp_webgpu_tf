@@ -103,7 +103,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const summarizedRays = summarize({
         name: modelName + '_summarizedRays',
         heads: config.heads,
-        length: 4,
+        length: 8,
         token: tokens.raysTok,
         perceiverDepth: ceil(2 * config.depth),
         transformerDepth: ceil(2 * config.depth),
