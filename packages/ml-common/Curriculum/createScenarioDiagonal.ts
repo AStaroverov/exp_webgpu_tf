@@ -16,7 +16,7 @@ export function createScenarioDiagonal(options: ScenarioCoreOptions): Scenario {
 
     const tankOptions = {
         fieldSize: scenario.width,
-        edgeMargin: 300,
+        edgeMargin: 100,
         maxDeviation: PI / 12,
         count: 1,
     };

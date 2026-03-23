@@ -5,7 +5,7 @@ import { createMLPlugin } from '../../tanks/src/Plugins/ML/createMlPlugin.ts';
 import { createPilotsPlugin } from '../../tanks/src/Plugins/Pilots/createPilotsPlugin.ts';
 import { LEARNING_STEPS } from '../consts.ts';
 
-const MAX_SIZE = 1600;
+const MAX_SIZE = 1400;
 const MIN_SIZE = 600;
 
 export function createBattlefield(options?: { size?: number, iteration?: number }) {
