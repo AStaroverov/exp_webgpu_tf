@@ -17,7 +17,6 @@ import { AdamW } from './Optimizer/AdamW.ts';
 
 export { RAY_HIT_TYPE_COUNT }; // LightTank, MediumTank, HeavyTank, PlayerTank, Harvester, MeleeCar
 
-export const BATTLE_FEATURES_DIM = 2;
 export const TANK_FEATURES_DIM = 8;
 
 export const TURRET_SLOTS = MAX_TURRETS;

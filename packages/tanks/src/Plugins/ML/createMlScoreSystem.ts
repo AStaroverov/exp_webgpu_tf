@@ -13,8 +13,8 @@ import { computeObstacleGrid } from "../../../../ml-common/computeObstacleGrid";
 import { computeConnectivityMap } from "../../../../ml-common/computeConnectivityMap";
 import { GRID_SIZE } from "../../../../ml/src/Models/Create";
 
-const NAVIGATION_COEFF = 0.003;
-const AIM_COEFF = 0.005;
+const NAVIGATION_COEFF = 0.0005;
+const AIM_COEFF = 0.0005;
 const MOVE_THRESHOLD = 0.1;
 const SPEED_THRESHOLD = 1;
 

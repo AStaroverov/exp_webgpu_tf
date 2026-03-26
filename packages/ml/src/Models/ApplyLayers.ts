@@ -191,12 +191,23 @@ export function applySelfTransformerLayer(
         name: `${name}_ln2`,
     }).apply(attnResidual) as tf.SymbolicTensor;
 
-    const ffnInner = createDenseLayer({
+    // SiLU-gated FFN: gate(x) * linear(x)
+    const ffnGate = createDenseLayer({
+        name: `${name}_ffn_gate`,
+        units: dModel * 4,
+        useBias: false,
+        activation: 'sigmoid',
+    }).apply(ffnNorm) as tf.SymbolicTensor;
+
+    const ffnUp = createDenseLayer({
         name: `${name}_ffn1`,
         units: dModel * 4,
         useBias: false,
-        activation: 'relu',
+        activation: 'linear',
     }).apply(ffnNorm) as tf.SymbolicTensor;
+
+    const ffnInner = tf.layers.multiply({name: `${name}_ffn_silu`})
+        .apply([ffnUp, ffnGate]) as tf.SymbolicTensor;
 
     const ffnOut = createDenseLayer({
         name: `${name}_ffn2`,
@@ -290,13 +301,25 @@ export function applySwinTransformerLayer(
         name: `${name}_ln2`,
     }).apply(attnResidual) as tf.SymbolicTensor;
 
-    const ffnInner = createDenseLayer({
+    // SiLU-gated FFN: gate(x) * linear(x)
+    const ffnGate = createDenseLayer({
+        name: `${name}_ffn_gate`,
+        units: dModel * 4,
+        useBias: false,
+        activation: 'sigmoid',
+        noisy,
+    }).apply(ffnNorm) as tf.SymbolicTensor;
+
+    const ffnUp = createDenseLayer({
         name: `${name}_ffn1`,
         units: dModel * 4,
         useBias: false,
-        activation: 'relu',
+        activation: 'linear',
         noisy,
     }).apply(ffnNorm) as tf.SymbolicTensor;
+
+    const ffnInner = tf.layers.multiply({name: `${name}_ffn_silu`})
+        .apply([ffnUp, ffnGate]) as tf.SymbolicTensor;
 
     const ffnOut = createDenseLayer({
         name: `${name}_ffn2`,

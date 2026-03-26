@@ -32,7 +32,7 @@ export function applyPerceiverLayer({
             ? kvMask(name, i)
             : kvMask ?? new MaskLikeLayer({ name: name + '_kvMaskLike' + i }).apply(kvTokI) as tf.SymbolicTensor;
         
-        x = applyCrossAttentionLayer({
+        const crossOut = applyCrossAttentionLayer({
             name: `${name}/cross/depth${i}`,
             heads,
             qTok: x,
@@ -41,6 +41,8 @@ export function applyPerceiverLayer({
             kvMask: kvMaskI,
             preNorm,
         });
+        x = tf.layers.add({name: `${name}/cross/depth${i}_residual`})
+            .apply([x, crossOut]) as tf.SymbolicTensor;
         x = applySelfTransformerLayer({
             name: `${name}/self/depth${i}`,
             heads,

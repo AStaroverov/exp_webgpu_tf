@@ -5,7 +5,6 @@ import { throwingError } from '../../lib/throwingError.ts';
 import {
     ALLY_FEATURES_DIM,
     ALLY_SLOTS,
-    BATTLE_FEATURES_DIM,
     BULLET_FEATURES_DIM,
     BULLET_SLOTS,
     ENEMY_FEATURES_DIM,
@@ -42,8 +41,6 @@ const BULLETS_INDEXES = new Uint32Array(Array.from({ length: BULLET_SLOTS }, (_,
 
 
 export type InputArrays = {
-    battleFeatures: Float32Array,
-    
     tankType: Int32Array,          // tank type for embedding
     tankFeatures: Float32Array,
     turretFeatures: Float32Array,
@@ -70,13 +67,6 @@ export function prepareInputArrays(
     height: number,
     obstacleGrid: Float32Array,
 ): InputArrays {
-    // ---- Battle features ----
-    const battleFeatures = new Float32Array(BATTLE_FEATURES_DIM);
-    let bi = 0;
-
-    battleFeatures[bi++] = log1p(width);
-    battleFeatures[bi++] = log1p(height);
-
     // ---- Tank features ----
     const tankFeatures = new Float32Array(TANK_FEATURES_DIM);
     let ti = 0;
@@ -241,8 +231,6 @@ export function prepareInputArrays(
     }
 
     const result = {
-        battleFeatures,
-        
         tankType,
         tankFeatures,
         turretFeatures,
@@ -271,7 +259,6 @@ export function prepareInputArrays(
 }
 
 export function prepareRandomInputArrays(): InputArrays {
-    const battleFeatures = new Float32Array(BATTLE_FEATURES_DIM).map(() => random());
     const tankFeatures = new Float32Array(TANK_FEATURES_DIM).map(() => random());
     const tankType = new Int32Array(1).map(() => randomRangeInt(0, 5));
     const raysFeatures = new Float32Array(RAY_SLOTS * RAY_FEATURES_DIM).map(() => random());
@@ -292,8 +279,6 @@ export function prepareRandomInputArrays(): InputArrays {
     const obstacleGrid = new Float32Array(GRID_CELLS).map(() => randomRangeInt(0, 1));
 
     return {
-        battleFeatures,
-
         tankFeatures,
         tankType,
         turretFeatures,
