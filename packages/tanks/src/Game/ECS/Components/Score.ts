@@ -6,15 +6,14 @@ import { TypedArray } from '../../../../../renderer/src/utils.ts';
 const POSITIVE_METRICS = [
     'hitEnemy',
     'killEnemy',
-    'adjacentEnemyDetection',
-    'exploration',
+    'aimAlignment',
+    'navigation',
     'spices',
     'debris',
 ] as const;
 const NEGATIVE_METRICS = [
     'friendlyFire',
     'gotHit',
-    'proximityPenalty',
 ] as const;
 const METRICS = [...POSITIVE_METRICS, ...NEGATIVE_METRICS] as const;
 const ScoreData = METRICS.reduce(
