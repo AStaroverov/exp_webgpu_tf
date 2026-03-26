@@ -7,7 +7,6 @@ import { analyzeVTrace } from '../../../../ml-common/analyzeVTrace.ts';
 import { forceExitChannel, metricsChannels } from '../../../../ml-common/channels.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
 import { flatTypedArray } from '../../../../ml-common/flat.ts';
-import { assembleStateHistory } from '../../../../ml-common/InputArrays.ts';
 import { AgentMemoryBatch, PreparedBatch } from '../../../../ml-common/Memory.ts';
 import { getNetworkSettings } from '../../../../ml-common/utils.ts';
 import { Model } from '../../Models/def.ts';
@@ -158,9 +157,7 @@ export function createLearnerManager() {
 function squeezeBatches(batches: AgentMemoryBatch[]): PreparedBatch {
     return {
         size: batches.reduce((acc, b) => acc + b.size, 0),
-        states: batches.flatMap(b =>
-            b.states.map((_, i) => assembleStateHistory(b.states, i))
-        ),
+        states: batches.flatMap(b => b.states),
         actions: batches.map(b => b.actions).flat(),
         logits: batches.map(b => b.logits).flat(),
         dones: flatTypedArray(batches.map(b => b.dones)),

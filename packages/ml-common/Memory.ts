@@ -1,4 +1,4 @@
-import { InputArrays, StateHistory } from './InputArrays.ts';
+import { InputArrays } from './InputArrays.ts';
 
 export type AgentMemoryBatch = {
     size: number,
@@ -10,9 +10,7 @@ export type AgentMemoryBatch = {
     logProbs: Float32Array,
 }
 
-export type PreparedBatch = Omit<AgentMemoryBatch, 'states'> & {
-    states: StateHistory[],
-}
+export type PreparedBatch = AgentMemoryBatch;
 
 export class AgentMemory {
     public states: InputArrays[] = [];

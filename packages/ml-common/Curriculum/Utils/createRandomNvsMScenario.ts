@@ -1,8 +1,17 @@
-import { PI, sqrt, pow, min } from '../../../../lib/math.ts';
+import { PI } from '../../../../lib/math.ts';
 import { randomRangeFloat, randomRangeInt } from '../../../../lib/random.ts';
 import { createPlayer } from '../../../tanks/src/Game/ECS/Entities/Player.ts';
 import { createTank } from '../../../tanks/src/Game/ECS/Entities/Tank/createTank.ts';
+import { createBuilding } from '../../../tanks/src/Game/ECS/Entities/Building/index.ts';
 import { VehicleType } from '../../../tanks/src/Game/Config/vehicles.ts';
+import {
+    resetSpawnGrid,
+    getSpawnGrid,
+    isCellEmpty,
+    getCellWorldPosition,
+    setCellContent,
+    CellContent,
+} from '../../../tanks/src/Arena/State/Game/SpawnGrid.ts';
 import { createScenarioCore, ScenarioCoreOptions } from '../createScenarioCore.ts';
 import { Scenario } from '../types.ts';
 import { BotLevel, createBotFeatures } from './botFeatures.ts';
@@ -11,11 +20,9 @@ import { fillWithSimpleHeuristicAgents } from './fillWithSimpleHeuristicAgents.t
 
 const tankTypes = [VehicleType.LightTank, VehicleType.MediumTank, VehicleType.HeavyTank] as const;
 
-const MIN_RADIUS = 100;
-
 /**
- * Creates a scenario with N agents and M bots at random positions.
- * Follows DRY by providing a generic way to spawn teams.
+ * Creates a scenario with N agents and M bots at random grid positions.
+ * Uses SpawnGrid to guarantee no overlap between tanks and obstacles.
  */
 export function createRandomNvsMScenario(
     options: ScenarioCoreOptions,
@@ -24,62 +31,54 @@ export function createRandomNvsMScenario(
     botLevel: BotLevel = 0,
 ): Scenario {
     const scenario = createScenarioCore(options);
-    const margin = 100;
-    const tankPositions: { x: number, y: number }[] = [];
+    resetSpawnGrid();
+    const grid = getSpawnGrid();
 
-    const getMinDist = (x: number, y: number): number => {
-        let minDist = Infinity;
-        for (let i = 0; i < tankPositions.length; i++) {
-            const tank = tankPositions[i];
-            const dist = sqrt(pow(tank.x - x, 2) + pow(tank.y - y, 2));
-            minDist = min(minDist, dist);
+    // Place one building in a random interior cell
+    const interiorCells: { col: number; row: number }[] = [];
+    for (let row = 1; row < grid.rows - 1; row++) {
+        for (let col = 1; col < grid.cols - 1; col++) {
+            interiorCells.push({ col, row });
         }
-        return minDist;
-    };
+    }
+    const buildingCell = interiorCells[randomRangeInt(0, interiorCells.length - 1)];
+    const buildingPos = getCellWorldPosition(buildingCell.col, buildingCell.row);
+    createBuilding({ x: buildingPos.x, y: buildingPos.y });
+    setCellContent(buildingCell.col, buildingCell.row, CellContent.Obstacle);
 
-    const findSpawnPosition = () => {
-        let x: number, y: number, dist = Infinity, j = 0;
-
+    // Spawn tanks in random empty cells
+    const spawnTank = (teamId: number) => {
+        const totalCells = grid.cols * grid.rows;
+        let attempts = 0;
+        let col: number, row: number;
         do {
-            j++;
-            const rx = randomRangeFloat(margin, scenario.width - margin);
-            const ry = randomRangeFloat(margin, scenario.height - margin);
-            const d = getMinDist(rx, ry);
-            if (dist === Infinity || d > dist) {
-                dist = d;
-                x = rx;
-                y = ry;
-            }
-        } while (dist < MIN_RADIUS * 2 && j < 100);
+            const idx = randomRangeInt(0, totalCells - 1);
+            col = idx % grid.cols;
+            row = Math.floor(idx / grid.cols);
+            attempts++;
+        } while (!isCellEmpty(col!, row!) && attempts < 200);
 
-        return { x: x!, y: y! };
+        const { x, y } = getCellWorldPosition(col!, row!);
+        setCellContent(col!, row!, CellContent.Vehicle);
+
+        createTank({
+            type: tankTypes[randomRangeInt(0, tankTypes.length - 1)],
+            playerId: createPlayer(teamId),
+            teamId,
+            x,
+            y,
+            rotation: PI * randomRangeFloat(0, 2),
+            color: teamId === 0
+                ? [0, randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1]
+                : [1, randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1],
+        });
     };
 
-    const createTeamTanks = (count: number, teamId: number) => {
-        for (let i = 0; i < count; i++) {
-            const { x, y } = findSpawnPosition();
-            tankPositions.push({ x, y });
-
-            createTank({
-                type: tankTypes[randomRangeInt(0, tankTypes.length - 1)],
-                playerId: createPlayer(teamId),
-                teamId,
-                x,
-                y,
-                rotation: PI * randomRangeFloat(0, 2),
-                color: teamId === 0
-                    ? [0, randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1]
-                    : [1, randomRangeFloat(0.2, 0.7), randomRangeFloat(0.2, 0.7), 1],
-            });
-        }
-    };
-
-    createTeamTanks(agentsCount, 0);
+    for (let i = 0; i < agentsCount; i++) spawnTank(0);
     fillWithCurrentAgents(scenario);
 
-    createTeamTanks(botsCount, 1);
+    for (let i = 0; i < botsCount; i++) spawnTank(1);
     fillWithSimpleHeuristicAgents(scenario, createBotFeatures(botLevel));
 
     return scenario;
 }
-

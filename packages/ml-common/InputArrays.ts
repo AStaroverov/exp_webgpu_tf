@@ -40,9 +40,6 @@ const ENEMIES_INDEXES = new Uint32Array(Array.from({ length: ENEMY_SLOTS }, (_, 
 const ALLIES_INDEXES = new Uint32Array(Array.from({ length: ALLY_SLOTS }, (_, i) => i));
 const BULLETS_INDEXES = new Uint32Array(Array.from({ length: BULLET_SLOTS }, (_, i) => i));
 
-import { HISTORY_LENGTH, HISTORY_OFFSETS } from './historyConfig.ts';
-export { HISTORY_LENGTH, HISTORY_OFFSETS };
-export type StateHistory = InputArrays[];  // always length HISTORY_LENGTH: [t, t-3, t-6, t-9, t-12]
 
 export type InputArrays = {
     battleFeatures: Float32Array,
@@ -119,11 +116,12 @@ export function prepareInputArrays(
         const turretY = turretsData[srcOffset + 2];
         const turretRotation = turretsData[srcOffset + 3];
 
-        turretFeatures[dstOffset + 0] = norm(turretX - tankX, QUANT);
-        turretFeatures[dstOffset + 1] = norm(turretY - tankY, QUANT);
+        turretFeatures[dstOffset + 0] = norm(turretX, width / 2);
+        turretFeatures[dstOffset + 1] = norm(turretY, height / 2);
         turretFeatures[dstOffset + 2] = cos(turretRotation);
         turretFeatures[dstOffset + 3] = sin(turretRotation);
     }
+    
     // ---- Enemies features ----
     const enemiesMask = new Float32Array(ENEMY_SLOTS);
     const enemiesTypes = new Int32Array(ENEMY_SLOTS);
@@ -153,10 +151,10 @@ export function prepareInputArrays(
         enemiesMask[w] = 1;
         enemiesTypes[w] = eType;
         enemiesFeatures[dstOffset + 0] = hp;
-        enemiesFeatures[dstOffset + 1] = norm(eX - tankX, QUANT);
-        enemiesFeatures[dstOffset + 2] = norm(eY - tankY, QUANT);
-        enemiesFeatures[dstOffset + 3] = norm(eVx - speedX, QUANT);
-        enemiesFeatures[dstOffset + 4] = norm(eVy - speedY, QUANT);
+        enemiesFeatures[dstOffset + 1] = norm(eX, width / 2);
+        enemiesFeatures[dstOffset + 2] = norm(eY, height / 2);
+        enemiesFeatures[dstOffset + 3] = norm(eVx, QUANT);
+        enemiesFeatures[dstOffset + 4] = norm(eVy, QUANT);
         enemiesFeatures[dstOffset + 5] = cos(eTurretRotation);
         enemiesFeatures[dstOffset + 6] = sin(eTurretRotation);
         enemiesFeatures[dstOffset + 7] = logNorm(eColliderRadius, QUANT);
@@ -191,10 +189,10 @@ export function prepareInputArrays(
         alliesMask[w] = 1;
         alliesTypes[w] = aType;
         alliesFeatures[dstOffset + 0] = hp;
-        alliesFeatures[dstOffset + 1] = norm(aX - tankX, QUANT);
-        alliesFeatures[dstOffset + 2] = norm(aY - tankY, QUANT);
-        alliesFeatures[dstOffset + 3] = norm(aVx - speedX, QUANT);
-        alliesFeatures[dstOffset + 4] = norm(aVy - speedY, QUANT);
+        alliesFeatures[dstOffset + 1] = norm(aX, width / 2);
+        alliesFeatures[dstOffset + 2] = norm(aY, height / 2);
+        alliesFeatures[dstOffset + 3] = norm(aVx, QUANT);
+        alliesFeatures[dstOffset + 4] = norm(aVy, QUANT);
         alliesFeatures[dstOffset + 5] = cos(aTurretRotation);
         alliesFeatures[dstOffset + 6] = sin(aTurretRotation);
         alliesFeatures[dstOffset + 7] = logNorm(aColliderRadius, QUANT);
@@ -239,7 +237,6 @@ export function prepareInputArrays(
         encodeRayFeatures(
             raysBuffer, srcOffset,
             raysFeatures, dstOffset,
-            tankX, tankY,
         );
     }
 
@@ -271,41 +268,6 @@ export function prepareInputArrays(
     }
 
     return result;
-}
-
-export function assembleStateHistory(
-    episodeStates: InputArrays[],
-    stepIndex: number,
-): StateHistory {
-    const history: InputArrays[] = [];
-    for (let f = 0; f < HISTORY_LENGTH; f++) {
-        const targetIdx = stepIndex - HISTORY_OFFSETS[f];
-        const clampedIdx = Math.max(0, targetIdx);
-        history.push(episodeStates[clampedIdx]);
-    }
-    return history;
-}
-
-/**
- * Собирает StateHistory для текущего шага без копирования всего массива.
- * Эквивалент assembleStateHistory([...pastStates, currentState], pastStates.length),
- * но O(HISTORY_LENGTH) вместо O(N).
- */
-export function assembleCurrentStateHistory(
-    pastStates: InputArrays[],
-    currentState: InputArrays,
-): StateHistory {
-    const lastIdx = pastStates.length;
-    const history: InputArrays[] = [];
-    for (let f = 0; f < HISTORY_LENGTH; f++) {
-        const targetIdx = Math.max(0, lastIdx - HISTORY_OFFSETS[f]);
-        history.push(targetIdx >= pastStates.length ? currentState : pastStates[targetIdx]);
-    }
-    return history;
-}
-
-export function prepareRandomStateHistory(): StateHistory {
-    return Array.from({ length: HISTORY_LENGTH }, () => prepareRandomInputArrays());
 }
 
 export function prepareRandomInputArrays(): InputArrays {
@@ -362,23 +324,17 @@ function encodeRayFeatures(
     srcOffset: number,
     raysFeatures: Float32Array,
     dstOffset: number,
-    tankX: number,
-    tankY: number,
 ): void {
     const hitType = raysBuffer[srcOffset + 0];
-    const rootX = raysBuffer[srcOffset + 2];
-    const rootY = raysBuffer[srcOffset + 3];
     const dirX = raysBuffer[srcOffset + 4];
     const dirY = raysBuffer[srcOffset + 5];
     const distance = raysBuffer[srcOffset + 6];
 
-    raysFeatures[dstOffset + 0] = norm(rootX - tankX, QUANT);
-    raysFeatures[dstOffset + 1] = norm(rootY - tankY, QUANT);
-    raysFeatures[dstOffset + 2] = dirX;
-    raysFeatures[dstOffset + 3] = dirY;
-    raysFeatures[dstOffset + 4] = norm(distance, QUANT);
+    raysFeatures[dstOffset + 0] = dirX;
+    raysFeatures[dstOffset + 1] = dirY;
+    raysFeatures[dstOffset + 2] = norm(distance, QUANT);
     // hit obstacle encoding: 0 = none, -1 = obstacle, 1 = vehicle
-    raysFeatures[dstOffset + 5] = hitType === RayHitType.NONE
+    raysFeatures[dstOffset + 3] = hitType === RayHitType.NONE
         ? 0
         : hitType === RayHitType.OBSTACLE
             ? -1
@@ -386,7 +342,7 @@ function encodeRayFeatures(
                 ? 1
                 : throwingError(`Invalid hit type: ${hitType}`);
     // ally/enemy encoding: 1 = ally, -1 = enemy, 0 = other
-    raysFeatures[dstOffset + 6] = hitType === RayHitType.ALLY_VEHICLE
+    raysFeatures[dstOffset + 4] = hitType === RayHitType.ALLY_VEHICLE
         ? 1
         : hitType === RayHitType.ENEMY_VEHICLE
             ? -1

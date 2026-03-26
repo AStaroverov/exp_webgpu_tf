@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 
-import { InputArrays, prepareInputArrays, assembleCurrentStateHistory, HISTORY_LENGTH, type StateHistory } from "../../../../../ml-common/InputArrays";
+import { InputArrays, prepareInputArrays } from "../../../../../ml-common/InputArrays";
 import { patientAction } from "../../../../../ml-common/utils";
 import { disposeNetwork } from "../../../../../ml/src/Models/Utils";
 import { batchAct } from "../../../../../ml/src/PPO/train";
@@ -64,17 +64,8 @@ export const createNetworkModelManager = (getter: () => Promise<tf.LayersModel>)
 
         if (scheduledAgents.length > 0) {
             const obstacleGrid = computeObstacleGrid(GameDI.world, GameDI.width, GameDI.height);
-            const currentStates = scheduledAgents.map(({width, height, agent}) => prepareInputArrays(agent.tankEid, width, height, obstacleGrid));
-
-            // Assemble state histories for each agent
-            const stateHistories: StateHistory[] = scheduledAgents.map(({agent}, i) => {
-                const memory = agent.getMemory?.();
-                if (memory && memory.states.length > 0) {
-                    return assembleCurrentStateHistory(memory.states, currentStates[i]);
-                }
-                // No history available: pad with current state repeated
-                return Array.from({ length: HISTORY_LENGTH }, () => currentStates[i]);
-            });
+            const currentStates = scheduledAgents
+                .map(({width, height, agent}) => prepareInputArrays(agent.tankEid, width, height, obstacleGrid));
 
             const noises = train
                 ? scheduledAgents.map(({agent}) => agent.getNoise?.())
@@ -82,7 +73,7 @@ export const createNetworkModelManager = (getter: () => Promise<tf.LayersModel>)
             const options = train
                 ? { greedy: false, epsilon: randomRangeFloat(0.05, 0.3), noises }
                 : { greedy: true };
-            const result = batchAct(network, stateHistories, options);
+            const result = batchAct(network, currentStates, options);
 
             for (const [index, {agent}] of scheduledAgents.entries()) {
                 computedAgents.set(agent, {

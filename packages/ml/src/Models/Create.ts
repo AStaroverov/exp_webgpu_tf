@@ -6,7 +6,6 @@ import {
     MAX_ENEMIES,
     RAYS_COUNT,
     RAY_HIT_TYPE_COUNT,
-    RAY_BUFFER,
     MAX_TURRETS,
 } from '../../../tanks/src/Plugins/Pilots/Components/TankState.ts';
 
@@ -26,11 +25,11 @@ export const TURRET_FEATURES_DIM = 4;
 
 // Enemies: [hp, x, y, vx, vy, turretRotationCos, turretRotationSin, colliderRadius]
 export const ENEMY_SLOTS = MAX_ENEMIES;
-export const ENEMY_FEATURES_DIM = 8 + 1; // 1 type embedding
+export const ENEMY_FEATURES_DIM = 8;
 
 // Allies: [hp, x, y, vx, vy, turretRotationCos, turretRotationSin, colliderRadius]
 export const ALLY_SLOTS = MAX_ALLIES;
-export const ALLY_FEATURES_DIM = 8 + 1; // 1 type embedding
+export const ALLY_FEATURES_DIM = 8;
 
 // Bullets: [x, y, vx, vy]
 export const BULLET_SLOTS = MAX_BULLETS;
@@ -38,7 +37,7 @@ export const BULLET_FEATURES_DIM = 4;
 
 // Unified rays (environment + turret rays combined)
 export const RAY_SLOTS = RAYS_COUNT;
-export const RAY_FEATURES_DIM = RAY_BUFFER - 1 + 2; // [locRootX, locRootY, locDirX, locDirY, distance, hitObstacle, hitVehicle]
+export const RAY_FEATURES_DIM = 5; // [dirX, dirY, distance, hitObstacle, hitVehicle]
 
 // Obstacle spatial map (16×16 grid)
 export const GRID_SIZE = 16;

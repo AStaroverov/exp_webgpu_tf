@@ -3,33 +3,30 @@ import { MAX_TURRETS } from "../../../tanks/src/Plugins/Pilots/Components/TankSt
 import { TANK_FEATURES_DIM, TURRET_FEATURES_DIM, RAY_SLOTS, RAY_FEATURES_DIM, ALLY_FEATURES_DIM, ALLY_SLOTS, BULLET_FEATURES_DIM, BULLET_SLOTS, ENEMY_FEATURES_DIM, ENEMY_SLOTS, GRID_CELLS, GRID_CELL_FEATURES } from "./Create";
 import { VEHICLE_TYPE_COUNT } from '../../../tanks/src/Game/Config';
 import { createDenseLayer } from './ApplyLayers';
-import { HISTORY_LENGTH } from '../../../ml-common/historyConfig';
-
-const T = HISTORY_LENGTH;
 
 export function createInputs(name: string) {
-    // Tank features: [B, T, TANK_FEATURES_DIM] — T tokens (one per temporal frame)
-    const tankInput = tf.input({name: name + '_tankInput', shape: [T, TANK_FEATURES_DIM]});
-    // Tank type: [B, T] — one type per frame
-    const tankTypeInput = tf.input({name: name + '_tankTypeInput', shape: [T]});
-    // Turret: [B, T * MAX_TURRETS, TURRET_FEATURES_DIM]
-    const turretInput = tf.input({name: name + '_turretInput', shape: [T * MAX_TURRETS, TURRET_FEATURES_DIM]});
-    // Rays: [B, T * RAY_SLOTS, RAY_FEATURES_DIM]
-    const raysInput = tf.input({name: name + '_raysInput', shape: [T * RAY_SLOTS, RAY_FEATURES_DIM]});
+    // Tank features: [B, 1, TANK_FEATURES_DIM]
+    const tankInput = tf.input({name: name + '_tankInput', shape: [1, TANK_FEATURES_DIM]});
+    // Tank type: [B, 1]
+    const tankTypeInput = tf.input({name: name + '_tankTypeInput', shape: [1]});
+    // Turret: [B, MAX_TURRETS, TURRET_FEATURES_DIM]
+    const turretInput = tf.input({name: name + '_turretInput', shape: [MAX_TURRETS, TURRET_FEATURES_DIM]});
+    // Rays: [B, RAY_SLOTS, RAY_FEATURES_DIM]
+    const raysInput = tf.input({name: name + '_raysInput', shape: [RAY_SLOTS, RAY_FEATURES_DIM]});
 
-    // Enemies: [B, T * ENEMY_SLOTS, ENEMY_FEATURES_DIM]
-    const enemiesInput = tf.input({name: name + '_enemiesInput', shape: [T * ENEMY_SLOTS, ENEMY_FEATURES_DIM]});
-    const enemiesTypesInput = tf.input({name: name + '_enemiesTypesInput', shape: [T * ENEMY_SLOTS]});
-    const enemiesMaskInput = tf.input({name: name + '_enemiesMaskInput', shape: [T * ENEMY_SLOTS]});
+    // Enemies: [B, ENEMY_SLOTS, ENEMY_FEATURES_DIM]
+    const enemiesInput = tf.input({name: name + '_enemiesInput', shape: [ENEMY_SLOTS, ENEMY_FEATURES_DIM]});
+    const enemiesTypesInput = tf.input({name: name + '_enemiesTypesInput', shape: [ENEMY_SLOTS]});
+    const enemiesMaskInput = tf.input({name: name + '_enemiesMaskInput', shape: [ENEMY_SLOTS]});
 
-    // Allies: [B, T * ALLY_SLOTS, ALLY_FEATURES_DIM]
-    const alliesInput = tf.input({name: name + '_alliesInput', shape: [T * ALLY_SLOTS, ALLY_FEATURES_DIM]});
-    const alliesTypesInput = tf.input({name: name + '_alliesTypesInput', shape: [T * ALLY_SLOTS]});
-    const alliesMaskInput = tf.input({name: name + '_alliesMaskInput', shape: [T * ALLY_SLOTS]});
+    // Allies: [B, ALLY_SLOTS, ALLY_FEATURES_DIM]
+    const alliesInput = tf.input({name: name + '_alliesInput', shape: [ALLY_SLOTS, ALLY_FEATURES_DIM]});
+    const alliesTypesInput = tf.input({name: name + '_alliesTypesInput', shape: [ALLY_SLOTS]});
+    const alliesMaskInput = tf.input({name: name + '_alliesMaskInput', shape: [ALLY_SLOTS]});
 
-    // Bullets: [B, T * BULLET_SLOTS, BULLET_FEATURES_DIM]
-    const bulletsInput = tf.input({name: name + '_bulletsInput', shape: [T * BULLET_SLOTS, BULLET_FEATURES_DIM]});
-    const bulletsMaskInput = tf.input({name: name + '_bulletsMaskInput', shape: [T * BULLET_SLOTS]});
+    // Bullets: [B, BULLET_SLOTS, BULLET_FEATURES_DIM]
+    const bulletsInput = tf.input({name: name + '_bulletsInput', shape: [BULLET_SLOTS, BULLET_FEATURES_DIM]});
+    const bulletsMaskInput = tf.input({name: name + '_bulletsMaskInput', shape: [BULLET_SLOTS]});
 
     // Obstacle grid: [B, GRID_CELLS, GRID_CELL_FEATURES] — static per episode
     const obstacleGridInput = tf.input({name: name + '_obstacleGridInput', shape: [GRID_CELLS, GRID_CELL_FEATURES]});
@@ -91,25 +88,25 @@ export function convertInputsToTokens(
         embeddingsInitializer: 'zeros',
     });
 
-    // Tank: [B, T, TANK_FEATURES_DIM]
+    // Tank: [B, 1, TANK_FEATURES_DIM]
     const tankVehicleEmb = vehicleTypeEmbedding.apply(tankTypeInput) as tf.SymbolicTensor;
     const tankTok = toToken('tank', tankInput, tankVehicleEmb);
 
-    // Turret: [B, T * MAX_TURRETS, TURRET_FEATURES_DIM]
+    // Turret: [B, MAX_TURRETS, TURRET_FEATURES_DIM]
     const turretTok = toToken('turret', turretInput);
 
-    // Rays: [B, T * RAY_SLOTS, RAY_FEATURES_DIM]
+    // Rays: [B, RAY_SLOTS, RAY_FEATURES_DIM]
     const raysTok = toToken('rays', raysInput);
 
-    // Enemies: [B, T * ENEMY_SLOTS, ENEMY_FEATURES_DIM]
+    // Enemies: [B, ENEMY_SLOTS, ENEMY_FEATURES_DIM]
     const enemiesVehicleEmb = vehicleTypeEmbedding.apply(enemiesTypesInput) as tf.SymbolicTensor;
     const enemiesTok = toToken('enemies', enemiesInput, enemiesVehicleEmb);
 
-    // Allies: [B, T * ALLY_SLOTS, ALLY_FEATURES_DIM]
+    // Allies: [B, ALLY_SLOTS, ALLY_FEATURES_DIM]
     const alliesVehicleEmb = vehicleTypeEmbedding.apply(alliesTypesInput) as tf.SymbolicTensor;
     const alliesTok = toToken('allies', alliesInput, alliesVehicleEmb);
 
-    // Bullets: [B, T * BULLET_SLOTS, BULLET_FEATURES_DIM]
+    // Bullets: [B, BULLET_SLOTS, BULLET_FEATURES_DIM]
     const bulletsTok = toToken('bullets', bulletsInput);
 
     // Obstacle grid: [B, GRID_CELLS, dModel] — static per episode

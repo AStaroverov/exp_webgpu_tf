@@ -113,10 +113,10 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const summarizedGrid = summarize({
         name: modelName + '_summarizedGrid',
         heads: config.heads,
-        length: 4,
+        length: 8,
         token: tokens.gridTok,
         perceiverDepth: ceil(2 * config.depth),
-        transformerDepth: ceil(1 * config.depth),
+        transformerDepth: ceil(2 * config.depth),
     });
 
     // Projectiles Token
@@ -126,8 +126,8 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         length: 2,
         token: tokens.bulletsTok,
         mask: inputs.bulletsMaskInput,
-        perceiverDepth: ceil(2 * config.depth),
-        transformerDepth: ceil(2 * config.depth),
+        perceiverDepth: ceil(1 * config.depth),
+        transformerDepth: ceil(1 * config.depth),
     });
 
     // Heads Token

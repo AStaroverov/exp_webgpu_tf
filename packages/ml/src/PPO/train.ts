@@ -5,7 +5,7 @@ import { normalize } from '../../../../lib/math.ts';
 import { random } from '../../../../lib/random.ts';
 import { ACTION_DIM } from '../../../ml-common/consts.ts';
 import { flatTypedArray } from '../../../ml-common/flat.ts';
-import { type StateHistory, prepareRandomStateHistory } from '../../../ml-common/InputArrays.ts';
+import { type InputArrays, prepareRandomInputArrays } from '../../../ml-common/InputArrays.ts';
 import { createInputTensors } from '../../../ml-common/InputTensors.ts';
 import { PreparedBatch } from '../../../ml-common/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
@@ -102,7 +102,7 @@ export function computeKullbackLeiblerAprox(
 
 export function batchAct(
     policyNetwork: tf.LayersModel,
-    states: StateHistory[],
+    states: InputArrays[],
     options?: { greedy?: boolean; epsilon?: number; noises?: (tf.Tensor[] | undefined)[] },
 ): {
     actions: Float32Array,
@@ -184,7 +184,7 @@ function sampleCategorical(
 
 export function pureAct(
     policyNetwork: tf.LayersModel,
-    state: StateHistory,
+    state: InputArrays,
 ): {
     actions: Float32Array,
 } {
@@ -385,7 +385,7 @@ let randomInputTensors: tf.Tensor[];
 
 function getRandomInputTensors() {
     randomInputTensors = randomInputTensors == null || random() > 0.9
-        ? (tf.dispose(randomInputTensors), createInputTensors([prepareRandomStateHistory()]))
+        ? (tf.dispose(randomInputTensors), createInputTensors([prepareRandomInputArrays()]))
         : randomInputTensors;
 
     return randomInputTensors;
