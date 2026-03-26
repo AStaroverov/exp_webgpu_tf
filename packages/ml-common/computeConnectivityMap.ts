@@ -7,6 +7,10 @@ const OBSTACLE_THRESHOLD = 0.5;
 const DR = [-1, -1, -1, 0, 0, 1, 1, 1];
 const DC = [-1, 0, 1, -1, 1, -1, 0, 1];
 
+function isBoundary(row: number, col: number): boolean {
+    return row === 0 || row === GRID_SIZE - 1 || col === 0 || col === GRID_SIZE - 1;
+}
+
 /**
  * Connectivity heat map for the obstacle grid.
  * For each free cell, bounded BFS (depth ≤ CONNECTIVITY_BFS_DEPTH)
@@ -29,7 +33,9 @@ export function computeConnectivityMap(
     let maxConn = 0;
 
     for (let start = 0; start < total; start++) {
-        if (obstacleGrid[start] > OBSTACLE_THRESHOLD) continue;
+        const startRow = (start / GRID_SIZE) | 0;
+        const startCol = start % GRID_SIZE;
+        if (obstacleGrid[start] > OBSTACLE_THRESHOLD || isBoundary(startRow, startCol)) continue;
 
         visited.fill(0);
         visited[start] = 1;
@@ -56,7 +62,7 @@ export function computeConnectivityMap(
 
                 const nIdx = nr * GRID_SIZE + nc;
                 if (visited[nIdx]) continue;
-                if (obstacleGrid[nIdx] > OBSTACLE_THRESHOLD) continue;
+                if (obstacleGrid[nIdx] > OBSTACLE_THRESHOLD || isBoundary(nr, nc)) continue;
 
                 visited[nIdx] = 1;
                 depth[nIdx] = d + 1;
