@@ -15,6 +15,7 @@ const POSITIVE_METRICS = [
 const NEGATIVE_METRICS = [
     'friendlyFire',
     'gotHit',
+    'stagnation',
 ] as const;
 const METRICS = [...POSITIVE_METRICS, ...NEGATIVE_METRICS] as const;
 const ScoreData = METRICS.reduce(

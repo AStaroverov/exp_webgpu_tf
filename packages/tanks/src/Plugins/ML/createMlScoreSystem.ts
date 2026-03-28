@@ -13,23 +13,30 @@ import { TankInputTensor, RAY_BUFFER, RAYS_COUNT, RayHitType } from "../Pilots/C
 import { computeObstacleGrid } from "../../../../ml-common/computeObstacleGrid";
 import { computeAllPairsDistances, UNREACHABLE } from "../../../../ml-common/computeAllPairsDistances";
 import { GRID_SIZE, GRID_CELLS } from "../../../../ml/src/Models/Create";
+import { SNAPSHOT_EVERY } from "../../../../ml-common/consts";
 import { cos, max, min, sin, sqrt, hypot } from "../../../../../lib/math";
 import { clamp } from "lodash";
 
-const AIM_COEFF = 0.0001;
-const APPROACH_COEFF = 0.005;
-const APPROACH_SATURATION = 5; // BFS cells of sustained approach to reach 3x multiplier
-const APPROACH_DECAY = 0.9;
+// All coefficients are per-action (1 action = SNAPSHOT_EVERY ticks ≈ 200ms)
 const ENGAGED_RAY_THRESHOLD = 2;
-const MOVEMENT_FRAMES = 10;
+
+const AIM_COEFF = 0.001;
+
+const APPROACH_COEFF = 0.05;
+const APPROACH_SATURATION = 5; // BFS cells of sustained approach to reach 3x multiplier
+const APPROACH_DECAY = 0.5;
+
+const MOVEMENT_COEFF = 0.01;
+const MOVEMENT_ACTIONS = 10; // ~2sec window
 const MOVEMENT_DIST_THRESHOLD = 400;
-const MOVEMENT_REWARD = 0.001;
+
+const STAGNATION_COEFF = 0.0005;
+const STAGNATION_GRACE = 10; // actions (~2sec) before penalty starts
+const STAGNATION_MAX_MULT = 5;
 
 export function createMlScoreSystem({ world } = GameDI) {
+    let frame = 0;
     let allPairsDist: Float32Array | null = null;
-    const prevCells = new Map<number, number>();
-    const approachAccum = new Map<number, number>();
-    const idleRings = new Map<number, RingBuffer<{ x: number, y: number }>>();
 
     const tick = () => {
         if (!MLState.enabled) return;
@@ -39,6 +46,9 @@ export function createMlScoreSystem({ world } = GameDI) {
             allPairsDist = computeAllPairsDistances(obstacleGrid);
         }
 
+        // Evaluate only once per action (aligned with agent decision step)
+        if (frame++ % SNAPSHOT_EVERY !== 0) return;
+
         const vehicleEids = query(world, [Vehicle]);
 
         for (const vehicleEid of vehicleEids) {
@@ -47,15 +57,26 @@ export function createMlScoreSystem({ world } = GameDI) {
             const enemyRayHits = collectEnemyRayHits(vehicleEid);
             addAimReward(vehicleEid, playerId, enemies, enemyRayHits);
             addMovementReward(vehicleEid, playerId);
+            
+            addHuntPressure(vehicleEid, playerId, enemies, enemyRayHits);
             addPathFollowingReward(vehicleEid, playerId, enemies, enemyRayHits);
         }
     };
 
+    const prevCells = new Map<number, number>();
+    const approachAccum = new Map<number, number>();
+    const idleRings = new Map<number, RingBuffer<{ x: number, y: number }>>();
+    const bestMinDist = new Map<number, number>();
+    const stagnationActions = new Map<number, number>();
+
     const dispose = () => {
+        frame = 0;
         allPairsDist = null;
         prevCells.clear();
         approachAccum.clear();
         idleRings.clear();
+        bestMinDist.clear();
+        stagnationActions.clear();
     };
 
     function addPathFollowingReward(
@@ -77,7 +98,7 @@ export function createMlScoreSystem({ world } = GameDI) {
         const prevCell = prevCells.get(vehicleEid);
         prevCells.set(vehicleEid, currentCell);
 
-        // First tick or same cell — no reward
+        // First action or same cell — no reward
         if (prevCell === undefined || prevCell === currentCell) return;
 
         // Any enemy engaged (visible in 2+ rays and close) — let combat rewards handle it
@@ -133,7 +154,7 @@ export function createMlScoreSystem({ world } = GameDI) {
 
         let ring = idleRings.get(vehicleEid);
         if (!ring) {
-            ring = new RingBuffer<{ x: number, y: number }>(MOVEMENT_FRAMES);
+            ring = new RingBuffer<{ x: number, y: number }>(MOVEMENT_ACTIONS);
             idleRings.set(vehicleEid, ring);
         }
 
@@ -145,7 +166,7 @@ export function createMlScoreSystem({ world } = GameDI) {
         const oldest = ring.getFirst()!;
         const displacement = hypot(px - oldest.x, py - oldest.y);
         const reward = clamp(displacement / MOVEMENT_DIST_THRESHOLD, 0, 1);
-        Score.addMovement(playerId, MOVEMENT_REWARD * reward);
+        Score.addMovement(playerId, MOVEMENT_COEFF * reward);
     }
 
     function addAimReward(
@@ -193,6 +214,64 @@ export function createMlScoreSystem({ world } = GameDI) {
         Score.addAimAlignment(playerId, bestCos * bestDistFactor * AIM_COEFF);
     }
 
+    function addHuntPressure(
+        vehicleEid: number,
+        playerId: number,
+        enemies: number[],
+        enemyRayHits: Map<number, number>,
+    ): void {
+        const dist = allPairsDist!;
+        const cellW = GameDI.width / GRID_SIZE;
+        const cellH = GameDI.height / GRID_SIZE;
+
+        const px = RigidBodyState.position.get(vehicleEid, 0);
+        const py = RigidBodyState.position.get(vehicleEid, 1);
+
+        // Any enemy engaged (visible in 2+ rays and close) — no stagnation penalty
+        for (const [eid, count] of enemyRayHits) {
+            if (count < ENGAGED_RAY_THRESHOLD) continue;
+            const ex = RigidBodyState.position.get(eid, 0);
+            const ey = RigidBodyState.position.get(eid, 1);
+            if (hypot(ex - px, ey - py) < 600) return;
+        }
+        const col = max(0, min(GRID_SIZE - 1, (px / cellW) | 0));
+        const row = max(0, min(GRID_SIZE - 1, (py / cellH) | 0));
+        const myCell = row * GRID_SIZE + col;
+
+        // Min BFS distance to any alive enemy
+        let minD = UNREACHABLE;
+        for (let i = 0; i < enemies.length; i++) {
+            const eid = enemies[i];
+            if (getTankHealth(eid) <= 0) continue;
+            const ex = RigidBodyState.position.get(eid, 0);
+            const ey = RigidBodyState.position.get(eid, 1);
+            const eCol = max(0, min(GRID_SIZE - 1, (ex / cellW) | 0));
+            const eRow = max(0, min(GRID_SIZE - 1, (ey / cellH) | 0));
+            const d = dist[myCell * GRID_CELLS + eRow * GRID_SIZE + eCol];
+            if (d < minD) minD = d;
+        }
+
+        if (minD >= UNREACHABLE) return;
+
+        const prev = bestMinDist.get(vehicleEid);
+
+        // Approaching — reset stagnation
+        if (prev === undefined || minD < prev - 0.5) {
+            bestMinDist.set(vehicleEid, minD);
+            stagnationActions.set(vehicleEid, 0);
+            return;
+        }
+
+        bestMinDist.set(vehicleEid, min(prev, minD));
+        const actions = (stagnationActions.get(vehicleEid) ?? 0) + 1;
+        stagnationActions.set(vehicleEid, actions);
+
+        if (actions <= STAGNATION_GRACE) return;
+
+        const overGrace = actions - STAGNATION_GRACE;
+        const mult = min(1 + overGrace / STAGNATION_GRACE, STAGNATION_MAX_MULT);
+        Score.addStagnation(playerId, -STAGNATION_COEFF * mult);
+    }
 
     return { tick, dispose };
 }
