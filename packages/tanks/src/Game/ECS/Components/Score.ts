@@ -7,7 +7,7 @@ const POSITIVE_METRICS = [
     'hitEnemy',
     'killEnemy',
     'aimAlignment',
-    'navigation',
+    'enemyFocus',
     'movement',
     'spices',
     'debris',
@@ -15,7 +15,7 @@ const POSITIVE_METRICS = [
 const NEGATIVE_METRICS = [
     'friendlyFire',
     'gotHit',
-    'stagnation',
+    'enemyUnfocus',
 ] as const;
 const METRICS = [...POSITIVE_METRICS, ...NEGATIVE_METRICS] as const;
 const ScoreData = METRICS.reduce(

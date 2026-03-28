@@ -10,11 +10,8 @@ import { Tank } from "../../Game/ECS/Components/Tank";
 import { getTankHealth } from "../../Game/ECS/Entities/Tank/TankUtils";
 import { findTankEnemiesEids, findVehicleFromPart } from "../Pilots/Utils/snapshotTankInputTensor";
 import { TankInputTensor, RAY_BUFFER, RAYS_COUNT, RayHitType } from "../Pilots/Components/TankState";
-import { computeObstacleGrid } from "../../../../ml-common/computeObstacleGrid";
-import { computeAllPairsDistances, UNREACHABLE } from "../../../../ml-common/computeAllPairsDistances";
-import { GRID_SIZE, GRID_CELLS } from "../../../../ml/src/Models/Create";
 import { SNAPSHOT_EVERY } from "../../../../ml-common/consts";
-import { cos, max, min, sin, sqrt, hypot } from "../../../../../lib/math";
+import { cos, sin, sqrt, hypot } from "../../../../../lib/math";
 import { clamp } from "lodash";
 
 // All coefficients are per-action (1 action = SNAPSHOT_EVERY ticks ≈ 200ms)
@@ -22,29 +19,18 @@ const ENGAGED_RAY_THRESHOLD = 2;
 
 const AIM_COEFF = 0.001;
 
-const APPROACH_COEFF = 0.05;
-const APPROACH_SATURATION = 5; // BFS cells of sustained approach to reach 3x multiplier
-const APPROACH_DECAY = 0.5;
+const FOCUS_REWARD = 0.0005;
+const FOCUS_PENALTY = -0.0005;
 
 const MOVEMENT_COEFF = 0.01;
 const MOVEMENT_ACTIONS = 10; // ~2sec window
-const MOVEMENT_DIST_THRESHOLD = 400;
-
-const STAGNATION_COEFF = 0.0005;
-const STAGNATION_GRACE = 10; // actions (~2sec) before penalty starts
-const STAGNATION_MAX_MULT = 5;
+const MOVEMENT_DIST_THRESHOLD = 500;
 
 export function createMlScoreSystem({ world } = GameDI) {
     let frame = 0;
-    let allPairsDist: Float32Array | null = null;
 
     const tick = () => {
         if (!MLState.enabled) return;
-
-        if (allPairsDist == null) {
-            const obstacleGrid = computeObstacleGrid(world, GameDI.width, GameDI.height);
-            allPairsDist = computeAllPairsDistances(obstacleGrid);
-        }
 
         // Evaluate only once per action (aligned with agent decision step)
         if (frame++ % SNAPSHOT_EVERY !== 0) return;
@@ -57,95 +43,32 @@ export function createMlScoreSystem({ world } = GameDI) {
             const enemyRayHits = collectEnemyRayHits(vehicleEid);
             addAimReward(vehicleEid, playerId, enemies, enemyRayHits);
             addMovementReward(vehicleEid, playerId);
-            
-            addHuntPressure(vehicleEid, playerId, enemies, enemyRayHits);
-            addPathFollowingReward(vehicleEid, playerId, enemies, enemyRayHits);
+            addEnemyFocusReward(playerId, enemyRayHits);
         }
     };
 
-    const prevCells = new Map<number, number>();
-    const approachAccum = new Map<number, number>();
     const idleRings = new Map<number, RingBuffer<{ x: number, y: number }>>();
-    const bestMinDist = new Map<number, number>();
-    const stagnationActions = new Map<number, number>();
 
     const dispose = () => {
         frame = 0;
-        allPairsDist = null;
-        prevCells.clear();
-        approachAccum.clear();
         idleRings.clear();
-        bestMinDist.clear();
-        stagnationActions.clear();
     };
 
-    function addPathFollowingReward(
-        vehicleEid: number,
+    function addEnemyFocusReward(
         playerId: number,
-        enemies: number[],
         enemyRayHits: Map<number, number>,
     ): void {
-        const dist = allPairsDist!;
-        const cellW = GameDI.width / GRID_SIZE;
-        const cellH = GameDI.height / GRID_SIZE;
-
-        const px = RigidBodyState.position.get(vehicleEid, 0);
-        const py = RigidBodyState.position.get(vehicleEid, 1);
-        const col = max(0, min(GRID_SIZE - 1, (px / cellW) | 0));
-        const row = max(0, min(GRID_SIZE - 1, (py / cellH) | 0));
-        const currentCell = row * GRID_SIZE + col;
-
-        const prevCell = prevCells.get(vehicleEid);
-        prevCells.set(vehicleEid, currentCell);
-
-        // First action or same cell — no reward
-        if (prevCell === undefined || prevCell === currentCell) return;
-
-        // Any enemy engaged (visible in 2+ rays and close) — let combat rewards handle it
-        for (const [eid, count] of enemyRayHits) {
-            if (count < ENGAGED_RAY_THRESHOLD) continue;
-            const ex = RigidBodyState.position.get(eid, 0);
-            const ey = RigidBodyState.position.get(eid, 1);
-            if (hypot(ex - px, ey - py) < 600) return;
+        let maxRays = 0;
+        for (const count of enemyRayHits.values()) {
+            if (count > maxRays) maxRays = count;
+            if (maxRays >= 3) break;
         }
 
-        // Sum approach deltas for all enemies
-        let totalDelta = 0;
-
-        for (let i = 0; i < enemies.length; i++) {
-            const eid = enemies[i];
-            if (getTankHealth(eid) <= 0) continue;
-
-            const ex = RigidBodyState.position.get(eid, 0);
-            const ey = RigidBodyState.position.get(eid, 1);
-            const eCol = max(0, min(GRID_SIZE - 1, (ex / cellW) | 0));
-            const eRow = max(0, min(GRID_SIZE - 1, (ey / cellH) | 0));
-            const enemyCell = eRow * GRID_SIZE + eCol;
-
-            const prevD = dist[prevCell * GRID_CELLS + enemyCell];
-            const currD = dist[currentCell * GRID_CELLS + enemyCell];
-
-            if (prevD >= UNREACHABLE || currD >= UNREACHABLE) continue;
-
-            const delta = prevD - currD;
-            if (delta > 0) {
-                totalDelta += delta;
-            }
+        if (maxRays >= 3) {
+            Score.addEnemyFocus(playerId, FOCUS_REWARD);
+        } else if (maxRays < 2) {
+            Score.addEnemyUnfocus(playerId, FOCUS_PENALTY);
         }
-
-        const prevAccum = approachAccum.get(vehicleEid) ?? 0;
-
-        if (totalDelta <= 0) {
-            approachAccum.set(vehicleEid, prevAccum * APPROACH_DECAY);
-            return;
-        }
-
-        const newAccum = prevAccum + totalDelta;
-        approachAccum.set(vehicleEid, newAccum);
-
-        // 1x → 3x based on sustained approach distance
-        const multiplier = 1 + 2 * min(newAccum / APPROACH_SATURATION, 1);
-        Score.addNavigation(playerId, APPROACH_COEFF * multiplier);
     }
 
     function addMovementReward(vehicleEid: number, playerId: number): void {
@@ -212,65 +135,6 @@ export function createMlScoreSystem({ world } = GameDI) {
         if (bestCos <= 0) return;
 
         Score.addAimAlignment(playerId, bestCos * bestDistFactor * AIM_COEFF);
-    }
-
-    function addHuntPressure(
-        vehicleEid: number,
-        playerId: number,
-        enemies: number[],
-        enemyRayHits: Map<number, number>,
-    ): void {
-        const dist = allPairsDist!;
-        const cellW = GameDI.width / GRID_SIZE;
-        const cellH = GameDI.height / GRID_SIZE;
-
-        const px = RigidBodyState.position.get(vehicleEid, 0);
-        const py = RigidBodyState.position.get(vehicleEid, 1);
-
-        // Any enemy engaged (visible in 2+ rays and close) — no stagnation penalty
-        for (const [eid, count] of enemyRayHits) {
-            if (count < ENGAGED_RAY_THRESHOLD) continue;
-            const ex = RigidBodyState.position.get(eid, 0);
-            const ey = RigidBodyState.position.get(eid, 1);
-            if (hypot(ex - px, ey - py) < 600) return;
-        }
-        const col = max(0, min(GRID_SIZE - 1, (px / cellW) | 0));
-        const row = max(0, min(GRID_SIZE - 1, (py / cellH) | 0));
-        const myCell = row * GRID_SIZE + col;
-
-        // Min BFS distance to any alive enemy
-        let minD = UNREACHABLE;
-        for (let i = 0; i < enemies.length; i++) {
-            const eid = enemies[i];
-            if (getTankHealth(eid) <= 0) continue;
-            const ex = RigidBodyState.position.get(eid, 0);
-            const ey = RigidBodyState.position.get(eid, 1);
-            const eCol = max(0, min(GRID_SIZE - 1, (ex / cellW) | 0));
-            const eRow = max(0, min(GRID_SIZE - 1, (ey / cellH) | 0));
-            const d = dist[myCell * GRID_CELLS + eRow * GRID_SIZE + eCol];
-            if (d < minD) minD = d;
-        }
-
-        if (minD >= UNREACHABLE) return;
-
-        const prev = bestMinDist.get(vehicleEid);
-
-        // Approaching — reset stagnation
-        if (prev === undefined || minD < prev - 0.5) {
-            bestMinDist.set(vehicleEid, minD);
-            stagnationActions.set(vehicleEid, 0);
-            return;
-        }
-
-        bestMinDist.set(vehicleEid, min(prev, minD));
-        const actions = (stagnationActions.get(vehicleEid) ?? 0) + 1;
-        stagnationActions.set(vehicleEid, actions);
-
-        if (actions <= STAGNATION_GRACE) return;
-
-        const overGrace = actions - STAGNATION_GRACE;
-        const mult = min(1 + overGrace / STAGNATION_GRACE, STAGNATION_MAX_MULT);
-        Score.addStagnation(playerId, -STAGNATION_COEFF * mult);
     }
 
     return { tick, dispose };
