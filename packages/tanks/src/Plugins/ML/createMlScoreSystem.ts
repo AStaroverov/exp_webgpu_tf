@@ -22,7 +22,7 @@ const APPROACH_SATURATION = 5; // BFS cells of sustained approach to reach 3x mu
 const APPROACH_DECAY = 0.9;
 const ENGAGED_RAY_THRESHOLD = 2;
 const MOVEMENT_FRAMES = 10;
-const MOVEMENT_DIST_THRESHOLD = 200;
+const MOVEMENT_DIST_THRESHOLD = 400;
 const MOVEMENT_REWARD = 0.001;
 
 export function createMlScoreSystem({ world } = GameDI) {
@@ -45,9 +45,9 @@ export function createMlScoreSystem({ world } = GameDI) {
             const playerId = PlayerRef.id[vehicleEid];
             const enemies = findTankEnemiesEids(vehicleEid);
             const enemyRayHits = collectEnemyRayHits(vehicleEid);
-            addPathFollowingReward(vehicleEid, playerId, enemies, enemyRayHits);
             addAimReward(vehicleEid, playerId, enemies, enemyRayHits);
             addMovementReward(vehicleEid, playerId);
+            addPathFollowingReward(vehicleEid, playerId, enemies, enemyRayHits);
         }
     };
 
