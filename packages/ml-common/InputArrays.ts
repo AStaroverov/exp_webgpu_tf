@@ -13,6 +13,8 @@ import {
     RAY_FEATURES_DIM,
     RAY_SLOTS,
     TANK_FEATURES_DIM,
+    TANK_HISTORY_STEPS,
+    TANK_HISTORY_FEATURE_DIM,
     TURRET_FEATURES_DIM,
 } from '../ml/src/Models/Create.ts';
 import {
@@ -28,13 +30,13 @@ import {
 function norm(v: number, size: number): number {
     return v / size;
 }
+
 function logNorm(v: number, size: number): number {
     return sign(v) * log1p(abs(v / size));
 }
 
-
-
 const QUANT = 100;
+
 const ENEMIES_INDEXES = new Uint32Array(Array.from({ length: ENEMY_SLOTS }, (_, i) => i));
 const ALLIES_INDEXES = new Uint32Array(Array.from({ length: ALLY_SLOTS }, (_, i) => i));
 const BULLETS_INDEXES = new Uint32Array(Array.from({ length: BULLET_SLOTS }, (_, i) => i));
@@ -43,6 +45,7 @@ const BULLETS_INDEXES = new Uint32Array(Array.from({ length: BULLET_SLOTS }, (_,
 export type InputArrays = {
     tankType: Int32Array,          // tank type for embedding
     tankFeatures: Float32Array,
+    tankFeaturesHistory: Float32Array, // [TANK_HISTORY_STEPS * TANK_HISTORY_FEATURE_DIM]
     turretFeatures: Float32Array,
 
     raysFeatures: Float32Array,    // unified env + turret rays
@@ -66,6 +69,7 @@ export function prepareInputArrays(
     width: number,
     height: number,
     obstacleGrid: Float32Array,
+    historyBuffer: TankHistoryBuffer,
 ): InputArrays {
     // ---- Tank features ----
     const tankFeatures = new Float32Array(TANK_FEATURES_DIM);
@@ -230,9 +234,19 @@ export function prepareInputArrays(
         );
     }
 
+    // ---- Tank history ----
+    const historyValues = new Float32Array(TANK_HISTORY_FEATURE_DIM);
+    historyValues[0] = norm(tankX, width / 2);
+    historyValues[1] = norm(tankY, height / 2);
+
+    const tankFeaturesHistory = historyBuffer
+        ? historyBuffer.update(tankEid, historyValues)
+        : new Float32Array(TANK_HISTORY_STEPS * TANK_HISTORY_FEATURE_DIM);
+
     const result = {
         tankType,
         tankFeatures,
+        tankFeaturesHistory,
         turretFeatures,
 
         raysFeatures,
@@ -260,6 +274,7 @@ export function prepareInputArrays(
 
 export function prepareRandomInputArrays(): InputArrays {
     const tankFeatures = new Float32Array(TANK_FEATURES_DIM).map(() => random());
+    const tankFeaturesHistory = new Float32Array(TANK_HISTORY_STEPS * TANK_HISTORY_FEATURE_DIM).map(() => random());
     const tankType = new Int32Array(1).map(() => randomRangeInt(0, 5));
     const raysFeatures = new Float32Array(RAY_SLOTS * RAY_FEATURES_DIM).map(() => random());
     
@@ -280,6 +295,7 @@ export function prepareRandomInputArrays(): InputArrays {
 
     return {
         tankFeatures,
+        tankFeaturesHistory,
         tankType,
         turretFeatures,
 
@@ -332,4 +348,52 @@ function encodeRayFeatures(
         : hitType === RayHitType.ENEMY_VEHICLE
             ? -1
             : 0;
+}
+
+const HISTORY_STRIDE = 5; // sample every 5th frame
+
+export class TankHistoryBuffer {
+    private buffers = new Map<number, Float32Array>();
+    private counters = new Map<number, number>();
+    private filled = new Map<number, number>();
+
+    update(tankEid: number, values: Float32Array): Float32Array {
+        const size = TANK_HISTORY_STEPS * TANK_HISTORY_FEATURE_DIM;
+        let buf = this.buffers.get(tankEid);
+        if (!buf) {
+            buf = new Float32Array(size);
+            this.buffers.set(tankEid, buf);
+            this.filled.set(tankEid, 0);
+        }
+
+        const count = (this.counters.get(tankEid) ?? 0) + 1;
+        this.counters.set(tankEid, count);
+
+        if (count % HISTORY_STRIDE === 0) {
+            // shift right: [s0, s1, s2, ...] → [_, s0, s1, ...]
+            buf.copyWithin(TANK_HISTORY_FEATURE_DIM, 0, size - TANK_HISTORY_FEATURE_DIM);
+            // newest at slot 0
+            buf.set(values, 0);
+
+            const filledCount = Math.min((this.filled.get(tankEid) ?? 0) + 1, TANK_HISTORY_STEPS);
+            this.filled.set(tankEid, filledCount);
+
+            // replicate oldest known into remaining tail slots
+            // e.g. filled=3: [t-5, t-10, t-15, t-15, t-15, t-15]
+            if (filledCount < TANK_HISTORY_STEPS) {
+                const lastFilledOffset = (filledCount - 1) * TANK_HISTORY_FEATURE_DIM;
+                for (let i = filledCount; i < TANK_HISTORY_STEPS; i++) {
+                    buf.set(buf.subarray(lastFilledOffset, lastFilledOffset + TANK_HISTORY_FEATURE_DIM), i * TANK_HISTORY_FEATURE_DIM);
+                }
+            }
+        }
+
+        return new Float32Array(buf);
+    }
+
+    clear() {
+        this.buffers.clear();
+        this.counters.clear();
+        this.filled.clear();
+    }
 }

@@ -1,12 +1,14 @@
 import * as tf from '@tensorflow/tfjs';
 import { MAX_TURRETS } from "../../../tanks/src/Plugins/Pilots/Components/TankState";
-import { TANK_FEATURES_DIM, TURRET_FEATURES_DIM, RAY_SLOTS, RAY_FEATURES_DIM, ALLY_FEATURES_DIM, ALLY_SLOTS, BULLET_FEATURES_DIM, BULLET_SLOTS, ENEMY_FEATURES_DIM, ENEMY_SLOTS, GRID_CELLS, GRID_CELL_FEATURES } from "./Create";
+import { TANK_FEATURES_DIM, TANK_HISTORY_STEPS, TANK_HISTORY_FEATURE_DIM, TURRET_FEATURES_DIM, RAY_SLOTS, RAY_FEATURES_DIM, ALLY_FEATURES_DIM, ALLY_SLOTS, BULLET_FEATURES_DIM, BULLET_SLOTS, ENEMY_FEATURES_DIM, ENEMY_SLOTS, GRID_CELLS, GRID_CELL_FEATURES } from "./Create";
 import { VEHICLE_TYPE_COUNT } from '../../../tanks/src/Game/Config';
 import { createDenseLayer } from './ApplyLayers';
 
 export function createInputs(name: string) {
     // Tank features: [B, 1, TANK_FEATURES_DIM]
     const tankInput = tf.input({name: name + '_tankInput', shape: [1, TANK_FEATURES_DIM]});
+    // Tank history: [B, TANK_HISTORY_STEPS, TANK_HISTORY_FEATURE_DIM]
+    const tankHistoryInput = tf.input({name: name + '_tankHistoryInput', shape: [TANK_HISTORY_STEPS, TANK_HISTORY_FEATURE_DIM]});
     // Tank type: [B, 1]
     const tankTypeInput = tf.input({name: name + '_tankTypeInput', shape: [1]});
     // Turret: [B, MAX_TURRETS, TURRET_FEATURES_DIM]
@@ -33,6 +35,7 @@ export function createInputs(name: string) {
 
     return {
         tankInput,
+        tankHistoryInput,
         tankTypeInput,
         turretInput,
         raysInput,
@@ -55,6 +58,7 @@ export function createInputs(name: string) {
 export function convertInputsToTokens(
     {
         tankInput,
+        tankHistoryInput,
         tankTypeInput,
         turretInput,
         raysInput,
@@ -92,6 +96,9 @@ export function convertInputsToTokens(
     const tankVehicleEmb = vehicleTypeEmbedding.apply(tankTypeInput) as tf.SymbolicTensor;
     const tankTok = toToken('tank', tankInput, tankVehicleEmb);
 
+    // Tank history: [B, TANK_HISTORY_STEPS, TANK_HISTORY_FEATURE_DIM]
+    const tankHistoryTok = toToken('tankHistory', tankHistoryInput);
+
     // Turret: [B, MAX_TURRETS, TURRET_FEATURES_DIM]
     const turretTok = toToken('turret', turretInput);
 
@@ -114,6 +121,7 @@ export function convertInputsToTokens(
 
     return {
         tankTok,
+        tankHistoryTok,
         turretTok,
         raysTok,
         alliesTok,

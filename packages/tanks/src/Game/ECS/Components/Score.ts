@@ -8,6 +8,7 @@ const POSITIVE_METRICS = [
     'killEnemy',
     'aimAlignment',
     'navigation',
+    'movement',
     'spices',
     'debris',
 ] as const;

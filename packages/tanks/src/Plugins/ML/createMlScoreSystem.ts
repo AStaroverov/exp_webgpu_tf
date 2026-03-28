@@ -1,4 +1,5 @@
 import { query } from "bitecs";
+import { RingBuffer } from "ring-buffer-ts";
 import { Vehicle } from "../../Game/ECS/Components/Vehicle";
 import { MLState } from "./MlState";
 import { GameDI } from "../../Game/DI/GameDI";
@@ -12,14 +13,23 @@ import { TankInputTensor, RAY_BUFFER, RAYS_COUNT, RayHitType } from "../Pilots/C
 import { computeObstacleGrid } from "../../../../ml-common/computeObstacleGrid";
 import { computeAllPairsDistances, UNREACHABLE } from "../../../../ml-common/computeAllPairsDistances";
 import { GRID_SIZE, GRID_CELLS } from "../../../../ml/src/Models/Create";
+import { cos, max, min, sin, sqrt, hypot } from "../../../../../lib/math";
+import { clamp } from "lodash";
 
-const AIM_COEFF = 0.0005;
+const AIM_COEFF = 0.0001;
 const APPROACH_COEFF = 0.005;
+const APPROACH_SATURATION = 5; // BFS cells of sustained approach to reach 3x multiplier
+const APPROACH_DECAY = 0.9;
 const ENGAGED_RAY_THRESHOLD = 2;
+const MOVEMENT_FRAMES = 10;
+const MOVEMENT_DIST_THRESHOLD = 200;
+const MOVEMENT_REWARD = 0.001;
 
 export function createMlScoreSystem({ world } = GameDI) {
     let allPairsDist: Float32Array | null = null;
     const prevCells = new Map<number, number>();
+    const approachAccum = new Map<number, number>();
+    const idleRings = new Map<number, RingBuffer<{ x: number, y: number }>>();
 
     const tick = () => {
         if (!MLState.enabled) return;
@@ -37,12 +47,15 @@ export function createMlScoreSystem({ world } = GameDI) {
             const enemyRayHits = collectEnemyRayHits(vehicleEid);
             addPathFollowingReward(vehicleEid, playerId, enemies, enemyRayHits);
             addAimReward(vehicleEid, playerId, enemies, enemyRayHits);
+            addMovementReward(vehicleEid, playerId);
         }
     };
 
     const dispose = () => {
         allPairsDist = null;
         prevCells.clear();
+        approachAccum.clear();
+        idleRings.clear();
     };
 
     function addPathFollowingReward(
@@ -57,8 +70,8 @@ export function createMlScoreSystem({ world } = GameDI) {
 
         const px = RigidBodyState.position.get(vehicleEid, 0);
         const py = RigidBodyState.position.get(vehicleEid, 1);
-        const col = Math.max(0, Math.min(GRID_SIZE - 1, (px / cellW) | 0));
-        const row = Math.max(0, Math.min(GRID_SIZE - 1, (py / cellH) | 0));
+        const col = max(0, min(GRID_SIZE - 1, (px / cellW) | 0));
+        const row = max(0, min(GRID_SIZE - 1, (py / cellH) | 0));
         const currentCell = row * GRID_SIZE + col;
 
         const prevCell = prevCells.get(vehicleEid);
@@ -67,13 +80,16 @@ export function createMlScoreSystem({ world } = GameDI) {
         // First tick or same cell — no reward
         if (prevCell === undefined || prevCell === currentCell) return;
 
-        // Enemy already visible in 2+ rays — target found, let combat rewards take over
-        for (const count of enemyRayHits.values()) {
-            if (count >= ENGAGED_RAY_THRESHOLD) return;
+        // Any enemy engaged (visible in 2+ rays and close) — let combat rewards handle it
+        for (const [eid, count] of enemyRayHits) {
+            if (count < ENGAGED_RAY_THRESHOLD) continue;
+            const ex = RigidBodyState.position.get(eid, 0);
+            const ey = RigidBodyState.position.get(eid, 1);
+            if (hypot(ex - px, ey - py) < 600) return;
         }
 
-        // Find best enemy to approach (maximizing BFS distance decrease)
-        let bestDelta = 0;
+        // Sum approach deltas for all enemies
+        let totalDelta = 0;
 
         for (let i = 0; i < enemies.length; i++) {
             const eid = enemies[i];
@@ -81,8 +97,8 @@ export function createMlScoreSystem({ world } = GameDI) {
 
             const ex = RigidBodyState.position.get(eid, 0);
             const ey = RigidBodyState.position.get(eid, 1);
-            const eCol = Math.max(0, Math.min(GRID_SIZE - 1, (ex / cellW) | 0));
-            const eRow = Math.max(0, Math.min(GRID_SIZE - 1, (ey / cellH) | 0));
+            const eCol = max(0, min(GRID_SIZE - 1, (ex / cellW) | 0));
+            const eRow = max(0, min(GRID_SIZE - 1, (ey / cellH) | 0));
             const enemyCell = eRow * GRID_SIZE + eCol;
 
             const prevD = dist[prevCell * GRID_CELLS + enemyCell];
@@ -91,14 +107,45 @@ export function createMlScoreSystem({ world } = GameDI) {
             if (prevD >= UNREACHABLE || currD >= UNREACHABLE) continue;
 
             const delta = prevD - currD;
-            if (delta > bestDelta) {
-                bestDelta = delta;
+            if (delta > 0) {
+                totalDelta += delta;
             }
         }
 
-        if (bestDelta <= 0) return;
+        const prevAccum = approachAccum.get(vehicleEid) ?? 0;
 
-        Score.addNavigation(playerId, APPROACH_COEFF);
+        if (totalDelta <= 0) {
+            approachAccum.set(vehicleEid, prevAccum * APPROACH_DECAY);
+            return;
+        }
+
+        const newAccum = prevAccum + totalDelta;
+        approachAccum.set(vehicleEid, newAccum);
+
+        // 1x → 3x based on sustained approach distance
+        const multiplier = 1 + 2 * min(newAccum / APPROACH_SATURATION, 1);
+        Score.addNavigation(playerId, APPROACH_COEFF * multiplier);
+    }
+
+    function addMovementReward(vehicleEid: number, playerId: number): void {
+        const px = RigidBodyState.position.get(vehicleEid, 0);
+        const py = RigidBodyState.position.get(vehicleEid, 1);
+
+        let ring = idleRings.get(vehicleEid);
+        if (!ring) {
+            ring = new RingBuffer<{ x: number, y: number }>(MOVEMENT_FRAMES);
+            idleRings.set(vehicleEid, ring);
+        }
+
+        ring.add({ x: px, y: py });
+
+        if (!ring.isFull()) return;
+
+        // Displacement between current and oldest position
+        const oldest = ring.getFirst()!;
+        const displacement = hypot(px - oldest.x, py - oldest.y);
+        const reward = clamp(displacement / MOVEMENT_DIST_THRESHOLD, 0, 1);
+        Score.addMovement(playerId, MOVEMENT_REWARD * reward);
     }
 
     function addAimReward(
@@ -110,8 +157,8 @@ export function createMlScoreSystem({ world } = GameDI) {
         const turretEid = Tank.turretEId[vehicleEid];
         const turretRot = RigidBodyState.rotation[turretEid];
 
-        const fwdX = Math.cos(turretRot);
-        const fwdY = Math.sin(turretRot);
+        const fwdX = cos(turretRot);
+        const fwdY = sin(turretRot);
 
         const tx = RigidBodyState.position.get(vehicleEid, 0);
         const ty = RigidBodyState.position.get(vehicleEid, 1);
@@ -129,7 +176,7 @@ export function createMlScoreSystem({ world } = GameDI) {
             const ey = RigidBodyState.position.get(eid, 1);
             const dx = ex - tx;
             const dy = ey - ty;
-            const dist = Math.sqrt(dx * dx + dy * dy);
+            const dist = sqrt(dx * dx + dy * dy);
             if (dist < 1) continue;
 
             const cosAngle = (fwdX * dx + fwdY * dy) / dist;

@@ -19,6 +19,10 @@ export { RAY_HIT_TYPE_COUNT }; // LightTank, MediumTank, HeavyTank, PlayerTank, 
 
 export const TANK_FEATURES_DIM = 8;
 
+// Tank history: [x, y] per step
+export const TANK_HISTORY_STEPS = 6;
+export const TANK_HISTORY_FEATURE_DIM = 2;
+
 export const TURRET_SLOTS = MAX_TURRETS;
 export const TURRET_FEATURES_DIM = 4;
 

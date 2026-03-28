@@ -12,6 +12,8 @@ import {
     RAY_FEATURES_DIM,
     RAY_SLOTS,
     TANK_FEATURES_DIM,
+    TANK_HISTORY_STEPS,
+    TANK_HISTORY_FEATURE_DIM,
     TURRET_FEATURES_DIM,
 } from '../ml/src/Models/Create.ts';
 import { type InputArrays } from './InputArrays.ts';
@@ -69,6 +71,7 @@ export function createInputTensors(
 
     return [
         tf.tensor3d(packF32(batch, s => s.tankFeatures, TANK_FEATURES_DIM), [B, 1, TANK_FEATURES_DIM]),
+        tf.tensor3d(packF32(batch, s => s.tankFeaturesHistory, TANK_HISTORY_STEPS * TANK_HISTORY_FEATURE_DIM), [B, TANK_HISTORY_STEPS, TANK_HISTORY_FEATURE_DIM]),
         tf.tensor2d(packI32(batch, s => s.tankType, 1), [B, 1]),
         tf.tensor3d(packF32(batch, s => s.turretFeatures, MAX_TURRETS * TURRET_FEATURES_DIM), [B, MAX_TURRETS, TURRET_FEATURES_DIM]),
         tf.tensor3d(packF32(batch, s => s.raysFeatures, RAY_SLOTS * RAY_FEATURES_DIM), [B, RAY_SLOTS, RAY_FEATURES_DIM]),

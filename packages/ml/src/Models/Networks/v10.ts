@@ -135,6 +135,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
         return tf.layers.concatenate({name: name + '_headsToken' + i, axis: 1 })
             .apply([
                 tokens.tankTok,
+                tokens.tankHistoryTok,
                 tokens.turretTok,
                 summarizedVehicle,
                 summarizedRays,
