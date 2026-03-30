@@ -49,6 +49,22 @@ function cloneCurriculumState(state: CurriculumState): CurriculumState {
     };
 }
 
+export interface AdvantageStats {
+    mean: number;
+    var: number;
+}
+
+export function getAdvantageStats(network: tf.LayersModel): AdvantageStats | undefined {
+    const meta = network.getUserDefinedMetadata() as undefined | { advantageStats?: AdvantageStats };
+    return meta?.advantageStats;
+}
+
+export function setAdvantageStats(network: tf.LayersModel, stats: AdvantageStats) {
+    network.setUserDefinedMetadata({
+        ...network.getUserDefinedMetadata(),
+        advantageStats: stats,
+    });
+}
 
 export async function patientAction<T>(action: () => T | Promise<T>, attempts: number = 100): Promise<T> {
     while (true) {

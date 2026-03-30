@@ -1,7 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { Scalar } from '@tensorflow/tfjs-core/dist/tensor';
 import { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
-import { normalize } from '../../../../lib/math.ts';
 import { random } from '../../../../lib/random.ts';
 import { ACTION_DIM } from '../../../ml-common/consts.ts';
 import { flatTypedArray } from '../../../ml-common/flat.ts';
@@ -9,6 +8,7 @@ import { type InputArrays, prepareRandomInputArrays } from '../../../ml-common/I
 import { createInputTensors } from '../../../ml-common/InputTensors.ts';
 import { PreparedBatch } from '../../../ml-common/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
+import { getAdvantageStats, setAdvantageStats } from '../../../ml-common/utils.ts';
 import { shouldNoiseLayer } from '../Models/Create.ts';
 
 export function trainPolicyNetwork(
@@ -285,10 +285,9 @@ export function computeRetraceTargets(
             throw new Error('Retrace returns contain NaN');
         }
 
-        const normalizedAdvantages = normalize(advantages);
-
+        const normalizedAdvantages = normalizeAdvantagesRunning(policyNetwork, advantages);
         return {
-            advantages: normalizedAdvantages,
+            advantages: normalizedAdvantages as Float32Array,
             tdErrors: tdErrors,
             returns: retraceReturns,
             values: values,
@@ -296,6 +295,38 @@ export function computeRetraceTargets(
         };
     });
 }
+
+const ADV_SMOOTHING = 0.05;
+
+function normalizeAdvantagesRunning(
+    network: tf.LayersModel,
+    advantages: Float32Array,
+): Float32Array {
+    let batchMean = 0;
+    for (let i = 0; i < advantages.length; i++) batchMean += advantages[i];
+    batchMean /= advantages.length;
+
+    let batchVar = 0;
+    for (let i = 0; i < advantages.length; i++) {
+        const d = advantages[i] - batchMean;
+        batchVar += d * d;
+    }
+    batchVar /= advantages.length;
+
+    const prev = getAdvantageStats(network);
+    const mean = prev ? (1 - ADV_SMOOTHING) * prev.mean + ADV_SMOOTHING * batchMean : batchMean;
+    const variance = prev ? (1 - ADV_SMOOTHING) * prev.var + ADV_SMOOTHING * batchVar : batchVar;
+    setAdvantageStats(network, { mean, var: variance });
+
+    const s = Math.sqrt(variance) + 1e-8;
+    const out = new Float32Array(advantages.length);
+    for (let i = 0; i < advantages.length; i++) {
+        out[i] = (advantages[i] - mean) / s;
+    }
+    return out;
+}
+
+
 
 /**
  * Retrace(λ) — Munos et al., "Safe and Efficient Off-Policy RL", 2016
@@ -402,4 +433,3 @@ export function networkHealthCheck(network: tf.LayersModel): Promise<boolean> {
         .then(() => Promise.all(tData.map(t => asyncUnwrapTensor(t))))
         .then(() => true);
 }
-

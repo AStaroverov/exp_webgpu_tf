@@ -61,13 +61,13 @@ export function convertInputsToTokens(
         tankHistoryInput,
         tankTypeInput,
         turretInput,
-        raysInput,
         enemiesInput,
         enemiesTypesInput,
         alliesInput,
         alliesTypesInput,
         bulletsInput,
-        obstacleGridInput,
+        // raysInput,
+        // obstacleGridInput,
     }: ReturnType<typeof createInputs>,
     dModel: number,
 ) {
@@ -102,9 +102,6 @@ export function convertInputsToTokens(
     // Turret: [B, MAX_TURRETS, TURRET_FEATURES_DIM]
     const turretTok = toToken('turret', turretInput);
 
-    // Rays: [B, RAY_SLOTS, RAY_FEATURES_DIM]
-    const raysTok = toToken('rays', raysInput);
-
     // Enemies: [B, ENEMY_SLOTS, ENEMY_FEATURES_DIM]
     const enemiesVehicleEmb = vehicleTypeEmbedding.apply(enemiesTypesInput) as tf.SymbolicTensor;
     const enemiesTok = toToken('enemies', enemiesInput, enemiesVehicleEmb);
@@ -116,17 +113,20 @@ export function convertInputsToTokens(
     // Bullets: [B, BULLET_SLOTS, BULLET_FEATURES_DIM]
     const bulletsTok = toToken('bullets', bulletsInput);
 
+    // Rays: [B, RAY_SLOTS, RAY_FEATURES_DIM]
+    // const raysTok = toToken('rays', raysInput);
+
     // Obstacle grid: [B, GRID_CELLS, dModel] — static per episode
-    const gridTok = toToken('grid', obstacleGridInput);
+    // const gridTok = toToken('grid', obstacleGridInput);
 
     return {
         tankTok,
         tankHistoryTok,
         turretTok,
-        raysTok,
         alliesTok,
         enemiesTok,
         bulletsTok,
-        gridTok,
+        // raysTok,
+        // gridTok,
     };
 }
