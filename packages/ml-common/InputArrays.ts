@@ -18,12 +18,14 @@ import {
     TURRET_FEATURES_DIM,
 } from '../ml/src/Models/Create.ts';
 import {
+    TankInputTensor,
+    RayHitType,
     ALLY_BUFFER,
     BULLET_BUFFER,
     ENEMY_BUFFER,
-    RAY_BUFFER, MAX_TURRETS,
-    RayHitType,
-    TURRET_BUFFER, TankInputTensor,
+    RAY_BUFFER,
+    MAX_TURRETS,
+    TURRET_BUFFER,
     RAYS_COUNT
 } from '../tanks/src/Plugins/Pilots/Components/TankState.ts';
 
@@ -40,7 +42,6 @@ const QUANT = 100;
 const ENEMIES_INDEXES = new Uint32Array(Array.from({ length: ENEMY_SLOTS }, (_, i) => i));
 const ALLIES_INDEXES = new Uint32Array(Array.from({ length: ALLY_SLOTS }, (_, i) => i));
 const BULLETS_INDEXES = new Uint32Array(Array.from({ length: BULLET_SLOTS }, (_, i) => i));
-
 
 export type InputArrays = {
     tankType: Int32Array,          // tank type for embedding
@@ -126,32 +127,21 @@ export function prepareInputArrays(
 
     for (let r = 0; r < ENEMY_SLOTS; r++) {
         const w = ENEMIES_INDEXES[r];
-        const dstOffset = w * ENEMY_FEATURES_DIM;
         const srcOffset = r * ENEMY_BUFFER;
 
         if (enemiesBuffer[srcOffset] === 0) {
             continue;
         }
 
-        const eType = enemiesBuffer[srcOffset + 1];
-        const hp = enemiesBuffer[srcOffset + 2];
-        const eX = enemiesBuffer[srcOffset + 3];
-        const eY = enemiesBuffer[srcOffset + 4];
-        const eVx = enemiesBuffer[srcOffset + 5];
-        const eVy = enemiesBuffer[srcOffset + 6];
-        const eTurretRotation = enemiesBuffer[srcOffset + 7];
-        const eColliderRadius = enemiesBuffer[srcOffset + 8];
-
         enemiesMask[w] = 1;
-        enemiesTypes[w] = eType;
-        enemiesFeatures[dstOffset + 0] = hp;
-        enemiesFeatures[dstOffset + 1] = norm(eX, width / 2);
-        enemiesFeatures[dstOffset + 2] = norm(eY, height / 2);
-        enemiesFeatures[dstOffset + 3] = norm(eVx, QUANT);
-        enemiesFeatures[dstOffset + 4] = norm(eVy, QUANT);
-        enemiesFeatures[dstOffset + 5] = cos(eTurretRotation);
-        enemiesFeatures[dstOffset + 6] = sin(eTurretRotation);
-        enemiesFeatures[dstOffset + 7] = logNorm(eColliderRadius, QUANT);
+        enemiesTypes[w] = enemiesBuffer[srcOffset + 1];
+        encodeUnitFeatures(
+            enemiesBuffer, srcOffset,
+            enemiesFeatures, w * ENEMY_FEATURES_DIM,
+            tankX, tankY,
+            speedX, speedY,
+            width, height,
+        );
     }
 
     // ---- Allies features ----
@@ -164,32 +154,19 @@ export function prepareInputArrays(
 
     for (let r = 0; r < ALLY_SLOTS; r++) {
         const w = ALLIES_INDEXES[r];
-        const dstOffset = w * ALLY_FEATURES_DIM;
         const srcOffset = r * ALLY_BUFFER;
 
         if (alliesBuffer[srcOffset] === 0) {
             continue;
         }
 
-        const aType = alliesBuffer[srcOffset + 1];
-        const hp = alliesBuffer[srcOffset + 2];
-        const aX = alliesBuffer[srcOffset + 3];
-        const aY = alliesBuffer[srcOffset + 4];
-        const aVx = alliesBuffer[srcOffset + 5];
-        const aVy = alliesBuffer[srcOffset + 6];
-        const aTurretRotation = alliesBuffer[srcOffset + 7];
-        const aColliderRadius = alliesBuffer[srcOffset + 8];
-
         alliesMask[w] = 1;
-        alliesTypes[w] = aType;
-        alliesFeatures[dstOffset + 0] = hp;
-        alliesFeatures[dstOffset + 1] = norm(aX, width / 2);
-        alliesFeatures[dstOffset + 2] = norm(aY, height / 2);
-        alliesFeatures[dstOffset + 3] = norm(aVx, QUANT);
-        alliesFeatures[dstOffset + 4] = norm(aVy, QUANT);
-        alliesFeatures[dstOffset + 5] = cos(aTurretRotation);
-        alliesFeatures[dstOffset + 6] = sin(aTurretRotation);
-        alliesFeatures[dstOffset + 7] = logNorm(aColliderRadius, QUANT);
+        alliesTypes[w] = alliesBuffer[srcOffset + 1];
+        encodeUnitFeatures(
+            alliesBuffer, srcOffset,
+            alliesFeatures, w * ALLY_FEATURES_DIM,
+            tankX, tankY, speedX, speedY, width, height,
+        );
     }
 
     // ---- Bullets features ----
@@ -214,10 +191,16 @@ export function prepareInputArrays(
         const bSpeedY = bulletsBuffer[srcOffset + 4];
 
         bulletsMask[w] = 1;
-        bulletsFeatures[dstOffset + 0] = norm(bX - tankX, QUANT);
-        bulletsFeatures[dstOffset + 1] = norm(bY - tankY, QUANT);
-        bulletsFeatures[dstOffset + 2] = norm(bSpeedX - speedX, QUANT);
-        bulletsFeatures[dstOffset + 3] = norm(bSpeedY - speedY, QUANT);
+        // Absolute
+        bulletsFeatures[dstOffset + 0] = norm(bX, width / 2);
+        bulletsFeatures[dstOffset + 1] = norm(bY, height / 2);
+        bulletsFeatures[dstOffset + 2] = norm(bSpeedX, QUANT);
+        bulletsFeatures[dstOffset + 3] = norm(bSpeedY, QUANT);
+        // Relative to tank
+        bulletsFeatures[dstOffset + 4] = norm(bX - tankX, QUANT);
+        bulletsFeatures[dstOffset + 5] = norm(bY - tankY, QUANT);
+        bulletsFeatures[dstOffset + 6] = norm(bSpeedX - speedX, QUANT);
+        bulletsFeatures[dstOffset + 7] = norm(bSpeedY - speedY, QUANT);
     }
 
     // ---- Unified rays features (environment + turret rays) ----
@@ -231,17 +214,34 @@ export function prepareInputArrays(
         encodeRayFeatures(
             raysBuffer, srcOffset,
             raysFeatures, dstOffset,
+            width, height,
         );
     }
 
     // ---- Tank history ----
-    const historyValues = new Float32Array(TANK_HISTORY_FEATURE_DIM);
-    historyValues[0] = norm(tankX, width / 2);
-    historyValues[1] = norm(tankY, height / 2);
+    const rawHistoryValues = new Float32Array(2);
+    rawHistoryValues[0] = tankX;
+    rawHistoryValues[1] = tankY;
 
-    const tankFeaturesHistory = historyBuffer
-        ? historyBuffer.update(tankEid, historyValues)
-        : new Float32Array(TANK_HISTORY_STEPS * TANK_HISTORY_FEATURE_DIM);
+    const rawHistory = historyBuffer
+        ? historyBuffer.update(tankEid, rawHistoryValues)
+        : null;
+
+    const tankFeaturesHistory = new Float32Array(TANK_HISTORY_STEPS * TANK_HISTORY_FEATURE_DIM);
+    if (rawHistory) {
+        for (let i = 0; i < TANK_HISTORY_STEPS; i++) {
+            const outOff = i * TANK_HISTORY_FEATURE_DIM;
+            const rawOff = i * 2;
+            const hx = rawHistory[rawOff];
+            const hy = rawHistory[rawOff + 1];
+            // Absolute position
+            tankFeaturesHistory[outOff + 0] = norm(hx, width / 2);
+            tankFeaturesHistory[outOff + 1] = norm(hy, height / 2);
+            // Relative position to current
+            tankFeaturesHistory[outOff + 2] = norm(tankX - hx, QUANT);
+            tankFeaturesHistory[outOff + 3] = norm(tankY - hy, QUANT);
+        }
+    }
 
     const result = {
         tankType,
@@ -325,17 +325,23 @@ function encodeRayFeatures(
     srcOffset: number,
     raysFeatures: Float32Array,
     dstOffset: number,
+    width: number, height: number,
 ): void {
     const hitType = raysBuffer[srcOffset + 0];
+    const rootX = raysBuffer[srcOffset + 2];
+    const rootY = raysBuffer[srcOffset + 3];
     const dirX = raysBuffer[srcOffset + 4];
     const dirY = raysBuffer[srcOffset + 5];
     const distance = raysBuffer[srcOffset + 6];
-
-    raysFeatures[dstOffset + 0] = dirX;
-    raysFeatures[dstOffset + 1] = dirY;
-    raysFeatures[dstOffset + 2] = norm(distance, QUANT);
+    
+    // Absolute hit point position
+    raysFeatures[dstOffset + 0] = norm(rootX + dirX * distance, width / 2);
+    raysFeatures[dstOffset + 1] = norm(rootY + dirY * distance, height / 2);
+    // Direction and distance
+    raysFeatures[dstOffset + 2] = norm(dirX * distance, QUANT);
+    raysFeatures[dstOffset + 3] = norm(dirY * distance, QUANT);
     // hit obstacle encoding: 0 = none, -1 = obstacle, 1 = vehicle
-    raysFeatures[dstOffset + 3] = hitType === RayHitType.NONE
+    raysFeatures[dstOffset + 4] = hitType === RayHitType.NONE
         ? 0
         : hitType === RayHitType.OBSTACLE
             ? -1
@@ -343,14 +349,48 @@ function encodeRayFeatures(
                 ? 1
                 : throwingError(`Invalid hit type: ${hitType}`);
     // ally/enemy encoding: 1 = ally, -1 = enemy, 0 = other
-    raysFeatures[dstOffset + 4] = hitType === RayHitType.ALLY_VEHICLE
+    raysFeatures[dstOffset + 5] = hitType === RayHitType.ALLY_VEHICLE
         ? 1
         : hitType === RayHitType.ENEMY_VEHICLE
             ? -1
             : 0;
 }
 
+function encodeUnitFeatures(
+    buffer: Float64Array, srcOffset: number,
+    features: Float32Array, dstOffset: number,
+    tankX: number, tankY: number,
+    speedX: number, speedY: number,
+    width: number, height: number,
+): void {
+    const hp = buffer[srcOffset + 2];
+    const x = buffer[srcOffset + 3];
+    const y = buffer[srcOffset + 4];
+    const vx = buffer[srcOffset + 5];
+    const vy = buffer[srcOffset + 6];
+    const turretRotation = buffer[srcOffset + 7];
+    const colliderRadius = buffer[srcOffset + 8];
+
+    // Absolute features
+    features[dstOffset + 0] = hp;
+    features[dstOffset + 1] = norm(x, width / 2);
+    features[dstOffset + 2] = norm(y, height / 2);
+    features[dstOffset + 3] = norm(vx, QUANT);
+    features[dstOffset + 4] = norm(vy, QUANT);
+    // Relative to tank
+    features[dstOffset + 5] = norm(x - tankX, QUANT);
+    features[dstOffset + 6] = norm(y - tankY, QUANT);
+    features[dstOffset + 7] = norm(vx - speedX, QUANT);
+    features[dstOffset + 8] = norm(vy - speedY, QUANT);
+    // Rotation
+    features[dstOffset + 9] = cos(turretRotation);
+    features[dstOffset + 10] = sin(turretRotation);
+    // Collider radius
+    features[dstOffset + 11] = logNorm(colliderRadius, QUANT);
+}
+
 const HISTORY_STRIDE = 5; // sample every 5th frame
+const HISTORY_RAW_DIM = 2; // raw positions stored in history buffer: [x, y]
 
 export class TankHistoryBuffer {
     private buffers = new Map<number, Float32Array>();
@@ -358,7 +398,7 @@ export class TankHistoryBuffer {
     private filled = new Map<number, number>();
 
     update(tankEid: number, values: Float32Array): Float32Array {
-        const size = TANK_HISTORY_STEPS * TANK_HISTORY_FEATURE_DIM;
+        const size = TANK_HISTORY_STEPS * HISTORY_RAW_DIM;
         let buf = this.buffers.get(tankEid);
         if (!buf) {
             buf = new Float32Array(size);
@@ -371,7 +411,7 @@ export class TankHistoryBuffer {
 
         if (count % HISTORY_STRIDE === 0) {
             // shift right: [s0, s1, s2, ...] → [_, s0, s1, ...]
-            buf.copyWithin(TANK_HISTORY_FEATURE_DIM, 0, size - TANK_HISTORY_FEATURE_DIM);
+            buf.copyWithin(HISTORY_RAW_DIM, 0, size - HISTORY_RAW_DIM);
             // newest at slot 0
             buf.set(values, 0);
 
@@ -381,9 +421,9 @@ export class TankHistoryBuffer {
             // replicate oldest known into remaining tail slots
             // e.g. filled=3: [t-5, t-10, t-15, t-15, t-15, t-15]
             if (filledCount < TANK_HISTORY_STEPS) {
-                const lastFilledOffset = (filledCount - 1) * TANK_HISTORY_FEATURE_DIM;
+                const lastFilledOffset = (filledCount - 1) * HISTORY_RAW_DIM;
                 for (let i = filledCount; i < TANK_HISTORY_STEPS; i++) {
-                    buf.set(buf.subarray(lastFilledOffset, lastFilledOffset + TANK_HISTORY_FEATURE_DIM), i * TANK_HISTORY_FEATURE_DIM);
+                    buf.set(buf.subarray(lastFilledOffset, lastFilledOffset + HISTORY_RAW_DIM), i * HISTORY_RAW_DIM);
                 }
             }
         }
