@@ -17,7 +17,6 @@ export function trainPolicyNetwork(
     actions: tf.Tensor,      // [B, actionDim]
     oldLogProbs: tf.Tensor,  // [B]
     advantages: tf.Tensor,   // [B]
-    batchSize: number,
     clipRatio: number,
     entropyCoeff: number,
     clipNorm: number,
@@ -60,7 +59,6 @@ export function trainValueNetwork(
     states: tf.Tensor[],
     returns: tf.Tensor,
     oldValues: tf.Tensor,
-    batchSize: number,
     clipRatio: number,
     lossCoeff: number,
     clipNorm: number,
