@@ -28,6 +28,8 @@ const store = {
     
     valueLoss: new CompressedBuffer(1_000, 5),
     policyLoss: new CompressedBuffer(1_000, 5),
+    entropy: new CompressedBuffer(1_000, 5),
+    entropyAlpha: new CompressedBuffer(1_000, 5),
 
     trainTime: new CompressedBuffer(1_000, 5),
     waitTime: new CompressedBuffer(1_000, 5),
@@ -291,6 +293,26 @@ function drawTab2() {
     }, {
         xLabel: 'Version',
         yLabel: 'Loss',
+        width: 500,
+        height: 300,
+    });
+
+    const entropySeries = store.entropy.toArray();
+    tfvis.render.linechart({ name: 'Entropy', tab: 'Tab 2' }, {
+        values: [entropySeries, calculateMovingAverage(entropySeries, 20)],
+        series: ['H(π)', 'MA'],
+    }, {
+        xLabel: 'Version',
+        yLabel: 'Entropy',
+        width: 500,
+        height: 300,
+    });
+
+    tfvis.render.linechart({ name: 'Entropy α', tab: 'Tab 2' }, {
+        values: [store.entropyAlpha.toArray()],
+    }, {
+        xLabel: 'Version',
+        yLabel: 'α',
         width: 500,
         height: 300,
     });

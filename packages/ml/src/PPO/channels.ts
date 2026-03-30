@@ -31,7 +31,8 @@ export const queueSizeChannel = createChannel<number>('queueSizeChannel');
 
 export type ModelSettings = {
     lr?: number,
-    expIteration?: number
+    expIteration?: number,
+    logEntropyCoeff?: number,
 
     rewardRatio?: number,
     emaStdReturns?: number,

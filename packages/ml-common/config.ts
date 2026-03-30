@@ -1,6 +1,4 @@
-import { clamp } from 'lodash-es';
-import { lerp } from '../../lib/math.ts';
-import { LEARNING_STEPS, TICK_TIME_SIMULATION } from './consts.ts';
+import { TICK_TIME_SIMULATION } from './consts.ts';
 
 export const CONFIG = {
     clipNorm: 1,
@@ -9,8 +7,12 @@ export const CONFIG = {
         return 0.99;
     },
 
-    policyEntropy: (iteration: number) => {
-        return lerp(0.01, 0.1, 1 - clamp(iteration / LEARNING_STEPS, 0, 1));
+    adaptiveEntropy: {
+        targetRatio: 0.5,          // target entropy as fraction of max entropy
+        alphaLR: 0.01,             // learning rate for log_alpha update (per training pass)
+        initialLogAlpha: Math.log(0.1),   // initial α ≈ 0.1
+        minLogAlpha: Math.log(0.005),     // min α ≈ 0.005
+        maxLogAlpha: Math.log(0.5),       // max α ≈ 0.5
     },
 
     policyEpochs: (_iter: number) => 4,

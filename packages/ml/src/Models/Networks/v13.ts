@@ -6,8 +6,8 @@ import { applyPerceiverLayer } from '../Layers/PerceiverLayer.ts';
 import { VariableLayer } from '../Layers/VariableLayer.ts';
 import { createNormalizationLayer } from '../ApplyLayers.ts';
 import { createInputs, convertInputsToTokens } from '../Inputs.ts';
-import { GRID_SIZE } from '../Create.ts';
 import { MaskLikeLayer } from '../Layers/MaskLikeLayer.ts';
+import { ceil } from 'lodash';
 
 type NetworkConfig = {
     dim: number;
@@ -32,11 +32,39 @@ const valueNetworkConfig: NetworkConfig = {
 export function createNetwork(modelName: Model, config: NetworkConfig = modelName === Model.Policy ? policyNetworkConfig : valueNetworkConfig) {
     const inputs = createInputs(modelName);
     const tokens = convertInputsToTokens(inputs, config.dim);
-    const getKvToken = (name: string, i: number) => {
+  
+    let gridLatentToken = new VariableLayer({
+        name: modelName + '_gridLatent',
+        shape: [16, config.dim],
+        initializer: 'truncatedNormal',
+    }).apply(tokens.tankTok) as tf.SymbolicTensor;
+    gridLatentToken = applyPerceiverLayer({
+        name: modelName + '_gridPerceiver',
+        depth: ceil(config.depth / 2),
+        heads: config.heads,
+        qTok: gridLatentToken,
+        kvTok: tokens.gridTok,
+        preNorm: true,
+    });
+    let raysLatentToken = new VariableLayer({
+        name: modelName + '_raysLatent',
+        shape: [16, config.dim],
+        initializer: 'truncatedNormal',
+    }).apply(tokens.tankTok) as tf.SymbolicTensor;
+    raysLatentToken = applyPerceiverLayer({
+        name: modelName + '_raysPerceiver',
+        depth: ceil(config.depth / 2),
+        heads: config.heads,
+        qTok: raysLatentToken,
+        kvTok: tokens.raysTok,
+        preNorm: true,
+    });
+
+      const getKvToken = (name: string, i: number) => {
         return tf.layers.concatenate({name: name + 'kvToken' + i, axis: 1 })
             .apply([
-                gridFeatures,
-                raysFeatures,
+                gridLatentToken,
+                raysLatentToken,
                 tokens.bulletsTok,
                 tokens.alliesTok,
                 tokens.enemiesTok,
@@ -48,8 +76,8 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const getKvMask = (name: string, i: number) => {
         return tf.layers.concatenate({name: name + 'kvMask' + i, axis: 1 })
             .apply([
-                new MaskLikeLayer({ name: gridFeatures.name + '_maskLike' + i }).apply(gridFeatures) as tf.SymbolicTensor,
-                new MaskLikeLayer({ name: raysFeatures.name + '_maskLike' + i }).apply(raysFeatures) as tf.SymbolicTensor,
+                new MaskLikeLayer({ name: gridLatentToken.name + '_maskLike' + i }).apply(gridLatentToken) as tf.SymbolicTensor,
+                new MaskLikeLayer({ name: raysLatentToken.name + '_maskLike' + i }).apply(raysLatentToken) as tf.SymbolicTensor,
                 inputs.bulletsMaskInput,
                 inputs.alliesMaskInput,
                 inputs.enemiesMaskInput,
@@ -58,24 +86,6 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
                 new MaskLikeLayer({ name: tokens.turretTok.name + '_maskLike' + i }).apply(tokens.turretTok) as tf.SymbolicTensor,            
             ]) as tf.SymbolicTensor;
     }
-
-    // Spatial CNN compression: grid (Conv2D) + rays (Conv1D)
-    const gridFeatures = applyGridCNN({
-        name: modelName + '_gridCNN',
-        input: inputs.obstacleGridInput,
-        dim: config.dim,
-        spatialShape: [GRID_SIZE, GRID_SIZE],
-        steps: 2,
-        poolSize: 2,
-    }); // [B, 16, dim]
-
-    const raysFeatures = applyCNN({
-        name: modelName + '_raysCNN',
-        input: inputs.raysInput,
-        dim: config.dim,
-        steps: 3,
-        poolSize: 2,
-    }); // [B, 16, dim]
 
     const latentToken = new VariableLayer({
         name: modelName + '_latent',

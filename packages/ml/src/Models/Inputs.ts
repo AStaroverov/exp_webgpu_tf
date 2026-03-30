@@ -66,8 +66,8 @@ export function convertInputsToTokens(
         alliesInput,
         alliesTypesInput,
         bulletsInput,
-        // raysInput,
-        // obstacleGridInput,
+        raysInput,
+        obstacleGridInput,
     }: ReturnType<typeof createInputs>,
     dModel: number,
 ) {
@@ -114,10 +114,10 @@ export function convertInputsToTokens(
     const bulletsTok = toToken('bullets', bulletsInput);
 
     // Rays: [B, RAY_SLOTS, RAY_FEATURES_DIM]
-    // const raysTok = toToken('rays', raysInput);
+    const raysTok = toToken('rays', raysInput);
 
     // Obstacle grid: [B, GRID_CELLS, dModel] — static per episode
-    // const gridTok = toToken('grid', obstacleGridInput);
+    const gridTok = toToken('grid', obstacleGridInput);
 
     return {
         tankTok,
@@ -126,7 +126,7 @@ export function convertInputsToTokens(
         alliesTok,
         enemiesTok,
         bulletsTok,
-        // raysTok,
-        // gridTok,
+        raysTok,
+        gridTok,
     };
 }

@@ -21,8 +21,9 @@ export function trainPolicyNetwork(
     entropyCoeff: number,
     clipNorm: number,
     returnCost: boolean,
-): undefined | tf.Tensor {
-    return tf.tidy(() => {
+): { loss?: tf.Tensor, entropy: number } {
+    let entropyValue = 0;
+    const loss = tf.tidy(() => {
         return optimize(network.optimizer, () => {
             const predicted = network.apply(states, { training: true, noise: shouldNoiseLayer }) as tf.Tensor | tf.Tensor[];
             const logitsHeads = parsePolicyOutput(predicted);
@@ -45,13 +46,15 @@ export function trainPolicyNetwork(
             const policyLoss = spoTerm.mean().mul(-1) as tf.Scalar;              // scalar
 
             // Entropy for categorical distributions
-            const entropy = computeEntropyCategorical(logitsHeads).mul(entropyCoeff) as tf.Scalar;
+            const rawEntropy = computeEntropyCategorical(logitsHeads);
+            entropyValue = rawEntropy.dataSync()[0];
 
-            // Total loss
-            const totalLoss = policyLoss.sub(entropy);
+            // Total loss = SPO - α * H(π)
+            const totalLoss = policyLoss.sub(rawEntropy.mul(entropyCoeff));
             return totalLoss as tf.Scalar;
         }, {clipNorm, returnCost});
     });
+    return { loss, entropy: entropyValue };
 }
 
 export function trainValueNetwork(
