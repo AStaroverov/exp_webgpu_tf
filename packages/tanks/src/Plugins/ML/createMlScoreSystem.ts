@@ -84,12 +84,11 @@ export function createMlScoreSystem({ world } = GameDI) {
         ring.add({ x: px, y: py });
 
         if (!ring.isFull()) return;
-
-        // Displacement between current and oldest position
-        const oldest = ring.getFirst()!;
+        const oldest = ring.getFirst();
+        if (!oldest) return;
         const displacement = hypot(px - oldest.x, py - oldest.y);
         const reward = clamp(displacement / MOVEMENT_DIST_THRESHOLD, 0, 1);
-        Score.addMovement(playerId, MOVEMENT_COEFF * reward);
+        Score.addMovement(playerId, MOVEMENT_COEFF * (reward ** 2));
     }
 
     function addAimReward(
