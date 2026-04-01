@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 
-import { InputArrays, prepareInputArrays, TankHistoryBuffer } from "../../../../../ml-common/InputArrays";
+import { InputArrays, prepareInputArrays } from "../../../../../ml-common/InputArrays";
 import { patientAction } from "../../../../../ml-common/utils";
 import { disposeNetwork } from "../../../../../ml/src/Models/Utils";
 import { batchAct } from "../../../../../ml/src/PPO/train";
@@ -16,7 +16,6 @@ export const createNetworkModelManager = (getter: () => Promise<tf.LayersModel>)
     let promiseNetwork: undefined | Promise<tf.LayersModel> = undefined;
     let dateRequestNetwork: number = 0;
 
-    const historyBuffer = new TankHistoryBuffer();
     let scheduledAgents: {width: number, height: number, agent: TankAgent}[] = []
     let computedAgents = new Map<TankAgent<unknown>, {
         state: InputArrays,
@@ -66,7 +65,7 @@ export const createNetworkModelManager = (getter: () => Promise<tf.LayersModel>)
         if (scheduledAgents.length > 0) {
             const obstacleGrid = computeObstacleGrid(GameDI.world, GameDI.width, GameDI.height);
             const currentStates = scheduledAgents
-                .map(({width, height, agent}) => prepareInputArrays(agent.tankEid, width, height, obstacleGrid, historyBuffer));
+                .map(({width, height, agent}) => prepareInputArrays(agent.tankEid, width, height, obstacleGrid, agent.getMemory?.() ?? null));
 
             const noises = train
                 ? scheduledAgents.map(({agent}) => agent.getNoise?.())

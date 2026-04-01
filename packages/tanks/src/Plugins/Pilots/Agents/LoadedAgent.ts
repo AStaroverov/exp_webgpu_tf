@@ -11,7 +11,7 @@ export class LoadedAgent implements TankAgent<DownloadableAgent> {
         private readonly modelManager: NetworkModelManager
     ) {
     }
-    
+
     scheduleUpdateTankBehaviour(width: number, height: number): void {
         this.modelManager.schedule(width, height, this);
     }

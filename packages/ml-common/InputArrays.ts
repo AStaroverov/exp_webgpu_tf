@@ -2,6 +2,7 @@ import { cos, sin, log1p, abs, sign } from '../../lib/math.ts';
 import { random, randomRangeInt } from '../../lib/random.ts';
 import { shuffle } from '../../lib/shuffle.ts';
 import { throwingError } from '../../lib/throwingError.ts';
+import { AgentMemory } from './Memory.ts';
 import {
     ALLY_FEATURES_DIM,
     ALLY_SLOTS,
@@ -72,7 +73,7 @@ export function prepareInputArrays(
     width: number,
     height: number,
     obstacleGrid: Float32Array,
-    historyBuffer: TankHistoryBuffer,
+    memory: AgentMemory | null,
 ): InputArrays {
     // ---- Tank features ----
     const tankFeatures = new Float32Array(TANK_FEATURES_DIM);
@@ -223,30 +224,8 @@ export function prepareInputArrays(
         );
     }
 
-    // ---- Tank history ----
-    const rawHistoryValues = new Float32Array(2);
-    rawHistoryValues[0] = tankX;
-    rawHistoryValues[1] = tankY;
-
-    const rawHistory = historyBuffer
-        ? historyBuffer.update(tankEid, rawHistoryValues)
-        : null;
-
-    const tankFeaturesHistory = new Float32Array(TANK_HISTORY_STEPS * TANK_HISTORY_FEATURE_DIM);
-    if (rawHistory) {
-        for (let i = 0; i < TANK_HISTORY_STEPS; i++) {
-            const outOff = i * TANK_HISTORY_FEATURE_DIM;
-            const rawOff = i * 2;
-            const hx = rawHistory[rawOff];
-            const hy = rawHistory[rawOff + 1];
-            // Absolute position
-            tankFeaturesHistory[outOff + 0] = norm(hx, width / 2);
-            tankFeaturesHistory[outOff + 1] = norm(hy, height / 2);
-            // Relative position to current
-            tankFeaturesHistory[outOff + 2] = norm(tankX - hx, QUANT);
-            tankFeaturesHistory[outOff + 3] = norm(tankY - hy, QUANT);
-        }
-    }
+    // ---- Tank history (pure, derived from memory.states) ----
+    const tankFeaturesHistory = buildTankHistory(memory, tankX, tankY, width, height);
 
     const result = {
         tankType,
@@ -410,9 +389,9 @@ function encodeObstacleGrid(
         for (let col = 0; col < GRID_SIZE; col++) {
             const cellX = (col + 0.5) * cellW;
             const cellY = (row + 0.5) * cellH;
+            buf[offset++] = rawGrid[row * GRID_SIZE + col];
             buf[offset++] = (col + 0.5) / GRID_SIZE - 0.5;
             buf[offset++] = (row + 0.5) / GRID_SIZE - 0.5;
-            buf[offset++] = rawGrid[row * GRID_SIZE + col];
             buf[offset++] = norm(cellX - tankX, width / 2);
             buf[offset++] = norm(cellY - tankY, height / 2);
         }
@@ -420,51 +399,40 @@ function encodeObstacleGrid(
     return buf;
 }
 
-const HISTORY_STRIDE = 5; // sample every 5th frame
-const HISTORY_RAW_DIM = 2; // raw positions stored in history buffer: [x, y]
+const HISTORY_STRIDE = 5;
 
-export class TankHistoryBuffer {
-    private buffers = new Map<number, Float32Array>();
-    private counters = new Map<number, number>();
-    private filled = new Map<number, number>();
+function buildTankHistory(
+    memory: AgentMemory | null,
+    tankX: number, tankY: number,
+    width: number, height: number,
+): Float32Array {
+    const out = new Float32Array(TANK_HISTORY_STEPS * TANK_HISTORY_FEATURE_DIM);
+    if (!memory || memory.states.length === 0) return out;
 
-    update(tankEid: number, values: Float32Array): Float32Array {
-        const size = TANK_HISTORY_STEPS * HISTORY_RAW_DIM;
-        let buf = this.buffers.get(tankEid);
-        if (!buf) {
-            buf = new Float32Array(size);
-            this.buffers.set(tankEid, buf);
-            this.filled.set(tankEid, 0);
-        }
+    const states = memory.states;
+    let filled = 0;
 
-        const count = (this.counters.get(tankEid) ?? 0) + 1;
-        this.counters.set(tankEid, count);
-
-        if (count % HISTORY_STRIDE === 0) {
-            // shift right: [s0, s1, s2, ...] → [_, s0, s1, ...]
-            buf.copyWithin(HISTORY_RAW_DIM, 0, size - HISTORY_RAW_DIM);
-            // newest at slot 0
-            buf.set(values, 0);
-
-            const filledCount = Math.min((this.filled.get(tankEid) ?? 0) + 1, TANK_HISTORY_STEPS);
-            this.filled.set(tankEid, filledCount);
-
-            // replicate oldest known into remaining tail slots
-            // e.g. filled=3: [t-5, t-10, t-15, t-15, t-15, t-15]
-            if (filledCount < TANK_HISTORY_STEPS) {
-                const lastFilledOffset = (filledCount - 1) * HISTORY_RAW_DIM;
-                for (let i = filledCount; i < TANK_HISTORY_STEPS; i++) {
-                    buf.set(buf.subarray(lastFilledOffset, lastFilledOffset + HISTORY_RAW_DIM), i * HISTORY_RAW_DIM);
-                }
-            }
-        }
-
-        return new Float32Array(buf);
+    for (let i = 0; i < TANK_HISTORY_STEPS; i++) {
+        const idx = states.length - 1 - i * HISTORY_STRIDE;
+        if (idx < 0) break;
+        filled++;
+        const prev = states[idx].tankFeatures;
+        const hx = prev[1] * (width / 2);  // denorm
+        const hy = prev[2] * (height / 2);
+        const off = i * TANK_HISTORY_FEATURE_DIM;
+        out[off + 0] = norm(hx, width / 2);
+        out[off + 1] = norm(hy, height / 2);
+        out[off + 2] = norm(tankX - hx, QUANT);
+        out[off + 3] = norm(tankY - hy, QUANT);
     }
 
-    clear() {
-        this.buffers.clear();
-        this.counters.clear();
-        this.filled.clear();
+    // replicate oldest known into remaining slots
+    if (filled > 0 && filled < TANK_HISTORY_STEPS) {
+        const srcOff = (filled - 1) * TANK_HISTORY_FEATURE_DIM;
+        for (let i = filled; i < TANK_HISTORY_STEPS; i++) {
+            out.set(out.subarray(srcOff, srcOff + TANK_HISTORY_FEATURE_DIM), i * TANK_HISTORY_FEATURE_DIM);
+        }
     }
+
+    return out;
 }

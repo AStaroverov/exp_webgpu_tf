@@ -14,7 +14,7 @@ export function createPilotSystem() {
         if (!PilotsState.enabled) return;
         if (!getPilotAgents().every(isSynced)) return;
         if (frame++ % SNAPSHOT_EVERY !== 0) return;
-        
+
         for (const agent of currentPilots) {
             agent.evaluateTankBehaviour?.(GameDI.width, GameDI.height, frame);
         }
