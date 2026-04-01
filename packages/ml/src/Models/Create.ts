@@ -44,7 +44,7 @@ export const RAY_FEATURES_DIM = 6; // [absHitX, absHitY, distanceX, distanceY, h
 
 // Obstacle spatial map (16×16 grid)
 export const GRID_SIZE = 16;
-export const GRID_CELL_FEATURES = 3;  // obstacle + cell_x + cell_y
+export const GRID_CELL_FEATURES = 5;  // obstacle + cell_x + cell_y + rel_x + rel_y
 export const GRID_CELLS = GRID_SIZE * GRID_SIZE;  // 256
 
 export const ACTION_HEAD_DIMS = [15, 15, 2, 31];

@@ -8,7 +8,6 @@ import {
     ENEMY_SLOTS,
     GRID_CELL_FEATURES,
     GRID_CELLS,
-    GRID_SIZE,
     RAY_FEATURES_DIM,
     RAY_SLOTS,
     TANK_FEATURES_DIM,
@@ -47,22 +46,6 @@ function packI32(
     return buf;
 }
 
-function packGridF32(batch: InputArrays[]): Float32Array {
-    const B = batch.length;
-    const buf = new Float32Array(B * GRID_CELLS * GRID_CELL_FEATURES);
-    let offset = 0;
-    for (let b = 0; b < B; b++) {
-        const grid = batch[b].obstacleGrid;
-        for (let row = 0; row < GRID_SIZE; row++) {
-            for (let col = 0; col < GRID_SIZE; col++) {
-                buf[offset++] = (col + 0.5) / GRID_SIZE - 0.5;
-                buf[offset++] = (row + 0.5) / GRID_SIZE - 0.5;
-                buf[offset++] = grid[row * GRID_SIZE + col];
-            }
-        }
-    }
-    return buf;
-}
 
 export function createInputTensors(
     batch: InputArrays[],
@@ -83,6 +66,6 @@ export function createInputTensors(
         tf.tensor2d(packF32(batch, s => s.alliesMask, ALLY_SLOTS), [B, ALLY_SLOTS]),
         tf.tensor3d(packF32(batch, s => s.bulletsFeatures, BULLET_SLOTS * BULLET_FEATURES_DIM), [B, BULLET_SLOTS, BULLET_FEATURES_DIM]),
         tf.tensor2d(packF32(batch, s => s.bulletsMask, BULLET_SLOTS), [B, BULLET_SLOTS]),
-        tf.tensor3d(packGridF32(batch), [B, GRID_CELLS, GRID_CELL_FEATURES]),
+        tf.tensor3d(packF32(batch, s => s.obstacleGrid, GRID_CELLS * GRID_CELL_FEATURES), [B, GRID_CELLS, GRID_CELL_FEATURES]),
     ];
 }

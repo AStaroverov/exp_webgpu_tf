@@ -10,6 +10,8 @@ import {
     ENEMY_FEATURES_DIM,
     ENEMY_SLOTS,
     GRID_CELLS,
+    GRID_CELL_FEATURES,
+    GRID_SIZE,
     RAY_FEATURES_DIM,
     RAY_SLOTS,
     TANK_FEATURES_DIM,
@@ -62,7 +64,7 @@ export type InputArrays = {
     bulletsFeatures: Float32Array,
     bulletsMask: Float32Array,
 
-    obstacleGrid: Float32Array,  // GRID_CELLS = 256
+    obstacleGrid: Float32Array,  // GRID_CELLS * GRID_CELL_FEATURES
 }
 
 export function prepareInputArrays(
@@ -265,7 +267,7 @@ export function prepareInputArrays(
         bulletsFeatures,
         bulletsMask,
 
-        obstacleGrid,
+        obstacleGrid: encodeObstacleGrid(obstacleGrid, tankX, tankY, width, height),
     };
 
     if (!checkInputArrays(result)) {
@@ -294,7 +296,7 @@ export function prepareRandomInputArrays(): InputArrays {
     const bulletsMask = new Float32Array(BULLET_SLOTS).map(() => randomRangeInt(0, 1));
     const bulletsFeatures = new Float32Array(BULLET_SLOTS * BULLET_FEATURES_DIM).map(() => random());
 
-    const obstacleGrid = new Float32Array(GRID_CELLS).map(() => randomRangeInt(0, 1));
+    const obstacleGrid = new Float32Array(GRID_CELLS * GRID_CELL_FEATURES).map(() => random());
 
     return {
         tankFeatures,
@@ -393,6 +395,29 @@ function encodeUnitFeatures(
     features[dstOffset + 12] = sin(turretRotation - tankRotation);
     // Collider radius
     features[dstOffset + 13] = logNorm(colliderRadius, QUANT);
+}
+
+function encodeObstacleGrid(
+    rawGrid: Float32Array,
+    tankX: number, tankY: number,
+    width: number, height: number,
+): Float32Array {
+    const buf = new Float32Array(GRID_CELLS * GRID_CELL_FEATURES);
+    const cellW = width / GRID_SIZE;
+    const cellH = height / GRID_SIZE;
+    let offset = 0;
+    for (let row = 0; row < GRID_SIZE; row++) {
+        for (let col = 0; col < GRID_SIZE; col++) {
+            const cellX = (col + 0.5) * cellW;
+            const cellY = (row + 0.5) * cellH;
+            buf[offset++] = (col + 0.5) / GRID_SIZE - 0.5;
+            buf[offset++] = (row + 0.5) / GRID_SIZE - 0.5;
+            buf[offset++] = rawGrid[row * GRID_SIZE + col];
+            buf[offset++] = norm(cellX - tankX, width / 2);
+            buf[offset++] = norm(cellY - tankY, height / 2);
+        }
+    }
+    return buf;
 }
 
 const HISTORY_STRIDE = 5; // sample every 5th frame
