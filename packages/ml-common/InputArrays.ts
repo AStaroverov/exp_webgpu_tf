@@ -115,6 +115,8 @@ export function prepareInputArrays(
         turretFeatures[dstOffset + 1] = norm(turretY, height / 2);
         turretFeatures[dstOffset + 2] = cos(turretRotation);
         turretFeatures[dstOffset + 3] = sin(turretRotation);
+        turretFeatures[dstOffset + 4] = cos(turretRotation - rotation);
+        turretFeatures[dstOffset + 5] = sin(turretRotation - rotation);
     }
     
     // ---- Enemies features ----
@@ -140,6 +142,7 @@ export function prepareInputArrays(
             enemiesFeatures, w * ENEMY_FEATURES_DIM,
             tankX, tankY,
             speedX, speedY,
+            rotation,
             width, height,
         );
     }
@@ -165,7 +168,7 @@ export function prepareInputArrays(
         encodeUnitFeatures(
             alliesBuffer, srcOffset,
             alliesFeatures, w * ALLY_FEATURES_DIM,
-            tankX, tankY, speedX, speedY, width, height,
+            tankX, tankY, speedX, speedY, rotation, width, height,
         );
     }
 
@@ -361,6 +364,7 @@ function encodeUnitFeatures(
     features: Float32Array, dstOffset: number,
     tankX: number, tankY: number,
     speedX: number, speedY: number,
+    tankRotation: number,
     width: number, height: number,
 ): void {
     const hp = buffer[srcOffset + 2];
@@ -385,8 +389,10 @@ function encodeUnitFeatures(
     // Rotation
     features[dstOffset + 9] = cos(turretRotation);
     features[dstOffset + 10] = sin(turretRotation);
+    features[dstOffset + 11] = cos(turretRotation - tankRotation);
+    features[dstOffset + 12] = sin(turretRotation - tankRotation);
     // Collider radius
-    features[dstOffset + 11] = logNorm(colliderRadius, QUANT);
+    features[dstOffset + 13] = logNorm(colliderRadius, QUANT);
 }
 
 const HISTORY_STRIDE = 5; // sample every 5th frame

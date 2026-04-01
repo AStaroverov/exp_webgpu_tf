@@ -30,7 +30,7 @@ export const CONFIG = {
             target: 0.01,
             low: 0.007,
         },
-        initial: 1e-4,
+        initial: 1e-5,
         multHigh: 0.95,
         multLow: 1.01,
         min: 1e-5,

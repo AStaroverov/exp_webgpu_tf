@@ -41,7 +41,7 @@ export function applyPerceiverLayer({
             kvMask: kvMaskI,
             preNorm,
         });
-        x = tf.layers.add({name: `${name}/cross/depth${i}_residual`})
+        x = tf.layers.add({name: `${name}/residual/depth${i}`})
             .apply([x, crossOut]) as tf.SymbolicTensor;
         x = applySelfTransformerLayer({
             name: `${name}/self/depth${i}`,

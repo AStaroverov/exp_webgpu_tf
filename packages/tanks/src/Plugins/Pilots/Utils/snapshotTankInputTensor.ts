@@ -42,8 +42,8 @@ const rayDir = new Vector2(0, 0);
 const ENV_RAY_COLLISION_MASK = CollisionGroupConfig.OBSTACLE | ALL_VEHICLE_PARTS_MASK;
 
 export function snapshotTankInputTensor({ world } = GameDI) {
-    TankInputTensor.resetRaysData();
-    TankInputTensor.resetTurretsData();
+    // TankInputTensor.resetRaysData();
+    // TankInputTensor.resetTurretsData();
     TankInputTensor.resetEnemiesCoords();
     TankInputTensor.resetAlliesCoords();
     TankInputTensor.resetBulletsCoords();
