@@ -105,21 +105,15 @@ export function prepareInputArrays(
     for (let i = 0; i < MAX_TURRETS; i++) {
         const dstOffset = i * TURRET_FEATURES_DIM;
         const srcOffset = i * TURRET_BUFFER;
-        
+
         if (turretsData[srcOffset + 0] === 0) {
             continue;
         }
 
-        const turretX = turretsData[srcOffset + 1];
-        const turretY = turretsData[srcOffset + 2];
         const turretRotation = turretsData[srcOffset + 3];
 
-        turretFeatures[dstOffset + 0] = norm(turretX, width / 2);
-        turretFeatures[dstOffset + 1] = norm(turretY, height / 2);
-        turretFeatures[dstOffset + 2] = cos(turretRotation);
-        turretFeatures[dstOffset + 3] = sin(turretRotation);
-        turretFeatures[dstOffset + 4] = cos(turretRotation - rotation);
-        turretFeatures[dstOffset + 5] = sin(turretRotation - rotation);
+        turretFeatures[dstOffset + 0] = cos(turretRotation - rotation);
+        turretFeatures[dstOffset + 1] = sin(turretRotation - rotation);
     }
     
     // ---- Enemies features ----
@@ -145,8 +139,6 @@ export function prepareInputArrays(
             enemiesFeatures, w * ENEMY_FEATURES_DIM,
             tankX, tankY,
             speedX, speedY,
-            rotation,
-            width, height,
         );
     }
 
@@ -171,7 +163,7 @@ export function prepareInputArrays(
         encodeUnitFeatures(
             alliesBuffer, srcOffset,
             alliesFeatures, w * ALLY_FEATURES_DIM,
-            tankX, tankY, speedX, speedY, rotation, width, height,
+            tankX, tankY, speedX, speedY,
         );
     }
 
@@ -197,16 +189,11 @@ export function prepareInputArrays(
         const bSpeedY = bulletsBuffer[srcOffset + 4];
 
         bulletsMask[w] = 1;
-        // Absolute
-        bulletsFeatures[dstOffset + 0] = norm(bX, width / 2);
-        bulletsFeatures[dstOffset + 1] = norm(bY, height / 2);
-        bulletsFeatures[dstOffset + 2] = norm(bSpeedX, QUANT);
-        bulletsFeatures[dstOffset + 3] = norm(bSpeedY, QUANT);
         // Relative to tank
-        bulletsFeatures[dstOffset + 4] = norm(bX - tankX, QUANT);
-        bulletsFeatures[dstOffset + 5] = norm(bY - tankY, QUANT);
-        bulletsFeatures[dstOffset + 6] = norm(bSpeedX - speedX, QUANT);
-        bulletsFeatures[dstOffset + 7] = norm(bSpeedY - speedY, QUANT);
+        bulletsFeatures[dstOffset + 0] = norm(bX - tankX, QUANT);
+        bulletsFeatures[dstOffset + 1] = norm(bY - tankY, QUANT);
+        bulletsFeatures[dstOffset + 2] = norm(bSpeedX - speedX, QUANT);
+        bulletsFeatures[dstOffset + 3] = norm(bSpeedY - speedY, QUANT);
     }
 
     // ---- Unified rays features (environment + turret rays) ----
@@ -220,7 +207,6 @@ export function prepareInputArrays(
         encodeRayFeatures(
             raysBuffer, srcOffset,
             raysFeatures, dstOffset,
-            width, height,
         );
     }
 
@@ -309,23 +295,17 @@ function encodeRayFeatures(
     srcOffset: number,
     raysFeatures: Float32Array,
     dstOffset: number,
-    width: number, height: number,
 ): void {
     const hitType = raysBuffer[srcOffset + 0];
-    const rootX = raysBuffer[srcOffset + 2];
-    const rootY = raysBuffer[srcOffset + 3];
     const dirX = raysBuffer[srcOffset + 4];
     const dirY = raysBuffer[srcOffset + 5];
     const distance = raysBuffer[srcOffset + 6];
     
-    // Absolute hit point position
-    raysFeatures[dstOffset + 0] = norm(rootX + dirX * distance, width / 2);
-    raysFeatures[dstOffset + 1] = norm(rootY + dirY * distance, height / 2);
-    // Direction and distance
-    raysFeatures[dstOffset + 2] = norm(dirX * distance, QUANT);
-    raysFeatures[dstOffset + 3] = norm(dirY * distance, QUANT);
+    // Direction and distance (relative to ray root on tank)
+    raysFeatures[dstOffset + 0] = norm(dirX * distance, QUANT);
+    raysFeatures[dstOffset + 1] = norm(dirY * distance, QUANT);
     // hit obstacle encoding: 0 = none, -1 = obstacle, 1 = vehicle
-    raysFeatures[dstOffset + 4] = hitType === RayHitType.NONE
+    raysFeatures[dstOffset + 2] = hitType === RayHitType.NONE
         ? 0
         : hitType === RayHitType.OBSTACLE
             ? -1
@@ -333,7 +313,7 @@ function encodeRayFeatures(
                 ? 1
                 : throwingError(`Invalid hit type: ${hitType}`);
     // ally/enemy encoding: 1 = ally, -1 = enemy, 0 = other
-    raysFeatures[dstOffset + 5] = hitType === RayHitType.ALLY_VEHICLE
+    raysFeatures[dstOffset + 3] = hitType === RayHitType.ALLY_VEHICLE
         ? 1
         : hitType === RayHitType.ENEMY_VEHICLE
             ? -1
@@ -345,35 +325,22 @@ function encodeUnitFeatures(
     features: Float32Array, dstOffset: number,
     tankX: number, tankY: number,
     speedX: number, speedY: number,
-    tankRotation: number,
-    width: number, height: number,
 ): void {
     const hp = buffer[srcOffset + 2];
     const x = buffer[srcOffset + 3];
     const y = buffer[srcOffset + 4];
     const vx = buffer[srcOffset + 5];
     const vy = buffer[srcOffset + 6];
-    const turretRotation = buffer[srcOffset + 7];
     const colliderRadius = buffer[srcOffset + 8];
 
-    // Absolute features
-    features[dstOffset + 0] = hp;
-    features[dstOffset + 1] = norm(x, width / 2);
-    features[dstOffset + 2] = norm(y, height / 2);
-    features[dstOffset + 3] = norm(vx, QUANT);
-    features[dstOffset + 4] = norm(vy, QUANT);
     // Relative to tank
-    features[dstOffset + 5] = norm(x - tankX, QUANT);
-    features[dstOffset + 6] = norm(y - tankY, QUANT);
-    features[dstOffset + 7] = norm(vx - speedX, QUANT);
-    features[dstOffset + 8] = norm(vy - speedY, QUANT);
-    // Rotation
-    features[dstOffset + 9] = cos(turretRotation);
-    features[dstOffset + 10] = sin(turretRotation);
-    features[dstOffset + 11] = cos(turretRotation - tankRotation);
-    features[dstOffset + 12] = sin(turretRotation - tankRotation);
+    features[dstOffset + 0] = hp;
+    features[dstOffset + 1] = norm(x - tankX, QUANT);
+    features[dstOffset + 2] = norm(y - tankY, QUANT);
+    features[dstOffset + 3] = norm(vx - speedX, QUANT);
+    features[dstOffset + 4] = norm(vy - speedY, QUANT);
     // Collider radius
-    features[dstOffset + 13] = logNorm(colliderRadius, QUANT);
+    features[dstOffset + 5] = logNorm(colliderRadius, QUANT);
 }
 
 function encodeObstacleGrid(
@@ -390,8 +357,6 @@ function encodeObstacleGrid(
             const cellX = (col + 0.5) * cellW;
             const cellY = (row + 0.5) * cellH;
             buf[offset++] = rawGrid[row * GRID_SIZE + col];
-            buf[offset++] = (col + 0.5) / GRID_SIZE - 0.5;
-            buf[offset++] = (row + 0.5) / GRID_SIZE - 0.5;
             buf[offset++] = norm(cellX - tankX, width / 2);
             buf[offset++] = norm(cellY - tankY, height / 2);
         }
@@ -420,10 +385,8 @@ function buildTankHistory(
         const hx = prev[1] * (width / 2);  // denorm
         const hy = prev[2] * (height / 2);
         const off = i * TANK_HISTORY_FEATURE_DIM;
-        out[off + 0] = norm(hx, width / 2);
-        out[off + 1] = norm(hy, height / 2);
-        out[off + 2] = norm(tankX - hx, QUANT);
-        out[off + 3] = norm(tankY - hy, QUANT);
+        out[off + 0] = norm(tankX - hx, QUANT);
+        out[off + 1] = norm(tankY - hy, QUANT);
     }
 
     // replicate oldest known into remaining slots

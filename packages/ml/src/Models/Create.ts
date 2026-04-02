@@ -19,32 +19,32 @@ export { RAY_HIT_TYPE_COUNT }; // LightTank, MediumTank, HeavyTank, PlayerTank, 
 
 export const TANK_FEATURES_DIM = 8;
 
-// Tank history: [absX, absY, relX, relY] per step
+// Tank history: [relX, relY] per step
 export const TANK_HISTORY_STEPS = 6;
-export const TANK_HISTORY_FEATURE_DIM = 4;
+export const TANK_HISTORY_FEATURE_DIM = 2;
 
 export const TURRET_SLOTS = MAX_TURRETS;
-export const TURRET_FEATURES_DIM = 6;
+export const TURRET_FEATURES_DIM = 2;
 
-// Enemies: [hp, x, y, vx, vy, relX, relY, relVx, relVy, turretCos, turretSin, relTurretCos, relTurretSin, colliderRadius]
+// Enemies: [hp, relX, relY, relVx, relVy, colliderRadius]
 export const ENEMY_SLOTS = MAX_ENEMIES;
-export const ENEMY_FEATURES_DIM = 14;
+export const ENEMY_FEATURES_DIM = 6;
 
-// Allies: [hp, x, y, vx, vy, relX, relY, relVx, relVy, turretCos, turretSin, relTurretCos, relTurretSin, colliderRadius]
+// Allies: [hp, relX, relY, relVx, relVy, colliderRadius]
 export const ALLY_SLOTS = MAX_ALLIES;
-export const ALLY_FEATURES_DIM = 14;
+export const ALLY_FEATURES_DIM = 6;
 
-// Bullets: [relX, relY, relVx, relVy, absX, absY, absVx, absVy]
+// Bullets: [relX, relY, relVx, relVy]
 export const BULLET_SLOTS = MAX_BULLETS;
-export const BULLET_FEATURES_DIM = 8;
+export const BULLET_FEATURES_DIM = 4;
 
 // Unified rays (environment + turret rays combined)
 export const RAY_SLOTS = RAYS_COUNT;
-export const RAY_FEATURES_DIM = 6; // [absHitX, absHitY, distanceX, distanceY, hitObstacle, hitVehicle]
+export const RAY_FEATURES_DIM = 4; // [distanceX, distanceY, hitObstacle, hitVehicle]
 
 // Obstacle spatial map (16×16 grid)
 export const GRID_SIZE = 16;
-export const GRID_CELL_FEATURES = 5;  // obstacle + cell_x + cell_y + rel_x + rel_y
+export const GRID_CELL_FEATURES = 3;  // obstacle + rel_x + rel_y
 export const GRID_CELLS = GRID_SIZE * GRID_SIZE;  // 256
 
 export const ACTION_HEAD_DIMS = [15, 15, 2, 31];
