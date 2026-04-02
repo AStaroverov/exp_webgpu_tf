@@ -17,14 +17,14 @@ type NetworkConfig = {
 type policyNetworkConfig = NetworkConfig
 
 const policyNetworkConfig: policyNetworkConfig = {
-    dim: 128,
+    dim: 256,
     heads: 4,
-    depth: 2,
+    depth: 3,
 };
 
 const valueNetworkConfig: NetworkConfig = {
-    dim: 64,
-    heads: 2,
+    dim: 128,
+    heads: 4,
     depth: 1,
 };
 
