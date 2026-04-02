@@ -10,22 +10,35 @@ import { Tank } from "../../Game/ECS/Components/Tank";
 import { getTankHealth } from "../../Game/ECS/Entities/Tank/TankUtils";
 import { findTankEnemiesEids, findVehicleFromPart } from "../Pilots/Utils/snapshotTankInputTensor";
 import { TankInputTensor, RAY_BUFFER, RAYS_COUNT, RayHitType } from "../Pilots/Components/TankState";
+import { computeObstacleGrid } from "../../../../ml-common/computeObstacleGrid";
+import { computeAllPairsDistances, UNREACHABLE } from "../../../../ml-common/computeAllPairsDistances";
+import { GRID_SIZE, GRID_CELLS } from "../../../../ml/src/Models/Create";
 import { SNAPSHOT_EVERY } from "../../../../ml-common/consts";
-import { cos, sin, sqrt, hypot } from "../../../../../lib/math";
+import { cos, max, min, sin, sqrt, hypot } from "../../../../../lib/math";
 import { clamp } from "lodash";
 
 // All coefficients are per-action (1 action = SNAPSHOT_EVERY ticks ≈ 200ms)
 const ENGAGED_RAY_THRESHOLD = 2;
+
 const AIM_COEFF = 0.01;
+
+const APPROACH_COEFF = 0.05;
+
 const MOVEMENT_COEFF = 0.1;
 const MOVEMENT_ACTIONS = 10; // ~2sec window
 const MOVEMENT_DIST_THRESHOLD = 500;
 
 export function createMlScoreSystem({ world } = GameDI) {
     let frame = 0;
+    let allPairsDist: Float32Array | null = null;
 
     const tick = () => {
         if (!MLState.enabled) return;
+
+        if (allPairsDist == null) {
+            const obstacleGrid = computeObstacleGrid(world, GameDI.width, GameDI.height);
+            allPairsDist = computeAllPairsDistances(obstacleGrid);
+        }
 
         // Evaluate only once per action (aligned with agent decision step)
         if (frame++ % SNAPSHOT_EVERY !== 0) return;
@@ -38,16 +51,20 @@ export function createMlScoreSystem({ world } = GameDI) {
             const enemyRayHits = collectEnemyRayHits(vehicleEid);
             addAimReward(vehicleEid, playerId, enemies, enemyRayHits);
             addMovementReward(vehicleEid, playerId);
+            addPathFollowingReward(vehicleEid, playerId, enemies, enemyRayHits);
         }
     };
 
     const idleRings = new Map<number, RingBuffer<{ x: number, y: number }>>();
+    const prevCells = new Map<number, number>();
     // Previous aim score per vehicle (for delta-based reward)
     const prevAimScores = new Map<number, number>();
 
     const dispose = () => {
         frame = 0;
+        allPairsDist = null;
         idleRings.clear();
+        prevCells.clear();
         prevAimScores.clear();
     };
 
@@ -119,6 +136,65 @@ export function createMlScoreSystem({ world } = GameDI) {
         if (delta <= 0) return;
 
         Score.addAimAlignment(playerId, delta * AIM_COEFF);
+    }
+
+    function addPathFollowingReward(
+        vehicleEid: number,
+        playerId: number,
+        enemies: number[],
+        enemyRayHits: Map<number, number>,
+    ): void {
+        const dist = allPairsDist!;
+        const cellW = GameDI.width / GRID_SIZE;
+        const cellH = GameDI.height / GRID_SIZE;
+
+        const px = RigidBodyState.position.get(vehicleEid, 0);
+        const py = RigidBodyState.position.get(vehicleEid, 1);
+        const col = max(0, min(GRID_SIZE - 1, (px / cellW) | 0));
+        const row = max(0, min(GRID_SIZE - 1, (py / cellH) | 0));
+        const currentCell = row * GRID_SIZE + col;
+
+        const prevCell = prevCells.get(vehicleEid);
+        prevCells.set(vehicleEid, currentCell);
+
+        // First action or same cell — no reward
+        if (prevCell === undefined || prevCell === currentCell) return;
+
+        // Any enemy engaged (visible in 2+ rays and close) — let combat rewards handle it
+        for (const [eid, count] of enemyRayHits) {
+            if (count < ENGAGED_RAY_THRESHOLD) continue;
+            const ex = RigidBodyState.position.get(eid, 0);
+            const ey = RigidBodyState.position.get(eid, 1);
+            if (hypot(ex - px, ey - py) < 600) return;
+        }
+
+        // Sum approach deltas for all enemies
+        let totalDelta = 0;
+
+        for (let i = 0; i < enemies.length; i++) {
+            const eid = enemies[i];
+            if (getTankHealth(eid) <= 0) continue;
+
+            const ex = RigidBodyState.position.get(eid, 0);
+            const ey = RigidBodyState.position.get(eid, 1);
+            const eCol = max(0, min(GRID_SIZE - 1, (ex / cellW) | 0));
+            const eRow = max(0, min(GRID_SIZE - 1, (ey / cellH) | 0));
+            const enemyCell = eRow * GRID_SIZE + eCol;
+
+            const prevD = dist[prevCell * GRID_CELLS + enemyCell];
+            const currD = dist[currentCell * GRID_CELLS + enemyCell];
+
+            if (prevD >= UNREACHABLE || currD >= UNREACHABLE) continue;
+
+            const delta = prevD - currD;
+            if (delta > 0) {
+                totalDelta += delta;
+            }
+        }
+
+        if (totalDelta <= 0) return;
+
+        Score.addNavigation(playerId, APPROACH_COEFF * totalDelta);
     }
 
     return { tick, dispose };

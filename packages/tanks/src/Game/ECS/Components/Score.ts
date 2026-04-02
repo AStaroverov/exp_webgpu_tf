@@ -8,6 +8,7 @@ const POSITIVE_METRICS = [
     'killEnemy',
     'aimAlignment',
     'movement',
+    'navigation',
 ] as const;
 const NEGATIVE_METRICS = [
     'friendlyFire',
