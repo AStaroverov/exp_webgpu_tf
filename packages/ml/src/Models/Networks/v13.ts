@@ -17,14 +17,14 @@ type NetworkConfig = {
 type policyNetworkConfig = NetworkConfig
 
 const policyNetworkConfig: policyNetworkConfig = {
-    dim: 256,
+    dim: 128,
     heads: 4,
-    depth: 3,
+    depth: 2,
 };
 
 const valueNetworkConfig: NetworkConfig = {
-    dim: 128,
-    heads: 4,
+    dim: 64,
+    heads: 2,
     depth: 1,
 };
 
@@ -32,38 +32,11 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const inputs = createInputs(modelName);
     const tokens = convertInputsToTokens(inputs, config.dim);
   
-    let gridLatentToken = new VariableLayer({
-        name: modelName + '_gridLatent',
-        shape: [16, config.dim],
-        initializer: 'truncatedNormal',
-    }).apply(tokens.tankTok) as tf.SymbolicTensor;
-    gridLatentToken = applyPerceiverLayer({
-        name: modelName + '_gridPerceiver',
-        depth: 1,
-        heads: config.heads,
-        qTok: gridLatentToken,
-        kvTok: tokens.gridTok,
-        preNorm: true,
-    });
-    let raysLatentToken = new VariableLayer({
-        name: modelName + '_raysLatent',
-        shape: [16, config.dim],
-        initializer: 'truncatedNormal',
-    }).apply(tokens.tankTok) as tf.SymbolicTensor;
-    raysLatentToken = applyPerceiverLayer({
-        name: modelName + '_raysPerceiver',
-        depth: 1,
-        heads: config.heads,
-        qTok: raysLatentToken,
-        kvTok: tokens.raysTok,
-        preNorm: true,
-    });
-
-      const getKvToken = (name: string, i: number) => {
+    const getKvToken = (name: string, i: number) => {
         return tf.layers.concatenate({name: name + 'kvToken' + i, axis: 1 })
             .apply([
-                gridLatentToken,
-                raysLatentToken,
+                tokens.gridTok,
+                tokens.raysTok,
                 tokens.bulletsTok,
                 tokens.alliesTok,
                 tokens.enemiesTok,
@@ -75,14 +48,14 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
     const getKvMask = (name: string, i: number) => {
         return tf.layers.concatenate({name: name + 'kvMask' + i, axis: 1 })
             .apply([
-                new MaskLikeLayer({ name: gridLatentToken.name + '_maskLike' + i }).apply(gridLatentToken) as tf.SymbolicTensor,
-                new MaskLikeLayer({ name: raysLatentToken.name + '_maskLike' + i }).apply(raysLatentToken) as tf.SymbolicTensor,
+                new MaskLikeLayer({ name: tokens.gridTok.name + '_maskLike' + i }).apply(tokens.gridTok) as tf.SymbolicTensor,
+                new MaskLikeLayer({ name: tokens.raysTok.name + '_maskLike' + i }).apply(tokens.raysTok) as tf.SymbolicTensor,
                 inputs.bulletsMaskInput,
                 inputs.alliesMaskInput,
                 inputs.enemiesMaskInput,
                 new MaskLikeLayer({ name: tokens.tankHistoryTok.name + '_maskLike' + i }).apply(tokens.tankHistoryTok) as tf.SymbolicTensor,
                 new MaskLikeLayer({ name: tokens.tankTok.name + '_maskLike' + i }).apply(tokens.tankTok) as tf.SymbolicTensor,
-                new MaskLikeLayer({ name: tokens.turretTok.name + '_maskLike' + i }).apply(tokens.turretTok) as tf.SymbolicTensor,            
+                new MaskLikeLayer({ name: tokens.turretTok.name + '_maskLike' + i }).apply(tokens.turretTok) as tf.SymbolicTensor,
             ]) as tf.SymbolicTensor;
     }
 

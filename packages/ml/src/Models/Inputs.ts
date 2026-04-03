@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { MAX_TURRETS } from "../../../tanks/src/Plugins/Pilots/Components/TankState";
-import { TANK_FEATURES_DIM, TANK_HISTORY_STEPS, TANK_HISTORY_FEATURE_DIM, TURRET_FEATURES_DIM, RAY_SLOTS, RAY_FEATURES_DIM, ALLY_FEATURES_DIM, ALLY_SLOTS, BULLET_FEATURES_DIM, BULLET_SLOTS, ENEMY_FEATURES_DIM, ENEMY_SLOTS, GRID_CELLS, GRID_CELL_FEATURES } from "./Create";
+import { TANK_FEATURES_DIM, TANK_HISTORY_STEPS, TANK_HISTORY_FEATURE_DIM, TURRET_FEATURES_DIM, RAY_SLOTS, RAY_FEATURES_DIM, ALLY_FEATURES_DIM, ALLY_SLOTS, BULLET_FEATURES_DIM, BULLET_SLOTS, ENEMY_FEATURES_DIM, ENEMY_SLOTS, GRID_CELLS, GRID_CELL_FEATURES, GRID_SIZE } from "./Create";
 import { VEHICLE_TYPE_COUNT } from '../../../tanks/src/Game/Config';
 import { createDenseLayer } from './ApplyLayers';
 
@@ -113,11 +113,33 @@ export function convertInputsToTokens(
     // Bullets: [B, BULLET_SLOTS, BULLET_FEATURES_DIM]
     const bulletsTok = toToken('bullets', bulletsInput);
 
-    // Rays: [B, RAY_SLOTS, RAY_FEATURES_DIM]
-    const raysTok = toToken('rays', raysInput);
+    // Rays patching: [B, 128, 4] → reshape [B, 16, 32] → Dense → [B, 16, dModel]
+    const RAY_PATCH_SIZE = 8;
+    const raysPatched = tf.layers.reshape({
+        name: 'rays_patch',
+        targetShape: [RAY_SLOTS / RAY_PATCH_SIZE, RAY_FEATURES_DIM * RAY_PATCH_SIZE],
+    }).apply(raysInput) as tf.SymbolicTensor;
+    const raysTok = toToken('rays', raysPatched);
 
-    // Obstacle grid: [B, GRID_CELLS, dModel] — static per episode
-    const gridTok = toToken('grid', obstacleGridInput);
+    // Grid block patching: [B, 256, 3] → blocks 4×4 → [B, 16, 48] → Dense → [B, 16, dModel]
+    const GRID_PATCH_SIZE = 4;
+    const gridSpatial = tf.layers.reshape({
+        name: 'grid_toSpatial',
+        targetShape: [GRID_SIZE, GRID_SIZE, GRID_CELL_FEATURES],
+    }).apply(obstacleGridInput) as tf.SymbolicTensor;
+    const gridBlocks = tf.layers.reshape({
+        name: 'grid_toBlocks',
+        targetShape: [GRID_SIZE / GRID_PATCH_SIZE, GRID_PATCH_SIZE, GRID_SIZE / GRID_PATCH_SIZE, GRID_PATCH_SIZE, GRID_CELL_FEATURES],
+    }).apply(gridSpatial) as tf.SymbolicTensor;
+    const gridPermuted = tf.layers.permute({
+        name: 'grid_permuteBlocks',
+        dims: [1, 3, 2, 4, 5],
+    }).apply(gridBlocks) as tf.SymbolicTensor;
+    const gridPatched = tf.layers.reshape({
+        name: 'grid_patch',
+        targetShape: [(GRID_SIZE / GRID_PATCH_SIZE) ** 2, GRID_PATCH_SIZE ** 2 * GRID_CELL_FEATURES],
+    }).apply(gridPermuted) as tf.SymbolicTensor;
+    const gridTok = toToken('grid', gridPatched);
 
     return {
         tankTok,

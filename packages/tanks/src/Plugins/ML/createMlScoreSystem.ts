@@ -20,7 +20,7 @@ import { clamp } from "lodash";
 // All coefficients are per-action (1 action = SNAPSHOT_EVERY ticks ≈ 200ms)
 const ENGAGED_RAY_THRESHOLD = 2;
 
-const AIM_COEFF = 0.01;
+const AIM_COEFF = 0.1;
 
 const APPROACH_COEFF = 0.05;
 
