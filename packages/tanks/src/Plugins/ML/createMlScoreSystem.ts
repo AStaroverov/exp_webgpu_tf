@@ -144,7 +144,7 @@ export function createMlScoreSystem({ world } = GameDI) {
         const delta = currentScore - prevScore;
         if (delta === 0) return;
 
-        const coeff = delta > 0 ? AIM_COEFF : AIM_COEFF * 0.5;
+        const coeff = delta > 0 ? AIM_COEFF : AIM_COEFF * 1.2;
         Score.addAimAlignment(playerId, delta * coeff);
     }
 
