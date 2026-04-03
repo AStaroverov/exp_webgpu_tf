@@ -58,7 +58,7 @@ export function createMlScoreSystem({ world } = GameDI) {
     const idleRings = new Map<number, RingBuffer<{ x: number, y: number }>>();
     const prevCells = new Map<number, number>();
     // Previous aim score per vehicle (for delta-based reward)
-    const prevAimScores = new Map<number, number>();
+    const prevAimScores = new Map<number, number | null>();
 
     const dispose = () => {
         frame = 0;
@@ -128,14 +128,24 @@ export function createMlScoreSystem({ world } = GameDI) {
             }
         }
 
+        // No visible enemies — reset state to null so next sighting starts fresh
+        if (bestCos === -1) {
+            prevAimScores.set(vehicleEid, null);
+            return;
+        }
+
         const currentScore = bestCos > 0 ? bestCos * bestDistFactor : 0;
-        const prevScore = prevAimScores.get(vehicleEid) ?? 0;
+        const prevScore = prevAimScores.get(vehicleEid) ?? null;
         prevAimScores.set(vehicleEid, currentScore);
 
-        const delta = currentScore - prevScore;
-        if (delta <= 0) return;
+        // First tick after no enemies — skip to establish baseline
+        if (prevScore === null) return;
 
-        Score.addAimAlignment(playerId, delta * AIM_COEFF);
+        const delta = currentScore - prevScore;
+        if (delta === 0) return;
+
+        const coeff = delta > 0 ? AIM_COEFF : AIM_COEFF * 0.5;
+        Score.addAimAlignment(playerId, delta * coeff);
     }
 
     function addPathFollowingReward(
