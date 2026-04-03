@@ -24,6 +24,7 @@ interface SeriesDef {
     label?: string;
     dashed?: boolean;
     width?: number;
+    dot?: boolean;
 }
 
 // --- Store ---
@@ -193,9 +194,9 @@ function buildPanel(): HTMLElement {
     for (let i = 0; i < scenariosCount; i++) {
         const idx = i as MetricIndex;
         addChartToGrid(grid, `Scenario ${i}`, [
-            { getData: () => store[`successRatio${idx}Train`].toArray(), color: '#4a9eff', label: 'Train' },
+            { getData: () => store[`successRatio${idx}Train`].toArray(), color: '#4a9eff', label: 'Train', dot: true },
             { getData: () => movingAvg(store[`successRatio${idx}Train`].toArray(), 20), color: '#ff6b6b', label: 'Train MA', width: 2 },
-            { getData: () => store[`successRatio${idx}Ref`].toArray(), color: '#51cf66', label: 'Ref' },
+            { getData: () => store[`successRatio${idx}Ref`].toArray(), color: '#51cf66', label: 'Ref', dot: true },
             { getData: () => movingAvg(store[`successRatio${idx}Ref`].toArray(), 20), color: '#ffd43b', label: 'Ref MA', width: 2 },
         ]);
     }
@@ -310,9 +311,11 @@ function addChartToGrid(container: HTMLElement, title: string, series: SeriesDef
             datasets: series.map(s => ({
                 data: [] as Point[],
                 borderColor: s.color,
-                borderWidth: s.width ?? 1.2,
+                borderWidth: s.dot ? 0 : (s.width ?? 1.2),
                 borderDash: s.dashed ? [6, 4] : [],
-                pointRadius: 0,
+                pointRadius: s.dot ? 1.5 : 0,
+                backgroundColor: s.color,
+                showLine: !s.dot,
                 fill: false,
                 tension: 0,
                 label: s.label ?? '',
