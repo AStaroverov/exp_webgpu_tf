@@ -19,12 +19,12 @@ type policyNetworkConfig = NetworkConfig
 const policyNetworkConfig: policyNetworkConfig = {
     dim: 128,
     heads: 4,
-    depth: 2,
+    depth: 6,
 };
 
 const valueNetworkConfig: NetworkConfig = {
-    dim: 64,
-    heads: 2,
+    dim: 32,
+    heads: 1,
     depth: 1,
 };
 
@@ -61,7 +61,7 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
 
     const latentToken = new VariableLayer({
         name: modelName + '_latent',
-        shape: [16, config.dim],
+        shape: [32, config.dim],
         initializer: 'truncatedNormal',
     }).apply(tokens.tankTok) as tf.SymbolicTensor;
 
@@ -77,14 +77,14 @@ export function createNetwork(modelName: Model, config: NetworkConfig = modelNam
 
     const latentHeads = new VariableLayer({
         name: modelName + '_heads',
-        shape: [config.heads, config.dim],
+        shape: [4, config.dim],
         initializer: 'truncatedNormal',
     }).apply(tokens.tankTok) as tf.SymbolicTensor;
 
     const summarizedHeads = applyPerceiverLayer({
         name: modelName + '_summarizedHeads',
         heads: 1,
-        depth: 1,
+        depth: 2,
         qTok: latentHeads,
         kvTok: latentFeatures,
         preNorm: true,

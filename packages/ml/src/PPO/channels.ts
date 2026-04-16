@@ -8,6 +8,7 @@ import { Model } from '../Models/def.ts';
 export type AgentSample = {
     memoryBatch: AgentMemoryBatch,
     networkVersion: number,
+    scenarioIndex: number,
 }
 
 export type EpisodeSample = {

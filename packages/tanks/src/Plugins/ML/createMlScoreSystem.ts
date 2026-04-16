@@ -28,6 +28,9 @@ const MOVEMENT_COEFF = 0.1;
 const MOVEMENT_ACTIONS = 10; // ~2sec window
 const MOVEMENT_DIST_THRESHOLD = 500;
 
+const PROXIMITY_COEFF = 0.005;
+const PROXIMITY_RADIUS_MULT = 1.5;
+
 export function createMlScoreSystem({ world } = GameDI) {
     let frame = 0;
     let allPairsDist: Float32Array | null = null;
@@ -49,9 +52,10 @@ export function createMlScoreSystem({ world } = GameDI) {
             const playerId = PlayerRef.id[vehicleEid];
             const enemies = findTankEnemiesEids(vehicleEid);
             const enemyRayHits = collectEnemyRayHits(vehicleEid);
-            addAimReward(vehicleEid, playerId, enemies, enemyRayHits);
+            // addAimReward(vehicleEid, playerId, enemies, enemyRayHits);
             addMovementReward(vehicleEid, playerId);
             addPathFollowingReward(vehicleEid, playerId, enemies, enemyRayHits);
+            addProximityPenalty(vehicleEid, playerId);
         }
     };
 
@@ -59,6 +63,7 @@ export function createMlScoreSystem({ world } = GameDI) {
     const prevCells = new Map<number, number>();
     // Previous aim score per vehicle (for delta-based reward)
     const prevAimScores = new Map<number, number | null>();
+    const prevMinDists = new Map<number, number>();
 
     const dispose = () => {
         frame = 0;
@@ -66,6 +71,7 @@ export function createMlScoreSystem({ world } = GameDI) {
         idleRings.clear();
         prevCells.clear();
         prevAimScores.clear();
+        prevMinDists.clear();
     };
 
     function addMovementReward(vehicleEid: number, playerId: number): void {
@@ -205,6 +211,32 @@ export function createMlScoreSystem({ world } = GameDI) {
         if (totalDelta <= 0) return;
 
         Score.addNavigation(playerId, APPROACH_COEFF * totalDelta);
+    }
+
+    function addProximityPenalty(vehicleEid: number, playerId: number): void {
+        const colliderRadius = TankInputTensor.colliderRadius[vehicleEid];
+        if (colliderRadius <= 0) return;
+
+        const threshold = colliderRadius * PROXIMITY_RADIUS_MULT;
+        let minDist = Infinity;
+
+        for (let i = 0; i < RAYS_COUNT; i++) {
+            const offset = i * RAY_BUFFER;
+            const hitType = TankInputTensor.raysData.get(vehicleEid, offset);
+            if (hitType === RayHitType.NONE) continue;
+            const distance = TankInputTensor.raysData.get(vehicleEid, offset + 6);
+            if (distance < minDist) minDist = distance;
+        }
+
+        const prev = prevMinDists.get(vehicleEid);
+        prevMinDists.set(vehicleEid, minDist);
+
+        // Only penalize when getting closer (distance decreasing) and within threshold
+        if (prev === undefined || minDist >= prev || minDist >= threshold) return;
+
+        // violation ∈ (0, 1] — 1 when touching, 0 at threshold
+        const violation = (threshold - minDist) / threshold;
+        Score.addProximityPenalty(playerId, -PROXIMITY_COEFF * violation);
     }
 
     return { tick, dispose };

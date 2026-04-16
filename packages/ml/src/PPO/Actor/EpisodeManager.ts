@@ -78,6 +78,7 @@ export class EpisodeManager {
 
             agentSampleChannel.emit({
                 networkVersion,
+                scenarioIndex: episode.index,
                 memoryBatch,
             });
         });

@@ -8,8 +8,8 @@ import { type InputArrays, prepareRandomInputArrays } from '../../../ml-common/I
 import { createInputTensors } from '../../../ml-common/InputTensors.ts';
 import { PreparedBatch } from '../../../ml-common/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../ml-common/Tensor.ts';
-import { getAdvantageStats, setAdvantageStats } from '../../../ml-common/utils.ts';
 import { shouldNoiseLayer } from '../Models/Create.ts';
+import { normalize } from '../../../../lib/math.ts';
 
 export function trainPolicyNetwork(
     network: tf.LayersModel,
@@ -286,7 +286,7 @@ export function computeRetraceTargets(
             throw new Error('Retrace returns contain NaN');
         }
 
-        const normalizedAdvantages = normalizeAdvantagesRunning(policyNetwork, advantages);
+        const normalizedAdvantages = normalize(advantages);
         return {
             advantages: normalizedAdvantages as Float32Array,
             tdErrors: tdErrors,
@@ -296,38 +296,6 @@ export function computeRetraceTargets(
         };
     });
 }
-
-const ADV_SMOOTHING = 0.05;
-
-function normalizeAdvantagesRunning(
-    network: tf.LayersModel,
-    advantages: Float32Array,
-): Float32Array {
-    let batchMean = 0;
-    for (let i = 0; i < advantages.length; i++) batchMean += advantages[i];
-    batchMean /= advantages.length;
-
-    let batchVar = 0;
-    for (let i = 0; i < advantages.length; i++) {
-        const d = advantages[i] - batchMean;
-        batchVar += d * d;
-    }
-    batchVar /= advantages.length;
-
-    const prev = getAdvantageStats(network);
-    const mean = prev ? (1 - ADV_SMOOTHING) * prev.mean + ADV_SMOOTHING * batchMean : batchMean;
-    const variance = prev ? (1 - ADV_SMOOTHING) * prev.var + ADV_SMOOTHING * batchVar : batchVar;
-    setAdvantageStats(network, { mean, var: variance });
-
-    const s = Math.sqrt(variance) + 1e-8;
-    const out = new Float32Array(advantages.length);
-    for (let i = 0; i < advantages.length; i++) {
-        out[i] = (advantages[i] - mean) / s;
-    }
-    return out;
-}
-
-
 
 /**
  * Retrace(λ) — Munos et al., "Safe and Efficient Off-Policy RL", 2016
