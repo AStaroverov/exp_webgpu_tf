@@ -22,9 +22,9 @@ const ENGAGED_RAY_THRESHOLD = 2;
 
 const AIM_COEFF = 0.1;
 
-const APPROACH_COEFF = 0.05;
+const APPROACH_COEFF = 0.01;
 
-const MOVEMENT_COEFF = 0.1;
+const MOVEMENT_COEFF = 0.05;
 const MOVEMENT_ACTIONS = 10; // ~2sec window
 const MOVEMENT_DIST_THRESHOLD = 500;
 
@@ -37,6 +37,7 @@ export function createMlScoreSystem({ world } = GameDI) {
 
     const tick = () => {
         if (!MLState.enabled) return;
+        return;
 
         if (allPairsDist == null) {
             const obstacleGrid = computeObstacleGrid(world, GameDI.width, GameDI.height);

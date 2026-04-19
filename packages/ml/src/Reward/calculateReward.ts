@@ -12,7 +12,7 @@ export const WEIGHTS = ({
     FINAL_REWARD_SCALE: 1.0,
 });
 
-export const getFramePenalty = (_frame: number) => 0;
+export const getFramePenalty = (_frame: number) => -0.001;
 
 /**
  * Step reward: score delta since last action (hit, kill, gotHit, friendlyFire).
