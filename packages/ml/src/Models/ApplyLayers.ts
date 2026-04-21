@@ -132,14 +132,12 @@ export function applyCrossAttentionLayer(
 ) {
     const dModel = qTok.shape[qTok.shape.length - 1]!;
     const isSameToken = qTok === kvTok;
-    qTok = preNorm
-        ? createNormalizationLayer({ name: name + '_QNorm_' }).apply(qTok) as tf.SymbolicTensor
-        : new CloneLayer({ name: name + '_QClone_' }).apply(qTok) as tf.SymbolicTensor;
-    kvTok = isSameToken
-        ? qTok
-        : preNorm
-            ? createNormalizationLayer({ name: name + '_KVNorm_' }).apply(kvTok) as tf.SymbolicTensor
-            : kvTok;
+    if (preNorm) {
+        qTok = createNormalizationLayer({ name: name + '_QNorm_' }).apply(qTok) as tf.SymbolicTensor;
+        kvTok = isSameToken
+            ? qTok
+            : createNormalizationLayer({ name: name + '_KVNorm_' }).apply(kvTok) as tf.SymbolicTensor;
+    }
 
     // Create mask-like layers if masks are not provided
     qMask ??= new MaskLikeLayer({ name: name + '_qMaskLike' }).apply(qTok) as tf.SymbolicTensor;
@@ -149,6 +147,7 @@ export function applyCrossAttentionLayer(
         name: name + '_MultiHeadAttentionLayer',
         keyDim: dModel / heads,
         numHeads: heads,
+        selfAttn: isSameToken,
     }).apply([qTok, qMask, kvTok, kvMask]) as tf.SymbolicTensor;
 
     return attention;
