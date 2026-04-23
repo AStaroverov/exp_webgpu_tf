@@ -37,7 +37,6 @@ export function createMlScoreSystem({ world } = GameDI) {
 
     const tick = () => {
         if (!MLState.enabled) return;
-        return;
 
         if (allPairsDist == null) {
             const obstacleGrid = computeObstacleGrid(world, GameDI.width, GameDI.height);
@@ -53,7 +52,7 @@ export function createMlScoreSystem({ world } = GameDI) {
             const playerId = PlayerRef.id[vehicleEid];
             const enemies = findTankEnemiesEids(vehicleEid);
             const enemyRayHits = collectEnemyRayHits(vehicleEid);
-            // addAimReward(vehicleEid, playerId, enemies, enemyRayHits);
+            addAimReward(vehicleEid, playerId, enemies, enemyRayHits);
             addMovementReward(vehicleEid, playerId);
             addPathFollowingReward(vehicleEid, playerId, enemies, enemyRayHits);
             addProximityPenalty(vehicleEid, playerId);
@@ -151,7 +150,7 @@ export function createMlScoreSystem({ world } = GameDI) {
         const delta = currentScore - prevScore;
         if (delta === 0) return;
 
-        const coeff = delta > 0 ? AIM_COEFF : AIM_COEFF * 1.2;
+        const coeff = delta > 0 ? AIM_COEFF : AIM_COEFF * 2;
         Score.addAimAlignment(playerId, delta * coeff);
     }
 

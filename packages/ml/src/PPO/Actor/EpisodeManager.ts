@@ -89,7 +89,7 @@ export class EpisodeManager {
     }
 
     protected async runEpisode() {
-        const episode = await this.beforeEpisode();
+        const episode = this.beforeEpisode();
 
         try {
             await this.awaitAgentsSync();
