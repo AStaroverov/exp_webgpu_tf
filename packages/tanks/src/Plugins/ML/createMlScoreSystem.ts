@@ -16,20 +16,7 @@ import { GRID_SIZE, GRID_CELLS } from "../../../../ml/src/Models/Create";
 import { SNAPSHOT_EVERY } from "../../../../ml-common/consts";
 import { cos, max, min, sin, sqrt, hypot } from "../../../../../lib/math";
 import { clamp } from "lodash";
-
-// All coefficients are per-action (1 action = SNAPSHOT_EVERY ticks ≈ 200ms)
-const ENGAGED_RAY_THRESHOLD = 2;
-
-const AIM_COEFF = 0.1;
-
-const APPROACH_COEFF = 0.01;
-
-const MOVEMENT_COEFF = 0.05;
-const MOVEMENT_ACTIONS = 10; // ~2sec window
-const MOVEMENT_DIST_THRESHOLD = 500;
-
-const PROXIMITY_COEFF = 0.005;
-const PROXIMITY_RADIUS_MULT = 1.5;
+import { WEIGHTS } from "../../../../ml/src/Reward/calculateReward";
 
 export function createMlScoreSystem({ world } = GameDI) {
     let frame = 0;
@@ -63,7 +50,8 @@ export function createMlScoreSystem({ world } = GameDI) {
     const prevCells = new Map<number, number>();
     // Previous aim score per vehicle (for delta-based reward)
     const prevAimScores = new Map<number, number | null>();
-    const prevMinDists = new Map<number, number>();
+    const prevObstacleViolations = new Map<number, number | null>();
+    const prevEnemyViolations = new Map<number, number | null>();
 
     const dispose = () => {
         frame = 0;
@@ -71,7 +59,8 @@ export function createMlScoreSystem({ world } = GameDI) {
         idleRings.clear();
         prevCells.clear();
         prevAimScores.clear();
-        prevMinDists.clear();
+        prevObstacleViolations.clear();
+        prevEnemyViolations.clear();
     };
 
     function addMovementReward(vehicleEid: number, playerId: number): void {
@@ -80,7 +69,7 @@ export function createMlScoreSystem({ world } = GameDI) {
 
         let ring = idleRings.get(vehicleEid);
         if (!ring) {
-            ring = new RingBuffer<{ x: number, y: number }>(MOVEMENT_ACTIONS);
+            ring = new RingBuffer<{ x: number, y: number }>(WEIGHTS.MOVEMENT_ACTIONS);
             idleRings.set(vehicleEid, ring);
         }
 
@@ -90,8 +79,8 @@ export function createMlScoreSystem({ world } = GameDI) {
         const oldest = ring.getFirst();
         if (!oldest) return;
         const displacement = hypot(px - oldest.x, py - oldest.y);
-        const reward = clamp(displacement / MOVEMENT_DIST_THRESHOLD, 0, 1);
-        Score.addMovement(playerId, MOVEMENT_COEFF * (reward ** 2));
+        const reward = clamp(displacement / WEIGHTS.MOVEMENT_DIST_THRESHOLD, 0, 1);
+        Score.addMovement(playerId, WEIGHTS.MOVEMENT_COEFF * (reward ** 2));
     }
 
     function addAimReward(
@@ -111,12 +100,14 @@ export function createMlScoreSystem({ world } = GameDI) {
 
         let bestCos = -1;
         let bestDistFactor = 0;
+        let bestProduct = -Infinity;
+        let hasEnemy = false;
 
         for (let i = 0; i < enemies.length; i++) {
             const eid = enemies[i];
             if (getTankHealth(eid) <= 0) continue;
             // Only reward aiming at enemies clearly visible (2+ rays), not through cracks
-            if ((enemyRayHits.get(eid) ?? 0) < ENGAGED_RAY_THRESHOLD) continue;
+            if ((enemyRayHits.get(eid) ?? 0) < WEIGHTS.ENGAGED_RAY_THRESHOLD) continue;
 
             const ex = RigidBodyState.position.get(eid, 0);
             const ey = RigidBodyState.position.get(eid, 1);
@@ -127,31 +118,35 @@ export function createMlScoreSystem({ world } = GameDI) {
 
             const cosAngle = (fwdX * dx + fwdY * dy) / dist;
             const distFactor = 1 / (1 + dist / (GameDI.width * 0.5));
+            const product = cosAngle * distFactor;
 
-            if (cosAngle * distFactor > bestCos * bestDistFactor) {
+            if (product > bestProduct) {
+                bestProduct = product;
                 bestCos = cosAngle;
                 bestDistFactor = distFactor;
+                hasEnemy = true;
             }
         }
 
         // No visible enemies — reset state to null so next sighting starts fresh
-        if (bestCos === -1) {
+        if (!hasEnemy) {
             prevAimScores.set(vehicleEid, null);
             return;
         }
 
-        const currentScore = bestCos > 0 ? bestCos * bestDistFactor : 0;
+        // Remap cos [-1, 1] → [0, 1] so score is monotonic across full 0..180° range
+        const currentScore = ((bestCos + 1) / 2) * bestDistFactor;
         const prevScore = prevAimScores.get(vehicleEid) ?? null;
         prevAimScores.set(vehicleEid, currentScore);
 
-        // First tick after no enemies — skip to establish baseline
+        // Delta: turning toward enemy = +, away = −. Hold bonus only when aim is already good,
+        // so holding a solid lock is rewarded but holding a bad aim isn't punished.
         if (prevScore === null) return;
-
-        const delta = currentScore - prevScore;
-        if (delta === 0) return;
-
-        const coeff = delta > 0 ? AIM_COEFF : AIM_COEFF * 2;
-        Score.addAimAlignment(playerId, delta * coeff);
+        const deltaTerm = (currentScore - prevScore) * WEIGHTS.AIM_COEFF;
+        const holdTerm = currentScore > WEIGHTS.AIM_HOLD_THRESHOLD
+            ? (currentScore - WEIGHTS.AIM_HOLD_THRESHOLD) * WEIGHTS.AIM_HOLD_COEFF
+            : 0;
+        Score.addAimAlignment(playerId, deltaTerm + holdTerm);
     }
 
     function addPathFollowingReward(
@@ -178,10 +173,10 @@ export function createMlScoreSystem({ world } = GameDI) {
 
         // Any enemy engaged (visible in 2+ rays and close) — let combat rewards handle it
         for (const [eid, count] of enemyRayHits) {
-            if (count < ENGAGED_RAY_THRESHOLD) continue;
+            if (count < WEIGHTS.ENGAGED_RAY_THRESHOLD) continue;
             const ex = RigidBodyState.position.get(eid, 0);
             const ey = RigidBodyState.position.get(eid, 1);
-            if (hypot(ex - px, ey - py) < 600) return;
+            if (hypot(ex - px, ey - py) < WEIGHTS.APPROACH_DISENGAGE_DIST) return;
         }
 
         // Sum approach deltas for all enemies
@@ -210,33 +205,77 @@ export function createMlScoreSystem({ world } = GameDI) {
 
         if (totalDelta <= 0) return;
 
-        Score.addNavigation(playerId, APPROACH_COEFF * totalDelta);
+        Score.addNavigation(playerId, WEIGHTS.APPROACH_COEFF * totalDelta);
     }
 
     function addProximityPenalty(vehicleEid: number, playerId: number): void {
         const colliderRadius = TankInputTensor.colliderRadius[vehicleEid];
         if (colliderRadius <= 0) return;
 
-        const threshold = colliderRadius * PROXIMITY_RADIUS_MULT;
-        let minDist = Infinity;
+        const obstacleThreshold = colliderRadius * WEIGHTS.PROXIMITY_OBSTACLE_RADIUS_MULT;
+        const enemyThreshold = colliderRadius * WEIGHTS.PROXIMITY_ENEMY_RADIUS_MULT;
+
+        let minObstacleDist = Infinity;
+        let minEnemyDist = Infinity;
 
         for (let i = 0; i < RAYS_COUNT; i++) {
             const offset = i * RAY_BUFFER;
             const hitType = TankInputTensor.raysData.get(vehicleEid, offset);
             if (hitType === RayHitType.NONE) continue;
             const distance = TankInputTensor.raysData.get(vehicleEid, offset + 6);
-            if (distance < minDist) minDist = distance;
+            if (hitType === RayHitType.OBSTACLE) {
+                if (distance < minObstacleDist) minObstacleDist = distance;
+            } else if (hitType === RayHitType.ENEMY_VEHICLE) {
+                if (distance < minEnemyDist) minEnemyDist = distance;
+            }
         }
 
-        const prev = prevMinDists.get(vehicleEid);
-        prevMinDists.set(vehicleEid, minDist);
+        const obstacleViolation = minObstacleDist < obstacleThreshold
+            ? (obstacleThreshold - minObstacleDist) / obstacleThreshold
+            : null;
+        const enemyViolation = minEnemyDist < enemyThreshold
+            ? (enemyThreshold - minEnemyDist) / enemyThreshold
+            : null;
 
-        // Only penalize when getting closer (distance decreasing) and within threshold
-        if (prev === undefined || minDist >= prev || minDist >= threshold) return;
+        const penalty =
+            computeProximityTerm(
+                vehicleEid,
+                obstacleViolation,
+                prevObstacleViolations,
+                WEIGHTS.PROXIMITY_OBSTACLE_COEFF,
+                WEIGHTS.PROXIMITY_OBSTACLE_HOLD_COEFF,
+            ) +
+            computeProximityTerm(
+                vehicleEid,
+                enemyViolation,
+                prevEnemyViolations,
+                WEIGHTS.PROXIMITY_ENEMY_COEFF,
+                WEIGHTS.PROXIMITY_ENEMY_HOLD_COEFF,
+            );
 
-        // violation ∈ (0, 1] — 1 when touching, 0 at threshold
-        const violation = (threshold - minDist) / threshold;
-        Score.addProximityPenalty(playerId, -PROXIMITY_COEFF * violation);
+        if (penalty !== 0) Score.addProximityPenalty(playerId, -penalty);
+    }
+
+    function computeProximityTerm(
+        vehicleEid: number,
+        current: number | null,
+        store: Map<number, number | null>,
+        deltaCoeff: number,
+        holdCoeff: number,
+    ): number {
+        const prev = store.get(vehicleEid) ?? null;
+        store.set(vehicleEid, current);
+
+        // Out of range — reset, no term this tick
+        if (current === null) return 0;
+        // First sighting in range — seed prev, no delta yet (mirrors aim reward)
+        if (prev === null) return 0;
+
+        const deltaTerm = (current - prev) * deltaCoeff;
+        const holdTerm = current > WEIGHTS.PROXIMITY_HOLD_THRESHOLD
+            ? (current - WEIGHTS.PROXIMITY_HOLD_THRESHOLD) * holdCoeff
+            : 0;
+        return deltaTerm + holdTerm;
     }
 
     return { tick, dispose };

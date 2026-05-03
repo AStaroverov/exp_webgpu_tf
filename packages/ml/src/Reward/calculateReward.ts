@@ -4,12 +4,42 @@ import { Score } from '../../../tanks/src/Game/ECS/Components/Score.ts';
 import { TankAgent } from '../../../tanks/src/Plugins/Pilots/Agents/CurrentActorAgent.ts';
 import { scenariosCount } from '../../../ml-common/Curriculum/createScenarioByCurriculumState.ts';
 
+// All per-action coefficients (1 action = SNAPSHOT_EVERY ticks ≈ 200ms)
 export const WEIGHTS = ({
-    // Event-based step rewards (hit/kill tracked by other systems)
-    KILL_REWARD: 1.2,
-    HIT_REWARD: 0.05,
     // Episode outcome scale
     FINAL_REWARD_SCALE: 1.0,
+
+    // Event-based step rewards
+    KILL_REWARD: 1,
+    HIT_REWARD: 0.2,
+    FRIENDLY_FIRE_MULT: -2,
+    GOT_HIT_MULT: 0,
+
+    // Aim alignment (delta-based)
+    AIM_COEFF: 1,
+    AIM_HOLD_COEFF: 0.2,
+    AIM_HOLD_THRESHOLD: 0.6,
+    ENGAGED_RAY_THRESHOLD: 2,
+
+    // Path-following toward enemies
+    APPROACH_COEFF: 0.05,
+    APPROACH_DISENGAGE_DIST: 600,
+
+    // Movement over rolling window
+    MOVEMENT_COEFF: 0.1,
+    MOVEMENT_ACTIONS: 10, // ~2sec window
+    MOVEMENT_DIST_THRESHOLD: 500,
+
+    // Proximity penalty — shared hold threshold
+    PROXIMITY_HOLD_THRESHOLD: 0.3,
+    // Proximity penalty — obstacles
+    PROXIMITY_OBSTACLE_COEFF: 0.1,
+    PROXIMITY_OBSTACLE_HOLD_COEFF: 0.05,
+    PROXIMITY_OBSTACLE_RADIUS_MULT: 1.5,
+    // Proximity penalty — enemies (2x range, stronger)
+    PROXIMITY_ENEMY_COEFF: 0.25,
+    PROXIMITY_ENEMY_HOLD_COEFF: 0.12,
+    PROXIMITY_ENEMY_RADIUS_MULT: 3.0,
 });
 
 export const getFramePenalty = (_frame: number) => -0.001;

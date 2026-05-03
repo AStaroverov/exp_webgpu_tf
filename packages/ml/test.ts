@@ -85,7 +85,7 @@ frameTasks.addInterval(() => {
 
         snapshotTankInputTensor();
 
-        prepareInputArrays(tanks[0], GameDI.width, GameDI.height, computeObstacleGrid(GameDI.world, GameDI.width, GameDI.height));
+        prepareInputArrays(tanks[0], GameDI.width, GameDI.height, computeObstacleGrid(GameDI.world, GameDI.width, GameDI.height), null);
     }
 
     // const enemyTankPosition = getMatrixTranslation(GlobalTransform.matrix.getBatch(enemyEid));
