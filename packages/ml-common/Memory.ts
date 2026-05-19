@@ -10,6 +10,8 @@ export type AgentMemoryBatch = {
     logProbs: Float32Array,
 }
 
+export type PreparedBatch = AgentMemoryBatch;
+
 export class AgentMemory {
     public states: InputArrays[] = [];
     public actions: Float32Array[] = [];
@@ -68,9 +70,9 @@ export class AgentMemory {
 
         return {
             size: this.states.length,
-            states: (this.states),
-            actions: (this.actions),
-            logits: (this.logits),
+            states: this.states.slice(),
+            actions: this.actions.slice(),
+            logits: this.logits.slice(),
             logProbs: new Float32Array(this.logProbs),
             rewards: rewards,
             dones: dones,

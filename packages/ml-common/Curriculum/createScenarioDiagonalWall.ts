@@ -33,7 +33,7 @@ export function createScenarioDiagonalWall(options: ScenarioCoreOptions): Scenar
 
     if (random < 0.33) {
         // Two buildings, centered around the diagonal center, spaced farther apart
-        for (const offset of [-1, 1]) {
+        for (const offset of [0, 1]) {
             createBuilding({
                 x: geometry.centerX + perpX * offset * buildingSpacing,
                 y: geometry.centerY + perpY * offset * buildingSpacing,
@@ -42,7 +42,7 @@ export function createScenarioDiagonalWall(options: ScenarioCoreOptions): Scenar
     } else {
         // Five buildings extending from the center in one direction
         const direction = Math.random() < 0.5 ? -1 : 1;
-        for (const offset of [-1, 0, 1, 2, 3, 4]) {
+        for (const offset of [0, 1, 2, 3, 4]) {
             createBuilding({
                 x: geometry.centerX + perpX * offset * direction * buildingSpacing,
                 y: geometry.centerY + perpY * offset * direction * buildingSpacing,

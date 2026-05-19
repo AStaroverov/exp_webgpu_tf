@@ -138,17 +138,15 @@ function applyScores(
         const attackerTeamId = TeamRef.id[hitEid];
         const isFriendlyFire = vehiclePartTeamId === attackerTeamId;
 
-        // Reduced hit reward (shifted focus to kills)
         if (isFriendlyFire) {
-            Score.addFriendlyFire(attackerPlayerId, -2 * WEIGHTS.HIT_REWARD);
+            Score.addFriendlyFire(attackerPlayerId, WEIGHTS.FRIENDLY_FIRE_MULT * WEIGHTS.HIT_REWARD);
         } else {
             Score.addHitEnemy(attackerPlayerId, WEIGHTS.HIT_REWARD);
         }
     }
 
-    // Penalize the hittable for being hit (trade efficiency)
     const hittablePlayerId = PlayerRef.id[hittableEid];
-    Score.addGotHit(hittablePlayerId, -0.5 * WEIGHTS.HIT_REWARD * hitEids.length);
+    Score.addGotHit(hittablePlayerId, WEIGHTS.GOT_HIT_MULT * WEIGHTS.HIT_REWARD * hitEids.length);
 }
 
 function saveHitters(

@@ -8,6 +8,7 @@ import { Model } from '../Models/def.ts';
 export type AgentSample = {
     memoryBatch: AgentMemoryBatch,
     networkVersion: number,
+    scenarioIndex: number,
 }
 
 export type EpisodeSample = {
@@ -31,7 +32,8 @@ export const queueSizeChannel = createChannel<number>('queueSizeChannel');
 
 export type ModelSettings = {
     lr?: number,
-    expIteration?: number
+    expIteration?: number,
+    logEntropyCoeff?: number,
 
     rewardRatio?: number,
     emaStdReturns?: number,

@@ -6,39 +6,46 @@ import {
     MAX_ENEMIES,
     RAYS_COUNT,
     RAY_HIT_TYPE_COUNT,
-    RAY_BUFFER,
     MAX_TURRETS,
 } from '../../../tanks/src/Plugins/Pilots/Components/TankState.ts';
 
 
 import { createDenseLayer } from "./ApplyLayers.ts";
 import { Model } from './def.ts';
-import { createNetwork } from './Networks/v10.ts';
+import { createNetwork } from './Networks/v13.ts';
 import { AdamW } from './Optimizer/AdamW.ts';
 
 export { RAY_HIT_TYPE_COUNT }; // LightTank, MediumTank, HeavyTank, PlayerTank, Harvester, MeleeCar
 
-export const BATTLE_FEATURES_DIM = 2;
 export const TANK_FEATURES_DIM = 8;
 
+// Tank history: [relX, relY] per step
+export const TANK_HISTORY_STEPS = 6;
+export const TANK_HISTORY_FEATURE_DIM = 2;
+
 export const TURRET_SLOTS = MAX_TURRETS;
-export const TURRET_FEATURES_DIM = 4;
+export const TURRET_FEATURES_DIM = 2;
 
-// Enemies: [hp, x, y, vx, vy, turretRotationCos, turretRotationSin, colliderRadius]
+// Enemies: [hp, relX, relY, relVx, relVy, colliderRadius]
 export const ENEMY_SLOTS = MAX_ENEMIES;
-export const ENEMY_FEATURES_DIM = 8 + 1; // 1 type embedding
+export const ENEMY_FEATURES_DIM = 6;
 
-// Allies: [hp, x, y, vx, vy, turretRotationCos, turretRotationSin, colliderRadius]
+// Allies: [hp, relX, relY, relVx, relVy, colliderRadius]
 export const ALLY_SLOTS = MAX_ALLIES;
-export const ALLY_FEATURES_DIM = 8 + 1; // 1 type embedding
+export const ALLY_FEATURES_DIM = 6;
 
-// Bullets: [x, y, vx, vy]
+// Bullets: [relX, relY, relVx, relVy]
 export const BULLET_SLOTS = MAX_BULLETS;
 export const BULLET_FEATURES_DIM = 4;
 
 // Unified rays (environment + turret rays combined)
 export const RAY_SLOTS = RAYS_COUNT;
-export const RAY_FEATURES_DIM = RAY_BUFFER - 1 + 2; // [locRootX, locRootY, locDirX, locDirY, distance, hitObstacle, hitVehicle]
+export const RAY_FEATURES_DIM = 4; // [distanceX, distanceY, hitObstacle, hitVehicle]
+
+// Obstacle spatial map (16×16 grid)
+export const GRID_SIZE = 16;
+export const GRID_CELL_FEATURES = 3;  // obstacle + rel_x + rel_y
+export const GRID_CELLS = GRID_SIZE * GRID_SIZE;  // 256
 
 export const ACTION_HEAD_DIMS = [15, 15, 2, 31];
 

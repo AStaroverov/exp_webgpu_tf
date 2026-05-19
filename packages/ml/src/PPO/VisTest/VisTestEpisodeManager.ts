@@ -59,18 +59,16 @@ export class VisTestEpisodeManager extends EpisodeManager {
     }
 
     protected beforeEpisode() {
-        return createScenarioByCurriculumState(this.curriculumState, {
+        this.currentScenario = createScenarioByCurriculumState(this.curriculumState, {
             iteration: this.curriculumState.iteration,
             train: true,
-        })
-            .then((scenario) => {
-                (this.currentScenario = scenario);
-                const canvas = document.querySelector('canvas')!;
-                scenario.setRenderTarget(canvas);
-                canvas.style.width = scenario.width + 'px';
-                canvas.style.height = scenario.height + 'px';
-                return scenario;
-            });
+        });
+
+        const canvas = document.querySelector('canvas')!;
+        this.currentScenario.setRenderTarget(canvas);
+        canvas.style.width = this.currentScenario.width + 'px';
+        canvas.style.height = this.currentScenario.height + 'px';
+        return this.currentScenario;
     }
 
 

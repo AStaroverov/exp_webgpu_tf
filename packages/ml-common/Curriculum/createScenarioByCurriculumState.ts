@@ -1,77 +1,87 @@
-import { clamp } from 'lodash';
-import { min } from '../../../lib/math.ts';
-import { random } from '../../../lib/random.ts';
-import { createScenario1v1Random } from './createScenario1v1Random.ts';
-import { createScenarioDiagonal } from './createScenarioDiagonal.ts';
-import { createScenarioDiagonalWall } from './createScenarioDiagonalWall.ts';
-import { createScenarioAgentsVsBots1 } from './createScenarioAgentsVsBots1.ts';
 import { createScenarioGridBase } from './createScenarioGridBase.ts';
-import { createScenarioWithHistoricalAgents as createScenarioFrozenSelfPlay } from './createScenarioWithHistoricalAgents.ts';
-import { createStaticScenarioAgentsVsBots0 } from './createStaticScenarioAgentsVsBots0.ts';
 import { CurriculumState, Scenario } from './types.ts';
-import { createScenarioWithCurrentAgents as createScenarioSelfPlay } from './createScenarioWithCurrentAgents.ts';
-import { createScenario3v3Random } from './createScenario3v3Random.ts';
+import { createScenarioFromConfig, scenarioCompositions } from './scenarioCompositions.ts';
 
 type ScenarioOptions = Parameters<typeof createScenarioGridBase>[0];
 
-const mapEntries = [
-    [0, createScenario1v1Random],       // 1v1 random positions, simplest bot
-    [1, createScenarioDiagonal],        // 1v1 diagonal with center obstacle
-    [2, createScenario3v3Random.bind(null, 0)],
-    [3, createScenarioDiagonalWall],    // 1v1 diagonal with 3-building wall
-    [4, createStaticScenarioAgentsVsBots0],
-    [5, createScenario3v3Random.bind(null, 1)],
-    [6, createScenarioAgentsVsBots1],
-    [7, createScenarioFrozenSelfPlay],
-    [8, createScenarioSelfPlay],
-] as const;
-const mapIndexToConstructor = new Map<number, (options: ScenarioOptions) => Scenario>(mapEntries);
+const scenarios = scenarioCompositions.map(cfg => (opts: ScenarioOptions) => createScenarioFromConfig(cfg, opts));
 
-if (mapIndexToConstructor.size !== mapEntries.length) {
-    throw new Error('Scenario index is not unique');
+export const scenariosCount = scenarios.length;
+
+const THRESHOLD_STEP_ITERATIONS = 500;
+const THRESHOLD_MIN = 0.55;
+const THRESHOLD_MAX = 0.75;
+const THRESHOLD_STEP = 0.02;
+
+const SOFTMAX_BETA = 3;
+const EPSILON_FLOOR = 0.05;
+const REGRESSION_DROP = 0.1;
+const REGRESSION_BOOST = 3;
+
+function getCurrentThreshold(iteration: number): number {
+    return Math.min(THRESHOLD_MIN + THRESHOLD_STEP * Math.floor(iteration / THRESHOLD_STEP_ITERATIONS), THRESHOLD_MAX);
 }
 
-export const scenariosCount = mapIndexToConstructor.size;
+function getSuccessRatio(state: CurriculumState, index: number): number {
+    return state.mapScenarioIndexToSuccessRatio[index] ?? 0;
+}
 
-const edge = 0.3; // success ratio to unlock next scenario
+// Unlocked set spans [0, highestPassed + 1]. Scan all indices so a regression
+// on an earlier scenario does not re-lock later ones the agent has already cleared.
+function getUnlockedCount(state: CurriculumState, threshold: number): number {
+    let highestPassed = -1;
+    for (let i = 0; i < scenarios.length; i++) {
+        if (getSuccessRatio(state, i) >= threshold) {
+            highestPassed = i;
+        }
+    }
+    const unlocked = Math.min(highestPassed + 2, scenarios.length);
+    return Math.max(unlocked, 1);
+}
 
-export async function createScenarioByCurriculumState(curriculumState: CurriculumState, options: Omit<ScenarioOptions, 'index'>): Promise<Scenario> {
+function sampleIndex(weights: number[]): number {
+    const total = weights.reduce((s, w) => s + w, 0);
+    const r = Math.random() * total;
+    let acc = 0;
+    for (let i = 0; i < weights.length; i++) {
+        acc += weights[i];
+        if (r < acc) return i;
+    }
+    return weights.length - 1;
+}
+
+function computeSamplingWeights(state: CurriculumState, unlockedCount: number, threshold: number): number[] {
+    const rawWeights: number[] = [];
+    for (let i = 0; i < unlockedCount; i++) {
+        const raw = getSuccessRatio(state, i);
+        const normalized = (raw + 1) / 2;
+        let w = Math.exp(SOFTMAX_BETA * (1 - normalized));
+        // Regression: a previously competent scenario has degraded — prioritize recovery.
+        if (raw < threshold - REGRESSION_DROP) {
+            w *= REGRESSION_BOOST;
+        }
+        rawWeights.push(w);
+    }
+
+    const sum = rawWeights.reduce((s, w) => s + w, 0);
+    const probs = rawWeights.map(w => w / sum);
+
+    // ε-floor guarantees every unlocked scenario keeps non-trivial replay probability.
+    const floored = probs.map(p => Math.max(p, EPSILON_FLOOR));
+    const flooredSum = floored.reduce((s, p) => s + p, 0);
+    return floored.map(p => p / flooredSum);
+}
+
+export function createScenarioByCurriculumState(curriculumState: CurriculumState, options: Omit<ScenarioOptions, 'index'>): Scenario {
     const constructorOptions = options as ScenarioOptions;
 
-    let constructor = createScenario1v1Random;
+    const threshold = getCurrentThreshold(curriculumState.iteration);
+    const unlockedCount = getUnlockedCount(curriculumState, threshold);
+    const weights = computeSamplingWeights(curriculumState, unlockedCount, threshold);
+    const chosenIndex = sampleIndex(weights);
 
-    let weights = [];
-    let totalWeight = 0;
-    for (let i = 0, minSuccessRatio = 1; i < mapIndexToConstructor.size; i++) {
-        let successRatio: number | undefined = curriculumState.mapScenarioIndexToSuccessRatio[i];
-
-        // Unlock next scenarios when all previous reach at least 0.3 avg success
-        if (successRatio === undefined && minSuccessRatio < edge) {
-            break;
-        }
-
-        successRatio ??= 0;
-
-        const weight = clamp(0.9 - successRatio, 0.2, 1);
-
-        weights.push(weight);
-        totalWeight += weight;
-        minSuccessRatio = min(minSuccessRatio, successRatio);
-    }
-
-    for (let i = 0, r = random() * totalWeight; i < weights.length; i++) {
-        const weight = weights[i];
-        if (r < weight) {
-            constructorOptions.index = i;
-            constructor = mapIndexToConstructor.get(i) ?? (() => {
-                console.error(`Scenario ${i} not found, using default scenario 1v1`);
-                constructorOptions.index = 0;
-                return createScenario1v1Random;
-            })();
-            break;
-        }
-        r -= weight;
-    }
+    constructorOptions.index = chosenIndex;
+    const constructor = scenarios[chosenIndex];
 
     return constructor(constructorOptions);
 }

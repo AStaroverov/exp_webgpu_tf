@@ -48,7 +48,6 @@ function trainValue(network: tf.LayersModel, batch: LearnData) {
                 tStates,
                 tReturns,
                 tValues,
-                mbs,
                 CONFIG.valueClipRatio, CONFIG.valueLossCoeff, CONFIG.clipNorm,
                 j === mbc - 1,
             );

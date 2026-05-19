@@ -6,6 +6,8 @@ import { disposeNetwork } from "../../../../../ml/src/Models/Utils";
 import { batchAct } from "../../../../../ml/src/PPO/train";
 import { TankAgent } from "./CurrentActorAgent";
 import { random, randomRangeFloat } from '../../../../../../lib/random';
+import { computeObstacleGrid } from '../../../../../ml-common/computeObstacleGrid';
+import { GameDI } from '../../../Game/DI/GameDI';
 
 export type NetworkModelManager = ReturnType<typeof createNetworkModelManager>;
 
@@ -61,18 +63,21 @@ export const createNetworkModelManager = (getter: () => Promise<tf.LayersModel>)
         }
 
         if (scheduledAgents.length > 0) {
-            const states = scheduledAgents.map(({width, height, agent}) => prepareInputArrays(agent.tankEid, width, height));
+            const obstacleGrid = computeObstacleGrid(GameDI.world, GameDI.width, GameDI.height);
+            const currentStates = scheduledAgents
+                .map(({width, height, agent}) => prepareInputArrays(agent.tankEid, width, height, obstacleGrid, agent.getMemory?.() ?? null));
+
             const noises = train
                 ? scheduledAgents.map(({agent}) => agent.getNoise?.())
                 : undefined;
-            const options = train 
-                ? { greedy: false, epsilon: randomRangeFloat(0.05, 0.3), noises } 
+            const options = train
+                ? { greedy: false, epsilon: randomRangeFloat(0.05, 0.3), noises }
                 : { greedy: true };
-            const result = batchAct(network, states, options);
-            
+            const result = batchAct(network, currentStates, options);
+
             for (const [index, {agent}] of scheduledAgents.entries()) {
                 computedAgents.set(agent, {
-                    state: states[index],
+                    state: currentStates[index],
                     ...result[index]
                 });
             }

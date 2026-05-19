@@ -1,6 +1,7 @@
 import { getNetworkLearningRate, getNetworkSettings } from '../../../../ml-common/utils.ts';
 
 import * as tf from '@tensorflow/tfjs';
+import { clamp } from 'lodash-es';
 import { RingBuffer } from 'ring-buffer-ts';
 import { ceil, floor, max, median, min } from '../../../../../lib/math.ts';
 import { metricsChannels } from '../../../../ml-common/channels.ts';
@@ -10,13 +11,19 @@ import { getDynamicLearningRate } from '../../../../ml-common/getDynamicLearning
 import { createInputTensors } from '../../../../ml-common/InputTensors.ts';
 import { ReplayBuffer } from '../../../../ml-common/ReplayBuffer.ts';
 import { asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../../../../ml-common/Tensor.ts';
-import { createPolicyNetwork } from '../../Models/Create.ts';
+import { ACTION_HEAD_DIMS, createPolicyNetwork } from '../../Models/Create.ts';
 import { Model } from '../../Models/def.ts';
 import { modelSettingsChannel } from '../channels.ts';
 import { computeKullbackLeiblerAprox, trainPolicyNetwork } from '../train.ts';
 import { createLearnerAgent } from './createLearnerAgent.ts';
 import { LearnData } from './createLearnerManager.ts';
 import { isLossDangerous } from './isLossDangerous.ts';
+
+// Compute target entropy from action head dimensions
+// targetEntropy = targetRatio * mean(log(numClasses_i))
+const maxEntropyPerHead = ACTION_HEAD_DIMS.map(dim => Math.log(dim));
+const meanMaxEntropy = maxEntropyPerHead.reduce((a, b) => a + b, 0) / maxEntropyPerHead.length;
+const targetEntropy = CONFIG.adaptiveEntropy.targetRatio * meanMaxEntropy;
 
 export function createPolicyLearnerAgent() {
     return createLearnerAgent({
@@ -35,10 +42,15 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
     const mbc = ceil(batch.size / mbs);
     const rb = new ReplayBuffer(batch.states.length);
 
+    // Adaptive entropy coefficient: adapts to keep H(π) near target
+    let logEntropyCoeff = settings.logEntropyCoeff ?? CONFIG.adaptiveEntropy.initialLogAlpha;
+    const entropyCoeff = Math.exp(logEntropyCoeff);
+
     console.info(`[Train Policy]: Stating..
          Iteration ${expIteration},
          Sum batch size: ${batch.size},
-         Mini batch count: ${mbc} by ${mbs}`);
+         Mini batch count: ${mbc} by ${mbs},
+         Entropy α=${entropyCoeff.toFixed(4)}`);
 
     const getPolicyBatch = (batchSize: number, index: number) => {
         const indices = rb.getSample(batchSize, index * batchSize, (index + 1) * batchSize);
@@ -51,8 +63,8 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
 
     const klSize = floor(mbs * ceil(mbc / 3));
     const klList: number[] = [];
+    const entropyList: number[] = [];
     const policyLossList: tf.Tensor[] = [];
-    const entropyCoeff = CONFIG.policyEntropy(expIteration);
 
     for (let i = 0; i < CONFIG.policyEpochs(expIteration); i++) {
         for (let j = 0; j < mbc; j++) {
@@ -63,19 +75,19 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             const tOldLogProbs = tf.tensor1d(mBatch.logProbs);
             const tAdvantages = tf.tensor1d(mBatch.advantages);
 
-            const policyLoss = trainPolicyNetwork(
+            const { loss, entropy } = trainPolicyNetwork(
                 network,
                 tStates,
                 tActions,
                 tOldLogProbs,
                 tAdvantages,
-                mbs,
                 CONFIG.policyClipRatio,
                 entropyCoeff,
                 CONFIG.clipNorm,
                 j === mbc - 1,
             );
-            policyLoss && policyLossList.push(policyLoss);
+            loss && policyLossList.push(loss);
+            entropyList.push(entropy);
 
             tf.dispose(tStates);
             tActions.dispose();
@@ -92,6 +104,14 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
             break;
         }
     }
+
+    // Update log_entropyCoeff based on average entropy vs target
+    const avgEntropy = entropyList.reduce((a, b) => a + b, 0) / entropyList.length;
+    const newLogEntropyCoeff = clamp(
+        logEntropyCoeff - CONFIG.adaptiveEntropy.alphaLR * (avgEntropy - targetEntropy),
+        CONFIG.adaptiveEntropy.minLogAlpha,
+        CONFIG.adaptiveEntropy.maxLogAlpha
+    );
 
     return onReadyRead()
         .then(() => Promise.all([
@@ -111,13 +131,15 @@ function trainPolicy(network: tf.LayersModel, batch: LearnData) {
                 ? getDynamicLearningRate(kl, getNetworkLearningRate(network))
                 : getNetworkLearningRate(network);
 
-            modelSettingsChannel.emit({ lr, expIteration: expIteration + batch.size });
+            modelSettingsChannel.emit({ lr, expIteration: expIteration + batch.size, logEntropyCoeff: newLogEntropyCoeff });
 
             metricsChannels.kl.postMessage(klList);
             metricsChannels.lr.postMessage([lr]);
             metricsChannels.policyLoss.postMessage(policyLossList);
+            metricsChannels.entropy.postMessage([avgEntropy]);
+            metricsChannels.entropyAlpha.postMessage([Math.exp(newLogEntropyCoeff)]);
 
-            console.info(`[Train Policy]: Finish iteration=${expIteration}`);
+            console.info(`[Train Policy]: Finish iteration=${expIteration}, entropy=${avgEntropy.toFixed(4)}, α=${Math.exp(newLogEntropyCoeff).toFixed(4)}`);
         });
 }
 

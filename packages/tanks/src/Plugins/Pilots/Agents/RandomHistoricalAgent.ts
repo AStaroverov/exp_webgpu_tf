@@ -9,7 +9,7 @@ const historcalActorUpdater = createNetworkModelManager(() => getRandomHistorica
 export class RandomHistoricalAgent implements TankAgent<DownloadableAgent> {
     constructor(public readonly tankEid: number) {
     }
-    
+
     scheduleUpdateTankBehaviour(width: number, height: number): void {
         historcalActorUpdater.schedule(width, height, this);
     }

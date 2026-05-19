@@ -49,7 +49,6 @@ function cloneCurriculumState(state: CurriculumState): CurriculumState {
     };
 }
 
-
 export async function patientAction<T>(action: () => T | Promise<T>, attempts: number = 100): Promise<T> {
     while (true) {
         attempts--;

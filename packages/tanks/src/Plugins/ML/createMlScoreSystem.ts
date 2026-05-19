@@ -1,218 +1,296 @@
-import { EntityId, query } from "bitecs";
+import { query } from "bitecs";
+import { RingBuffer } from "ring-buffer-ts";
 import { Vehicle } from "../../Game/ECS/Components/Vehicle";
 import { MLState } from "./MlState";
 import { GameDI } from "../../Game/DI/GameDI";
-import { Score } from "../../Game/ECS/Components/Score";
-import { RAYS_COUNT, RAY_BUFFER, RayHitType, TankInputTensor } from "../Pilots/Components/TankState";
-import { PlayerRef } from "../../Game/ECS/Components/PlayerRef";
-import { findVehicleFromPart } from "../Pilots/Utils/snapshotTankInputTensor";
 import { RigidBodyState } from "../../Game/ECS/Components/Physical";
-import { hypot } from "../../../../../lib/math";
-import { VehicleController } from "../../Game/ECS/Components/VehicleController";
+import { PlayerRef } from "../../Game/ECS/Components/PlayerRef";
+import { Score } from "../../Game/ECS/Components/Score";
+import { Tank } from "../../Game/ECS/Components/Tank";
+import { getTankHealth } from "../../Game/ECS/Entities/Tank/TankUtils";
+import { findTankEnemiesEids, findVehicleFromPart } from "../Pilots/Utils/snapshotTankInputTensor";
+import { TankInputTensor, RAY_BUFFER, RAYS_COUNT, RayHitType } from "../Pilots/Components/TankState";
+import { computeObstacleGrid } from "../../../../ml-common/computeObstacleGrid";
+import { computeAllPairsDistances, UNREACHABLE } from "../../../../ml-common/computeAllPairsDistances";
+import { GRID_SIZE, GRID_CELLS } from "../../../../ml/src/Models/Create";
+import { SNAPSHOT_EVERY } from "../../../../ml-common/consts";
+import { cos, max, min, sin, sqrt, hypot } from "../../../../../lib/math";
+import { clamp } from "lodash";
 import { WEIGHTS } from "../../../../ml/src/Reward/calculateReward";
 
-// Track cooldown state per enemy: vehicleEid -> Map<enemyVehicleEid, lostVisibilityTime | -1>
-// -1 means on cooldown but still visible, positive number means time when enemy disappeared
-const enemyCooldownState = new Map<EntityId, Map<EntityId, number>>();
-const ADJACENT_ENEMY_COOLDOWN_MS = 3000;
-const COOLDOWN_VISIBLE = -1; // sentinel: on cooldown, enemy still visible
-
-// Track currently visible enemies per vehicle (for exploration reward)
-const currentlyVisibleEnemies = new Map<EntityId, Set<EntityId>>();
-
-// Track last reward position per vehicle for exploration reward
-const lastRewardPosition = new Map<EntityId, { x: number; y: number }>();
-
 export function createMlScoreSystem({ world } = GameDI) {
+    let frame = 0;
+    let allPairsDist: Float32Array | null = null;
+
     const tick = () => {
         if (!MLState.enabled) return;
 
+        if (allPairsDist == null) {
+            const obstacleGrid = computeObstacleGrid(world, GameDI.width, GameDI.height);
+            allPairsDist = computeAllPairsDistances(obstacleGrid);
+        }
+
+        // Evaluate only once per action (aligned with agent decision step)
+        if (frame++ % SNAPSHOT_EVERY !== 0) return;
+
         const vehicleEids = query(world, [Vehicle]);
-        
+
         for (const vehicleEid of vehicleEids) {
             const playerId = PlayerRef.id[vehicleEid];
-            if (playerId === 0) continue;
-
-            const raysBuffer = TankInputTensor.raysData.getBatch(vehicleEid);
-            
-            // Adjacent enemy detection reward
-            const adjacentEnemyRaysReward = getAdjacentEnemyRaysReward(vehicleEid, raysBuffer);
-            if (adjacentEnemyRaysReward > 0) {
-                Score.addAdjacentEnemyDetection(playerId, adjacentEnemyRaysReward);
-            }
-            
-            // Exploration reward
-            const explorationReward = getExplorationReward(vehicleEid);
-            if (explorationReward > 0) {
-                Score.addExploration(playerId, explorationReward);
-            }
-            
-            // Proximity penalty
-            const proximityPenalty = getProximityPenalty(vehicleEid, raysBuffer);
-            if (proximityPenalty > 0) {
-                Score.addProximityPenalty(playerId, -proximityPenalty);
-            }
+            const enemies = findTankEnemiesEids(vehicleEid);
+            const enemyRayHits = collectEnemyRayHits(vehicleEid);
+            addAimReward(vehicleEid, playerId, enemies, enemyRayHits);
+            addMovementReward(vehicleEid, playerId);
+            addPathFollowingReward(vehicleEid, playerId, enemies, enemyRayHits);
+            addProximityPenalty(vehicleEid, playerId);
         }
     };
 
+    const idleRings = new Map<number, RingBuffer<{ x: number, y: number }>>();
+    const prevCells = new Map<number, number>();
+    // Previous aim score per vehicle (for delta-based reward)
+    const prevAimScores = new Map<number, number | null>();
+    const prevObstacleViolations = new Map<number, number | null>();
+    const prevEnemyViolations = new Map<number, number | null>();
+
     const dispose = () => {
-        lastRewardPosition.clear();
-        enemyCooldownState.clear();
-        currentlyVisibleEnemies.clear();
+        frame = 0;
+        allPairsDist = null;
+        idleRings.clear();
+        prevCells.clear();
+        prevAimScores.clear();
+        prevObstacleViolations.clear();
+        prevEnemyViolations.clear();
     };
+
+    function addMovementReward(vehicleEid: number, playerId: number): void {
+        const px = RigidBodyState.position.get(vehicleEid, 0);
+        const py = RigidBodyState.position.get(vehicleEid, 1);
+
+        let ring = idleRings.get(vehicleEid);
+        if (!ring) {
+            ring = new RingBuffer<{ x: number, y: number }>(WEIGHTS.MOVEMENT_ACTIONS);
+            idleRings.set(vehicleEid, ring);
+        }
+
+        ring.add({ x: px, y: py });
+
+        if (!ring.isFull()) return;
+        const oldest = ring.getFirst();
+        if (!oldest) return;
+        const displacement = hypot(px - oldest.x, py - oldest.y);
+        const reward = clamp(displacement / WEIGHTS.MOVEMENT_DIST_THRESHOLD, 0, 1);
+        Score.addMovement(playerId, WEIGHTS.MOVEMENT_COEFF * (reward ** 2));
+    }
+
+    function addAimReward(
+        vehicleEid: number,
+        playerId: number,
+        enemies: number[],
+        enemyRayHits: Map<number, number>,
+    ): void {
+        const turretEid = Tank.turretEId[vehicleEid];
+        const turretRot = RigidBodyState.rotation[turretEid];
+
+        const fwdX = cos(turretRot);
+        const fwdY = sin(turretRot);
+
+        const tx = RigidBodyState.position.get(vehicleEid, 0);
+        const ty = RigidBodyState.position.get(vehicleEid, 1);
+
+        let bestCos = -1;
+        let bestDistFactor = 0;
+        let bestProduct = -Infinity;
+        let hasEnemy = false;
+
+        for (let i = 0; i < enemies.length; i++) {
+            const eid = enemies[i];
+            if (getTankHealth(eid) <= 0) continue;
+            // Only reward aiming at enemies clearly visible (2+ rays), not through cracks
+            if ((enemyRayHits.get(eid) ?? 0) < WEIGHTS.ENGAGED_RAY_THRESHOLD) continue;
+
+            const ex = RigidBodyState.position.get(eid, 0);
+            const ey = RigidBodyState.position.get(eid, 1);
+            const dx = ex - tx;
+            const dy = ey - ty;
+            const dist = sqrt(dx * dx + dy * dy);
+            if (dist < 1) continue;
+
+            const cosAngle = (fwdX * dx + fwdY * dy) / dist;
+            const distFactor = 1 / (1 + dist / (GameDI.width * 0.5));
+            const product = cosAngle * distFactor;
+
+            if (product > bestProduct) {
+                bestProduct = product;
+                bestCos = cosAngle;
+                bestDistFactor = distFactor;
+                hasEnemy = true;
+            }
+        }
+
+        // No visible enemies — reset state to null so next sighting starts fresh
+        if (!hasEnemy) {
+            prevAimScores.set(vehicleEid, null);
+            return;
+        }
+
+        // Remap cos [-1, 1] → [0, 1] so score is monotonic across full 0..180° range
+        const currentScore = ((bestCos + 1) / 2) * bestDistFactor;
+        const prevScore = prevAimScores.get(vehicleEid) ?? null;
+        prevAimScores.set(vehicleEid, currentScore);
+
+        // Delta: turning toward enemy = +, away = −. Hold bonus only when aim is already good,
+        // so holding a solid lock is rewarded but holding a bad aim isn't punished.
+        if (prevScore === null) return;
+        const deltaTerm = (currentScore - prevScore) * WEIGHTS.AIM_COEFF;
+        const holdTerm = currentScore > WEIGHTS.AIM_HOLD_THRESHOLD
+            ? (currentScore - WEIGHTS.AIM_HOLD_THRESHOLD) * WEIGHTS.AIM_HOLD_COEFF
+            : 0;
+        Score.addAimAlignment(playerId, deltaTerm + holdTerm);
+    }
+
+    function addPathFollowingReward(
+        vehicleEid: number,
+        playerId: number,
+        enemies: number[],
+        enemyRayHits: Map<number, number>,
+    ): void {
+        const dist = allPairsDist!;
+        const cellW = GameDI.width / GRID_SIZE;
+        const cellH = GameDI.height / GRID_SIZE;
+
+        const px = RigidBodyState.position.get(vehicleEid, 0);
+        const py = RigidBodyState.position.get(vehicleEid, 1);
+        const col = max(0, min(GRID_SIZE - 1, (px / cellW) | 0));
+        const row = max(0, min(GRID_SIZE - 1, (py / cellH) | 0));
+        const currentCell = row * GRID_SIZE + col;
+
+        const prevCell = prevCells.get(vehicleEid);
+        prevCells.set(vehicleEid, currentCell);
+
+        // First action or same cell — no reward
+        if (prevCell === undefined || prevCell === currentCell) return;
+
+        // Any enemy engaged (visible in 2+ rays and close) — let combat rewards handle it
+        for (const [eid, count] of enemyRayHits) {
+            if (count < WEIGHTS.ENGAGED_RAY_THRESHOLD) continue;
+            const ex = RigidBodyState.position.get(eid, 0);
+            const ey = RigidBodyState.position.get(eid, 1);
+            if (hypot(ex - px, ey - py) < WEIGHTS.APPROACH_DISENGAGE_DIST) return;
+        }
+
+        // Sum approach deltas for all enemies
+        let totalDelta = 0;
+
+        for (let i = 0; i < enemies.length; i++) {
+            const eid = enemies[i];
+            if (getTankHealth(eid) <= 0) continue;
+
+            const ex = RigidBodyState.position.get(eid, 0);
+            const ey = RigidBodyState.position.get(eid, 1);
+            const eCol = max(0, min(GRID_SIZE - 1, (ex / cellW) | 0));
+            const eRow = max(0, min(GRID_SIZE - 1, (ey / cellH) | 0));
+            const enemyCell = eRow * GRID_SIZE + eCol;
+
+            const prevD = dist[prevCell * GRID_CELLS + enemyCell];
+            const currD = dist[currentCell * GRID_CELLS + enemyCell];
+
+            if (prevD >= UNREACHABLE || currD >= UNREACHABLE) continue;
+
+            const delta = prevD - currD;
+            if (delta > 0) {
+                totalDelta += delta;
+            }
+        }
+
+        if (totalDelta <= 0) return;
+
+        Score.addNavigation(playerId, WEIGHTS.APPROACH_COEFF * totalDelta);
+    }
+
+    function addProximityPenalty(vehicleEid: number, playerId: number): void {
+        const colliderRadius = TankInputTensor.colliderRadius[vehicleEid];
+        if (colliderRadius <= 0) return;
+
+        const obstacleThreshold = colliderRadius * WEIGHTS.PROXIMITY_OBSTACLE_RADIUS_MULT;
+        const enemyThreshold = colliderRadius * WEIGHTS.PROXIMITY_ENEMY_RADIUS_MULT;
+
+        let minObstacleDist = Infinity;
+        let minEnemyDist = Infinity;
+
+        for (let i = 0; i < RAYS_COUNT; i++) {
+            const offset = i * RAY_BUFFER;
+            const hitType = TankInputTensor.raysData.get(vehicleEid, offset);
+            if (hitType === RayHitType.NONE) continue;
+            const distance = TankInputTensor.raysData.get(vehicleEid, offset + 6);
+            if (hitType === RayHitType.OBSTACLE) {
+                if (distance < minObstacleDist) minObstacleDist = distance;
+            } else if (hitType === RayHitType.ENEMY_VEHICLE) {
+                if (distance < minEnemyDist) minEnemyDist = distance;
+            }
+        }
+
+        const obstacleViolation = minObstacleDist < obstacleThreshold
+            ? (obstacleThreshold - minObstacleDist) / obstacleThreshold
+            : null;
+        const enemyViolation = minEnemyDist < enemyThreshold
+            ? (enemyThreshold - minEnemyDist) / enemyThreshold
+            : null;
+
+        const penalty =
+            computeProximityTerm(
+                vehicleEid,
+                obstacleViolation,
+                prevObstacleViolations,
+                WEIGHTS.PROXIMITY_OBSTACLE_COEFF,
+                WEIGHTS.PROXIMITY_OBSTACLE_HOLD_COEFF,
+            ) +
+            computeProximityTerm(
+                vehicleEid,
+                enemyViolation,
+                prevEnemyViolations,
+                WEIGHTS.PROXIMITY_ENEMY_COEFF,
+                WEIGHTS.PROXIMITY_ENEMY_HOLD_COEFF,
+            );
+
+        if (penalty !== 0) Score.addProximityPenalty(playerId, -penalty);
+    }
+
+    function computeProximityTerm(
+        vehicleEid: number,
+        current: number | null,
+        store: Map<number, number | null>,
+        deltaCoeff: number,
+        holdCoeff: number,
+    ): number {
+        const prev = store.get(vehicleEid) ?? null;
+        store.set(vehicleEid, current);
+
+        // Out of range — reset, no term this tick
+        if (current === null) return 0;
+        // First sighting in range — seed prev, no delta yet (mirrors aim reward)
+        if (prev === null) return 0;
+
+        const deltaTerm = (current - prev) * deltaCoeff;
+        const holdTerm = current > WEIGHTS.PROXIMITY_HOLD_THRESHOLD
+            ? (current - WEIGHTS.PROXIMITY_HOLD_THRESHOLD) * holdCoeff
+            : 0;
+        return deltaTerm + holdTerm;
+    }
 
     return { tick, dispose };
 }
 
-export function getAdjacentEnemyRaysReward(vehicleEid: EntityId, raysBuffer: Float64Array): number {
-    const now = performance.now();
-    
-    // Get or create cooldown state map for this vehicle
-    let cooldowns = enemyCooldownState.get(vehicleEid);
-    if (!cooldowns) {
-        cooldowns = new Map();
-        enemyCooldownState.set(vehicleEid, cooldowns);
-    }
 
-    // Collect adjacent enemy vehicle eids
-    const adjacentEnemies = new Set<EntityId>();
-    let lastEnemyVehicleEid: EntityId = 0;
-    
-    // Loop from -1 to RAYS_COUNT to handle wrap-around (last ray -> first ray adjacency)
-    for (let i = -1; i < RAYS_COUNT; i++) {
-        const idx = (i + RAYS_COUNT) % RAYS_COUNT;
-        const hitType = raysBuffer[idx * RAY_BUFFER + 0];
-        
-        if (hitType !== RayHitType.ENEMY_VEHICLE) {
-            lastEnemyVehicleEid = 0;
-            continue;
-        }
-        
-        const hitEid = raysBuffer[idx * RAY_BUFFER + 1];
-        const enemyVehicleEid = findVehicleFromPart(hitEid);
-        
-        if (enemyVehicleEid === 0) {
-            lastEnemyVehicleEid = 0;
-            continue;
-        }
-        
-        // Check if this enemy is adjacent (same enemy in consecutive rays)
-        if (lastEnemyVehicleEid === enemyVehicleEid) {
-            adjacentEnemies.add(enemyVehicleEid);
-        }
-        
-        lastEnemyVehicleEid = enemyVehicleEid;
-    }
-
-    // Track all visible enemies for exploration reward
-    currentlyVisibleEnemies.set(vehicleEid, adjacentEnemies);
-
-    // Update cooldown states for enemies that are no longer visible
-    // Cooldown timer only starts when NO enemies are visible at all
-    const noEnemiesVisible = adjacentEnemies.size === 0;
-    
-    for (const [enemyEid, state] of cooldowns) {
-        if (!adjacentEnemies.has(enemyEid)) {
-            if (state === COOLDOWN_VISIBLE && noEnemiesVisible) {
-                // No enemies visible at all - start countdown for this enemy
-                cooldowns.set(enemyEid, now);
-            } else if (state !== COOLDOWN_VISIBLE && now - state >= ADJACENT_ENEMY_COOLDOWN_MS) {
-                // Cooldown expired while enemy not visible - remove
-                cooldowns.delete(enemyEid);
-            }
-        }
-    }
-
-    // Check if reward can be given for each visible enemy
-    let totalReward = 0;
-    for (const enemyEid of adjacentEnemies) {
-        const state = cooldowns.get(enemyEid);
-        
-        if (state === undefined) {
-            // No cooldown - give reward and start cooldown
-            totalReward += WEIGHTS.ADJACENT_ENEMY_REWARD;
-            cooldowns.set(enemyEid, COOLDOWN_VISIBLE);
-        } else if (state !== COOLDOWN_VISIBLE && now - state >= ADJACENT_ENEMY_COOLDOWN_MS) {
-            // Was invisible, cooldown expired, now visible again - give reward
-            totalReward += WEIGHTS.ADJACENT_ENEMY_REWARD;
-            cooldowns.set(enemyEid, COOLDOWN_VISIBLE);
-        } else if (state !== COOLDOWN_VISIBLE) {
-            // Was invisible but cooldown not expired, now visible again - keep on cooldown
-            cooldowns.set(enemyEid, COOLDOWN_VISIBLE);
-        }
-        // else: state === COOLDOWN_VISIBLE - already on cooldown, no reward
-    }
-
-    return totalReward;
-}
-
-const EXPLORATION_DISTANCE = 50;
-function getExplorationReward(vehicleEid: EntityId): number {
-    const pos = RigidBodyState.position.getBatch(vehicleEid);
-    const x = pos[0];
-    const y = pos[1];
-
-    let lastPos = lastRewardPosition.get(vehicleEid);
-    if (!lastPos) {
-        lastPos = { x, y };
-        lastRewardPosition.set(vehicleEid, lastPos);
-        return 0;
-    }
-
-    const dx = x - lastPos.x;
-    const dy = y - lastPos.y;
-    const distance = hypot(dx, dy);
-
-    if (distance < EXPLORATION_DISTANCE) {
-        return 0;
-    }
-
-    lastPos.x = x;
-    lastPos.y = y;
-    
-    const hasEnemy = (currentlyVisibleEnemies.get(vehicleEid)?.size ?? 0) > 0;
-    return hasEnemy ? WEIGHTS.EXPLORATION_WITH_ENEMY_REWARD : WEIGHTS.EXPLORATION_WITHOUT_ENEMY_REWARD;
-}
-
-
-function getProximityPenalty(vehicleEid: EntityId, raysBuffer: Float64Array): number {
-    const move = VehicleController.move[vehicleEid];
-    
-    // Only penalize when moving
-    if (move === 0) return 0;
-
-    const rotation = RigidBodyState.rotation[vehicleEid];
-    const colliderRadius = TankInputTensor.colliderRadius[vehicleEid];
-    const dangerDistance = colliderRadius;
-
-    // Intended movement direction based on rotation and move input
-    // move > 0: forward, move < 0: backward
-    const forwardX = Math.sin(rotation);
-    const forwardY = -Math.cos(rotation);
-    const moveX = move > 0 ? forwardX : -forwardX;
-    const moveY = move > 0 ? forwardY : -forwardY;
-
-    // Check if intended movement direction points toward any close obstacle
+function collectEnemyRayHits(vehicleEid: number): Map<number, number> {
+    const hits = new Map<number, number>();
     for (let i = 0; i < RAYS_COUNT; i++) {
         const offset = i * RAY_BUFFER;
-        const distance = raysBuffer[offset + 6];
-
-        // Skip rays that are far enough
-        if (distance >= dangerDistance || distance === 0) continue;
-
-        // Get ray direction (points from tank to obstacle)
-        const dirX = raysBuffer[offset + 4];
-        const dirY = raysBuffer[offset + 5];
-
-        // Dot product: positive = moving toward obstacle, negative = moving away
-        const dot = dirX * moveX + dirY * moveY;
-        
-        // Only penalize if intended movement is TOWARD the obstacle
-        
-        if (dot > 0.5) {
-            return WEIGHTS.PROXIMITY_PENALTY;
-        }
+        if (TankInputTensor.raysData.get(vehicleEid, offset) !== RayHitType.ENEMY_VEHICLE) continue;
+        const partEid = TankInputTensor.raysData.get(vehicleEid, offset + 1);
+        const ownerEid = findVehicleFromPart(partEid);
+        if (ownerEid === 0) continue;
+        hits.set(ownerEid, (hits.get(ownerEid) ?? 0) + 1);
     }
-
-    return 0;
+    return hits;
 }

@@ -71,13 +71,14 @@ export class EpisodeManager {
             }
 
             const networkVersion = agent.getVersion();
-            const finalReward = calculateFinalReward(agent.tankEid, successRatio, pilots);
+            const finalReward = calculateFinalReward(agent.tankEid, successRatio, pilots, episode.index);
             const memoryBatch = agent.getMemoryBatch(finalReward);
 
             if (memoryBatch == null) return;
 
             agentSampleChannel.emit({
                 networkVersion,
+                scenarioIndex: episode.index,
                 memoryBatch,
             });
         });
@@ -88,7 +89,7 @@ export class EpisodeManager {
     }
 
     protected async runEpisode() {
-        const episode = await this.beforeEpisode();
+        const episode = this.beforeEpisode();
 
         try {
             await this.awaitAgentsSync();

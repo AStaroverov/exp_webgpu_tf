@@ -132,14 +132,12 @@ export function applyCrossAttentionLayer(
 ) {
     const dModel = qTok.shape[qTok.shape.length - 1]!;
     const isSameToken = qTok === kvTok;
-    qTok = preNorm
-        ? createNormalizationLayer({ name: name + '_QNorm_' }).apply(qTok) as tf.SymbolicTensor
-        : new CloneLayer({ name: name + '_QClone_' }).apply(qTok) as tf.SymbolicTensor;
-    kvTok = isSameToken
-        ? qTok
-        : preNorm
-            ? createNormalizationLayer({ name: name + '_KVNorm_' }).apply(kvTok) as tf.SymbolicTensor
-            : kvTok;
+    if (preNorm) {
+        qTok = createNormalizationLayer({ name: name + '_QNorm_' }).apply(qTok) as tf.SymbolicTensor;
+        kvTok = isSameToken
+            ? qTok
+            : createNormalizationLayer({ name: name + '_KVNorm_' }).apply(kvTok) as tf.SymbolicTensor;
+    }
 
     // Create mask-like layers if masks are not provided
     qMask ??= new MaskLikeLayer({ name: name + '_qMaskLike' }).apply(qTok) as tf.SymbolicTensor;
@@ -149,25 +147,27 @@ export function applyCrossAttentionLayer(
         name: name + '_MultiHeadAttentionLayer',
         keyDim: dModel / heads,
         numHeads: heads,
+        selfAttn: isSameToken,
     }).apply([qTok, qMask, kvTok, kvMask]) as tf.SymbolicTensor;
 
     return attention;
 }
 
+/**
+ * Apply a self-attention transformer layer with standard FFN.
+ */
 export function applySelfTransformerLayer(
     {
         name,
         heads,
         token,
         mask,
-        noisy = false,
         preNorm = false,
     }: {
         name: string,
         heads: number,
         token: tf.SymbolicTensor;
         mask?: tf.SymbolicTensor;
-        noisy?: boolean,
         preNorm?: boolean;
     },
 ) {
@@ -190,20 +190,29 @@ export function applySelfTransformerLayer(
         name: `${name}_ln2`,
     }).apply(attnResidual) as tf.SymbolicTensor;
 
-    const ffnInner = createDenseLayer({
+    // SiLU-gated FFN: gate(x) * linear(x)
+    const ffnGate = createDenseLayer({
+        name: `${name}_ffn_gate`,
+        units: dModel * 4,
+        useBias: false,
+        activation: 'sigmoid',
+    }).apply(ffnNorm) as tf.SymbolicTensor;
+
+    const ffnUp = createDenseLayer({
         name: `${name}_ffn1`,
         units: dModel * 4,
         useBias: false,
-        activation: 'relu',
-        noisy,
+        activation: 'linear',
     }).apply(ffnNorm) as tf.SymbolicTensor;
+
+    const ffnInner = tf.layers.multiply({name: `${name}_ffn_silu`})
+        .apply([ffnUp, ffnGate]) as tf.SymbolicTensor;
 
     const ffnOut = createDenseLayer({
         name: `${name}_ffn2`,
         units: dModel,
         useBias: false,
         activation: 'linear',
-        noisy,
     }).apply(ffnInner) as tf.SymbolicTensor;
 
     const finalOut = tf.layers.add({name: `${name}_ffnAdd`})
@@ -212,19 +221,20 @@ export function applySelfTransformerLayer(
     return finalOut;
 }
 
+/**
+ * Apply multiple self-attention transformer layers with standard FFN.
+ */
 export function applySelfTransformLayers(name: string, {
     depth,
     heads,
     token,
     mask,
-    noisy = false,
     preNorm = false,
 }: {
     depth: number,
     heads: number,
     token: tf.SymbolicTensor | ((name: string, i: number) => tf.SymbolicTensor),
     mask?: tf.SymbolicTensor | ((name: string, i: number) => tf.SymbolicTensor),
-    noisy?: boolean,
     preNorm?: boolean,
 }) {
     let x = typeof token === 'function' ? token(name, 0) : token;
@@ -235,7 +245,6 @@ export function applySelfTransformLayers(name: string, {
             heads,
             token: x,
             mask: mask ? (typeof mask === 'function' ? mask(lName, i) : mask) : undefined,
-            noisy,
             preNorm,
         });
     }
@@ -291,13 +300,25 @@ export function applySwinTransformerLayer(
         name: `${name}_ln2`,
     }).apply(attnResidual) as tf.SymbolicTensor;
 
-    const ffnInner = createDenseLayer({
+    // SiLU-gated FFN: gate(x) * linear(x)
+    const ffnGate = createDenseLayer({
+        name: `${name}_ffn_gate`,
+        units: dModel * 4,
+        useBias: false,
+        activation: 'sigmoid',
+        noisy,
+    }).apply(ffnNorm) as tf.SymbolicTensor;
+
+    const ffnUp = createDenseLayer({
         name: `${name}_ffn1`,
         units: dModel * 4,
         useBias: false,
-        activation: 'relu',
+        activation: 'linear',
         noisy,
     }).apply(ffnNorm) as tf.SymbolicTensor;
+
+    const ffnInner = tf.layers.multiply({name: `${name}_ffn_silu`})
+        .apply([ffnUp, ffnGate]) as tf.SymbolicTensor;
 
     const ffnOut = createDenseLayer({
         name: `${name}_ffn2`,

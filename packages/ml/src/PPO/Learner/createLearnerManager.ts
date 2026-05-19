@@ -7,15 +7,15 @@ import { analyzeVTrace } from '../../../../ml-common/analyzeVTrace.ts';
 import { forceExitChannel, metricsChannels } from '../../../../ml-common/channels.ts';
 import { CONFIG } from '../../../../ml-common/config.ts';
 import { flatTypedArray } from '../../../../ml-common/flat.ts';
-import { AgentMemoryBatch } from '../../../../ml-common/Memory.ts';
+import { AgentMemoryBatch, PreparedBatch } from '../../../../ml-common/Memory.ts';
 import { getNetworkSettings } from '../../../../ml-common/utils.ts';
 import { Model } from '../../Models/def.ts';
 import { disposeNetwork, getNetwork } from '../../Models/Utils.ts';
 import { agentSampleChannel, learnProcessChannel, modelSettingsChannel, queueSizeChannel } from '../channels.ts';
-import { computeVTraceTargets } from '../train.ts';
+import { computeRetraceTargets } from '../train.ts';
 import { ACTION_HEAD_DIMS } from '../../Models/Create.ts';
 
-export type LearnData = AgentMemoryBatch & {
+export type LearnData = PreparedBatch & {
     values: Float32Array,
     returns: Float32Array,
     tdErrors: Float32Array,
@@ -56,7 +56,7 @@ export function createLearnerManager() {
                         })
                         return b.memoryBatch
                     }));
-                    const {pureLogits, ...vTraceBatchData} = computeVTraceTargets(
+                    const {pureLogits, ...vTraceBatchData} = computeRetraceTargets(
                         policyNetwork,
                         valueNetwork,
                         batchData,
@@ -154,10 +154,10 @@ export function createLearnerManager() {
     });
 }
 
-function squeezeBatches(batches: AgentMemoryBatch[]): AgentMemoryBatch {
+function squeezeBatches(batches: AgentMemoryBatch[]): PreparedBatch {
     return {
         size: batches.reduce((acc, b) => acc + b.size, 0),
-        states: batches.map(b => b.states).flat(),
+        states: batches.flatMap(b => b.states),
         actions: batches.map(b => b.actions).flat(),
         logits: batches.map(b => b.logits).flat(),
         dones: flatTypedArray(batches.map(b => b.dones)),

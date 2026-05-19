@@ -42,8 +42,8 @@ const rayDir = new Vector2(0, 0);
 const ENV_RAY_COLLISION_MASK = CollisionGroupConfig.OBSTACLE | ALL_VEHICLE_PARTS_MASK;
 
 export function snapshotTankInputTensor({ world } = GameDI) {
-    TankInputTensor.resetRaysData();
-    TankInputTensor.resetTurretsData();
+    // TankInputTensor.resetRaysData();
+    // TankInputTensor.resetTurretsData();
     TankInputTensor.resetEnemiesCoords();
     TankInputTensor.resetAlliesCoords();
     TankInputTensor.resetBulletsCoords();
@@ -146,7 +146,6 @@ export function snapshotTankInputTensor({ world } = GameDI) {
             myTeamId,
             position[0],
             position[1],
-            rotation,
             [...enemiesEids, ...alliesEids],
         );
 
@@ -195,7 +194,7 @@ function createExcludeOwnVehiclePredicate(
 }
 
 /**
- * Angle step for unified ray system (64 rays covering 360 degrees)
+ * Angle step for unified ray system covering 360 degrees
  */
 const UNIFIED_ANGLE_STEP = (2 * Math.PI) / RAYS_COUNT;
 
@@ -215,7 +214,7 @@ function resetTargetRayAngles() {
 }
 
 /**
- * Cast unified rays - 64 rays evenly distributed around the agent.
+ * Cast unified rays evenly distributed around the agent.
  * For each target (enemy/ally), the ray at the closest angle slot is overridden
  * to point directly at that target. All rays use standard RAY_LENGTH.
  */
@@ -224,7 +223,6 @@ function castUnifiedRays(
     myTeamId: number,
     posX: number,
     posY: number,
-    rotation: number,
     targetEids: EntityId[],
     { physicalWorld } = GameDI,
 ) {
@@ -239,23 +237,19 @@ function castUnifiedRays(
     for (let i = 0; i < targetEids.length; i++) {
         const targetEid = targetEids[i];
         const targetPosition = RigidBodyState.position.getBatch(targetEid);
-        
+
         const dx = targetPosition[0] - posX;
         const dy = targetPosition[1] - posY;
-        const angleToTarget = Math.atan2(dy, dx);
-        
-        // Find which ray slot this angle corresponds to (relative to forward direction)
-        let relativeAngle = angleToTarget - rotation;
-        while (relativeAngle < 0) relativeAngle += 2 * Math.PI;
-        while (relativeAngle >= 2 * Math.PI) relativeAngle -= 2 * Math.PI;
-        
-        const rayIndex = Math.round(relativeAngle / UNIFIED_ANGLE_STEP) % RAYS_COUNT;
-        targetRayAngles[rayIndex] = relativeAngle;
+        let angleToTarget = Math.atan2(dy, dx);
+        while (angleToTarget < 0) angleToTarget += 2 * Math.PI;
+
+        const rayIndex = Math.round(angleToTarget / UNIFIED_ANGLE_STEP) % RAYS_COUNT;
+        targetRayAngles[rayIndex] = angleToTarget;
     }
 
-    // Cast all 64 rays
+    // Cast all rays (absolute world angles)
     for (let i = 0; i < RAYS_COUNT; i++) {
-        const angle = rotation + targetRayAngles[i];
+        const angle = targetRayAngles[i];
         
         rayDir.x = cos(angle);
         rayDir.y = sin(angle);
