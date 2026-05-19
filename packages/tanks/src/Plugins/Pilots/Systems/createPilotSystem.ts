@@ -1,5 +1,5 @@
 import { isFunction } from 'lodash';
-import { SNAPSHOT_EVERY } from '../../../../../ml-common/consts.ts';
+import { SNAPSHOT_EVERY } from '../../../../../ppo_tanks/src/consts.ts';
 import { GameDI } from '../../../Game/DI/GameDI.ts';
 import { TankAgent } from '../Agents/CurrentActorAgent.ts';
 import { getAlivePilotAgents, getPilotAgents } from '../Components/Pilot.ts';

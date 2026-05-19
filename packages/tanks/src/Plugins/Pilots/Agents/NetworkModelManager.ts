@@ -1,12 +1,13 @@
 import * as tf from '@tensorflow/tfjs';
 
-import { InputArrays, prepareInputArrays } from "../../../../../ml-common/InputArrays";
-import { patientAction } from "../../../../../ml-common/utils";
-import { disposeNetwork } from "../../../../../ml/src/Models/Utils";
-import { batchAct } from "../../../../../ml/src/PPO/train";
+import { InputArrays, prepareInputArrays } from "../../../../../ppo_tanks/src/state/InputArrays";
+import { patientAction } from "../../../../../ppo/src/utils/patientAction.ts";
+import { disposeNetwork } from "../../../../../ppo/src/models/storage.ts";
+import { batchAct } from "../../../../../ppo/src/core/train.ts";
+import { tankStateBindings } from "../../../../../ppo_tanks/src/state/bindings.ts";
 import { TankAgent } from "./CurrentActorAgent";
 import { random, randomRangeFloat } from '../../../../../../lib/random';
-import { computeObstacleGrid } from '../../../../../ml-common/computeObstacleGrid';
+import { computeObstacleGrid } from '../../../../../ppo_tanks/src/state/computeObstacleGrid';
 import { GameDI } from '../../../Game/DI/GameDI';
 
 export type NetworkModelManager = ReturnType<typeof createNetworkModelManager>;
@@ -73,7 +74,7 @@ export const createNetworkModelManager = (getter: () => Promise<tf.LayersModel>)
             const options = train
                 ? { greedy: false, epsilon: randomRangeFloat(0.05, 0.3), noises }
                 : { greedy: true };
-            const result = batchAct(network, currentStates, options);
+            const result = batchAct(network, currentStates, tankStateBindings, options);
 
             for (const [index, {agent}] of scheduledAgents.entries()) {
                 computedAgents.set(agent, {

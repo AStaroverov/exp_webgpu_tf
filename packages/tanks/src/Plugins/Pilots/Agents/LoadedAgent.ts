@@ -1,8 +1,8 @@
-import { applyActionToTank } from '../../../../../ml-common/applyActionToTank.ts';
+import { applyActionToTank } from '../../../../../ppo_tanks/src/state/applyActionToTank.ts';
 import { DownloadableAgent, TankAgent } from './CurrentActorAgent.ts';
 import { createNetworkModelManager, NetworkModelManager } from './NetworkModelManager.ts';
-import { Model } from '../../../../../ml/src/Models/def.ts';
-import { loadNetworkFromFS } from '../../../../../ml/src/Models/Transfer.ts';
+import { Model } from '../../../../../ppo/src/models/def.ts';
+import { loadNetworkFromFS } from '../../../../../ppo/src/models/Transfer.ts';
 
 export class LoadedAgent implements TankAgent<DownloadableAgent> {
     constructor(

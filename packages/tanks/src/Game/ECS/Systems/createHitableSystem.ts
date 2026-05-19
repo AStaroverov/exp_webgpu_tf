@@ -22,7 +22,7 @@ import { Vehicle } from '../Components/Vehicle.ts';
 import { SoundType } from '../Components/Sound.ts';
 import { spawnSoundAtParent } from '../Entities/Sound.ts';
 import { LastHitters } from '../Components/LastHitters.ts';
-import { WEIGHTS } from '../../../../../ml/src/Reward/calculateReward.ts';
+import { WEIGHTS } from '../../../../../ppo_tanks/src/reward/calculateReward.ts';
 
 export function createHitableSystem({ world } = GameDI) {
     const hitableChanges = createChangeDetector(world, [onSet(Hitable)]);

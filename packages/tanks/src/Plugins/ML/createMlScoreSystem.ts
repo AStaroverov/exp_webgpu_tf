@@ -10,13 +10,13 @@ import { Tank } from "../../Game/ECS/Components/Tank";
 import { getTankHealth } from "../../Game/ECS/Entities/Tank/TankUtils";
 import { findTankEnemiesEids, findVehicleFromPart } from "../Pilots/Utils/snapshotTankInputTensor";
 import { TankInputTensor, RAY_BUFFER, RAYS_COUNT, RayHitType } from "../Pilots/Components/TankState";
-import { computeObstacleGrid } from "../../../../ml-common/computeObstacleGrid";
-import { computeAllPairsDistances, UNREACHABLE } from "../../../../ml-common/computeAllPairsDistances";
-import { GRID_SIZE, GRID_CELLS } from "../../../../ml/src/Models/Create";
-import { SNAPSHOT_EVERY } from "../../../../ml-common/consts";
+import { computeObstacleGrid } from "../../../../ppo_tanks/src/state/computeObstacleGrid";
+import { computeAllPairsDistances, UNREACHABLE } from "../../../../ppo_tanks/src/state/computeAllPairsDistances";
+import { GRID_SIZE, GRID_CELLS } from "../../../../ppo_tanks/src/models/createTankNetworks";
+import { SNAPSHOT_EVERY } from "../../../../ppo_tanks/src/consts";
 import { cos, max, min, sin, sqrt, hypot } from "../../../../../lib/math";
 import { clamp } from "lodash";
-import { WEIGHTS } from "../../../../ml/src/Reward/calculateReward";
+import { WEIGHTS } from "../../../../ppo_tanks/src/reward/calculateReward";
 
 export function createMlScoreSystem({ world } = GameDI) {
     let frame = 0;

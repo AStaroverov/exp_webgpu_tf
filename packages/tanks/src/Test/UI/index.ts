@@ -4,10 +4,11 @@ import { TestGameState$, TestGameStateEffects, incrementEnemyCount } from '../St
 import { startTestGame, spawnEnemy, exitTestGame, spawnPlayerVehicle } from '../State/gameMethods.ts';
 import { spawnRockAtRandomPosition, spawnBuildingAtRandomPosition, BuildingSize } from '../State/engineMethods.ts';
 import { setRenderTarget } from '../State/RenderTarget.ts';
-import { upsertModels } from '../../../../ml/src/Models/restore.ts';
-import { initTensorFlow } from '../../../../ml-common/initTensorFlow.ts';
+import { upsertModels } from '../../../../ppo/src/models/Restore.ts';
+import { initTensorFlow } from '../../../../ppo/src/infra/initTensorFlow.ts';
+import { CONFIG } from '../../../../ppo_tanks/src/config.ts';
 
-import '../../../../ml/src/Models/Layers';
+import '../../../../ppo/src/models/Layers';
 
 const VEHICLE_OPTIONS: Record<string, VehicleType> = {
     '🏎️ Light Tank': VehicleType.LightTank,
@@ -68,7 +69,7 @@ if (savedEnemyType && VEHICLE_LABELS[Number(savedEnemyType)]) {
 
 async function init() {
     await initTensorFlow('wasm');
-    await upsertModels('/assets/models/v1');
+    await upsertModels(CONFIG.savePath, '/assets/models/v1');
     
     // Setup canvas
     const canvas = document.getElementById('canvas') as HTMLCanvasElement;

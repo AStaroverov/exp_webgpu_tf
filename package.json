@@ -9,6 +9,6 @@
   "workspaces": [
     "packages/renderer",
     "packages/tanks",
-    "packages/ml"
+    "packages/ppo_tanks"
   ]
 }

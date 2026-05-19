@@ -1,10 +1,11 @@
-import { applyActionToTank } from '../../../../../ml-common/applyActionToTank.ts';
-import { Model } from '../../../../../ml/src/Models/def.ts';
-import { getRandomHistoricalNetwork } from '../../../../../ml/src/Models/Utils.ts';
+import { applyActionToTank } from '../../../../../ppo_tanks/src/state/applyActionToTank.ts';
+import { Model } from '../../../../../ppo/src/models/def.ts';
+import { getRandomHistoricalNetwork } from '../../../../../ppo/src/models/storage.ts';
+import { CONFIG } from '../../../../../ppo_tanks/src/config.ts';
 import { createNetworkModelManager } from './NetworkModelManager.ts';
 import { DownloadableAgent, TankAgent } from './CurrentActorAgent.ts';
 
-const historcalActorUpdater = createNetworkModelManager(() => getRandomHistoricalNetwork(Model.Policy));
+const historcalActorUpdater = createNetworkModelManager(() => getRandomHistoricalNetwork(Model.Policy, CONFIG.savePath));
 
 export class RandomHistoricalAgent implements TankAgent<DownloadableAgent> {
     constructor(public readonly tankEid: number) {

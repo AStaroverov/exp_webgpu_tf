@@ -9,6 +9,8 @@ const POSITIVE_METRICS = [
     'aimAlignment',
     'movement',
     'navigation',
+    'spice',
+    'debris',
 ] as const;
 const NEGATIVE_METRICS = [
     'friendlyFire',

@@ -1,4 +1,4 @@
-import { initTensorFlow } from '../../../../ml-common/initTensorFlow.ts';
+import { initTensorFlow } from '../../../../ppo/src/infra/initTensorFlow.ts';
 import { VehicleType } from '../../Game/ECS/Components/Vehicle.ts';
 import { destroyEngine, getEngine } from './engine.ts';
 import { spawnPlayerTank, spawnEnemyAtRandomPosition } from './engineMethods.ts';

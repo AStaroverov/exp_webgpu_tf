@@ -1,4 +1,4 @@
-import { initTensorFlow } from '../../../../../ml-common/initTensorFlow.ts';
+import { initTensorFlow } from '../../../../../ppo/src/infra/initTensorFlow.ts';
 import { destroyEngine } from './engine.ts';
 import { activateBots, deactivateBots, finalizeGameState } from './gameMethods.ts';
 import { toggleGame } from './modules/gameState.ts';

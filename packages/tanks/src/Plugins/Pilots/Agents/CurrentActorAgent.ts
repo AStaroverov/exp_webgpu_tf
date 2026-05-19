@@ -1,16 +1,18 @@
 import * as tf from '@tensorflow/tfjs';
 
 import { clamp } from 'lodash';
-import { applyActionToTank } from '../../../../../ml-common/applyActionToTank.ts';
-import { AgentMemory, AgentMemoryBatch } from '../../../../../ml-common/Memory.ts';
-import { getNetworkExpIteration } from '../../../../../ml-common/utils.ts';
-import { Model } from '../../../../../ml/src/Models/def.ts';
-import { getNetwork } from '../../../../../ml/src/Models/Utils.ts';
-import { calculateActionReward, getFramePenalty } from '../../../../../ml/src/Reward/calculateReward.ts';
+import { applyActionToTank } from '../../../../../ppo_tanks/src/state/applyActionToTank.ts';
+import { AgentMemory, AgentMemoryBatch } from '../../../../../ppo/src/memory/Memory.ts';
+import { InputArrays } from '../../../../../ppo_tanks/src/state/InputArrays.ts';
+import { getNetworkExpIteration } from '../../../../../ppo/src/models/networkMeta.ts';
+import { Model } from '../../../../../ppo/src/models/def.ts';
+import { getNetwork } from '../../../../../ppo/src/models/storage.ts';
+import { CONFIG } from '../../../../../ppo_tanks/src/config.ts';
+import { calculateActionReward, getFramePenalty } from '../../../../../ppo_tanks/src/reward/calculateReward.ts';
 import { getTankHealth } from '../../../Game/ECS/Entities/Tank/TankUtils.ts';
 import { createNetworkModelManager } from './NetworkModelManager.ts';
-import { ACTION_HEAD_DIMS } from '../../../../../ml/src/Models/Create.ts';
-import { DirichletNoise } from '../../../../../ml-common/DirichletNoise.ts';
+import { ACTION_HEAD_DIMS } from '../../../../../ppo_tanks/src/models/createTankNetworks.ts';
+import { DirichletNoise } from '../../../../../ppo/src/noise/DirichletNoise.ts';
 
 export type TankAgent<A = Partial<DownloadableAgent> & Partial<LearnableAgent>> = A & {
     tankEid: number;
@@ -29,15 +31,15 @@ export type LearnableAgent = {
     dispose(): void;
     getNoise(): tf.Tensor[];
     getVersion(): number;
-    getMemory(): undefined | AgentMemory;
-    getMemoryBatch(rewardBias: number): undefined | AgentMemoryBatch;
+    getMemory(): undefined | AgentMemory<InputArrays>;
+    getMemoryBatch(rewardBias: number): undefined | AgentMemoryBatch<InputArrays>;
     evaluateTankBehaviour(width: number, height: number, frame: number): void;
 }
 
-const currentActorUpdater = createNetworkModelManager(() => getNetwork(Model.Policy));
+const currentActorUpdater = createNetworkModelManager(() => getNetwork(Model.Policy, CONFIG.savePath));
 
 export class CurrentActorAgent implements TankAgent<DownloadableAgent & LearnableAgent> {
-    private memory = new AgentMemory();
+    private memory = new AgentMemory<InputArrays>();
     private noise = new DirichletNoise(ACTION_HEAD_DIMS, {
         alpha: 0.3,  // α < 1 for sparse, peaked samples (high exploration)
         repeatInterval: [1, 6],
@@ -59,11 +61,11 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         return this.noise.sample();
     }
 
-    public getMemory(): undefined | AgentMemory {
+    public getMemory(): undefined | AgentMemory<InputArrays> {
         return this.train ? this.memory : undefined;
     }
 
-    public getMemoryBatch(finalReward: number): undefined | AgentMemoryBatch {
+    public getMemoryBatch(finalReward: number): undefined | AgentMemoryBatch<InputArrays> {
         return this.train ? this.memory.getBatch(finalReward) : undefined;
     }
 
@@ -87,7 +89,7 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
         currentActorUpdater.schedule(width, height, this);
     }
 
-    public applyUpdateTankBehaviour(width: number, height: number) {
+    public applyUpdateTankBehaviour(_width: number, _height: number) {
         const result = currentActorUpdater.get(
             this,
             this.train ||
@@ -111,8 +113,8 @@ export class CurrentActorAgent implements TankAgent<DownloadableAgent & Learnabl
     }
 
     public evaluateTankBehaviour(
-        width: number,
-        height: number,
+        _width: number,
+        _height: number,
         frame: number,
     ) {
         if (this.memory.size() === 0) return;
