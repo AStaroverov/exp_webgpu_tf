@@ -91,7 +91,7 @@ export function BattleHUD({ className, style }: { className?: string; style?: CS
                 <div className="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-2 drop-shadow-lg">
                     Allies
                 </div>
-                {tankEids.map(eid => (
+                {Array.from(tankEids, eid => (
                     <AllyTankHealthBar key={eid} eid={eid} />
                 ))}
             </div>
@@ -100,7 +100,7 @@ export function BattleHUD({ className, style }: { className?: string; style?: CS
                 <div className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2 drop-shadow-lg text-right">
                     Enemies
                 </div>
-                {tankEids.map(eid => (
+                {Array.from(tankEids, eid => (
                     <EnemyTankHealthBar key={eid} eid={eid} />
                 ))}
             </div>

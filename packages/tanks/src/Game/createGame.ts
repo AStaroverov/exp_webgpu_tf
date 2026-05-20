@@ -1,5 +1,5 @@
 import { EventQueue } from '@dimforge/rapier2d-simd';
-import { createWorld, deleteWorld, EntityId, hasComponent, resetWorld } from 'bitecs';
+import { deleteWorld, EntityId, hasComponent, resetWorld } from 'bitecs';
 import { destroyChangeDetectorSystem } from '../../../renderer/src/ECS/Systems/ChangedDetectorSystem.ts';
 import { createDrawShapeSystem } from '../../../renderer/src/ECS/Systems/SDFSystem/createDrawShapeSystem.ts';
 import { createTransformSystem } from '../../../renderer/src/ECS/Systems/TransformSystem.ts';
@@ -51,6 +51,7 @@ import { createTankAliveSystem } from './ECS/Systems/Tank/createTankAliveSystem.
 import { createShieldRegenerationSystem } from './ECS/Systems/createShieldRegenerationSystem.ts';
 import { SoundDI } from './DI/SoundDI.ts';
 import { createVehicleTurretRotationSystem as createTurretRotationSystem } from './ECS/Systems/Vehicle/VehicleControllerSystems.ts';
+import { createGameWorld } from './ECS/createGameWorld.ts';
 
 export type Game = ReturnType<typeof createGame>;
 
@@ -58,7 +59,7 @@ export function createGame({ width, height }: {
     width: number,
     height: number,
 }) {
-    const world = createWorld();
+    const world = createGameWorld();
     const physicalWorld = initPhysicalWorld();
 
     GameDI.width = width;

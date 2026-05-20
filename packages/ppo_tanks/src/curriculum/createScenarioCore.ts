@@ -1,4 +1,4 @@
-import { EntityId, query } from 'bitecs';
+import { query, QueryResult } from 'bitecs';
 import { Vehicle } from '../../../tanks/src/Game/ECS/Components/Vehicle.ts';
 import { getTeamsCount } from '../../../tanks/src/Game/ECS/Components/TeamRef.ts';
 import { createBattlefield } from './createBattlefield.ts';
@@ -18,7 +18,7 @@ export function createScenarioCore(
     options: ScenarioCoreOptions,
 ): Scenario {
     const game = createBattlefield(options);
-    let initialTanks: readonly EntityId[];
+    let initialTanks: QueryResult;
     let initialTeamHealth: Record<number, number>;
 
     const gameTick = game.gameTick;
@@ -39,4 +39,3 @@ export function createScenarioCore(
             : computeSuccessRatio(0, initialTeamHealth, getTeamHealth(initialTanks)),
     };
 }
-

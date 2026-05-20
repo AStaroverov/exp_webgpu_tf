@@ -1,22 +1,34 @@
-import { addComponent } from 'bitecs';
+import { addComponent, World } from 'bitecs';
 import { mat4 } from 'gl-matrix';
-import { World } from '../world.ts';
 import { NestedArray } from '../../utils.ts';
 import { delegate } from '../../delegate.ts';
 
-export const LocalTransform = ({
-    matrix: NestedArray.f32(16, delegate.defaultSize),
-});
+export function createLocalTransformComponent() {
+    return {
+        matrix: NestedArray.f32(16, delegate.defaultSize),
+    };
+}
 
-export const GlobalTransform = ({
-    matrix: NestedArray.f32(16, delegate.defaultSize),
-});
+export function createGlobalTransformComponent() {
+    return {
+        matrix: NestedArray.f32(16, delegate.defaultSize),
+    };
+}
+
+export const LocalTransform = createLocalTransformComponent();
+export const GlobalTransform = createGlobalTransformComponent();
 
 export function addTransformComponents(world: World, id: number) {
-    addComponent(world, id, LocalTransform);
-    addComponent(world, id, GlobalTransform);
-    LocalTransform.matrix.setBatch(id, IDENTIFY_MATRIX);
-    GlobalTransform.matrix.setBatch(id, IDENTIFY_MATRIX);
+    const components = (world as World<{ components?: {
+        LocalTransform: typeof LocalTransform;
+        GlobalTransform: typeof GlobalTransform;
+    } }>).components;
+    const worldLocalTransform = components?.LocalTransform ?? LocalTransform;
+    const worldGlobalTransform = components?.GlobalTransform ?? GlobalTransform;
+    addComponent(world, id, worldLocalTransform);
+    addComponent(world, id, worldGlobalTransform);
+    worldLocalTransform.matrix.setBatch(id, IDENTIFY_MATRIX);
+    worldGlobalTransform.matrix.setBatch(id, IDENTIFY_MATRIX);
 }
 
 const IDENTIFY_MATRIX: mat4 = mat4.create();

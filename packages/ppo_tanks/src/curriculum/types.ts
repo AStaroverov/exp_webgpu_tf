@@ -1,4 +1,4 @@
-import { EntityId } from 'bitecs';
+import { QueryResult } from 'bitecs';
 import { createBattlefield } from './createBattlefield.ts';
 
 export type CurriculumState = {
@@ -15,7 +15,7 @@ export type Scenario = Awaited<ReturnType<typeof createBattlefield>> & {
     index: number;
     train: boolean;
 
-    getVehicleEids(): readonly EntityId[];
+    getVehicleEids(): QueryResult;
     getTeamsCount(): number;
     getSuccessRatio(): number;
 }

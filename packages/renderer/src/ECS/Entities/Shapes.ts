@@ -1,15 +1,17 @@
-import { addEntity, World } from 'bitecs';
-import { addTransformComponents, applyMatrixTranslate, LocalTransform } from '../Components/Transform.ts';
-import { Color, Roundness, TColor } from '../Components/Common.ts';
-import { Shape, ShapeKind } from '../Components/Shape.ts';
+import { addEntity } from 'bitecs';
+import { addTransformComponents, applyMatrixTranslate } from '../Components/Transform.ts';
+import { TColor } from '../Components/Common.ts';
+import { ShapeKind } from '../Components/Shape.ts';
+import { getRenderComponents, type RenderWorldLike } from '../world.ts';
 
-export function createCircle(world: World, { x, y, z, radius, color }: {
+export function createCircle(world: RenderWorldLike, { x, y, z, radius, color }: {
     x: number;
     y: number;
     z: number;
     radius: number;
     color: TColor;
 }) {
+    const { Color, LocalTransform, Shape } = getRenderComponents(world);
     const id = addEntity(world);
 
     addTransformComponents(world, id);
@@ -21,7 +23,7 @@ export function createCircle(world: World, { x, y, z, radius, color }: {
     return id;
 }
 
-export function createRectangle(world: World, { x, y, z, width, height, color, roundness }: {
+export function createRectangle(world: RenderWorldLike, { x, y, z, width, height, color, roundness }: {
     x: number;
     y: number;
     z: number;
@@ -30,6 +32,7 @@ export function createRectangle(world: World, { x, y, z, width, height, color, r
     color: TColor;
     roundness?: number;
 }) {
+    const { Color, LocalTransform, Roundness, Shape } = getRenderComponents(world);
     const id = addEntity(world);
 
     addTransformComponents(world, id);
@@ -42,7 +45,7 @@ export function createRectangle(world: World, { x, y, z, width, height, color, r
     return id;
 }
 
-export function createTriangle(world: World, { x, y, z, color, roundness, point1, point2, point3 }: {
+export function createTriangle(world: RenderWorldLike, { x, y, z, color, roundness, point1, point2, point3 }: {
     x: number;
     y: number;
     z: number;
@@ -52,6 +55,7 @@ export function createTriangle(world: World, { x, y, z, color, roundness, point1
     point3: [number, number];
     color: TColor;
 }) {
+    const { Color, LocalTransform, Roundness, Shape } = getRenderComponents(world);
     const id = addEntity(world);
 
     addTransformComponents(world, id);

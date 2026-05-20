@@ -1,13 +1,16 @@
 import { getTankHealth, getTankTeamId } from '../../../tanks/src/Game/ECS/Entities/Tank/TankUtils.ts';
-import { EntityId } from 'bitecs';
+import { QueryResult } from 'bitecs';
 
-export function getTeamHealth(tanks: readonly EntityId[]): Record<number, number> {
-    return tanks.reduce((acc, tankEid) => {
+export function getTeamHealth(tanks: QueryResult): Record<number, number> {
+    const healthByTeam: Record<number, number> = {};
+
+    for (const tankEid of tanks) {
         const team = getTankTeamId(tankEid);
         const health = getTankHealth(tankEid);
-        acc[team] = (acc[team] || 0) + health;
-        return acc;
-    }, {} as Record<number, number>);
+        healthByTeam[team] = (healthByTeam[team] || 0) + health;
+    }
+
+    return healthByTeam;
 }
 
 export function getSuccessRatio(

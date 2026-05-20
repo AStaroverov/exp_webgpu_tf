@@ -1,18 +1,17 @@
-import { onAdd, onSet, query, World } from 'bitecs';
+import { onAdd, onSet, query } from 'bitecs';
 import { shaderMeta } from './sdf.shader.ts';
 import { GPUShader } from '../../../WGSL/GPUShader.ts';
 import { getTypeTypedArray } from '../../../Shader';
 import { projectionMatrix } from '../ResizeSystem.ts';
-import { Color, Roundness } from '../../Components/Common.ts';
-import { Shape } from '../../Components/Shape.ts';
-import { GlobalTransform } from '../../Components/Transform.ts';
 import { createChangeDetector } from '../ChangedDetectorSystem.ts';
+import { getRenderComponents, type RenderWorldLike } from '../../world.ts';
 
 export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
-    world: World,
+    world: RenderWorldLike,
     device: GPUDevice,
     shadowMapTexture: GPUTexture,
 }) {
+    const { Color, GlobalTransform, Roundness, Shape } = getRenderComponents(world);
     const gpuShader = new GPUShader(shaderMeta);
     
     // Set shadow map texture on shader meta before creating bind groups

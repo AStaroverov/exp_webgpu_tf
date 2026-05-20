@@ -1,15 +1,15 @@
-import { addEntity, World } from 'bitecs';
-import { addTransformComponents, applyMatrixTranslate, LocalTransform } from '../Components/Transform.ts';
-import { Color, Thinness } from '../Components/Common.ts';
-import { Rope } from '../Components/Rope.ts';
+import { addEntity } from 'bitecs';
+import { addTransformComponents, applyMatrixTranslate } from '../Components/Transform.ts';
+import { getRenderComponents, type RenderWorldLike } from '../world.ts';
 
-export function createRope(world: World, { x, y, thinness, color, points }: {
+export function createRope(world: RenderWorldLike, { x, y, thinness, color, points }: {
     x: number;
     y: number;
     thinness: number;
     color: [number, number, number, number];
     points: number[] | Float32Array;
 }) {
+    const { Color, LocalTransform, Rope, Thinness } = getRenderComponents(world);
     const id = addEntity(world);
 
     addTransformComponents(world, id);

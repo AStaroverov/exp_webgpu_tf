@@ -1,10 +1,10 @@
 import { Children } from '../../../../tanks/src/Game/ECS/Components/Children.ts';
-import { GlobalTransform, LocalTransform } from '../Components/Transform.ts';
 import { mat4 } from 'gl-matrix';
-import { World } from '../world.ts';
+import { getRenderComponents, type RenderWorldLike } from '../world.ts';
 import { query } from 'bitecs';
 
-export function createTransformSystem(world: World) {
+export function createTransformSystem(world: RenderWorldLike) {
+    const { GlobalTransform, LocalTransform } = getRenderComponents(world);
     return function execMainTransformSystem() {
         {
             const entities = query(world, [LocalTransform, GlobalTransform]);

@@ -32,7 +32,7 @@ export function getRegistratedAgents(): TankAgent[] {
 }
 
 export function getPilotAgents({ world } = GameDI) {
-    return query(world, [Pilot]).map((eid) => Pilot.agent.get(eid)!);
+    return Array.from(query(world, [Pilot]), (eid) => Pilot.agent.get(eid)!);
 }
 
 export function getAliveLearnableAgents(): CurrentActorAgent[] {
@@ -46,5 +46,5 @@ export function getAlivePilotAgents(): TankAgent[] {
 }
 
 export function getFreeVehicaleEids({ world } = GameDI) {
-    return query(world, [Vehicle, Not(Pilot)]);
+    return Array.from(query(world, [Vehicle, Not(Pilot)]));
 }

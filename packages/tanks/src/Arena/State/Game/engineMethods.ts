@@ -1,4 +1,4 @@
-import { EntityId, innerQuery } from 'bitecs';
+import { EntityId, query } from 'bitecs';
 import { Vehicle, VehicleType } from '../../../Game/ECS/Components/Vehicle.ts';
 import { Tank } from '../../../Game/ECS/Components/Tank.ts';
 import { TeamRef } from '../../../Game/ECS/Components/TeamRef.ts';
@@ -34,7 +34,7 @@ export const playerId$ = engine$.pipe(
 );
 
 export function getVehicleEids() {
-    return innerQuery(getEngine().world, [Vehicle]);
+    return Array.from(query(getEngine().world, [Vehicle]));
 }
 
 export function getVehicleType(vehicleEid: EntityId) {
@@ -50,7 +50,7 @@ export function setPilotAgent(vehicleEid: EntityId, agent: TankAgent) {
 }
 
 export function getTankEids(): EntityId[] {
-    return Array.from(innerQuery(getEngine().world, [Vehicle, Tank]));
+    return Array.from(query(getEngine().world, [Vehicle, Tank]));
 }
 
 export function getTankInfo(eid: EntityId): TankInfo {
@@ -65,7 +65,7 @@ export function getTankInfo(eid: EntityId): TankInfo {
 
 export function getPlayerScore(playerId: EntityId): { spice: number; debris: number } {
     return {
-        spice: Score.spices[playerId] ?? 0,
+        spice: Score.spice[playerId] ?? 0,
         debris: Score.debris[playerId] ?? 0,
     };
 }

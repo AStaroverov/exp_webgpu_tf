@@ -1,6 +1,6 @@
 import { PI } from '../../../../../lib/math.ts';
 import { randomRangeFloat } from '../../../../../lib/random.ts';
-import { innerQuery } from 'bitecs';
+import { query } from 'bitecs';
 import { Vehicle, VehicleType } from '../../Game/ECS/Components/Vehicle.ts';
 import { getEngine } from './engine.ts';
 import { createTank } from '../../Game/ECS/Entities/Tank/createTank.ts';
@@ -98,7 +98,7 @@ export function spawnEnemyAtRandomPosition(vehicleType: VehicleType = VehicleTyp
 }
 
 export function getVehicleEids() {
-    return innerQuery(getEngine().world, [Vehicle]);
+    return Array.from(query(getEngine().world, [Vehicle]));
 }
 
 export function getEnemyCount() {
@@ -172,4 +172,3 @@ export function spawnBuildingAtRandomPosition(size: BuildingSize = 'random') {
             return createLargeRuin(x, y, rotation);
     }
 }
-

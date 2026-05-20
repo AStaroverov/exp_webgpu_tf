@@ -1,6 +1,5 @@
 import { addComponent } from 'bitecs';
-import { GameDI as TanksGameDI } from '../../../tanks/src/Game/DI/GameDI.ts';
-// import { GameDI as LifeGameDI } from '../../../Games/Life/src/GameEngine/DI/GameDI.ts';
+import type { World } from 'bitecs';
 
 const $CompRef = Symbol('CompRef');
 let indexCompRef = 0;
@@ -12,12 +11,27 @@ export function component<T>(_comp: T): T {
     return comp;
 }
 
-export function obs<T extends (eid: number, ...args: A) => void, A extends any[]>(setter: T): T {
-    const setData = { component: nextCompRef, data: null };
-    return ((eid: number, ...args: A) => {
-        const r = setter(eid, ...args);
-        addComponent(TanksGameDI.world, eid, setData);
-        // addComponent(TanksGameDI.world ?? LifeGameDI.world, eid, setData);
-        return r;
-    }) as T;
+type ReactiveSetter = (eid: number, ...args: any[]) => any;
+type ComponentContext<T extends object> = {
+    ref: T;
+    obs: <F extends ReactiveSetter>(setter: F) => F;
+};
+
+export function defineComponent<T extends object>(
+    create: (ctx: ComponentContext<T>) => T,
+) {
+    return (world: World): T => {
+        const ref = nextCompRef as T;
+        const localObs = <F extends ReactiveSetter>(setter: F): F => {
+            const setData = { component: ref, data: null };
+            return ((eid: number, ...args: Parameters<F> extends [number, ...infer R] ? R : never) => {
+                const result = setter(eid, ...args);
+                addComponent(world, eid, setData);
+                return result;
+            }) as F;
+        };
+        const comp = Object.assign(ref, create({ ref, obs: localObs }));
+        nextCompRef = { [$CompRef]: indexCompRef++ };
+        return comp;
+    }
 }
