@@ -3,6 +3,7 @@ import { deleteWorld, EntityId, hasComponent, resetWorld } from 'bitecs';
 import { destroyChangeDetectorSystem } from '../../../renderer/src/ECS/Systems/ChangedDetectorSystem.ts';
 import { createDrawShapeSystem } from '../../../renderer/src/ECS/Systems/SDFSystem/createDrawShapeSystem.ts';
 import { createTransformSystem } from '../../../renderer/src/ECS/Systems/TransformSystem.ts';
+import { Children } from './ECS/Components/Children.ts';
 import { initWebGPU } from '../../../renderer/src/gpu.ts';
 import { createFrameTextures, createFrameTick } from '../../../renderer/src/WGSL/createFrame.ts';
 import { GameDI } from './DI/GameDI.ts';
@@ -72,7 +73,7 @@ export function createGame({ width, height }: {
     initCameraPosition();
 
     // const updateMap = createMapSystem();
-    const execTransformSystem = createTransformSystem(world);
+    const execTransformSystem = createTransformSystem(world, Children);
 
     // Vehicle control systems - tracks for tanks/harvesters, wheels for cars
     const updateTrackControl = createTrackControlSystem();

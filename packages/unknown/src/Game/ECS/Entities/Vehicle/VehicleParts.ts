@@ -1,0 +1,231 @@
+import { TColor } from '../../../../../../renderer/src/ECS/Components/Common.ts';
+import { getGameComponents } from '../../createGameWorld.ts';
+import { JointData, Vector2 } from '@dimforge/rapier2d-simd';
+import { GameDI } from '../../../DI/GameDI.ts';
+import { createRectangleRR } from '../../Components/RigidRender.ts';
+import { defaultVehicleOptions, VehicleOptions } from './Options.ts';
+import { randomRangeFloat } from '../../../../../../../lib/random.ts';
+import { clamp } from 'lodash-es';
+import { addEntity, EntityId, hasComponent } from 'bitecs';
+import { cos, min, sin } from '../../../../../../../lib/math.ts';
+import { VehicleType } from '../../Components/Vehicle.ts';
+import { getSlotPartConfig, SlotPartType } from '../../Components/SlotConfig.ts';
+import { isSlot, isSlotEmpty, isSlotFilled } from '../../Utils/SlotUtils.ts';
+
+export type PartsData = [x: number, y: number, w: number, h: number];
+
+export function createRectangleSet(
+    cols: number, rows: number,
+    width: number, paddingWidth: number,
+    height = width, paddingHeight = paddingWidth,
+): PartsData[] {
+    const count = cols * rows;
+    return Array.from({ length: count }, (_, i) => {
+        return [
+            i * paddingWidth % (paddingWidth * cols) - (paddingWidth * cols / 2 - width / 2),
+            Math.floor(i / cols) * paddingHeight - (paddingHeight * rows / 2 - height / 2),
+            width, height,
+        ];
+    });
+}
+
+export function updateSlotsBrightness(parentEId: EntityId, { world } = GameDI) {
+    const { Children } = getGameComponents(world);
+    const childCount = Children.entitiesCount[parentEId];
+
+    for (let i = 0; i < childCount; i++) {
+        const slotEid = Children.entitiesIds.get(parentEId, i);
+        if (!isSlot(slotEid)) continue;
+        adjustBrightness(slotEid, i / childCount / 2 - 0.1, i / childCount / 2 + 0.1);
+    }
+}
+
+export function createSlotEntities(
+    parentEId: EntityId,
+    params: PartsData[],
+    color: TColor,
+    partType: SlotPartType,
+    { world } = GameDI,
+) {
+    const { Slot, Color, Children, Parent } = getGameComponents(world);
+
+    for (let i = 0; i < params.length; i++) {
+        const slotEid = addEntity(world);
+        const param = params[i];
+        const x = param[0];
+        const y = param[1];
+        const width = param[2];
+        const height = param[3];
+
+        Slot.addComponent(world, slotEid, x, y, width, height, partType);
+        Color.addComponent(world, slotEid, color[0], color[1], color[2], color[3]);
+        Children.addComponent(world, slotEid);
+        Parent.addComponent(world, slotEid, parentEId);
+
+        Children.addChildren(parentEId, slotEid);
+    }
+}
+
+export function fillAllSlots(parentEId: EntityId, options: VehicleOptions, { world } = GameDI): void {
+    const { Children } = getGameComponents(world);
+    const childCount = Children.entitiesCount[parentEId];
+
+    for (let i = 0; i < childCount; i++) {
+        const childEid = Children.entitiesIds.get(parentEId, i);
+        if (isSlot(childEid) && isSlotEmpty(childEid)) {
+            fillSlot(childEid, options);
+        }
+    }
+}
+
+const jointParentAnchor = new Vector2(0, 0);
+const jointChildAnchor = new Vector2(0, 0);
+const fillSlotOptions: VehicleOptions = structuredClone(defaultVehicleOptions);
+export function fillSlot(
+    slotEid: EntityId,
+    options: VehicleOptions,
+    { world, physicalWorld } = GameDI,
+) {
+    const {
+        Slot, Parent, Children, Vehicle, RigidBodyRef, Color,
+        VehiclePart, Joint, PlayerRef, TeamRef, Hitable, Damagable, VehiclePartCaterpillar,
+    } = getGameComponents(world);
+
+    if (isNaN(options.x) || isNaN(options.y) || isNaN(options.rotation)) {
+        throw new Error('Some options are not set');
+    }
+    if (isSlotFilled(slotEid)) {
+        return;
+    }
+    Object.assign(fillSlotOptions, options);
+
+    const vehicleOrTurretEid = Parent.id[slotEid];
+    const vehicleEid = hasComponent(world, vehicleOrTurretEid, Vehicle)
+        ? vehicleOrTurretEid
+        : Parent.id[vehicleOrTurretEid];
+    const vehicleType = Vehicle.type[vehicleEid] as VehicleType;
+
+    const partType = Slot.partType[slotEid] as SlotPartType;
+    const config = getSlotPartConfig(partType, vehicleType);
+    const anchorX = Slot.anchorX[slotEid];
+    const anchorY = Slot.anchorY[slotEid];
+
+    const worldX = anchorX * cos(fillSlotOptions.rotation) - anchorY * sin(fillSlotOptions.rotation);
+    const worldY = anchorX * sin(fillSlotOptions.rotation) + anchorY * cos(fillSlotOptions.rotation);
+
+    fillSlotOptions.x += worldX;
+    fillSlotOptions.y += worldY;
+    fillSlotOptions.z = config.z;
+    fillSlotOptions.width = Slot.width[slotEid];
+    fillSlotOptions.height = Slot.height[slotEid];
+
+    fillSlotOptions.density = config.density;
+    fillSlotOptions.belongsSolverGroup = config.belongsSolverGroup;
+    fillSlotOptions.interactsSolverGroup = config.interactsSolverGroup;
+    fillSlotOptions.belongsCollisionGroup = config.belongsCollisionGroup;
+    fillSlotOptions.interactsCollisionGroup = config.interactsCollisionGroup;
+    fillSlotOptions.color = Color.applyColorToArray(slotEid, new Float32Array(4));
+
+    const rbId = RigidBodyRef.id[vehicleOrTurretEid];
+    const [eid, pid] = createRectangleRR(fillSlotOptions);
+
+    jointParentAnchor.x = anchorX;
+    jointParentAnchor.y = anchorY;
+
+    const joint = physicalWorld.createImpulseJoint(
+        JointData.fixed(jointParentAnchor, 0, jointChildAnchor, 0),
+        physicalWorld.getRigidBody(rbId),
+        physicalWorld.getRigidBody(pid),
+        false,
+    );
+
+    VehiclePart.addComponent(world, eid);
+    Joint.addComponent(world, eid, joint.handle);
+
+    PlayerRef.addComponent(world, eid, fillSlotOptions.playerId);
+    TeamRef.addComponent(world, eid, fillSlotOptions.teamId);
+    Hitable.addComponent(world, eid, min(fillSlotOptions.width, fillSlotOptions.height));
+    Damagable.addComponent(world, eid, min(fillSlotOptions.width, fillSlotOptions.height) / 20);
+
+    Parent.addComponent(world, eid, slotEid);
+    Children.addChildren(slotEid, eid);
+
+    if (partType === SlotPartType.Caterpillar) {
+        VehiclePartCaterpillar.addComponent(world, eid);
+    }
+}
+
+export function getEmptySlotsCount(parentEId: EntityId, { world } = GameDI): number {
+    const { Children } = getGameComponents(world);
+    const childCount = Children.entitiesCount[parentEId];
+    let emptyCount = 0;
+
+    for (let i = 0; i < childCount; i++) {
+        const childEid = Children.entitiesIds.get(parentEId, i);
+        if (!isSlot(childEid)) continue;
+
+        if (isSlotEmpty(childEid)) {
+            emptyCount++;
+        }
+    }
+
+    return emptyCount;
+}
+
+export function findFirstEmptySlot(parentEId: EntityId, { world } = GameDI): EntityId | null {
+    const { Children } = getGameComponents(world);
+    const childCount = Children.entitiesCount[parentEId];
+    for (let i = 0; i < childCount; i++) {
+        const childEid = Children.entitiesIds.get(parentEId, i);
+        if (isSlot(childEid) && isSlotEmpty(childEid)) {
+            return childEid;
+        }
+    }
+    return null;
+}
+
+export function getSlotCount(parentEId: EntityId, { world } = GameDI): number {
+    const { Children } = getGameComponents(world);
+    const childCount = Children.entitiesCount[parentEId];
+    let count = 0;
+    for (let i = 0; i < childCount; i++) {
+        const childEid = Children.entitiesIds.get(parentEId, i);
+        if (isSlot(childEid)) count++;
+    }
+    return count;
+}
+
+export function getFilledSlotCount(parentEId: EntityId, { world } = GameDI): number {
+    const { Children } = getGameComponents(world);
+    const childCount = Children.entitiesCount[parentEId];
+    let filled = 0;
+    for (let i = 0; i < childCount; i++) {
+        const childEid = Children.entitiesIds.get(parentEId, i);
+        if (isSlot(childEid) && isSlotFilled(childEid)) filled++;
+    }
+    return filled;
+}
+
+export function getVehicleTotalSlotCount(vehicleEid: EntityId, { world } = GameDI): number {
+    const { Tank } = getGameComponents(world);
+    const turretEid = Tank.turretEId[vehicleEid];
+    return getSlotCount(vehicleEid) + getSlotCount(turretEid);
+}
+
+export function getVehicleFilledSlotCount(vehicleEid: EntityId, { world } = GameDI): number {
+    const { Tank } = getGameComponents(world);
+    const turretEid = Tank.turretEId[vehicleEid];
+    return getFilledSlotCount(vehicleEid) + getFilledSlotCount(turretEid);
+}
+
+function adjustBrightness(eid: EntityId, start: number, end: number, { world } = GameDI) {
+    const { Color } = getGameComponents(world);
+    const factor = -1 * randomRangeFloat(start, end);
+    Color.set$(
+        eid,
+        clamp(Color.getR(eid) + factor, 0, 1),
+        clamp(Color.getG(eid) + factor, 0, 1),
+        clamp(Color.getB(eid) + factor, 0, 1),
+        Color.getA(eid),
+    );
+}

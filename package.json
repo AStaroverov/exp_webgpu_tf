@@ -10,6 +10,7 @@
     "packages/renderer",
     "packages/tanks",
     "packages/ppo_tanks",
-    "packages/tanksV2"
+    "packages/tanksV2",
+    "packages/unknown"
   ]
 }

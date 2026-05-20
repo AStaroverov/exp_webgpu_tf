@@ -12,17 +12,14 @@ export function component<T>(_comp: T): T {
 }
 
 type ReactiveSetter = (eid: number, ...args: any[]) => any;
-type ComponentContext<T extends object> = {
-    ref: T;
-    obs: <F extends ReactiveSetter>(setter: F) => F;
-};
+export type Obs = <F extends ReactiveSetter>(setter: F) => F;
 
 export function defineComponent<T extends object>(
-    create: (ctx: ComponentContext<T>) => T,
+    create: (ref: object, obs: Obs) => T,
 ) {
     return (world: World): T => {
-        const ref = nextCompRef as T;
-        const localObs = <F extends ReactiveSetter>(setter: F): F => {
+        const ref = nextCompRef as object;
+        const localObs: Obs = <F extends ReactiveSetter>(setter: F): F => {
             const setData = { component: ref, data: null };
             return ((eid: number, ...args: Parameters<F> extends [number, ...infer R] ? R : never) => {
                 const result = setter(eid, ...args);
@@ -30,7 +27,7 @@ export function defineComponent<T extends object>(
                 return result;
             }) as F;
         };
-        const comp = Object.assign(ref, create({ ref, obs: localObs }));
+        const comp = Object.assign(ref, create(ref, localObs)) as T;
         nextCompRef = { [$CompRef]: indexCompRef++ };
         return comp;
     }

@@ -2,13 +2,13 @@ import { createWorld as createBitecsWorld, World } from 'bitecs';
 import { createColorComponent, createRoundnessComponent, createThinnessComponent } from './Components/Common.ts';
 import { createRopeComponent } from './Components/Rope.ts';
 import { createShapeComponent } from './Components/Shape.ts';
-import { createGlobalTransformComponent, createLocalTransformComponent } from './Components/Transform.ts';
+import { GlobalTransform, LocalTransform } from './Components/Transform.ts';
 
 export function createRenderComponents(world: World) {
     return {
         Color: createColorComponent(world),
-        GlobalTransform: createGlobalTransformComponent(),
-        LocalTransform: createLocalTransformComponent(),
+        GlobalTransform,
+        LocalTransform,
         Rope: createRopeComponent(world),
         Roundness: createRoundnessComponent(world),
         Shape: createShapeComponent(world),

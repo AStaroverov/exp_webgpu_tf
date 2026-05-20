@@ -1,9 +1,12 @@
-import { Children } from '../../../../tanks/src/Game/ECS/Components/Children.ts';
 import { mat4 } from 'gl-matrix';
 import { getRenderComponents, type RenderWorldLike } from '../world.ts';
 import { query } from 'bitecs';
+type ChildrenLike = {
+    entitiesCount: ArrayLike<number>;
+    entitiesIds: { get(eid: number, i: number): number };
+};
 
-export function createTransformSystem(world: RenderWorldLike) {
+export function createTransformSystem(world: RenderWorldLike, Children: ChildrenLike) {
     const { GlobalTransform, LocalTransform } = getRenderComponents(world);
     return function execMainTransformSystem() {
         {
@@ -18,7 +21,7 @@ export function createTransformSystem(world: RenderWorldLike) {
         }
 
         {
-            const entities = query(world, [GlobalTransform, Children]);
+            const entities = query(world, [GlobalTransform, Children as object]);
 
             for (let i = 0; i < entities.length; i++) {
                 const id = entities[i];

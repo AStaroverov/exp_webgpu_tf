@@ -1,0 +1,30 @@
+{
+  "name": "unknown",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config config.vite.ts",
+    "build": "tsc && vite build --config config.vite.ts",
+    "preview": "vite preview --config config.vite.ts"
+  },
+  "devDependencies": {
+    "@dimforge/rapier2d": "^0.14.0",
+    "@dimforge/rapier2d-simd": "^0.15.0",
+    "@types/lodash": "^4.17.15",
+    "@types/lodash-es": "^4.17.12",
+    "events": "^3.3.0",
+    "lodash": "^4.17.21",
+    "lodash-es": "^4.17.21",
+    "ring-buffer-ts": "^1.2.0",
+    "rxjs": "^7.8.2",
+    "stats-gl": "^3.6.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vite-plugin-top-level-await": "^1.5.0",
+    "vite-plugin-wasm": "^3.4.1"
+  },
+  "dependencies": {
+    "bitecs": "^0.4.0"
+  }
+}
