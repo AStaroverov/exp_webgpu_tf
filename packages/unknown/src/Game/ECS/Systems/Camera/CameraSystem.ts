@@ -1,7 +1,7 @@
 import { EntityId } from 'bitecs';
-import { GameDI } from '../../../DI/GameDI.ts';
 import { GameMap } from '../../Entities/GameMap.ts';
-import { getGameComponents } from '../../createGameWorld.ts';
+import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
+import { Worlds } from '../../../DI/Worlds.ts';
 
 export interface CameraState {
     x: number;
@@ -24,11 +24,11 @@ export function initCameraPosition() {
     CameraState.y = GameMap.offsetY;
 }
 
-export function setCameraTarget(eid: EntityId | null, { world } = GameDI) {
+export function setCameraTarget(eid: EntityId | null, { physicsWorld: world } = Worlds) {
     CameraState.targetEid = eid;
 
     if (eid !== null) {
-        const { RigidBodyState } = getGameComponents(world);
+        const { RigidBodyState } = getPhysicsWorldComponents(world);
         CameraState.x = RigidBodyState.position.get(eid, 0);
         CameraState.y = RigidBodyState.position.get(eid, 1);
 
@@ -50,8 +50,8 @@ export function getCameraPosition(): { x: number; y: number } {
     return { x: CameraState.x, y: CameraState.y };
 }
 
-export function createCameraSystem({ world } = GameDI) {
-    const { RigidBodyState } = getGameComponents(world);
+export function createCameraSystem({ physicsWorld: world } = Worlds) {
+    const { RigidBodyState } = getPhysicsWorldComponents(world);
 
     return function updateCamera(_delta: number) {
         const { targetEid, smoothing, updateMapOffset } = CameraState;

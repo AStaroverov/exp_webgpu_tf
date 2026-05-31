@@ -1,9 +1,8 @@
 import { EntityId, hasComponent } from 'bitecs';
-import { GameDI } from '../../DI/GameDI.ts';
-import { getGameComponents } from '../createGameWorld.ts';
+import { getRenderWorldComponents, RenderGameWorld } from '../createRenderWorld.ts';
 
-export function isSlot(eid: EntityId, { world } = GameDI): boolean {
-    const { Slot, Children } = getGameComponents(world);
+export function isSlot(world: RenderGameWorld, eid: EntityId): boolean {
+    const { Slot, Children } = getRenderWorldComponents(world);
     const hasSlot = hasComponent(world, eid, Slot);
     const hasChildren = hasComponent(world, eid, Children);
     if (hasSlot && !hasChildren) {
@@ -12,17 +11,17 @@ export function isSlot(eid: EntityId, { world } = GameDI): boolean {
     return hasSlot && hasChildren;
 }
 
-export function isSlotFilled(slotEid: EntityId, { world } = GameDI): boolean {
-    const { Children } = getGameComponents(world);
+export function isSlotFilled(world: RenderGameWorld, slotEid: EntityId): boolean {
+    const { Children } = getRenderWorldComponents(world);
     return Children.entitiesCount[slotEid] > 0;
 }
 
-export function isSlotEmpty(slotEid: EntityId, { world } = GameDI): boolean {
-    const { Children } = getGameComponents(world);
+export function isSlotEmpty(world: RenderGameWorld, slotEid: EntityId): boolean {
+    const { Children } = getRenderWorldComponents(world);
     return Children.entitiesCount[slotEid] === 0;
 }
 
-export function getSlotFillerEid(slotEid: EntityId, { world } = GameDI): EntityId {
-    const { Children } = getGameComponents(world);
+export function getSlotFillerEid(world: RenderGameWorld, slotEid: EntityId): EntityId {
+    const { Children } = getRenderWorldComponents(world);
     return Children.entitiesIds.get(slotEid, 0);
 }

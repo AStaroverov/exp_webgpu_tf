@@ -9,13 +9,12 @@
  * Only the global top action of this kind is executed (chess-like sequencing).
  */
 
-import { GameDI } from '../../../DI/GameDI.ts';
 import { MapDI } from '../../../DI/MapDI.ts';
 import { normalizeAngle } from '../../../../../../../lib/math.ts';
-import { addEntity } from 'bitecs';
-import { getGameComponents } from '../../createGameWorld.ts';
+import { addEntity, World } from 'bitecs';
+import { getPhysicsWorldComponents, PhysicsWorld } from '../../createPhysicsWorld.ts';
 import { ActionDescriptor, applyTarget } from '../ActionDescriptor.ts';
-import { ActionScheduleDI, getTopAction } from '../ActionScheduleDI.ts';
+import { getTopAction } from '../ActionScheduleDI.ts';
 import { getActionComponents } from '../createActionWorld.ts';
 import { ActionKind, ActionStatus, ActionWorldTargetSpec, TargetKind } from '../ActionTypes.ts';
 
@@ -34,7 +33,7 @@ export type TurretAimActionSpec = {
 
 export const TurretAimActionDescriptor: ActionDescriptor<TurretAimActionSpec> = {
     kind: ActionKind.TurretAim,
-    createSystem: () => createTurretAimActionSystem(),
+    createSystem: (actionWorld, gameWorld) => createTurretAimActionSystem(actionWorld, gameWorld),
     createAction(world, ownerEid, spec, seq) {
         const { Action, TurretAimParams } = getActionComponents(world);
         const eid = addEntity(world);
@@ -46,11 +45,11 @@ export const TurretAimActionDescriptor: ActionDescriptor<TurretAimActionSpec> = 
 };
 
 export function createTurretAimActionSystem(
-    { world: actionWorld } = ActionScheduleDI,
-    { world: gameWorld } = GameDI,
+    actionWorld: World,
+    gameWorld: PhysicsWorld,
 ) {
     const { Action, ActionTarget, TurretAimParams } = getActionComponents(actionWorld);
-    const { Tank, TurretController, RigidBodyState } = getGameComponents(gameWorld);
+    const { Tank, TurretController, RigidBodyState } = getPhysicsWorldComponents(gameWorld);
 
     return function updateTurretAim(_delta: number) {
         const top = getTopAction();

@@ -1,12 +1,13 @@
 import { JointData, Vector2 } from '@dimforge/rapier2d-simd';
-import { addTransformComponents } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
-import { GameDI } from '../../../DI/GameDI.ts';
+import { PhysicalWorld } from '../../../Physical/initPhysicalWorld.ts';
 import { CollisionGroup } from '../../../Physical/createRigid.ts';
-import { createRectangleRigidGroup } from '../../Components/RigidGroup.ts';
+import { spawnRectangleCarrier, SpawnCtx } from '../spawnPart.ts';
+import { getPhysicsWorldComponents, PhysicsWorld } from '../../createPhysicsWorld.ts';
+import { getRenderWorldComponents } from '../../createRenderWorld.ts';
+import { Worlds } from '../../../DI/Worlds.ts';
 import { WheelPosition } from '../../Components/Wheel.ts';
 import { VehicleOptions } from '../Vehicle/Options.ts';
 import { PI } from '../../../../../../../lib/math.ts';
-import { getGameComponents } from '../../createGameWorld.ts';
 
 export type WheelOptions = VehicleOptions & {
     wheelPosition: WheelPosition;
@@ -21,22 +22,27 @@ export type WheelOptions = VehicleOptions & {
 const jointParentAnchor = new Vector2(0, 0);
 const jointChildAnchor = new Vector2(0, 0);
 
+// Returns [wheelPhysEid, wheelRenderEid, wheelPid]
 export function createWheel(
+    world: PhysicsWorld,
+    physicalWorld: PhysicalWorld,
     options: WheelOptions,
-    vehicleEid: number,
+    vehicleRenderEid: number,
     vehiclePid: number,
-    { world, physicalWorld } = GameDI,
-): [number, number] {
-    const { Wheel, WheelSteerable, WheelDrive, Joint, JointMotor, Parent, Children } = getGameComponents(world);
+): [number, number, number] {
+    const { Wheel, WheelSteerable, WheelDrive, Joint, JointMotor } = getPhysicsWorldComponents(world);
+    const renderWorld = Worlds.renderWorld;
+    const { Parent, Children } = getRenderWorldComponents(renderWorld);
 
     options.belongsCollisionGroup = CollisionGroup.NONE;
     options.interactsCollisionGroup = CollisionGroup.NONE;
     options.belongsSolverGroup = CollisionGroup.NONE;
     options.interactsSolverGroup = CollisionGroup.NONE;
 
-    const [wheelEid, wheelPid] = createRectangleRigidGroup(options);
+    const ctx: SpawnCtx = { physicsWorld: world, renderWorld, physicalWorld };
+    const [wheelPhysEid, wheelRenderEid, wheelPid] = spawnRectangleCarrier(ctx, options);
 
-    Wheel.addComponent(world, wheelEid);
+    Wheel.addComponent(world, wheelPhysEid);
 
     jointParentAnchor.x = options.anchorX;
     jointParentAnchor.y = options.anchorY;
@@ -54,26 +60,25 @@ export function createWheel(
         wheelBody,
         false,
     );
-    Joint.addComponent(world, wheelEid, joint.handle);
+    Joint.addComponent(world, wheelPhysEid, joint.handle);
 
     if (options.isSteerable) {
         WheelSteerable.addComponent(
             world,
-            wheelEid,
+            wheelPhysEid,
             options.maxSteeringAngle ?? PI / 6,
             options.steeringSpeed ?? PI * 2,
         );
-        JointMotor.addComponent(world, wheelEid);
+        JointMotor.addComponent(world, wheelPhysEid);
     }
 
     if (options.isDrive) {
-        WheelDrive.addComponent(world, wheelEid);
+        WheelDrive.addComponent(world, wheelPhysEid);
     }
 
-    addTransformComponents(world, wheelEid);
-    Parent.addComponent(world, wheelEid, vehicleEid);
-    Children.addComponent(world, wheelEid);
-    Children.addChildren(vehicleEid, wheelEid);
+    Parent.addComponent(renderWorld, wheelRenderEid, vehicleRenderEid);
+    Children.addComponent(renderWorld, wheelRenderEid);
+    Children.addChildren(vehicleRenderEid, wheelRenderEid);
 
-    return [wheelEid, wheelPid];
+    return [wheelPhysEid, wheelRenderEid, wheelPid];
 }

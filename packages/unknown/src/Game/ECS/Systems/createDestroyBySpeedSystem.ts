@@ -1,11 +1,11 @@
-import { GameDI } from '../../DI/GameDI.ts';
 import { query } from 'bitecs';
 import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 import { hypot } from '../../../../../../lib/math.ts';
-import { getGameComponents } from '../createGameWorld.ts';
+import { getPhysicsWorldComponents } from '../createPhysicsWorld.ts';
+import { Worlds } from '../../DI/Worlds.ts';
 
-export function createDestroyBySpeedSystem({ world } = GameDI) {
-    const { DestroyBySpeed, RigidBodyState } = getGameComponents(world);
+export function createDestroyBySpeedSystem({ physicsWorld: world } = Worlds) {
+    const { DestroyBySpeed, RigidBodyState } = getPhysicsWorldComponents(world);
 
     return () => {
         const eids = query(world, [DestroyBySpeed, RigidBodyState]);

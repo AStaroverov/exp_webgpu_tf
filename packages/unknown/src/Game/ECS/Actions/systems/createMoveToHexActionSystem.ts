@@ -11,15 +11,14 @@
  * waypoint list avoids both. Only the global top action of this kind is executed.
  */
 
-import { addEntity } from 'bitecs';
-import { GameDI } from '../../../DI/GameDI.ts';
+import { addEntity, World } from 'bitecs';
 import { MapDI } from '../../../DI/MapDI.ts';
 import { MapWorldId } from '../../../Map/HexGrid.ts';
 import { findPath } from '../../../Map/findPath.ts';
 import { normalizeAngle } from '../../../../../../../lib/math.ts';
-import { getGameComponents } from '../../createGameWorld.ts';
+import { getPhysicsWorldComponents, PhysicsWorld } from '../../createPhysicsWorld.ts';
 import { ActionDescriptor, applyTarget } from '../ActionDescriptor.ts';
-import { ActionScheduleDI, getTopAction } from '../ActionScheduleDI.ts';
+import { getTopAction } from '../ActionScheduleDI.ts';
 import { getActionComponents } from '../createActionWorld.ts';
 import { ActionHexTargetSpec, ActionKind, ActionStatus } from '../ActionTypes.ts';
 
@@ -55,15 +54,15 @@ export const MoveToHexActionDescriptor: ActionDescriptor<MoveToHexActionSpec> = 
         MoveToHexParams.addComponent(world, eid, spec.params.speed);
         return eid;
     },
-    createSystem: () => createMoveToHexActionSystem(),
+    createSystem: (actionWorld, gameWorld) => createMoveToHexActionSystem(actionWorld, gameWorld),
 };
 
 export function createMoveToHexActionSystem(
-    { world: actionWorld } = ActionScheduleDI,
-    { world: gameWorld } = GameDI,
+    actionWorld: World,
+    gameWorld: PhysicsWorld,
 ) {
     const { Action, ActionTarget } = getActionComponents(actionWorld);
-    const { VehicleController, RigidBodyState } = getGameComponents(gameWorld);
+    const { VehicleController, RigidBodyState } = getPhysicsWorldComponents(gameWorld);
 
     // Per-action movement plans. Keyed by the action entity id; rebuilt whenever a
     // fresh (Idle) action is picked up, so reused entity ids never inherit a stale

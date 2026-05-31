@@ -1,5 +1,4 @@
 import { hasComponent, query } from 'bitecs';
-import { GameDI } from '../../../DI/GameDI.ts';
 import { ExhaustSmokeOptions, spawnExhaustSmoke } from '../../Entities/ExhaustSmoke.ts';
 import {
     GlobalTransform,
@@ -9,7 +8,10 @@ import {
 } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
 import { random } from '../../../../../../../lib/random.ts';
 import { hypot } from '../../../../../../../lib/math.ts';
-import { getGameComponents } from '../../createGameWorld.ts';
+import { getRenderWorldComponents } from '../../createRenderWorld.ts';
+import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
+import { BridgeDI } from '../../../DI/BridgeDI.ts';
+import { Worlds } from '../../../DI/Worlds.ts';
 
 const ACCELERATION_EMISSION_MULTI = 5;
 const SMOKE_SIZE_MIN = 3;
@@ -25,26 +27,28 @@ const exhaustSmokeOptions: ExhaustSmokeOptions = {
     size: 0,
 };
 
-export function createExhaustSmokeSpawnSystem({ world } = GameDI) {
-    const { ExhaustPipe, Parent, Vehicle, RigidBodyState } = getGameComponents(world);
+export function createExhaustSmokeSpawnSystem({ physicsWorld, renderWorld } = Worlds) {
+    const { ExhaustPipe, Parent } = getRenderWorldComponents(renderWorld);
+    const { Vehicle, RigidBodyState } = getPhysicsWorldComponents(physicsWorld);
 
     return (delta: number) => {
-        const pipeEids = query(world, [ExhaustPipe]);
+        const pipeEids = query(renderWorld, [ExhaustPipe]);
         const deltaSeconds = delta / 1000;
 
         for (const pipeEid of pipeEids) {
-            const vehicleEid = Parent.id[pipeEid];
+            const vehicleRenderEid = Parent.id[pipeEid];
+            const vehiclePhysEid = BridgeDI.getPhysicsOf(vehicleRenderEid);
 
-            if (!hasComponent(world, vehicleEid, Vehicle)) continue;
+            if (!hasComponent(physicsWorld, vehiclePhysEid, Vehicle)) continue;
 
-            const vehicleMatrix = GlobalTransform.matrix.getBatch(vehicleEid);
+            const vehicleMatrix = GlobalTransform.matrix.getBatch(vehicleRenderEid);
             const vehicleX = getMatrixTranslationX(vehicleMatrix);
             const vehicleY = getMatrixTranslationY(vehicleMatrix);
             const vehicleRotation = getMatrixRotationZ(vehicleMatrix);
 
             let speed = 0;
-            if (hasComponent(world, vehicleEid, RigidBodyState)) {
-                const linvel = RigidBodyState.linvel.getBatch(vehicleEid);
+            if (hasComponent(physicsWorld, vehiclePhysEid, RigidBodyState)) {
+                const linvel = RigidBodyState.linvel.getBatch(vehiclePhysEid);
                 speed = hypot(linvel[0], linvel[1]);
             }
 
@@ -80,7 +84,7 @@ export function createExhaustSmokeSpawnSystem({ world } = GameDI) {
                 exhaustSmokeOptions.size = size;
                 exhaustSmokeOptions.velocityX = velocityX;
                 exhaustSmokeOptions.velocityY = velocityY;
-                spawnExhaustSmoke(exhaustSmokeOptions);
+                spawnExhaustSmoke(renderWorld, exhaustSmokeOptions);
             }
         }
     };

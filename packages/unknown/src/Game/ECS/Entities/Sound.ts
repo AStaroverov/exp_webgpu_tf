@@ -1,7 +1,6 @@
 import { addEntity, EntityId, hasComponent } from 'bitecs';
-import { GameDI } from '../../DI/GameDI.ts';
 import { SoundType } from '../Components/Sound.ts';
-import { getGameComponents } from '../createGameWorld.ts';
+import { getRenderWorldComponents, RenderGameWorld } from '../createRenderWorld.ts';
 import { addTransformComponents, applyMatrixTranslate, LocalTransform } from 'renderer/src/ECS/Components/Transform.ts';
 
 export interface SpawnSoundOptions {
@@ -22,10 +21,10 @@ export interface SpawnSoundWithParentOptions extends SpawnSoundOptions {
 }
 
 export function spawnSoundAtPosition(
+    world: RenderGameWorld,
     options: SpawnSoundAtPositionOptions,
-    { world } = GameDI,
 ): EntityId {
-    const { Sound, DestroyOnSoundFinish } = getGameComponents(world);
+    const { Sound, DestroyOnSoundFinish } = getRenderWorldComponents(world);
     const eid = addEntity(world);
 
     addTransformComponents(world, eid);
@@ -45,10 +44,10 @@ export function spawnSoundAtPosition(
 }
 
 export function spawnSoundAtParent(
+    world: RenderGameWorld,
     options: SpawnSoundWithParentOptions,
-    { world } = GameDI,
 ): EntityId {
-    const { Sound, DestroyOnSoundFinish, Parent, Children } = getGameComponents(world);
+    const { Sound, DestroyOnSoundFinish, Parent, Children } = getRenderWorldComponents(world);
     const eid = addEntity(world);
 
     if (!hasComponent(world, options.parentEid, Children)) {

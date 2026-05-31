@@ -1,6 +1,6 @@
 import { cos, sin } from '../../../../../../../lib/math.ts';
-import { GameDI } from '../../../DI/GameDI.ts';
-import { getGameComponents } from '../../createGameWorld.ts';
+import { PhysicalWorld } from '../../../Physical/initPhysicalWorld.ts';
+import { getPhysicsWorldComponents, PhysicsWorld } from '../../createPhysicsWorld.ts';
 import { TrackSide } from '../../Components/Track.ts';
 import { createTrack, TrackOptions } from '../Track/createTrack.ts';
 import { createVehicleBase, createVehicleTurret } from '../Vehicle/VehicleBase.ts';
@@ -14,11 +14,11 @@ export type HarvesterTracksConfig = {
     trackHeight: number;
 };
 
-export function createHarvesterBase(options: HarvesterOptions, { world } = GameDI): [number, number] {
-    const { Tank } = getGameComponents(world);
-    const [vehicleEid, vehiclePid] = createVehicleBase(options);
-    Tank.addComponent(world, vehicleEid);
-    return [vehicleEid, vehiclePid];
+export function createHarvesterBase(world: PhysicsWorld, physicalWorld: PhysicalWorld, options: HarvesterOptions): [number, number, number] {
+    const { Tank } = getPhysicsWorldComponents(world);
+    const [vehiclePhysEid, vehicleRenderEid, vehiclePid] = createVehicleBase(world, physicalWorld, options);
+    Tank.addComponent(world, vehiclePhysEid);
+    return [vehiclePhysEid, vehicleRenderEid, vehiclePid];
 }
 
 /**
@@ -26,11 +26,13 @@ export function createHarvesterBase(options: HarvesterOptions, { world } = GameD
  * Tracks are attached to the harvester body via fixed joints.
  */
 export function createHarvesterTracks(
+    world: PhysicsWorld,
+    physicalWorld: PhysicalWorld,
     options: HarvesterOptions,
     tracksConfig: HarvesterTracksConfig,
-    harvesterEid: number,
+    harvesterRenderEid: number,
     harvesterPid: number,
-): [leftTrackEid: number, rightTrackEid: number] {
+): [leftTrackRenderEid: number, rightTrackRenderEid: number] {
     const trackOptions: TrackOptions = {
         ...options,
         width: tracksConfig.trackWidth,
@@ -48,38 +50,43 @@ export function createHarvesterTracks(
     trackOptions.x = options.x + leftWorldX;
     trackOptions.y = options.y + leftWorldY;
 
-    const [leftTrackEid] = createTrack(trackOptions, harvesterEid, harvesterPid);
+    const [, leftTrackRenderEid] = createTrack(world, physicalWorld, trackOptions, harvesterRenderEid, harvesterPid);
 
     // Create right track
     trackOptions.trackSide = TrackSide.Right;
     trackOptions.anchorY = tracksConfig.rightAnchorY;
-    
+
     const rightWorldX = tracksConfig.anchorX * cos(options.rotation) - tracksConfig.rightAnchorY * sin(options.rotation);
     const rightWorldY = tracksConfig.anchorX * sin(options.rotation) + tracksConfig.rightAnchorY * cos(options.rotation);
     trackOptions.x = options.x + rightWorldX;
     trackOptions.y = options.y + rightWorldY;
 
-    const [rightTrackEid] = createTrack(trackOptions, harvesterEid, harvesterPid);
+    const [, rightTrackRenderEid] = createTrack(world, physicalWorld, trackOptions, harvesterRenderEid, harvesterPid);
 
-    return [leftTrackEid, rightTrackEid];
+    return [leftTrackRenderEid, rightTrackRenderEid];
 }
 
+// Returns [turretRenderEid, turretPid]
 export function createHarvesterTurret(
+    world: PhysicsWorld,
+    physicalWorld: PhysicalWorld,
     options: HarvesterOptions,
-    harvesterEid: number,
+    harvesterPhysEid: number,
+    harvesterRenderEid: number,
     harvesterPid: number,
-    { world } = GameDI,
 ): [number, number] {
-    const { Tank } = getGameComponents(world);
-    const [turretEid, turretPid] = createVehicleTurret(
+    const { Tank } = getPhysicsWorldComponents(world);
+    const [turretPhysEid, turretRenderEid, turretPid] = createVehicleTurret(
+        world,
+        physicalWorld,
         options,
         options.turret,
-        harvesterEid,
+        harvesterRenderEid,
         harvesterPid,
     );
 
-    Tank.setTurretEid(harvesterEid, turretEid);
+    Tank.setTurretEid(harvesterPhysEid, turretPhysEid);
 
-    return [turretEid, turretPid];
+    return [turretRenderEid, turretPid];
 }
 

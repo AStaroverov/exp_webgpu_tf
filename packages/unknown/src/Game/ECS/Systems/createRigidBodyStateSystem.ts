@@ -1,9 +1,9 @@
 import { query } from 'bitecs';
-import { GameDI } from '../../DI/GameDI.ts';
-import { getGameComponents } from '../createGameWorld.ts';
+import { getPhysicsWorldComponents } from '../createPhysicsWorld.ts';
+import { Worlds } from '../../DI/Worlds.ts';
 
-export function createRigidBodyStateSystem({ world, physicalWorld } = GameDI) {
-    const { RigidBodyRef, RigidBodyState } = getGameComponents(world);
+export function createRigidBodyStateSystem({ physicsWorld: world, physicalWorld } = Worlds) {
+    const { RigidBodyRef, RigidBodyState } = getPhysicsWorldComponents(world);
 
     return () => {
         const entities = query(world, [RigidBodyRef, RigidBodyState]);

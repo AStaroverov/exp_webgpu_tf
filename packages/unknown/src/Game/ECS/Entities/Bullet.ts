@@ -1,7 +1,9 @@
-import { GameDI } from '../../DI/GameDI.ts';
 import { isNumber } from 'lodash-es';
 import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';
-import { createRectangleRR } from '../Components/RigidRender.ts';
+import { spawnRectanglePart, SpawnCtx } from './spawnPart.ts';
+import { BridgeDI } from '../../DI/BridgeDI.ts';
+import { Worlds } from '../../DI/Worlds.ts';
+import { getRenderWorldComponents } from '../createRenderWorld.ts';
 import { spawnMuzzleFlash } from './MuzzleFlash.ts';
 import { SoundType } from '../Components/Sound.ts';
 import { spawnSoundAtPosition } from './Sound.ts';
@@ -16,11 +18,11 @@ import { ZIndex } from '../../consts.ts';
 import { ActiveEvents, RigidBodyType } from '@dimforge/rapier2d-simd';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { BulletCaliber, mapBulletCaliber, MAX_BULLET_SPEED, MIN_BULLET_SPEED } from '../Components/Bullet.ts';
-import { getGameComponents } from '../createGameWorld.ts';
+import { getPhysicsWorldComponents } from '../createPhysicsWorld.ts';
 import { min, PI } from '../../../../../../lib/math.ts';
 import { ExplosionConfig, SoundConfig } from '../../Config/index.ts';
 
-type Options = Parameters<typeof createRectangleRR>[0];
+type Options = Parameters<typeof spawnRectanglePart>[1];
 const optionsBulletRR: Options = {
     x: 0,
     y: 0,
@@ -46,8 +48,8 @@ export function createBullet(options: Partial<Options> & {
     calibre: BulletCaliber,
     playerId: number,
     teamId: number
-}, { world } = GameDI) {
-    const { Bullet, TeamRef, PlayerRef, Hitable, Damagable, DestroyBySpeed } = getGameComponents(world);
+}, { physicsWorld: world, renderWorld, physicalWorld } = Worlds) {
+    const { Bullet, TeamRef, PlayerRef, Hitable, Damagable, DestroyBySpeed } = getPhysicsWorldComponents(world);
 
     Object.assign(optionsBulletRR, defaultOptionsBulletRR);
     Object.assign(optionsBulletRR, options);
@@ -65,15 +67,16 @@ export function createBullet(options: Partial<Options> & {
     optionsBulletRR.density = bulletCaliber.density;
     optionsBulletRR.linearDamping = bulletCaliber.linearDamping;
 
-    const [bulletId] = createRectangleRR(optionsBulletRR);
-    Bullet.addComponent(world, bulletId, options.calibre);
-    TeamRef.addComponent(world, bulletId, options.teamId);
-    PlayerRef.addComponent(world, bulletId, options.playerId);
-    Hitable.addComponent(world, bulletId, min(bulletCaliber.width, bulletCaliber.height) / 10);
-    Damagable.addComponent(world, bulletId, bulletCaliber.damage);
-    DestroyBySpeed.addComponent(world, bulletId, MIN_BULLET_SPEED);
+    const ctx: SpawnCtx = { physicsWorld: world, renderWorld, physicalWorld };
+    const [bulletPhysEid] = spawnRectanglePart(ctx, optionsBulletRR);
+    Bullet.addComponent(world, bulletPhysEid, options.calibre);
+    TeamRef.addComponent(world, bulletPhysEid, options.teamId);
+    PlayerRef.addComponent(world, bulletPhysEid, options.playerId);
+    Hitable.addComponent(world, bulletPhysEid, min(bulletCaliber.width, bulletCaliber.height) / 10);
+    Damagable.addComponent(world, bulletPhysEid, bulletCaliber.damage);
+    DestroyBySpeed.addComponent(world, bulletPhysEid, MIN_BULLET_SPEED);
 
-    return bulletId;
+    return bulletPhysEid;
 }
 
 const optionsSpawnBullet = {
@@ -90,20 +93,23 @@ const optionsSpawnBullet = {
 const tmpMatrix = mat4.create();
 const tmpPosition = vec3.create() as Float32Array;
 
-export function spawnBullet(vehicleEid: number, { world } = GameDI) {
-    const { Tank, Firearms, TeamRef, PlayerRef, Color } = getGameComponents(world);
+export function spawnBullet(vehiclePhysEid: number, { physicsWorld: world, renderWorld } = Worlds) {
+    const { Tank, Firearms, TeamRef, PlayerRef } = getPhysicsWorldComponents(world);
+    const { Color } = getRenderWorldComponents(renderWorld);
 
-    const turretEid = Tank.turretEId[vehicleEid];
-    const globalTransform = GlobalTransform.matrix.getBatch(turretEid);
-    const bulletPosition = Firearms.bulletStartPosition.getBatch(turretEid);
-    const bulletCaliber = mapBulletCaliber[Firearms.caliber[turretEid] as BulletCaliber];
+    const turretPhysEid = Tank.turretEId[vehiclePhysEid];
+    const turretRenderEid = BridgeDI.getRenderOf(turretPhysEid);
+    const vehicleRenderEid = BridgeDI.getRenderOf(vehiclePhysEid);
+    const globalTransform = GlobalTransform.matrix.getBatch(turretRenderEid);
+    const bulletPosition = Firearms.bulletStartPosition.getBatch(turretPhysEid);
+    const bulletCaliber = mapBulletCaliber[Firearms.caliber[turretPhysEid] as BulletCaliber];
 
     tmpPosition.set(bulletPosition);
     mat4.identity(tmpMatrix);
     mat4.translate(tmpMatrix, tmpMatrix, tmpPosition);
     mat4.multiply(tmpMatrix, globalTransform, tmpMatrix);
 
-    Color.applyColorToArray(vehicleEid, optionsSpawnBullet.color);
+    Color.applyColorToArray(vehicleRenderEid, optionsSpawnBullet.color);
     optionsSpawnBullet.color[0] *= 0.3;
     optionsSpawnBullet.color[1] *= 0.3;
     optionsSpawnBullet.color[2] *= 0.3;
@@ -113,13 +119,13 @@ export function spawnBullet(vehicleEid: number, { world } = GameDI) {
     optionsSpawnBullet.width = bulletCaliber.width;
     optionsSpawnBullet.height = bulletCaliber.height;
     optionsSpawnBullet.rotation = getMatrixRotationZ(tmpMatrix);
-    optionsSpawnBullet.calibre = Firearms.caliber[turretEid] as BulletCaliber;
-    optionsSpawnBullet.teamId = TeamRef.id[vehicleEid];
-    optionsSpawnBullet.playerId = PlayerRef.id[vehicleEid];
+    optionsSpawnBullet.calibre = Firearms.caliber[turretPhysEid] as BulletCaliber;
+    optionsSpawnBullet.teamId = TeamRef.id[vehiclePhysEid];
+    optionsSpawnBullet.playerId = PlayerRef.id[vehiclePhysEid];
 
     createBullet(optionsSpawnBullet);
 
-    spawnMuzzleFlash({
+    spawnMuzzleFlash(renderWorld, {
         x: optionsSpawnBullet.x,
         y: optionsSpawnBullet.y,
         size: bulletCaliber.height * ExplosionConfig.muzzleFlashSizeMult,
@@ -128,7 +134,7 @@ export function spawnBullet(vehicleEid: number, { world } = GameDI) {
     });
 
     const soundVolume = SoundConfig.shootBaseVolume + (bulletCaliber.width * SoundConfig.shootVolumePerWidth);
-    spawnSoundAtPosition({
+    spawnSoundAtPosition(renderWorld, {
         type: SoundType.TankShoot,
         x: optionsSpawnBullet.x,
         y: optionsSpawnBullet.y,

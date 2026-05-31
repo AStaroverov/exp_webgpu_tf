@@ -1,9 +1,8 @@
 import { ActiveCollisionTypes, ActiveEvents, ColliderDesc } from '@dimforge/rapier2d-simd';
-import { GameDI } from '../DI/GameDI.ts';
 import { BodyOptions, createBody } from './createBody.ts';
 import { PhysicalWorld } from './initPhysicalWorld.ts';
 import { CollisionGroupConfig, TANK_PARTS_MASK } from '../Config/index.ts';
-import { getGameComponents } from '../ECS/createGameWorld.ts';
+import { getPhysicsWorldComponents, PhysicsWorld } from '../ECS/createPhysicsWorld.ts';
 
 export const CollisionGroup = {
     ...CollisionGroupConfig,
@@ -54,13 +53,13 @@ function prepareColliderDesc(shape: ColliderDesc, o: CommonRigidOptions): Collid
 }
 
 export function createRigidRectangle(
+    physicalWorld: PhysicalWorld,
     o: CommonRigidOptions & {
         width: number,
         height: number,
     },
-    { physicalWorld }: { physicalWorld: PhysicalWorld } = GameDI,
 ) {
-    const body = createBody(o, { physicalWorld });
+    const body = createBody(physicalWorld, o);
     const colliderDesc = prepareColliderDesc(ColliderDesc.cuboid(o.width / 2, o.height / 2), o);
     physicalWorld.createCollider(colliderDesc, body);
 
@@ -68,20 +67,20 @@ export function createRigidRectangle(
 }
 
 export function createRigidCircle(
+    physicalWorld: PhysicalWorld,
     o: CommonRigidOptions & {
         radius: number,
     },
-    { physicalWorld }: { physicalWorld: PhysicalWorld } = GameDI,
 ) {
-    const body = createBody(o, { physicalWorld });
+    const body = createBody(physicalWorld, o);
     const colliderDesc = prepareColliderDesc(ColliderDesc.ball(o.radius / 2), o);
     physicalWorld.createCollider(colliderDesc, body);
 
     return body.handle;
 }
 
-export function removeRigidShape(eid: number, { world, physicalWorld } = GameDI) {
-    const { RigidBodyRef } = getGameComponents(world);
+export function removeRigidShape(world: PhysicsWorld, physicalWorld: PhysicalWorld, eid: number) {
+    const { RigidBodyRef } = getPhysicsWorldComponents(world);
     const pid = RigidBodyRef.id[eid];
     const body = physicalWorld.getRigidBody(pid);
     body && physicalWorld.removeRigidBody(body);

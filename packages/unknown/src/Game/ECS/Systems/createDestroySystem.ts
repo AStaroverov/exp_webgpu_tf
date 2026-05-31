@@ -1,13 +1,13 @@
-import { GameDI } from '../../DI/GameDI.ts';
 import { query } from 'bitecs';
 import { recursiveTypicalRemoveEntity, typicalRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
-import { getGameComponents } from '../createGameWorld.ts';
+import { getPhysicsWorldComponents } from '../createPhysicsWorld.ts';
+import { Worlds } from '../../DI/Worlds.ts';
 
-export function createDestroySystem({ world } = GameDI) {
-    const { Destroy } = getGameComponents(world);
+export function createDestroySystem({ physicsWorld } = Worlds) {
+    const { Destroy } = getPhysicsWorldComponents(physicsWorld);
 
     return () => {
-        const eids = query(world, [Destroy]);
+        const eids = query(physicsWorld, [Destroy]);
 
         for (let i = 0; i < eids.length; i++) {
             const eid = eids[i];

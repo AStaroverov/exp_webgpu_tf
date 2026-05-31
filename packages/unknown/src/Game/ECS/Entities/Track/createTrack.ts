@@ -1,11 +1,12 @@
 import { JointData, Vector2 } from '@dimforge/rapier2d-simd';
-import { addTransformComponents } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
-import { GameDI } from '../../../DI/GameDI.ts';
+import { PhysicalWorld } from '../../../Physical/initPhysicalWorld.ts';
 import { CollisionGroup } from '../../../Physical/createRigid.ts';
 import { TrackSide } from '../../Components/Track.ts';
 import { VehicleOptions } from '../Vehicle/Options.ts';
-import { createRectangleRigidGroup } from '../../Components/RigidGroup.ts';
-import { getGameComponents } from '../../createGameWorld.ts';
+import { spawnRectangleCarrier, SpawnCtx } from '../spawnPart.ts';
+import { getPhysicsWorldComponents, PhysicsWorld } from '../../createPhysicsWorld.ts';
+import { getRenderWorldComponents } from '../../createRenderWorld.ts';
+import { Worlds } from '../../../DI/Worlds.ts';
 
 export type TrackOptions = VehicleOptions & {
     trackSide: TrackSide;
@@ -17,22 +18,27 @@ export type TrackOptions = VehicleOptions & {
 const jointParentAnchor = new Vector2(0, 0);
 const jointChildAnchor = new Vector2(0, 0);
 
+// Returns [trackPhysEid, trackRenderEid, trackPid]
 export function createTrack(
+    world: PhysicsWorld,
+    physicalWorld: PhysicalWorld,
     options: TrackOptions,
-    vehicleEid: number,
+    vehicleRenderEid: number,
     vehiclePid: number,
-    { world, physicalWorld } = GameDI,
-): [number, number] {
-    const { Track, Joint, Parent, Children } = getGameComponents(world);
+): [number, number, number] {
+    const { Track, Joint } = getPhysicsWorldComponents(world);
+    const renderWorld = Worlds.renderWorld;
+    const { Parent, Children } = getRenderWorldComponents(renderWorld);
 
     options.belongsCollisionGroup = CollisionGroup.NONE;
     options.interactsCollisionGroup = CollisionGroup.NONE;
     options.belongsSolverGroup = CollisionGroup.NONE;
     options.interactsSolverGroup = CollisionGroup.NONE;
 
-    const [trackEid, trackPid] = createRectangleRigidGroup(options);
+    const ctx: SpawnCtx = { physicsWorld: world, renderWorld, physicalWorld };
+    const [trackPhysEid, trackRenderEid, trackPid] = spawnRectangleCarrier(ctx, options);
 
-    Track.addComponent(world, trackEid, options.trackSide, options.trackLength);
+    Track.addComponent(world, trackPhysEid, options.trackSide, options.trackLength);
 
     jointParentAnchor.x = options.anchorX;
     jointParentAnchor.y = options.anchorY;
@@ -48,12 +54,11 @@ export function createTrack(
         trackBody,
         false,
     );
-    Joint.addComponent(world, trackEid, joint.handle);
+    Joint.addComponent(world, trackPhysEid, joint.handle);
 
-    addTransformComponents(world, trackEid);
-    Parent.addComponent(world, trackEid, vehicleEid);
-    Children.addComponent(world, trackEid);
-    Children.addChildren(vehicleEid, trackEid);
+    Parent.addComponent(renderWorld, trackRenderEid, vehicleRenderEid);
+    Children.addComponent(renderWorld, trackRenderEid);
+    Children.addChildren(vehicleRenderEid, trackRenderEid);
 
-    return [trackEid, trackPid];
+    return [trackPhysEid, trackRenderEid, trackPid];
 }

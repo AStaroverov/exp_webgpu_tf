@@ -3,11 +3,9 @@ import { GPUShader } from 'renderer/src/WGSL/GPUShader.ts';
 import { shaderMeta, MAX_VFX_COUNT } from './vfx.shader.ts';
 import { getTypeTypedArray } from 'renderer/src/Shader/index.ts';
 import { projectionMatrix } from 'renderer/src/ECS/Systems/ResizeSystem.ts';
-import { RenderDI } from '../../../../DI/RenderDI.ts';
-import { GameDI } from '../../../../DI/GameDI.ts';
 import { VFXType, VFXTypeValue } from '../../../Components/VFX.ts';
 import { GlobalTransform } from 'renderer/src/ECS/Components/Transform.ts';
-import { getGameComponents } from '../../../createGameWorld.ts';
+import { getRenderWorldComponents, RenderGameWorld } from '../../../createRenderWorld.ts';
 
 // Max radius calculation per effect type
 const getMaxRadius: Record<VFXTypeValue, (progress: number) => number> = {
@@ -37,8 +35,8 @@ const seedMultiplier: Record<VFXTypeValue, number> = {
     [VFXType.MuzzleFlash]: 0.1,
 };
 
-export function createDrawVFXSystem({ device } = RenderDI, { world } = GameDI) {
-    const { VFX, Progress } = getGameComponents(world);
+export function createDrawVFXSystem(device: GPUDevice, world: RenderGameWorld) {
+    const { VFX, ProgressFx: Progress } = getRenderWorldComponents(world);
     const gpuShader = new GPUShader(shaderMeta);
     const pipeline = gpuShader.getRenderPipeline(device, 'vs_main', 'fs_main', { withDepth: true });
     const bindGroup0 = gpuShader.getBindGroup(device, 0);

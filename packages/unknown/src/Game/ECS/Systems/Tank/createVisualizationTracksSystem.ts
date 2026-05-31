@@ -1,20 +1,23 @@
 import { query } from 'bitecs';
-import { GameDI } from '../../../DI/GameDI.ts';
 import { TrackSide } from '../../Components/Track.ts';
 import { Vector2 } from '@dimforge/rapier2d-simd';
 import { abs, cos, sign, sin } from '../../../../../../../lib/math.ts';
 import { getSlotFillerEid, isSlot } from '../../Utils/SlotUtils.ts';
-import { getGameComponents } from '../../createGameWorld.ts';
+import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
+import { getRenderWorldComponents } from '../../createRenderWorld.ts';
+import { BridgeDI } from '../../../DI/BridgeDI.ts';
+import { Worlds } from '../../../DI/Worlds.ts';
 
 const TURN_FACTOR = 0.7;
 const ANGULAR_SCALE = 50;
 
-export function createVisualizationTracksSystem({ world, physicalWorld } = GameDI) {
-    const { Track, Joint, RigidBodyState, Slot, Children } = getGameComponents(world);
+export function createVisualizationTracksSystem({ physicsWorld, renderWorld, physicalWorld } = Worlds) {
+    const { Track, Joint, RigidBodyState } = getPhysicsWorldComponents(physicsWorld);
     const vect2 = new Vector2(0, 0);
 
     return (_delta: number) => {
-        const trackEids = query(world, [Track]);
+        const { Slot, Children } = getRenderWorldComponents(renderWorld);
+        const trackEids = query(physicsWorld, [Track]);
 
         for (const trackEid of trackEids) {
             const trackLimit = Track.length[trackEid] / 2;
@@ -40,11 +43,12 @@ export function createVisualizationTracksSystem({ world, physicalWorld } = GameD
 
             if (abs(delta) < 0.05) continue;
 
-            const childCount = Children.entitiesCount[trackEid];
+            const trackRenderEid = BridgeDI.getRenderOf(trackEid);
+            const childCount = Children.entitiesCount[trackRenderEid];
             for (let i = 0; i < childCount; i++) {
-                const slotEid = Children.entitiesIds.get(trackEid, i);
+                const slotEid = Children.entitiesIds.get(trackRenderEid, i);
 
-                if (!isSlot(slotEid)) continue;
+                if (!isSlot(renderWorld, slotEid)) continue;
 
                 let anchorX = Slot.anchorX[slotEid];
                 let anchorY = Slot.anchorY[slotEid];
@@ -59,8 +63,9 @@ export function createVisualizationTracksSystem({ world, physicalWorld } = GameD
                 Slot.anchorX[slotEid] = anchorX;
                 Slot.anchorY[slotEid] = anchorY;
 
-                const fillerEid = getSlotFillerEid(slotEid);
-                if (fillerEid === 0) continue;
+                const fillerRenderEid = getSlotFillerEid(renderWorld, slotEid);
+                if (fillerRenderEid === 0) continue;
+                const fillerEid = BridgeDI.getPhysicsOf(fillerRenderEid);
 
                 const jointPid = Joint.pid[fillerEid];
                 const joint = physicalWorld.getImpulseJoint(jointPid);

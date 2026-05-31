@@ -1,21 +1,22 @@
-import { GameDI } from '../../DI/GameDI.ts';
-import { query } from 'bitecs';
-import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
-import { getGameComponents } from '../createGameWorld.ts';
+import { query, removeEntity } from 'bitecs';
+import { getRenderWorldComponents } from '../createRenderWorld.ts';
+import { Worlds } from '../../DI/Worlds.ts';
 
-export function createDestroyByTimeoutSystem({ world } = GameDI) {
-    const { DestroyByTimeout } = getGameComponents(world);
+// fx-only timeout destroy (RenderWorld). fx entities have no Rapier body, so they are
+// reaped directly from RenderWorld (no Bridge/atom involved).
+export function createDestroyByTimeoutSystem({ renderWorld } = Worlds) {
+    const { DestroyByTimeoutFx } = getRenderWorldComponents(renderWorld);
 
     return (delta: number) => {
-        const eids = query(world, [DestroyByTimeout]);
+        const eids = query(renderWorld, [DestroyByTimeoutFx]);
 
         for (let i = 0; i < eids.length; i++) {
             const eid = eids[i];
 
-            DestroyByTimeout.updateTimeout(eid, delta);
+            DestroyByTimeoutFx.updateTimeout(eid, delta);
 
-            if (DestroyByTimeout.timeout[eid] <= 0) {
-                scheduleRemoveEntity(eid);
+            if (DestroyByTimeoutFx.timeout[eid] <= 0) {
+                removeEntity(renderWorld, eid);
             }
         }
     };

@@ -1,13 +1,14 @@
-import { GameDI } from '../DI/GameDI.ts';
 import { CollisionGroup } from './createRigid.ts';
-import { getGameComponents } from '../ECS/createGameWorld.ts';
+import { getPhysicsWorldComponents, PhysicsWorld } from '../ECS/createPhysicsWorld.ts';
+import { PhysicalWorld } from './initPhysicalWorld.ts';
 
 export function setPhysicalCollisionGroup(
+    world: PhysicsWorld,
+    physicalWorld: PhysicalWorld,
     eid: number,
     group: typeof CollisionGroup[keyof typeof CollisionGroup],
-    { world, physicalWorld } = GameDI,
 ) {
-    const { RigidBodyRef } = getGameComponents(world);
+    const { RigidBodyRef } = getPhysicsWorldComponents(world);
     const physicalId = RigidBodyRef.id[eid];
     const rigidBody = physicalWorld.getRigidBody(physicalId);
 

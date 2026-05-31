@@ -1,5 +1,4 @@
-import { GameDI } from '../../DI/GameDI.ts';
-import { getGameComponents } from '../createGameWorld.ts';
+import { getRenderWorldComponents, RenderGameWorld } from '../createRenderWorld.ts';
 import { createRectangle } from '../../../../../renderer/src/ECS/Entities/Shapes.ts';
 import {
     LocalTransform,
@@ -20,9 +19,9 @@ export interface TreadMarkOptions {
     rotation?: number;
 }
 
-export function spawnTreadMark(options: TreadMarkOptions, { world } = GameDI, { enabled } = RenderDI) {
+export function spawnTreadMark(world: RenderGameWorld, options: TreadMarkOptions, { enabled } = RenderDI) {
     if (!enabled) return;
-    const { TreadMark, Progress, DestroyByTimeout } = getGameComponents(world);
+    const { TreadMark, ProgressFx, DestroyByTimeoutFx } = getRenderWorldComponents(world);
 
     const eid = createRectangle(world, {
         x: options.x,
@@ -38,6 +37,6 @@ export function spawnTreadMark(options: TreadMarkOptions, { world } = GameDI, { 
     }
 
     TreadMark.addComponent(world, eid);
-    Progress.addComponent(world, eid, TREAD_MARK_DURATION);
-    DestroyByTimeout.addComponent(world, eid, TREAD_MARK_DURATION);
+    ProgressFx.addComponent(world, eid, TREAD_MARK_DURATION);
+    DestroyByTimeoutFx.addComponent(world, eid, TREAD_MARK_DURATION);
 }

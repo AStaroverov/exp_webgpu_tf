@@ -1,9 +1,8 @@
 import { addEntity, EntityId } from 'bitecs';
-import { GameDI } from '../../DI/GameDI.ts';
-import { getGameComponents } from '../createGameWorld.ts';
+import { getPhysicsWorldComponents, PhysicsWorld } from '../createPhysicsWorld.ts';
 
-export function createPlayer(teamId: number, { world } = GameDI): EntityId {
-    const { TeamRef } = getGameComponents(world);
+export function createPlayer(world: PhysicsWorld, teamId: number): EntityId {
+    const { TeamRef } = getPhysicsWorldComponents(world);
     const playerId = addEntity(world);
     TeamRef.addComponent(world, playerId, teamId);
     return playerId;

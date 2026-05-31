@@ -1,7 +1,6 @@
 import { addEntity } from 'bitecs';
-import { GameDI } from '../../DI/GameDI.ts';
 import { PI } from '../../../../../../lib/math.ts';
-import { getGameComponents } from '../createGameWorld.ts';
+import { getRenderWorldComponents, RenderGameWorld } from '../createRenderWorld.ts';
 
 export interface ExhaustPipeOptions {
     vehicleEid: number;
@@ -15,8 +14,8 @@ export interface ExhaustPipeOptions {
  * Creates an exhaust pipe entity attached to a vehicle.
  * The exhaust pipe will emit smoke particles in the specified direction.
  */
-export function createExhaustPipe(options: ExhaustPipeOptions, { world } = GameDI): number {
-    const { ExhaustPipe, Parent } = getGameComponents(world);
+export function createExhaustPipe(world: RenderGameWorld, options: ExhaustPipeOptions): number {
+    const { ExhaustPipe, Parent } = getRenderWorldComponents(world);
     const eid = addEntity(world);
 
     ExhaustPipe.addComponent(
@@ -36,6 +35,7 @@ export function createExhaustPipe(options: ExhaustPipeOptions, { world } = GameD
  * Adds default exhaust pipes to a tank (rear-facing exhausts).
  */
 export function createTankExhaustPipes(
+    world: RenderGameWorld,
     tankEid: number,
     tankWidth: number,
     tankHeight: number,
@@ -45,7 +45,7 @@ export function createTankExhaustPipes(
     const rearX = -tankWidth / 2 + 2; // Behind the tank (positive Y is rear)
     const offsetY = tankHeight / 4;
 
-    const leftPipeEid = createExhaustPipe({
+    const leftPipeEid = createExhaustPipe(world, {
         vehicleEid: tankEid,
         relativeX: rearX,
         relativeY: offsetY,
@@ -53,7 +53,7 @@ export function createTankExhaustPipes(
         emissionRate: 5,
     });
 
-    const rightPipeEid = createExhaustPipe({
+    const rightPipeEid = createExhaustPipe(world, {
         vehicleEid: tankEid,
         relativeX: rearX,
         relativeY: -offsetY,
@@ -68,6 +68,7 @@ export function createTankExhaustPipes(
  * Adds exhaust pipe to a car (single rear exhaust).
  */
 export function addCarExhaustPipe(
+    world: RenderGameWorld,
     carEid: number,
     carWidth: number,
     carHeight: number,
@@ -77,7 +78,7 @@ export function addCarExhaustPipe(
     const rearY = carHeight / 2 + 2; // Behind the car (positive Y is rear)
     const offsetX = carWidth / 3;
 
-    return createExhaustPipe({
+    return createExhaustPipe(world, {
         vehicleEid: carEid,
         relativeX: offsetX,
         relativeY: rearY,

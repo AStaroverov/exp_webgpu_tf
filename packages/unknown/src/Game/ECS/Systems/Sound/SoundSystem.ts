@@ -1,12 +1,12 @@
-import { query, EntityId, hasComponent } from 'bitecs';
-import { GameDI } from '../../../DI/GameDI.ts';
+import { query, EntityId, hasComponent, removeEntity } from 'bitecs';
 import { SoundType, SoundState } from '../../Components/Sound.ts';
 import { CameraState } from '../Camera/CameraSystem.ts';
 import { soundManager } from './SoundManager.ts';
 import { WebAudioTrack } from './WebAudioTrack.ts';
 import { GlobalTransform, getMatrixTranslationX, getMatrixTranslationY } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
 import { hypot } from '../../../../../../../lib/math.ts';
-import { getGameComponents } from '../../createGameWorld.ts';
+import { getRenderWorldComponents, RenderGameWorld } from '../../createRenderWorld.ts';
+import { Worlds } from '../../../DI/Worlds.ts';
 
 const SOUND_IDS: Record<SoundType, string> = {
     [SoundType.None]: '',
@@ -64,8 +64,8 @@ export async function loadGameSounds(): Promise<void> {
     ]);
 }
 
-function getEntityPosition(eid: EntityId, { world } = GameDI): { x: number; y: number } {
-    const { Parent } = getGameComponents(world);
+function getEntityPosition(world: RenderGameWorld, eid: EntityId): { x: number; y: number } {
+    const { Parent } = getRenderWorldComponents(world);
     if (hasComponent(world, eid, Parent) && hasComponent(world, Parent.id[eid], GlobalTransform)) {
         const matrix = GlobalTransform.matrix.getBatch(Parent.id[eid]);
         return {
@@ -85,8 +85,8 @@ function getEntityPosition(eid: EntityId, { world } = GameDI): { x: number; y: n
     return { x: 0, y: 0 };
 }
 
-function getDistanceToCamera(eid: EntityId): number {
-    const pos = getEntityPosition(eid);
+function getDistanceToCamera(world: RenderGameWorld, eid: EntityId): number {
+    const pos = getEntityPosition(world, eid);
     const dx = pos.x - CameraState.x;
     const dy = pos.y - CameraState.y;
     return hypot(dx, dy);
@@ -100,8 +100,8 @@ function calculateDistanceVolume(distance: number, baseVolume: number): number {
     return baseVolume * (1 - normalized ** 3);
 }
 
-export function createSoundSystem({ world } = GameDI) {
-    const { Sound } = getGameComponents(world);
+export function createSoundSystem({ renderWorld: world } = Worlds) {
+    const { Sound } = getRenderWorldComponents(world);
 
     const soundsByType: Map<SoundType, Set<EntityId>> = new Map();
     for (const type of Object.values(SoundType)) {
@@ -131,7 +131,7 @@ export function createSoundSystem({ world } = GameDI) {
             const type = Sound.type[eid] as SoundType;
             if (type === SoundType.None) continue;
 
-            const distance = getDistanceToCamera(eid);
+            const distance = getDistanceToCamera(world, eid);
             const wantsToPlay = Sound.state[eid] === SoundState.Playing;
 
             entitiesByType.get(type)?.push({ eid, distance, wantsToPlay });
@@ -154,7 +154,7 @@ export function createSoundSystem({ world } = GameDI) {
                 if (toPlay.has(eid)) continue;
                 const track = activeAudios.get(eid);
                 track && soundManager.stopInstance(track);
-                handleStoppedSounds(eid);
+                handleStoppedSounds(world, eid);
                 activeAudios.delete(eid);
                 typeSet.delete(eid);
             }
@@ -165,14 +165,14 @@ export function createSoundSystem({ world } = GameDI) {
                 let track = activeAudios.get(eid);
 
                 if (!track) {
-                    const pos = getEntityPosition(eid);
+                    const pos = getEntityPosition(world, eid);
                     const loop = Sound.loop[eid] === 1;
 
                     const newTrack = soundManager.play(soundId, { volume, loop, x: pos.x, y: pos.y });
                     if (newTrack) {
                         activeAudios.set(eid, newTrack);
                         typeSet.add(eid);
-                        newTrack.onEnded(() => handleStoppedSounds(eid));
+                        newTrack.onEnded(() => handleStoppedSounds(world, eid));
                     }
                 } else {
                     track.setVolume(volume * Sound.volume[eid]);
@@ -190,7 +190,7 @@ export function createSoundSystem({ world } = GameDI) {
                     activeAudios.delete(eid);
                     const type = Sound.type[eid] as SoundType;
                     soundsByType.get(type)?.delete(eid);
-                    handleStoppedSounds(eid);
+                    handleStoppedSounds(world, eid);
                 } else if (state === SoundState.Paused && track.state === 'playing') {
                     soundManager.pauseInstance(track);
                 } else if (state === SoundState.Playing && track.state === 'paused') {
@@ -210,11 +210,16 @@ export function createSoundSystem({ world } = GameDI) {
     };
 }
 
-function handleStoppedSounds(eid: EntityId, { world } = GameDI): void {
-    const { Destroy, DestroyOnSoundFinish } = getGameComponents(world);
-    if (hasComponent(world, eid, DestroyOnSoundFinish) && !hasComponent(world, eid, Destroy)) {
-        Destroy.addComponent(world, eid);
+function handleStoppedSounds(world: RenderGameWorld, eid: EntityId): void {
+    const { DestroyOnSoundFinish, Parent, Children } = getRenderWorldComponents(world);
+    if (!hasComponent(world, eid, DestroyOnSoundFinish)) return;
+
+    // Sound entities are render-only (no Rapier atom): reap directly from RenderWorld,
+    // disconnecting the parent->child edge if present.
+    if (hasComponent(world, eid, Parent) && hasComponent(world, Parent.id[eid], Children)) {
+        Children.removeChild(Parent.id[eid], eid);
     }
+    removeEntity(world, eid);
 }
 
 export function disposeSoundSystem(): void {

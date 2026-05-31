@@ -1,7 +1,6 @@
 import { addEntity } from 'bitecs';
-import { GameDI } from '../../DI/GameDI.ts';
 import { VFXType } from '../Components/VFX.ts';
-import { getGameComponents } from '../createGameWorld.ts';
+import { getRenderWorldComponents, RenderGameWorld } from '../createRenderWorld.ts';
 import {
     addTransformComponents,
     applyMatrixTranslate,
@@ -29,10 +28,10 @@ export function getSmokeVelocity(eid: number): [number, number] {
     return [smokeVelocityX[eid % 1024], smokeVelocityY[eid % 1024]];
 }
 
-export function spawnExhaustSmoke(options: ExhaustSmokeOptions, { world } = GameDI, { enabled } = RenderDI) {
+export function spawnExhaustSmoke(world: RenderGameWorld, options: ExhaustSmokeOptions, { enabled } = RenderDI) {
     if (!enabled) return;
 
-    const { Progress, VFX, DestroyByTimeout } = getGameComponents(world);
+    const { ProgressFx, VFX, DestroyByTimeoutFx } = getRenderWorldComponents(world);
     const eid = addEntity(world);
 
     addTransformComponents(world, eid);
@@ -43,9 +42,9 @@ export function spawnExhaustSmoke(options: ExhaustSmokeOptions, { world } = Game
     smokeVelocityX[eid % 1024] = options.velocityX;
     smokeVelocityY[eid % 1024] = options.velocityY;
 
-    Progress.addComponent(world, eid, EXHAUST_SMOKE_DURATION);
+    ProgressFx.addComponent(world, eid, EXHAUST_SMOKE_DURATION);
     VFX.addComponent(world, eid, VFXType.ExhaustSmoke);
-    DestroyByTimeout.addComponent(world, eid, EXHAUST_SMOKE_DURATION);
+    DestroyByTimeoutFx.addComponent(world, eid, EXHAUST_SMOKE_DURATION);
 
     return eid;
 }

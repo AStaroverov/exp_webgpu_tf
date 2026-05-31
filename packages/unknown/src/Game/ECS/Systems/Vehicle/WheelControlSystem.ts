@@ -1,10 +1,12 @@
 import { query, hasComponent } from 'bitecs';
 import { Vector2 } from '@dimforge/rapier2d-simd';
-import { GameDI } from '../../../DI/GameDI.ts';
 import { applyRotationToVector } from '../../../Physical/applyRotationToVector.ts';
 import { clamp } from 'lodash-es';
 import { EngineType } from '../../../Config/vehicles.ts';
-import { getGameComponents } from '../../createGameWorld.ts';
+import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
+import { getRenderWorldComponents } from '../../createRenderWorld.ts';
+import { BridgeDI } from '../../../DI/BridgeDI.ts';
+import { Worlds } from '../../../DI/Worlds.ts';
 
 const WHEEL_IMPULSE_FACTOR = 4000000000;
 
@@ -17,11 +19,11 @@ const mapTypeToWheelImpulse = {
 
 const impulseVector = new Vector2(0, 0);
 
-export function createWheelControlSystem({ world } = GameDI) {
+export function createWheelControlSystem({ physicsWorld, renderWorld } = Worlds) {
     const {
-        Vehicle, VehicleController, Children, Wheel, WheelDrive, WheelSteerable,
+        Vehicle, VehicleController, Wheel, WheelDrive, WheelSteerable,
         JointMotor, Impulse, RigidBodyState,
-    } = getGameComponents(world);
+    } = getPhysicsWorldComponents(physicsWorld);
 
     function applyWheelDrive(
         wheelEid: number,
@@ -41,32 +43,38 @@ export function createWheelControlSystem({ world } = GameDI) {
     }
 
     return (delta: number) => {
-        const vehicleEids = query(world, [Vehicle, VehicleController, Children]);
+        const { Children } = getRenderWorldComponents(renderWorld);
+        const vehicleEids = query(physicsWorld, [Vehicle, VehicleController]);
 
         for (let i = 0; i < vehicleEids.length; i++) {
             const vehicleEid = vehicleEids[i];
+            const vehicleRenderEid = BridgeDI.getRenderOf(vehicleEid);
+            if (!hasComponent(renderWorld, vehicleRenderEid, Children)) continue;
+
             const accelerate = VehicleController.move[vehicleEid];
             const steering = VehicleController.rotation[vehicleEid];
 
             const engineType = Vehicle.engineType[vehicleEid] as EngineType;
             const impulseFactor = mapTypeToWheelImpulse[engineType];
 
-            const childCount = Children.entitiesCount[vehicleEid];
+            const childCount = Children.entitiesCount[vehicleRenderEid];
 
             for (let c = 0; c < childCount; c++) {
-                const childEid = Children.entitiesIds.get(vehicleEid, c);
+                const childRenderEid = Children.entitiesIds.get(vehicleRenderEid, c);
+                const childEid = BridgeDI.getPhysicsOf(childRenderEid);
+                if (childEid === 0) continue;
 
-                if (!hasComponent(world, childEid, Wheel)) {
+                if (!hasComponent(physicsWorld, childEid, Wheel)) {
                     continue;
                 }
 
-                if (hasComponent(world, childEid, WheelSteerable)) {
+                if (hasComponent(physicsWorld, childEid, WheelSteerable)) {
                     const maxAngle = WheelSteerable.maxSteeringAngle[childEid];
                     const targetAngle = clamp(steering * maxAngle, -maxAngle, maxAngle);
                     JointMotor.setTargetPosition$(childEid, targetAngle);
                 }
 
-                if (hasComponent(world, childEid, WheelDrive)) {
+                if (hasComponent(physicsWorld, childEid, WheelDrive)) {
                     applyWheelDrive(childEid, accelerate, impulseFactor, delta);
                 }
             }

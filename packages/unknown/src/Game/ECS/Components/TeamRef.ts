@@ -1,8 +1,7 @@
 import { addComponent, query, World } from 'bitecs';
 import { delegate } from '../../../../../renderer/src/delegate.ts';
 import { TypedArray } from '../../../../../renderer/src/utils.ts';
-import { GameDI } from '../../DI/GameDI.ts';
-import { getGameComponents } from '../createGameWorld.ts';
+import { getPhysicsWorldComponents, PhysicsWorld } from '../createPhysicsWorld.ts';
 import { defineComponent } from '../../../../../renderer/src/ECS/utils.ts';
 
 export const createTeamRefComponent = defineComponent((TeamRef) => {
@@ -16,8 +15,8 @@ export const createTeamRefComponent = defineComponent((TeamRef) => {
     };
 });
 
-export function getTeamsCount({ world } = GameDI) {
-    const { Tank, TeamRef } = getGameComponents(world);
+export function getTeamsCount(world: PhysicsWorld) {
+    const { Tank, TeamRef } = getPhysicsWorldComponents(world);
     const tanks = query(world, [Tank]);
     const teamsCount = new Set(tanks.map(tankId => TeamRef.id[tankId]));
     return teamsCount.size;

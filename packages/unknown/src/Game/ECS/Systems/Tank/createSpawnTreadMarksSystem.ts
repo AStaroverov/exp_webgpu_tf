@@ -1,5 +1,4 @@
 import { query } from 'bitecs';
-import { GameDI } from '../../../DI/GameDI.ts';
 import { abs } from '../../../../../../../lib/math.ts';
 import { random } from '../../../../../../../lib/random.ts';
 import { spawnTreadMark, TreadMarkOptions } from '../../Entities/TreadMark.ts';
@@ -9,7 +8,9 @@ import {
     getMatrixTranslationY,
     getMatrixRotationZ,
 } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
-import { getGameComponents } from '../../createGameWorld.ts';
+import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
+import { BridgeDI } from '../../../DI/BridgeDI.ts';
+import { Worlds } from '../../../DI/Worlds.ts';
 
 const BASE_TREAD_MARK_CHANCE = 0.005;
 const ANGVEL_MULTIPLIER = 0.025;
@@ -24,11 +25,11 @@ const treadMarkOptions: TreadMarkOptions = {
     rotation: 0,
 };
 
-export function createSpawnTreadMarksSystem({ world } = GameDI) {
-    const { VehiclePartCaterpillar, RigidBodyState } = getGameComponents(world);
+export function createSpawnTreadMarksSystem({ physicsWorld, renderWorld } = Worlds) {
+    const { VehiclePartCaterpillar, RigidBodyState } = getPhysicsWorldComponents(physicsWorld);
 
     return (_delta: number) => {
-        const caterpillarEids = query(world, [VehiclePartCaterpillar, RigidBodyState]);
+        const caterpillarEids = query(physicsWorld, [VehiclePartCaterpillar, RigidBodyState]);
 
         for (const eid of caterpillarEids) {
             const linvel = RigidBodyState.linvel.getBatch(eid);
@@ -45,7 +46,7 @@ export function createSpawnTreadMarksSystem({ world } = GameDI) {
 
             if (random() > treadMarkChance) continue;
 
-            const globalMatrix = GlobalTransform.matrix.getBatch(eid);
+            const globalMatrix = GlobalTransform.matrix.getBatch(BridgeDI.getRenderOf(eid));
             const x = getMatrixTranslationX(globalMatrix);
             const y = getMatrixTranslationY(globalMatrix);
             const rotation = getMatrixRotationZ(globalMatrix);
@@ -53,7 +54,7 @@ export function createSpawnTreadMarksSystem({ world } = GameDI) {
             treadMarkOptions.x = x;
             treadMarkOptions.y = y;
             treadMarkOptions.rotation = rotation;
-            spawnTreadMark(treadMarkOptions);
+            spawnTreadMark(renderWorld, treadMarkOptions);
         }
     };
 }

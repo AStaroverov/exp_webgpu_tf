@@ -8,12 +8,13 @@
  */
 
 import { removeEntity } from 'bitecs';
-import { ActionScheduleDI, getTopAction } from './ActionScheduleDI.ts';
+import { getTopAction } from './ActionScheduleDI.ts';
+import { Worlds } from '../../DI/Worlds.ts';
 import { getActionComponents } from './createActionWorld.ts';
 import { ActionStatus } from './ActionTypes.ts';
 
-export function createActionSchedulerSystem({ world } = ActionScheduleDI) {
-    const { Action } = getActionComponents(world);
+export function createActionSchedulerSystem({ actionWorld } = Worlds) {
+    const { Action } = getActionComponents(actionWorld);
 
     return function scheduler() {
         for (;;) {
@@ -21,7 +22,7 @@ export function createActionSchedulerSystem({ world } = ActionScheduleDI) {
             if (top === null) return;
             if (Action.status[top] !== ActionStatus.Finished) return;
 
-            removeEntity(world, top);
+            removeEntity(actionWorld, top);
         }
     };
 }

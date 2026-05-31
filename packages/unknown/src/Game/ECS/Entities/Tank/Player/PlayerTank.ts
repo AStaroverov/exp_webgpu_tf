@@ -1,3 +1,5 @@
+import { PhysicsWorld } from '../../../createPhysicsWorld.ts';
+import { PhysicalWorld } from '../../../../Physical/initPhysicalWorld.ts';
 import { PI } from '../../../../../../../../lib/math.ts';
 import { TColor } from '../../../../../../../renderer/src/ECS/Components/Common.ts';
 import { BulletCaliber } from '../../../Components/Bullet.ts';
@@ -7,6 +9,7 @@ import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../../V
 import { mutatedOptions, resetOptions, updateColorOptions } from '../Common/Options.ts';
 import { createTankBase, createTankTracks, createTankTurret } from '../Common/Tank.ts';
 import { createTankExhaustPipes } from '../../ExhaustPipe.ts';
+import { Worlds } from '../../../../DI/Worlds.ts';
 // Use Medium tank parts as base
 import {
     caterpillarLength,
@@ -33,7 +36,7 @@ const APPROXIMATE_COLLIDER_RADIUS = 80;
  * - Faster reload (350ms vs 500ms)
  * - Faster turret rotation
  */
-export function createPlayerTank(opts: {
+export function createPlayerTank(world: PhysicsWorld, physicalWorld: PhysicalWorld, opts: {
     playerId: number,
     teamId: number,
     x: number,
@@ -50,13 +53,17 @@ export function createPlayerTank(opts: {
     options.engineType = EngineType.v8_turbo;  // Faster engine
     options.trackLength = caterpillarLength;
 
+    const renderWorld = Worlds.renderWorld;
+
     options.density = DENSITY * 14;
     options.width = PADDING * 12;
     options.height = PADDING * 8;
-    const [tankEid, tankPid] = createTankBase(options);
+    const [tankPhysEid, tankRenderEid, tankPid] = createTankBase(world, physicalWorld, options);
 
     // Create left and right tracks as independent entities
-    const [leftTrackEid, rightTrackEid] = createTankTracks(
+    const [leftTrackRenderEid, rightTrackRenderEid] = createTankTracks(
+        world,
+        physicalWorld,
         options,
         {
             leftAnchorY: TRACK_ANCHOR_Y,
@@ -65,7 +72,7 @@ export function createPlayerTank(opts: {
             trackWidth: PADDING * 2,
             trackHeight: caterpillarLength,
         },
-        tankEid,
+        tankRenderEid,
         tankPid,
     );
 
@@ -78,35 +85,35 @@ export function createPlayerTank(opts: {
     options.firearms.reloadingDuration = 350;        // Faster reload (was 500)
     options.firearms.bulletCaliber = BulletCaliber.Medium;
     options.firearms.bulletStartPosition = [13 * PADDING, 0];
-    const [turretEid, gunEid] = createTankTurret(options, tankEid, tankPid);
+    const [turretRenderEid, gunRenderEid] = createTankTurret(world, physicalWorld, options, tankPhysEid, tankRenderEid, tankPid);
 
     // Hull parts attached to tank body
-    createSlotEntities(tankEid, hullSet, options.color, SlotPartType.HullPart);
-    
+    createSlotEntities(renderWorld, tankRenderEid, hullSet, options.color, SlotPartType.HullPart);
+
     // Caterpillar parts attached to track entities
     updateColorOptions(options, TRACKS_COLOR);
-    createSlotEntities(leftTrackEid, caterpillarSetLeft, options.color, SlotPartType.Caterpillar);
-    createSlotEntities(rightTrackEid, caterpillarSetRight, options.color, SlotPartType.Caterpillar);
+    createSlotEntities(renderWorld, leftTrackRenderEid, caterpillarSetLeft, options.color, SlotPartType.Caterpillar);
+    createSlotEntities(renderWorld, rightTrackRenderEid, caterpillarSetRight, options.color, SlotPartType.Caterpillar);
 
     // Turret parts
     updateColorOptions(options, TURRET_COLOR);
-    createSlotEntities(gunEid, turretGunSet, options.color, SlotPartType.TurretGun);
-    createSlotEntities(turretEid, turretHeadSet, options.color, SlotPartType.TurretHead);
+    createSlotEntities(renderWorld, gunRenderEid, turretGunSet, options.color, SlotPartType.TurretGun);
+    createSlotEntities(renderWorld, turretRenderEid, turretHeadSet, options.color, SlotPartType.TurretHead);
 
     // Fill all slots with physical parts
-    updateSlotsBrightness(tankEid);
-    fillAllSlots(tankEid, options);
-    updateSlotsBrightness(leftTrackEid);
-    fillAllSlots(leftTrackEid, options);
-    updateSlotsBrightness(rightTrackEid);
-    fillAllSlots(rightTrackEid, options);
-    updateSlotsBrightness(turretEid);
-    fillAllSlots(turretEid, options);
-    updateSlotsBrightness(gunEid);
-    fillAllSlots(gunEid, options);
+    updateSlotsBrightness(renderWorld, tankRenderEid);
+    fillAllSlots(renderWorld, physicalWorld, tankRenderEid, options);
+    updateSlotsBrightness(renderWorld, leftTrackRenderEid);
+    fillAllSlots(renderWorld, physicalWorld, leftTrackRenderEid, options);
+    updateSlotsBrightness(renderWorld, rightTrackRenderEid);
+    fillAllSlots(renderWorld, physicalWorld, rightTrackRenderEid, options);
+    updateSlotsBrightness(renderWorld, turretRenderEid);
+    fillAllSlots(renderWorld, physicalWorld, turretRenderEid, options);
+    updateSlotsBrightness(renderWorld, gunRenderEid);
+    fillAllSlots(renderWorld, physicalWorld, gunRenderEid, options);
 
     // Add exhaust pipes
-    createTankExhaustPipes(tankEid, PADDING * 12, PADDING * 8);
+    createTankExhaustPipes(renderWorld, tankRenderEid, PADDING * 12, PADDING * 8);
 
-    return tankEid;
+    return tankPhysEid;
 }

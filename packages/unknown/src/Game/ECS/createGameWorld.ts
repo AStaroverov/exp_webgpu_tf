@@ -1,3 +1,9 @@
+/**
+ * @deprecated Step 1 of the worlds migration split this single world into
+ * `createPhysicsWorld` + `createRenderWorld`. This module is retained only for the
+ * `GameComponents`/`GameWorld` types that legacy imports may still reference; it is no
+ * longer instantiated by `createGame`. Do not add new usages.
+ */
 import { createWorld, World } from 'bitecs';
 import { createRenderComponents, RenderComponents } from '../../../../renderer/src/ECS/world.ts';
 

@@ -1,17 +1,17 @@
 import { query } from 'bitecs';
-import { GameDI } from '../../../DI/GameDI.ts';
-import { getGameComponents } from '../../createGameWorld.ts';
+import { getRenderWorldComponents } from '../../createRenderWorld.ts';
+import { Worlds } from '../../../DI/Worlds.ts';
 
 const INITIAL_ALPHA = 0.4;
 
-export function createUpdateTreadMarksSystem({ world } = GameDI) {
-    const { Color, TreadMark, Progress } = getGameComponents(world);
+export function createUpdateTreadMarksSystem({ renderWorld } = Worlds) {
+    const { Color, TreadMark, ProgressFx } = getRenderWorldComponents(renderWorld);
 
     return () => {
-        const treadMarkEids = query(world, [TreadMark, Progress]);
+        const treadMarkEids = query(renderWorld, [TreadMark, ProgressFx]);
 
         for (const eid of treadMarkEids) {
-            const progress = Progress.getProgress(eid);
+            const progress = ProgressFx.getProgress(eid);
             const alpha = INITIAL_ALPHA * (1 - progress);
 
             if (alpha - Color.getA(eid) > 0.05) {

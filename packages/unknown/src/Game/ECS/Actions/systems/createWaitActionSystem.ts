@@ -3,9 +3,9 @@
  * Idle → Running, accumulate elapsed, and Finish when elapsed >= duration.
  */
 
-import { addEntity } from 'bitecs';
+import { addEntity, World } from 'bitecs';
 import { ActionDescriptor, applyTarget } from '../ActionDescriptor.ts';
-import { ActionScheduleDI, getTopAction } from '../ActionScheduleDI.ts';
+import { getTopAction } from '../ActionScheduleDI.ts';
 import { getActionComponents } from '../createActionWorld.ts';
 import { ActionKind, ActionStatus } from '../ActionTypes.ts';
 
@@ -20,7 +20,7 @@ export type WaitActionSpec = {
 
 export const WaitActionDescriptor: ActionDescriptor<WaitActionSpec> = {
     kind: ActionKind.Wait,
-    createSystem: () => createWaitActionSystem(),
+    createSystem: (actionWorld) => createWaitActionSystem(actionWorld),
     createAction(world, ownerEid, spec, seq) {
         const { Action, WaitParams } = getActionComponents(world);
         const eid = addEntity(world);
@@ -31,7 +31,7 @@ export const WaitActionDescriptor: ActionDescriptor<WaitActionSpec> = {
     },
 };
 
-export function createWaitActionSystem({ world } = ActionScheduleDI) {
+export function createWaitActionSystem(world: World) {
     const { Action, WaitParams } = getActionComponents(world);
 
     return function updateWait(delta: number) {

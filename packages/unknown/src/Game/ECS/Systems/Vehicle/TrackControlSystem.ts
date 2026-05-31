@@ -1,10 +1,12 @@
 import { query, hasComponent } from 'bitecs';
 import { Vector2 } from '@dimforge/rapier2d-simd';
-import { GameDI } from '../../../DI/GameDI.ts';
 import { TrackSide } from '../../Components/Track.ts';
 import { applyRotationToVector } from '../../../Physical/applyRotationToVector.ts';
 import { EngineType } from '../../../Config/vehicles.ts';
-import { getGameComponents } from '../../createGameWorld.ts';
+import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
+import { getRenderWorldComponents } from '../../createRenderWorld.ts';
+import { BridgeDI } from '../../../DI/BridgeDI.ts';
+import { Worlds } from '../../../DI/Worlds.ts';
 
 const TRACK_IMPULSE_FACTOR = 3_000_000_000;
 
@@ -17,8 +19,8 @@ const mapTypeToTrackImpulse = {
 
 const impulseVector = new Vector2(0, 0);
 
-export function createTrackControlSystem({ world } = GameDI) {
-    const { Tank, Vehicle, VehicleController, Children, Track, RigidBodyState, Impulse } = getGameComponents(world);
+export function createTrackControlSystem({ physicsWorld, renderWorld } = Worlds) {
+    const { Tank, Vehicle, VehicleController, Track, RigidBodyState, Impulse } = getPhysicsWorldComponents(physicsWorld);
 
     function applyTrackImpulse(
         trackEid: number,
@@ -34,10 +36,13 @@ export function createTrackControlSystem({ world } = GameDI) {
     }
 
     return (delta: number) => {
-        const vehicleEids = query(world, [Tank, Vehicle, VehicleController, Children]);
+        const { Children } = getRenderWorldComponents(renderWorld);
+        const vehicleEids = query(physicsWorld, [Tank, Vehicle, VehicleController]);
 
         for (let i = 0; i < vehicleEids.length; i++) {
             const vehicleEid = vehicleEids[i];
+            const vehicleRenderEid = BridgeDI.getRenderOf(vehicleEid);
+            if (!hasComponent(renderWorld, vehicleRenderEid, Children)) continue;
             const moveDirection = VehicleController.move[vehicleEid];
             const rotationDirection = VehicleController.rotation[vehicleEid];
 
@@ -59,12 +64,14 @@ export function createTrackControlSystem({ world } = GameDI) {
                 rightPower /= maxPower;
             }
 
-            const childCount = Children.entitiesCount[vehicleEid];
+            const childCount = Children.entitiesCount[vehicleRenderEid];
 
             for (let c = 0; c < childCount; c++) {
-                const childEid = Children.entitiesIds.get(vehicleEid, c);
+                const childRenderEid = Children.entitiesIds.get(vehicleRenderEid, c);
+                const childEid = BridgeDI.getPhysicsOf(childRenderEid);
+                if (childEid === 0) continue;
 
-                if (!hasComponent(world, childEid, Track)) {
+                if (!hasComponent(physicsWorld, childEid, Track)) {
                     continue;
                 }
 

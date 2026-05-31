@@ -1,12 +1,13 @@
 import { JointData, Vector2 } from '@dimforge/rapier2d-simd';
-import { GameDI } from '../../../../DI/GameDI.ts';
-import { addTransformComponents } from '../../../../../../../renderer/src/ECS/Components/Transform.ts';
+import { PhysicalWorld } from '../../../../Physical/initPhysicalWorld.ts';
 import { TrackSide } from '../../../Components/Track.ts';
 import { createVehicleBase, createVehicleTurret } from '../../Vehicle/VehicleBase.ts';
 import { createTrack, TrackOptions } from '../../Track/createTrack.ts';
 import { type TankOptions } from './Options.ts';
-import { createRectangleRigidGroup } from '../../../Components/RigidGroup.ts';
-import { getGameComponents } from '../../../createGameWorld.ts';
+import { spawnRectangleCarrier, SpawnCtx } from '../../spawnPart.ts';
+import { getPhysicsWorldComponents, PhysicsWorld } from '../../../createPhysicsWorld.ts';
+import { getRenderWorldComponents } from '../../../createRenderWorld.ts';
+import { Worlds } from '../../../../DI/Worlds.ts';
 
 export type TankTracksConfig = {
     anchorX: number;
@@ -16,19 +17,27 @@ export type TankTracksConfig = {
     trackHeight: number;
 };
 
-export function createTankBase(options: TankOptions, { world } = GameDI): [number, number] {
-    const { Tank } = getGameComponents(world);
-    const [vehicleEid, vehiclePid] = createVehicleBase(options);
-    Tank.addComponent(world, vehicleEid);
-    return [vehicleEid, vehiclePid];
+// Returns [vehiclePhysEid, vehicleRenderEid, vehiclePid]
+export function createTankBase(
+    world: PhysicsWorld,
+    physicalWorld: PhysicalWorld,
+    options: TankOptions,
+): [number, number, number] {
+    const { Tank } = getPhysicsWorldComponents(world);
+    const [vehiclePhysEid, vehicleRenderEid, vehiclePid] = createVehicleBase(world, physicalWorld, options);
+    Tank.addComponent(world, vehiclePhysEid);
+    return [vehiclePhysEid, vehicleRenderEid, vehiclePid];
 }
 
+// Returns [leftTrackRenderEid, rightTrackRenderEid]
 export function createTankTracks(
+    world: PhysicsWorld,
+    physicalWorld: PhysicalWorld,
     options: TankOptions,
     tracksConfig: TankTracksConfig,
-    tankEid: number,
+    tankRenderEid: number,
     tankPid: number,
-): [leftTrackEid: number, rightTrackEid: number] {
+): [leftTrackRenderEid: number, rightTrackRenderEid: number] {
     const trackOptions: TrackOptions = {
         ...options,
         width: tracksConfig.trackWidth,
@@ -44,52 +53,62 @@ export function createTankTracks(
     trackOptions.anchorY = tracksConfig.leftAnchorY;
     trackOptions.x = options.x;
     trackOptions.y = options.y;
-    const [leftTrackEid] = createTrack(trackOptions, tankEid, tankPid);
+    const [, leftTrackRenderEid] = createTrack(world, physicalWorld, trackOptions, tankRenderEid, tankPid);
 
     trackOptions.trackSide = TrackSide.Right;
     trackOptions.anchorY = tracksConfig.rightAnchorY;
     trackOptions.x = options.x;
     trackOptions.y = options.y;
-    const [rightTrackEid] = createTrack(trackOptions, tankEid, tankPid);
+    const [, rightTrackRenderEid] = createTrack(world, physicalWorld, trackOptions, tankRenderEid, tankPid);
 
-    return [leftTrackEid, rightTrackEid];
+    return [leftTrackRenderEid, rightTrackRenderEid];
 }
 
+// Returns [turretRenderEid, gunRenderEid]
 export function createTankTurret(
+    world: PhysicsWorld,
+    physicalWorld: PhysicalWorld,
     options: TankOptions,
-    tankEid: number,
+    tankPhysEid: number,
+    tankRenderEid: number,
     tankPid: number,
-    { world } = GameDI,
-) {
-    const { Tank, Firearms } = getGameComponents(world);
+): readonly [number, number] {
+    const { Tank, Firearms } = getPhysicsWorldComponents(world);
 
-    const [turretEid, turretPid] = createVehicleTurret(
+    const [turretPhysEid, turretRenderEid, turretPid] = createVehicleTurret(
+        world,
+        physicalWorld,
         options,
         options.turret,
-        tankEid,
+        tankRenderEid,
         tankPid,
     );
 
-    const [gunEid] = createTankGun(options, turretEid, turretPid);
+    const [, gunRenderEid] = createTankGun(world, physicalWorld, options, turretRenderEid, turretPid);
 
-    Tank.setTurretEid(tankEid, turretEid);
+    Tank.setTurretEid(tankPhysEid, turretPhysEid);
 
-    Firearms.addComponent(world, turretEid);
-    Firearms.setData(turretEid, options.firearms.bulletStartPosition, options.firearms.bulletCaliber);
-    Firearms.setReloadingDuration(turretEid, options.firearms.reloadingDuration);
+    Firearms.addComponent(world, turretPhysEid);
+    Firearms.setData(turretPhysEid, options.firearms.bulletStartPosition, options.firearms.bulletCaliber);
+    Firearms.setReloadingDuration(turretPhysEid, options.firearms.reloadingDuration);
 
-    return [turretEid, gunEid] as const;
+    return [turretRenderEid, gunRenderEid] as const;
 }
 
+// Returns [gunPhysEid, gunRenderEid, gunPid]
 export function createTankGun(
+    world: PhysicsWorld,
+    physicalWorld: PhysicalWorld,
     options: TankOptions,
-    turretEid: number,
+    turretRenderEid: number,
     turretPid: number,
-    { world, physicalWorld } = GameDI,
-): [number, number] {
-    const { Joint, Parent, Children } = getGameComponents(world);
+): [number, number, number] {
+    const { Joint } = getPhysicsWorldComponents(world);
+    const renderWorld = Worlds.renderWorld;
+    const { Parent, Children } = getRenderWorldComponents(renderWorld);
 
-    const [gunEid, gunPid] = createRectangleRigidGroup({
+    const ctx: SpawnCtx = { physicsWorld: world, renderWorld, physicalWorld };
+    const [gunPhysEid, gunRenderEid, gunPid] = spawnRectangleCarrier(ctx, {
         ...options,
         width: options.turret.gunWidth,
         height: options.turret.gunHeight,
@@ -106,12 +125,11 @@ export function createTankGun(
         physicalWorld.getRigidBody(gunPid),
         false,
     );
-    Joint.addComponent(world, gunEid, joint.handle);
+    Joint.addComponent(world, gunPhysEid, joint.handle);
 
-    addTransformComponents(world, gunEid);
-    Parent.addComponent(world, gunEid, turretEid);
-    Children.addComponent(world, gunEid);
-    Children.addChildren(turretEid, gunEid);
+    Parent.addComponent(renderWorld, gunRenderEid, turretRenderEid);
+    Children.addComponent(renderWorld, gunRenderEid);
+    Children.addChildren(turretRenderEid, gunRenderEid);
 
-    return [gunEid, gunPid];
+    return [gunPhysEid, gunRenderEid, gunPid];
 }

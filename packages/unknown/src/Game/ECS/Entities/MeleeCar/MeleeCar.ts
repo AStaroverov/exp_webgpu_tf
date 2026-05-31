@@ -1,3 +1,5 @@
+import { PhysicsWorld } from '../../createPhysicsWorld.ts';
+import { PhysicalWorld } from '../../../Physical/initPhysicalWorld.ts';
 import { PI } from '../../../../../../../lib/math.ts';
 import { TColor } from '../../../../../../renderer/src/ECS/Components/Common.ts';
 import { SlotPartType } from '../../Components/SlotConfig.ts';
@@ -18,12 +20,13 @@ import {
     wheelSlotSet
 } from './MeleeCarParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from './Options.ts';
+import { Worlds } from '../../../DI/Worlds.ts';
 
 // MeleeCar colors - aggressive sporty look
 const WHEEL_COLOR = new Float32Array([0.2, 0.2, 0.2, 1]);     // Dark rubber
 const APPROXIMATE_COLLIDER_RADIUS = 45;
 
-export function createMeleeCar(opts: {
+export function createMeleeCar(world: PhysicsWorld, physicalWorld: PhysicalWorld, opts: {
     playerId: number,
     teamId: number,
     x: number,
@@ -46,11 +49,14 @@ export function createMeleeCar(opts: {
     options.height = PADDING * 6;
     options.linearDamping = DampingConfig.carLinear;
     options.angularDamping = DampingConfig.carAngular;
-    const [carEid, carPid] = createMeleeCarBase(options);
+    const renderWorld = Worlds.renderWorld;
+    const [carPhysEid, carRenderEid, carPid] = createMeleeCarBase(world, physicalWorld, options);
 
     // Create 4 wheels as independent entities
     // Front wheels are steerable, rear wheels are drive wheels
-    const [frontLeftEid, frontRightEid, rearLeftEid, rearRightEid] = createMeleeCarWheels(
+    const [frontLeftRenderEid, frontRightRenderEid, rearLeftRenderEid, rearRightRenderEid] = createMeleeCarWheels(
+        world,
+        physicalWorld,
         options,
         {
             ...WHEEL_ANCHORS,
@@ -59,35 +65,35 @@ export function createMeleeCar(opts: {
             maxSteeringAngle: PI / 5, // ~36 degrees max steering
             steeringSpeed: PI * 3, // Fast steering response
         },
-        carEid,
+        carRenderEid,
         carPid,
     );
 
     // Hull parts - main car body
-    createSlotEntities(carEid, hullSet, options.color, SlotPartType.HullPart);
+    createSlotEntities(renderWorld, carRenderEid, hullSet, options.color, SlotPartType.HullPart);
 
     // Wheel visual parts attached to each wheel entity
     updateColorOptions(options, WHEEL_COLOR);
-    createSlotEntities(frontLeftEid, wheelSlotSet, options.color, SlotPartType.Wheel);
-    createSlotEntities(frontRightEid, wheelSlotSet, options.color, SlotPartType.Wheel);
-    createSlotEntities(rearLeftEid, wheelSlotSet, options.color, SlotPartType.Wheel);
-    createSlotEntities(rearRightEid, wheelSlotSet, options.color, SlotPartType.Wheel);
+    createSlotEntities(renderWorld, frontLeftRenderEid, wheelSlotSet, options.color, SlotPartType.Wheel);
+    createSlotEntities(renderWorld, frontRightRenderEid, wheelSlotSet, options.color, SlotPartType.Wheel);
+    createSlotEntities(renderWorld, rearLeftRenderEid, wheelSlotSet, options.color, SlotPartType.Wheel);
+    createSlotEntities(renderWorld, rearRightRenderEid, wheelSlotSet, options.color, SlotPartType.Wheel);
 
     // Fill all slots with physical parts
-    updateSlotsBrightness(carEid);
-    fillAllSlots(carEid, options);
-    updateSlotsBrightness(frontLeftEid);
-    fillAllSlots(frontLeftEid, options);
-    updateSlotsBrightness(frontRightEid);
-    fillAllSlots(frontRightEid, options);
-    updateSlotsBrightness(rearLeftEid);
-    fillAllSlots(rearLeftEid, options);
-    updateSlotsBrightness(rearRightEid);
-    fillAllSlots(rearRightEid, options);
+    updateSlotsBrightness(renderWorld, carRenderEid);
+    fillAllSlots(renderWorld, physicalWorld, carRenderEid, options);
+    updateSlotsBrightness(renderWorld, frontLeftRenderEid);
+    fillAllSlots(renderWorld, physicalWorld, frontLeftRenderEid, options);
+    updateSlotsBrightness(renderWorld, frontRightRenderEid);
+    fillAllSlots(renderWorld, physicalWorld, frontRightRenderEid, options);
+    updateSlotsBrightness(renderWorld, rearLeftRenderEid);
+    fillAllSlots(renderWorld, physicalWorld, rearLeftRenderEid, options);
+    updateSlotsBrightness(renderWorld, rearRightRenderEid);
+    fillAllSlots(renderWorld, physicalWorld, rearRightRenderEid, options);
 
     // Add exhaust pipe
-    addCarExhaustPipe(carEid, PADDING * 10, PADDING * 6);
+    addCarExhaustPipe(renderWorld, carRenderEid, PADDING * 10, PADDING * 6);
 
-    return carEid;
+    return carPhysEid;
 }
 

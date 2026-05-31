@@ -1,4 +1,4 @@
-import { GameDI } from '../../DI/GameDI.ts';
+import { Worlds } from '../../DI/Worlds.ts';
 import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
 import { EntityId, hasComponent, Not, onSet, query } from 'bitecs';
 import { BulletCaliber, mapBulletCaliber } from '../Components/Bullet.ts';
@@ -13,19 +13,22 @@ import {
 import { clamp } from 'lodash';
 import { SoundType } from '../Components/Sound.ts';
 import { spawnSoundAtParent } from '../Entities/Sound.ts';
-import { getGameComponents } from '../createGameWorld.ts';
+import { getPhysicsWorldComponents, PhysicsWorld } from '../createPhysicsWorld.ts';
+import { getRenderWorldComponents, RenderGameWorld } from '../createRenderWorld.ts';
+import { BridgeDI } from '../../DI/BridgeDI.ts';
 
-export function createHitableSystem({ world } = GameDI) {
-    const { Hitable, Bullet, VehiclePart, Parent, Vehicle } = getGameComponents(world);
-    const hitableChanges = createChangeDetector(world, [onSet(Hitable)]);
+export function createHitableSystem({ physicsWorld, renderWorld } = Worlds) {
+    const { Hitable, Bullet, VehiclePart, Vehicle } = getPhysicsWorldComponents(physicsWorld);
+    const hitableChanges = createChangeDetector(physicsWorld, [onSet(Hitable)]);
     let time = 0;
 
     return (delta: number) => {
+        const { Parent } = getRenderWorldComponents(renderWorld);
         time += delta;
 
         if (!hitableChanges.hasChanges()) return;
 
-        const vehiclePartEids = query(world, [VehiclePart, Hitable]);
+        const vehiclePartEids = query(physicsWorld, [VehiclePart, Hitable]);
         const hittedVehicles = new Set<EntityId>();
 
         for (let i = 0; i < vehiclePartEids.length; i++) {
@@ -33,12 +36,16 @@ export function createHitableSystem({ world } = GameDI) {
             if (!hitableChanges.has(vehiclePartEid)) continue;
 
             const hitEids = Hitable.getHitEids(vehiclePartEid);
-            const vehicleEid = Parent.id[Parent.id[vehiclePartEid]];
+            // part phys -> part render -> slot render -> carrier render -> carrier phys (vehicle)
+            const partRenderEid = BridgeDI.getRenderOf(vehiclePartEid);
+            const slotRenderEid = Parent.id[partRenderEid];
+            const carrierRenderEid = Parent.id[slotRenderEid];
+            const vehicleEid = BridgeDI.getPhysicsOf(carrierRenderEid);
 
-            applyDamage(vehiclePartEid);
-            saveHitters(vehiclePartEid, vehicleEid, hitEids);
+            applyDamage(physicsWorld, vehiclePartEid);
+            saveHitters(physicsWorld, vehiclePartEid, vehicleEid, hitEids);
 
-            if (hasComponent(world, vehicleEid, Vehicle)) {
+            if (hasComponent(physicsWorld, vehicleEid, Vehicle)) {
                 hittedVehicles.add(vehicleEid);
             }
 
@@ -50,24 +57,24 @@ export function createHitableSystem({ world } = GameDI) {
         }
 
         for (const vehicleEid of hittedVehicles) {
-           throttledSpawnSoundAtParent(vehicleEid, time, 200);
+           throttledSpawnSoundAtParent(renderWorld, BridgeDI.getRenderOf(vehicleEid), time, 200);
         }
 
-        const bulletIds = query(world, [Bullet, Hitable]);
+        const bulletIds = query(physicsWorld, [Bullet, Hitable]);
         for (let i = 0; i < bulletIds.length; i++) {
             const bulletId = bulletIds[i];
             if (!hitableChanges.has(bulletId)) continue;
 
-            applyDamage(bulletId);
+            applyDamage(physicsWorld, bulletId);
 
             if (!Hitable.isDestroyed(bulletId)) continue;
 
-            const bulletMatrix = GlobalTransform.matrix.getBatch(bulletId);
+            const bulletMatrix = GlobalTransform.matrix.getBatch(BridgeDI.getRenderOf(bulletId));
             const bulletCaliber = mapBulletCaliber[Bullet.caliber[bulletId] as BulletCaliber];
             const hitX = getMatrixTranslationX(bulletMatrix);
             const hitY = getMatrixTranslationY(bulletMatrix);
 
-            spawnHitFlash({
+            spawnHitFlash(renderWorld, {
                 x: hitX,
                 y: hitY,
                 size: bulletCaliber.width * 2,
@@ -77,12 +84,12 @@ export function createHitableSystem({ world } = GameDI) {
             scheduleRemoveEntity(bulletId);
         }
 
-        const restEids = query(world, [Hitable, Not(VehiclePart), Not(Bullet)]);
+        const restEids = query(physicsWorld, [Hitable, Not(VehiclePart), Not(Bullet)]);
         for (let i = 0; i < restEids.length; i++) {
             const eid = restEids[i];
             if (!hitableChanges.has(eid)) continue;
 
-            applyDamage(eid);
+            applyDamage(physicsWorld, eid);
 
             if (!Hitable.isDestroyed(eid)) continue;
 
@@ -95,8 +102,8 @@ export function createHitableSystem({ world } = GameDI) {
 
 const FORCE_TARGET = 1_000_000_000;
 
-function applyDamage(targetEid: number, { world } = GameDI) {
-    const { Hitable, Damagable } = getGameComponents(world);
+function applyDamage(world: PhysicsWorld, targetEid: number) {
+    const { Hitable, Damagable } = getPhysicsWorldComponents(world);
     const count = Hitable.hitIndex[targetEid];
     const hits = Hitable.hits.getBatch(targetEid);
 
@@ -113,12 +120,12 @@ function applyDamage(targetEid: number, { world } = GameDI) {
 }
 
 function saveHitters(
+    world: PhysicsWorld,
     hittableEid: EntityId,
     vehicleEid: EntityId,
     hitEids: Float64Array,
-    { world } = GameDI,
 ) {
-    const { LastHitters, TeamRef, PlayerRef } = getGameComponents(world);
+    const { LastHitters, TeamRef, PlayerRef } = getPhysicsWorldComponents(world);
     if (!hasComponent(world, vehicleEid, LastHitters)) return;
     if (!hasComponent(world, hittableEid, TeamRef)) return;
 
@@ -137,12 +144,12 @@ function saveHitters(
 }
 
 const mapParentToLastSoundTime = new Map<EntityId, number>();
-function throttledSpawnSoundAtParent(parentEid: EntityId, now: number, delay: number) {
+function throttledSpawnSoundAtParent(world: RenderGameWorld, parentEid: EntityId, now: number, delay: number) {
     const lastSpawnTime = mapParentToLastSoundTime.get(parentEid);
     if (lastSpawnTime && (now - lastSpawnTime) < delay) return;
     mapParentToLastSoundTime.set(parentEid, now);
 
-    spawnSoundAtParent({
+    spawnSoundAtParent(world, {
         parentEid,
         type: SoundType.TankHit,
         loop: false,

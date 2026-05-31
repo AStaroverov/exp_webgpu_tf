@@ -1,7 +1,6 @@
 import { addEntity } from 'bitecs';
-import { GameDI } from '../../DI/GameDI.ts';
 import { VFXType } from '../Components/VFX.ts';
-import { getGameComponents } from '../createGameWorld.ts';
+import { getRenderWorldComponents, RenderGameWorld } from '../createRenderWorld.ts';
 import { addTransformComponents, applyMatrixTranslate, applyMatrixRotateZ, applyMatrixScale, LocalTransform } from '../../../../../renderer/src/ECS/Components/Transform.ts';
 import { ZIndex } from '../../consts.ts';
 import { RenderDI } from '../../DI/RenderDI.ts';
@@ -14,10 +13,10 @@ export interface MuzzleFlashOptions {
     rotation?: number;
 }
 
-export function spawnMuzzleFlash(options: MuzzleFlashOptions, { world } = GameDI, { enabled } = RenderDI) {
+export function spawnMuzzleFlash(world: RenderGameWorld, options: MuzzleFlashOptions, { enabled } = RenderDI) {
     if (!enabled) return;
 
-    const { VFX, Progress, DestroyByTimeout } = getGameComponents(world);
+    const { VFX, ProgressFx, DestroyByTimeoutFx } = getRenderWorldComponents(world);
     const eid = addEntity(world);
 
     addTransformComponents(world, eid);
@@ -28,6 +27,6 @@ export function spawnMuzzleFlash(options: MuzzleFlashOptions, { world } = GameDI
     applyMatrixScale(LocalTransform.matrix.getBatch(eid), options.size, options.size);
 
     VFX.addComponent(world, eid, VFXType.MuzzleFlash);
-    Progress.addComponent(world, eid, options.duration);
-    DestroyByTimeout.addComponent(world, eid, options.duration);
+    ProgressFx.addComponent(world, eid, options.duration);
+    DestroyByTimeoutFx.addComponent(world, eid, options.duration);
 }

@@ -1,12 +1,12 @@
 import { query } from 'bitecs';
-import { GameDI } from '../../DI/GameDI.ts';
-import { getGameComponents } from '../createGameWorld.ts';
+import { getPhysicsWorldComponents } from '../createPhysicsWorld.ts';
+import { Worlds } from '../../DI/Worlds.ts';
 
 const impulseVec = { x: 0, y: 0 };
 const pointVec = { x: 0, y: 0 };
 
-export function createApplyImpulseSystem({ world, physicalWorld } = GameDI) {
-    const { RigidBodyRef, Impulse, TorqueImpulse, ImpulseAtPoint } = getGameComponents(world);
+export function createApplyImpulseSystem({ physicsWorld: world, physicalWorld } = Worlds) {
+    const { RigidBodyRef, Impulse, TorqueImpulse, ImpulseAtPoint } = getPhysicsWorldComponents(world);
 
     return () => {
         const entitiesWithImpulse = query(world, [RigidBodyRef, Impulse]);

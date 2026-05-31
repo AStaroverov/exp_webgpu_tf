@@ -1,17 +1,20 @@
-import { GameDI } from '../../../DI/GameDI.ts';
 import { query } from 'bitecs';
 import { normalizeAngle } from '../../../../../../../lib/math.ts';
-import { getGameComponents } from '../../createGameWorld.ts';
+import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
+import { getRenderWorldComponents } from '../../createRenderWorld.ts';
+import { BridgeDI } from '../../../DI/BridgeDI.ts';
+import { Worlds } from '../../../DI/Worlds.ts';
 
-export function createVehicleTurretRotationSystem({ world } = GameDI) {
-    const { VehicleTurret, TurretController, JointMotor, Parent, RigidBodyState } = getGameComponents(world);
+export function createVehicleTurretRotationSystem({ physicsWorld, renderWorld } = Worlds) {
+    const { VehicleTurret, TurretController, JointMotor, RigidBodyState } = getPhysicsWorldComponents(physicsWorld);
 
     return (delta: number) => {
-        const turretEids = query(world, [VehicleTurret, TurretController, JointMotor]);
+        const { Parent } = getRenderWorldComponents(renderWorld);
+        const turretEids = query(physicsWorld, [VehicleTurret, TurretController, JointMotor]);
 
         for (let i = 0; i < turretEids.length; i++) {
             const turretEid = turretEids[i];
-            const vehicleEid = Parent.id[turretEid];
+            const vehicleEid = BridgeDI.getPhysicsOf(Parent.id[BridgeDI.getRenderOf(turretEid)]);
             const vehicleRot = RigidBodyState.rotation[vehicleEid];
             const turretRot = RigidBodyState.rotation[turretEid];
             const turretRotDir = TurretController.rotation[turretEid];

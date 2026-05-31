@@ -11,6 +11,7 @@
 
 import { EntityId, World } from 'bitecs';
 import { MapWorldId } from '../../Map/HexGrid.ts';
+import { PhysicsWorld } from '../createPhysicsWorld.ts';
 import { ActionKind, ActionTargetSpec, TargetKind } from './ActionTypes.ts';
 import { getActionComponents } from './createActionWorld.ts';
 
@@ -25,7 +26,7 @@ export type ActionDescriptor<S extends ActionSpecBase = ActionSpecBase> = {
      */
     createAction: (world: World, ownerEid: number, spec: S, seq: number) => EntityId;
     /** Build this kind's executor system. */
-    createSystem: () => (delta: number) => void;
+    createSystem: (actionWorld: World, gameWorld: PhysicsWorld) => (delta: number) => void;
 };
 
 /** Add the `ActionTarget` component and fill it from a target spec (none → None). */

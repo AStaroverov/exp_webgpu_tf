@@ -1,8 +1,8 @@
-import { GameDI } from '../DI/GameDI.ts';
-import { getGameComponents } from '../ECS/createGameWorld.ts';
+import { getPhysicsWorldComponents, PhysicsWorld } from '../ECS/createPhysicsWorld.ts';
+import { PhysicalWorld } from './initPhysicalWorld.ts';
 
-export function changePhysicalDensity(pid: number, density: number, { world, physicalWorld } = GameDI) {
-    const { RigidBodyRef } = getGameComponents(world);
+export function changePhysicalDensity(world: PhysicsWorld, physicalWorld: PhysicalWorld, pid: number, density: number) {
+    const { RigidBodyRef } = getPhysicsWorldComponents(world);
     const physicalId = RigidBodyRef.id[pid];
     const rigidBody = physicalWorld.getRigidBody(physicalId);
 

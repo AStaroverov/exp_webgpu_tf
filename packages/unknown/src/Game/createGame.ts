@@ -6,18 +6,19 @@ import { createTransformSystem } from '../../../renderer/src/ECS/Systems/Transfo
 import { initWebGPU } from '../../../renderer/src/gpu.ts';
 import { createFrameTextures, createFrameTick } from '../../../renderer/src/WGSL/createFrame.ts';
 import { GameDI } from './DI/GameDI.ts';
+import { Worlds } from './DI/Worlds.ts';
+import { BridgeDI } from './DI/BridgeDI.ts';
 import { RenderDI } from './DI/RenderDI.ts';
-import { getEntityIdByPhysicalId } from './ECS/Components/Physical.ts';
-import { getGameComponents } from './ECS/createGameWorld.ts';
+import { getPhysicsWorldComponents, createPhysicsWorld } from './ECS/createPhysicsWorld.ts';
+import { getRenderWorldComponents, createRenderWorld } from './ECS/createRenderWorld.ts';
 import { GameSession } from './ECS/Entities/GameSession.ts';
 import { GameMap } from './ECS/Entities/GameMap.ts';
 import { createTank } from './ECS/Entities/Tank/createTank.ts';
 import { SystemGroup } from './ECS/Plugins/systems.ts';
-import { createApplyRigidBodyToTransformSystem } from './ECS/Systems/createApplyRigidBodyToTransformSystem.ts';
+import { createMirrorSyncSystem } from './ECS/Systems/createMirrorSyncSystem.ts';
 import { createSpawnerBulletsSystem } from './ECS/Systems/createBulletSystem.ts';
 import { createDestroyByTimeoutSystem } from './ECS/Systems/createDestroyByTimeoutSystem.ts';
 import { createDestroyBySpeedSystem } from './ECS/Systems/createDestroyBySpeedSystem.ts';
-import { createDestroyOutOfZoneSystem } from './ECS/Systems/createDestroyOutOfZoneSystem.ts';
 import { createDestroySystem } from './ECS/Systems/createDestroySystem.ts';
 import { createRigidBodyStateSystem } from './ECS/Systems/createRigidBodyStateSystem.ts';
 import { createApplyImpulseSystem } from './ECS/Systems/createApplyImpulseSystem.ts';
@@ -43,7 +44,6 @@ import { createTankAliveSystem } from './ECS/Systems/Tank/createTankAliveSystem.
 import { createShieldRegenerationSystem } from './ECS/Systems/createShieldRegenerationSystem.ts';
 import { SoundDI } from './DI/SoundDI.ts';
 import { createVehicleTurretRotationSystem as createTurretRotationSystem } from './ECS/Systems/Vehicle/VehicleControllerSystems.ts';
-import { createGameWorld } from './ECS/createGameWorld.ts';
 import { VehicleType } from './Config/index.ts';
 import { MapDI } from './DI/MapDI.ts';
 import { HexGrid } from './Map/HexGrid.ts';
@@ -62,31 +62,36 @@ export function createGame({ width, height }: {
     width: number,
     height: number,
 }) {
-    const world = createGameWorld();
+    const physicsWorld = createPhysicsWorld();
+    const renderWorld = createRenderWorld();
     const physicalWorld = initPhysicalWorld();
-    const { Children, Hitable, RigidBodyRef, VehicleController } = getGameComponents(world);
+    BridgeDI.init(physicsWorld, renderWorld);
+
+    const { Hitable, VehicleController } = getPhysicsWorldComponents(physicsWorld);
+    const { Children } = getRenderWorldComponents(renderWorld);
 
     GameDI.width = width;
     GameDI.height = height;
-    GameDI.world = world;
-    GameDI.physicalWorld = physicalWorld;
+    Worlds.physicsWorld = physicsWorld;
+    Worlds.renderWorld = renderWorld;
+    Worlds.physicalWorld = physicalWorld;
 
     // Actions live in their own ECS world, separate from the game world.
-    ActionScheduleDI.world = createActionWorld();
+    Worlds.actionWorld = createActionWorld();
 
     GameMap.setOffset(width / 2, height / 2);
     initCameraPosition();
 
     MapDI.grid = new HexGrid({ center: { x: width / 2, y: height / 2 } });
 
-    const execTransformSystem = createTransformSystem(world, Children);
+    const execTransformSystem = createTransformSystem(renderWorld, Children);
+    const mirrorSync = createMirrorSyncSystem();
 
     const updateTrackControl = createTrackControlSystem();
     const updateWheelControl = createWheelControlSystem();
     const updateTurretRotation = createTurretRotationSystem();
 
     const syncRigidBodyState = createRigidBodyStateSystem();
-    const applyRigidBodyDeltaToLocalTransform = createApplyRigidBodyToTransformSystem();
     const applyImpulses = createApplyImpulseSystem();
     const applyJointMotors = createJointMotorSystem();
 
@@ -97,29 +102,27 @@ export function createGame({ width, height }: {
         updateWheelControl(delta);
         updateTurretRotation(delta);
 
-        execTransformSystem();
         applyImpulses();
         applyJointMotors(delta);
         physicalWorld.step(eventQueue);
         syncRigidBodyState();
-        applyRigidBodyDeltaToLocalTransform();
 
         eventQueue.drainContactForceEvents(event => {
             const handle1 = event.collider1();
             const handle2 = event.collider2();
             const rb1 = physicalWorld.getCollider(handle1).parent();
             const rb2 = physicalWorld.getCollider(handle2).parent();
-            const eid1 = rb1 && getEntityIdByPhysicalId(rb1.handle);
-            const eid2 = rb2 && getEntityIdByPhysicalId(rb2.handle);
+            const eid1 = rb1 ? BridgeDI.getPhysicsByPhysicalId(rb1.handle) : undefined;
+            const eid2 = rb2 ? BridgeDI.getPhysicsByPhysicalId(rb2.handle) : undefined;
 
             if (eid1 == null || eid2 == null) return;
 
             const forceMagnitude = event.totalForceMagnitude();
 
-            if (hasComponent(world, eid1, Hitable)) {
+            if (hasComponent(physicsWorld, eid1, Hitable)) {
                 Hitable.hit$(eid1, eid2, forceMagnitude);
             }
-            if (hasComponent(world, eid2, Hitable)) {
+            if (hasComponent(physicsWorld, eid2, Hitable)) {
                 Hitable.hit$(eid2, eid1, forceMagnitude);
             }
         });
@@ -137,13 +140,11 @@ export function createGame({ width, height }: {
     };
 
     const destroy = createDestroySystem();
-    const destroyOutOfZone = createDestroyOutOfZoneSystem();
     const destroyByTimeout = createDestroyByTimeoutSystem();
     const destroyBySpeed = createDestroyBySpeedSystem();
     const destroyFrame = (delta: number) => {
         destroyByTimeout(delta);
         destroyBySpeed();
-        destroyOutOfZone();
         destroy();
     };
 
@@ -163,7 +164,7 @@ export function createGame({ width, height }: {
     };
 
     GameDI.gameTick = (delta: number) => {
-        if (GameDI.world === null) return;
+        if (Worlds.physicsWorld === null) return;
 
         physicalFrame(delta);
 
@@ -195,22 +196,27 @@ export function createGame({ width, height }: {
         GameDI.plugins.dispose();
 
         physicalWorld.free();
-        RigidBodyRef.dispose();
+        BridgeDI.dispose();
 
-        resetWorld(world);
-        deleteWorld(world);
-        destroyChangeDetectorSystem(world);
+        resetWorld(physicsWorld);
+        deleteWorld(physicsWorld);
+        resetWorld(renderWorld);
+        deleteWorld(renderWorld);
+        destroyChangeDetectorSystem(physicsWorld); // JointMotor detector
+        destroyChangeDetectorSystem(renderWorld);  // Shape/Color/Roundness detectors
 
         GameSession.reset();
         GameMap.reset();
         MapDI.grid = null!;
         ActionScheduleDI.nextSeq = 1;
-        ActionScheduleDI.world = null!;
+
+        Worlds.physicsWorld = null!;
+        Worlds.renderWorld = null!;
+        Worlds.physicalWorld = null!;
+        Worlds.actionWorld = null!;
 
         GameDI.width = null!;
         GameDI.height = null!;
-        GameDI.world = null!;
-        GameDI.physicalWorld = null!;
         GameDI.gameTick = null!;
         GameDI.destroy = null!;
 
@@ -268,14 +274,14 @@ export function createGame({ width, height }: {
         const textures = createFrameTextures(device, canvas);
 
         const shapeSystem = createDrawShapeSystem({
-            world,
+            world: renderWorld,
             device,
             shadowMapTexture: textures.shadowMapTexture,
         });
         const drawFauna = createDrawFaunaSystem();
         const drawGrid = createDrawGridSystem();
         const drawSandstorm = createSandstormSystem();
-        const drawVFX = createDrawVFXSystem();
+        const drawVFX = createDrawVFXSystem(device, renderWorld);
 
         const frameTick = createFrameTick(
             {
@@ -286,6 +292,10 @@ export function createGame({ width, height }: {
                 getPixelRatio: () => window.devicePixelRatio,
             },
             ({ passEncoder, delta }) => {
+                // RENDER tick: sync atom transforms to mirrors, then compose Local->Global.
+                mirrorSync();
+                execTransformSystem();
+
                 drawFauna(passEncoder, delta);
                 drawGrid(passEncoder);
                 shapeSystem.drawShapes(passEncoder);

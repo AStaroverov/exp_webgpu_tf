@@ -1,5 +1,4 @@
 import { query } from 'bitecs';
-import { GameDI } from '../../../DI/GameDI.ts';
 import { abs } from '../../../../../../../lib/math.ts';
 import { random } from '../../../../../../../lib/random.ts';
 import { spawnTreadMark } from '../../Entities/TreadMark.ts';
@@ -9,7 +8,9 @@ import {
     getMatrixTranslationY,
     getMatrixRotationZ,
 } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
-import { getGameComponents } from '../../createGameWorld.ts';
+import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
+import { BridgeDI } from '../../../DI/BridgeDI.ts';
+import { Worlds } from '../../../DI/Worlds.ts';
 
 const BASE_CHANCE = 0.01;
 const SKID_CHANCE = 0.5;
@@ -18,11 +19,11 @@ const ROTATION_MULTIPLIER = 0.3;
 const TREAD_MARK_WIDTH = 2.5;
 const TREAD_MARK_HEIGHT = 4;
 
-export function createSpawnWheelTreadMarksSystem({ world } = GameDI) {
-    const { Wheel, RigidBodyState, Impulse } = getGameComponents(world);
+export function createSpawnWheelTreadMarksSystem({ physicsWorld, renderWorld } = Worlds) {
+    const { Wheel, RigidBodyState, Impulse } = getPhysicsWorldComponents(physicsWorld);
 
     return (_delta: number) => {
-        const wheelEids = query(world, [Wheel, RigidBodyState, Impulse]);
+        const wheelEids = query(physicsWorld, [Wheel, RigidBodyState, Impulse]);
 
         for (const eid of wheelEids) {
             const linvel = RigidBodyState.linvel.getBatch(eid);
@@ -44,12 +45,12 @@ export function createSpawnWheelTreadMarksSystem({ world } = GameDI) {
 
             if (random() > chance) continue;
 
-            const globalMatrix = GlobalTransform.matrix.getBatch(eid);
+            const globalMatrix = GlobalTransform.matrix.getBatch(BridgeDI.getRenderOf(eid));
             const x = getMatrixTranslationX(globalMatrix);
             const y = getMatrixTranslationY(globalMatrix);
             const rot = getMatrixRotationZ(globalMatrix);
 
-            spawnTreadMark({
+            spawnTreadMark(renderWorld, {
                 x,
                 y,
                 width: TREAD_MARK_WIDTH,

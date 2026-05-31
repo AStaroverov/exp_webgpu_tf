@@ -10,15 +10,13 @@
  */
 
 import { EntityId, query } from 'bitecs';
-import { ActionWorld, getActionComponents } from './createActionWorld.ts';
+import { getActionComponents } from './createActionWorld.ts';
+import { Worlds } from '../../DI/Worlds.ts';
 
 export const ActionScheduleDI: {
-    /** The dedicated ECS world the action entities live in (set in createGame). */
-    world: ActionWorld;
     /** Monotonic FIFO counter; the next enqueued action gets this seq, then it++. */
     nextSeq: number;
 } = {
-    world: null as unknown as ActionWorld,
     nextSeq: 1,
 };
 
@@ -31,9 +29,9 @@ export const ActionScheduleDI: {
  * this is cheaper than maintaining a mirrored array — swap to a heap behind this
  * same signature if it ever grows.
  */
-export function getTopAction({ world } = ActionScheduleDI): EntityId | null {
-    const { Action } = getActionComponents(world);
-    const eids = query(world, [Action]);
+export function getTopAction({ actionWorld } = Worlds): EntityId | null {
+    const { Action } = getActionComponents(actionWorld);
+    const eids = query(actionWorld, [Action]);
     let best: EntityId | null = null;
     let bestSeq = Infinity;
     for (let i = 0; i < eids.length; i++) {

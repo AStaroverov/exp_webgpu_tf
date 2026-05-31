@@ -1,13 +1,9 @@
-import { PhysicalWorld } from '../Physical/initPhysicalWorld.ts';
-import { World } from '../../../../renderer/src/ECS/world.ts';
 import { EntityId } from 'bitecs';
 import { PluginDI } from './PluginDI.ts';
 
 export const GameDI: {
     width: number;
     height: number;
-    world: World;
-    physicalWorld: PhysicalWorld;
     gameTick: (delta: number) => void;
     destroy: () => void;
     enableSound: () => void;
@@ -18,8 +14,6 @@ export const GameDI: {
 } = {
     width: null as any,
     height: null as any,
-    world: null as any,
-    physicalWorld: null as any,
     gameTick: null as any,
     destroy: null as any,
     enableSound: null as any,

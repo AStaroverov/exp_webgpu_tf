@@ -1,10 +1,12 @@
 import { EntityId, hasComponent, removeComponent } from 'bitecs';
 import { min, smoothstep } from '../../../../../../../lib/math.ts';
-import { GameDI } from '../../../DI/GameDI.ts';
 import { CollisionGroup } from '../../../Physical/createRigid.ts';
 import { removePhysicalJoint } from '../../../Physical/removePhysicalJoint.ts';
 import { setPhysicalCollisionGroup } from '../../../Physical/setPhysicalCollisionGroup.ts';
-import { getGameComponents } from '../../createGameWorld.ts';
+import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
+import { getRenderWorldComponents } from '../../createRenderWorld.ts';
+import { BridgeDI } from '../../../DI/BridgeDI.ts';
+import { Worlds } from '../../../DI/Worlds.ts';
 import { recursiveTypicalRemoveEntity, scheduleRemoveEntity } from '../../Utils/typicalRemoveEntity.ts';
 import { spawnExplosion } from '../Explosion.ts';
 import {
@@ -18,13 +20,16 @@ import { getSlotFillerEid, isSlot, isSlotEmpty } from '../../Utils/SlotUtils.ts'
 import { EngineLabels, EngineType } from '../../../Config/vehicles.ts';
 
 
-export function destroyTank(vehicleEid: EntityId, { world } = GameDI) {
-    const { Tank, Children } = getGameComponents(world);
-    const vehicleMatrix = GlobalTransform.matrix.getBatch(vehicleEid);
+export function destroyTank(vehiclePhysEid: EntityId, { physicsWorld: world, renderWorld } = Worlds) {
+    const { Tank } = getPhysicsWorldComponents(world);
+    const { Children } = getRenderWorldComponents(renderWorld);
+
+    const vehicleRenderEid = BridgeDI.getRenderOf(vehiclePhysEid);
+    const vehicleMatrix = GlobalTransform.matrix.getBatch(vehicleRenderEid);
     const explosionX = getMatrixTranslationX(vehicleMatrix);
     const explosionY = getMatrixTranslationY(vehicleMatrix);
 
-    spawnExplosion({
+    spawnExplosion(renderWorld, {
         x: explosionX,
         y: explosionY,
         size: 60,
@@ -33,46 +38,49 @@ export function destroyTank(vehicleEid: EntityId, { world } = GameDI) {
 
     const partsToExplode: EntityId[] = [];
 
-    const turretEid = Tank.turretEId[vehicleEid];
-    for (let i = 0; i < Children.entitiesCount[turretEid]; i++) {
-        const slotEid = Children.entitiesIds.get(turretEid, i);
-        if (!isSlot(slotEid) || isSlotEmpty(slotEid)) continue;
-        const partEid = getSlotFillerEid(slotEid);
-        if (partEid === 0) continue;
-        partsToExplode.push(partEid);
-        tearOffTankPart(partEid);
+    const turretPhysEid = Tank.turretEId[vehiclePhysEid];
+    const turretRenderEid = BridgeDI.getRenderOf(turretPhysEid);
+
+    const collectFromCarrier = (carrierRenderEid: number) => {
+        for (let i = 0; i < Children.entitiesCount[carrierRenderEid]; i++) {
+            const slotEid = Children.entitiesIds.get(carrierRenderEid, i);
+            if (!isSlot(renderWorld, slotEid) || isSlotEmpty(renderWorld, slotEid)) continue;
+            const partRenderEid = getSlotFillerEid(renderWorld, slotEid);
+            if (partRenderEid === 0) continue;
+            const partPhysEid = BridgeDI.getPhysicsOf(partRenderEid);
+            partsToExplode.push(partPhysEid);
+            tearOffTankPart(partPhysEid);
+        }
+    };
+
+    collectFromCarrier(turretRenderEid);
+    collectFromCarrier(vehicleRenderEid);
+
+    for (const partPhysEid of partsToExplode) {
+        applyExplosionImpulse(world, partPhysEid, explosionX, explosionY);
     }
 
-    for (let i = 0; i < Children.entitiesCount[vehicleEid]; i++) {
-        const slotEid = Children.entitiesIds.get(vehicleEid, i);
-        if (!isSlot(slotEid) || isSlotEmpty(slotEid)) continue;
-        const partEid = getSlotFillerEid(slotEid);
-        if (partEid === 0) continue;
-        partsToExplode.push(partEid);
-        tearOffTankPart(partEid);
-    }
-
-    for (const partEid of partsToExplode) {
-        applyExplosionImpulse(partEid, explosionX, explosionY);
-    }
-
-    scheduleRemoveEntity(vehicleEid);
-    scheduleRemoveEntity(turretEid);
+    scheduleRemoveEntity(vehiclePhysEid);
+    scheduleRemoveEntity(turretPhysEid);
 }
 
-export function syncRemoveTank(tankEid: EntityId) {
-    recursiveTypicalRemoveEntity(tankEid);
+export function syncRemoveTank(tankPhysEid: EntityId) {
+    recursiveTypicalRemoveEntity(tankPhysEid);
 }
 
-export function tearOffTankPart(vehiclePartEid: number, shouldBreakConnection: boolean = true, { world } = GameDI) {
-    const { TeamRef, PlayerRef, Parent, Children, Joint, VehiclePart } = getGameComponents(world);
+export function tearOffTankPart(vehiclePartEid: number, shouldBreakConnection: boolean = true, { physicsWorld: world, renderWorld, physicalWorld } = Worlds) {
+    const { TeamRef, PlayerRef, Joint, VehiclePart } = getPhysicsWorldComponents(world);
+    const { Parent, Children } = getRenderWorldComponents(renderWorld);
+
     removeComponent(world, vehiclePartEid, TeamRef);
     removeComponent(world, vehiclePartEid, PlayerRef);
 
-    const slotEid = Parent.id[vehiclePartEid];
+    // The slot->part edge lives in RenderWorld; resolve via the part's mirror.
+    const partRenderEid = BridgeDI.getRenderOf(vehiclePartEid);
+    const slotEid = Parent.id[partRenderEid];
 
-    if (shouldBreakConnection && isSlot(slotEid)) {
-        Children.removeChild(slotEid, vehiclePartEid);
+    if (shouldBreakConnection && isSlot(renderWorld, slotEid)) {
+        Children.removeChild(slotEid, partRenderEid);
     }
 
     const jointPid = hasComponent(world, vehiclePartEid, Joint) ? Joint.pid[vehiclePartEid] : 0;
@@ -82,27 +90,29 @@ export function tearOffTankPart(vehiclePartEid: number, shouldBreakConnection: b
             VehiclePart.removeComponent(world, vehiclePartEid);
         }
         resetVehiclePartJointComponent(vehiclePartEid);
-        setPhysicalCollisionGroup(vehiclePartEid, CollisionGroup.ALL & ~CollisionGroup.VEHICALE_BASE & ~CollisionGroup.BULLET);
-        removePhysicalJoint(jointPid);
+        setPhysicalCollisionGroup(world, physicalWorld, vehiclePartEid, CollisionGroup.ALL & ~CollisionGroup.VEHICALE_BASE & ~CollisionGroup.BULLET);
+        removePhysicalJoint(physicalWorld, jointPid);
     }
 }
 
-export function resetVehiclePartJointComponent(vehiclePartEid: number, { world } = GameDI) {
-    const { Joint, VehiclePartCaterpillar } = getGameComponents(world);
+export function resetVehiclePartJointComponent(vehiclePartEid: number, { physicsWorld: world } = Worlds) {
+    const { Joint, VehiclePartCaterpillar } = getPhysicsWorldComponents(world);
     Joint.resetComponent(vehiclePartEid);
     VehiclePartCaterpillar.removeComponent(world, vehiclePartEid);
 }
 
-export function getTankCurrentPartsCount(vehicleEid: number, { world } = GameDI) {
-    const { Tank } = getGameComponents(world);
-    const turretEid = Tank.turretEId[vehicleEid];
-    return getFilledSlotCount(vehicleEid) + getFilledSlotCount(turretEid);
+export function getTankCurrentPartsCount(vehiclePhysEid: number, { physicsWorld, renderWorld } = Worlds) {
+    const { Tank } = getPhysicsWorldComponents(physicsWorld);
+    const turretPhysEid = Tank.turretEId[vehiclePhysEid];
+    return getFilledSlotCount(renderWorld, BridgeDI.getRenderOf(vehiclePhysEid))
+        + getFilledSlotCount(renderWorld, BridgeDI.getRenderOf(turretPhysEid));
 }
 
-export function getTankTotalSlotCount(vehicleEid: number, { world } = GameDI) {
-    const { Tank } = getGameComponents(world);
-    const turretEid = Tank.turretEId[vehicleEid];
-    return getSlotCount(vehicleEid) + getSlotCount(turretEid);
+export function getTankTotalSlotCount(vehiclePhysEid: number, { physicsWorld, renderWorld } = Worlds) {
+    const { Tank } = getPhysicsWorldComponents(physicsWorld);
+    const turretPhysEid = Tank.turretEId[vehiclePhysEid];
+    return getSlotCount(renderWorld, BridgeDI.getRenderOf(vehiclePhysEid))
+        + getSlotCount(renderWorld, BridgeDI.getRenderOf(turretPhysEid));
 }
 
 export const HEALTH_THRESHOLD = 0.85;
@@ -123,13 +133,13 @@ export function getTankHealth(tankEid: number): number {
     return health;
 }
 
-export function getTankTeamId(tankEid: number, { world } = GameDI) {
-    const { TeamRef } = getGameComponents(world);
+export function getTankTeamId(tankEid: number, { physicsWorld: world } = Worlds) {
+    const { TeamRef } = getPhysicsWorldComponents(world);
     return TeamRef.id[tankEid];
 }
 
-export function getTankEngineLabel(vehicleEid: number, { world } = GameDI): string {
-    const { Vehicle } = getGameComponents(world);
+export function getTankEngineLabel(vehicleEid: number, { physicsWorld: world } = Worlds): string {
+    const { Vehicle } = getPhysicsWorldComponents(world);
     const engine = Vehicle.engineType[vehicleEid] as EngineType;
     return EngineLabels[engine];
 }

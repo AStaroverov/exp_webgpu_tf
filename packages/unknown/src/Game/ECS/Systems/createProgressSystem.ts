@@ -1,15 +1,16 @@
 import { query } from 'bitecs';
-import { GameDI } from '../../DI/GameDI.ts';
-import { getGameComponents } from '../createGameWorld.ts';
+import { getRenderWorldComponents } from '../createRenderWorld.ts';
+import { Worlds } from '../../DI/Worlds.ts';
 
-export function createProgressSystem({ world } = GameDI) {
-    const { Progress } = getGameComponents(world);
+// Ages fx progress (RenderWorld). All Progress users in Step 1 are render-only fx.
+export function createProgressSystem({ renderWorld } = Worlds) {
+    const { ProgressFx } = getRenderWorldComponents(renderWorld);
 
     return (delta: number) => {
-        const eids = query(world, [Progress]);
+        const eids = query(renderWorld, [ProgressFx]);
 
         for (let i = 0; i < eids.length; i++) {
-            Progress.updateAge(eids[i], delta);
+            ProgressFx.updateAge(eids[i], delta);
         }
     };
 }

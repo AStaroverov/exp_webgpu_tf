@@ -6,6 +6,7 @@
  */
 
 import { ActionKind } from './ActionTypes.ts';
+import { Worlds } from '../../DI/Worlds.ts';
 import { MoveToHexActionDescriptor } from './systems/createMoveToHexActionSystem.ts';
 import { WaitActionDescriptor } from './systems/createWaitActionSystem.ts';
 import { TurretAimActionDescriptor } from './systems/createTurretAimActionSystem.ts';
@@ -28,8 +29,8 @@ export type EnqueueActionSpec = Parameters<Registry[keyof Registry]['createActio
  * them all per tick. Each executor decides for itself whether the global top
  * action is its responsibility.
  */
-export function createRunExecutors(): (delta: number) => void {
-    const systems = Object.values(ACTION_REGISTRY).map((d) => d.createSystem());
+export function createRunExecutors({ actionWorld, physicsWorld } = Worlds): (delta: number) => void {
+    const systems = Object.values(ACTION_REGISTRY).map((d) => d.createSystem(actionWorld, physicsWorld));
 
     return function runExecutors(delta: number) {
         for (let i = 0; i < systems.length; i++) {
