@@ -45,6 +45,16 @@ import { SoundDI } from './DI/SoundDI.ts';
 import { createVehicleTurretRotationSystem as createTurretRotationSystem } from './ECS/Systems/Vehicle/VehicleControllerSystems.ts';
 import { createGameWorld } from './ECS/createGameWorld.ts';
 import { VehicleType } from './Config/index.ts';
+import { MapDI } from './DI/MapDI.ts';
+import { HexGrid } from './Map/HexGrid.ts';
+import { findPath } from './Map/findPath.ts';
+import { createDrawGridSystem } from './ECS/Systems/Render/Grid/createDrawGridSystem.ts';
+import { ActionScheduleDI } from './ECS/Actions/ActionScheduleDI.ts';
+import { createActionWorld } from './ECS/Actions/createActionWorld.ts';
+import { createRunExecutors } from './ECS/Actions/registry.ts';
+import { createActionSchedulerSystem } from './ECS/Actions/createActionSchedulerSystem.ts';
+import { enqueueAction } from './ECS/Actions/ActionSchedule.ts';
+import { ActionKind, TargetKind } from './ECS/Actions/ActionTypes.ts';
 
 export type Game = ReturnType<typeof createGame>;
 
@@ -54,15 +64,20 @@ export function createGame({ width, height }: {
 }) {
     const world = createGameWorld();
     const physicalWorld = initPhysicalWorld();
-    const { Children, Hitable, RigidBodyRef, Tank, TurretController, VehicleController } = getGameComponents(world);
+    const { Children, Hitable, RigidBodyRef, VehicleController } = getGameComponents(world);
 
     GameDI.width = width;
     GameDI.height = height;
     GameDI.world = world;
     GameDI.physicalWorld = physicalWorld;
 
+    // Actions live in their own ECS world, separate from the game world.
+    ActionScheduleDI.world = createActionWorld();
+
     GameMap.setOffset(width / 2, height / 2);
     initCameraPosition();
+
+    MapDI.grid = new HexGrid({ center: { x: width / 2, y: height / 2 } });
 
     const execTransformSystem = createTransformSystem(world, Children);
 
@@ -140,10 +155,19 @@ export function createGame({ width, height }: {
     const updateTankAliveSystem = createTankAliveSystem();
     const regenerateShields = createShieldRegenerationSystem();
 
+    const runActionExecutors = createRunExecutors();
+    const actionScheduler = createActionSchedulerSystem();
+    const updateActions = (delta: number) => {
+        runActionExecutors(delta); // each kind system: if top is mine, run it & mutate its status
+        actionScheduler();         // pop Finished top, delete its entity → next top surfaces
+    };
+
     GameDI.gameTick = (delta: number) => {
         if (GameDI.world === null) return;
 
         physicalFrame(delta);
+
+        updateActions(delta);
 
         GameDI.plugins.systems[SystemGroup.Before].forEach(system => system(delta));
 
@@ -179,6 +203,9 @@ export function createGame({ width, height }: {
 
         GameSession.reset();
         GameMap.reset();
+        MapDI.grid = null!;
+        ActionScheduleDI.nextSeq = 1;
+        ActionScheduleDI.world = null!;
 
         GameDI.width = null!;
         GameDI.height = null!;
@@ -246,6 +273,7 @@ export function createGame({ width, height }: {
             shadowMapTexture: textures.shadowMapTexture,
         });
         const drawFauna = createDrawFaunaSystem();
+        const drawGrid = createDrawGridSystem();
         const drawSandstorm = createSandstormSystem();
         const drawVFX = createDrawVFXSystem();
 
@@ -259,6 +287,7 @@ export function createGame({ width, height }: {
             },
             ({ passEncoder, delta }) => {
                 drawFauna(passEncoder, delta);
+                drawGrid(passEncoder);
                 shapeSystem.drawShapes(passEncoder);
                 drawVFX(passEncoder);
                 drawSandstorm(passEncoder, delta);
@@ -295,43 +324,47 @@ export function createGame({ width, height }: {
     return GameDI;
 
 function spawnDemoTanks() {
+    const grid = MapDI.grid;
     const palette: Array<[number, number, number, number]> = [
         [1.0, 0.4, 0.4, 1],
         [0.4, 0.7, 1.0, 1],
         [0.6, 1.0, 0.5, 1],
         [1.0, 0.9, 0.4, 1],
     ];
-    const cx = width / 2;
-    const cy = height / 2;
-    const radius = 300;
-    const layout = [
-        { x: cx + radius, y: cy,          rotation:  Math.PI * 0.5,  rot:  0.35 },
-        { x: cx - radius, y: cy,          rotation: -Math.PI * 0.5,  rot:  0.35 },
-        { x: cx,          y: cy + radius, rotation:  Math.PI,        rot: -0.35 },
-        { x: cx,          y: cy - radius, rotation:  0,              rot: -0.35 },
-    ];
+
+    // Pick distinct random cells to place the tanks on.
+    const allCells: Array<{ q: number; r: number }> = [];
+    grid.forEachCell((cell) => allCells.push({ q: cell.q, r: cell.r }));
+    for (let i = allCells.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [allCells[i], allCells[j]] = [allCells[j], allCells[i]];
+    }
+    const slots = allCells.slice(0, palette.length);
 
     let firstTankEid: EntityId | null = null;
+    const placed: Array<{ eid: EntityId; q: number; r: number }> = [];
 
-    for (let i = 0; i < layout.length; i++) {
-        const slot = layout[i];
+    for (let i = 0; i < slots.length; i++) {
+        const { q, r } = slots[i];
+        const pos = grid.hexToWorld({ q, r });
+        if (!pos) continue;
+
         const tankEid = createTank({
             type: VehicleType.MediumTank,
             playerId: i + 1,
             teamId: (i % 2) + 1,
-            x: slot.x,
-            y: slot.y,
-            rotation: slot.rotation,
+            x: pos.x,
+            y: pos.y,
+            rotation: Math.random() * Math.PI * 2,
             color: new Float32Array(palette[i % palette.length]),
         });
 
-        VehicleController.setMove$(tankEid, 1);
-        VehicleController.setRotate$(tankEid, slot.rot);
+        VehicleController.setMove$(tankEid, 0);
+        VehicleController.setRotate$(tankEid, 0);
 
-        const turretEid = Tank.turretEId[tankEid];
-        if (turretEid) {
-            TurretController.setShooting$(turretEid, 1);
-        }
+        // Mark the cell as occupied by this tank (game world entity).
+        grid.occupy(q, r, tankEid);
+        placed.push({ eid: tankEid, q, r });
 
         if (firstTankEid === null) {
             firstTankEid = tankEid;
@@ -340,6 +373,64 @@ function spawnDemoTanks() {
 
     if (firstTankEid !== null) {
         setCameraTarget(firstTankEid);
+    }
+
+    // Demo: enqueue MoveToHex actions onto the single global FIFO stack. Only the
+    // top action runs at a time, so tanks move one after another (chess-like).
+    // For each tank, chain a couple of hops to random reachable empty cells.
+    for (let t = 0; t < placed.length; t++) {
+        const tank = placed[t];
+        let fromQ = tank.q;
+        let fromR = tank.r;
+
+        for (let hop = 0; hop < 2; hop++) {
+            const target = pickReachableCell(fromQ, fromR);
+            if (!target) break;
+
+            enqueueAction(tank.eid, {
+                kind: ActionKind.MoveToHex,
+                target: { kind: TargetKind.Hex, q: target.q, r: target.r },
+                params: { speed: 1 },
+            });
+
+            fromQ = target.q;
+            fromR = target.r;
+        }
+
+        // After moving, aim the turret at the next tank (circular) and fire a
+        // couple of rounds — demonstrates the TurretAim + Fire actions on the
+        // same global FIFO stack.
+        const targetTank = placed[(t + 1) % placed.length];
+        if (targetTank.eid !== tank.eid) {
+            enqueueAction(tank.eid, {
+                kind: ActionKind.TurretAim,
+                target: { kind: TargetKind.Entity, eid: targetTank.eid },
+                params: { tolerance: 0.05 },
+            });
+            enqueueAction(tank.eid, {
+                kind: ActionKind.Fire,
+                params: { shots: 2 },
+            });
+        }
+    }
+
+    // Pick a random walkable + empty cell reachable from (q, r) via A*.
+    function pickReachableCell(fromQ: number, fromR: number): { q: number; r: number } | null {
+        const candidates: Array<{ q: number; r: number }> = [];
+        grid.forEachCell((cell) => {
+            if (cell.q === fromQ && cell.r === fromR) return;
+            if (!grid.isPassable(cell.q, cell.r)) return;
+            candidates.push({ q: cell.q, r: cell.r });
+        });
+        for (let i = candidates.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+        }
+        for (const c of candidates) {
+            const path = findPath(grid, { q: fromQ, r: fromR }, { q: c.q, r: c.r });
+            if (path && path.length > 1) return c;
+        }
+        return null;
     }
 }
 }
