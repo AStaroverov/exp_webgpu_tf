@@ -1,11 +1,11 @@
-import { getRenderWorldComponents, RenderGameWorld } from '../createRenderWorld.ts';
+import { getFxWorldComponents } from '../createFxWorld.ts';
 import { createRectangle } from '../../../../../renderer/src/ECS/Entities/Shapes.ts';
 import {
-    LocalTransform,
     applyMatrixRotateZ,
 } from '../../../../../renderer/src/ECS/Components/Transform.ts';
 import { ZIndex } from '../../consts.ts';
 import { RenderDI } from '../../DI/RenderDI.ts';
+import { Worlds } from '../../DI/Worlds.ts';
 
 export const TREAD_MARK_DURATION = 10_000;
 
@@ -19,11 +19,11 @@ export interface TreadMarkOptions {
     rotation?: number;
 }
 
-export function spawnTreadMark(world: RenderGameWorld, options: TreadMarkOptions, { enabled } = RenderDI) {
+export function spawnTreadMark(options: TreadMarkOptions, { fxWorld } = Worlds, { enabled } = RenderDI) {
     if (!enabled) return;
-    const { TreadMark, ProgressFx, DestroyByTimeoutFx } = getRenderWorldComponents(world);
+    const { LocalTransform, TreadMark, ProgressFx, DestroyByTimeoutFx } = getFxWorldComponents(fxWorld);
 
-    const eid = createRectangle(world, {
+    const eid = createRectangle(fxWorld, {
         x: options.x,
         y: options.y,
         z: ZIndex.TreadMark,
@@ -36,7 +36,7 @@ export function spawnTreadMark(world: RenderGameWorld, options: TreadMarkOptions
         applyMatrixRotateZ(LocalTransform.matrix.getBatch(eid), options.rotation);
     }
 
-    TreadMark.addComponent(world, eid);
-    ProgressFx.addComponent(world, eid, TREAD_MARK_DURATION);
-    DestroyByTimeoutFx.addComponent(world, eid, TREAD_MARK_DURATION);
+    TreadMark.addComponent(fxWorld, eid);
+    ProgressFx.addComponent(fxWorld, eid, TREAD_MARK_DURATION);
+    DestroyByTimeoutFx.addComponent(fxWorld, eid, TREAD_MARK_DURATION);
 }

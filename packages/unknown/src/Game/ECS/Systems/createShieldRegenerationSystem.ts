@@ -4,30 +4,28 @@ import { VehicleType } from '../Components/Vehicle.ts';
 import { SlotPartType } from '../Components/SlotConfig.ts';
 import { fillSlot } from '../Entities/Vehicle/VehicleParts.ts';
 import { mutatedVehicleOptions, resetOptions } from '../Entities/Vehicle/Options.ts';
-import { isSlot, isSlotEmpty } from '../Utils/SlotUtils.ts';
+import { isSlotEmpty } from '../Utils/SlotUtils.ts';
 import { ShieldConfig } from '../../Config/index.ts';
 import { getPhysicsWorldComponents } from '../createPhysicsWorld.ts';
-import { getRenderWorldComponents, RenderGameWorld } from '../createRenderWorld.ts';
-import { BridgeDI } from '../../DI/BridgeDI.ts';
+import { getBrainWorldComponents } from '../createBrainWorld.ts';
+import { getSlotWorldComponents, SlotWorld } from '../createSlotWorld.ts';
+import { getNodeParent, getNodePhysics, getNodeSlots } from '../refs.ts';
 
 const SHIELD_REGEN_INTERVAL = ShieldConfig.regenInterval;
 
-export function createShieldRegenerationSystem({ physicsWorld, renderWorld, physicalWorld } = Worlds) {
-    const { Vehicle, VehicleTurret, RigidBodyState, PlayerRef, TeamRef } = getPhysicsWorldComponents(physicsWorld);
+export function createShieldRegenerationSystem({ physicsWorld, slotWorld, brainWorld } = Worlds) {
+    const { RigidBodyState } = getPhysicsWorldComponents(physicsWorld);
+    const { Vehicle, TurretController, PlayerRef, TeamRef } = getBrainWorldComponents(brainWorld);
     const regenTimers = new Map<number, number>();
 
-    function findFirstEmptyShieldSlot(renderWorld: RenderGameWorld, parentRenderEid: number): number | null {
-        const { Slot, Children } = getRenderWorldComponents(renderWorld);
-        const childCount = Children.entitiesCount[parentRenderEid];
+    function findFirstEmptyShieldSlot(slotWorld: SlotWorld, turretNode: number): number | null {
+        const { Slot } = getSlotWorldComponents(slotWorld);
 
-        for (let i = 0; i < childCount; i++) {
-            const childEid = Children.entitiesIds.get(parentRenderEid, i);
+        for (const slotEid of getNodeSlots(turretNode)) {
+            if (Slot.partType[slotEid] !== SlotPartType.Shield) continue;
+            if (!isSlotEmpty(slotWorld, slotEid)) continue;
 
-            if (!isSlot(renderWorld, childEid)) continue;
-            if (Slot.partType[childEid] !== SlotPartType.Shield) continue;
-            if (!isSlotEmpty(renderWorld, childEid)) continue;
-
-            return childEid;
+            return slotEid;
         }
 
         return null;
@@ -36,38 +34,40 @@ export function createShieldRegenerationSystem({ physicsWorld, renderWorld, phys
     return (_delta: number) => {
         const currentTime = performance.now();
 
-        const turretEids = query(physicsWorld, [VehicleTurret]);
+        // Node-rooted: iterate turret NODES (TurretController) — same set as the old
+        // query([VehicleTurret]), since every turret carries a TurretController brain.
+        const turretNodes = query(brainWorld, [TurretController]);
 
-        for (let i = 0; i < turretEids.length; i++) {
-            const turretEid = turretEids[i];
-            // turret phys -> turret render -> vehicle render -> vehicle phys
-            const turretRenderEid = BridgeDI.getRenderOf(turretEid);
-            const { Parent } = getRenderWorldComponents(renderWorld);
-            const vehicleEid = BridgeDI.getPhysicsOf(Parent.id[turretRenderEid]);
+        for (let i = 0; i < turretNodes.length; i++) {
+            const turretNode = turretNodes[i];
+            // turret node -> Brain parent (hull node = hull-brain) -> hull physics (vehicle atom).
+            const hullBrain = getNodeParent(turretNode);
+            const vehicleEid = getNodePhysics(hullBrain);
 
-            if (Vehicle.type[vehicleEid] !== VehicleType.Harvester) continue;
+            if (Vehicle.type[hullBrain] !== VehicleType.Harvester) continue;
 
-            const lastRegenTime = regenTimers.get(turretEid) ?? 0;
+            const lastRegenTime = regenTimers.get(turretNode) ?? 0;
             if (currentTime - lastRegenTime < SHIELD_REGEN_INTERVAL) continue;
 
-            const emptyShieldSlotEid = findFirstEmptyShieldSlot(renderWorld, turretRenderEid);
+            const emptyShieldSlotEid = findFirstEmptyShieldSlot(slotWorld, turretNode);
             if (emptyShieldSlotEid === null) continue;
 
             const options = resetOptions(mutatedVehicleOptions);
-            options.playerId = PlayerRef.id[vehicleEid];
-            options.teamId = TeamRef.id[vehicleEid];
+            options.playerId = PlayerRef.id[hullBrain];
+            options.teamId = TeamRef.id[hullBrain];
             options.x = RigidBodyState.position.get(vehicleEid, 0);
             options.y = RigidBodyState.position.get(vehicleEid, 1);
             options.rotation = RigidBodyState.rotation[vehicleEid];
 
-            fillSlot(renderWorld, physicalWorld, emptyShieldSlotEid, options);
+            // The shield slot is owned by the turret node (its carrier).
+            fillSlot(emptyShieldSlotEid, turretNode, options);
 
-            regenTimers.set(turretEid, currentTime);
+            regenTimers.set(turretNode, currentTime);
         }
 
-        for (const turretEid of regenTimers.keys()) {
-            if (!turretEids.includes(turretEid)) {
-                regenTimers.delete(turretEid);
+        for (const turretNode of regenTimers.keys()) {
+            if (!turretNodes.includes(turretNode)) {
+                regenTimers.delete(turretNode);
             }
         }
     };

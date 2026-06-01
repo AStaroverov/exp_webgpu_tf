@@ -1,5 +1,3 @@
-import { PhysicsWorld } from '../../createPhysicsWorld.ts';
-import { PhysicalWorld } from '../../../Physical/initPhysicalWorld.ts';
 import { PI } from '../../../../../../../lib/math.ts';
 import { WheelPosition } from '../../Components/Wheel.ts';
 import { createWheel, WheelOptions } from '../Wheel/createWheel.ts';
@@ -17,11 +15,11 @@ export type MeleeCarWheelsConfig = {
     steeringSpeed?: number;
 };
 
-export function createMeleeCarBase(world: PhysicsWorld, physicalWorld: PhysicalWorld, options: MeleeCarOptions): [number, number, number] {
+export function createMeleeCarBase(options: MeleeCarOptions): [number, number, number] {
     // MeleeCar doesn't have caterpillars or turret - just a simple ramming vehicle
     // No Tank component needed since there's no turret
     // Wheels are added as children via createMeleeCarWheels
-    return createVehicleBase(world, physicalWorld, options);
+    return createVehicleBase(options);
 }
 
 /**
@@ -29,8 +27,6 @@ export function createMeleeCarBase(world: PhysicsWorld, physicalWorld: PhysicalW
  * Front wheels are steerable, rear wheels are drive wheels.
  */
 export function createMeleeCarWheels(
-    world: PhysicsWorld,
-    physicalWorld: PhysicalWorld,
     options: MeleeCarOptions,
     wheelsConfig: MeleeCarWheelsConfig,
     carRenderEid: number,
@@ -58,7 +54,7 @@ export function createMeleeCarWheels(
     wheelOptions.isDrive = true;
     wheelOptions.x = options.x + wheelsConfig.frontLeft.x;
     wheelOptions.y = options.y + wheelsConfig.frontLeft.y;
-    const [, frontLeftRenderEid] = createWheel(world, physicalWorld, wheelOptions, carRenderEid, carPid);
+    const [, frontLeftRenderEid] = createWheel(wheelOptions, carRenderEid, carPid);
 
     // Front Right wheel - steerable
     wheelOptions.wheelPosition = WheelPosition.FrontRight;
@@ -68,7 +64,7 @@ export function createMeleeCarWheels(
     wheelOptions.isDrive = true;
     wheelOptions.x = options.x + wheelsConfig.frontRight.x;
     wheelOptions.y = options.y + wheelsConfig.frontRight.y;
-    const [, frontRightRenderEid] = createWheel(world, physicalWorld, wheelOptions, carRenderEid, carPid);
+    const [, frontRightRenderEid] = createWheel(wheelOptions, carRenderEid, carPid);
 
     // Rear Left wheel - drive wheel
     wheelOptions.wheelPosition = WheelPosition.RearLeft;
@@ -78,7 +74,7 @@ export function createMeleeCarWheels(
     wheelOptions.isDrive = true;
     wheelOptions.x = options.x + wheelsConfig.rearLeft.x;
     wheelOptions.y = options.y + wheelsConfig.rearLeft.y;
-    const [, rearLeftRenderEid] = createWheel(world, physicalWorld, wheelOptions, carRenderEid, carPid);
+    const [, rearLeftRenderEid] = createWheel(wheelOptions, carRenderEid, carPid);
 
     // Rear Right wheel - drive wheel
     wheelOptions.wheelPosition = WheelPosition.RearRight;
@@ -88,7 +84,7 @@ export function createMeleeCarWheels(
     wheelOptions.isDrive = true;
     wheelOptions.x = options.x + wheelsConfig.rearRight.x;
     wheelOptions.y = options.y + wheelsConfig.rearRight.y;
-    const [, rearRightRenderEid] = createWheel(world, physicalWorld, wheelOptions, carRenderEid, carPid);
+    const [, rearRightRenderEid] = createWheel(wheelOptions, carRenderEid, carPid);
 
     return [frontLeftRenderEid, frontRightRenderEid, rearLeftRenderEid, rearRightRenderEid];
 }

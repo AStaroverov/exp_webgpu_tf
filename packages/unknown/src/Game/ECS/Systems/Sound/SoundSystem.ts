@@ -3,9 +3,11 @@ import { SoundType, SoundState } from '../../Components/Sound.ts';
 import { CameraState } from '../Camera/CameraSystem.ts';
 import { soundManager } from './SoundManager.ts';
 import { WebAudioTrack } from './WebAudioTrack.ts';
-import { GlobalTransform, getMatrixTranslationX, getMatrixTranslationY } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
+import { getMatrixTranslationX, getMatrixTranslationY } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
 import { hypot } from '../../../../../../../lib/math.ts';
-import { getRenderWorldComponents, RenderGameWorld } from '../../createRenderWorld.ts';
+import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
+import { getSoundWorldComponents, SoundWorld } from '../../createSoundWorld.ts';
+import { clearSoundOwner, getSoundOwnerOf } from '../../refs.ts';
 import { Worlds } from '../../../DI/Worlds.ts';
 
 const SOUND_IDS: Record<SoundType, string> = {
@@ -64,18 +66,19 @@ export async function loadGameSounds(): Promise<void> {
     ]);
 }
 
-function getEntityPosition(world: RenderGameWorld, eid: EntityId): { x: number; y: number } {
-    const { Parent } = getRenderWorldComponents(world);
-    if (hasComponent(world, eid, Parent) && hasComponent(world, Parent.id[eid], GlobalTransform)) {
-        const matrix = GlobalTransform.matrix.getBatch(Parent.id[eid]);
-        return {
-            x: getMatrixTranslationX(matrix),
-            y: getMatrixTranslationY(matrix),
-        };
+function getEntityPosition(world: SoundWorld, eid: EntityId): { x: number; y: number } {
+    // Owner-linked sound: position from the owning physics atom's RigidBodyState.
+    const ownerAtomEid = getSoundOwnerOf(eid);
+    if (ownerAtomEid !== 0) {
+        const { RigidBodyState } = getPhysicsWorldComponents(Worlds.physicsWorld);
+        const pos = RigidBodyState.position.getBatch(ownerAtomEid);
+        return { x: pos[0], y: pos[1] };
     }
 
-    if (hasComponent(world, eid, GlobalTransform)) {
-        const matrix = GlobalTransform.matrix.getBatch(eid);
+    // Fixed-position sound: position from SoundWorld's own (flat, no-parent) transform.
+    const { LocalTransform } = getSoundWorldComponents(world);
+    if (hasComponent(world, eid, LocalTransform)) {
+        const matrix = LocalTransform.matrix.getBatch(eid);
         return {
             x: getMatrixTranslationX(matrix),
             y: getMatrixTranslationY(matrix),
@@ -85,7 +88,7 @@ function getEntityPosition(world: RenderGameWorld, eid: EntityId): { x: number; 
     return { x: 0, y: 0 };
 }
 
-function getDistanceToCamera(world: RenderGameWorld, eid: EntityId): number {
+function getDistanceToCamera(world: SoundWorld, eid: EntityId): number {
     const pos = getEntityPosition(world, eid);
     const dx = pos.x - CameraState.x;
     const dy = pos.y - CameraState.y;
@@ -100,8 +103,8 @@ function calculateDistanceVolume(distance: number, baseVolume: number): number {
     return baseVolume * (1 - normalized ** 3);
 }
 
-export function createSoundSystem({ renderWorld: world } = Worlds) {
-    const { Sound } = getRenderWorldComponents(world);
+export function createSoundSystem({ soundWorld: world } = Worlds) {
+    const { Sound } = getSoundWorldComponents(world);
 
     const soundsByType: Map<SoundType, Set<EntityId>> = new Map();
     for (const type of Object.values(SoundType)) {
@@ -210,15 +213,13 @@ export function createSoundSystem({ renderWorld: world } = Worlds) {
     };
 }
 
-function handleStoppedSounds(world: RenderGameWorld, eid: EntityId): void {
-    const { DestroyOnSoundFinish, Parent, Children } = getRenderWorldComponents(world);
+function handleStoppedSounds(world: SoundWorld, eid: EntityId): void {
+    const { DestroyOnSoundFinish } = getSoundWorldComponents(world);
     if (!hasComponent(world, eid, DestroyOnSoundFinish)) return;
 
-    // Sound entities are render-only (no Rapier atom): reap directly from RenderWorld,
-    // disconnecting the parent->child edge if present.
-    if (hasComponent(world, eid, Parent) && hasComponent(world, Parent.id[eid], Children)) {
-        Children.removeChild(Parent.id[eid], eid);
-    }
+    // Sound entities live in SoundWorld (no Rapier atom, no render Parent): unlink the
+    // owner edge (if any) and reap directly from SoundWorld.
+    clearSoundOwner(eid);
     removeEntity(world, eid);
 }
 

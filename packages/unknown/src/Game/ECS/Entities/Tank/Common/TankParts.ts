@@ -1,7 +1,6 @@
 // Re-export from Vehicle for backward compatibility
 export {
     createRectangleSet,
-    updateSlotsBrightness,
     createSlotEntities,
     fillAllSlots,
     fillSlot,

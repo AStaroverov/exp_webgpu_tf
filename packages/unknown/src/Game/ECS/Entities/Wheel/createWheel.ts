@@ -1,9 +1,10 @@
 import { JointData, Vector2 } from '@dimforge/rapier2d-simd';
-import { PhysicalWorld } from '../../../Physical/initPhysicalWorld.ts';
+import { addEntity } from 'bitecs';
 import { CollisionGroup } from '../../../Physical/createRigid.ts';
-import { spawnRectangleCarrier, SpawnCtx } from '../spawnPart.ts';
-import { getPhysicsWorldComponents, PhysicsWorld } from '../../createPhysicsWorld.ts';
-import { getRenderWorldComponents } from '../../createRenderWorld.ts';
+import { spawnRectangleCarrier } from '../spawnPart.ts';
+import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
+import { getHullBrainByRender } from '../Vehicle/VehicleBase.ts';
+import { setNodeRender, linkBrainChild } from '../../refs.ts';
 import { Worlds } from '../../../DI/Worlds.ts';
 import { WheelPosition } from '../../Components/Wheel.ts';
 import { VehicleOptions } from '../Vehicle/Options.ts';
@@ -24,25 +25,30 @@ const jointChildAnchor = new Vector2(0, 0);
 
 // Returns [wheelPhysEid, wheelRenderEid, wheelPid]
 export function createWheel(
-    world: PhysicsWorld,
-    physicalWorld: PhysicalWorld,
     options: WheelOptions,
     vehicleRenderEid: number,
     vehiclePid: number,
+    { physicsWorld, physicalWorld, brainWorld } = Worlds,
 ): [number, number, number] {
-    const { Wheel, WheelSteerable, WheelDrive, Joint, JointMotor } = getPhysicsWorldComponents(world);
-    const renderWorld = Worlds.renderWorld;
-    const { Parent, Children } = getRenderWorldComponents(renderWorld);
+    const { Wheel, WheelSteerable, WheelDrive, Joint, JointMotor } = getPhysicsWorldComponents(physicsWorld);
 
     options.belongsCollisionGroup = CollisionGroup.NONE;
     options.interactsCollisionGroup = CollisionGroup.NONE;
     options.belongsSolverGroup = CollisionGroup.NONE;
     options.interactsSolverGroup = CollisionGroup.NONE;
 
-    const ctx: SpawnCtx = { physicsWorld: world, renderWorld, physicalWorld };
-    const [wheelPhysEid, wheelRenderEid, wheelPid] = spawnRectangleCarrier(ctx, options);
+    // Brain-first: the wheel node before its physics/render presentation.
+    const wheelNode = addEntity(brainWorld);
 
-    Wheel.addComponent(world, wheelPhysEid);
+    const [wheelPhysEid, wheelRenderEid, wheelPid] = spawnRectangleCarrier(options);
+
+    Wheel.addComponent(physicsWorld, wheelPhysEid);
+
+    // Node->render presentation + Brain hierarchy: wheel node is a child of the hull
+    // node; it reaches its wheel atom downward via getNodePhysics(wheelNode).
+    const hullBrain = getHullBrainByRender(vehicleRenderEid);
+    setNodeRender(wheelNode, wheelRenderEid);
+    linkBrainChild(hullBrain, wheelNode);
 
     jointParentAnchor.x = options.anchorX;
     jointParentAnchor.y = options.anchorY;
@@ -60,25 +66,24 @@ export function createWheel(
         wheelBody,
         false,
     );
-    Joint.addComponent(world, wheelPhysEid, joint.handle);
+    Joint.addComponent(physicsWorld, wheelPhysEid, joint.handle);
 
     if (options.isSteerable) {
         WheelSteerable.addComponent(
-            world,
+            physicsWorld,
             wheelPhysEid,
             options.maxSteeringAngle ?? PI / 6,
             options.steeringSpeed ?? PI * 2,
         );
-        JointMotor.addComponent(world, wheelPhysEid);
+        JointMotor.addComponent(physicsWorld, wheelPhysEid);
     }
 
     if (options.isDrive) {
-        WheelDrive.addComponent(world, wheelPhysEid);
+        WheelDrive.addComponent(physicsWorld, wheelPhysEid);
     }
 
-    Parent.addComponent(renderWorld, wheelRenderEid, vehicleRenderEid);
-    Children.addComponent(renderWorld, wheelRenderEid);
-    Children.addChildren(vehicleRenderEid, wheelRenderEid);
+    // No render parent/children: the wheel carrier is physics-driven (own world
+    // transform from mirrorSync) → render ROOT, not a child (parenting double-composes).
 
     return [wheelPhysEid, wheelRenderEid, wheelPid];
 }

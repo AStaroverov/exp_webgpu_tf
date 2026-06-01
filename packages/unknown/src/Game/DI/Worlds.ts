@@ -1,5 +1,9 @@
 import { PhysicsWorld } from '../ECS/createPhysicsWorld.ts';
 import { RenderGameWorld } from '../ECS/createRenderWorld.ts';
+import { SlotWorld } from '../ECS/createSlotWorld.ts';
+import { BrainWorld } from '../ECS/createBrainWorld.ts';
+import { FxWorld } from '../ECS/createFxWorld.ts';
+import { SoundWorld } from '../ECS/createSoundWorld.ts';
 import { ActionWorld } from '../ECS/Actions/createActionWorld.ts';
 import { PhysicalWorld } from '../Physical/initPhysicalWorld.ts';
 
@@ -12,13 +16,21 @@ import { PhysicalWorld } from '../Physical/initPhysicalWorld.ts';
  * branded types keep the wrong world from being passed in.
  */
 export const Worlds: {
+    physicalWorld: PhysicalWorld;
     physicsWorld: PhysicsWorld;
     renderWorld: RenderGameWorld;
-    physicalWorld: PhysicalWorld;
+    slotWorld: SlotWorld;
+    brainWorld: BrainWorld;
+    fxWorld: FxWorld;
+    soundWorld: SoundWorld;
     actionWorld: ActionWorld;
 } = {
+    physicalWorld: null!,
     physicsWorld: null!,
     renderWorld: null!,
-    physicalWorld: null!,
+    slotWorld: null!,
+    brainWorld: null!,
+    fxWorld: null!,
+    soundWorld: null!,
     actionWorld: null!,
 };

@@ -10,7 +10,8 @@ import { random } from '../../../../../../../lib/random.ts';
 import { hypot } from '../../../../../../../lib/math.ts';
 import { getRenderWorldComponents } from '../../createRenderWorld.ts';
 import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
-import { BridgeDI } from '../../../DI/BridgeDI.ts';
+import { getBrainWorldComponents } from '../../createBrainWorld.ts';
+import { getNodeByPhysics, getPhysicsOf } from '../../refs.ts';
 import { Worlds } from '../../../DI/Worlds.ts';
 
 const ACCELERATION_EMISSION_MULTI = 5;
@@ -27,19 +28,22 @@ const exhaustSmokeOptions: ExhaustSmokeOptions = {
     size: 0,
 };
 
-export function createExhaustSmokeSpawnSystem({ physicsWorld, renderWorld } = Worlds) {
+export function createExhaustSmokeSpawnSystem({ physicsWorld, renderWorld, brainWorld } = Worlds) {
     const { ExhaustPipe, Parent } = getRenderWorldComponents(renderWorld);
-    const { Vehicle, RigidBodyState } = getPhysicsWorldComponents(physicsWorld);
+    const { RigidBodyState } = getPhysicsWorldComponents(physicsWorld);
+    const { Vehicle } = getBrainWorldComponents(brainWorld);
 
     return (delta: number) => {
         const pipeEids = query(renderWorld, [ExhaustPipe]);
         const deltaSeconds = delta / 1000;
 
         for (const pipeEid of pipeEids) {
+            // The pipe is a render-only child of the vehicle render; its render Parent IS
+            // the vehicle render. Resolve the vehicle's physics + brain node downward.
             const vehicleRenderEid = Parent.id[pipeEid];
-            const vehiclePhysEid = BridgeDI.getPhysicsOf(vehicleRenderEid);
+            const vehiclePhysEid = getPhysicsOf(vehicleRenderEid);
 
-            if (!hasComponent(physicsWorld, vehiclePhysEid, Vehicle)) continue;
+            if (!hasComponent(brainWorld, getNodeByPhysics(vehiclePhysEid), Vehicle)) continue;
 
             const vehicleMatrix = GlobalTransform.matrix.getBatch(vehicleRenderEid);
             const vehicleX = getMatrixTranslationX(vehicleMatrix);
@@ -84,7 +88,7 @@ export function createExhaustSmokeSpawnSystem({ physicsWorld, renderWorld } = Wo
                 exhaustSmokeOptions.size = size;
                 exhaustSmokeOptions.velocityX = velocityX;
                 exhaustSmokeOptions.velocityY = velocityY;
-                spawnExhaustSmoke(renderWorld, exhaustSmokeOptions);
+                spawnExhaustSmoke(exhaustSmokeOptions);
             }
         }
     };

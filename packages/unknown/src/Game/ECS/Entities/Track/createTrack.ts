@@ -1,11 +1,12 @@
 import { JointData, Vector2 } from '@dimforge/rapier2d-simd';
-import { PhysicalWorld } from '../../../Physical/initPhysicalWorld.ts';
+import { addEntity } from 'bitecs';
 import { CollisionGroup } from '../../../Physical/createRigid.ts';
 import { TrackSide } from '../../Components/Track.ts';
 import { VehicleOptions } from '../Vehicle/Options.ts';
-import { spawnRectangleCarrier, SpawnCtx } from '../spawnPart.ts';
-import { getPhysicsWorldComponents, PhysicsWorld } from '../../createPhysicsWorld.ts';
-import { getRenderWorldComponents } from '../../createRenderWorld.ts';
+import { spawnRectangleCarrier } from '../spawnPart.ts';
+import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
+import { getHullBrainByRender } from '../Vehicle/VehicleBase.ts';
+import { setNodeRender, linkBrainChild } from '../../refs.ts';
 import { Worlds } from '../../../DI/Worlds.ts';
 
 export type TrackOptions = VehicleOptions & {
@@ -20,25 +21,30 @@ const jointChildAnchor = new Vector2(0, 0);
 
 // Returns [trackPhysEid, trackRenderEid, trackPid]
 export function createTrack(
-    world: PhysicsWorld,
-    physicalWorld: PhysicalWorld,
     options: TrackOptions,
     vehicleRenderEid: number,
     vehiclePid: number,
+    { physicsWorld, physicalWorld, brainWorld } = Worlds,
 ): [number, number, number] {
-    const { Track, Joint } = getPhysicsWorldComponents(world);
-    const renderWorld = Worlds.renderWorld;
-    const { Parent, Children } = getRenderWorldComponents(renderWorld);
+    const { Track, Joint } = getPhysicsWorldComponents(physicsWorld);
 
     options.belongsCollisionGroup = CollisionGroup.NONE;
     options.interactsCollisionGroup = CollisionGroup.NONE;
     options.belongsSolverGroup = CollisionGroup.NONE;
     options.interactsSolverGroup = CollisionGroup.NONE;
 
-    const ctx: SpawnCtx = { physicsWorld: world, renderWorld, physicalWorld };
-    const [trackPhysEid, trackRenderEid, trackPid] = spawnRectangleCarrier(ctx, options);
+    // Brain-first: the track node before its physics/render presentation.
+    const trackNode = addEntity(brainWorld);
 
-    Track.addComponent(world, trackPhysEid, options.trackSide, options.trackLength);
+    const [trackPhysEid, trackRenderEid, trackPid] = spawnRectangleCarrier(options);
+
+    Track.addComponent(physicsWorld, trackPhysEid, options.trackSide, options.trackLength);
+
+    // Node->render presentation + Brain hierarchy: track node is a child of the hull
+    // node; it reaches its track atom downward via getNodePhysics(trackNode).
+    const hullBrain = getHullBrainByRender(vehicleRenderEid);
+    setNodeRender(trackNode, trackRenderEid);
+    linkBrainChild(hullBrain, trackNode);
 
     jointParentAnchor.x = options.anchorX;
     jointParentAnchor.y = options.anchorY;
@@ -54,11 +60,10 @@ export function createTrack(
         trackBody,
         false,
     );
-    Joint.addComponent(world, trackPhysEid, joint.handle);
+    Joint.addComponent(physicsWorld, trackPhysEid, joint.handle);
 
-    Parent.addComponent(renderWorld, trackRenderEid, vehicleRenderEid);
-    Children.addComponent(renderWorld, trackRenderEid);
-    Children.addChildren(vehicleRenderEid, trackRenderEid);
+    // No render parent/children: the track carrier is physics-driven (own world
+    // transform from mirrorSync) → render ROOT, not a child (parenting double-composes).
 
     return [trackPhysEid, trackRenderEid, trackPid];
 }

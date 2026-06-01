@@ -1,20 +1,20 @@
 import { Worlds } from '../../../DI/Worlds.ts';
-import { hasComponent, query } from 'bitecs';
+import { query } from 'bitecs';
 import { destroyTank, getTankHealth } from '../../Entities/Tank/TankUtils.ts';
-import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
-import { getRenderWorldComponents } from '../../createRenderWorld.ts';
-import { BridgeDI } from '../../../DI/BridgeDI.ts';
+import { getBrainWorldComponents } from '../../createBrainWorld.ts';
+import { getNodeChildren, getNodePhysics } from '../../refs.ts';
 
-export function createTankAliveSystem({ physicsWorld, renderWorld } = Worlds) {
-    const { Vehicle } = getPhysicsWorldComponents(physicsWorld);
+export function createTankAliveSystem({ brainWorld } = Worlds) {
+    const { Vehicle } = getBrainWorldComponents(brainWorld);
 
     return () => {
-        const { Children } = getRenderWorldComponents(renderWorld);
-        const vehicleEids = query(physicsWorld, [Vehicle]);
+        const brainEids = query(brainWorld, [Vehicle]);
 
-        for (const vehicleEid of vehicleEids) {
-            const vehicleRenderEid = BridgeDI.getRenderOf(vehicleEid);
-            if (!hasComponent(renderWorld, vehicleRenderEid, Children)) continue;
+        for (const brainEid of brainEids) {
+            // brainEid IS the hull node; its presentation (downward) is the hull atom.
+            const vehicleEid = getNodePhysics(brainEid);
+            // skip until it has Brain children (fully built).
+            if (getNodeChildren(brainEid).length === 0) continue;
 
             const hp = getTankHealth(vehicleEid);
             hp === 0 && destroyTank(vehicleEid);

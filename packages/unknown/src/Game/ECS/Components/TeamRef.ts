@@ -1,7 +1,6 @@
-import { addComponent, query, World } from 'bitecs';
+import { addComponent, removeComponent, World } from 'bitecs';
 import { delegate } from '../../../../../renderer/src/delegate.ts';
 import { TypedArray } from '../../../../../renderer/src/utils.ts';
-import { getPhysicsWorldComponents, PhysicsWorld } from '../createPhysicsWorld.ts';
 import { defineComponent } from '../../../../../renderer/src/ECS/utils.ts';
 
 export const createTeamRefComponent = defineComponent((TeamRef) => {
@@ -12,12 +11,9 @@ export const createTeamRefComponent = defineComponent((TeamRef) => {
             addComponent(world, eid, TeamRef);
             id[eid] = team;
         },
+        removeComponent(world: World, eid: number) {
+            id[eid] = 0;
+            removeComponent(world, eid, TeamRef);
+        },
     };
 });
-
-export function getTeamsCount(world: PhysicsWorld) {
-    const { Tank, TeamRef } = getPhysicsWorldComponents(world);
-    const tanks = query(world, [Tank]);
-    const teamsCount = new Set(tanks.map(tankId => TeamRef.id[tankId]));
-    return teamsCount.size;
-}

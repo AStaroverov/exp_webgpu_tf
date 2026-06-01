@@ -4,8 +4,8 @@ import { applyRotationToVector } from '../../../Physical/applyRotationToVector.t
 import { clamp } from 'lodash-es';
 import { EngineType } from '../../../Config/vehicles.ts';
 import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
-import { getRenderWorldComponents } from '../../createRenderWorld.ts';
-import { BridgeDI } from '../../../DI/BridgeDI.ts';
+import { getBrainWorldComponents } from '../../createBrainWorld.ts';
+import { getNodeChildren, getNodePhysics } from '../../refs.ts';
 import { Worlds } from '../../../DI/Worlds.ts';
 
 const WHEEL_IMPULSE_FACTOR = 4000000000;
@@ -19,11 +19,12 @@ const mapTypeToWheelImpulse = {
 
 const impulseVector = new Vector2(0, 0);
 
-export function createWheelControlSystem({ physicsWorld, renderWorld } = Worlds) {
+export function createWheelControlSystem({ physicsWorld, brainWorld } = Worlds) {
     const {
-        Vehicle, VehicleController, Wheel, WheelDrive, WheelSteerable,
+        Wheel, WheelDrive, WheelSteerable,
         JointMotor, Impulse, RigidBodyState,
     } = getPhysicsWorldComponents(physicsWorld);
+    const { Vehicle, VehicleController } = getBrainWorldComponents(brainWorld);
 
     function applyWheelDrive(
         wheelEid: number,
@@ -43,25 +44,22 @@ export function createWheelControlSystem({ physicsWorld, renderWorld } = Worlds)
     }
 
     return (delta: number) => {
-        const { Children } = getRenderWorldComponents(renderWorld);
-        const vehicleEids = query(physicsWorld, [Vehicle, VehicleController]);
+        const brainEids = query(brainWorld, [Vehicle, VehicleController]);
 
-        for (let i = 0; i < vehicleEids.length; i++) {
-            const vehicleEid = vehicleEids[i];
-            const vehicleRenderEid = BridgeDI.getRenderOf(vehicleEid);
-            if (!hasComponent(renderWorld, vehicleRenderEid, Children)) continue;
+        for (let i = 0; i < brainEids.length; i++) {
+            const brainEid = brainEids[i];
+            // brainEid IS the hull node; its Brain children are the turret/track/wheel nodes.
+            const childNodes = getNodeChildren(brainEid);
+            if (childNodes.length === 0) continue;
 
-            const accelerate = VehicleController.move[vehicleEid];
-            const steering = VehicleController.rotation[vehicleEid];
+            const accelerate = VehicleController.move[brainEid];
+            const steering = VehicleController.rotation[brainEid];
 
-            const engineType = Vehicle.engineType[vehicleEid] as EngineType;
+            const engineType = Vehicle.engineType[brainEid] as EngineType;
             const impulseFactor = mapTypeToWheelImpulse[engineType];
 
-            const childCount = Children.entitiesCount[vehicleRenderEid];
-
-            for (let c = 0; c < childCount; c++) {
-                const childRenderEid = Children.entitiesIds.get(vehicleRenderEid, c);
-                const childEid = BridgeDI.getPhysicsOf(childRenderEid);
+            for (let c = 0; c < childNodes.length; c++) {
+                const childEid = getNodePhysics(childNodes[c]);
                 if (childEid === 0) continue;
 
                 if (!hasComponent(physicsWorld, childEid, Wheel)) {

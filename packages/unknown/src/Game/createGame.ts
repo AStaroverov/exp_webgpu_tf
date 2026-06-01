@@ -7,10 +7,15 @@ import { initWebGPU } from '../../../renderer/src/gpu.ts';
 import { createFrameTextures, createFrameTick } from '../../../renderer/src/WGSL/createFrame.ts';
 import { GameDI } from './DI/GameDI.ts';
 import { Worlds } from './DI/Worlds.ts';
-import { BridgeDI } from './DI/BridgeDI.ts';
+import { getNodeByPhysics } from './ECS/refs.ts';
+import { physicsByBody } from './DI/physicsByBody.ts';
 import { RenderDI } from './DI/RenderDI.ts';
 import { getPhysicsWorldComponents, createPhysicsWorld } from './ECS/createPhysicsWorld.ts';
 import { getRenderWorldComponents, createRenderWorld } from './ECS/createRenderWorld.ts';
+import { createSlotWorld } from './ECS/createSlotWorld.ts';
+import { createBrainWorld, getBrainWorldComponents } from './ECS/createBrainWorld.ts';
+import { createFxWorld } from './ECS/createFxWorld.ts';
+import { createSoundWorld } from './ECS/createSoundWorld.ts';
 import { GameSession } from './ECS/Entities/GameSession.ts';
 import { GameMap } from './ECS/Entities/GameMap.ts';
 import { createTank } from './ECS/Entities/Tank/createTank.ts';
@@ -64,16 +69,24 @@ export function createGame({ width, height }: {
 }) {
     const physicsWorld = createPhysicsWorld();
     const renderWorld = createRenderWorld();
+    const slotWorld = createSlotWorld();
+    const brainWorld = createBrainWorld();
+    const fxWorld = createFxWorld();
+    const soundWorld = createSoundWorld();
     const physicalWorld = initPhysicalWorld();
-    BridgeDI.init(physicsWorld, renderWorld);
 
-    const { Hitable, VehicleController } = getPhysicsWorldComponents(physicsWorld);
+    const { Hitable } = getPhysicsWorldComponents(physicsWorld);
+    const { VehicleController } = getBrainWorldComponents(brainWorld);
     const { Children } = getRenderWorldComponents(renderWorld);
 
     GameDI.width = width;
     GameDI.height = height;
     Worlds.physicsWorld = physicsWorld;
     Worlds.renderWorld = renderWorld;
+    Worlds.slotWorld = slotWorld;
+    Worlds.brainWorld = brainWorld;
+    Worlds.fxWorld = fxWorld;
+    Worlds.soundWorld = soundWorld;
     Worlds.physicalWorld = physicalWorld;
 
     // Actions live in their own ECS world, separate from the game world.
@@ -112,8 +125,8 @@ export function createGame({ width, height }: {
             const handle2 = event.collider2();
             const rb1 = physicalWorld.getCollider(handle1).parent();
             const rb2 = physicalWorld.getCollider(handle2).parent();
-            const eid1 = rb1 ? BridgeDI.getPhysicsByPhysicalId(rb1.handle) : undefined;
-            const eid2 = rb2 ? BridgeDI.getPhysicsByPhysicalId(rb2.handle) : undefined;
+            const eid1 = rb1 ? physicsByBody.get(rb1.handle) : undefined;
+            const eid2 = rb2 ? physicsByBody.get(rb2.handle) : undefined;
 
             if (eid1 == null || eid2 == null) return;
 
@@ -196,14 +209,23 @@ export function createGame({ width, height }: {
         GameDI.plugins.dispose();
 
         physicalWorld.free();
-        BridgeDI.dispose();
+        physicsByBody.clear();
 
         resetWorld(physicsWorld);
         deleteWorld(physicsWorld);
         resetWorld(renderWorld);
         deleteWorld(renderWorld);
+        resetWorld(slotWorld);
+        deleteWorld(slotWorld);
+        resetWorld(brainWorld);
+        deleteWorld(brainWorld);
+        resetWorld(fxWorld);
+        deleteWorld(fxWorld);
+        resetWorld(soundWorld);
+        deleteWorld(soundWorld);
         destroyChangeDetectorSystem(physicsWorld); // JointMotor detector
         destroyChangeDetectorSystem(renderWorld);  // Shape/Color/Roundness detectors
+        destroyChangeDetectorSystem(fxWorld);      // fx Shape/Color/Roundness detectors
 
         GameSession.reset();
         GameMap.reset();
@@ -212,6 +234,10 @@ export function createGame({ width, height }: {
 
         Worlds.physicsWorld = null!;
         Worlds.renderWorld = null!;
+        Worlds.slotWorld = null!;
+        Worlds.brainWorld = null!;
+        Worlds.fxWorld = null!;
+        Worlds.soundWorld = null!;
         Worlds.physicalWorld = null!;
         Worlds.actionWorld = null!;
 
@@ -278,10 +304,20 @@ export function createGame({ width, height }: {
             device,
             shadowMapTexture: textures.shadowMapTexture,
         });
+        // Second SDF pass for FxWorld (tread marks are real SDF rectangles).
+        const fxShapeSystem = createDrawShapeSystem({
+            world: fxWorld,
+            device,
+            shadowMapTexture: textures.shadowMapTexture,
+        });
         const drawFauna = createDrawFaunaSystem();
         const drawGrid = createDrawGridSystem();
         const drawSandstorm = createSandstormSystem();
-        const drawVFX = createDrawVFXSystem(device, renderWorld);
+        const drawVFX = createDrawVFXSystem(device, fxWorld);
+
+        // fx have no Parent/Children → flat Local->Global compose. The empty
+        // Children stub keeps the hierarchy pass a no-op (no fx entity has it).
+        const execFxTransform = createTransformSystem(fxWorld, { entitiesCount: [], entitiesIds: { get: () => 0 } });
 
         const frameTick = createFrameTick(
             {
@@ -294,16 +330,19 @@ export function createGame({ width, height }: {
             ({ passEncoder, delta }) => {
                 // RENDER tick: sync atom transforms to mirrors, then compose Local->Global.
                 mirrorSync();
-                execTransformSystem();
+                execTransformSystem();      // RenderWorld (hierarchy)
+                execFxTransform();          // FxWorld: flat Local->Global (no children)
 
                 drawFauna(passEncoder, delta);
                 drawGrid(passEncoder);
-                shapeSystem.drawShapes(passEncoder);
-                drawVFX(passEncoder);
+                shapeSystem.drawShapes(passEncoder);    // SDF pass #1 — RenderWorld mirrors
+                fxShapeSystem.drawShapes(passEncoder);  // SDF pass #2 — FxWorld tread marks
+                drawVFX(passEncoder);                   // VFX pass — FxWorld
                 drawSandstorm(passEncoder, delta);
             },
             ({ passEncoder: shadowMapPassEncoder }) => {
                 shapeSystem.drawShadowMap(shadowMapPassEncoder);
+                fxShapeSystem.drawShadowMap(shadowMapPassEncoder);
             },
         );
 
@@ -369,8 +408,9 @@ function spawnDemoTanks() {
             color: new Float32Array(palette[i % palette.length]),
         });
 
-        VehicleController.setMove$(tankEid, 0);
-        VehicleController.setRotate$(tankEid, 0);
+        const tankBrain = getNodeByPhysics(tankEid);
+        VehicleController.setMove$(tankBrain, 0);
+        VehicleController.setRotate$(tankBrain, 0);
 
         // Mark the cell as occupied by this tank (game world entity).
         grid.occupy(q, r, tankEid);
@@ -405,22 +445,22 @@ function spawnDemoTanks() {
 
             fromQ = target.q;
             fromR = target.r;
-        }
 
-        // After moving, aim the turret at the next tank (circular) and fire a
-        // couple of rounds — demonstrates the TurretAim + Fire actions on the
-        // same global FIFO stack.
-        const targetTank = placed[(t + 1) % placed.length];
-        if (targetTank.eid !== tank.eid) {
-            enqueueAction(tank.eid, {
-                kind: ActionKind.TurretAim,
-                target: { kind: TargetKind.Entity, eid: targetTank.eid },
-                params: { tolerance: 0.05 },
-            });
-            enqueueAction(tank.eid, {
-                kind: ActionKind.Fire,
-                params: { shots: 2 },
-            });
+            // After moving, aim the turret at the next tank (circular) and fire a
+            // couple of rounds — demonstrates the TurretAim + Fire actions on the
+            // same global FIFO stack.
+            const targetTank = placed[(t + 1) % placed.length];
+            if (targetTank.eid !== tank.eid) {
+                enqueueAction(tank.eid, {
+                    kind: ActionKind.TurretAim,
+                    target: { kind: TargetKind.Entity, eid: targetTank.eid },
+                    params: { tolerance: 0.05 },
+                });
+                enqueueAction(tank.eid, {
+                    kind: ActionKind.Fire,
+                    params: { shots: 2 },
+                });
+            }
         }
     }
 

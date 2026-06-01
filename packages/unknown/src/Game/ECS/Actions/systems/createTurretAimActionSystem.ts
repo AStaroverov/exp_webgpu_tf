@@ -13,6 +13,9 @@ import { MapDI } from '../../../DI/MapDI.ts';
 import { normalizeAngle } from '../../../../../../../lib/math.ts';
 import { addEntity, World } from 'bitecs';
 import { getPhysicsWorldComponents, PhysicsWorld } from '../../createPhysicsWorld.ts';
+import { getBrainWorldComponents } from '../../createBrainWorld.ts';
+import { getNodeByPhysics, getTurretPhysOfHull } from '../../refs.ts';
+import { Worlds } from '../../../DI/Worlds.ts';
 import { ActionDescriptor, applyTarget } from '../ActionDescriptor.ts';
 import { getTopAction } from '../ActionScheduleDI.ts';
 import { getActionComponents } from '../createActionWorld.ts';
@@ -49,7 +52,8 @@ export function createTurretAimActionSystem(
     gameWorld: PhysicsWorld,
 ) {
     const { Action, ActionTarget, TurretAimParams } = getActionComponents(actionWorld);
-    const { Tank, TurretController, RigidBodyState } = getPhysicsWorldComponents(gameWorld);
+    const { RigidBodyState } = getPhysicsWorldComponents(gameWorld);
+    const { TurretController } = getBrainWorldComponents(Worlds.brainWorld);
 
     return function updateTurretAim(_delta: number) {
         const top = getTopAction();
@@ -58,13 +62,15 @@ export function createTurretAimActionSystem(
         if (Action.status[top] === ActionStatus.Finished) return;
 
         const ownerEid = Action.ownerEid[top];
-        const turretEid = Tank.turretEId[ownerEid];
+        // ownerEid is the hull ATOM; its hull node's turret child node -> turret ATOM.
+        const turretEid = getTurretPhysOfHull(getNodeByPhysics(ownerEid));
 
         // No turret to aim → nothing we can do; finish.
         if (!turretEid) {
             Action.setFinished$(top);
             return;
         }
+        const turretBrain = getNodeByPhysics(turretEid);
 
         // Resolve the target world point.
         let tx: number | null = null;
@@ -96,7 +102,7 @@ export function createTurretAimActionSystem(
 
         if (tx === null || ty === null) {
             // Unresolvable target — fail the action.
-            TurretController.setRotation$(turretEid, 0);
+            TurretController.setRotation$(turretBrain, 0);
             Action.setFinished$(top);
             return;
         }
@@ -112,13 +118,13 @@ export function createTurretAimActionSystem(
 
         const tolerance = TurretAimParams.tolerance[top] || 0.05;
         if (Math.abs(err) <= tolerance) {
-            TurretController.setRotation$(turretEid, 0);
+            TurretController.setRotation$(turretBrain, 0);
             Action.setFinished$(top);
             return;
         }
 
         // Proportional within SLOW_BAND, full speed outside it.
         const dir = Math.abs(err) >= SLOW_BAND ? Math.sign(err) : err / SLOW_BAND;
-        TurretController.setRotation$(turretEid, dir);
+        TurretController.setRotation$(turretBrain, dir);
     };
 }

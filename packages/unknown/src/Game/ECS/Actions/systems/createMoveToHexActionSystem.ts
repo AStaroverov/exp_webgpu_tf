@@ -17,6 +17,9 @@ import { MapWorldId } from '../../../Map/HexGrid.ts';
 import { findPath } from '../../../Map/findPath.ts';
 import { normalizeAngle } from '../../../../../../../lib/math.ts';
 import { getPhysicsWorldComponents, PhysicsWorld } from '../../createPhysicsWorld.ts';
+import { getBrainWorldComponents } from '../../createBrainWorld.ts';
+import { getNodeByPhysics } from '../../refs.ts';
+import { Worlds } from '../../../DI/Worlds.ts';
 import { ActionDescriptor, applyTarget } from '../ActionDescriptor.ts';
 import { getTopAction } from '../ActionScheduleDI.ts';
 import { getActionComponents } from '../createActionWorld.ts';
@@ -62,16 +65,19 @@ export function createMoveToHexActionSystem(
     gameWorld: PhysicsWorld,
 ) {
     const { Action, ActionTarget } = getActionComponents(actionWorld);
-    const { VehicleController, RigidBodyState } = getPhysicsWorldComponents(gameWorld);
+    const { RigidBodyState } = getPhysicsWorldComponents(gameWorld);
+    const { VehicleController } = getBrainWorldComponents(Worlds.brainWorld);
 
     // Per-action movement plans. Keyed by the action entity id; rebuilt whenever a
     // fresh (Idle) action is picked up, so reused entity ids never inherit a stale
     // plan.
     const plans = new Map<number, MovePlan>();
 
+    // ownerEid is the hull ATOM; the controller lives on its hull node (hull-brain).
     const stop = (ownerEid: number) => {
-        VehicleController.setMove$(ownerEid, 0);
-        VehicleController.setRotate$(ownerEid, 0);
+        const brain = getNodeByPhysics(ownerEid);
+        VehicleController.setMove$(brain, 0);
+        VehicleController.setRotate$(brain, 0);
     };
 
     return function updateMoveToHex(_delta: number) {
@@ -171,7 +177,8 @@ export function createMoveToHexActionSystem(
         const heading = RigidBodyState.rotation[ownerEid];
         const err = normalizeAngle(desired - heading);
 
-        VehicleController.setRotate$(ownerEid, Math.abs(err) < 1e-3 ? 0 : Math.sign(err));
-        VehicleController.setMove$(ownerEid, Math.abs(err) < HEADING_DEADZONE ? 1 : 0.3);
+        const ownerBrain = getNodeByPhysics(ownerEid);
+        VehicleController.setRotate$(ownerBrain, Math.abs(err) < 1e-3 ? 0 : Math.sign(err));
+        VehicleController.setMove$(ownerBrain, Math.abs(err) < HEADING_DEADZONE ? 1 : 0.3);
     };
 }

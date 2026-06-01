@@ -1,6 +1,7 @@
 import { cos, sin } from '../../../../../../../lib/math.ts';
-import { PhysicalWorld } from '../../../Physical/initPhysicalWorld.ts';
-import { getPhysicsWorldComponents, PhysicsWorld } from '../../createPhysicsWorld.ts';
+import { getBrainWorldComponents } from '../../createBrainWorld.ts';
+import { getNodeByPhysics } from '../../refs.ts';
+import { Worlds } from '../../../DI/Worlds.ts';
 import { TrackSide } from '../../Components/Track.ts';
 import { createTrack, TrackOptions } from '../Track/createTrack.ts';
 import { createVehicleBase, createVehicleTurret } from '../Vehicle/VehicleBase.ts';
@@ -14,10 +15,10 @@ export type HarvesterTracksConfig = {
     trackHeight: number;
 };
 
-export function createHarvesterBase(world: PhysicsWorld, physicalWorld: PhysicalWorld, options: HarvesterOptions): [number, number, number] {
-    const { Tank } = getPhysicsWorldComponents(world);
-    const [vehiclePhysEid, vehicleRenderEid, vehiclePid] = createVehicleBase(world, physicalWorld, options);
-    Tank.addComponent(world, vehiclePhysEid);
+export function createHarvesterBase(options: HarvesterOptions, { brainWorld } = Worlds): [number, number, number] {
+    const { Tank } = getBrainWorldComponents(brainWorld);
+    const [vehiclePhysEid, vehicleRenderEid, vehiclePid] = createVehicleBase(options);
+    Tank.addComponent(brainWorld, getNodeByPhysics(vehiclePhysEid));
     return [vehiclePhysEid, vehicleRenderEid, vehiclePid];
 }
 
@@ -26,8 +27,6 @@ export function createHarvesterBase(world: PhysicsWorld, physicalWorld: Physical
  * Tracks are attached to the harvester body via fixed joints.
  */
 export function createHarvesterTracks(
-    world: PhysicsWorld,
-    physicalWorld: PhysicalWorld,
     options: HarvesterOptions,
     tracksConfig: HarvesterTracksConfig,
     harvesterRenderEid: number,
@@ -50,7 +49,7 @@ export function createHarvesterTracks(
     trackOptions.x = options.x + leftWorldX;
     trackOptions.y = options.y + leftWorldY;
 
-    const [, leftTrackRenderEid] = createTrack(world, physicalWorld, trackOptions, harvesterRenderEid, harvesterPid);
+    const [, leftTrackRenderEid] = createTrack(trackOptions, harvesterRenderEid, harvesterPid);
 
     // Create right track
     trackOptions.trackSide = TrackSide.Right;
@@ -61,31 +60,26 @@ export function createHarvesterTracks(
     trackOptions.x = options.x + rightWorldX;
     trackOptions.y = options.y + rightWorldY;
 
-    const [, rightTrackRenderEid] = createTrack(world, physicalWorld, trackOptions, harvesterRenderEid, harvesterPid);
+    const [, rightTrackRenderEid] = createTrack(trackOptions, harvesterRenderEid, harvesterPid);
 
     return [leftTrackRenderEid, rightTrackRenderEid];
 }
 
 // Returns [turretRenderEid, turretPid]
 export function createHarvesterTurret(
-    world: PhysicsWorld,
-    physicalWorld: PhysicalWorld,
     options: HarvesterOptions,
-    harvesterPhysEid: number,
+    _harvesterPhysEid: number,
     harvesterRenderEid: number,
     harvesterPid: number,
 ): [number, number] {
-    const { Tank } = getPhysicsWorldComponents(world);
-    const [turretPhysEid, turretRenderEid, turretPid] = createVehicleTurret(
-        world,
-        physicalWorld,
+    // createVehicleTurret links the turret node as a Brain child of the hull node;
+    // the turret is found from the hull node via getTurretPhysOfHull.
+    const [, turretRenderEid, turretPid] = createVehicleTurret(
         options,
         options.turret,
         harvesterRenderEid,
         harvesterPid,
     );
-
-    Tank.setTurretEid(harvesterPhysEid, turretPhysEid);
 
     return [turretRenderEid, turretPid];
 }

@@ -9,7 +9,7 @@ import {
     getMatrixRotationZ,
 } from '../../../../../../renderer/src/ECS/Components/Transform.ts';
 import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
-import { BridgeDI } from '../../../DI/BridgeDI.ts';
+import { getNodeByPhysics, getNodeRender } from '../../refs.ts';
 import { Worlds } from '../../../DI/Worlds.ts';
 
 const BASE_CHANCE = 0.01;
@@ -19,7 +19,7 @@ const ROTATION_MULTIPLIER = 0.3;
 const TREAD_MARK_WIDTH = 2.5;
 const TREAD_MARK_HEIGHT = 4;
 
-export function createSpawnWheelTreadMarksSystem({ physicsWorld, renderWorld } = Worlds) {
+export function createSpawnWheelTreadMarksSystem({ physicsWorld } = Worlds) {
     const { Wheel, RigidBodyState, Impulse } = getPhysicsWorldComponents(physicsWorld);
 
     return (_delta: number) => {
@@ -45,12 +45,13 @@ export function createSpawnWheelTreadMarksSystem({ physicsWorld, renderWorld } =
 
             if (random() > chance) continue;
 
-            const globalMatrix = GlobalTransform.matrix.getBatch(BridgeDI.getRenderOf(eid));
+            // Wheel atoms are brain nodes (children of the hull node); resolve render via the node.
+            const globalMatrix = GlobalTransform.matrix.getBatch(getNodeRender(getNodeByPhysics(eid)));
             const x = getMatrixTranslationX(globalMatrix);
             const y = getMatrixTranslationY(globalMatrix);
             const rot = getMatrixRotationZ(globalMatrix);
 
-            spawnTreadMark(renderWorld, {
+            spawnTreadMark({
                 x,
                 y,
                 width: TREAD_MARK_WIDTH,

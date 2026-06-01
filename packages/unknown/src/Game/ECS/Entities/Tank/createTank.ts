@@ -4,7 +4,6 @@ import { createHeavyTank } from './Heavy/HeavyTank.ts';
 import { createPlayerTank } from './Player/PlayerTank.ts';
 import { VehicleType } from '../../../Config/index.ts';
 import { EntityId } from 'bitecs';
-import { Worlds } from '../../../DI/Worlds.ts';
 
 export type TankVehicleType = 
     | typeof VehicleType.LightTank 
@@ -13,23 +12,23 @@ export type TankVehicleType =
     | typeof VehicleType.PlayerTank;
 
 type TankOptions =
-    | { type: typeof VehicleType.LightTank } & Parameters<typeof createLightTank>[2]
-    | { type: typeof VehicleType.MediumTank } & Parameters<typeof createMediumTank>[2]
-    | { type: typeof VehicleType.HeavyTank } & Parameters<typeof createHeavyTank>[2]
-    | { type: typeof VehicleType.PlayerTank } & Parameters<typeof createPlayerTank>[2]
+    | { type: typeof VehicleType.LightTank } & Parameters<typeof createLightTank>[0]
+    | { type: typeof VehicleType.MediumTank } & Parameters<typeof createMediumTank>[0]
+    | { type: typeof VehicleType.HeavyTank } & Parameters<typeof createHeavyTank>[0]
+    | { type: typeof VehicleType.PlayerTank } & Parameters<typeof createPlayerTank>[0]
 
-export function createTank(options: TankOptions, { physicsWorld: world, physicalWorld } = Worlds): EntityId {
+export function createTank(options: TankOptions): EntityId {
     const type = options.type;
 
     switch (type) {
         case VehicleType.LightTank:
-            return createLightTank(world, physicalWorld, options);
+            return createLightTank(options);
         case VehicleType.MediumTank:
-            return createMediumTank(world, physicalWorld, options);
+            return createMediumTank(options);
         case VehicleType.HeavyTank:
-            return createHeavyTank(world, physicalWorld, options);
+            return createHeavyTank(options);
         case VehicleType.PlayerTank:
-            return createPlayerTank(world, physicalWorld, options);
+            return createPlayerTank(options);
         default:
             throw new Error(`Unknown tank type ${ type }`);
     }

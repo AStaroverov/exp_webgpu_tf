@@ -2,14 +2,7 @@ import { query } from 'bitecs';
 import { abs } from '../../../../../../../lib/math.ts';
 import { random } from '../../../../../../../lib/random.ts';
 import { spawnTreadMark, TreadMarkOptions } from '../../Entities/TreadMark.ts';
-import {
-    GlobalTransform,
-    getMatrixTranslationX,
-    getMatrixTranslationY,
-    getMatrixRotationZ,
-} from '../../../../../../renderer/src/ECS/Components/Transform.ts';
 import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
-import { BridgeDI } from '../../../DI/BridgeDI.ts';
 import { Worlds } from '../../../DI/Worlds.ts';
 
 const BASE_TREAD_MARK_CHANCE = 0.005;
@@ -25,7 +18,7 @@ const treadMarkOptions: TreadMarkOptions = {
     rotation: 0,
 };
 
-export function createSpawnTreadMarksSystem({ physicsWorld, renderWorld } = Worlds) {
+export function createSpawnTreadMarksSystem({ physicsWorld } = Worlds) {
     const { VehiclePartCaterpillar, RigidBodyState } = getPhysicsWorldComponents(physicsWorld);
 
     return (_delta: number) => {
@@ -46,15 +39,14 @@ export function createSpawnTreadMarksSystem({ physicsWorld, renderWorld } = Worl
 
             if (random() > treadMarkChance) continue;
 
-            const globalMatrix = GlobalTransform.matrix.getBatch(BridgeDI.getRenderOf(eid));
-            const x = getMatrixTranslationX(globalMatrix);
-            const y = getMatrixTranslationY(globalMatrix);
-            const rotation = getMatrixRotationZ(globalMatrix);
+            // Caterpillar parts are slot-fill leaves (no brain node); the render mirrors
+            // the physics body, so read the world transform from RigidBodyState directly.
+            const pos = RigidBodyState.position.getBatch(eid);
 
-            treadMarkOptions.x = x;
-            treadMarkOptions.y = y;
-            treadMarkOptions.rotation = rotation;
-            spawnTreadMark(renderWorld, treadMarkOptions);
+            treadMarkOptions.x = pos[0];
+            treadMarkOptions.y = pos[1];
+            treadMarkOptions.rotation = RigidBodyState.rotation[eid];
+            spawnTreadMark(treadMarkOptions);
         }
     };
 }

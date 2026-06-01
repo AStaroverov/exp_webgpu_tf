@@ -1,14 +1,14 @@
 import { addEntity } from 'bitecs';
 import { VFXType } from '../Components/VFX.ts';
-import { getRenderWorldComponents, RenderGameWorld } from '../createRenderWorld.ts';
+import { getFxWorldComponents } from '../createFxWorld.ts';
 import {
     addTransformComponents,
     applyMatrixTranslate,
     applyMatrixScale,
-    LocalTransform,
 } from '../../../../../renderer/src/ECS/Components/Transform.ts';
 import { ZIndex } from '../../consts.ts';
 import { RenderDI } from '../../DI/RenderDI.ts';
+import { Worlds } from '../../DI/Worlds.ts';
 
 export const EXHAUST_SMOKE_DURATION = 2_000;
 
@@ -20,31 +20,19 @@ export interface ExhaustSmokeOptions {
     size: number;
 }
 
-// Velocity stored per particle (for drift simulation)
-const smokeVelocityX = new Float32Array(1024);
-const smokeVelocityY = new Float32Array(1024);
-
-export function getSmokeVelocity(eid: number): [number, number] {
-    return [smokeVelocityX[eid % 1024], smokeVelocityY[eid % 1024]];
-}
-
-export function spawnExhaustSmoke(world: RenderGameWorld, options: ExhaustSmokeOptions, { enabled } = RenderDI) {
+export function spawnExhaustSmoke(options: ExhaustSmokeOptions, { fxWorld } = Worlds, { enabled } = RenderDI) {
     if (!enabled) return;
 
-    const { ProgressFx, VFX, DestroyByTimeoutFx } = getRenderWorldComponents(world);
-    const eid = addEntity(world);
+    const { LocalTransform, ProgressFx, VFX, DestroyByTimeoutFx } = getFxWorldComponents(fxWorld);
+    const eid = addEntity(fxWorld);
 
-    addTransformComponents(world, eid);
+    addTransformComponents(fxWorld, eid);
     applyMatrixTranslate(LocalTransform.matrix.getBatch(eid), options.x, options.y, ZIndex.TreadMark);
     applyMatrixScale(LocalTransform.matrix.getBatch(eid), options.size, options.size);
 
-    // Store velocity for drift
-    smokeVelocityX[eid % 1024] = options.velocityX;
-    smokeVelocityY[eid % 1024] = options.velocityY;
-
-    ProgressFx.addComponent(world, eid, EXHAUST_SMOKE_DURATION);
-    VFX.addComponent(world, eid, VFXType.ExhaustSmoke);
-    DestroyByTimeoutFx.addComponent(world, eid, EXHAUST_SMOKE_DURATION);
+    ProgressFx.addComponent(fxWorld, eid, EXHAUST_SMOKE_DURATION);
+    VFX.addComponent(fxWorld, eid, VFXType.ExhaustSmoke);
+    DestroyByTimeoutFx.addComponent(fxWorld, eid, EXHAUST_SMOKE_DURATION);
 
     return eid;
 }

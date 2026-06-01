@@ -1,19 +1,22 @@
 import { TColor } from '../../../../../../renderer/src/ECS/Components/Common.ts';
-import { getRenderWorldComponents, RenderGameWorld } from '../../createRenderWorld.ts';
 import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
+import { getBrainWorldComponents } from '../../createBrainWorld.ts';
+import { getSlotWorldComponents, SlotWorld } from '../../createSlotWorld.ts';
 import { JointData, Vector2 } from '@dimforge/rapier2d-simd';
-import { PhysicalWorld } from '../../../Physical/initPhysicalWorld.ts';
-import { spawnRectanglePart, SpawnCtx } from '../spawnPart.ts';
-import { BridgeDI } from '../../../DI/BridgeDI.ts';
+import { spawnRectanglePart } from '../spawnPart.ts';
+import { attachOccupant, attachSlotToNode, clearOccupant, getNodeByPhysics, getNodeParent, getNodePhysics, getNodeSlots, getTurretPhysOfHull } from '../../refs.ts';
 import { Worlds } from '../../../DI/Worlds.ts';
 import { defaultVehicleOptions, VehicleOptions } from './Options.ts';
 import { randomRangeFloat } from '../../../../../../../lib/random.ts';
 import { clamp } from 'lodash-es';
-import { addEntity, EntityId, hasComponent } from 'bitecs';
+import { addEntity, EntityId, hasComponent, query } from 'bitecs';
 import { cos, min, sin } from '../../../../../../../lib/math.ts';
 import { VehicleType } from '../../Components/Vehicle.ts';
 import { getSlotPartConfig, SlotPartType } from '../../Components/SlotConfig.ts';
-import { isSlot, isSlotEmpty, isSlotFilled } from '../../Utils/SlotUtils.ts';
+import { isSlotEmpty, isSlotFilled } from '../../Utils/SlotUtils.ts';
+import { CollisionGroup } from '../../../Physical/createRigid.ts';
+import { removePhysicalJoint } from '../../../Physical/removePhysicalJoint.ts';
+import { setPhysicalCollisionGroup } from '../../../Physical/setPhysicalCollisionGroup.ts';
 
 export type PartsData = [x: number, y: number, w: number, h: number];
 
@@ -32,52 +35,44 @@ export function createRectangleSet(
     });
 }
 
-// `renderWorld` carrier render eid (slots are RenderWorld entities).
-export function updateSlotsBrightness(renderWorld: RenderGameWorld, parentRenderEid: EntityId) {
-    const { Children } = getRenderWorldComponents(renderWorld);
-    const childCount = Children.entitiesCount[parentRenderEid];
-
-    for (let i = 0; i < childCount; i++) {
-        const slotEid = Children.entitiesIds.get(parentRenderEid, i);
-        if (!isSlot(renderWorld, slotEid)) continue;
-        adjustBrightness(renderWorld, slotEid, i / childCount / 2 - 0.1, i / childCount / 2 + 0.1);
-    }
-}
-
+// Creates SlotWorld slots for a carrier PHYSICS atom. Each slot captures a darkened
+// copy of `color` (replacing the old render-Color + updateSlotsBrightness pass). The
+// carrier's brain node owns the slot list downward via NodeSlotsRef.
 export function createSlotEntities(
-    renderWorld: RenderGameWorld,
-    parentRenderEid: EntityId,
+    carrierPhysEid: EntityId,
     params: PartsData[],
     color: TColor,
     partType: SlotPartType,
+    { slotWorld } = Worlds,
 ) {
-    const { Slot, Color, Children, Parent } = getRenderWorldComponents(renderWorld);
+    const { Slot, Color } = getSlotWorldComponents(slotWorld);
+    const darkened = new Float32Array(4);
+
+    // The carrier's brain node owns the slot list downward (NodeSlotsRef). Resolved
+    // once for the whole set.
+    const carrierNode = getNodeByPhysics(carrierPhysEid);
 
     for (let i = 0; i < params.length; i++) {
-        const slotEid = addEntity(renderWorld);
+        const slotEid = addEntity(slotWorld);
         const param = params[i];
         const x = param[0];
         const y = param[1];
         const width = param[2];
         const height = param[3];
 
-        Slot.addComponent(renderWorld, slotEid, x, y, width, height, partType);
-        Color.addComponent(renderWorld, slotEid, color[0], color[1], color[2], color[3]);
-        Children.addComponent(renderWorld, slotEid);
-        Parent.addComponent(renderWorld, slotEid, parentRenderEid);
+        adjustBrightness(color, darkened, i / params.length / 2 - 0.1, i / params.length / 2 + 0.1);
 
-        Children.addChildren(parentRenderEid, slotEid);
+        Slot.addComponent(slotWorld, slotEid, x, y, width, height, partType);
+        Color.addComponent(slotWorld, slotEid, darkened[0], darkened[1], darkened[2], darkened[3]);
+        if (carrierNode !== 0) attachSlotToNode(carrierNode, slotEid);
     }
 }
 
-export function fillAllSlots(renderWorld: RenderGameWorld, physicalWorld: PhysicalWorld, parentRenderEid: EntityId, options: VehicleOptions): void {
-    const { Children } = getRenderWorldComponents(renderWorld);
-    const childCount = Children.entitiesCount[parentRenderEid];
-
-    for (let i = 0; i < childCount; i++) {
-        const childEid = Children.entitiesIds.get(parentRenderEid, i);
-        if (isSlot(renderWorld, childEid) && isSlotEmpty(renderWorld, childEid)) {
-            fillSlot(renderWorld, physicalWorld, childEid, options);
+export function fillAllSlots(carrierPhysEid: EntityId, options: VehicleOptions, { slotWorld } = Worlds): void {
+    const carrierNode = getNodeByPhysics(carrierPhysEid);
+    for (const slotEid of getNodeSlots(carrierNode)) {
+        if (isSlotEmpty(slotWorld, slotEid)) {
+            fillSlot(slotEid, carrierNode, options);
         }
     }
 }
@@ -86,34 +81,36 @@ const jointParentAnchor = new Vector2(0, 0);
 const jointChildAnchor = new Vector2(0, 0);
 const fillSlotOptions: VehicleOptions = structuredClone(defaultVehicleOptions);
 export function fillSlot(
-    renderWorld: RenderGameWorld,
-    physicalWorld: PhysicalWorld,
     slotEid: EntityId,
+    carrierNode: EntityId,
     options: VehicleOptions,
+    { slotWorld, physicsWorld, physicalWorld, brainWorld } = Worlds,
 ) {
-    const physicsWorld = Worlds.physicsWorld;
-    const { Slot, Parent, Children, Color } = getRenderWorldComponents(renderWorld);
+    const { Slot } = getSlotWorldComponents(slotWorld);
     const {
-        Vehicle, RigidBodyRef, VehiclePart, Joint, PlayerRef, TeamRef,
+        RigidBodyRef, VehiclePart, Joint, TeamRef, PlayerRef,
         Hitable, Damagable, VehiclePartCaterpillar,
     } = getPhysicsWorldComponents(physicsWorld);
+    const { Vehicle } = getBrainWorldComponents(brainWorld);
 
     if (isNaN(options.x) || isNaN(options.y) || isNaN(options.rotation)) {
         throw new Error('Some options are not set');
     }
-    if (isSlotFilled(renderWorld, slotEid)) {
+    if (isSlotFilled(slotWorld, slotEid)) {
         return;
     }
     Object.assign(fillSlotOptions, options);
 
-    // Slot's carrier render eid; the vehicle (brain) render eid is its parent if the
-    // carrier is a turret/track. Translate carrier render -> physics for the joint body.
-    const carrierRenderEid = Parent.id[slotEid];
-    const carrierPhysEid = BridgeDI.getPhysicsOf(carrierRenderEid);
-    const vehiclePhysEid = hasComponent(physicsWorld, carrierPhysEid, Vehicle)
-        ? carrierPhysEid
-        : BridgeDI.getPhysicsOf(Parent.id[carrierRenderEid]);
-    const vehicleType = Vehicle.type[vehiclePhysEid] as VehicleType;
+    // The carrier node owns the slot. Its presentation (downward) is the carrier atom
+    // (the joint parent body). Resolve the vehicle (for the config lookup): if the
+    // carrier node IS the hull node it carries Vehicle; otherwise it's a turret/gun/
+    // track node, so its Brain parent (the hull node) carries Vehicle.
+    const carrierPhysEid = getNodePhysics(carrierNode);
+    let vehicleBrain = carrierNode;
+    if (!hasComponent(brainWorld, vehicleBrain, Vehicle)) {
+        vehicleBrain = getNodeParent(carrierNode);
+    }
+    const vehicleType = Vehicle.type[vehicleBrain] as VehicleType;
 
     const partType = Slot.partType[slotEid] as SlotPartType;
     const config = getSlotPartConfig(partType, vehicleType);
@@ -134,12 +131,11 @@ export function fillSlot(
     fillSlotOptions.interactsSolverGroup = config.interactsSolverGroup;
     fillSlotOptions.belongsCollisionGroup = config.belongsCollisionGroup;
     fillSlotOptions.interactsCollisionGroup = config.interactsCollisionGroup;
-    fillSlotOptions.color = Color.applyColorToArray(slotEid, new Float32Array(4));
+    fillSlotOptions.color = readSlotColor(slotWorld, slotEid, new Float32Array(4));
 
     const rbId = RigidBodyRef.id[carrierPhysEid];
 
-    const ctx: SpawnCtx = { physicsWorld, renderWorld, physicalWorld };
-    const [partPhysEid, partRenderEid, pid] = spawnRectanglePart(ctx, fillSlotOptions);
+    const [partPhysEid, , pid] = spawnRectanglePart(fillSlotOptions);
 
     jointParentAnchor.x = anchorX;
     jointParentAnchor.y = anchorY;
@@ -154,94 +150,117 @@ export function fillSlot(
     VehiclePart.addComponent(physicsWorld, partPhysEid);
     Joint.addComponent(physicsWorld, partPhysEid, joint.handle);
 
-    PlayerRef.addComponent(physicsWorld, partPhysEid, fillSlotOptions.playerId);
+    // Cheap static team/player copy for the cold contact path (saveHitters).
     TeamRef.addComponent(physicsWorld, partPhysEid, fillSlotOptions.teamId);
+    PlayerRef.addComponent(physicsWorld, partPhysEid, fillSlotOptions.playerId);
     Hitable.addComponent(physicsWorld, partPhysEid, min(fillSlotOptions.width, fillSlotOptions.height));
     Damagable.addComponent(physicsWorld, partPhysEid, min(fillSlotOptions.width, fillSlotOptions.height) / 20);
 
-    // slot -> part edge lives in RenderWorld (slot is a RenderWorld entity).
-    Parent.addComponent(renderWorld, partRenderEid, slotEid);
-    Children.addChildren(slotEid, partRenderEid);
+    // slot -> part edge: OccupantRef on the slot (downward; the part keeps no ref up).
+    attachOccupant(slotEid, partPhysEid);
 
     if (partType === SlotPartType.Caterpillar) {
         VehiclePartCaterpillar.addComponent(physicsWorld, partPhysEid);
     }
 }
 
-export function getEmptySlotsCount(renderWorld: RenderGameWorld, parentRenderEid: EntityId): number {
-    const { Children } = getRenderWorldComponents(renderWorld);
-    const childCount = Children.entitiesCount[parentRenderEid];
+export function getEmptySlotsCount(carrierPhysEid: EntityId, { slotWorld } = Worlds): number {
     let emptyCount = 0;
-
-    for (let i = 0; i < childCount; i++) {
-        const childEid = Children.entitiesIds.get(parentRenderEid, i);
-        if (!isSlot(renderWorld, childEid)) continue;
-
-        if (isSlotEmpty(renderWorld, childEid)) {
-            emptyCount++;
-        }
+    for (const slotEid of getNodeSlots(getNodeByPhysics(carrierPhysEid))) {
+        if (isSlotEmpty(slotWorld, slotEid)) emptyCount++;
     }
-
     return emptyCount;
 }
 
-export function findFirstEmptySlot(renderWorld: RenderGameWorld, parentRenderEid: EntityId): EntityId | null {
-    const { Children } = getRenderWorldComponents(renderWorld);
-    const childCount = Children.entitiesCount[parentRenderEid];
-    for (let i = 0; i < childCount; i++) {
-        const childEid = Children.entitiesIds.get(parentRenderEid, i);
-        if (isSlot(renderWorld, childEid) && isSlotEmpty(renderWorld, childEid)) {
-            return childEid;
-        }
+export function findFirstEmptySlot(carrierPhysEid: EntityId, { slotWorld } = Worlds): EntityId | null {
+    for (const slotEid of getNodeSlots(getNodeByPhysics(carrierPhysEid))) {
+        if (isSlotEmpty(slotWorld, slotEid)) return slotEid;
     }
     return null;
 }
 
-export function getSlotCount(renderWorld: RenderGameWorld, parentRenderEid: EntityId): number {
-    const { Children } = getRenderWorldComponents(renderWorld);
-    const childCount = Children.entitiesCount[parentRenderEid];
+export function getSlotCount(carrierPhysEid: EntityId): number {
     let count = 0;
-    for (let i = 0; i < childCount; i++) {
-        const childEid = Children.entitiesIds.get(parentRenderEid, i);
-        if (isSlot(renderWorld, childEid)) count++;
-    }
+    for (const _slotEid of getNodeSlots(getNodeByPhysics(carrierPhysEid))) count++;
     return count;
 }
 
-export function getFilledSlotCount(renderWorld: RenderGameWorld, parentRenderEid: EntityId): number {
-    const { Children } = getRenderWorldComponents(renderWorld);
-    const childCount = Children.entitiesCount[parentRenderEid];
+export function getFilledSlotCount(carrierPhysEid: EntityId, { slotWorld } = Worlds): number {
     let filled = 0;
-    for (let i = 0; i < childCount; i++) {
-        const childEid = Children.entitiesIds.get(parentRenderEid, i);
-        if (isSlot(renderWorld, childEid) && isSlotFilled(renderWorld, childEid)) filled++;
+    for (const slotEid of getNodeSlots(getNodeByPhysics(carrierPhysEid))) {
+        if (isSlotFilled(slotWorld, slotEid)) filled++;
     }
     return filled;
 }
 
-// vehicleEid here is the PHYS brain eid; turret stored as phys eid; translate to render for slot walk.
-export function getVehicleTotalSlotCount(vehiclePhysEid: EntityId, { physicsWorld, renderWorld } = Worlds): number {
-    const { Tank } = getPhysicsWorldComponents(physicsWorld);
-    const turretPhysEid = Tank.turretEId[vehiclePhysEid];
-    return getSlotCount(renderWorld, BridgeDI.getRenderOf(vehiclePhysEid))
-        + getSlotCount(renderWorld, BridgeDI.getRenderOf(turretPhysEid));
+export function getVehicleTotalSlotCount(vehiclePhysEid: EntityId): number {
+    const turretPhysEid = getTurretPhysOfHull(getNodeByPhysics(vehiclePhysEid));
+    return getSlotCount(vehiclePhysEid) + getSlotCount(turretPhysEid);
 }
 
-export function getVehicleFilledSlotCount(vehiclePhysEid: EntityId, { physicsWorld, renderWorld } = Worlds): number {
-    const { Tank } = getPhysicsWorldComponents(physicsWorld);
-    const turretPhysEid = Tank.turretEId[vehiclePhysEid];
-    return getFilledSlotCount(renderWorld, BridgeDI.getRenderOf(vehiclePhysEid))
-        + getFilledSlotCount(renderWorld, BridgeDI.getRenderOf(turretPhysEid));
+export function getVehicleFilledSlotCount(vehiclePhysEid: EntityId): number {
+    const turretPhysEid = getTurretPhysOfHull(getNodeByPhysics(vehiclePhysEid));
+    return getFilledSlotCount(vehiclePhysEid) + getFilledSlotCount(turretPhysEid);
 }
 
-function adjustBrightness(renderWorld: RenderGameWorld, eid: EntityId, start: number, end: number) {
-    const { Color } = getRenderWorldComponents(renderWorld);
+// Finds the slot currently occupied by a part atom (slot -> part is OccupantRef,
+// downward; this is the reverse, resolved by a query over filled slots — no reverse
+// ref on the part). Returns 0 if the part occupies no slot (already torn off). Cold:
+// only used when a part is destroyed/explodes.
+export function findSlotOfOccupant(partPhysEid: number, { slotWorld } = Worlds): number {
+    const { OccupantRef } = getSlotWorldComponents(slotWorld);
+    for (const slotEid of query(slotWorld, [OccupantRef])) {
+        if (OccupantRef.id[slotEid] === partPhysEid) return slotEid;
+    }
+    return 0;
+}
+
+// Detaches a part atom from its slot: clears team/player, removes the joint, resets
+// collision group. The slot's OccupantRef is cleared (slot becomes empty); the part
+// itself keeps no slot reference (a torn part still lies on the ground).
+export function detachPart(
+    partPhysEid: number,
+    shouldBreakConnection: boolean = true,
+    { physicsWorld, physicalWorld } = Worlds,
+) {
+    const { TeamRef, PlayerRef, Joint, VehiclePart, VehiclePartCaterpillar } = getPhysicsWorldComponents(physicsWorld);
+
+    // A detached part stops being credited: drop its static team/player copy.
+    if (hasComponent(physicsWorld, partPhysEid, TeamRef)) {
+        TeamRef.removeComponent(physicsWorld, partPhysEid);
+        PlayerRef.removeComponent(physicsWorld, partPhysEid);
+    }
+
+    if (shouldBreakConnection) {
+        const slotEid = findSlotOfOccupant(partPhysEid);
+        if (slotEid !== 0) {
+            clearOccupant(slotEid);
+        }
+    }
+
+    const jointPid = hasComponent(physicsWorld, partPhysEid, Joint) ? Joint.pid[partPhysEid] : 0;
+    if (jointPid > 0) {
+        Joint.removeComponent(physicsWorld, partPhysEid);
+        if (hasComponent(physicsWorld, partPhysEid, VehiclePart)) {
+            VehiclePart.removeComponent(physicsWorld, partPhysEid);
+        }
+        Joint.resetComponent(partPhysEid);
+        VehiclePartCaterpillar.removeComponent(physicsWorld, partPhysEid);
+        setPhysicalCollisionGroup(physicsWorld, physicalWorld, partPhysEid, CollisionGroup.ALL & ~CollisionGroup.VEHICALE_BASE & ~CollisionGroup.BULLET);
+        removePhysicalJoint(physicalWorld, jointPid);
+    }
+}
+
+function readSlotColor<T extends TColor>(slotWorld: SlotWorld, slotEid: EntityId, out: T): T {
+    const { Color } = getSlotWorldComponents(slotWorld);
+    return Color.applyColorToArray(slotEid, out);
+}
+
+// Port of the old render-Color darkening: writes a darkened copy of `src` into `out`.
+function adjustBrightness(src: TColor, out: Float32Array, start: number, end: number) {
     const factor = -1 * randomRangeFloat(start, end);
-    Color.set$(
-        eid,
-        clamp(Color.getR(eid) + factor, 0, 1),
-        clamp(Color.getG(eid) + factor, 0, 1),
-        clamp(Color.getB(eid) + factor, 0, 1),
-        Color.getA(eid),
-    );
+    out[0] = clamp(src[0] + factor, 0, 1);
+    out[1] = clamp(src[1] + factor, 0, 1);
+    out[2] = clamp(src[2] + factor, 0, 1);
+    out[3] = src[3];
 }

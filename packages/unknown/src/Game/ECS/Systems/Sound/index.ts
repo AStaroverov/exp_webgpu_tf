@@ -6,4 +6,4 @@ export {
 } from './SoundSystem.ts';
 export { createTankMoveSoundSystem } from './createTankMoveSoundSystem.ts';
 export { SoundType, SoundState } from '../../Components/Sound.ts';
-export { spawnSoundAtPosition, spawnSoundAtParent } from '../../Entities/Sound.ts';
+export { spawnSoundAtPosition, spawnSoundForOwner } from '../../Entities/Sound.ts';

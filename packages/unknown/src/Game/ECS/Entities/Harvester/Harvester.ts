@@ -1,10 +1,9 @@
-import { PhysicsWorld } from '../../createPhysicsWorld.ts';
-import { PhysicalWorld } from '../../../Physical/initPhysicalWorld.ts';
 import { PI } from '../../../../../../../lib/math.ts';
 import { TColor } from '../../../../../../renderer/src/ECS/Components/Common.ts';
 import { SlotPartType } from '../../Components/SlotConfig.ts';
 import { VehicleType } from '../../Components/Vehicle.ts';
-import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../Vehicle/VehicleParts.ts';
+import { createSlotEntities, fillAllSlots } from '../Vehicle/VehicleParts.ts';
+import { getPhysicsOf } from '../../refs.ts';
 import { createTankExhaustPipes } from '../ExhaustPipe.ts';
 import { createHarvesterBase, createHarvesterTracks, createHarvesterTurret } from './HarvesterBase.ts';
 import {
@@ -32,14 +31,14 @@ const SCOOP_COLOR = new Float32Array([0.6, 0.5, 0.3, 1]);   // Rusty metal color
 const SHIELD_COLOR = new Float32Array([0.3, 0.7, 1.0, 0.6]); // Cyan semi-transparent energy shield
 const APPROXIMATE_COLLIDER_RADIUS = 85;
 
-export function createHarvester(world: PhysicsWorld, physicalWorld: PhysicalWorld, opts: {
+export function createHarvester(opts: {
     playerId: number,
     teamId: number,
     x: number,
     y: number,
     rotation: number,
     color: TColor,
-}) {
+}, { renderWorld } = Worlds) {
     const options = resetOptions(mutatedOptions, opts);
     options.partsCount = PARTS_COUNT;
     options.size = SIZE;
@@ -50,17 +49,13 @@ export function createHarvester(world: PhysicsWorld, physicalWorld: PhysicalWorl
     options.trackLength = caterpillarLength;
 
     // Heavy base for bulldozer
-    const renderWorld = Worlds.renderWorld;
-
     options.density = DENSITY * 16;
     options.width = PADDING * 10;
     options.height = PADDING * 10;
-    const [harvesterPhysEid, harvesterRenderEid, harvesterPid] = createHarvesterBase(world, physicalWorld, options);
+    const [harvesterPhysEid, harvesterRenderEid, harvesterPid] = createHarvesterBase(options);
 
     // Create left and right tracks as independent entities
     const [leftTrackRenderEid, rightTrackRenderEid] = createHarvesterTracks(
-        world,
-        physicalWorld,
         options,
         {
             anchorX: 0,
@@ -77,37 +72,38 @@ export function createHarvester(world: PhysicsWorld, physicalWorld: PhysicalWorl
     options.width = PADDING * 10;
     options.height = PADDING * 6;
     options.turret.rotationSpeed = PI * 0.4; // Slower rotation for heavy barrier
-    const [barrierRenderEid] = createHarvesterTurret(world, physicalWorld, options, harvesterPhysEid, harvesterRenderEid, harvesterPid);
+    const [barrierRenderEid] = createHarvesterTurret(options, harvesterPhysEid, harvesterRenderEid, harvesterPid);
+
+    // Carrier PHYSICS atoms (the EXACT atom owning each slot group).
+    const leftTrackPhysEid = getPhysicsOf(leftTrackRenderEid);
+    const rightTrackPhysEid = getPhysicsOf(rightTrackRenderEid);
+    const barrierPhysEid = getPhysicsOf(barrierRenderEid);
 
     // Hull parts attached to harvester body
-    createSlotEntities(renderWorld, harvesterRenderEid, hullSet, options.color, SlotPartType.HullPart);
+    createSlotEntities(harvesterPhysEid, hullSet, options.color, SlotPartType.HullPart);
 
     // Caterpillar parts attached to track entities
     updateColorOptions(options, TRACKS_COLOR);
-    createSlotEntities(renderWorld, leftTrackRenderEid, caterpillarSetLeft, options.color, SlotPartType.Caterpillar);
-    createSlotEntities(renderWorld, rightTrackRenderEid, caterpillarSetRight, options.color, SlotPartType.Caterpillar);
+    createSlotEntities(leftTrackPhysEid, caterpillarSetLeft, options.color, SlotPartType.Caterpillar);
+    createSlotEntities(rightTrackPhysEid, caterpillarSetRight, options.color, SlotPartType.Caterpillar);
 
     // Front scoop for collecting debris
     updateColorOptions(options, SCOOP_COLOR);
-    createSlotEntities(renderWorld, harvesterRenderEid, scoopSet, options.color, SlotPartType.Scoop);
+    createSlotEntities(harvesterPhysEid, scoopSet, options.color, SlotPartType.Scoop);
 
     // Impenetrable barrier on the "turret"
     updateColorOptions(options, BARRIER_COLOR);
-    createSlotEntities(renderWorld, barrierRenderEid, barrierSet, options.color, SlotPartType.Barrier);
+    createSlotEntities(barrierPhysEid, barrierSet, options.color, SlotPartType.Barrier);
 
     // Energy shield arc - semi-transparent cyan, bullet-only collision
     updateColorOptions(options, SHIELD_COLOR);
-    createSlotEntities(renderWorld, barrierRenderEid, shieldSet, options.color, SlotPartType.Shield);
+    createSlotEntities(barrierPhysEid, shieldSet, options.color, SlotPartType.Shield);
 
     // Fill all slots with physical parts
-    updateSlotsBrightness(renderWorld, harvesterRenderEid);
-    fillAllSlots(renderWorld, physicalWorld, harvesterRenderEid, options);
-    updateSlotsBrightness(renderWorld, leftTrackRenderEid);
-    fillAllSlots(renderWorld, physicalWorld, leftTrackRenderEid, options);
-    updateSlotsBrightness(renderWorld, rightTrackRenderEid);
-    fillAllSlots(renderWorld, physicalWorld, rightTrackRenderEid, options);
-    updateSlotsBrightness(renderWorld, barrierRenderEid);
-    fillAllSlots(renderWorld, physicalWorld, barrierRenderEid, options);
+    fillAllSlots(harvesterPhysEid, options);
+    fillAllSlots(leftTrackPhysEid, options);
+    fillAllSlots(rightTrackPhysEid, options);
+    fillAllSlots(barrierPhysEid, options);
 
     // Add exhaust pipes
     createTankExhaustPipes(renderWorld, harvesterRenderEid, PADDING * 10, PADDING * 10);

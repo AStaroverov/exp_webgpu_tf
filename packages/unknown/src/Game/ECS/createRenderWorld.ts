@@ -5,16 +5,6 @@ import { Opaque } from '../../../../renderer/src/type.ts';
 import { createChildrenComponent } from './Components/Children.ts';
 import { createParentComponent } from './Components/Parent.ts';
 import { createExhaustPipeComponent } from './Components/ExhaustPipe.ts';
-import { createSlotComponent } from './Components/Slot.ts';
-import { createVFXComponent } from './Components/VFX.ts';
-import { createTreadMarkComponent } from './Components/TreadMark.ts';
-import { createProgressComponent } from './Components/Progress.ts';
-import { createDestroyComponent, createDestroyByTimeoutComponent } from './Components/Destroy.ts';
-import {
-    createSoundComponent,
-    createDestroyOnSoundFinishComponent,
-    createSoundParentRelativeComponent,
-} from './Components/Sound.ts';
 import { createPhysicsRefComponent } from '../DI/links.ts';
 
 function createRenderOnlyComponents(world: World) {
@@ -22,16 +12,6 @@ function createRenderOnlyComponents(world: World) {
         Parent: createParentComponent(world),
         Children: createChildrenComponent(world),
         ExhaustPipe: createExhaustPipeComponent(world),
-        Slot: createSlotComponent(world),
-        VFX: createVFXComponent(world),
-        TreadMark: createTreadMarkComponent(world),
-        Sound: createSoundComponent(world),
-        SoundParentRelative: createSoundParentRelativeComponent(world),
-        DestroyOnSoundFinish: createDestroyOnSoundFinishComponent(world),
-        // fx lifecycle lives with fx (RenderWorld) transitionally
-        ProgressFx: createProgressComponent(world),
-        DestroyFx: createDestroyComponent(world),
-        DestroyByTimeoutFx: createDestroyByTimeoutComponent(world),
         PhysicsRef: createPhysicsRefComponent(world),
     };
 }

@@ -1,14 +1,14 @@
 import { query, removeEntity } from 'bitecs';
-import { getRenderWorldComponents } from '../createRenderWorld.ts';
+import { getFxWorldComponents } from '../createFxWorld.ts';
 import { Worlds } from '../../DI/Worlds.ts';
 
-// fx-only timeout destroy (RenderWorld). fx entities have no Rapier body, so they are
-// reaped directly from RenderWorld (no Bridge/atom involved).
-export function createDestroyByTimeoutSystem({ renderWorld } = Worlds) {
-    const { DestroyByTimeoutFx } = getRenderWorldComponents(renderWorld);
+// fx-only timeout destroy (FxWorld). fx entities have no Rapier body, so they are
+// reaped directly from FxWorld (no Bridge/atom involved).
+export function createDestroyByTimeoutSystem({ fxWorld } = Worlds) {
+    const { DestroyByTimeoutFx } = getFxWorldComponents(fxWorld);
 
     return (delta: number) => {
-        const eids = query(renderWorld, [DestroyByTimeoutFx]);
+        const eids = query(fxWorld, [DestroyByTimeoutFx]);
 
         for (let i = 0; i < eids.length; i++) {
             const eid = eids[i];
@@ -16,7 +16,7 @@ export function createDestroyByTimeoutSystem({ renderWorld } = Worlds) {
             DestroyByTimeoutFx.updateTimeout(eid, delta);
 
             if (DestroyByTimeoutFx.timeout[eid] <= 0) {
-                removeEntity(renderWorld, eid);
+                removeEntity(fxWorld, eid);
             }
         }
     };

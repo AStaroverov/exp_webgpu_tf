@@ -1,9 +1,10 @@
 import { addEntity } from 'bitecs';
 import { VFXType } from '../Components/VFX.ts';
-import { getRenderWorldComponents, RenderGameWorld } from '../createRenderWorld.ts';
-import { addTransformComponents, applyMatrixTranslate, applyMatrixScale, LocalTransform } from '../../../../../renderer/src/ECS/Components/Transform.ts';
+import { getFxWorldComponents } from '../createFxWorld.ts';
+import { addTransformComponents, applyMatrixTranslate, applyMatrixScale } from '../../../../../renderer/src/ECS/Components/Transform.ts';
 import { ZIndex } from '../../consts.ts';
 import { RenderDI } from '../../DI/RenderDI.ts';
+import { Worlds } from '../../DI/Worlds.ts';
 
 export interface HitFlashOptions {
     x: number;
@@ -12,17 +13,17 @@ export interface HitFlashOptions {
     duration: number;
 }
 
-export function spawnHitFlash(world: RenderGameWorld, options: HitFlashOptions, { enabled } = RenderDI) {
+export function spawnHitFlash(options: HitFlashOptions, { fxWorld } = Worlds, { enabled } = RenderDI) {
     if (!enabled) return;
 
-    const { VFX, ProgressFx, DestroyByTimeoutFx } = getRenderWorldComponents(world);
-    const eid = addEntity(world);
+    const { LocalTransform, VFX, ProgressFx, DestroyByTimeoutFx } = getFxWorldComponents(fxWorld);
+    const eid = addEntity(fxWorld);
 
-    addTransformComponents(world, eid);
+    addTransformComponents(fxWorld, eid);
     applyMatrixTranslate(LocalTransform.matrix.getBatch(eid), options.x, options.y, ZIndex.HitFlash);
     applyMatrixScale(LocalTransform.matrix.getBatch(eid), options.size, options.size);
 
-    VFX.addComponent(world, eid, VFXType.HitFlash);
-    ProgressFx.addComponent(world, eid, options.duration);
-    DestroyByTimeoutFx.addComponent(world, eid, options.duration);
+    VFX.addComponent(fxWorld, eid, VFXType.HitFlash);
+    ProgressFx.addComponent(fxWorld, eid, options.duration);
+    DestroyByTimeoutFx.addComponent(fxWorld, eid, options.duration);
 }

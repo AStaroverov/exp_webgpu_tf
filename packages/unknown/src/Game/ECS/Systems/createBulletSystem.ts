@@ -1,27 +1,27 @@
 import { query } from 'bitecs';
 import { Worlds } from '../../DI/Worlds.ts';
-import { BridgeDI } from '../../DI/BridgeDI.ts';
+import { getNodeParent } from '../refs.ts';
 import { spawnBullet } from '../Entities/Bullet.ts';
-import { getPhysicsWorldComponents } from '../createPhysicsWorld.ts';
-import { getRenderWorldComponents } from '../createRenderWorld.ts';
+import { getBrainWorldComponents } from '../createBrainWorld.ts';
 
-export function createSpawnerBulletsSystem({ physicsWorld, renderWorld } = Worlds) {
-    const { Firearms, TurretController, VehicleTurret } = getPhysicsWorldComponents(physicsWorld);
+export function createSpawnerBulletsSystem({ brainWorld } = Worlds) {
+    const { Firearms, TurretController } = getBrainWorldComponents(brainWorld);
 
     return ((delta: number) => {
-        const { Parent } = getRenderWorldComponents(renderWorld);
-        const turretEids = query(physicsWorld, [VehicleTurret, TurretController, Firearms]);
+        // Node-rooted: iterate armed turret NODES directly (Firearms + TurretController).
+        // This is exactly the old set — only armed turrets ever carried both — without
+        // the atom->brain climb (harvester barriers lack Firearms, so are excluded).
+        const turretBrains = query(brainWorld, [Firearms, TurretController]);
 
-        for (let i = 0; i < turretEids.length; i++) {
-            const turretEid = turretEids[i];
+        for (let i = 0; i < turretBrains.length; i++) {
+            const turretBrain = turretBrains[i];
 
-            Firearms.updateReloading(turretEid, delta);
-            if (!TurretController.shouldShoot(turretEid) || Firearms.isReloading(turretEid)) continue;
-            Firearms.startReloading(turretEid);
+            Firearms.updateReloading(turretBrain, delta);
+            if (!TurretController.shouldShoot(turretBrain) || Firearms.isReloading(turretBrain)) continue;
+            Firearms.startReloading(turretBrain);
 
-            // turret phys -> turret render -> vehicle render -> vehicle phys
-            const vehicleEid = BridgeDI.getPhysicsOf(Parent.id[BridgeDI.getRenderOf(turretEid)]);
-            spawnBullet(vehicleEid);
+            // turret node -> Brain parent (hull node) = the hull-brain.
+            spawnBullet(getNodeParent(turretBrain));
         }
     });
 }

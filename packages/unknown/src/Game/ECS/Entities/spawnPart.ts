@@ -6,16 +6,11 @@ import {
 import { createRectangle, createCircle } from '../../../../../renderer/src/ECS/Entities/Shapes.ts';
 import { getRenderComponents } from '../../../../../renderer/src/ECS/world.ts';
 import { createRigidRectangle, createRigidCircle } from '../../Physical/createRigid.ts';
-import { PhysicalWorld } from '../../Physical/initPhysicalWorld.ts';
 import { getPhysicsWorldComponents, PhysicsWorld } from '../createPhysicsWorld.ts';
-import { RenderGameWorld } from '../createRenderWorld.ts';
-import { BridgeDI } from '../../DI/BridgeDI.ts';
+import { getRenderWorldComponents } from '../createRenderWorld.ts';
+import { physicsByBody } from '../../DI/physicsByBody.ts';
+import { Worlds } from '../../DI/Worlds.ts';
 
-export type SpawnCtx = {
-    physicsWorld: PhysicsWorld;
-    renderWorld: RenderGameWorld;
-    physicalWorld: PhysicalWorld;
-};
 
 export type SpawnResult = [physEid: number, renderEid: number, physicalId: number];
 
@@ -29,16 +24,18 @@ function addPhysicsAtom(physicsWorld: PhysicsWorld, physicalId: number): number 
     return physEid;
 }
 
-function linkAtom(physEid: number, renderEid: number, physicalId: number): SpawnResult {
-    BridgeDI.link('mirror', physEid, renderEid);
-    BridgeDI.registerPhysicalId(physicalId, physEid);
+// The render references its physics body downward (render -> physics). The atom no
+// longer references its render; the owning brain node points at the render/physics.
+function linkAtom(physEid: number, renderEid: number, physicalId: number, { renderWorld } = Worlds): SpawnResult {
+    getRenderWorldComponents(renderWorld).PhysicsRef.set(renderWorld, renderEid, physEid);
+    physicsByBody.set(physicalId, physEid);
     return [physEid, renderEid, physicalId];
 }
 
 // ---- visible part / bullet: mirror carries Shape/Color/Roundness (was createRectangleRR) ----
 export function spawnRectanglePart(
-    ctx: SpawnCtx,
     options: Parameters<typeof createRectangle>[1] & Parameters<typeof createRigidRectangle>[1],
+    ctx = Worlds,
 ): SpawnResult {
     const physicalId = createRigidRectangle(ctx.physicalWorld, options);
     const physEid = addPhysicsAtom(ctx.physicsWorld, physicalId);
@@ -47,8 +44,8 @@ export function spawnRectanglePart(
 }
 
 export function spawnCirclePart(
-    ctx: SpawnCtx,
     options: Parameters<typeof createCircle>[1] & Parameters<typeof createRigidCircle>[1],
+    ctx = Worlds,
 ): SpawnResult {
     const physicalId = createRigidCircle(ctx.physicalWorld, options);
     const physEid = addPhysicsAtom(ctx.physicsWorld, physicalId);
@@ -58,8 +55,8 @@ export function spawnCirclePart(
 
 // ---- carrier: invisible body, mirror is transform-only (was createRectangleRigidGroup) ----
 export function spawnRectangleCarrier(
-    ctx: SpawnCtx,
     options: Parameters<typeof createRigidRectangle>[1] & { x: number; y: number },
+    ctx = Worlds,
 ): SpawnResult {
     const physicalId = createRigidRectangle(ctx.physicalWorld, options);
     const physEid = addPhysicsAtom(ctx.physicsWorld, physicalId);
@@ -75,8 +72,8 @@ export function spawnRectangleCarrier(
 }
 
 export function spawnCircleCarrier(
-    ctx: SpawnCtx,
     options: Parameters<typeof createRigidCircle>[1] & { x: number; y: number },
+    ctx = Worlds,
 ): SpawnResult {
     const physicalId = createRigidCircle(ctx.physicalWorld, options);
     const physEid = addPhysicsAtom(ctx.physicsWorld, physicalId);

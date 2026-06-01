@@ -1,13 +1,13 @@
 import { query } from 'bitecs';
-import { getRenderWorldComponents } from '../createRenderWorld.ts';
+import { getFxWorldComponents } from '../createFxWorld.ts';
 import { Worlds } from '../../DI/Worlds.ts';
 
-// Ages fx progress (RenderWorld). All Progress users in Step 1 are render-only fx.
-export function createProgressSystem({ renderWorld } = Worlds) {
-    const { ProgressFx } = getRenderWorldComponents(renderWorld);
+// Ages fx progress (FxWorld). All Progress users are fx entities.
+export function createProgressSystem({ fxWorld } = Worlds) {
+    const { ProgressFx } = getFxWorldComponents(fxWorld);
 
     return (delta: number) => {
-        const eids = query(renderWorld, [ProgressFx]);
+        const eids = query(fxWorld, [ProgressFx]);
 
         for (let i = 0; i < eids.length; i++) {
             ProgressFx.updateAge(eids[i], delta);

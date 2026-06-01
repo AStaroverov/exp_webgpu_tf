@@ -1,23 +1,29 @@
-import { query } from 'bitecs';
+import { hasComponent, query } from 'bitecs';
 import { normalizeAngle } from '../../../../../../../lib/math.ts';
 import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
-import { getRenderWorldComponents } from '../../createRenderWorld.ts';
-import { BridgeDI } from '../../../DI/BridgeDI.ts';
+import { getBrainWorldComponents } from '../../createBrainWorld.ts';
+import { getNodeParent, getNodePhysics } from '../../refs.ts';
 import { Worlds } from '../../../DI/Worlds.ts';
 
-export function createVehicleTurretRotationSystem({ physicsWorld, renderWorld } = Worlds) {
-    const { VehicleTurret, TurretController, JointMotor, RigidBodyState } = getPhysicsWorldComponents(physicsWorld);
+export function createVehicleTurretRotationSystem({ physicsWorld, brainWorld } = Worlds) {
+    const { VehicleTurret, JointMotor, RigidBodyState } = getPhysicsWorldComponents(physicsWorld);
+    const { TurretController } = getBrainWorldComponents(brainWorld);
 
     return (delta: number) => {
-        const { Parent } = getRenderWorldComponents(renderWorld);
-        const turretEids = query(physicsWorld, [VehicleTurret, TurretController, JointMotor]);
+        // Node-rooted: iterate turret NODES (every turret carries a TurretController
+        // brain — set in createVehicleTurret), descending to the turret atom. Equals
+        // the old query([VehicleTurret, JointMotor]) set, guarded by JointMotor below.
+        const turretBrains = query(brainWorld, [TurretController]);
 
-        for (let i = 0; i < turretEids.length; i++) {
-            const turretEid = turretEids[i];
-            const vehicleEid = BridgeDI.getPhysicsOf(Parent.id[BridgeDI.getRenderOf(turretEid)]);
+        for (let i = 0; i < turretBrains.length; i++) {
+            const turretBrain = turretBrains[i];
+            const turretEid = getNodePhysics(turretBrain);
+            if (turretEid === 0 || !hasComponent(physicsWorld, turretEid, JointMotor)) continue;
+            // turret node -> Brain parent (hull node) -> hull physics (vehicle atom).
+            const vehicleEid = getNodePhysics(getNodeParent(turretBrain));
             const vehicleRot = RigidBodyState.rotation[vehicleEid];
             const turretRot = RigidBodyState.rotation[turretEid];
-            const turretRotDir = TurretController.rotation[turretEid];
+            const turretRotDir = TurretController.rotation[turretBrain];
             const maxRotationSpeed = VehicleTurret.rotationSpeed[turretEid];
 
             const relTurretRot = normalizeAngle(turretRot - vehicleRot);

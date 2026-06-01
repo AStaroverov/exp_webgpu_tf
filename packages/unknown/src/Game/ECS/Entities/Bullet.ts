@@ -1,7 +1,7 @@
 import { isNumber } from 'lodash-es';
 import { applyRotationToVector } from '../../Physical/applyRotationToVector.ts';
-import { spawnRectanglePart, SpawnCtx } from './spawnPart.ts';
-import { BridgeDI } from '../../DI/BridgeDI.ts';
+import { spawnRectanglePart } from './spawnPart.ts';
+import { getNodeByPhysics, getNodeRender, getTurretPhysOfHull } from '../refs.ts';
 import { Worlds } from '../../DI/Worlds.ts';
 import { getRenderWorldComponents } from '../createRenderWorld.ts';
 import { spawnMuzzleFlash } from './MuzzleFlash.ts';
@@ -19,10 +19,11 @@ import { ActiveEvents, RigidBodyType } from '@dimforge/rapier2d-simd';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
 import { BulletCaliber, mapBulletCaliber, MAX_BULLET_SPEED, MIN_BULLET_SPEED } from '../Components/Bullet.ts';
 import { getPhysicsWorldComponents } from '../createPhysicsWorld.ts';
+import { getBrainWorldComponents } from '../createBrainWorld.ts';
 import { min, PI } from '../../../../../../lib/math.ts';
 import { ExplosionConfig, SoundConfig } from '../../Config/index.ts';
 
-type Options = Parameters<typeof spawnRectanglePart>[1];
+type Options = Parameters<typeof spawnRectanglePart>[0];
 const optionsBulletRR: Options = {
     x: 0,
     y: 0,
@@ -48,7 +49,7 @@ export function createBullet(options: Partial<Options> & {
     calibre: BulletCaliber,
     playerId: number,
     teamId: number
-}, { physicsWorld: world, renderWorld, physicalWorld } = Worlds) {
+}, { physicsWorld: world } = Worlds) {
     const { Bullet, TeamRef, PlayerRef, Hitable, Damagable, DestroyBySpeed } = getPhysicsWorldComponents(world);
 
     Object.assign(optionsBulletRR, defaultOptionsBulletRR);
@@ -67,9 +68,9 @@ export function createBullet(options: Partial<Options> & {
     optionsBulletRR.density = bulletCaliber.density;
     optionsBulletRR.linearDamping = bulletCaliber.linearDamping;
 
-    const ctx: SpawnCtx = { physicsWorld: world, renderWorld, physicalWorld };
-    const [bulletPhysEid] = spawnRectanglePart(ctx, optionsBulletRR);
+    const [bulletPhysEid] = spawnRectanglePart(optionsBulletRR);
     Bullet.addComponent(world, bulletPhysEid, options.calibre);
+    // Cheap static team/player copy for the cold contact path (saveHitters).
     TeamRef.addComponent(world, bulletPhysEid, options.teamId);
     PlayerRef.addComponent(world, bulletPhysEid, options.playerId);
     Hitable.addComponent(world, bulletPhysEid, min(bulletCaliber.width, bulletCaliber.height) / 10);
@@ -93,16 +94,18 @@ const optionsSpawnBullet = {
 const tmpMatrix = mat4.create();
 const tmpPosition = vec3.create() as Float32Array;
 
-export function spawnBullet(vehiclePhysEid: number, { physicsWorld: world, renderWorld } = Worlds) {
-    const { Tank, Firearms, TeamRef, PlayerRef } = getPhysicsWorldComponents(world);
+export function spawnBullet(hullBrain: number, { renderWorld, brainWorld } = Worlds) {
+    const { Firearms, TeamRef, PlayerRef } = getBrainWorldComponents(brainWorld);
     const { Color } = getRenderWorldComponents(renderWorld);
 
-    const turretPhysEid = Tank.turretEId[vehiclePhysEid];
-    const turretRenderEid = BridgeDI.getRenderOf(turretPhysEid);
-    const vehicleRenderEid = BridgeDI.getRenderOf(vehiclePhysEid);
+    // hull node -> turret child node (-> turret ATOM -> turret node).
+    const turretPhysEid = getTurretPhysOfHull(hullBrain);
+    const turretBrain = getNodeByPhysics(turretPhysEid);
+    const turretRenderEid = getNodeRender(turretBrain);
+    const vehicleRenderEid = getNodeRender(hullBrain);
     const globalTransform = GlobalTransform.matrix.getBatch(turretRenderEid);
-    const bulletPosition = Firearms.bulletStartPosition.getBatch(turretPhysEid);
-    const bulletCaliber = mapBulletCaliber[Firearms.caliber[turretPhysEid] as BulletCaliber];
+    const bulletPosition = Firearms.bulletStartPosition.getBatch(turretBrain);
+    const bulletCaliber = mapBulletCaliber[Firearms.caliber[turretBrain] as BulletCaliber];
 
     tmpPosition.set(bulletPosition);
     mat4.identity(tmpMatrix);
@@ -119,13 +122,13 @@ export function spawnBullet(vehiclePhysEid: number, { physicsWorld: world, rende
     optionsSpawnBullet.width = bulletCaliber.width;
     optionsSpawnBullet.height = bulletCaliber.height;
     optionsSpawnBullet.rotation = getMatrixRotationZ(tmpMatrix);
-    optionsSpawnBullet.calibre = Firearms.caliber[turretPhysEid] as BulletCaliber;
-    optionsSpawnBullet.teamId = TeamRef.id[vehiclePhysEid];
-    optionsSpawnBullet.playerId = PlayerRef.id[vehiclePhysEid];
+    optionsSpawnBullet.calibre = Firearms.caliber[turretBrain] as BulletCaliber;
+    optionsSpawnBullet.teamId = TeamRef.id[hullBrain];
+    optionsSpawnBullet.playerId = PlayerRef.id[hullBrain];
 
     createBullet(optionsSpawnBullet);
 
-    spawnMuzzleFlash(renderWorld, {
+    spawnMuzzleFlash({
         x: optionsSpawnBullet.x,
         y: optionsSpawnBullet.y,
         size: bulletCaliber.height * ExplosionConfig.muzzleFlashSizeMult,
@@ -134,7 +137,7 @@ export function spawnBullet(vehiclePhysEid: number, { physicsWorld: world, rende
     });
 
     const soundVolume = SoundConfig.shootBaseVolume + (bulletCaliber.width * SoundConfig.shootVolumePerWidth);
-    spawnSoundAtPosition(renderWorld, {
+    spawnSoundAtPosition({
         type: SoundType.TankShoot,
         x: optionsSpawnBullet.x,
         y: optionsSpawnBullet.y,

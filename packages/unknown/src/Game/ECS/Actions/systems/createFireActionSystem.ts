@@ -14,7 +14,10 @@
  */
 
 import { addEntity, World } from 'bitecs';
-import { getPhysicsWorldComponents, PhysicsWorld } from '../../createPhysicsWorld.ts';
+import { PhysicsWorld } from '../../createPhysicsWorld.ts';
+import { getBrainWorldComponents } from '../../createBrainWorld.ts';
+import { getNodeByPhysics, getTurretPhysOfHull } from '../../refs.ts';
+import { Worlds } from '../../../DI/Worlds.ts';
 import { ActionDescriptor, applyTarget } from '../ActionDescriptor.ts';
 import { getTopAction } from '../ActionScheduleDI.ts';
 import { getActionComponents } from '../createActionWorld.ts';
@@ -51,10 +54,10 @@ export const FireActionDescriptor: ActionDescriptor<FireActionSpec> = {
 
 export function createFireActionSystem(
     actionWorld: World,
-    gameWorld: PhysicsWorld,
+    _gameWorld: PhysicsWorld,
 ) {
     const { Action, FireParams } = getActionComponents(actionWorld);
-    const { Tank, TurretController, Firearms } = getPhysicsWorldComponents(gameWorld);
+    const { TurretController, Firearms } = getBrainWorldComponents(Worlds.brainWorld);
 
     const plans = new Map<number, FirePlan>();
 
@@ -65,7 +68,8 @@ export function createFireActionSystem(
         if (Action.status[top] === ActionStatus.Finished) return;
 
         const ownerEid = Action.ownerEid[top];
-        const turretEid = Tank.turretEId[ownerEid];
+        // ownerEid is the hull ATOM; its hull node's turret child node -> turret ATOM.
+        const turretEid = getTurretPhysOfHull(getNodeByPhysics(ownerEid));
 
         // No turret to fire from → finish immediately.
         if (!turretEid) {
@@ -73,6 +77,7 @@ export function createFireActionSystem(
             Action.setFinished$(top);
             return;
         }
+        const turretBrain = getNodeByPhysics(turretEid);
 
         if (Action.status[top] === ActionStatus.Idle) {
             Action.setRunning$(top);
@@ -81,7 +86,7 @@ export function createFireActionSystem(
 
         const plan = plans.get(top);
         if (!plan) {
-            TurretController.setShooting$(turretEid, 0);
+            TurretController.setShooting$(turretBrain, 0);
             Action.setFinished$(top);
             return;
         }
@@ -89,15 +94,15 @@ export function createFireActionSystem(
         if (plan.phase === 'waitReady') {
             // Wait until the weapon is ready, then raise the shoot flag. The spawner
             // (run later this tick) fires the round and starts the reload.
-            if (Firearms.isReloading(turretEid)) return;
-            TurretController.setShooting$(turretEid, 1);
+            if (Firearms.isReloading(turretBrain)) return;
+            TurretController.setShooting$(turretBrain, 1);
             plan.phase = 'firing';
             return;
         }
 
         // phase === 'firing': the reload starting confirms the round was fired.
-        if (Firearms.isReloading(turretEid)) {
-            TurretController.setShooting$(turretEid, 0);
+        if (Firearms.isReloading(turretBrain)) {
+            TurretController.setShooting$(turretBrain, 0);
             plan.remaining--;
             if (plan.remaining <= 0) {
                 plans.delete(top);

@@ -5,59 +5,68 @@ import { BulletCaliber, mapBulletCaliber } from '../Components/Bullet.ts';
 import { createChangeDetector } from '../../../../../renderer/src/ECS/Systems/ChangedDetectorSystem.ts';
 import { getTankHealth, tearOffTankPart } from '../Entities/Tank/TankUtils.ts';
 import { spawnHitFlash } from '../Entities/HitFlash.ts';
-import {
-    getMatrixTranslationX,
-    getMatrixTranslationY,
-    GlobalTransform,
-} from '../../../../../renderer/src/ECS/Components/Transform.ts';
 import { clamp } from 'lodash';
 import { SoundType } from '../Components/Sound.ts';
-import { spawnSoundAtParent } from '../Entities/Sound.ts';
+import { spawnSoundForOwner } from '../Entities/Sound.ts';
 import { getPhysicsWorldComponents, PhysicsWorld } from '../createPhysicsWorld.ts';
-import { getRenderWorldComponents, RenderGameWorld } from '../createRenderWorld.ts';
-import { BridgeDI } from '../../DI/BridgeDI.ts';
+import { getBrainWorldComponents, BrainWorld } from '../createBrainWorld.ts';
+import { getCarrierNodeOfPart, getNodeParent, getNodePhysics } from '../refs.ts';
 
-export function createHitableSystem({ physicsWorld, renderWorld } = Worlds) {
-    const { Hitable, Bullet, VehiclePart, Vehicle } = getPhysicsWorldComponents(physicsWorld);
+export function createHitableSystem({ physicsWorld, brainWorld } = Worlds) {
+    const { Hitable, Bullet, VehiclePart, RigidBodyState } = getPhysicsWorldComponents(physicsWorld);
+    const { Vehicle, TurretController } = getBrainWorldComponents(brainWorld);
     const hitableChanges = createChangeDetector(physicsWorld, [onSet(Hitable)]);
     let time = 0;
 
     return (delta: number) => {
-        const { Parent } = getRenderWorldComponents(renderWorld);
         time += delta;
 
         if (!hitableChanges.hasChanges()) return;
 
         const vehiclePartEids = query(physicsWorld, [VehiclePart, Hitable]);
-        const hittedVehicles = new Set<EntityId>();
+        const hittedVehicleBrains = new Set<EntityId>();
 
         for (let i = 0; i < vehiclePartEids.length; i++) {
             const vehiclePartEid = vehiclePartEids[i];
             if (!hitableChanges.has(vehiclePartEid)) continue;
 
             const hitEids = Hitable.getHitEids(vehiclePartEid);
-            // part phys -> part render -> slot render -> carrier render -> carrier phys (vehicle)
-            const partRenderEid = BridgeDI.getRenderOf(vehiclePartEid);
-            const slotRenderEid = Parent.id[partRenderEid];
-            const carrierRenderEid = Parent.id[slotRenderEid];
-            const vehicleEid = BridgeDI.getPhysicsOf(carrierRenderEid);
+            // Resolve the part's vehicle top-down from its carrier node (the node whose
+            // slot holds it), reproducing the old part->carrier-atom->attached-brain
+            // chain. A node owns its OWN brain only if it carries Vehicle (hull) or
+            // TurretController (turret); track/wheel/gun atoms were attached to their
+            // PARENT's brain. When that attached brain bears Vehicle, the credited body
+            // is the carrier atom itself (hull/track); otherwise climb one node-parent.
+            const [carrierNode] = getCarrierNodeOfPart(vehiclePartEid);
+            const ownsBrain = hasComponent(brainWorld, carrierNode, Vehicle)
+                || hasComponent(brainWorld, carrierNode, TurretController);
+            const attachedBrain = ownsBrain ? carrierNode : getNodeParent(carrierNode);
+            let vehicleBrain: number;
+            let vehiclePhysEid: number;
+            if (hasComponent(brainWorld, attachedBrain, Vehicle)) {
+                vehicleBrain = attachedBrain;
+                vehiclePhysEid = getNodePhysics(carrierNode);
+            } else {
+                vehicleBrain = getNodeParent(carrierNode);
+                vehiclePhysEid = getNodePhysics(vehicleBrain);
+            }
 
             applyDamage(physicsWorld, vehiclePartEid);
-            saveHitters(physicsWorld, vehiclePartEid, vehicleEid, hitEids);
+            saveHitters(physicsWorld, brainWorld, vehiclePartEid, vehicleBrain, hitEids);
 
-            if (hasComponent(physicsWorld, vehicleEid, Vehicle)) {
-                hittedVehicles.add(vehicleEid);
+            if (hasComponent(brainWorld, vehicleBrain, Vehicle)) {
+                hittedVehicleBrains.add(vehiclePhysEid);
             }
 
             if (!Hitable.isDestroyed(vehiclePartEid)) continue;
 
             tearOffTankPart(vehiclePartEid, true);
 
-            getTankHealth(vehicleEid);
+            getTankHealth(vehiclePhysEid);
         }
 
-        for (const vehicleEid of hittedVehicles) {
-           throttledSpawnSoundAtParent(renderWorld, BridgeDI.getRenderOf(vehicleEid), time, 200);
+        for (const vehiclePhysEid of hittedVehicleBrains) {
+           throttledSpawnSoundForOwner(vehiclePhysEid, time, 200);
         }
 
         const bulletIds = query(physicsWorld, [Bullet, Hitable]);
@@ -69,12 +78,14 @@ export function createHitableSystem({ physicsWorld, renderWorld } = Worlds) {
 
             if (!Hitable.isDestroyed(bulletId)) continue;
 
-            const bulletMatrix = GlobalTransform.matrix.getBatch(BridgeDI.getRenderOf(bulletId));
+            // Bullets are leaf atoms (no brain node) and visually mirror their physics
+            // body, so the hit point is the bullet atom's own RigidBodyState position.
+            const bulletPos = RigidBodyState.position.getBatch(bulletId);
             const bulletCaliber = mapBulletCaliber[Bullet.caliber[bulletId] as BulletCaliber];
-            const hitX = getMatrixTranslationX(bulletMatrix);
-            const hitY = getMatrixTranslationY(bulletMatrix);
+            const hitX = bulletPos[0];
+            const hitY = bulletPos[1];
 
-            spawnHitFlash(renderWorld, {
+            spawnHitFlash({
                 x: hitX,
                 y: hitY,
                 size: bulletCaliber.width * 2,
@@ -121,36 +132,40 @@ function applyDamage(world: PhysicsWorld, targetEid: number) {
 
 function saveHitters(
     world: PhysicsWorld,
+    brainWorld: BrainWorld,
     hittableEid: EntityId,
-    vehicleEid: EntityId,
+    vehicleBrain: EntityId,
     hitEids: Float64Array,
 ) {
-    const { LastHitters, TeamRef, PlayerRef } = getPhysicsWorldComponents(world);
-    if (!hasComponent(world, vehicleEid, LastHitters)) return;
+    const { TeamRef, PlayerRef } = getPhysicsWorldComponents(world);
+    const { LastHitters } = getBrainWorldComponents(brainWorld);
+    // team/player live on the cheap static atom copy (atom TeamRef/PlayerRef); only the
+    // LastHitters credit hops to the (hull-)brain. TeamRef/PlayerRef are co-added at
+    // spawn, so TeamRef presence is the guard for "is a team/player-bearing atom".
+    if (!hasComponent(brainWorld, vehicleBrain, LastHitters)) return;
     if (!hasComponent(world, hittableEid, TeamRef)) return;
 
     const vehiclePartTeamId = TeamRef.id[hittableEid];
 
     for (const hitEid of hitEids) {
-        if (!hasComponent(world, hitEid, PlayerRef)) continue;
         if (!hasComponent(world, hitEid, TeamRef)) continue;
 
         const attackerTeamId = TeamRef.id[hitEid];
         if (attackerTeamId === vehiclePartTeamId) continue;
 
         const attackerPlayerId = PlayerRef.id[hitEid];
-        LastHitters.addHit(vehicleEid, attackerPlayerId);
+        LastHitters.addHit(vehicleBrain, attackerPlayerId);
     }
 }
 
-const mapParentToLastSoundTime = new Map<EntityId, number>();
-function throttledSpawnSoundAtParent(world: RenderGameWorld, parentEid: EntityId, now: number, delay: number) {
-    const lastSpawnTime = mapParentToLastSoundTime.get(parentEid);
+const mapOwnerToLastSoundTime = new Map<EntityId, number>();
+function throttledSpawnSoundForOwner(ownerEid: EntityId, now: number, delay: number) {
+    const lastSpawnTime = mapOwnerToLastSoundTime.get(ownerEid);
     if (lastSpawnTime && (now - lastSpawnTime) < delay) return;
-    mapParentToLastSoundTime.set(parentEid, now);
+    mapOwnerToLastSoundTime.set(ownerEid, now);
 
-    spawnSoundAtParent(world, {
-        parentEid,
+    spawnSoundForOwner({
+        ownerEid,
         type: SoundType.TankHit,
         loop: false,
         volume: 1,

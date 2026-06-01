@@ -1,36 +1,37 @@
 import { query, hasComponent } from 'bitecs';
 import { SoundType, SoundState } from '../../Components/Sound.ts';
-import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
-import { getRenderWorldComponents } from '../../createRenderWorld.ts';
-import { BridgeDI } from '../../../DI/BridgeDI.ts';
+import { getSoundWorldComponents } from '../../createSoundWorld.ts';
+import { getBrainWorldComponents } from '../../createBrainWorld.ts';
+import { getNodeByPhysics, getSoundOwnerOf } from '../../refs.ts';
 import { Worlds } from '../../../DI/Worlds.ts';
 
 const MOVE_THRESHOLD = 0.1;
 
-export function createTankMoveSoundSystem({ physicsWorld, renderWorld } = Worlds) {
-    const { Vehicle, VehicleController } = getPhysicsWorldComponents(physicsWorld);
+export function createTankMoveSoundSystem({ soundWorld, brainWorld } = Worlds) {
+    const { Vehicle, VehicleController } = getBrainWorldComponents(brainWorld);
 
-    function isVehicleMoving(vehiclePhysEid: number): boolean {
-        const move = Math.abs(VehicleController.move[vehiclePhysEid]);
-        const rotation = Math.abs(VehicleController.rotation[vehiclePhysEid]);
+    function isVehicleMoving(brainEid: number): boolean {
+        const move = Math.abs(VehicleController.move[brainEid]);
+        const rotation = Math.abs(VehicleController.rotation[brainEid]);
         return move > MOVE_THRESHOLD || rotation > MOVE_THRESHOLD;
     }
 
     return function updateVehicleMoveSounds(_delta: number): void {
-        const { Sound, Parent, SoundParentRelative } = getRenderWorldComponents(renderWorld);
-        const soundEids = query(renderWorld, [Sound, Parent, SoundParentRelative]);
+        const { Sound, SoundParentRelative } = getSoundWorldComponents(soundWorld);
+        const soundEids = query(soundWorld, [Sound, SoundParentRelative]);
 
         for (const soundEid of soundEids) {
             if (Sound.type[soundEid] !== SoundType.TankMove) continue;
 
-            const parentRenderEid = Parent.id[soundEid];
-            const parentPhysEid = BridgeDI.getPhysicsOf(parentRenderEid);
+            const ownerAtomEid = getSoundOwnerOf(soundEid);
+            // sound -> owner atom (hull) -> the brain node whose presentation is that atom.
+            const ownerBrain = getNodeByPhysics(ownerAtomEid);
 
-            if (!hasComponent(physicsWorld, parentPhysEid, Vehicle)) {
+            if (!hasComponent(brainWorld, ownerBrain, Vehicle)) {
                 continue;
             }
 
-            const isMoving = isVehicleMoving(parentPhysEid);
+            const isMoving = isVehicleMoving(ownerBrain);
             const isPlaying = Sound.state[soundEid] === SoundState.Playing;
 
             if (isMoving && !isPlaying) {

@@ -1,14 +1,14 @@
 import { query } from 'bitecs';
-import { getRenderWorldComponents } from '../../createRenderWorld.ts';
+import { getFxWorldComponents } from '../../createFxWorld.ts';
 import { Worlds } from '../../../DI/Worlds.ts';
 
 const INITIAL_ALPHA = 0.4;
 
-export function createUpdateTreadMarksSystem({ renderWorld } = Worlds) {
-    const { Color, TreadMark, ProgressFx } = getRenderWorldComponents(renderWorld);
+export function createUpdateTreadMarksSystem({ fxWorld } = Worlds) {
+    const { Color, TreadMark, ProgressFx } = getFxWorldComponents(fxWorld);
 
     return () => {
-        const treadMarkEids = query(renderWorld, [TreadMark, ProgressFx]);
+        const treadMarkEids = query(fxWorld, [TreadMark, ProgressFx]);
 
         for (const eid of treadMarkEids) {
             const progress = ProgressFx.getProgress(eid);

@@ -1,14 +1,17 @@
 import { JointData, Vector2 } from '@dimforge/rapier2d-simd';
-import { getPhysicsWorldComponents, PhysicsWorld } from '../../createPhysicsWorld.ts';
+import { addEntity } from 'bitecs';
+import { getPhysicsWorldComponents } from '../../createPhysicsWorld.ts';
 import { getRenderWorldComponents } from '../../createRenderWorld.ts';
-import { PhysicalWorld } from '../../../Physical/initPhysicalWorld.ts';
+import { getBrainWorldComponents } from '../../createBrainWorld.ts';
 import { CollisionGroup } from '../../../Physical/createRigid.ts';
-import { spawnRectangleCarrier, SpawnCtx } from '../spawnPart.ts';
+import { spawnRectangleCarrier } from '../spawnPart.ts';
 import { Worlds } from '../../../DI/Worlds.ts';
+import { getNodeByPhysics, getPhysicsOf, setNodeRender, linkBrainChild } from '../../refs.ts';
 import { VehicleType } from '../../Components/Vehicle.ts';
 import { VehicleOptions } from './Options.ts';
-import { spawnSoundAtParent } from '../Sound.ts';
+import { spawnSoundForOwner } from '../Sound.ts';
 import { SoundType } from '../../Components/Sound.ts';
+import { getSoundWorldComponents } from '../../createSoundWorld.ts';
 
 const volumeByType: Record<VehicleType, number> = {
     [VehicleType.LightTank]: 0.6,
@@ -19,46 +22,61 @@ const volumeByType: Record<VehicleType, number> = {
     [VehicleType.MeleeCar]: 0.7,
 };
 
+// Resolves the hull node (= hull-brain) given the vehicle's RENDER eid: render ->
+// physics atom -> the brain node whose presentation is that atom (downward refs only).
+export function getHullBrainByRender(vehicleRenderEid: number): number {
+    return getNodeByPhysics(getPhysicsOf(vehicleRenderEid));
+}
+
 // Returns [vehiclePhysEid, vehicleRenderEid, vehiclePid]
 export function createVehicleBase(
-    world: PhysicsWorld,
-    physicalWorld: PhysicalWorld,
     options: VehicleOptions,
+    { physicsWorld, brainWorld, renderWorld, soundWorld } = Worlds,
 ): [number, number, number] {
+    const { ImpulseAtPoint } = getPhysicsWorldComponents(physicsWorld);
     const {
-        Vehicle, TeamRef, PlayerRef, LastHitters,
-        HeuristicsData, ImpulseAtPoint, VehicleController,
-    } = getPhysicsWorldComponents(world);
-    const renderWorld = Worlds.renderWorld;
-    const { Color, Children, SoundParentRelative } = getRenderWorldComponents(renderWorld);
+        Vehicle, TeamRef, PlayerRef, LastHitters, HeuristicsData, VehicleController,
+    } = getBrainWorldComponents(brainWorld);
+    const { Color, Children } = getRenderWorldComponents(renderWorld);
+    const { SoundParentRelative } = getSoundWorldComponents(soundWorld);
 
     options.belongsCollisionGroup = CollisionGroup.VEHICALE_BASE;
     options.interactsCollisionGroup = CollisionGroup.VEHICALE_BASE;
 
-    const ctx: SpawnCtx = { physicsWorld: world, renderWorld, physicalWorld };
-    const [vehiclePhysEid, vehicleRenderEid, vehiclePid] = spawnRectangleCarrier(ctx, options);
+    // Brain-first: lay the hull node out before its physics/render presentation.
+    const hullBrain = addEntity(brainWorld);
 
-    Vehicle.addComponent(world, vehiclePhysEid, options.vehicleType);
-    Vehicle.setEngineType(vehiclePhysEid, options.engineType);
-    TeamRef.addComponent(world, vehiclePhysEid, options.teamId);
-    PlayerRef.addComponent(world, vehiclePhysEid, options.playerId);
-    LastHitters.addComponent(world, vehiclePhysEid);
-    HeuristicsData.addComponent(world, vehiclePhysEid, options.approximateColliderRadius);
-    ImpulseAtPoint.addComponent(world, vehiclePhysEid);
-    VehicleController.addComponent(world, vehiclePhysEid);
+    const [vehiclePhysEid, vehicleRenderEid, vehiclePid] = spawnRectangleCarrier(options);
+
+    // The hull-brain: the vehicle's mind. Canonical team/player live here.
+    Vehicle.addComponent(brainWorld, hullBrain, options.vehicleType);
+    Vehicle.setEngineType(hullBrain, options.engineType);
+    TeamRef.addComponent(brainWorld, hullBrain, options.teamId);
+    PlayerRef.addComponent(brainWorld, hullBrain, options.playerId);
+    LastHitters.addComponent(brainWorld, hullBrain);
+    HeuristicsData.addComponent(brainWorld, hullBrain, options.approximateColliderRadius);
+    VehicleController.addComponent(brainWorld, hullBrain);
+
+    // Per-atom physics impulse helper stays on the atom.
+    ImpulseAtPoint.addComponent(physicsWorld, vehiclePhysEid);
+
+    // Node->render presentation (scheme A: drawn node carries NodeRenderRef; the
+    // render's PhysicsRef -> physics already set in spawnRectangleCarrier). The node
+    // reaches its hull atom downward via getNodePhysics(hullBrain).
+    setNodeRender(hullBrain, vehicleRenderEid);
 
     // Render hierarchy on the mirror.
     Children.addComponent(renderWorld, vehicleRenderEid);
     Color.addComponent(renderWorld, vehicleRenderEid, ...options.color);
 
-    const soundEid = spawnSoundAtParent(renderWorld, {
-        parentEid: vehicleRenderEid,
+    const soundEid = spawnSoundForOwner({
+        ownerEid: vehiclePhysEid,
         type: SoundType.TankMove,
         volume: volumeByType[options.vehicleType] ?? 0.8,
         loop: true,
         autoplay: false,
     });
-    SoundParentRelative.addComponent(renderWorld, soundEid);
+    SoundParentRelative.addComponent(soundWorld, soundEid);
 
     return [vehiclePhysEid, vehicleRenderEid, vehiclePid];
 }
@@ -72,26 +90,33 @@ export type TurretOptions = {
 
 // Returns [turretPhysEid, turretRenderEid, turretPid]
 export function createVehicleTurret(
-    world: PhysicsWorld,
-    physicalWorld: PhysicalWorld,
     options: VehicleOptions,
     turretOptions: TurretOptions,
     vehicleRenderEid: number,
     vehiclePid: number,
+    { physicsWorld, physicalWorld, brainWorld } = Worlds,
 ): [number, number, number] {
-    const { VehicleTurret, TurretController, Joint, JointMotor } = getPhysicsWorldComponents(world);
-    const renderWorld = Worlds.renderWorld;
-    const { Parent, Children } = getRenderWorldComponents(renderWorld);
+    const { VehicleTurret, Joint, JointMotor } = getPhysicsWorldComponents(physicsWorld);
+    const { TurretController } = getBrainWorldComponents(brainWorld);
 
     options.belongsCollisionGroup = 0;
     options.interactsCollisionGroup = 0;
 
-    const ctx: SpawnCtx = { physicsWorld: world, renderWorld, physicalWorld };
-    const [turretPhysEid, turretRenderEid, turretPid] = spawnRectangleCarrier(ctx, options);
+    // Brain-first: the turret node before its physics/render presentation.
+    const turretBrain = addEntity(brainWorld);
 
-    VehicleTurret.addComponent(world, turretPhysEid);
+    const [turretPhysEid, turretRenderEid, turretPid] = spawnRectangleCarrier(options);
+
+    VehicleTurret.addComponent(physicsWorld, turretPhysEid);
     VehicleTurret.setRotationSpeed(turretPhysEid, turretOptions.rotationSpeed);
-    TurretController.addComponent(world, turretPhysEid);
+
+    // The turret-brain: aim/fire mind, distinct from the hull-brain.
+    TurretController.addComponent(brainWorld, turretBrain);
+
+    // Node->render presentation + Brain hierarchy: turret node is a child of the hull
+    // node; it reaches its turret atom downward via getNodePhysics(turretBrain).
+    setNodeRender(turretBrain, turretRenderEid);
+    linkBrainChild(getHullBrainByRender(vehicleRenderEid), turretBrain);
 
     parentVector.x = 0;
     parentVector.y = 0;
@@ -104,12 +129,12 @@ export function createVehicleTurret(
         physicalWorld.getRigidBody(turretPid),
         false,
     );
-    Joint.addComponent(world, turretPhysEid, joint.handle);
-    JointMotor.addComponent(world, turretPhysEid);
+    Joint.addComponent(physicsWorld, turretPhysEid, joint.handle);
+    JointMotor.addComponent(physicsWorld, turretPhysEid);
 
-    Parent.addComponent(renderWorld, turretRenderEid, vehicleRenderEid);
-    Children.addComponent(renderWorld, turretRenderEid);
-    Children.addChildren(vehicleRenderEid, turretRenderEid);
+    // No render parent/children: the turret carrier is physics-driven — its mirror gets
+    // a WORLD transform from mirrorSync, so it must be a render ROOT (Global = world).
+    // Parenting it under the hull would double-compose (hull.Global x turret.Local=world).
 
     return [turretPhysEid, turretRenderEid, turretPid];
 }

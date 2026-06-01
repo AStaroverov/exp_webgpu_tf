@@ -1,12 +1,13 @@
 import { JointData, Vector2 } from '@dimforge/rapier2d-simd';
-import { PhysicalWorld } from '../../../../Physical/initPhysicalWorld.ts';
 import { TrackSide } from '../../../Components/Track.ts';
 import { createVehicleBase, createVehicleTurret } from '../../Vehicle/VehicleBase.ts';
 import { createTrack, TrackOptions } from '../../Track/createTrack.ts';
 import { type TankOptions } from './Options.ts';
-import { spawnRectangleCarrier, SpawnCtx } from '../../spawnPart.ts';
-import { getPhysicsWorldComponents, PhysicsWorld } from '../../../createPhysicsWorld.ts';
-import { getRenderWorldComponents } from '../../../createRenderWorld.ts';
+import { spawnRectangleCarrier } from '../../spawnPart.ts';
+import { getPhysicsWorldComponents } from '../../../createPhysicsWorld.ts';
+import { getBrainWorldComponents } from '../../../createBrainWorld.ts';
+import { getNodeByPhysics, setNodeRender, linkBrainChild } from '../../../refs.ts';
+import { addEntity } from 'bitecs';
 import { Worlds } from '../../../../DI/Worlds.ts';
 
 export type TankTracksConfig = {
@@ -19,20 +20,18 @@ export type TankTracksConfig = {
 
 // Returns [vehiclePhysEid, vehicleRenderEid, vehiclePid]
 export function createTankBase(
-    world: PhysicsWorld,
-    physicalWorld: PhysicalWorld,
     options: TankOptions,
+    { brainWorld } = Worlds,
 ): [number, number, number] {
-    const { Tank } = getPhysicsWorldComponents(world);
-    const [vehiclePhysEid, vehicleRenderEid, vehiclePid] = createVehicleBase(world, physicalWorld, options);
-    Tank.addComponent(world, vehiclePhysEid);
+    const { Tank } = getBrainWorldComponents(brainWorld);
+    const [vehiclePhysEid, vehicleRenderEid, vehiclePid] = createVehicleBase(options);
+    // Tank lives on the hull-brain (the hull node whose presentation is the hull atom).
+    Tank.addComponent(brainWorld, getNodeByPhysics(vehiclePhysEid));
     return [vehiclePhysEid, vehicleRenderEid, vehiclePid];
 }
 
 // Returns [leftTrackRenderEid, rightTrackRenderEid]
 export function createTankTracks(
-    world: PhysicsWorld,
-    physicalWorld: PhysicalWorld,
     options: TankOptions,
     tracksConfig: TankTracksConfig,
     tankRenderEid: number,
@@ -53,62 +52,54 @@ export function createTankTracks(
     trackOptions.anchorY = tracksConfig.leftAnchorY;
     trackOptions.x = options.x;
     trackOptions.y = options.y;
-    const [, leftTrackRenderEid] = createTrack(world, physicalWorld, trackOptions, tankRenderEid, tankPid);
+    const [, leftTrackRenderEid] = createTrack(trackOptions, tankRenderEid, tankPid);
 
     trackOptions.trackSide = TrackSide.Right;
     trackOptions.anchorY = tracksConfig.rightAnchorY;
     trackOptions.x = options.x;
     trackOptions.y = options.y;
-    const [, rightTrackRenderEid] = createTrack(world, physicalWorld, trackOptions, tankRenderEid, tankPid);
+    const [, rightTrackRenderEid] = createTrack(trackOptions, tankRenderEid, tankPid);
 
     return [leftTrackRenderEid, rightTrackRenderEid];
 }
 
-// Returns [turretRenderEid, gunRenderEid]
 export function createTankTurret(
-    world: PhysicsWorld,
-    physicalWorld: PhysicalWorld,
-    options: TankOptions,
-    tankPhysEid: number,
     tankRenderEid: number,
     tankPid: number,
-): readonly [number, number] {
-    const { Tank, Firearms } = getPhysicsWorldComponents(world);
+    options: TankOptions,
+    { brainWorld } = Worlds,
+): readonly [turretRenderEid: number, gunRenderEid: number] {
+    const { Firearms } = getBrainWorldComponents(brainWorld);
 
     const [turretPhysEid, turretRenderEid, turretPid] = createVehicleTurret(
-        world,
-        physicalWorld,
         options,
         options.turret,
         tankRenderEid,
         tankPid,
     );
 
-    const [, gunRenderEid] = createTankGun(world, physicalWorld, options, turretRenderEid, turretPid);
+    const [, gunRenderEid] = createTankGun(turretPid, turretPhysEid, options);
 
-    Tank.setTurretEid(tankPhysEid, turretPhysEid);
-
-    Firearms.addComponent(world, turretPhysEid);
-    Firearms.setData(turretPhysEid, options.firearms.bulletStartPosition, options.firearms.bulletCaliber);
-    Firearms.setReloadingDuration(turretPhysEid, options.firearms.reloadingDuration);
+    const turretBrain = getNodeByPhysics(turretPhysEid);
+    Firearms.addComponent(brainWorld, turretBrain);
+    Firearms.setData(turretBrain, options.firearms.bulletStartPosition, options.firearms.bulletCaliber);
+    Firearms.setReloadingDuration(turretBrain, options.firearms.reloadingDuration);
 
     return [turretRenderEid, gunRenderEid] as const;
 }
 
-// Returns [gunPhysEid, gunRenderEid, gunPid]
 export function createTankGun(
-    world: PhysicsWorld,
-    physicalWorld: PhysicalWorld,
-    options: TankOptions,
-    turretRenderEid: number,
     turretPid: number,
-): [number, number, number] {
-    const { Joint } = getPhysicsWorldComponents(world);
-    const renderWorld = Worlds.renderWorld;
-    const { Parent, Children } = getRenderWorldComponents(renderWorld);
+    turretPhysEid: number,
+    options: TankOptions,
+    { physicsWorld, physicalWorld, brainWorld } = Worlds,
+): [gunPhysEid: number, gunRenderEid: number, gunPid: number] {
+    const { Joint } = getPhysicsWorldComponents(physicsWorld);
 
-    const ctx: SpawnCtx = { physicsWorld: world, renderWorld, physicalWorld };
-    const [gunPhysEid, gunRenderEid, gunPid] = spawnRectangleCarrier(ctx, {
+    // Brain-first: the gun node before its physics/render presentation.
+    const gunNode = addEntity(brainWorld);
+
+    const [gunPhysEid, gunRenderEid, gunPid] = spawnRectangleCarrier({
         ...options,
         width: options.turret.gunWidth,
         height: options.turret.gunHeight,
@@ -125,11 +116,11 @@ export function createTankGun(
         physicalWorld.getRigidBody(gunPid),
         false,
     );
-    Joint.addComponent(world, gunPhysEid, joint.handle);
+    Joint.addComponent(physicsWorld, gunPhysEid, joint.handle);
 
-    Parent.addComponent(renderWorld, gunRenderEid, turretRenderEid);
-    Children.addComponent(renderWorld, gunRenderEid);
-    Children.addChildren(turretRenderEid, gunRenderEid);
+    const turretBrain = getNodeByPhysics(turretPhysEid);
+    setNodeRender(gunNode, gunRenderEid);
+    linkBrainChild(turretBrain, gunNode);
 
     return [gunPhysEid, gunRenderEid, gunPid];
 }
