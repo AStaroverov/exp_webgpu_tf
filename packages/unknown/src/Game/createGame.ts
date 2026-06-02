@@ -46,8 +46,9 @@ import { createVehicleTurretRotationSystem as createTurretRotationSystem } from 
 import { createGameWorld } from './ECS/createGameWorld.ts';
 import { VehicleType } from './Config/index.ts';
 import { MapDI } from './DI/MapDI.ts';
-import { HexGrid } from './Map/HexGrid.ts';
+import { HexGrid, OccupantKind } from './Map/HexGrid.ts';
 import { findPath } from './Map/findPath.ts';
+import { spawnObstacles } from './ECS/Entities/Obstacle/spawnObstacles.ts';
 import { createDrawGridSystem } from './ECS/Systems/Render/Grid/createDrawGridSystem.ts';
 import { ActionScheduleDI } from './ECS/Actions/ActionScheduleDI.ts';
 import { createActionWorld } from './ECS/Actions/createActionWorld.ts';
@@ -320,6 +321,7 @@ export function createGame({ width, height }: {
     };
 
     spawnDemoTanks();
+    spawnObstacles();
 
     return GameDI;
 
@@ -363,7 +365,7 @@ function spawnDemoTanks() {
         VehicleController.setRotate$(tankEid, 0);
 
         // Mark the cell as occupied by this tank (game world entity).
-        grid.occupy(q, r, tankEid);
+        grid.occupy(q, r, tankEid, OccupantKind.Unit);
         placed.push({ eid: tankEid, q, r });
 
         if (firstTankEid === null) {
@@ -395,26 +397,26 @@ function spawnDemoTanks() {
 
             fromQ = target.q;
             fromR = target.r;
-        }
 
-        // After moving, aim the turret at the next tank (circular) and fire a
-        // couple of rounds — demonstrates the TurretAim + Fire actions on the
-        // same global FIFO stack.
-        const targetTank = placed[(t + 1) % placed.length];
-        if (targetTank.eid !== tank.eid) {
-            enqueueAction(tank.eid, {
-                kind: ActionKind.TurretAim,
-                target: { kind: TargetKind.Entity, eid: targetTank.eid },
-                params: { tolerance: 0.05 },
-            });
-            enqueueAction(tank.eid, {
-                kind: ActionKind.Fire,
-                params: { shots: 2 },
-            });
+            // After moving, aim the turret at the next tank (circular) and fire a
+            // couple of rounds — demonstrates the TurretAim + Fire actions on the
+            // same global FIFO stack.
+            const targetTank = placed[(t + 1) % placed.length];
+            if (targetTank.eid !== tank.eid) {
+                enqueueAction(tank.eid, {
+                    kind: ActionKind.TurretAim,
+                    target: { kind: TargetKind.Entity, eid: targetTank.eid },
+                    params: { tolerance: 0.05 },
+                });
+                enqueueAction(tank.eid, {
+                    kind: ActionKind.Fire,
+                    params: { shots: 2 },
+                });
+            }
         }
     }
 
-    // Pick a random walkable + empty cell reachable from (q, r) via A*.
+    // Pick a random empty cell reachable from (q, r) via A*.
     function pickReachableCell(fromQ: number, fromR: number): { q: number; r: number } | null {
         const candidates: Array<{ q: number; r: number }> = [];
         grid.forEachCell((cell) => {

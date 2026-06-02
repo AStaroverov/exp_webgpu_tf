@@ -5,10 +5,8 @@
  * neighbors, distance) plus a per-cell occupancy/walkability store.
  *
  * Occupancy is stored *by reference*: each cell remembers which entity sits on
- * it (`occupantEid`) and which world that entity belongs to (`occupantWorldId`).
- * Entity ids from different worlds do not share an id space, so the world id is
- * required to resolve an occupant. The grid itself is NOT an ECS world — wiring
- * grid cells to ECS entities is a later step.
+ * it (`occupantEid`) and what kind of occupant it is (`occupantKind`). The grid
+ * itself is NOT an ECS world — wiring grid cells to ECS entities is a later step.
  */
 
 import { EntityId } from 'bitecs';
@@ -24,15 +22,25 @@ export enum MapWorldId {
     Game = 0,
 }
 
+/**
+ * What kind of entity occupies a hex. A cell is blocked the same way regardless
+ * of kind; the kind lets consumers tell a movable unit apart from a static
+ * obstacle without resolving the entity in its world.
+ */
+export enum OccupantKind {
+    /** A movable entity (a tank). */
+    Unit = 0,
+    /** A static obstacle (rock / building). */
+    Obstacle = 1,
+}
+
 export type HexCell = {
     readonly q: number;
     readonly r: number;
-    /** Whether units may path through this cell at all (terrain). */
-    walkable: boolean;
     /** Entity currently occupying this cell, or null. */
     occupantEid: EntityId | null;
-    /** Which world `occupantEid` belongs to, or null when empty. */
-    occupantWorldId: MapWorldId | null;
+    /** What kind of entity occupies this cell, or null when empty. */
+    occupantKind: OccupantKind | null;
 };
 
 const cellKey = (q: number, r: number): string => `${q},${r}`;
@@ -73,9 +81,8 @@ export class HexGrid {
             this.cells.set(cellKey(hex.q, hex.r), {
                 q: hex.q,
                 r: hex.r,
-                walkable: true,
                 occupantEid: null,
-                occupantWorldId: null,
+                occupantKind: null,
             });
         });
     }
@@ -139,40 +146,31 @@ export class HexGrid {
         return result;
     }
 
-    // --- occupancy / walkability -------------------------------------------
+    // --- occupancy ----------------------------------------------------------
 
-    isWalkable(q: number, r: number): boolean {
-        return this.cells.get(cellKey(q, r))?.walkable ?? false;
-    }
-
-    setWalkable(q: number, r: number, walkable: boolean): void {
-        const cell = this.cells.get(cellKey(q, r));
-        if (cell) cell.walkable = walkable;
-    }
-
-    /** A cell can be entered if it exists, is walkable and currently empty. */
+    /** A cell can be entered if it exists and is currently empty. */
     isPassable(q: number, r: number): boolean {
         const cell = this.cells.get(cellKey(q, r));
-        return cell != null && cell.walkable && cell.occupantEid === null;
+        return cell != null && cell.occupantEid === null;
     }
 
-    occupy(q: number, r: number, eid: EntityId, worldId: MapWorldId = MapWorldId.Game): void {
+    occupy(q: number, r: number, eid: EntityId, kind: OccupantKind): void {
         const cell = this.cells.get(cellKey(q, r));
         if (!cell) return;
         cell.occupantEid = eid;
-        cell.occupantWorldId = worldId;
+        cell.occupantKind = kind;
     }
 
     vacate(q: number, r: number): void {
         const cell = this.cells.get(cellKey(q, r));
         if (!cell) return;
         cell.occupantEid = null;
-        cell.occupantWorldId = null;
+        cell.occupantKind = null;
     }
 
-    getOccupant(q: number, r: number): { eid: EntityId; worldId: MapWorldId } | null {
+    getOccupant(q: number, r: number): { eid: EntityId; kind: OccupantKind } | null {
         const cell = this.cells.get(cellKey(q, r));
-        if (!cell || cell.occupantEid === null || cell.occupantWorldId === null) return null;
-        return { eid: cell.occupantEid, worldId: cell.occupantWorldId };
+        if (!cell || cell.occupantEid === null || cell.occupantKind === null) return null;
+        return { eid: cell.occupantEid, kind: cell.occupantKind };
     }
 }

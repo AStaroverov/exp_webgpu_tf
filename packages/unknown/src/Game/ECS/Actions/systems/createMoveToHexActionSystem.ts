@@ -14,7 +14,7 @@
 import { addEntity } from 'bitecs';
 import { GameDI } from '../../../DI/GameDI.ts';
 import { MapDI } from '../../../DI/MapDI.ts';
-import { MapWorldId } from '../../../Map/HexGrid.ts';
+import { OccupantKind } from '../../../Map/HexGrid.ts';
 import { findPath } from '../../../Map/findPath.ts';
 import { normalizeAngle } from '../../../../../../../lib/math.ts';
 import { getGameComponents } from '../../createGameWorld.ts';
@@ -160,7 +160,7 @@ export function createMoveToHexActionSystem(
             if (!(plan.fromQ === goalQ && plan.fromR === goalR)) {
                 grid.vacate(plan.fromQ, plan.fromR);
             }
-            grid.occupy(goalQ, goalR, ownerEid, MapWorldId.Game);
+            grid.occupy(goalQ, goalR, ownerEid, OccupantKind.Unit);
             plans.delete(top);
             Action.setFinished$(top);
             return;

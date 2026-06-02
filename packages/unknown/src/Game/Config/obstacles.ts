@@ -10,22 +10,22 @@
 
 export const RockConfig = {
     /** Column count range [min, max] */
-    colsRange: [5, 20] as [number, number],
+    colsRange: [7, 12] as [number, number],
     
     /** Row count range [min, max] */
-    rowsRange: [5, 20] as [number, number],
+    rowsRange: [7, 12] as [number, number],
     
     /** Cell size range [min, max] */
-    cellSizeRange: [5, 10] as [number, number],
+    cellSizeRange: [8, 12] as [number, number],
     
     /** Part size range [min, max] */
-    partSizeRange: [5, 10] as [number, number],
+    partSizeRange: [5, 12] as [number, number],
     
     /** Noise scale range for procedural generation */
-    noiseScaleRange: [0.03, 0.08] as [number, number],
+    noiseScaleRange: [0.03, 0.04] as [number, number],
     
     /** Noise octaves range */
-    noiseOctavesRange: [1, 5] as [number, number],
+    noiseOctavesRange: [1, 3] as [number, number],
     
     /** Empty threshold range (higher = more empty space) */
     emptyThresholdRange: [0.5, 0.8] as [number, number],
@@ -70,4 +70,17 @@ export const BuildingConfig = {
 } as const;
 
 export type BuildingType = typeof BuildingConfig;
+
+// =============================================================================
+// HEX-GRID PLACEMENT (prebuild → validate → commit, see spawnObstacles.ts)
+// =============================================================================
+
+export const ObstacleConfig = {
+    /** Probability of placing a rock on a free cell during prebuild. */
+    spawnChance: 0.12,
+    /** How many times to re-roll the whole layout when validate() rejects it. */
+    maxLayoutAttempts: 5,
+} as const;
+
+export type ObstacleConfigType = typeof ObstacleConfig;
 

@@ -22,6 +22,7 @@ import { createJointComponent } from './Components/Joint.ts';
 import { createJointMotorComponent } from './Components/JointMotor.ts';
 import { createLastHittersComponent } from './Components/LastHitters.ts';
 import { createObstacleComponent } from './Components/Obstacle.ts';
+import { createObstacleFootprintComponent } from './Components/ObstacleFootprint.ts';
 import { createParentComponent } from './Components/Parent.ts';
 import {
     createRigidBodyRefComponent,
@@ -73,6 +74,7 @@ function createGameOnlyComponents(world: World) {
         JointMotor: createJointMotorComponent(world),
         LastHitters: createLastHittersComponent(world),
         Obstacle: createObstacleComponent(world),
+        ObstacleFootprint: createObstacleFootprintComponent(world),
         Parent: createParentComponent(world),
         PlayerRef: createPlayerRefComponent(world),
         Progress: createProgressComponent(world),
