@@ -5,9 +5,16 @@ export const projectionMatrix = mat4.create();
 // Camera position in world coordinates
 export const cameraPosition = { x: 0, y: 0 };
 
+// Camera zoom: >1 zooms in, <1 zooms out (shows more of the world).
+export const cameraZoom = { value: 1 };
+
 export function setCameraPosition(x: number, y: number) {
     cameraPosition.x = x;
     cameraPosition.y = y;
+}
+
+export function setCameraZoom(zoom: number) {
+    cameraZoom.value = Math.max(0.01, zoom);
 }
 
 export function createResizeSystem(canvas: HTMLCanvasElement, getPixelRatio: () => number) {
@@ -19,17 +26,21 @@ export function createResizeSystem(canvas: HTMLCanvasElement, getPixelRatio: () 
     let prevPixelRatio = pixelRatio;
     let prevCameraX = cameraPosition.x;
     let prevCameraY = cameraPosition.y;
+    let prevCameraZoom = cameraZoom.value;
 
     canvas.width = width * pixelRatio;
     canvas.height = height * pixelRatio;
     updateProjectionMatrix(width, height);
 
     function updateProjectionMatrix(w: number, h: number) {
-        // Center the camera: camera position becomes the center of the screen
-        const left = cameraPosition.x - w / 2;
-        const right = cameraPosition.x + w / 2;
-        const bottom = cameraPosition.y - h / 2;
-        const top = cameraPosition.y + h / 2;
+        // Center the camera: camera position becomes the center of the screen.
+        // Zoom scales how many world units fit on screen (half-extents / zoom).
+        const halfW = w / 2 / cameraZoom.value;
+        const halfH = h / 2 / cameraZoom.value;
+        const left = cameraPosition.x - halfW;
+        const right = cameraPosition.x + halfW;
+        const bottom = cameraPosition.y - halfH;
+        const top = cameraPosition.y + halfH;
         mat4.ortho(projectionMatrix, left, right, bottom, top, -1, 1);
     }
 
@@ -39,8 +50,9 @@ export function createResizeSystem(canvas: HTMLCanvasElement, getPixelRatio: () 
         pixelRatio = getPixelRatio();
         
         const sizeChanged = prevWidth !== width || prevHeight !== height || pixelRatio !== prevPixelRatio;
-        const cameraChanged = prevCameraX !== cameraPosition.x || prevCameraY !== cameraPosition.y;
-        
+        const cameraChanged = prevCameraX !== cameraPosition.x || prevCameraY !== cameraPosition.y
+            || prevCameraZoom !== cameraZoom.value;
+
         if (!sizeChanged && !cameraChanged) return;
         
         if (sizeChanged) {
@@ -55,5 +67,6 @@ export function createResizeSystem(canvas: HTMLCanvasElement, getPixelRatio: () 
         prevPixelRatio = pixelRatio;
         prevCameraX = cameraPosition.x;
         prevCameraY = cameraPosition.y;
+        prevCameraZoom = cameraZoom.value;
     };
 }

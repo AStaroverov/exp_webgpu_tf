@@ -3,16 +3,15 @@ import { Vector2 } from '@dimforge/rapier2d-simd';
 import { GameDI } from '../../../DI/GameDI.ts';
 import { TrackSide } from '../../Components/Track.ts';
 import { applyRotationToVector } from '../../../Physical/applyRotationToVector.ts';
-import { EngineType } from '../../../Config/vehicles.ts';
+import { EngineConfig, EngineType } from '../../../Config/vehicles.ts';
 import { getGameComponents } from '../../createGameWorld.ts';
 
 const TRACK_IMPULSE_FACTOR = 3_000_000_000;
 
 const mapTypeToTrackImpulse = {
-    [EngineType.v6]: TRACK_IMPULSE_FACTOR * 0.8,
-    [EngineType.v8]: TRACK_IMPULSE_FACTOR,
-    [EngineType.v12]: TRACK_IMPULSE_FACTOR * 2,
-    [EngineType.v8_turbo]: TRACK_IMPULSE_FACTOR * 2,
+    [EngineType.v6]: TRACK_IMPULSE_FACTOR * EngineConfig[EngineType.v6].impulseMult,
+    [EngineType.v8]: TRACK_IMPULSE_FACTOR * EngineConfig[EngineType.v8].impulseMult,
+    [EngineType.v12]: TRACK_IMPULSE_FACTOR * EngineConfig[EngineType.v12].impulseMult,
 };
 
 const impulseVector = new Vector2(0, 0);

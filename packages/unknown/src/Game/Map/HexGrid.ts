@@ -131,6 +131,22 @@ export class HexGrid {
         return hex.corners.map((p) => ({ x: p.x + this.originX, y: p.y + this.originY }));
     }
 
+    /** World-space bounding box of the whole grid (including hex corners). */
+    worldBounds(): { minX: number; minY: number; maxX: number; maxY: number } {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        this.grid.forEach((hex) => {
+            for (const p of hex.corners) {
+                const x = p.x + this.originX;
+                const y = p.y + this.originY;
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+            }
+        });
+        return { minX, minY, maxX, maxY };
+    }
+
     /** Hex distance (number of steps) between two cells. */
     distance(a: HexCoordinates, b: HexCoordinates): number {
         return this.grid.distance(a, b);

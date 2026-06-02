@@ -3,16 +3,15 @@ import { Vector2 } from '@dimforge/rapier2d-simd';
 import { GameDI } from '../../../DI/GameDI.ts';
 import { applyRotationToVector } from '../../../Physical/applyRotationToVector.ts';
 import { clamp } from 'lodash-es';
-import { EngineType } from '../../../Config/vehicles.ts';
+import { EngineConfig, EngineType } from '../../../Config/vehicles.ts';
 import { getGameComponents } from '../../createGameWorld.ts';
 
 const WHEEL_IMPULSE_FACTOR = 4000000000;
 
 const mapTypeToWheelImpulse = {
-    [EngineType.v6]: WHEEL_IMPULSE_FACTOR * 0.8,
-    [EngineType.v8]: WHEEL_IMPULSE_FACTOR,
-    [EngineType.v12]: WHEEL_IMPULSE_FACTOR * 2,
-    [EngineType.v8_turbo]: WHEEL_IMPULSE_FACTOR * 2,
+    [EngineType.v6]: WHEEL_IMPULSE_FACTOR * EngineConfig[EngineType.v6].impulseMult,
+    [EngineType.v8]: WHEEL_IMPULSE_FACTOR * EngineConfig[EngineType.v8].impulseMult,
+    [EngineType.v12]: WHEEL_IMPULSE_FACTOR * EngineConfig[EngineType.v12].impulseMult,
 };
 
 const impulseVector = new Vector2(0, 0);

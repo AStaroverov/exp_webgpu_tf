@@ -19,7 +19,6 @@ export enum VehicleType {
     LightTank = 0,
     MediumTank = 1,
     HeavyTank = 2,
-    PlayerTank = 3,  // Special player tank - medium size but faster
     Harvester = 4,   // Bulldozer with barrier and scoop for collecting debris
     MeleeCar = 5,    // Fast 4-wheeled car for ramming
 }
@@ -36,14 +35,12 @@ export enum EngineType {
     v6 = 0,
     v8 = 1,
     v12 = 2,
-    v8_turbo = 3,  // Player special engine - faster than v8
 }
 
 export const EngineLabels: Record<EngineType, string> = {
     [EngineType.v6]: 'v6',
     [EngineType.v8]: 'v8',
     [EngineType.v12]: 'v12',
-    [EngineType.v8_turbo]: 'v8 Turbo',
 };
 
 /**
@@ -51,20 +48,16 @@ export const EngineLabels: Record<EngineType, string> = {
  */
 export const EngineConfig: Record<EngineType, { impulseMult: number; rotationMult: number }> = {
     [EngineType.v6]: {
-        impulseMult: 0.8,
-        rotationMult: 0.9,
+        impulseMult: 0.8 * 5,
+        rotationMult: 0.9 * 3,
     },
     [EngineType.v8]: {
-        impulseMult: 1.0,
-        rotationMult: 1.0,
+        impulseMult: 1.0 * 5,
+        rotationMult: 1.0 * 3,
     },
     [EngineType.v12]: {
-        impulseMult: 2.0,
-        rotationMult: 3.0,
-    },
-    [EngineType.v8_turbo]: {
-        impulseMult: 2.0,
-        rotationMult: 2.0,
+        impulseMult: 2.0 * 5,
+        rotationMult: 3.0 * 3,
     },
 };
 
@@ -200,35 +193,6 @@ export const HeavyTankConfig: TankStats = {
     colors: {
         tracks: new Float32Array([0.5, 0.5, 0.5, 1]),
         turret: new Float32Array([0.5, 1, 0.5, 1]),
-    },
-};
-
-/**
- * Player Tank Configuration
- * Based on Medium tank but with enhanced speed and reload.
- */
-export const PlayerTankConfig: TankStats = {
-    type: VehicleType.PlayerTank,
-    engine: EngineType.v8_turbo,
-    size: 6,
-    padding: 7,
-    density: 300,
-    colliderRadius: 80,
-    hullSize: [8, 10],
-    turretSize: [8, 8],
-    hullGrid: [8, 11],
-    turretHeadGrid: [6, 7],
-    turretGunGrid: [2, 10],
-    caterpillarLines: 22,
-    caterpillarSize: 3,
-    trackAnchorXMult: 5,
-    turretSpeed: TurretSpeedConfig.player,
-    reloadTime: ReloadConfig.player,
-    bulletCaliber: BulletCaliber.Medium,
-    bulletOffsetYMult: 13,
-    colors: {
-        tracks: new Float32Array([0.4, 0.4, 0.5, 1]),
-        turret: new Float32Array([0.4, 0.8, 1, 1]),
     },
 };
 
@@ -375,8 +339,6 @@ export function getTankConfig(type: VehicleType): TankStats | undefined {
             return MediumTankConfig;
         case VehicleType.HeavyTank:
             return HeavyTankConfig;
-        case VehicleType.PlayerTank:
-            return PlayerTankConfig;
         default:
             return undefined;
     }

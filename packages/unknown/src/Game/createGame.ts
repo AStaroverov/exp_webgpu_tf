@@ -36,7 +36,7 @@ import { createJointMotorSystem } from './ECS/Systems/Physical/createJointMotorS
 import { initPhysicalWorld } from './Physical/initPhysicalWorld.ts';
 import { createProgressSystem } from './ECS/Systems/createProgressSystem.ts';
 import { createCameraSystem, setCameraTarget, initCameraPosition, CameraState } from './ECS/Systems/Camera/CameraSystem.ts';
-import { setCameraPosition } from '../../../renderer/src/ECS/Systems/ResizeSystem.ts';
+import { setCameraPosition, setCameraZoom } from '../../../renderer/src/ECS/Systems/ResizeSystem.ts';
 import { createSoundSystem, loadGameSounds, disposeSoundSystem, SoundManager, createTankMoveSoundSystem } from './ECS/Systems/Sound/index.ts';
 import { createHitableSystem } from './ECS/Systems/createHitableSystem.ts';
 import { createTankAliveSystem } from './ECS/Systems/Tank/createTankAliveSystem.ts';
@@ -79,6 +79,18 @@ export function createGame({ width, height }: {
     initCameraPosition();
 
     MapDI.grid = new HexGrid({ center: { x: width / 2, y: height / 2 } });
+
+    // Camera: sit at the field center and zoom out so the whole grid fits on
+    // screen (with a small margin). No target — the camera stays put.
+    {
+        const bounds = MapDI.grid.worldBounds();
+        const fieldW = bounds.maxX - bounds.minX;
+        const fieldH = bounds.maxY - bounds.minY;
+        const margin = 2; // padding around the field (larger -> more zoomed out)
+        const zoom = Math.min(width / (fieldW * margin), height / (fieldH * margin));
+        setCameraPosition((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2);
+        setCameraZoom(zoom);
+    }
 
     const execTransformSystem = createTransformSystem(world, Children);
 
@@ -343,7 +355,6 @@ function spawnDemoTanks() {
     }
     const slots = allCells.slice(0, palette.length);
 
-    let firstTankEid: EntityId | null = null;
     const placed: Array<{ eid: EntityId; q: number; r: number }> = [];
 
     for (let i = 0; i < slots.length; i++) {
@@ -367,15 +378,9 @@ function spawnDemoTanks() {
         // Mark the cell as occupied by this tank (game world entity).
         grid.occupy(q, r, tankEid, OccupantKind.Unit);
         placed.push({ eid: tankEid, q, r });
-
-        if (firstTankEid === null) {
-            firstTankEid = tankEid;
-        }
     }
 
-    if (firstTankEid !== null) {
-        setCameraTarget(firstTankEid);
-    }
+    // Camera is fixed at the field center (set above); it does not follow a tank.
 
     // Demo: enqueue MoveToHex actions onto the single global FIFO stack. Only the
     // top action runs at a time, so tanks move one after another (chess-like).
