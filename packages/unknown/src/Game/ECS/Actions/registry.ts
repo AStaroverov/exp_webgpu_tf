@@ -6,26 +6,26 @@
  */
 
 import { ActionKind } from './ActionTypes.ts';
-import { MoveToHexActionDescriptor } from './systems/createMoveToHexActionSystem.ts';
-import { WaitActionDescriptor } from './systems/createWaitActionSystem.ts';
-import { TurretAimActionDescriptor } from './systems/createTurretAimActionSystem.ts';
-import { FireActionDescriptor } from './systems/createFireActionSystem.ts';
+import { MoveStepActionDescriptor } from './systems/MoveStepAction.ts';
+import { HoldActionDescriptor } from './systems/HoldAction.ts';
+import { AimActionDescriptor } from './systems/AimAction.ts';
+import { FireActionDescriptor } from './systems/FireAction.ts';
 
 export const ACTION_REGISTRY = {
-    [ActionKind.MoveToHex]: MoveToHexActionDescriptor,
-    [ActionKind.Wait]: WaitActionDescriptor,
-    [ActionKind.TurretAim]: TurretAimActionDescriptor,
+    [ActionKind.MoveStep]: MoveStepActionDescriptor,
+    [ActionKind.Hold]: HoldActionDescriptor,
+    [ActionKind.Aim]: AimActionDescriptor,
     [ActionKind.Fire]: FireActionDescriptor,
 };
 
 type Registry = typeof ACTION_REGISTRY;
 
-/** Enqueue spec union — derived from every registered descriptor's `createAction`. */
-export type EnqueueActionSpec = Parameters<Registry[keyof Registry]['createAction']>[2];
+/** Enqueue spec union — derived from every registered descriptor's `encode`. */
+export type EnqueueActionSpec = Parameters<Registry[keyof Registry]['encode']>[2];
 
 /**
  * Build all registered executor systems once and return a function that runs
- * them all per tick. Each executor decides for itself whether the global top
+ * them all per tick. Each executor decides for itself whether each owner's front
  * action is its responsibility.
  */
 export function createRunExecutors(): (delta: number) => void {

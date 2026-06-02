@@ -46,16 +46,15 @@ import { createVehicleTurretRotationSystem as createTurretRotationSystem } from 
 import { createGameWorld } from './ECS/createGameWorld.ts';
 import { VehicleType } from './Config/index.ts';
 import { MapDI } from './DI/MapDI.ts';
-import { HexGrid, OccupantKind } from './Map/HexGrid.ts';
-import { findPath } from './Map/findPath.ts';
+import { HexGrid } from './Map/HexGrid.ts';
 import { spawnObstacles } from './ECS/Entities/Obstacle/spawnObstacles.ts';
 import { createDrawGridSystem } from './ECS/Systems/Render/Grid/createDrawGridSystem.ts';
-import { ActionScheduleDI } from './ECS/Actions/ActionScheduleDI.ts';
-import { createActionWorld } from './ECS/Actions/createActionWorld.ts';
 import { createRunExecutors } from './ECS/Actions/registry.ts';
-import { createActionSchedulerSystem } from './ECS/Actions/createActionSchedulerSystem.ts';
-import { enqueueAction } from './ECS/Actions/ActionSchedule.ts';
-import { ActionKind, TargetKind } from './ECS/Actions/ActionTypes.ts';
+import { createActionSchedulerSystem } from './ECS/Actions/systems/ActionScheduler.ts';
+import { createStandInDriverSystem } from './ECS/Plugins/createStandInDriverSystem.ts';
+import { createShapeCountDiagnosticSystem } from './ECS/Plugins/createShapeCountDiagnosticSystem.ts';
+import { createGridOccupancySystem } from './ECS/Systems/Map/createGridOccupancySystem.ts';
+import { PluginDI } from './DI/PluginDI.ts';
 
 export type Game = ReturnType<typeof createGame>;
 
@@ -71,9 +70,6 @@ export function createGame({ width, height }: {
     GameDI.height = height;
     GameDI.world = world;
     GameDI.physicalWorld = physicalWorld;
-
-    // Actions live in their own ECS world, separate from the game world.
-    ActionScheduleDI.world = createActionWorld();
 
     GameMap.setOffset(width / 2, height / 2);
     initCameraPosition();
@@ -168,17 +164,30 @@ export function createGame({ width, height }: {
     const updateTankAliveSystem = createTankAliveSystem();
     const regenerateShields = createShieldRegenerationSystem();
 
+    const updateGridOccupancy = createGridOccupancySystem();
+
     const runActionExecutors = createRunExecutors();
     const actionScheduler = createActionSchedulerSystem();
     const updateActions = (delta: number) => {
-        runActionExecutors(delta); // each kind system: if top is mine, run it & mutate its status
-        actionScheduler();         // pop Finished top, delete its entity → next top surfaces
+        runActionExecutors(delta); // each kind system: run every owner's front (slot 0) of its kind
+        actionScheduler();         // reaper: Finished front → shift slot 1 → slot 0, count--
     };
+
+    // Stand-in decision driver — placeholder for the future ML policy. Runs in
+    // SystemGroup.Before so decisions land before the gameplay/spawn systems act
+    // on them this tick (PLAN.md §8). Same seam the ML driver will use.
+    const standInDriver = createStandInDriverSystem();
+    PluginDI.addSystem(SystemGroup.Before, standInDriver);
+
+    // TEMP diagnostic (DELETE once the 10k shape-buffer overflow is diagnosed).
+    PluginDI.addSystem(SystemGroup.After, createShapeCountDiagnosticSystem());
 
     GameDI.gameTick = (delta: number) => {
         if (GameDI.world === null) return;
 
         physicalFrame(delta);
+
+        updateGridOccupancy(); // rebuild the grid's Unit/Reserved layer from vehicle state
 
         updateActions(delta);
 
@@ -217,8 +226,6 @@ export function createGame({ width, height }: {
         GameSession.reset();
         GameMap.reset();
         MapDI.grid = null!;
-        ActionScheduleDI.nextSeq = 1;
-        ActionScheduleDI.world = null!;
 
         GameDI.width = null!;
         GameDI.height = null!;
@@ -332,112 +339,46 @@ export function createGame({ width, height }: {
         setCameraTarget(tankEid);
     };
 
-    spawnDemoTanks();
     spawnObstacles();
+    spawnDemoTanks();
 
     return GameDI;
 
-function spawnDemoTanks() {
-    const grid = MapDI.grid;
-    const palette: Array<[number, number, number, number]> = [
-        [1.0, 0.4, 0.4, 1],
-        [0.4, 0.7, 1.0, 1],
-        [0.6, 1.0, 0.5, 1],
-        [1.0, 0.9, 0.4, 1],
-    ];
+    function spawnDemoTanks() {
+        const grid = MapDI.grid;
+        const palette: Array<[number, number, number, number]> = [
+            [1.0, 0.4, 0.4, 1],
+            [0.4, 0.7, 1.0, 1],
+            [0.6, 1.0, 0.5, 1],
+            [1.0, 0.9, 0.4, 1],
+        ];
 
-    // Pick distinct random cells to place the tanks on.
-    const allCells: Array<{ q: number; r: number }> = [];
-    grid.forEachCell((cell) => allCells.push({ q: cell.q, r: cell.r }));
-    for (let i = allCells.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [allCells[i], allCells[j]] = [allCells[j], allCells[i]];
-    }
-    const slots = allCells.slice(0, palette.length);
+        // Pick distinct random cells to place the tanks on.
+        const allCells: Array<{ q: number; r: number }> = [];
+        grid.forEachCell((cell) => allCells.push({ q: cell.q, r: cell.r }));
+        for (let i = allCells.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [allCells[i], allCells[j]] = [allCells[j], allCells[i]];
+        }
+        const slots = allCells.slice(0, palette.length);
 
-    const placed: Array<{ eid: EntityId; q: number; r: number }> = [];
+        for (let i = 0; i < slots.length; i++) {
+            const { q, r } = slots[i];
+            const pos = grid.hexToWorld({ q, r });
+            if (!pos) continue;
 
-    for (let i = 0; i < slots.length; i++) {
-        const { q, r } = slots[i];
-        const pos = grid.hexToWorld({ q, r });
-        if (!pos) continue;
-
-        const tankEid = createTank({
-            type: VehicleType.MediumTank,
-            playerId: i + 1,
-            teamId: (i % 2) + 1,
-            x: pos.x,
-            y: pos.y,
-            rotation: Math.random() * Math.PI * 2,
-            color: new Float32Array(palette[i % palette.length]),
-        });
-
-        VehicleController.setMove$(tankEid, 0);
-        VehicleController.setRotate$(tankEid, 0);
-
-        // Mark the cell as occupied by this tank (game world entity).
-        grid.occupy(q, r, tankEid, OccupantKind.Unit);
-        placed.push({ eid: tankEid, q, r });
-    }
-
-    // Camera is fixed at the field center (set above); it does not follow a tank.
-
-    // Demo: enqueue MoveToHex actions onto the single global FIFO stack. Only the
-    // top action runs at a time, so tanks move one after another (chess-like).
-    // For each tank, chain a couple of hops to random reachable empty cells.
-    for (let t = 0; t < placed.length; t++) {
-        const tank = placed[t];
-        let fromQ = tank.q;
-        let fromR = tank.r;
-
-        for (let hop = 0; hop < 2; hop++) {
-            const target = pickReachableCell(fromQ, fromR);
-            if (!target) break;
-
-            enqueueAction(tank.eid, {
-                kind: ActionKind.MoveToHex,
-                target: { kind: TargetKind.Hex, q: target.q, r: target.r },
-                params: { speed: 1 },
+            const tankEid = createTank({
+                type: VehicleType.MediumTank,
+                playerId: i + 1,
+                teamId: (i % 2) + 1,
+                x: pos.x,
+                y: pos.y,
+                rotation: Math.random() * Math.PI * 2,
+                color: new Float32Array(palette[i % palette.length]),
             });
 
-            fromQ = target.q;
-            fromR = target.r;
-
-            // After moving, aim the turret at the next tank (circular) and fire a
-            // couple of rounds — demonstrates the TurretAim + Fire actions on the
-            // same global FIFO stack.
-            const targetTank = placed[(t + 1) % placed.length];
-            if (targetTank.eid !== tank.eid) {
-                enqueueAction(tank.eid, {
-                    kind: ActionKind.TurretAim,
-                    target: { kind: TargetKind.Entity, eid: targetTank.eid },
-                    params: { tolerance: 0.05 },
-                });
-                enqueueAction(tank.eid, {
-                    kind: ActionKind.Fire,
-                    params: { shots: 2 },
-                });
-            }
+            VehicleController.setMove$(tankEid, 0);
+            VehicleController.setRotate$(tankEid, 0);
         }
     }
-
-    // Pick a random empty cell reachable from (q, r) via A*.
-    function pickReachableCell(fromQ: number, fromR: number): { q: number; r: number } | null {
-        const candidates: Array<{ q: number; r: number }> = [];
-        grid.forEachCell((cell) => {
-            if (cell.q === fromQ && cell.r === fromR) return;
-            if (!grid.isPassable(cell.q, cell.r)) return;
-            candidates.push({ q: cell.q, r: cell.r });
-        });
-        for (let i = candidates.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
-        }
-        for (const c of candidates) {
-            const path = findPath(grid, { q: fromQ, r: fromR }, { q: c.q, r: c.r });
-            if (path && path.length > 1) return c;
-        }
-        return null;
-    }
-}
 }

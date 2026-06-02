@@ -48,16 +48,16 @@ export const EngineLabels: Record<EngineType, string> = {
  */
 export const EngineConfig: Record<EngineType, { impulseMult: number; rotationMult: number }> = {
     [EngineType.v6]: {
-        impulseMult: 0.8 * 5,
-        rotationMult: 0.9 * 3,
+        impulseMult: 0.8,
+        rotationMult: 0.9,
     },
     [EngineType.v8]: {
-        impulseMult: 1.0 * 5,
-        rotationMult: 1.0 * 3,
+        impulseMult: 1.0,
+        rotationMult: 1.0,
     },
     [EngineType.v12]: {
-        impulseMult: 2.0 * 5,
-        rotationMult: 3.0 * 3,
+        impulseMult: 2.0,
+        rotationMult: 3.0,
     },
 };
 

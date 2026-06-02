@@ -1,11 +1,9 @@
 /**
  * ActionSchedule — enums + target-addressing spec types.
  *
- * See `Actions/PLAN.md`. One global ordered stack of action entities, played out
- * chess-like: only the top action is active at any time.
+ * Actions live on the controlled entity as the `ActionsQueue` component (slot 0 =
+ * front). See `Actions/QUEUE_REFACTOR_PLAN.md`.
  */
-
-import { MapWorldId } from '../../Map/HexGrid.ts';
 
 export enum ActionStatus {
     Idle = 0,
@@ -23,10 +21,10 @@ export enum TargetKind {
 
 /** Action kinds — each kind has a params component and an executor system. */
 export enum ActionKind {
-    MoveToHex = 0,
-    Wait = 1,
-    TurretAim = 2,
-    Fire = 3,
+    MoveStep = 0,
+    Aim = 1,
+    Fire = 2,
+    Hold = 3,
 }
 
 // ── Target addressing — discriminated union over TargetKind ──────────────────
@@ -35,7 +33,6 @@ export type ActionNoneTargetSpec = { kind: TargetKind.None };
 export type ActionEntityTargetSpec = {
     kind: TargetKind.Entity;
     eid: number;
-    worldId?: MapWorldId;
 };
 export type ActionHexTargetSpec = { kind: TargetKind.Hex; q: number; r: number };
 export type ActionPointTargetSpec = { kind: TargetKind.Point; x: number; y: number };

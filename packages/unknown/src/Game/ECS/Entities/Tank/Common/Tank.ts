@@ -17,9 +17,12 @@ export type TankTracksConfig = {
 };
 
 export function createTankBase(options: TankOptions, { world } = GameDI): [number, number] {
-    const { Tank } = getGameComponents(world);
+    const { Tank, ActionsQueue } = getGameComponents(world);
     const [vehicleEid, vehiclePid] = createVehicleBase(options);
     Tank.addComponent(world, vehicleEid);
+    // Decision #3 (not lazy): every tank gets its action queue so
+    // query([ActionsQueue, Vehicle, RigidBodyState]) finds it.
+    ActionsQueue.addComponent(world, vehicleEid);
     return [vehicleEid, vehiclePid];
 }
 

@@ -89,29 +89,48 @@ under the tanks. The `Grid` pass (`Render/Grid/`) is instanced (one quad per hex
 draws a pointy-hex SDF outline + faint fill; cell centers come from `MapDI.grid`.
 
 ### ActionSchedule — `src/Game/ECS/Actions/`
-A step-by-step action system in its **own ECS world** (`createActionWorld` →
+An event-driven action system in its **own ECS world** (`createActionWorld` →
 `ActionScheduleDI.world`), kept separate from the game world; an action only
 *references* game entities by id (`ownerEid`, an Entity target's `eid`) — disjoint
-id spaces. **One global FIFO stack** of action entities (`ActionScheduleDI.stack`),
-played out **chess-like**: only the **top** action is active at any moment. Each
-action has a `status` (`Idle/Running/Finished`), a `kind` (`ActionKind`), an owner,
-an `ActionTarget` (entity/hex/point addressing — Shape-style `kind`+`values`), and a
-per-kind params component. Each kind is one **descriptor** (`ActionDescriptor<Spec>`,
-co-located with its system) that forms its own action entity; `ACTION_REGISTRY` maps
-kind → descriptor and `EnqueueActionSpec` is *derived* from it. Split of responsibility:
+id spaces. **Per-owner FIFO queues, concurrent across owners** (no single global
+stack): each owner's **front** action is its smallest-`seq` live action and the only
+one that *runs*; different owners run concurrently each tick. Queue depth is bounded
+(`MAX_QUEUE = 2`: one running + one pre-decided next). Each action has a `status`
+(`Idle/Running/Finished`), a `kind` (`ActionKind`), an owner, a `seq` (per-owner FIFO
+key), a `requestNext` flag, an `ActionTarget` (entity/hex/point — Shape-style
+`kind`+`values`), and a per-kind params component. Each kind is one **descriptor**
+(`ActionDescriptor<Spec>`, co-located with its system, optional `onCancel` hook);
+`ACTION_REGISTRY` maps kind → descriptor and `EnqueueActionSpec` is *derived* from it.
+Split of responsibility:
 - **Executor systems** (`systems/create<Kind>ActionSystem.ts`, one per kind, wired via
-  `registry.ts` → `createRunExecutors`) read the action world for the action and the
-  game world for the owner, decide if the top is theirs, and drive it
-  `Idle → Running → Finished`, mutating the action as it progresses.
-- **Scheduler** (`createActionSchedulerSystem`) owns the stack only: it reaps the
-  `Finished` top and deletes the entity. Runs after the executors each tick (in
-  `gameTick`, the `updateActions(delta)` block, before the gameplay systems).
+  `registry.ts` → `createRunExecutors`) iterate `liveOwners()`, take each owner's
+  `getFrontAction`, and if it's their kind drive it `Idle → Running → Finished`
+  (physics-driven completion). Completion is real simulation state (vehicle arrived /
+  round fired), not a wall-clock timer — so fast tanks finish and re-decide sooner.
+- **Scheduler** (`createActionSchedulerSystem`) is the reaper: deletes **all**
+  `Finished` actions each tick. Runs after the executors in `gameTick`'s
+  `updateActions(delta)` block, before the gameplay systems.
 
-Enqueue with `enqueueAction(ownerEid, { kind, target, params })`. Kinds so far:
-`MoveToHex` (A* + `VehicleController` to a hex center, updates occupancy), `Wait`
-(timer), `TurretAim` (rotate the tank turret toward a target via `TurretController`,
-finishes within `tolerance`), `Fire` (raise `TurretController.shoot` and let the
-bullet spawner fire `shots` rounds, one per reload cycle). See `Actions/PLAN.md`.
+**Request-next "slot" model (the seam to the decision/ML layer):** a running action
+raises its `requestNext` flag from inside its executor at a kind-specific moment
+(`MoveStep` near the destination; `Aim`/`Fire` immediately; `Hold` near timer end) —
+this *opens a slot*. An idle owner is an always-open slot. `needsDecision(ownerEid)`
+(= `queueDepth < MAX_QUEUE && (isIdle || requestNext[front])`) reports open slots; the
+decision driver *fills* them via `enqueueAction` (which returns `null` when the queue
+is full). `clearForOwner(ownerEid)` is the interrupt: it calls each cleared running
+front's `onCancel` (zero controllers, release grid reservations) before deleting.
+This module never calls the policy; the driver never touches physics. The driver lives
+**outside** this module as a `PluginDI` system in `SystemGroup.Before`
+(`ECS/Plugins/createStandInDriverSystem.ts` is the current placeholder; the ML policy
+will replace it at the same seam).
+
+Enqueue with `enqueueAction(ownerEid, { kind, target, params })`. Atomic kinds:
+`MoveStep` (one hop to a neighbour hex via `VehicleController`; reserves the target
+cell `free → Reserved → Unit`, see Hex grid `OccupantKind.Reserved`), `Aim` (rotate
+the turret toward a hex via `TurretController`, finishes within `tolerance`), `Fire`
+(one round: wait for `!isReloading`, raise `TurretController.shoot`, the bullet spawner
+fires it), `Hold` (tactical timer pause). See `Actions/PLAN.md` (design) and
+`Actions/IMPLEMENTATION.md` (build steps).
 
 ### Config — `src/Game/Config/` (re-exported via `Config/index.ts`)
 `vehicles, weapons, parts, obstacles, physics, gameplay, sound, vfx, spice, zindex`.

@@ -1,6 +1,7 @@
 import { createWorld, World } from 'bitecs';
 import { createRenderComponents, RenderComponents } from '../../../../renderer/src/ECS/world.ts';
 
+import { createActionsQueueComponent } from './Components/ActionsQueue.ts';
 import { createBulletComponent } from './Components/Bullet.ts';
 import { createChildrenComponent } from './Components/Children.ts';
 import { createDamagableComponent } from './Components/Damagable.ts';
@@ -57,6 +58,7 @@ import {
 
 function createGameOnlyComponents(world: World) {
     return {
+        ActionsQueue: createActionsQueueComponent(world),
         Bullet: createBulletComponent(world),
         Children: createChildrenComponent(world),
         Damagable: createDamagableComponent(world),

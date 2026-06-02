@@ -1,49 +1,50 @@
 /**
  * Per-kind action descriptor — one self-contained object per `ActionKind`,
  * co-located with that kind's executor system. Each descriptor knows how to
- * **form its own action entity** (create the entity, add `Action`, fill the
- * target, init its params) and how to build its executor system. It is generic
- * over its enqueue spec `S`, so `createAction` receives that kind's strictly
- * typed spec directly. The registry collects these objects and derives the whole
- * `EnqueueActionSpec` union from them — adding a kind never touches a switch or a
- * hand-maintained union.
+ * **encode its spec into a queue slot** (write the common buffers + its per-kind
+ * params) and how to build its executor system. It is generic over its enqueue
+ * spec `S`, so `encode` receives that kind's strictly typed spec directly. The
+ * registry collects these objects and derives the whole `EnqueueActionSpec` union
+ * from them — adding a kind never touches a switch or a hand-maintained union.
  */
 
-import { EntityId, World } from 'bitecs';
-import { MapWorldId } from '../../Map/HexGrid.ts';
 import { ActionKind, ActionTargetSpec, TargetKind } from './ActionTypes.ts';
-import { getActionComponents } from './createActionWorld.ts';
+import { ActionsQueueComponent } from '../Components/ActionsQueue.ts';
 
 /** Minimal shape every enqueue spec satisfies. */
 export type ActionSpecBase = { kind: ActionKind };
 
 export type ActionDescriptor<S extends ActionSpecBase = ActionSpecBase> = {
     kind: S['kind'];
-    /**
-     * Form the full action entity from the spec and return its eid. `seq` is the
-     * FIFO order stamp assigned by `enqueueAction` (→ `Action.seq`).
-     */
-    createAction: (world: World, ownerEid: number, spec: S, seq: number) => EntityId;
-    /** Build this kind's executor system. */
+    /** Write this spec into slot `slot` of owner `eid`'s queue (status = Idle). */
+    encode: (eid: number, slot: number, spec: S) => void;
+    /** Build this kind's executor system (iterates ActionsQueue, runs its-kind fronts). */
     createSystem: () => (delta: number) => void;
 };
 
-/** Add the `ActionTarget` component and fill it from a target spec (none → None). */
-export function applyTarget(world: World, eid: number, target?: ActionTargetSpec): void {
-    const { ActionTarget } = getActionComponents(world);
-    ActionTarget.addComponent(world, eid);
-    if (!target) return;
+/** Write a target spec into a queue slot's `targetKind`/`targetVals` (none → None). */
+export function encodeTarget(
+    q: ActionsQueueComponent,
+    eid: number,
+    slot: number,
+    target?: ActionTargetSpec,
+): void {
+    if (!target) {
+        q.setTarget(eid, slot, TargetKind.None, 0, 0);
+        return;
+    }
     switch (target.kind) {
         case TargetKind.Entity:
-            ActionTarget.setEntity$(eid, target.eid, target.worldId ?? MapWorldId.Game);
+            q.setTarget(eid, slot, TargetKind.Entity, target.eid, 0);
             break;
         case TargetKind.Hex:
-            ActionTarget.setHex$(eid, target.q, target.r);
+            q.setTarget(eid, slot, TargetKind.Hex, target.q, target.r);
             break;
         case TargetKind.Point:
-            ActionTarget.setPoint$(eid, target.x, target.y);
+            q.setTarget(eid, slot, TargetKind.Point, target.x, target.y);
             break;
         case TargetKind.None:
+            q.setTarget(eid, slot, TargetKind.None, 0, 0);
             break;
     }
 }

@@ -14,15 +14,6 @@ import { Grid, rectangle, type HexCoordinates } from 'honeycomb-grid';
 import { HexGridConfig, HexTile, POINTY_DIRECTIONS } from './HexConfig.ts';
 
 /**
- * Worlds whose entities may occupy a hex. Entity id spaces are disjoint between
- * worlds, so an occupant is (world id, entity id).
- */
-export enum MapWorldId {
-    /** The game ECS world (`GameDI.world`). */
-    Game = 0,
-}
-
-/**
  * What kind of entity occupies a hex. A cell is blocked the same way regardless
  * of kind; the kind lets consumers tell a movable unit apart from a static
  * obstacle without resolving the entity in its world.
@@ -32,6 +23,8 @@ export enum OccupantKind {
     Unit = 0,
     /** A static obstacle (rock / building). */
     Obstacle = 1,
+    /** A cell a unit is *driving into* — not yet physically occupied, but no longer free. */
+    Reserved = 2,
 }
 
 export type HexCell = {
@@ -164,7 +157,10 @@ export class HexGrid {
 
     // --- occupancy ----------------------------------------------------------
 
-    /** A cell can be entered if it exists and is currently empty. */
+    /**
+     * A cell can be entered if it exists and is currently empty. Any occupant —
+     * `Unit`, `Obstacle`, or `Reserved` — makes the cell impassable.
+     */
     isPassable(q: number, r: number): boolean {
         const cell = this.cells.get(cellKey(q, r));
         return cell != null && cell.occupantEid === null;
