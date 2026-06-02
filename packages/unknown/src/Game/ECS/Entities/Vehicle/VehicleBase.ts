@@ -13,7 +13,6 @@ const volumeByType: Record<VehicleType, number> = {
     [VehicleType.LightTank]: 0.6,
     [VehicleType.MediumTank]: 0.8,
     [VehicleType.HeavyTank]: 1.0,
-    [VehicleType.PlayerTank]: 0.8,
     [VehicleType.Harvester]: 1.0,
     [VehicleType.MeleeCar]: 0.7,
 };

@@ -14,6 +14,41 @@
 
 ---
 
+## ✅ MVP built (2026-06-02)
+
+The full pipeline is scaffolded and typechecks clean. Implemented:
+
+- **`unknown` game refactor:** `createGame` now wires only systems — build-specific
+  world content (obstacles, demo tanks, stand-in driver) moved to
+  `unknown/src/Game/setupDemoWorld.ts` (called by the dev `index.ts`). This is the
+  split that lets `ppo_unknown` spawn its own teams + policy driver, mirroring how
+  `ppo_tanks/curriculum` forms training worlds.
+- **Observation = chess-like board** (final, replaces the physics §5.2 below):
+  `state/board.ts` (`UnknownInputBoard` SoA, 8×8×5), `snapshotUnknownBoard.ts`
+  (occupancy-driven, no physics), `state/InputArrays.ts` (`S = { board }`),
+  `state/InputTensors.ts` (→ `[B, 8, 8, 5]`), `state/bindings.ts`.
+- **Action space:** `ACTION_HEAD_DIMS = [3, 6, K_ENEMY]` — kind `{MoveStep, Fire, Hold}`
+  (Aim folded into Fire, v1), moveDir (6 neighbours), fireTarget (k-nearest enemy).
+  `env/applyActionToGame.ts` decodes indices → one `enqueueAction`.
+- **Networks:** `models/Networks/v1.ts` (Conv2D trunk over the board) +
+  `models/createUnknownNetworks.ts` (policy/value factories, same contract as tanks).
+- **Agent + driver:** `env/UnknownAgent.ts` (AgentMemory two-phase, batchAct, shared
+  network pulled from storage), `env/createPolicyDriverSystem.ts` (Before plugin,
+  replaces the stand-in), `env/createUnknownScenario.ts` (headless self-play N-vs-M).
+- **Reward:** `reward/calculateReward.ts` (Δ own-hp − enemy-hp + time cost; terminal
+  team-spirit from success ratio).
+- **Episode + workers:** `agents/UnknownEpisodeManager.ts`, `entry/{index,ActorWorker,
+  LearnerPolicyWorker,LearnerValueWorker}.ts`; `package.json`/`tsconfig.json`/
+  `config.vite.ts`/`index.html`/`index.ts`.
+
+**Not yet done / known MVP simplifications:** no curriculum sampling (single fixed
+scenario, index 0); no action masking (invalid choices are no-ops + time penalty);
+reward is Δ-at-decision-point rather than per-tick accumulated; no obstacles spawned
+in training scenarios yet; no metrics/visualizer UI. `npm install` + a headless smoke
+run still need to be exercised (deps were verified present at repo root, tsc passes).
+
+---
+
 ## 1. Guiding principle
 
 The generic `packages/ppo` package is **fully game-agnostic** and is reused verbatim:

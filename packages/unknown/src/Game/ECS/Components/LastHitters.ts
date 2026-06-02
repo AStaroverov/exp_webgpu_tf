@@ -3,7 +3,7 @@ import { delegate } from '../../../../../renderer/src/delegate.ts';
 import { NestedArray } from '../../../../../renderer/src/utils.ts';
 import { defineComponent } from '../../../../../renderer/src/ECS/utils.ts';
 
-const MAX_HITTERS = 5;
+const MAX_HITTERS = 10;
 const ENTRY_SIZE = 2;
 
 export const createLastHittersComponent = defineComponent((LastHitters) => {

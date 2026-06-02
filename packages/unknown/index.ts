@@ -1,4 +1,5 @@
 import { createGame } from './src/Game/createGame.ts';
+import { setupDemoWorld } from './src/Game/setupDemoWorld.ts';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 const sndBtn = document.getElementById('snd') as HTMLButtonElement;
@@ -10,6 +11,8 @@ const game = createGame({
     width: canvas.width,
     height: canvas.height,
 });
+
+setupDemoWorld();
 
 await game.setRenderTarget(canvas);
 

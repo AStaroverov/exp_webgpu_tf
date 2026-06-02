@@ -11,7 +11,6 @@ import { getEntityIdByPhysicalId } from './ECS/Components/Physical.ts';
 import { getGameComponents } from './ECS/createGameWorld.ts';
 import { GameSession } from './ECS/Entities/GameSession.ts';
 import { GameMap } from './ECS/Entities/GameMap.ts';
-import { createTank } from './ECS/Entities/Tank/createTank.ts';
 import { SystemGroup } from './ECS/Plugins/systems.ts';
 import { createApplyRigidBodyToTransformSystem } from './ECS/Systems/createApplyRigidBodyToTransformSystem.ts';
 import { createSpawnerBulletsSystem } from './ECS/Systems/createBulletSystem.ts';
@@ -44,17 +43,12 @@ import { createShieldRegenerationSystem } from './ECS/Systems/createShieldRegene
 import { SoundDI } from './DI/SoundDI.ts';
 import { createVehicleTurretRotationSystem as createTurretRotationSystem } from './ECS/Systems/Vehicle/VehicleControllerSystems.ts';
 import { createGameWorld } from './ECS/createGameWorld.ts';
-import { VehicleType } from './Config/index.ts';
 import { MapDI } from './DI/MapDI.ts';
 import { HexGrid } from './Map/HexGrid.ts';
-import { spawnObstacles } from './ECS/Entities/Obstacle/spawnObstacles.ts';
 import { createDrawGridSystem } from './ECS/Systems/Render/Grid/createDrawGridSystem.ts';
 import { createRunExecutors } from './ECS/Actions/registry.ts';
 import { createActionSchedulerSystem } from './ECS/Actions/systems/ActionScheduler.ts';
-import { createStandInDriverSystem } from './ECS/Plugins/createStandInDriverSystem.ts';
-import { createShapeCountDiagnosticSystem } from './ECS/Plugins/createShapeCountDiagnosticSystem.ts';
 import { createGridOccupancySystem } from './ECS/Systems/Map/createGridOccupancySystem.ts';
-import { PluginDI } from './DI/PluginDI.ts';
 
 export type Game = ReturnType<typeof createGame>;
 
@@ -64,7 +58,7 @@ export function createGame({ width, height }: {
 }) {
     const world = createGameWorld();
     const physicalWorld = initPhysicalWorld();
-    const { Children, Hitable, RigidBodyRef, VehicleController } = getGameComponents(world);
+    const { Children, Hitable, RigidBodyRef } = getGameComponents(world);
 
     GameDI.width = width;
     GameDI.height = height;
@@ -173,14 +167,10 @@ export function createGame({ width, height }: {
         actionScheduler();         // reaper: Finished front → shift slot 1 → slot 0, count--
     };
 
-    // Stand-in decision driver — placeholder for the future ML policy. Runs in
-    // SystemGroup.Before so decisions land before the gameplay/spawn systems act
-    // on them this tick (PLAN.md §8). Same seam the ML driver will use.
-    const standInDriver = createStandInDriverSystem();
-    PluginDI.addSystem(SystemGroup.Before, standInDriver);
-
-    // TEMP diagnostic (DELETE once the 10k shape-buffer overflow is diagnosed).
-    PluginDI.addSystem(SystemGroup.After, createShapeCountDiagnosticSystem());
+    // NOTE: the base game wires only systems. Build-specific world content — the
+    // decision driver and the spawned entities (obstacles + units) — is added by
+    // the caller: `setupDemoWorld()` for the dev game, `createUnknownScenario()`
+    // (ppo_unknown) for training. This keeps createGame reusable across builds.
 
     GameDI.gameTick = (delta: number) => {
         if (GameDI.world === null) return;
@@ -339,46 +329,5 @@ export function createGame({ width, height }: {
         setCameraTarget(tankEid);
     };
 
-    spawnObstacles();
-    spawnDemoTanks();
-
     return GameDI;
-
-    function spawnDemoTanks() {
-        const grid = MapDI.grid;
-        const palette: Array<[number, number, number, number]> = [
-            [1.0, 0.4, 0.4, 1],
-            [0.4, 0.7, 1.0, 1],
-            [0.6, 1.0, 0.5, 1],
-            [1.0, 0.9, 0.4, 1],
-        ];
-
-        // Pick distinct random cells to place the tanks on.
-        const allCells: Array<{ q: number; r: number }> = [];
-        grid.forEachCell((cell) => allCells.push({ q: cell.q, r: cell.r }));
-        for (let i = allCells.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [allCells[i], allCells[j]] = [allCells[j], allCells[i]];
-        }
-        const slots = allCells.slice(0, palette.length);
-
-        for (let i = 0; i < slots.length; i++) {
-            const { q, r } = slots[i];
-            const pos = grid.hexToWorld({ q, r });
-            if (!pos) continue;
-
-            const tankEid = createTank({
-                type: VehicleType.MediumTank,
-                playerId: i + 1,
-                teamId: (i % 2) + 1,
-                x: pos.x,
-                y: pos.y,
-                rotation: Math.random() * Math.PI * 2,
-                color: new Float32Array(palette[i % palette.length]),
-            });
-
-            VehicleController.setMove$(tankEid, 0);
-            VehicleController.setRotate$(tankEid, 0);
-        }
-    }
 }
