@@ -158,7 +158,6 @@ export class HexGrid {
         return this.grid.distance(a, b);
     }
 
-    /** In-grid neighbors of a cell (1..6 of them). */
     neighbors(coord: HexCoordinates): HexTile[] {
         const result: HexTile[] = [];
         for (const dir of POINTY_DIRECTIONS) {
@@ -166,6 +165,12 @@ export class HexGrid {
             if (n) result.push(n);
         }
         return result;
+    }
+
+    neighborAt(coord: HexCoordinates, dirIndex: number): HexTile | undefined {
+        const dir = POINTY_DIRECTIONS[dirIndex];
+        if (dir === undefined) return undefined;
+        return this.grid.neighborOf(coord, dir, { allowOutside: false }) ?? undefined;
     }
 
     // --- occupancy ----------------------------------------------------------

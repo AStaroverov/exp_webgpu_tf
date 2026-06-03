@@ -1,6 +1,7 @@
 export * from './gatherND.ts';
 export * from './topK.ts';
 export * from './FixedPositionalEncodingLayer.ts';
+export * from './Grid2DPositionalEncodingLayer.ts';
 export * from './LogStdLayer.ts';
 export * from './MaskLikeLayer.ts';
 export * from './MaskSquashLayer.ts';

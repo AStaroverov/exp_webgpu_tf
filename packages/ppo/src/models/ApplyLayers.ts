@@ -6,9 +6,19 @@ import { MaskLikeLayer } from './Layers/MaskLikeLayer.ts';
 import { MultiHeadAttentionLayer } from './Layers/MultiHeadAttentionLayer.ts';
 import { RMSNormConfig, RMSNormLayer } from "./Layers/RMSNormLayer.ts";
 import { NoisyDenseLayer } from './Layers/NoisyDenseLayer.ts';
-import { CloneLayer } from './Layers/CloneLayer.ts';
-import { SwinAttentionLayer } from './Layers/SwinAttentionLayer.ts';
 
+export function tokenProj(x: tf.SymbolicTensor, dModel: number, name: string): SymbolicTensor {
+   return createDenseLayer({
+        name: name + '_tokProj',
+        units: dModel,
+        useBias: false,
+        activation: 'linear'
+    }).apply(x) as SymbolicTensor;
+}
+
+export function createNormalizationLayer(options: RMSNormConfig) {
+    return new RMSNormLayer(options);
+}
 
 export function applyMLP({name, layers: hiddenLayers, preNorm = false}: {
     name: string,
@@ -66,49 +76,6 @@ export function applyLaNLayer({name, units, preNorm = false}: {
     }).apply(layer) as tf.SymbolicTensor;
 
     return tf.layers.multiply({name: `${name}/LaN_output`}).apply([branch1, branch2]) as tf.SymbolicTensor;
-}
-
-export function applyNoisyLaNLayer({name, units, sigma, preNorm = false}: {
-    name: string,
-    units: number,
-    sigma?: number,
-    preNorm?: boolean,
-}, layer: tf.SymbolicTensor) {
-    if (preNorm) {
-        layer = createNormalizationLayer({
-            name: `${name}/NoisyLaN_preNorm`,
-        }).apply(layer) as tf.SymbolicTensor;
-    }
-
-    const branch1 = new NoisyDenseLayer({
-        name: `${name}/NoisyLaN_branch1`,
-        units,
-        useBias: true,
-        activation: 'tanh',
-        sigma,
-    }).apply(layer) as tf.SymbolicTensor;
-    const branch2 = new NoisyDenseLayer({
-        name: `${name}/NoisyLaN_branch2`,
-        units,
-        useBias: true,
-        activation: 'tanh',
-        sigma,
-    }).apply(layer) as tf.SymbolicTensor;
-
-    return tf.layers.multiply({name: `${name}/NoisyLaN_output`}).apply([branch1, branch2]) as tf.SymbolicTensor;
-}
-
-export function createNormalizationLayer(options: RMSNormConfig) {
-    return new RMSNormLayer(options);
-}
-
-export function tokenProj(x: tf.SymbolicTensor, dModel: number, name: string): SymbolicTensor {
-   return createDenseLayer({
-        name: name + '_tokProj',
-        units: dModel,
-        useBias: false,
-        activation: 'linear'
-    }).apply(x) as SymbolicTensor;
 }
 
 export function applyCrossAttentionLayer(
@@ -250,88 +217,6 @@ export function applySelfTransformLayers(name: string, {
     }
 
     return x;
-}
-
-export function applySwinTransformerLayer(
-    {
-        name,
-        heads,
-        token,
-        mask,
-        window,
-        stride,
-        noisy = false,
-        preNorm = false,
-    }: {
-        name: string,
-        heads: number,
-        token: tf.SymbolicTensor,
-        mask?: tf.SymbolicTensor,
-        window: number,
-        stride?: number,
-        noisy?: boolean,
-        preNorm?: boolean,
-    },
-) {
-    token = preNorm
-       ? createNormalizationLayer({ name: name + '_norm_' + token.name}).apply(token) as tf.SymbolicTensor
-       : token;
-    mask ??= new MaskLikeLayer({ name: token.name + '_maskLike' }).apply(token) as tf.SymbolicTensor;
-    
-    const dModel = token.shape[token.shape.length - 1]!;
-    const clone = new CloneLayer({ name: name + '_clone_' + token.name});
-    const selfAttn = new SwinAttentionLayer({
-        name: `${name}_SwinAttentionLayer`,
-        numHeads: heads,
-        keyDim: dModel / heads,
-        window,
-        stride,
-    }).apply([
-        clone.apply(token) as tf.SymbolicTensor,
-        mask,
-        clone.apply(token) as tf.SymbolicTensor,
-        mask
-    ]) as tf.SymbolicTensor;
-
-    const attnResidual = tf.layers.add({name: `${name}_residual`})
-        .apply([token, selfAttn]) as tf.SymbolicTensor;
-
-    const ffnNorm = createNormalizationLayer({
-        name: `${name}_ln2`,
-    }).apply(attnResidual) as tf.SymbolicTensor;
-
-    // SiLU-gated FFN: gate(x) * linear(x)
-    const ffnGate = createDenseLayer({
-        name: `${name}_ffn_gate`,
-        units: dModel * 4,
-        useBias: false,
-        activation: 'sigmoid',
-        noisy,
-    }).apply(ffnNorm) as tf.SymbolicTensor;
-
-    const ffnUp = createDenseLayer({
-        name: `${name}_ffn1`,
-        units: dModel * 4,
-        useBias: false,
-        activation: 'linear',
-        noisy,
-    }).apply(ffnNorm) as tf.SymbolicTensor;
-
-    const ffnInner = tf.layers.multiply({name: `${name}_ffn_silu`})
-        .apply([ffnUp, ffnGate]) as tf.SymbolicTensor;
-
-    const ffnOut = createDenseLayer({
-        name: `${name}_ffn2`,
-        units: dModel,
-        useBias: false,
-        activation: 'linear',
-        noisy,
-    }).apply(ffnInner) as tf.SymbolicTensor;
-
-    const finalOut = tf.layers.add({name: `${name}_ffnAdd`})
-        .apply([attnResidual, ffnOut]) as tf.SymbolicTensor;
-
-    return finalOut;
 }
 
 export function applyGlobalAverage1d({ name }: { name: string }, token: tf.SymbolicTensor) {

@@ -64,6 +64,13 @@ export class UnknownAgent {
         return sharedNetwork != null ? getNetworkExpIteration(sharedNetwork) : 0;
     }
 
+    closeFinalStep(): void {
+        if (!this.train || !this.opened) return;
+        const delta = calculateActionReward(this.tankEid) - this.prevPotential;
+        this.memory.updateSecondPart(delta, true);
+        this.opened = false;
+    }
+
     getMemoryBatch(finalReward: number): undefined | AgentMemoryBatch<InputArrays> {
         return this.train ? this.memory.getBatch(finalReward) : undefined;
     }

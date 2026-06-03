@@ -56,6 +56,7 @@ export class UnknownEpisodeManager extends EpisodeManager<Scenario> {
         if (isReference) return;
 
         scenario.agents.forEach((agent) => {
+            agent.closeFinalStep();
             const networkVersion = agent.getVersion();
             const finalReward = calculateFinalReward(agent.tankEid, successRatio, scenario.agents);
             const memoryBatch = agent.getMemoryBatch(finalReward);

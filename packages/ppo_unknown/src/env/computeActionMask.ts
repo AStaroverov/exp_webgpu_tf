@@ -1,14 +1,16 @@
 /**
  * computeActionMask — build the per-decision invalid-action mask for one agent.
  *
- * The mask is a flat `Float32Array` of length `ACTION_DIM_TOTAL` (73), laid out
+ * The mask is a flat `Float32Array` of length `ACTION_DIM_TOTAL` (15), laid out
  * identically to the concatenated policy logits (kind | move | fire) and additive:
  *   `0`        → action allowed,
  *   `MASK_NEG` → action forbidden (added to the logit before softmax/argmax).
  *
  * Slices (see `ACTION_HEAD_DIMS`):
- *   kind [0..2]   — never masked (an invalid kind+sub-action falls through to a
- *                   no-op in `applyActionToGame`).
+ *   kind [0..2]   — `MASK_NEG` on `MoveStep` when no neighbour is passable, and on
+ *                   `Fire` when every direction is friendly-fire-blocked. `Hold` is
+ *                   never masked, so the kind head always has at least one valid
+ *                   choice and the policy never *selects* a kind it cannot act on.
  *   move [3..8]   — `0` for each passable hex neighbour (shared predicate with
  *                   `applyActionToGame.moveDestination`), `MASK_NEG` otherwise.
  *   fire [9..14]  — `MASK_NEG` for each direction whose line-of-fire hits a friendly
@@ -16,11 +18,13 @@
  *                   down an empty line just wastes the shot — the reward, not the
  *                   mask, discourages that.
  *
- * All-masked guard (REFACTOR §2.1): a head with ZERO valid actions must be left
- * fully unmasked (all `0`) — an all-`MASK_NEG` head still yields a (uniform)
- * distribution after softmax but teaches nothing and risks NaN edge cases. Since
- * `kind` is free, the policy can pick `Hold` instead; if it picks the dead kind,
- * `applyActionToGame` no-ops.
+ * Dead sub-head: when a sub-slice (move/fire) ends up fully `MASK_NEG`, its kind is
+ * masked too, so that sub-head is never the acted head. We deliberately leave the
+ * slice fully masked rather than resetting it: with `MASK_NEG = -1e9` (not `-inf`)
+ * a fully-masked head degenerates to a finite *uniform* distribution — no NaN — and
+ * keeping it masked means no spurious gradient flows into a head whose sampled index
+ * is meaningless. The act- and train-time masks are identical, so the PPO ratio stays
+ * consistent.
  */
 
 import { GameDI } from '../../../unknown/src/Game/DI/GameDI.ts';
@@ -33,14 +37,16 @@ import {
     MASK_NEG,
     MOVE_DIR_COUNT,
     POLICY_ACTION_KIND_COUNT,
+    PolicyActionKind,
 } from '../consts.ts';
 import { moveDestination } from './applyActionToGame.ts';
 
+const KIND_OFFSET = 0; // kind slice is first
 const MOVE_OFFSET = POLICY_ACTION_KIND_COUNT; // 3
 const FIRE_OFFSET = POLICY_ACTION_KIND_COUNT + MOVE_DIR_COUNT; // 9
 
 export function computeActionMask(eid: number, { world } = GameDI): Float32Array {
-    const mask = new Float32Array(ACTION_DIM_TOTAL); // all 0 (kind + fire slices stay 0)
+    const mask = new Float32Array(ACTION_DIM_TOTAL); // all 0 (every action allowed by default)
     const grid = MapDI.grid;
     if (!grid) return mask; // no grid → nothing to forbid
 
@@ -59,8 +65,9 @@ export function computeActionMask(eid: number, { world } = GameDI): Float32Array
                 mask[MOVE_OFFSET + dir] = MASK_NEG;
             }
         }
-        // all-masked guard: fully boxed in → leave the move slice all 0.
-        if (!anyMove) mask.fill(0, MOVE_OFFSET, MOVE_OFFSET + MOVE_DIR_COUNT);
+        // No passable neighbour → forbid the MoveStep KIND itself (the move sub-slice
+        // stays fully masked → uniform/dead; the policy must pick Fire or Hold instead).
+        if (!anyMove) mask[KIND_OFFSET + PolicyActionKind.MoveStep] = MASK_NEG;
     }
     // if `here` is undefined we leave the move slice all 0 (no info → don't forbid).
 
@@ -71,15 +78,14 @@ export function computeActionMask(eid: number, { world } = GameDI): Float32Array
     //   • enemy Unit / Obstacle first → allow (the round stops on it, no friendly fire);
     //   • Reserved / empty cells are passed through (bullet flies over them).
     // Empty rays stay fireable (0) — a wasted shot is discouraged by the reward,
-    // not the mask. The first ray step uses `neighbors(here)[dir]` to match
-    // `applyActionToGame`; subsequent steps repeat that axial delta (a straight
-    // hex line), which sidesteps the off-grid neighbour-index shift.
+    // not the mask. The first ray step uses `neighborAt(here, dir)` (direction-stable
+    // slot, matching `applyActionToGame`); subsequent steps repeat that axial delta
+    // (a straight hex line).
     if (here) {
         const myTeam = TeamRef.id[eid];
-        const neighbours = grid.neighbors(here);
         let anyFire = false;
         for (let dir = 0; dir < FIRE_DIR_COUNT; dir++) {
-            const target = neighbours[dir];
+            const target = grid.neighborAt(here, dir);
             if (!target) {
                 anyFire = true; // off-grid direction → no-op, leave allowed (0)
                 continue;
@@ -109,8 +115,9 @@ export function computeActionMask(eid: number, { world } = GameDI): Float32Array
                 anyFire = true; // 0 = allowed (already)
             }
         }
-        // all-masked guard: every direction is blocked by a teammate → leave the slice all 0.
-        if (!anyFire) mask.fill(0, FIRE_OFFSET, FIRE_OFFSET + FIRE_DIR_COUNT);
+        // Every direction friendly-fire-blocked → forbid the Fire KIND itself (the fire
+        // sub-slice stays fully masked → uniform/dead; the policy must pick Move or Hold).
+        if (!anyFire) mask[KIND_OFFSET + PolicyActionKind.Fire] = MASK_NEG;
     }
 
     return mask;

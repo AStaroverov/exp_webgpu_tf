@@ -21,8 +21,11 @@ import { HOLD_DURATION_MS, MOVE_SPEED, PolicyActionKind } from '../consts.ts';
 
 /**
  * Shared move-passability predicate (single source of truth with
- * `computeActionMask`): the `moveDir`-th in-grid neighbour of `(q, r)` that a unit
- * may step into, or `undefined` if that direction is off-grid / blocked.
+ * `computeActionMask`): the in-grid neighbour of `(q, r)` in the FIXED direction
+ * slot `moveDir` (0..5, stable `POINTY_DIRECTIONS` order) that a unit may step
+ * into, or `undefined` if that direction is off-grid / blocked. Uses the
+ * direction-stable `neighborAt` (NOT the compacted `neighbors`) so action slot
+ * `moveDir` means the same physical direction at every board position.
  */
 export function moveDestination(
     grid: HexGrid,
@@ -30,7 +33,7 @@ export function moveDestination(
     r: number,
     moveDir: number,
 ): { q: number; r: number } | undefined {
-    const dest = grid.neighbors({ q, r })[moveDir];
+    const dest = grid.neighborAt({ q, r }, moveDir);
     if (!dest || !grid.isPassable(dest.q, dest.r)) return undefined;
     return { q: dest.q, r: dest.r };
 }
@@ -67,8 +70,9 @@ export function applyActionToGame(eid: number, actions: Float32Array, { world } 
 
     if (kind === PolicyActionKind.Fire) {
         // fireTarget is a neighbour direction 0..5 (same layout as moveDir): fire at
-        // the fireTarget-th in-grid neighbour hex of the current cell.
-        const target = grid.neighbors(here)[fireTarget];
+        // the in-grid neighbour hex in that FIXED direction. neighborAt keeps the slot
+        // direction-stable (NOT the compacted neighbors), matching computeActionMask.
+        const target = grid.neighborAt(here, fireTarget);
         if (!target) return; // off-grid direction → no-op (defensive)
         enqueueAction(eid, {
             kind: ActionKind.Fire,
