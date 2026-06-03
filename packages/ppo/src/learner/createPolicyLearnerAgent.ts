@@ -6,7 +6,6 @@ import { RingBuffer } from 'ring-buffer-ts';
 import { ceil, floor, max, median, min } from '../../../../lib/math.ts';
 import { metricsChannels } from '../infra/channels.ts';
 import type { PpoConfig } from '../config.ts';
-import type { StateBindings } from '../core/StateBindings.ts';
 import { flatTypedArray } from '../utils/flat.ts';
 import { getDynamicLearningRate } from '../utils/getDynamicLearningRate.ts';
 import { ReplayBuffer } from '../memory/ReplayBuffer.ts';
@@ -18,9 +17,10 @@ import { createLearnerAgent } from './createLearnerAgent.ts';
 import { LearnData } from './createLearnerManager.ts';
 import { isLossDangerous } from './isLossDangerous.ts';
 
-export function createPolicyLearnerAgent<S>({ config, bindings, actionHeadDims, createNetwork, onNetworkReady }: {
+export function createPolicyLearnerAgent<S>({ config, createInputTensors, prepareRandomInputArrays, actionHeadDims, createNetwork, onNetworkReady }: {
     config: PpoConfig,
-    bindings: StateBindings<S>,
+    createInputTensors: (batch: S[]) => tf.Tensor[],
+    prepareRandomInputArrays: () => S,
     actionHeadDims: number[],
     createNetwork: () => tf.LayersModel,
     onNetworkReady?: (network: tf.LayersModel) => void,
@@ -30,6 +30,7 @@ export function createPolicyLearnerAgent<S>({ config, bindings, actionHeadDims, 
     const maxEntropyPerHead = actionHeadDims.map(dim => Math.log(dim));
     const meanMaxEntropy = maxEntropyPerHead.reduce((a, b) => a + b, 0) / maxEntropyPerHead.length;
     const targetEntropy = config.adaptiveEntropy.targetRatio * meanMaxEntropy;
+    const totalDim = actionHeadDims.reduce((a, b) => a + b, 0);
 
     const klHistory = new RingBuffer<number>(25);
 
@@ -68,10 +69,13 @@ export function createPolicyLearnerAgent<S>({ config, bindings, actionHeadDims, 
             for (let j = 0; j < mbc; j++) {
                 const mBatch = getPolicyBatch(mbs, j);
 
-                const tStates = bindings.createInputTensors(mBatch.states);
+                const tStates = createInputTensors(mBatch.states);
                 const tActions = tf.tensor2d(flatTypedArray(mBatch.actions), [mBatch.actions.length, mBatch.actions[0].length]);
                 const tOldLogProbs = tf.tensor1d(mBatch.logProbs);
                 const tAdvantages = tf.tensor1d(mBatch.advantages);
+                const tMasks = mBatch.masks != null
+                    ? tf.tensor2d(flatTypedArray(mBatch.masks), [mBatch.masks.length, totalDim])
+                    : undefined;
 
                 const { loss, entropy } = trainPolicyNetwork(
                     network,
@@ -83,6 +87,7 @@ export function createPolicyLearnerAgent<S>({ config, bindings, actionHeadDims, 
                     entropyCoeff,
                     config.clipNorm,
                     j === mbc - 1,
+                    tMasks,
                 );
                 loss && policyLossList.push(loss);
                 entropyList.push(entropy);
@@ -91,6 +96,7 @@ export function createPolicyLearnerAgent<S>({ config, bindings, actionHeadDims, 
                 tActions.dispose();
                 tOldLogProbs.dispose();
                 tAdvantages.dispose();
+                tMasks?.dispose();
             }
 
             // KL on non-perturbed data (for learning rate adaptation)
@@ -146,12 +152,14 @@ export function createPolicyLearnerAgent<S>({ config, bindings, actionHeadDims, 
         const actions = indices.map(i => batch.actions[i]);
         const logProbs = indices.map(i => batch.logProbs[i]);
         const advantages = indices.map(i => batch.advantages[i]);
+        const masks = batch.masks ? indices.map(i => batch.masks![i]) : undefined;
 
         return {
             states: states,
             actions: actions,
             logProbs: (logProbs),
             advantages: (advantages),
+            masks: masks,
         };
     };
 
@@ -160,8 +168,9 @@ export function createPolicyLearnerAgent<S>({ config, bindings, actionHeadDims, 
         const actions = indices.map(i => batch.actions[i]);
         const logits = indices.map(i => batch.logits[i]);
         const logProb = indices.map(i => batch.logProbs[i]);
+        const masks = batch.masks ? indices.map(i => batch.masks![i]) : undefined;
 
-        return { states, actions, logits, logProb, };
+        return { states, actions, logits, logProb, masks };
     };
 
     const computeKLForBatch = (
@@ -172,9 +181,12 @@ export function createPolicyLearnerAgent<S>({ config, bindings, actionHeadDims, 
         let result: undefined | tf.Tensor;
 
         if (batch.states.length > 0) {
-            const tStates = bindings.createInputTensors(batch.states);
+            const tStates = createInputTensors(batch.states);
             const tActions = tf.tensor2d(flatTypedArray(batch.actions), [batch.actions.length, batch.actions[0].length]);
             const tLogProb = tf.tensor1d(batch.logProb);
+            const tMasks = batch.masks != null
+                ? tf.tensor2d(flatTypedArray(batch.masks), [batch.masks.length, totalDim])
+                : undefined;
 
             result = computeKullbackLeiblerAprox(
                 network,
@@ -182,11 +194,13 @@ export function createPolicyLearnerAgent<S>({ config, bindings, actionHeadDims, 
                 tActions,
                 tLogProb,
                 mbs,
+                tMasks,
             )
 
             tf.dispose(tStates);
             tActions.dispose();
             tLogProb.dispose();
+            tMasks?.dispose();
         }
 
         return result;
@@ -194,7 +208,8 @@ export function createPolicyLearnerAgent<S>({ config, bindings, actionHeadDims, 
 
     return createLearnerAgent<S>({
         config,
-        bindings,
+        createInputTensors,
+        prepareRandomInputArrays,
         modelName: Model.Policy,
         createNetwork,
         trainNetwork: trainPolicy,

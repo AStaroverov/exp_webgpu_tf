@@ -1,7 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { get, isNumber } from 'lodash-es';
 import type { PpoConfig } from '../config.ts';
-import type { StateBindings } from '../core/StateBindings.ts';
 import { getNetworkExpIteration, setNetworkSettings } from '../models/networkMeta.ts';
 import { patientAction } from '../utils/patientAction.ts';
 import { saveNetworkToDB } from '../models/Transfer.ts';
@@ -11,9 +10,10 @@ import { learnProcessChannel, modelSettingsChannel } from '../core/channels.ts';
 import { networkHealthCheck } from '../core/train.ts';
 import { LearnData } from './createLearnerManager.ts';
 
-export async function createLearnerAgent<S>({ config, bindings, modelName, createNetwork, trainNetwork, onNetworkReady }: {
+export async function createLearnerAgent<S>({ config, createInputTensors, prepareRandomInputArrays, modelName, createNetwork, trainNetwork, onNetworkReady }: {
     config: PpoConfig,
-    bindings: StateBindings<S>,
+    createInputTensors: (batch: S[]) => tf.Tensor[],
+    prepareRandomInputArrays: () => S,
     modelName: Model,
     createNetwork: () => tf.LayersModel,
     trainNetwork: (network: tf.LayersModel, batch: LearnData<S>) => unknown | Promise<unknown>,
@@ -36,7 +36,7 @@ export async function createLearnerAgent<S>({ config, bindings, modelName, creat
         const batch = rawBatch as LearnData<S>;
         try {
             await trainNetwork(network, batch);
-            await patientAction(() => networkHealthCheck(network, bindings));
+            await patientAction(() => networkHealthCheck(network, createInputTensors, prepareRandomInputArrays));
             await patientAction(() => saveNetworkToDB(network, modelName, config.savePath));
 
             return { modelName: modelName, version: getNetworkExpIteration(network) };

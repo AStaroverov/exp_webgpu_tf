@@ -5,8 +5,8 @@ import { bufferWhile } from '../../../../lib/Rx/bufferWhile.ts';
 import type { VTraceDiagnostics } from '../metrics/analyzeVTrace.ts';
 import { analyzeVTrace } from '../metrics/analyzeVTrace.ts';
 import { forceExitChannel, metricsChannels } from '../infra/channels.ts';
+import type * as tf from '@tensorflow/tfjs';
 import type { PpoConfig } from '../config.ts';
-import type { StateBindings } from '../core/StateBindings.ts';
 import { flatTypedArray } from '../utils/flat.ts';
 import { AgentMemoryBatch, PreparedBatch } from '../memory/Memory.ts';
 import { getNetworkSettings } from '../models/networkMeta.ts';
@@ -22,9 +22,9 @@ export type LearnData<S> = PreparedBatch<S> & {
     advantages: Float32Array,
 };
 
-export function createLearnerManager<S>({ config, bindings, actionHeadDims }: {
+export function createLearnerManager<S>({ config, createInputTensors, actionHeadDims }: {
     config: PpoConfig,
-    bindings: StateBindings<S>,
+    createInputTensors: (batch: S[]) => tf.Tensor[],
     actionHeadDims: number[],
 }) {
     let lastEndTime = 0;
@@ -63,11 +63,13 @@ export function createLearnerManager<S>({ config, bindings, actionHeadDims }: {
                     const {pureLogits, ...vTraceBatchData} = computeRetraceTargets<S>(
                         policyNetwork,
                         valueNetwork,
+                        createInputTensors,
                         batchData,
                         config.miniBatchSize(expIteration),
                         config.gamma(expIteration),
                         actionHeadDims.length,
-                        bindings,
+                        undefined,
+                        batchData.masks,
                     );
                     const learnData = {
                         ...batchData,
@@ -166,6 +168,7 @@ function squeezeBatches<S>(batches: AgentMemoryBatch<S>[]): PreparedBatch<S> {
         states: batches.flatMap(b => b.states),
         actions: batches.map(b => b.actions).flat(),
         logits: batches.map(b => b.logits).flat(),
+        masks: batches.some(b => b.masks) ? batches.flatMap(b => b.masks ?? []) : undefined,
         dones: flatTypedArray(batches.map(b => b.dones)),
         rewards: flatTypedArray(batches.map(b => b.rewards)),
         logProbs: flatTypedArray(batches.map(b => b.logProbs)),

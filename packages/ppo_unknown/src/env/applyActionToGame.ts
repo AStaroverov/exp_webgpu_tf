@@ -1,19 +1,39 @@
 /**
  * applyActionToGame — decode sampled categorical action indices into exactly one
  * `enqueueAction` call (the decision seam). Heads irrelevant to the chosen kind
- * are ignored. Invalid choices (no passable neighbour / no enemy) become no-ops;
- * the reward's time penalty discourages them (PLAN §5.1, v1 no-op fallback).
+ * are ignored. Invalid choices (no passable neighbour / empty fire cell) become
+ * no-ops; the reward's time penalty discourages them (PLAN §5.1, v1 no-op
+ * fallback). With action masking on (`computeActionMask`), these no-ops should be
+ * unreachable in practice, but the all-masked guard means an empty-board step can
+ * still arrive here — so the defensive fallbacks stay.
  *
- * actions = [kind, moveDir, fireTarget] (Float32Array from batchAct).
+ * actions = [kind, moveDir, fireTarget] (Float32Array from batchAct), where
+ * `fireTarget` is a NEIGHBOUR DIRECTION 0..5 (same layout as `moveDir`).
  */
 
-import { query } from 'bitecs';
 import { GameDI } from '../../../unknown/src/Game/DI/GameDI.ts';
 import { MapDI } from '../../../unknown/src/Game/DI/MapDI.ts';
 import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld.ts';
 import { enqueueAction } from '../../../unknown/src/Game/ECS/Actions/ActionSchedule.ts';
 import { ActionKind, TargetKind } from '../../../unknown/src/Game/ECS/Actions/ActionTypes.ts';
-import { HOLD_DURATION_MS, K_ENEMY, MOVE_SPEED, PolicyActionKind } from '../consts.ts';
+import type { HexGrid } from '../../../unknown/src/Game/Map/HexGrid.ts';
+import { HOLD_DURATION_MS, MOVE_SPEED, PolicyActionKind } from '../consts.ts';
+
+/**
+ * Shared move-passability predicate (single source of truth with
+ * `computeActionMask`): the `moveDir`-th in-grid neighbour of `(q, r)` that a unit
+ * may step into, or `undefined` if that direction is off-grid / blocked.
+ */
+export function moveDestination(
+    grid: HexGrid,
+    q: number,
+    r: number,
+    moveDir: number,
+): { q: number; r: number } | undefined {
+    const dest = grid.neighbors({ q, r })[moveDir];
+    if (!dest || !grid.isPassable(dest.q, dest.r)) return undefined;
+    return { q: dest.q, r: dest.r };
+}
 
 export function applyActionToGame(eid: number, actions: Float32Array, { world } = GameDI): void {
     const grid = MapDI.grid;
@@ -35,9 +55,8 @@ export function applyActionToGame(eid: number, actions: Float32Array, { world } 
     }
 
     if (kind === PolicyActionKind.MoveStep) {
-        const neighbors = grid.neighbors({ q: here.q, r: here.r });
-        const dest = neighbors[moveDir];
-        if (!dest || !grid.isPassable(dest.q, dest.r)) return; // invalid → no-op
+        const dest = moveDestination(grid, here.q, here.r, moveDir);
+        if (!dest) return; // invalid → no-op
         enqueueAction(eid, {
             kind: ActionKind.MoveStep,
             target: { kind: TargetKind.Hex, q: dest.q, r: dest.r },
@@ -47,39 +66,14 @@ export function applyActionToGame(eid: number, actions: Float32Array, { world } 
     }
 
     if (kind === PolicyActionKind.Fire) {
-        const target = nearestEnemies(eid, px, py, world)[fireTarget];
-        if (!target) return; // no enemy in that slot → no-op
+        // fireTarget is a neighbour direction 0..5 (same layout as moveDir): fire at
+        // the fireTarget-th in-grid neighbour hex of the current cell.
+        const target = grid.neighbors(here)[fireTarget];
+        if (!target) return; // off-grid direction → no-op (defensive)
         enqueueAction(eid, {
             kind: ActionKind.Fire,
             target: { kind: TargetKind.Hex, q: target.q, r: target.r },
         });
         return;
     }
-}
-
-/** Up to K_ENEMY enemy hexes, nearest first — the fire-head slot list. */
-function nearestEnemies(
-    selfEid: number,
-    px: number,
-    py: number,
-    world: (typeof GameDI)['world'],
-): Array<{ q: number; r: number }> {
-    const { Tank, TeamRef, RigidBodyState } = getGameComponents(world);
-    const grid = MapDI.grid;
-    const myTeam = TeamRef.id[selfEid];
-
-    const enemies: Array<{ q: number; r: number; d: number }> = [];
-    const tanks = query(world, [Tank]);
-    for (let i = 0; i < tanks.length; i++) {
-        const other = tanks[i];
-        if (other === selfEid || TeamRef.id[other] === myTeam) continue;
-        const ox = RigidBodyState.position.get(other, 0);
-        const oy = RigidBodyState.position.get(other, 1);
-        const hex = grid.worldToHex(ox, oy);
-        if (!hex) continue;
-        enemies.push({ q: hex.q, r: hex.r, d: (ox - px) ** 2 + (oy - py) ** 2 });
-    }
-
-    enemies.sort((a, b) => a.d - b.d);
-    return enemies.slice(0, K_ENEMY);
 }

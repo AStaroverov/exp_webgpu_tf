@@ -5,7 +5,8 @@ import { setConsolePrefix } from '../../../ppo/src/infra/console.ts';
 import { initTensorFlow } from '../../../ppo/src/infra/initTensorFlow.ts';
 import { createValueLearnerAgent } from '../../../ppo/src/learner/createValueLearnerAgent.ts';
 import { CONFIG } from '../config.ts';
-import { unknownStateBindings } from '../state/bindings.ts';
+import { createInputTensors } from '../state/InputTensors.ts';
+import { prepareRandomInputArrays } from '../state/InputArrays.ts';
 import { createValueNetwork } from '../models/createUnknownNetworks.ts';
 
 setConsolePrefix(`[LEARNER_VALUE]`);
@@ -14,6 +15,7 @@ await initTensorFlow('webgpu');
 
 createValueLearnerAgent({
     config: CONFIG,
-    bindings: unknownStateBindings,
+    createInputTensors,
+    prepareRandomInputArrays,
     createNetwork: createValueNetwork,
 });

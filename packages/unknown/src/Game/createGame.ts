@@ -15,7 +15,7 @@ import { SystemGroup } from './ECS/Plugins/systems.ts';
 import { createApplyRigidBodyToTransformSystem } from './ECS/Systems/createApplyRigidBodyToTransformSystem.ts';
 import { createSpawnerBulletsSystem } from './ECS/Systems/createBulletSystem.ts';
 import { createDestroyByTimeoutSystem } from './ECS/Systems/createDestroyByTimeoutSystem.ts';
-import { createDestroyBySpeedSystem } from './ECS/Systems/createDestroyBySpeedSystem.ts';
+import { createDestroyByDistanceSystem } from './ECS/Systems/createDestroyByDistanceSystem.ts';
 import { createDestroyOutOfZoneSystem } from './ECS/Systems/createDestroyOutOfZoneSystem.ts';
 import { createDestroySystem } from './ECS/Systems/createDestroySystem.ts';
 import { createRigidBodyStateSystem } from './ECS/Systems/createRigidBodyStateSystem.ts';
@@ -142,10 +142,10 @@ export function createGame({ width, height }: {
     const destroy = createDestroySystem();
     const destroyOutOfZone = createDestroyOutOfZoneSystem();
     const destroyByTimeout = createDestroyByTimeoutSystem();
-    const destroyBySpeed = createDestroyBySpeedSystem();
+    const destroyByDistance = createDestroyByDistanceSystem();
     const destroyFrame = (delta: number) => {
         destroyByTimeout(delta);
-        destroyBySpeed();
+        destroyByDistance();
         destroyOutOfZone();
         destroy();
     };

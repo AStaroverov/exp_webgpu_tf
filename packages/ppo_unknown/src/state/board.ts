@@ -27,19 +27,28 @@ export const BOARD_CELLS = BOARD_COLS * BOARD_ROWS;
 
 /** Per-cell channels (board planes). Collapsed/trimmed per design decisions. */
 export const BoardChannel = {
-    /** Static obstacle on the cell (collapsed passable/obstacle: obstacle=1 → impassable). */
-    Obstacle: 0,
     /** The observing agent's own cell. */
-    Self: 1,
-    /** Same-team unit. */
-    Ally: 2,
-    /** Other-team unit. */
-    Enemy: 3,
+    Self: 0,
     /** Normalized hp (0..1) of the unit on the cell; 0 if no unit. */
-    Hp: 4,
+    Hp: 1,
+    /** Static obstacle on the cell (collapsed passable/obstacle: obstacle=1 → impassable). */
+    Obstacle: 2,
+    /** Same-team unit. */
+    Ally: 3,
+    /** Other-team unit. */
+    Enemy: 4,
+    /** A cell a unit is driving into (grid `OccupantKind.Reserved`); 0/1. */
+    Reserved: 5,
+    /**
+     * Under fire (0/1): a cell lying on the remaining flight path of an enemy
+     * bullet currently in the air. Bullets travel a fixed distance in a straight
+     * line, so the whole stretch a live bullet will still cross is marked (not its
+     * current cell). See `markBulletThreat`.
+     */
+    UnderFire: 6,
 } as const;
 
-export const BOARD_CHANNELS = 5;
+export const BOARD_CHANNELS = 7;
 export const BOARD_SIZE = BOARD_CELLS * BOARD_CHANNELS;
 
 export const UnknownInputBoard = component({

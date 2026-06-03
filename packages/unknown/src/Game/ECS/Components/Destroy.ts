@@ -1,4 +1,4 @@
-import { TypedArray } from '../../../../../renderer/src/utils.ts';
+import { NestedArray, TypedArray } from '../../../../../renderer/src/utils.ts';
 import { delegate } from '../../../../../renderer/src/delegate.ts';
 import { addComponent, World } from 'bitecs';
 import { defineComponent } from '../../../../../renderer/src/ECS/utils.ts';
@@ -31,13 +31,19 @@ export const createDestroyByTimeoutComponent = defineComponent((DestroyByTimeout
     };
 });
 
-export const createDestroyBySpeedComponent = defineComponent((DestroyBySpeed) => {
-    const minSpeed = TypedArray.f64(delegate.defaultSize);
+export const createDestroyByDistanceComponent = defineComponent((DestroyByDistance) => {
+    // Origin point the distance is measured from.
+    const origin = NestedArray.f64(2, delegate.defaultSize);
+    // Squared max distance — avoids a sqrt per entity per tick.
+    const maxDistanceSq = TypedArray.f64(delegate.defaultSize);
     return {
-        minSpeed,
-        addComponent(world: World, eid: number, min: number) {
-            addComponent(world, eid, DestroyBySpeed);
-            minSpeed[eid] = min;
+        origin,
+        maxDistanceSq,
+        addComponent(world: World, eid: number, x: number, y: number, maxDistance: number) {
+            addComponent(world, eid, DestroyByDistance);
+            origin.set(eid, 0, x);
+            origin.set(eid, 1, y);
+            maxDistanceSq[eid] = maxDistance * maxDistance;
         },
     };
 });

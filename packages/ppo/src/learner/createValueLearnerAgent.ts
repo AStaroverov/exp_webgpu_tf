@@ -2,7 +2,6 @@ import * as tf from '@tensorflow/tfjs';
 import { ceil, max, min } from '../../../../lib/math.ts';
 import { metricsChannels } from '../infra/channels.ts';
 import type { PpoConfig } from '../config.ts';
-import type { StateBindings } from '../core/StateBindings.ts';
 import { ReplayBuffer } from '../memory/ReplayBuffer.ts';
 import { asyncUnwrapTensor, onReadyRead } from '../utils/Tensor.ts';
 import { getNetworkExpIteration } from '../models/networkMeta.ts';
@@ -12,9 +11,10 @@ import { createLearnerAgent } from './createLearnerAgent.ts';
 import { LearnData } from './createLearnerManager.ts';
 import { isLossDangerous } from './isLossDangerous.ts';
 
-export function createValueLearnerAgent<S>({ config, bindings, createNetwork, onNetworkReady }: {
+export function createValueLearnerAgent<S>({ config, createInputTensors, prepareRandomInputArrays, createNetwork, onNetworkReady }: {
     config: PpoConfig,
-    bindings: StateBindings<S>,
+    createInputTensors: (batch: S[]) => tf.Tensor[],
+    prepareRandomInputArrays: () => S,
     createNetwork: () => tf.LayersModel,
     onNetworkReady?: (network: tf.LayersModel) => void,
 }) {
@@ -36,7 +36,7 @@ export function createValueLearnerAgent<S>({ config, bindings, createNetwork, on
                 const indices = rb.getSample(mbs, j * mbs, (j + 1) * mbs);
                 const mBatch = createValueBatch(batch, indices);
 
-                const tStates = bindings.createInputTensors(mBatch.states);
+                const tStates = createInputTensors(mBatch.states);
                 const tReturns = tf.tensor1d(mBatch.returns);
                 const tValues = tf.tensor1d(mBatch.values);
 
@@ -87,7 +87,8 @@ export function createValueLearnerAgent<S>({ config, bindings, createNetwork, on
 
     return createLearnerAgent<S>({
         config,
-        bindings,
+        createInputTensors,
+        prepareRandomInputArrays,
         modelName: Model.Value,
         createNetwork,
         trainNetwork: trainValue,

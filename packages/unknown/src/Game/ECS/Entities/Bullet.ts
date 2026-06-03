@@ -15,7 +15,7 @@ import {
 import { ZIndex } from '../../consts.ts';
 import { ActiveEvents, RigidBodyType } from '@dimforge/rapier2d-simd';
 import { CollisionGroup } from '../../Physical/createRigid.ts';
-import { BulletCaliber, mapBulletCaliber, MAX_BULLET_SPEED, MIN_BULLET_SPEED } from '../Components/Bullet.ts';
+import { BulletCaliber, mapBulletCaliber, MAX_BULLET_SPEED } from '../Components/Bullet.ts';
 import { getGameComponents } from '../createGameWorld.ts';
 import { min, PI } from '../../../../../../lib/math.ts';
 import { ExplosionConfig, SoundConfig } from '../../Config/index.ts';
@@ -47,7 +47,7 @@ export function createBullet(options: Partial<Options> & {
     playerId: number,
     teamId: number
 }, { world } = GameDI) {
-    const { Bullet, TeamRef, PlayerRef, Hitable, Damagable, DestroyBySpeed } = getGameComponents(world);
+    const { Bullet, TeamRef, PlayerRef, Hitable, Damagable, DestroyByDistance } = getGameComponents(world);
 
     Object.assign(optionsBulletRR, defaultOptionsBulletRR);
     Object.assign(optionsBulletRR, options);
@@ -71,7 +71,7 @@ export function createBullet(options: Partial<Options> & {
     PlayerRef.addComponent(world, bulletId, options.playerId);
     Hitable.addComponent(world, bulletId, min(bulletCaliber.width, bulletCaliber.height) / 10);
     Damagable.addComponent(world, bulletId, bulletCaliber.damage);
-    DestroyBySpeed.addComponent(world, bulletId, MIN_BULLET_SPEED);
+    DestroyByDistance.addComponent(world, bulletId, optionsBulletRR.x, optionsBulletRR.y, bulletCaliber.maxDistance);
 
     return bulletId;
 }

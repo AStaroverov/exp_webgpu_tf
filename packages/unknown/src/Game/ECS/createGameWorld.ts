@@ -7,7 +7,7 @@ import { createChildrenComponent } from './Components/Children.ts';
 import { createDamagableComponent } from './Components/Damagable.ts';
 import {
     createDestroyComponent,
-    createDestroyBySpeedComponent,
+    createDestroyByDistanceComponent,
     createDestroyByTimeoutComponent,
 } from './Components/Destroy.ts';
 import { createExhaustPipeComponent } from './Components/ExhaustPipe.ts';
@@ -63,7 +63,7 @@ function createGameOnlyComponents(world: World) {
         Children: createChildrenComponent(world),
         Damagable: createDamagableComponent(world),
         Destroy: createDestroyComponent(world),
-        DestroyBySpeed: createDestroyBySpeedComponent(world),
+        DestroyByDistance: createDestroyByDistanceComponent(world),
         DestroyByTimeout: createDestroyByTimeoutComponent(world),
         DestroyOnSoundFinish: createDestroyOnSoundFinishComponent(world),
         ExhaustPipe: createExhaustPipeComponent(world),

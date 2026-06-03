@@ -8,14 +8,15 @@ import { episodeSampleChannel } from '../../../ppo/src/core/channels.ts';
 import { createLearnerManager } from '../../../ppo/src/learner/createLearnerManager.ts';
 import { createPolicyLearnerAgent } from '../../../ppo/src/learner/createPolicyLearnerAgent.ts';
 import { CONFIG } from '../config.ts';
-import { unknownStateBindings } from '../state/bindings.ts';
+import { createInputTensors } from '../state/InputTensors.ts';
+import { prepareRandomInputArrays } from '../state/InputArrays.ts';
 import { ACTION_HEAD_DIMS, createPolicyNetwork } from '../models/createUnknownNetworks.ts';
 
 setConsolePrefix(`[LEARNER_POLICY]`);
 
 await initTensorFlow('webgpu');
 
-createLearnerManager({ config: CONFIG, bindings: unknownStateBindings, actionHeadDims: ACTION_HEAD_DIMS });
+createLearnerManager({ config: CONFIG, createInputTensors, actionHeadDims: ACTION_HEAD_DIMS });
 
 // Forward episode success to the metrics channel for visibility (no curriculum yet).
 episodeSampleChannel.obs.subscribe((sample) => {
@@ -28,7 +29,8 @@ episodeSampleChannel.obs.subscribe((sample) => {
 
 createPolicyLearnerAgent({
     config: CONFIG,
-    bindings: unknownStateBindings,
+    createInputTensors,
+    prepareRandomInputArrays,
     actionHeadDims: ACTION_HEAD_DIMS,
     createNetwork: createPolicyNetwork,
 });

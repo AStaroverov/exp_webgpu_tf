@@ -7,7 +7,8 @@ import { setConsolePrefix } from '../../../ppo/src/infra/console.ts';
 import { initTensorFlow } from '../../../ppo/src/infra/initTensorFlow.ts';
 import { metricsChannels } from '../../../ppo/src/infra/channels.ts';
 import { CONFIG } from '../config.ts';
-import { tankStateBindings } from '../state/bindings.ts';
+import { createInputTensors } from '../state/InputTensors.ts';
+import { prepareRandomInputArrays } from '../state/InputArrays.ts';
 import { ACTION_HEAD_DIMS, createPolicyNetwork } from '../models/createTankNetworks.ts';
 import { createLearnerManager } from '../../../ppo/src/learner/createLearnerManager.ts';
 import { createPolicyLearnerAgent } from '../../../ppo/src/learner/createPolicyLearnerAgent.ts';
@@ -21,7 +22,7 @@ import '../ui/uiUtils.ts';
 setConsolePrefix(`[LEARNER_POLICY]`);
 
 await initTensorFlow('webgpu');
-createLearnerManager({ config: CONFIG, bindings: tankStateBindings, actionHeadDims: ACTION_HEAD_DIMS });
+createLearnerManager({ config: CONFIG, createInputTensors, actionHeadDims: ACTION_HEAD_DIMS });
 
 const mapScenarioIndexToSuccessRatio = new Map<number, RingBuffer<number>>();
 const mapScenarioIndexToAvgSuccessRatio = new Map<number, number>();
@@ -72,7 +73,8 @@ function onPolicyReady(network: tf.LayersModel) {
 
 createPolicyLearnerAgent({
     config: CONFIG,
-    bindings: tankStateBindings,
+    createInputTensors,
+    prepareRandomInputArrays,
     actionHeadDims: ACTION_HEAD_DIMS,
     createNetwork: createPolicyNetwork,
     onNetworkReady: onPolicyReady,

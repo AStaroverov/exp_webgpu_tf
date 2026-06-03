@@ -23,10 +23,11 @@ import { getNetworkExpIteration } from '../../../ppo/src/models/networkMeta.ts';
 import { patientAction } from '../../../ppo/src/utils/patientAction.ts';
 import { getTankHealth } from '../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts';
 import { CONFIG } from '../config.ts';
-import { unknownStateBindings } from '../state/bindings.ts';
+import { createInputTensors } from '../state/InputTensors.ts';
 import { InputArrays, prepareInputArrays } from '../state/InputArrays.ts';
-import { calculateActionReward, getFramePenalty } from '../reward/calculateReward.ts';
+import { calculateActionReward } from '../reward/calculateReward.ts';
 import { applyActionToGame } from './applyActionToGame.ts';
+import { computeActionMask } from './computeActionMask.ts';
 
 const EXPLORE_EPSILON = 0.1;
 
@@ -85,15 +86,14 @@ export class UnknownAgent {
      * One decision step. `snapshotUnknownBoard` must already have filled this
      * tank's board row this tick (the driver does it once for all observers).
      */
-    decide(frame: number): void {
+    decide(): void {
         if (sharedNetwork == null) return;
 
         // 1. Close the previous macro-action with its accumulated reward.
         if (this.opened && this.train) {
             const delta = calculateActionReward(this.tankEid) - this.prevPotential;
-            const reward = delta + getFramePenalty(frame);
             const done = getTankHealth(this.tankEid) <= 0;
-            this.memory.updateSecondPart(reward, done);
+            this.memory.updateSecondPart(delta, done);
             if (done) {
                 this.opened = false;
                 return;
@@ -102,17 +102,18 @@ export class UnknownAgent {
 
         // 2. Sample an action for the current state.
         const state = prepareInputArrays(this.tankEid);
+        const mask = computeActionMask(this.tankEid);
         const options = this.train
             ? { greedy: false, epsilon: EXPLORE_EPSILON }
             : { greedy: true };
-        const [result] = batchAct(sharedNetwork, [state], unknownStateBindings, options);
+        const [result] = batchAct(sharedNetwork, createInputTensors([state]), [mask], options);
 
         // 3. Enqueue it into the game.
         applyActionToGame(this.tankEid, result.actions);
 
         // 4. Open the new step.
         if (this.train) {
-            this.memory.addFirstPart(state, result.actions, result.logits, result.logProb);
+            this.memory.addFirstPart(state, result.actions, result.logits, result.logProb, mask);
             this.prevPotential = calculateActionReward(this.tankEid);
             this.opened = true;
         }

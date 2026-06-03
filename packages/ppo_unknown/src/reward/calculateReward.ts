@@ -23,10 +23,6 @@ const FINAL_REWARD_SCALE = 1.0;
 /** Team-spirit τ: 0 = selfish, 1 = fully cooperative. Fixed for the MVP scenario. */
 const TEAM_SPIRIT = 0.5;
 
-export function getFramePenalty(_frame: number): number {
-    return -0.001;
-}
-
 /** Cumulative combat score for the tank's player (delta'd by the agent). */
 export function calculateActionReward(eid: number, { world } = GameDI): number {
     const { PlayerRef } = getGameComponents(world);

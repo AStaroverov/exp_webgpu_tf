@@ -11,7 +11,8 @@
  *   - The observer's own cell  → `Self` plane (+ its hp).
  *   - Same-team unit cells     → `Ally`  plane (+ hp).
  *   - Other-team unit cells    → `Enemy` plane (+ hp).
- *   - `Reserved` cells         → ignored (transient movement reservation, dropped).
+ *   - `Reserved` cells         → `Reserved` plane (a unit is driving into them).
+ *   - Live enemy bullet paths  → `UnderFire` plane (see `markBulletThreat`).
  *
  * Prereq: each observing tank must have `UnknownInputBoard` added (agent setup calls
  * `UnknownInputBoard.addComponent(world, tankEid)`).
@@ -24,6 +25,7 @@ import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld
 import { OccupantKind } from '../../../unknown/src/Game/Map/HexGrid.ts';
 import { getTankHealth } from '../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts';
 import { BoardChannel, UnknownInputBoard } from './board.ts';
+import { markBulletThreat } from './markBulletThreat.ts';
 
 export function snapshotUnknownBoard({ world } = GameDI) {
     const grid = MapDI.grid;
@@ -47,6 +49,11 @@ export function snapshotUnknownBoard({ world } = GameDI) {
                 return;
             }
 
+            if (kind === OccupantKind.Reserved) {
+                UnknownInputBoard.set(selfEid, hex.row, hex.col, BoardChannel.Reserved, 1);
+                return;
+            }
+
             if (kind === OccupantKind.Unit) {
                 const unitEid = cell.occupantEid!;
                 const plane =
@@ -60,5 +67,9 @@ export function snapshotUnknownBoard({ world } = GameDI) {
                 UnknownInputBoard.set(selfEid, hex.row, hex.col, BoardChannel.Hp, getTankHealth(unitEid));
             }
         });
+
+        // Threat from live enemy bullets — straight-line projection of each
+        // bullet's remaining (fixed-distance) flight path onto the board.
+        markBulletThreat(selfEid, myTeam, grid, world);
     }
 }

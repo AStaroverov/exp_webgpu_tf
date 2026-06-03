@@ -21,6 +21,7 @@ import { PluginDI } from '../../../unknown/src/Game/DI/PluginDI.ts';
 import { SystemGroup } from '../../../unknown/src/Game/ECS/Plugins/systems.ts';
 import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld.ts';
 import { createTank } from '../../../unknown/src/Game/ECS/Entities/Tank/createTank.ts';
+import { spawnObstacles } from '../../../unknown/src/Game/ECS/Entities/Obstacle/spawnObstacles.ts';
 import { VehicleType } from '../../../unknown/src/Game/Config/index.ts';
 import { getTankHealth, getTankTeamId } from '../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts';
 import { getTeamsCount } from '../../../unknown/src/Game/ECS/Components/TeamRef.ts';
@@ -58,6 +59,12 @@ export function createUnknownScenario(options: { index: number; train?: boolean 
     const game = createGame({ width: FIELD_SIZE, height: FIELD_SIZE });
     const world = game.world;
     const { Tank, Vehicle, VehicleController } = getGameComponents(world);
+
+    // Scatter rocks first so tanks never spawn on an obstacle cell (pickDistinctCells
+    // filters on isPassable, which obstacle occupancy flips to false) and the board
+    // observation carries the obstacles. Layout re-rolls until the free region stays
+    // connected — see spawnObstacles.
+    spawnObstacles();
 
     const cells = pickDistinctCells(TEAMS_COUNT * TEAM_SIZE);
     const agents: UnknownAgent[] = [];

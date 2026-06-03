@@ -6,6 +6,7 @@ export type AgentMemoryBatch<S> = {
     dones: Float32Array,
     logits: Float32Array[],
     logProbs: Float32Array,
+    masks?: Float32Array[],
 }
 
 export type PreparedBatch<S> = AgentMemoryBatch<S>;
@@ -14,6 +15,7 @@ export class AgentMemory<S> {
     public states: S[] = [];
     public actions: Float32Array[] = [];
     public logits: Float32Array[] = [];
+    public masks: Float32Array[] = [];
     public logProbs: number[] = [];
     public rewards: number[] = [];
     public dones: boolean[] = [];
@@ -34,6 +36,7 @@ export class AgentMemory<S> {
         action: Float32Array,
         logits: Float32Array,
         logProb: number,
+        mask?: Float32Array,
     ) {
         if (this.isDone()) return;
         if (this.states.length !== this.rewards.length) return;
@@ -42,6 +45,7 @@ export class AgentMemory<S> {
         this.actions.push(action);
         this.logits.push(logits);
         this.logProbs.push(logProb);
+        if (mask != null) this.masks.push(mask);
     }
 
     updateSecondPart(reward: number, done: boolean) {
@@ -71,6 +75,7 @@ export class AgentMemory<S> {
             states: this.states.slice(),
             actions: this.actions.slice(),
             logits: this.logits.slice(),
+            masks: this.masks.length > 0 ? this.masks.slice() : undefined,
             logProbs: new Float32Array(this.logProbs),
             rewards: rewards,
             dones: dones,
@@ -81,20 +86,26 @@ export class AgentMemory<S> {
         this.states.length = 0;
         this.actions.length = 0;
         this.logits.length = 0;
+        this.masks.length = 0;
         this.logProbs.length = 0;
         this.rewards.length = 0;
         this.dones.length = 0;
     }
 
     private setMinLength() {
-        const minLength = Math.min(
+        // Masks are optional: an empty masks array (never-masked memory, e.g. ppo_tanks)
+        // must NOT force minLength to 0 — only include it when populated.
+        const lengths = [
             this.states.length,
             this.actions.length,
             this.logits.length,
             this.logProbs.length,
             this.rewards.length,
             this.dones.length,
-        );
+        ];
+        if (this.masks.length > 0) lengths.push(this.masks.length);
+
+        const minLength = Math.min(...lengths);
 
         this.states.length = minLength;
         this.actions.length = minLength;
@@ -102,5 +113,6 @@ export class AgentMemory<S> {
         this.logProbs.length = minLength;
         this.rewards.length = minLength;
         this.dones.length = minLength;
+        if (this.masks.length > 0) this.masks.length = minLength;
     }
 }

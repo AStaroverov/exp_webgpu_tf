@@ -4,7 +4,7 @@ import { InputArrays, prepareInputArrays } from "../../../../../ppo_tanks/src/st
 import { patientAction } from "../../../../../ppo/src/utils/patientAction.ts";
 import { disposeNetwork } from "../../../../../ppo/src/models/storage.ts";
 import { batchAct } from "../../../../../ppo/src/core/train.ts";
-import { tankStateBindings } from "../../../../../ppo_tanks/src/state/bindings.ts";
+import { createInputTensors } from "../../../../../ppo_tanks/src/state/InputTensors.ts";
 import { TankAgent } from "./CurrentActorAgent";
 import { random, randomRangeFloat } from '../../../../../../lib/random';
 import { computeObstacleGrid } from '../../../../../ppo_tanks/src/state/computeObstacleGrid';
@@ -74,7 +74,7 @@ export const createNetworkModelManager = (getter: () => Promise<tf.LayersModel>)
             const options = train
                 ? { greedy: false, epsilon: randomRangeFloat(0.05, 0.3), noises }
                 : { greedy: true };
-            const result = batchAct(network, currentStates, tankStateBindings, options);
+            const result = batchAct(network, createInputTensors(currentStates), undefined, options);
 
             for (const [index, {agent}] of scheduledAgents.entries()) {
                 computedAgents.set(agent, {

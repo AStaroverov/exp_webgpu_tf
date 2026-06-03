@@ -3,10 +3,29 @@ import { Scalar } from '@tensorflow/tfjs-core/dist/tensor';
 import { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
 import { flatTypedArray } from '../utils/flat.ts';
 import { PreparedBatch } from '../memory/Memory.ts';
-import { StateBindings } from './StateBindings.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../utils/Tensor.ts';
 import { shouldNoiseLayer } from '../models/noiseGate.ts';
 import { normalize } from '../../../../lib/math.ts';
+
+// Additive invalid-action mask sentinel: 0 = allowed, MASK_NEG = forbidden.
+// Not -Infinity: an all-masked head would otherwise yield NaN after softmax/multinomial.
+export const MASK_NEG = -1e9;
+
+/**
+ * Slice a flat per-step mask [B, sum(dims)] into per-head tensors [B, dim_i],
+ * mirroring how the concatenated logits heads are arranged.
+ */
+export function splitMaskFlat(maskFlat: tf.Tensor, dims: number[]): tf.Tensor[] {
+    return tf.tidy(() => {
+        const heads: tf.Tensor[] = [];
+        let offset = 0;
+        for (const dim of dims) {
+            heads.push(maskFlat.slice([0, offset], [-1, dim]));
+            offset += dim;
+        }
+        return heads;
+    });
+}
 
 export function trainPolicyNetwork(
     network: tf.LayersModel,
@@ -18,15 +37,17 @@ export function trainPolicyNetwork(
     entropyCoeff: number,
     clipNorm: number,
     returnCost: boolean,
+    masks?: tf.Tensor,       // [B, sum(dims)] additive mask, optional
 ): { loss?: tf.Tensor, entropy: number } {
     let entropyValue = 0;
     const loss = tf.tidy(() => {
         return optimize(network.optimizer, () => {
             const predicted = network.apply(states, { training: true, noise: shouldNoiseLayer }) as tf.Tensor | tf.Tensor[];
             const logitsHeads = parsePolicyOutput(predicted);
+            const maskHeads = masks != null ? splitMaskFlat(masks, logitsHeads.map(h => h.shape[h.rank - 1] as number)) : undefined;
 
             // Compute log probabilities for categorical distributions
-            const newLogProbs = computeLogProbCategorical(actions, logitsHeads); // [B]
+            const newLogProbs = computeLogProbCategorical(actions, logitsHeads, maskHeads); // [B]
 
             // r = exp(newLogProb - oldLogProb)
             const ratios = tf.exp(newLogProbs.sub(oldLogProbs));                 // [B]
@@ -43,7 +64,7 @@ export function trainPolicyNetwork(
             const policyLoss = spoTerm.mean().mul(-1) as tf.Scalar;              // scalar
 
             // Entropy for categorical distributions
-            const rawEntropy = computeEntropyCategorical(logitsHeads);
+            const rawEntropy = computeEntropyCategorical(logitsHeads, maskHeads);
             entropyValue = rawEntropy.dataSync()[0];
 
             // Total loss = SPO - α * H(π)
@@ -85,11 +106,13 @@ export function computeKullbackLeiblerAprox(
     actions: tf.Tensor,
     oldLogProb: tf.Tensor,
     batchSize: number,
+    masks?: tf.Tensor,       // [B, sum(dims)] additive mask, optional
 ) {
     return tf.tidy(() => {
         const predicted = policyNetwork.predict(states, {batchSize});
         const logitsHeads = parsePolicyOutput(predicted);
-        const newLogProbs = computeLogProbCategorical(actions, logitsHeads);
+        const maskHeads = masks != null ? splitMaskFlat(masks, logitsHeads.map(h => h.shape[h.rank - 1] as number)) : undefined;
+        const newLogProbs = computeLogProbCategorical(actions, logitsHeads, maskHeads);
         // Schulman KL approximation: KL ≈ E[ratio - 1 - log(ratio)]
         const logRatio = newLogProbs.sub(oldLogProb);
         const ratio = logRatio.exp();
@@ -98,10 +121,10 @@ export function computeKullbackLeiblerAprox(
     });
 }
 
-export function batchAct<S>(
+export function batchAct(
     policyNetwork: tf.LayersModel,
-    states: S[],
-    bindings: StateBindings<S>,
+    inputTensors: tf.Tensor[],
+    outputMasks?: Float32Array[],  // one flat [sum(dims)] mask per state, optional
     options?: { greedy?: boolean; epsilon?: number; noises?: (tf.Tensor[] | undefined)[] },
 ): {
     actions: Float32Array,
@@ -109,18 +132,27 @@ export function batchAct<S>(
     logProb: number,
 }[] {
     return tf.tidy(() => {
-        const batchSize = states.length;
+        const batchSize = inputTensors[0].shape[0] as number;
         const noise = options?.greedy !== true ? shouldNoiseLayer : undefined;
-        const predicted = policyNetwork.apply(bindings.createInputTensors(states), { noise }) as tf.Tensor | tf.Tensor[];
+        const predicted = policyNetwork.apply(inputTensors, { noise }) as tf.Tensor | tf.Tensor[];
+        // batchAct fully consumes the caller-provided input tensors (forward pass only,
+        // returns plain Float32Arrays), so dispose them here — no caller-side tidy needed.
+        tf.dispose(inputTensors);
         const logitsHeads = parsePolicyOutput(predicted);
+        const headDims = logitsHeads.map(h => h.shape[h.rank - 1] as number);
 
         const results: {actions: Float32Array, logits: Float32Array, logProb: number}[] = [];
 
         for (let i = 0; i < batchSize; i++) {
             const stateLogitsHeads = logitsHeads.map(logits => logits.slice([i], [1]));
             const noiseTensors = options?.noises?.[i];
-            const sample = sampleActionsFromLogits(stateLogitsHeads.map(h => h.squeeze()), options, noiseTensors);
-            const logProb = computeLogProbCategorical(sample.actions.expandDims(0), stateLogitsHeads);
+            const flatMask = outputMasks?.[i];
+            const maskHeads = flatMask != null
+                ? splitMaskFlat(tf.tensor2d(flatMask, [1, flatMask.length]), headDims)
+                : undefined;
+            const squeezedMaskHeads = maskHeads?.map(h => h.squeeze() as tf.Tensor);
+            const sample = sampleActionsFromLogits(stateLogitsHeads.map(h => h.squeeze()), noiseTensors, squeezedMaskHeads, options);
+            const logProb = computeLogProbCategorical(sample.actions.expandDims(0), stateLogitsHeads, maskHeads);
 
             results.push({
                 logits: syncUnwrapTensor(sample.logitsFlat) as Float32Array,
@@ -135,21 +167,26 @@ export function batchAct<S>(
 
 export function sampleActionsFromLogits(
     heads: tf.Tensor[],
-    opts?: { greedy?: boolean; epsilon?: number },
     noises?: tf.Tensor[],
+    maskHeads?: tf.Tensor[],
+    opts?: { greedy?: boolean; epsilon?: number },
 ): { actions: tf.Tensor; logitsFlat: tf.Tensor } {
     const { greedy = false, epsilon = 0 } = opts ?? {};
 
     return tf.tidy(() => {
         const results = heads.map((logits, headIdx) => {
+            const headMask = maskHeads?.[headIdx];
             if (greedy) {
-                return { action: tf.argMax(logits, -1), noisyLogits: logits };
+                // Apply mask before greedy argMax so eval never picks a forbidden action.
+                const maskedLogits = headMask != null ? logits.add(headMask) : logits;
+                return { action: tf.argMax(maskedLogits, -1), noisyLogits: maskedLogits };
             }
-            return sampleCategorical(logits, epsilon, noises?.[headIdx]);
+            return sampleCategorical(logits, headMask, epsilon, noises?.[headIdx]);
         });
 
         return {
             actions: tf.stack(results.map(r => r.action), -1),
+            // Store RAW (unmasked) logits; mask is stored separately and re-applied at train time.
             logitsFlat: tf.concat(heads, -1),
         };
     });
@@ -157,10 +194,14 @@ export function sampleActionsFromLogits(
 
 function sampleCategorical(
     logits: tf.Tensor,
+    mask: undefined | tf.Tensor,
     epsilon: number,
-    dirichletNoise?: tf.Tensor,
+    dirichletNoise: undefined | tf.Tensor,
 ): { action: tf.Tensor } {
     return tf.tidy(() => {
+        // Apply mask FIRST so ε-uniform / Dirichlet mixing happens on already-masked
+        // logits and exploration never resurrects a forbidden action.
+        if (mask != null) logits = logits.add(mask);
         const numActions = logits.shape[logits.rank - 1]!;
         let noisyLogits = logits;
 
@@ -176,6 +217,12 @@ function sampleCategorical(
             noisyLogits = tf.log(probs.clipByValue(1e-8, 1));
         }
 
+        // Re-apply the mask AFTER ε-uniform / Dirichlet mixing: the mixing re-adds a
+        // nonzero floor (ε/numActions, or ε·Dir) to every slot, including forbidden
+        // ones, so masking only before the mix would let multinomial resurrect an
+        // invalid action. Re-masking here drives those slots back to MASK_NEG.
+        if (mask != null) noisyLogits = noisyLogits.add(mask);
+
         const action = tf.multinomial(noisyLogits as tf.Tensor1D, 1).squeeze();
         return { action };
     });
@@ -183,16 +230,23 @@ function sampleCategorical(
 
 export function pureAct<S>(
     policyNetwork: tf.LayersModel,
+    createInputTensors: (batch: S[]) => tf.Tensor[],
     state: S,
-    bindings: StateBindings<S>,
+    mask?: Float32Array,     // flat [sum(dims)] mask, optional
 ): {
     actions: Float32Array,
 } {
     return tf.tidy(() => {
-        const predicted = policyNetwork.apply(bindings.createInputTensors([state])) as tf.Tensor | tf.Tensor[];
+        const predicted = policyNetwork.apply(createInputTensors([state])) as tf.Tensor | tf.Tensor[];
         const logitsHeads = parsePolicyOutput(predicted);
+        const maskHeads = mask != null
+            ? splitMaskFlat(tf.tensor2d(mask, [1, mask.length]), logitsHeads.map(h => h.shape[h.rank - 1] as number))
+            : undefined;
         const actions = tf
-            .concat(logitsHeads.map(logits => tf.argMax(logits, -1).expandDims(-1)), -1)
+            .concat(logitsHeads.map((logits, i) => {
+                const masked = maskHeads?.[i] != null ? logits.add(maskHeads[i]) : logits;
+                return tf.argMax(masked, -1).expandDims(-1);
+            }), -1)
             .squeeze([0]);
 
         return {
@@ -242,12 +296,13 @@ function optimize(
 export function computeRetraceTargets<S>(
     policyNetwork: tf.LayersModel,
     valueNetwork: tf.LayersModel,
+    createInputTensors: (batch: S[]) => tf.Tensor[],
     batch: PreparedBatch<S>,
     batchSize: number,
     gamma: number,
     actionDim: number,
-    bindings: StateBindings<S>,
     lambda: number = 0.95,
+    masks?: Float32Array[],  // one flat mask per step, optional
 ): {
     advantages: Float32Array,
     tdErrors: Float32Array,
@@ -256,11 +311,18 @@ export function computeRetraceTargets<S>(
     pureLogits: Float32Array[],
 } {
     return tf.tidy(() => {
-        const input = bindings.createInputTensors(batch.states);
+        const input = createInputTensors(batch.states);
         const predicted = policyNetwork.predict(input, {batchSize});
         const logitsHeads = parsePolicyOutput(predicted);
         const actions = tf.tensor2d(flatTypedArray(batch.actions), [batch.size, actionDim]);
-        const logProbCurrentTensor = computeLogProbCategorical(actions, logitsHeads);
+        const flatMasks = masks ?? batch.masks;
+        const maskTensor = flatMasks != null && flatMasks.length > 0
+            ? tf.tensor2d(flatTypedArray(flatMasks), [batch.size, flatMasks[0].length])
+            : undefined;
+        const maskHeads = maskTensor != null
+            ? splitMaskFlat(maskTensor, logitsHeads.map(h => h.shape[h.rank - 1] as number))
+            : undefined;
+        const logProbCurrentTensor = computeLogProbCategorical(actions, logitsHeads, maskHeads);
         const logProbBehaviorTensor = tf.tensor1d(batch.logProbs);
         const rhosTensor = logProbCurrentTensor.sub(logProbBehaviorTensor).exp();
         const valuesTensor = (valueNetwork.predict(input, {batchSize}) as tf.Tensor).squeeze();
@@ -356,9 +418,10 @@ function parsePolicyOutput(prediction: tf.Tensor | tf.Tensor[]): tf.Tensor[] {
 }
 
 // Compute log probability for categorical distributions
-function computeLogProbCategorical(actions: tf.Tensor, heads: tf.Tensor[]): tf.Tensor {
+function computeLogProbCategorical(actions: tf.Tensor, heads: tf.Tensor[], maskHeads?: tf.Tensor[]): tf.Tensor {
     return tf.tidy(() => {
-        const logProbs = heads.map((logits, i) => {
+        const logProbs = heads.map((rawLogits, i) => {
+            const logits = maskHeads?.[i] != null ? rawLogits.add(maskHeads[i]) : rawLogits;
             const actionIndices = actions.slice([0, i], [-1, 1]).squeeze([-1]); // [B]
             const logSoftmax = tf.logSoftmax(logits); // [B, numClasses]
             // Use one-hot encoding to select the correct log probability
@@ -371,9 +434,10 @@ function computeLogProbCategorical(actions: tf.Tensor, heads: tf.Tensor[]): tf.T
 }
 
 // Compute entropy for categorical distributions
-function computeEntropyCategorical(logitsHeads: tf.Tensor[]): tf.Tensor {
+function computeEntropyCategorical(logitsHeads: tf.Tensor[], maskHeads?: tf.Tensor[]): tf.Tensor {
     return tf.tidy(() => {
-        const entropies = logitsHeads.map(logits => {
+        const entropies = logitsHeads.map((rawLogits, i) => {
+            const logits = maskHeads?.[i] != null ? rawLogits.add(maskHeads[i]) : rawLogits;
             const probs = tf.softmax(logits); // [B, numClasses]
             const logProbs = tf.logSoftmax(logits); // [B, numClasses]
             return probs.mul(logProbs).sum(-1).mul(-1); // -sum(p * log(p)) -> [B]
@@ -384,10 +448,11 @@ function computeEntropyCategorical(logitsHeads: tf.Tensor[]): tf.Tensor {
 
 export function networkHealthCheck<S>(
     network: tf.LayersModel,
-    bindings: StateBindings<S>,
+    createInputTensors: (batch: S[]) => tf.Tensor[],
+    prepareRandomInputArrays: () => S,
 ): Promise<boolean> {
     const tData = tf.tidy(() => {
-        const inputs = bindings.createInputTensors([bindings.prepareRandomInputArrays()]);
+        const inputs = createInputTensors([prepareRandomInputArrays()]);
         const result = network.predict(inputs) as tf.Tensor | tf.Tensor[];
         const arr = Array.isArray(result) ? result : [result];
         return arr.map(t => t.squeeze());

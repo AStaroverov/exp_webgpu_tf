@@ -37,6 +37,7 @@ export type HexCell = {
 };
 
 const cellKey = (q: number, r: number): string => `${q},${r}`;
+const rowColKey = (row: number, col: number): string => `${row}:${col}`;
 
 export class HexGrid {
     /** honeycomb grid — source of truth for geometry & which hexes exist. */
@@ -47,6 +48,8 @@ export class HexGrid {
     readonly originY: number;
 
     private readonly cells = new Map<string, HexCell>();
+    /** Reverse index: `row:col` → the honeycomb hex at that grid position. */
+    private readonly hexByRowCol = new Map<string, HexTile>();
 
     constructor(opts?: { originX?: number; originY?: number; center?: { x: number; y: number } }) {
         this.grid = new Grid(
@@ -77,6 +80,7 @@ export class HexGrid {
                 occupantEid: null,
                 occupantKind: null,
             });
+            this.hexByRowCol.set(rowColKey(hex.row, hex.col), hex);
         });
     }
 
@@ -91,6 +95,15 @@ export class HexGrid {
 
     getCell(q: number, r: number): HexCell | undefined {
         return this.cells.get(cellKey(q, r));
+    }
+
+    /**
+     * Hex at a given grid `(row, col)` position, or undefined if out of bounds.
+     * Layout matches the board observation (`row * cols + col`, cell-major), so a
+     * flat cell index `idx` decodes as `row = idx / cols`, `col = idx % cols`.
+     */
+    cellAt(row: number, col: number): HexTile | undefined {
+        return this.hexByRowCol.get(rowColKey(row, col));
     }
 
     forEachCell(fn: (cell: HexCell, hex: HexTile) => void): void {

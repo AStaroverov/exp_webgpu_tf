@@ -13,7 +13,7 @@ import { PI } from '../../../../../lib/math.ts';
 export const BulletSpeedConfig = {
     /** Maximum allowed bullet speed */
     max: 2000,
-    
+
     /** Minimum speed before bullet is destroyed */
     min: 200,
 } as const;
@@ -44,6 +44,8 @@ export type BulletCaliberStats = {
     damage: number;
     /** Linear damping (speed loss over time) */
     linearDamping: number;
+    /** Maximum distance the bullet may travel from its spawn point before it is destroyed */
+    maxDistance: number;
 };
 
 /**
@@ -58,6 +60,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
         density: 3_000,
         damage: 3,
         linearDamping: 0.4, // Light bullets lose speed quickly
+        maxDistance: 96 * 2.4,
     },
     
     [BulletCaliber.Medium]: {
@@ -67,6 +70,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
         density: 3_000,
         damage: 4,
         linearDamping: 0.3, // Medium bullets have moderate drag
+        maxDistance: 96 * 4.4,
     },
     
     [BulletCaliber.Heavy]: {
@@ -76,6 +80,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
         density: 3_000,
         damage: 6,
         linearDamping: 0.2, // Heavy bullets maintain speed longer
+        maxDistance: 96 * 6.4,
     },
 } as const;
 
