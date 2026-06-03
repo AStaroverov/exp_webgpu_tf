@@ -3,14 +3,13 @@ import { get } from 'lodash';
 import { isObject, mapValues, throttle } from 'lodash-es';
 import { metricsChannels } from '../../../../ppo/src/infra/channels.ts';
 import { ACTION_HEAD_DIMS } from '../../consts.ts';
+import { scenariosCount } from '../../curriculum/createScenarioByCurriculumState.ts';
 import { CompressedBuffer } from './CompressedBuffer.ts';
 import { RingBuffer } from './RingBuffer.ts';
 import { getAgentLog, setAgentLog } from './store.ts';
 
 // Number of categorical policy heads → one logit chart each.
 const ACTION_DIM = ACTION_HEAD_DIMS.length;
-// MVP: single fixed scenario (no curriculum sampling).
-const scenariosCount = 1;
 
 // --- Chart.js global dark theme ---
 Chart.defaults.color = '#999';

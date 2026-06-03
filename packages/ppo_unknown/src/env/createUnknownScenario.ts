@@ -1,12 +1,14 @@
 /**
  * createUnknownScenario — builds one headless training world for ppo_unknown.
  *
- * The analogue of tanks' `createScenarioGridBase` + `createScenarioCore`, but
- * collapsed to one fixed self-play N-vs-M scenario for the MVP (no curriculum
- * sampling yet). Steps:
+ * The analogue of tanks' `createScenarioGridBase` + `createScenarioCore`: a fixed
+ * N-vs-N world whose ONLY curriculum axis is how the enemy team (team 1) is driven
+ * — `enemy`: 'standing' | 'random' | 'self-play' (see `scenarioCompositions`). Team 0
+ * is always the learning policy. Steps:
  *   1. createGame headless (no render target).
  *   2. spawn TEAM_SIZE tanks for each of the 2 teams on distinct passable cells.
- *   3. give every learning tank a board-observation component + an UnknownAgent.
+ *   3. drive team 0 (and team 1 under self-play) with a learning UnknownAgent;
+ *      drive random enemies with a scripted RandomBot; leave standing enemies undriven.
  *   4. install the policy driver as the SystemGroup.Before plugin (in place of the
  *      stand-in driver, which the base createGame no longer adds).
  *
@@ -28,8 +30,10 @@ import { getTeamsCount } from '../../../unknown/src/Game/ECS/Components/TeamRef.
 import { TEAM_SIZE, TEAMS_COUNT } from '../consts.ts';
 import { UnknownInputBoard } from '../state/board.ts';
 import { scoreTracker } from '../reward/ScoreTracker.ts';
+import { EnemyKind } from '../curriculum/types.ts';
 import { UnknownAgent } from './UnknownAgent.ts';
-import { createPolicyDriverSystem } from './createPolicyDriverSystem.ts';
+import { RandomBot } from './RandomBot.ts';
+import { createPolicyDriverSystem, TankDriver } from './createPolicyDriverSystem.ts';
 
 const FIELD_SIZE = 1000;
 
@@ -53,8 +57,17 @@ export type Scenario = {
     getSuccessRatio: () => number;
 };
 
-export function createUnknownScenario(options: { index: number; train?: boolean }): Scenario {
+export function createUnknownScenario(options: {
+    index: number;
+    train?: boolean;
+    /**
+     * How the enemy team (team 1) is driven — the curriculum's single difficulty axis.
+     * Team 0 is always the learning policy. Defaults to 'self-play' (the v1 behaviour).
+     */
+    enemy?: EnemyKind;
+}): Scenario {
     const train = options.train ?? true;
+    const enemy = options.enemy ?? 'self-play';
     scoreTracker.reset(); // fresh combat score per episode
     const game = createGame({ width: FIELD_SIZE, height: FIELD_SIZE });
     const world = game.world;
@@ -67,8 +80,12 @@ export function createUnknownScenario(options: { index: number; train?: boolean 
     spawnObstacles();
 
     const cells = pickDistinctCells(TEAMS_COUNT * TEAM_SIZE);
+    // `agents` are the LEARNING tanks only (team 0 always; team 1 when self-play) —
+    // the episode manager emits their memory. `driverMap` holds every tank that gets
+    // a per-decision driver (learning agents + scripted bots). Standing enemies get
+    // no driver at all, so they never enqueue an action and simply hold position.
     const agents: UnknownAgent[] = [];
-    const agentMap = new Map<number, UnknownAgent>();
+    const driverMap = new Map<number, TankDriver>();
 
     let slot = 0;
     for (let team = 0; team < TEAMS_COUNT; team++) {
@@ -90,14 +107,25 @@ export function createUnknownScenario(options: { index: number; train?: boolean 
             VehicleController.setMove$(tankEid, 0);
             VehicleController.setRotate$(tankEid, 0);
 
+            const isEnemy = team !== 0;
+            if (isEnemy && enemy === 'standing') {
+                continue; // no driver → enemy holds position
+            }
+            if (isEnemy && enemy === 'random') {
+                driverMap.set(tankEid, new RandomBot(tankEid)); // scripted wanderer, no learning
+                continue;
+            }
+
+            // Learning agent: team 0 always, plus team 1 under self-play. Only these
+            // observe the board (need UnknownInputBoard) and accumulate memory.
             UnknownInputBoard.addComponent(world, tankEid);
             const agent = new UnknownAgent(tankEid, train);
             agents.push(agent);
-            agentMap.set(tankEid, agent);
+            driverMap.set(tankEid, agent);
         }
     }
 
-    PluginDI.addSystem(SystemGroup.Before, createPolicyDriverSystem(agentMap));
+    PluginDI.addSystem(SystemGroup.Before, createPolicyDriverSystem(driverMap));
 
     // Capture initial per-team health on the first tick to base the success ratio on.
     let initialTeamHealth: Record<number, number> | undefined;

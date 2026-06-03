@@ -65,10 +65,10 @@ export function createHeavyTank(opts: {
     options.density = DENSITY;
     options.width = PADDING * 7;
     options.height = PADDING * 6;
-    options.turret.rotationSpeed = PI * 0.6;
+    options.turret.rotationSpeed = PI * 0.1;
     options.turret.gunWidth = PADDING * 7;
     options.turret.gunHeight = PADDING * 2;
-    options.firearms.reloadingDuration = 700;
+    options.firearms.reloadingDuration = 1000;
     options.firearms.bulletCaliber = BulletCaliber.Heavy;
     options.firearms.bulletStartPosition = [13 * PADDING, 0];
     const [turretEid, gunEid] = createTankTurret(options, tankEid, tankPid);

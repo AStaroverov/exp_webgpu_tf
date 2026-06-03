@@ -54,31 +54,31 @@ export type BulletCaliberStats = {
  */
 export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     [BulletCaliber.Light]: {
-        width: 8,
-        height: 3,
-        speed: 450,
-        density: 3_000,
-        damage: 3,
+        width: 8 * 1.6,
+        height: 3 * 1.6,
+        speed: 450 * 1.6,
+        density: 5_000,
+        damage: 3 * 3,
         linearDamping: 0.4, // Light bullets lose speed quickly
         maxDistance: 96 * 2.4,
     },
     
     [BulletCaliber.Medium]: {
-        width: 10,
-        height: 4,
-        speed: 525,
-        density: 3_000,
-        damage: 4,
+        width: 10 * 1.6,
+        height: 4 * 1.6,
+        speed: 525 * 1.6,
+        density: 5_000,
+        damage: 4 * 3,
         linearDamping: 0.3, // Medium bullets have moderate drag
         maxDistance: 96 * 4.4,
     },
     
     [BulletCaliber.Heavy]: {
-        width: 12,
-        height: 5,
-        speed: 600,
-        density: 3_000,
-        damage: 6,
+        width: 12 * 1.6,
+        height: 5 * 1.6,
+        speed: 600 * 1.6,
+        density: 5_000,
+        damage: 6 * 3,
         linearDamping: 0.2, // Heavy bullets maintain speed longer
         maxDistance: 96 * 6.4,
     },

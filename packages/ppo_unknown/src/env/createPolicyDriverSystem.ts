@@ -13,9 +13,14 @@ import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld
 import { needsDecision } from '../../../unknown/src/Game/ECS/Actions/ActionSchedule.ts';
 import { snapshotUnknownBoard } from '../state/snapshotUnknownBoard.ts';
 import { scoreTracker } from '../reward/ScoreTracker.ts';
-import { UnknownAgent } from './UnknownAgent.ts';
 
-export function createPolicyDriverSystem(agents: Map<number, UnknownAgent>, { world } = GameDI) {
+/**
+ * Anything the driver can poke at a decision point: a learning `UnknownAgent` or a
+ * scripted `RandomBot`. Keeping it structural lets one driver loop serve both.
+ */
+export type TankDriver = { decide(): void };
+
+export function createPolicyDriverSystem(agents: Map<number, TankDriver>, { world } = GameDI) {
     const { Tank, Vehicle, VehicleController, Children } = getGameComponents(world);
     let frame = 0;
 

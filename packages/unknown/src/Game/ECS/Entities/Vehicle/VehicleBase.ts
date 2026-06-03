@@ -74,8 +74,7 @@ export function createVehicleTurret(
     options.interactsCollisionGroup = 0;
 
     const [turretEid, turretPid] = createRectangleRigidGroup(options);
-    VehicleTurret.addComponent(world, turretEid);
-    VehicleTurret.setRotationSpeed(turretEid, turretOptions.rotationSpeed);
+    VehicleTurret.addComponent(world, turretEid, turretOptions.rotationSpeed);
     TurretController.addComponent(world, turretEid);
 
     parentVector.x = 0;

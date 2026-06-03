@@ -11,8 +11,9 @@ import { max } from '../../../../lib/math.ts';
 import { frameTasks } from '../../../../lib/TasksScheduler/frameTasks.ts';
 import { macroTasks } from '../../../../lib/TasksScheduler/macroTasks.ts';
 import { TICK_TIME_SIMULATION } from '../consts.ts';
-import { createUnknownScenario, Scenario } from '../env/createUnknownScenario.ts';
+import { Scenario } from '../env/createUnknownScenario.ts';
 import { UnknownAgent } from '../env/UnknownAgent.ts';
+import { createScenarioByCurriculumState } from '../curriculum/createScenarioByCurriculumState.ts';
 import { getDrawState, settingsReady } from '../ui/uiUtils.ts';
 import { UnknownEpisodeManager } from './UnknownEpisodeManager.ts';
 
@@ -54,7 +55,7 @@ export class UnknownVisTestEpisodeManager extends UnknownEpisodeManager {
     }
 
     protected beforeEpisode(): Scenario {
-        const scenario = createUnknownScenario({ index: 0, train: true });
+        const scenario = createScenarioByCurriculumState(this.curriculumState, { train: true });
 
         const canvas = document.querySelector('canvas');
         if (canvas) {

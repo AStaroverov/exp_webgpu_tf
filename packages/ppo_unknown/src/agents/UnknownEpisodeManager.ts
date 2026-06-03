@@ -1,7 +1,9 @@
 /**
  * UnknownEpisodeManager — the ppo_unknown episode loop. Subclasses the generic
- * `EpisodeManager<Scenario>` exactly like tanks' `TankEpisodeManager`, but with a
- * single fixed self-play scenario (no curriculum sampling yet — MVP).
+ * `EpisodeManager<Scenario>` exactly like tanks' `TankEpisodeManager`: each episode
+ * is sampled from the curriculum ladder (standing → random → self-play enemies) by
+ * `createScenarioByCurriculumState`, driven by the curriculum state the learner
+ * broadcasts over `curriculumStateChannel`.
  *
  * Per episode: build a headless scenario, pull fresh policy weights, tick until a
  * team is wiped / one tank left / the frame cap, then emit each learning tank's
@@ -15,21 +17,29 @@ import { agentSampleChannel, episodeSampleChannel } from '../../../ppo/src/core/
 import { CONFIG } from '../config.ts';
 import { TICK_TIME_SIMULATION } from '../consts.ts';
 import { calculateFinalReward } from '../reward/calculateReward.ts';
-import { createUnknownScenario, Scenario } from '../env/createUnknownScenario.ts';
+import { Scenario } from '../env/createUnknownScenario.ts';
 import { UnknownAgent } from '../env/UnknownAgent.ts';
+import { createScenarioByCurriculumState } from '../curriculum/createScenarioByCurriculumState.ts';
+import { CurriculumState, DEFAULT_CURRICULUM_STATE } from '../curriculum/types.ts';
+import { curriculumStateChannel } from '../curriculumChannel.ts';
 
 const MAX_FRAMES = CONFIG.episodeFrames;
 
 export class UnknownEpisodeManager extends EpisodeManager<Scenario> {
+    protected curriculumState: CurriculumState = DEFAULT_CURRICULUM_STATE;
+
     constructor() {
         super({
             backpressureQueueSize: CONFIG.backpressureQueueSize,
             simulationTickTime: TICK_TIME_SIMULATION,
         });
+        curriculumStateChannel.obs.subscribe((state) => {
+            this.curriculumState = state;
+        });
     }
 
     protected beforeEpisode(): Scenario {
-        return createUnknownScenario({ index: 0, train: random() < 0.9 });
+        return createScenarioByCurriculumState(this.curriculumState, { train: random() < 0.9 });
     }
 
     protected afterEpisode(scenario: Scenario): void {

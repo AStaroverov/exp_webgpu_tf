@@ -67,10 +67,10 @@ export function createLightTank(opts: {
     options.density = DENSITY;
     options.width = PADDING * 6;
     options.height = PADDING * 6;
-    options.turret.rotationSpeed = PI * 0.8;
+    options.turret.rotationSpeed = PI * 0.3;
     options.turret.gunWidth = PADDING * 6;
     options.turret.gunHeight = PADDING * 2;
-    options.firearms.reloadingDuration = 300;
+    options.firearms.reloadingDuration = 500;
     options.firearms.bulletCaliber = BulletCaliber.Light;
     options.firearms.bulletStartPosition = [9 * PADDING, 0];
     const [turretEid, gunEid] = createTankTurret(options, tankEid, tankPid);
