@@ -33,7 +33,7 @@ export const CONFIG: PpoConfig & {
 
     lrConfig: {
         kl: { high: 0.013, target: 0.01, low: 0.007 },
-        initial: 1e-3,
+        initial: 1e-5,
         multHigh: 0.95,
         multLow: 1.01,
         min: 1e-5,
@@ -47,7 +47,7 @@ export const CONFIG: PpoConfig & {
     // a few simulated minutes; termination is owned by ppo_unknown (no win cond
     // baked into the game).
     episodeFrames: Math.round(2 * 60 * 1000 / TICK_TIME_SIMULATION),
-    workerCount: 4,
+    workerCount: 10,
     backpressureQueueSize: 2,
     savePath: 'PPO_UNKNOWN',
 };
