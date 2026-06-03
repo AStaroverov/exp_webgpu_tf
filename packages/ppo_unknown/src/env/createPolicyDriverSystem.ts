@@ -41,7 +41,7 @@ export function createPolicyDriverSystem(agents: Map<number, UnknownAgent>, { wo
         for (let i = 0; i < tanks.length; i++) {
             const eid = tanks[i];
             const agent = agents.get(eid);
-            if (agent && needsDecision(eid)) agent.decide(frame);
+            if (agent && needsDecision(eid)) agent.decide();
         }
     };
 }
