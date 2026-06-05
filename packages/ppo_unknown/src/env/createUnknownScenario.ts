@@ -7,8 +7,9 @@
  *   1. createGame headless (no render target).
  *   2. spawn `allies` + `enemies` tanks on distinct passable cells.
  *   3. drive team 0 (and team 1 under self-play) with a learning UnknownAgent;
- *      drive moving/shooting enemies with a scripted RandomBot; leave standing
- *      enemies undriven.
+ *      drive moving/shooting enemies with a scripted RandomBot; drive frozen
+ *      enemies with a FrozenAgent (historical policy snapshot, no learning);
+ *      leave standing enemies undriven.
  *   4. install the policy driver as the SystemGroup.Before plugin (in place of the
  *      stand-in driver, which the base createGame no longer adds).
  *
@@ -31,6 +32,7 @@ import { UnknownInputBoard } from '../state/board.ts';
 import { scoreTracker } from '../reward/ScoreTracker.ts';
 import { ScenarioConfig } from '../curriculum/types.ts';
 import { UnknownAgent } from './UnknownAgent.ts';
+import { FrozenAgent } from './FrozenAgent.ts';
 import { RandomBot } from './RandomBot.ts';
 import { createPolicyDriverSystem, TankDriver } from './createPolicyDriverSystem.ts';
 
@@ -119,6 +121,13 @@ export function createUnknownScenario(options: {
             }
             if (isEnemy && enemy === 'shooting') {
                 driverMap.set(tankEid, new RandomBot(tankEid, SHOOTING_BOT));
+                continue;
+            }
+            if (isEnemy && enemy === 'frozen') {
+                // Frozen historical policy: observes the board like a learning agent
+                // but is greedy and emits no memory — so not in `agents`.
+                UnknownInputBoard.addComponent(world, tankEid);
+                driverMap.set(tankEid, new FrozenAgent(tankEid));
                 continue;
             }
 

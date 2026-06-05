@@ -19,6 +19,7 @@ import { TICK_TIME_SIMULATION } from '../consts.ts';
 import { calculateFinalReward } from '../reward/calculateReward.ts';
 import { Scenario } from '../env/createUnknownScenario.ts';
 import { UnknownAgent } from '../env/UnknownAgent.ts';
+import { FrozenAgent } from '../env/FrozenAgent.ts';
 import { createScenarioByCurriculumState } from '../curriculum/createScenarioByCurriculumState.ts';
 import { CurriculumState, DEFAULT_CURRICULUM_STATE } from '../curriculum/types.ts';
 import { curriculumStateChannel } from '../curriculumChannel.ts';
@@ -76,7 +77,9 @@ export class UnknownEpisodeManager extends EpisodeManager<Scenario> {
     }
 
     protected awaitAgentsSync(): Promise<unknown> {
-        return UnknownAgent.sync();
+        // FrozenAgent.sync() also re-rolls which historical version the frozen
+        // opponents play this episode.
+        return Promise.all([UnknownAgent.sync(), FrozenAgent.sync()]);
     }
 
     protected runGameTick(frame: number, deltaTime: number, scenario: Scenario): boolean {

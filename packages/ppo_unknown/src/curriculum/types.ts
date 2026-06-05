@@ -24,14 +24,18 @@ export type { Scenario } from '../env/createUnknownScenario.ts';
  *               moving targets without tactics or return fire.
  *   shooting  — `RandomBot` that wanders AND fires randomly: the learner meets
  *               incoming fire for the first time.
+ *   frozen    — enemies run a FROZEN historical snapshot of the policy
+ *               (`FrozenAgent`): a stable opponent before live co-adaptation.
  *   self-play — enemies are learning agents sharing the live policy: the full
  *               competitive co-adaptation regime.
  *
  * Index ordering is load-bearing: a network's stored
  * `mapScenarioIndexToSuccessRatio` is keyed by index, so never reorder — only append.
+ * (Known one-time exception: 'frozen' was inserted at index 4, so a pre-existing
+ * ratio at 4 — formerly self-play — is reinterpreted as frozen. Accepted.)
  */
 
-export type EnemyBehavior = 'standing' | 'moving' | 'shooting' | 'self-play';
+export type EnemyBehavior = 'standing' | 'moving' | 'shooting' | 'frozen' | 'self-play';
 
 export type ScenarioConfig = {
     /** Team 0 size — the learning policy. */
@@ -50,7 +54,9 @@ export const scenarioCompositions: readonly ScenarioConfig[] = [
     { allies: 4, enemies: 4, enemy: 'moving' },
     // 3: 4 vs 4, enemies move and shoot back
     { allies: 4, enemies: 4, enemy: 'shooting' },
-    // 4: 4 vs 4 self-play
+    // 4: 4 vs 4 against a frozen historical snapshot of the policy
+    { allies: 4, enemies: 4, enemy: 'frozen' },
+    // 5: 4 vs 4 self-play
     { allies: 4, enemies: 4, enemy: 'self-play' },
 ] as const;
 
