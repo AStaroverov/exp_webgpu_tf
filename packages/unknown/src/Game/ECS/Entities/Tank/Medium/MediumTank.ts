@@ -68,7 +68,7 @@ export function createMediumTank(opts: {
     options.turret.rotationSpeed = PI * 0.2;
     options.turret.gunWidth = PADDING * 6;
     options.turret.gunHeight = PADDING * 2;
-    options.firearms.reloadingDuration = 800;
+    options.firearms.reloadingDuration = 2000;
     options.firearms.bulletCaliber = BulletCaliber.Medium;
     options.firearms.bulletStartPosition = [11 * PADDING, 0];
     const [turretEid, gunEid] = createTankTurret(options, tankEid, tankPid);
