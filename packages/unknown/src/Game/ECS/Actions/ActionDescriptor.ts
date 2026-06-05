@@ -29,22 +29,9 @@ export function encodeTarget(
     slot: number,
     target?: ActionTargetSpec,
 ): void {
-    if (!target) {
+    if (!target || target.kind === TargetKind.None) {
         q.setTarget(eid, slot, TargetKind.None, 0, 0);
         return;
     }
-    switch (target.kind) {
-        case TargetKind.Entity:
-            q.setTarget(eid, slot, TargetKind.Entity, target.eid, 0);
-            break;
-        case TargetKind.Hex:
-            q.setTarget(eid, slot, TargetKind.Hex, target.q, target.r);
-            break;
-        case TargetKind.Point:
-            q.setTarget(eid, slot, TargetKind.Point, target.x, target.y);
-            break;
-        case TargetKind.None:
-            q.setTarget(eid, slot, TargetKind.None, 0, 0);
-            break;
-    }
+    q.setTarget(eid, slot, TargetKind.Hex, target.q, target.r);
 }

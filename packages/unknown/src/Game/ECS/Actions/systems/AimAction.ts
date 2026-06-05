@@ -1,6 +1,6 @@
 /**
  * Aim executor — rotates the owner tank's turret to point at the action's
- * target (entity / hex / point). Each tick it computes the desired world angle
+ * target hex. Each tick it computes the desired world angle
  * from the turret toward the target and nudges `TurretController.rotation` (the
  * direction modifier the physics turret-rotation system integrates) toward it,
  * with proportional slow-down near the goal to avoid overshoot. The action
@@ -15,7 +15,7 @@ import { MapDI } from '../../../DI/MapDI.ts';
 import { normalizeAngle } from '../../../../../../../lib/math.ts';
 import { getGameComponents } from '../../createGameWorld.ts';
 import { ActionDescriptor, encodeTarget } from '../ActionDescriptor.ts';
-import { ActionKind, ActionStatus, ActionWorldTargetSpec, TargetKind } from '../ActionTypes.ts';
+import { ActionHexTargetSpec, ActionKind, ActionStatus } from '../ActionTypes.ts';
 import { AimParamOffset } from '../ActionSlot.ts';
 
 /** Heading-error band (rad) below which we steer proportionally instead of full speed. */
@@ -27,7 +27,7 @@ export type AimParamsSpec = { tolerance: number };
 /** Enqueue spec for an Aim action. */
 export type AimActionSpec = {
     kind: ActionKind.Aim;
-    target: ActionWorldTargetSpec;
+    target: ActionHexTargetSpec;
     params: AimParamsSpec;
 };
 
@@ -60,36 +60,14 @@ export function createAimActionSystem({ world } = GameDI) {
                 continue;
             }
 
-            // Resolve the target world point.
-            let tx: number | null = null;
-            let ty: number | null = null;
-            switch (ActionsQueue.getTargetKind(ownerEid, 0)) {
-                case TargetKind.Entity: {
-                    const targetEid = ActionsQueue.getTargetVal(ownerEid, 0, 0);
-                    tx = RigidBodyState.position.get(targetEid, 0);
-                    ty = RigidBodyState.position.get(targetEid, 1);
-                    break;
-                }
-                case TargetKind.Hex: {
-                    const c = MapDI.grid.hexToWorld({
-                        q: ActionsQueue.getTargetVal(ownerEid, 0, 0),
-                        r: ActionsQueue.getTargetVal(ownerEid, 0, 1),
-                    });
-                    if (c) {
-                        tx = c.x;
-                        ty = c.y;
-                    }
-                    break;
-                }
-                case TargetKind.Point: {
-                    tx = ActionsQueue.getTargetVal(ownerEid, 0, 0);
-                    ty = ActionsQueue.getTargetVal(ownerEid, 0, 1);
-                    break;
-                }
-            }
+            // Resolve the target hex's world center.
+            const targetCenter = MapDI.grid.hexToWorld({
+                q: ActionsQueue.getTargetVal(ownerEid, 0, 0),
+                r: ActionsQueue.getTargetVal(ownerEid, 0, 1),
+            });
 
-            if (tx === null || ty === null) {
-                // Unresolvable target — fail the action.
+            if (!targetCenter) {
+                // Off-map target — fail the action.
                 TurretController.setRotation$(turretEid, 0);
                 ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
                 continue;
@@ -104,7 +82,7 @@ export function createAimActionSystem({ world } = GameDI) {
 
             const turretX = RigidBodyState.position.get(turretEid, 0);
             const turretY = RigidBodyState.position.get(turretEid, 1);
-            const desired = Math.atan2(ty - turretY, tx - turretX);
+            const desired = Math.atan2(targetCenter.y - turretY, targetCenter.x - turretX);
             const err = normalizeAngle(desired - RigidBodyState.rotation[turretEid]);
 
             const tolerance = ActionsQueue.getParam(ownerEid, 0, AimParamOffset.tolerance) || 0.05;

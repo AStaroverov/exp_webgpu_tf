@@ -76,7 +76,7 @@ export function createGame({ width, height }: {
         const bounds = MapDI.grid.worldBounds();
         const fieldW = bounds.maxX - bounds.minX;
         const fieldH = bounds.maxY - bounds.minY;
-        const margin = 2; // padding around the field (larger -> more zoomed out)
+        const margin = 1.2; // padding around the field (larger -> more zoomed out)
         const zoom = Math.min(width / (fieldW * margin), height / (fieldH * margin));
         setCameraPosition((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2);
         setCameraZoom(zoom);
@@ -164,7 +164,7 @@ export function createGame({ width, height }: {
     const actionScheduler = createActionSchedulerSystem();
     const updateActions = (delta: number) => {
         runActionExecutors(delta); // each kind system: run every owner's front (slot 0) of its kind
-        actionScheduler();         // reaper: Finished front → shift slot 1 → slot 0, count--
+        actionScheduler(delta);    // watchdog: time out stuck fronts; reaper: Finished front → slot 1 → slot 0, count--
     };
 
     // NOTE: the base game wires only systems. Build-specific world content — the

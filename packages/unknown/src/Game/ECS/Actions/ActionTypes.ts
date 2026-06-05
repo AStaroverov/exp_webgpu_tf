@@ -14,9 +14,7 @@ export enum ActionStatus {
 /** What an action is addressed to. */
 export enum TargetKind {
     None = 0,
-    Entity = 1,
-    Hex = 2,
-    Point = 3,
+    Hex = 1,
 }
 
 /** Action kinds — each kind has a params component and an executor system. */
@@ -30,21 +28,6 @@ export enum ActionKind {
 // ── Target addressing — discriminated union over TargetKind ──────────────────
 
 export type ActionNoneTargetSpec = { kind: TargetKind.None };
-export type ActionEntityTargetSpec = {
-    kind: TargetKind.Entity;
-    eid: number;
-};
 export type ActionHexTargetSpec = { kind: TargetKind.Hex; q: number; r: number };
-export type ActionPointTargetSpec = { kind: TargetKind.Point; x: number; y: number };
 
-export type ActionTargetSpec =
-    | ActionNoneTargetSpec
-    | ActionEntityTargetSpec
-    | ActionHexTargetSpec
-    | ActionPointTargetSpec;
-
-/** A target that addresses a place in the world (where to aim / which entity). */
-export type ActionWorldTargetSpec =
-    | ActionEntityTargetSpec
-    | ActionHexTargetSpec
-    | ActionPointTargetSpec;
+export type ActionTargetSpec = ActionNoneTargetSpec | ActionHexTargetSpec;

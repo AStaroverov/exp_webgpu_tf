@@ -108,9 +108,6 @@ export class UnknownAgent {
         // 2. Sample an action for the current state.
         const state = prepareInputArrays(this.tankEid);
         const mask = computeActionMask(this.tankEid);
-        // Classic PPO exploration: sample the masked softmax π itself, entropy
-        // bonus does the exploring. No ε-mixing — so the recorded logProb IS the
-        // clean π_old logprob and the surrogate ratio is the canonical π/π_old.
         const options = this.train ? { greedy: false } : { greedy: true };
         const input = createInputTensors([state]);
         const [result] = batchAct(sharedNetwork, input, [mask], options);

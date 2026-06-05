@@ -23,13 +23,13 @@ import { ActionHexTargetSpec, ActionKind, ActionStatus } from '../ActionTypes.ts
 import { MoveStepParamOffset } from '../ActionSlot.ts';
 
 /** Distance (world units) within which the target center counts as reached. */
-const ARRIVE_EPSILON = 6;
+const ARRIVE_EPSILON = 12;
 /**
  * Proximity band (world units, > ARRIVE_EPSILON) to the destination center at
  * which we open the slot, so the next decision is computed from a near-final
  * position rather than a stale start one (§4).
  */
-const REQUEST_NEXT_DIST = 12;
+const REQUEST_NEXT_DIST = 18;
 /** Heading error (rad) below which we drive straight instead of pivoting. */
 const HEADING_DEADZONE = 0.15;
 

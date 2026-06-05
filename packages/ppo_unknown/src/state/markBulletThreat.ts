@@ -12,6 +12,10 @@
  * `Obstacle`) — the bullet hits it — and at the grid edge. The cell the bullet
  * currently sits in is never treated as a blocker (it just left the muzzle).
  *
+ * Marks are written into the observer's EGOCENTRIC window (axial deltas from
+ * `(selfQ, selfR)`, see board.ts); path cells beyond the view radius are walked
+ * (the shot still flies there) but not marked (not visible).
+ *
  * Pure straight-line geometry over `worldToHex`; no honeycomb allocation.
  */
 
@@ -20,7 +24,7 @@ import { GameDI } from '../../../unknown/src/Game/DI/GameDI.ts';
 import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld.ts';
 import { HexGridConfig } from '../../../unknown/src/Game/Map/HexConfig.ts';
 import { OccupantKind, type HexGrid } from '../../../unknown/src/Game/Map/HexGrid.ts';
-import { BoardChannel, UnknownInputBoard } from './board.ts';
+import { BoardChannel, hexDeltaDistance, UnknownInputBoard, VIEW_RADIUS } from './board.ts';
 
 /** Sample interval along the ray (px). Below a hex inradius (≈0.866·radius) so no cell is skipped. */
 const SAMPLE_STEP = HexGridConfig.radius * 0.5;
@@ -30,6 +34,8 @@ const ORIGIN_EPS = 1e-3;
 export function markBulletThreat(
     selfEid: number,
     myTeam: number,
+    selfQ: number,
+    selfR: number,
     grid: HexGrid,
     world: World = GameDI.world,
 ): void {
@@ -81,7 +87,13 @@ export function markBulletThreat(
             if (key === lastKey) continue; // same cell as previous sample
             lastKey = key;
 
-            UnknownInputBoard.set(selfEid, hex.row, hex.col, BoardChannel.UnderFire, 1);
+            // Mark only cells inside the observer's view radius; the walk itself
+            // continues (the bullet still flies and can be blocked out there).
+            const dq = hex.q - selfQ;
+            const dr = hex.r - selfR;
+            if (hexDeltaDistance(dq, dr) <= VIEW_RADIUS) {
+                UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.UnderFire, 1);
+            }
 
             // The bullet's current cell never blocks (it just left the muzzle);
             // any later Unit/Obstacle cell stops the shot there.

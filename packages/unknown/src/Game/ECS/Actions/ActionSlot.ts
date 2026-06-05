@@ -11,6 +11,15 @@ export const MAX_QUEUE = 2;
 /** Per-kind param/scratch floats per slot (≤2 used today, headroom). */
 export const PARAMS = 4;
 
+/**
+ * Watchdog ceiling (ms) on a single action's run time, enforced by the scheduler.
+ * Sits above the longest legitimate action — one MoveStep hop (pivot + drive
+ * ~166 world units) takes well over 3 s; heavy Fire is ~1600 ms reload + turret
+ * traverse. Anything older is stuck (e.g. a tank physically blocked mid-hop) and
+ * gets force-finished so the slot reopens.
+ */
+export const MAX_ACTION_MS = 5000;
+
 /** Per-kind `params` offsets (`p0..p3`). */
 export const MoveStepParamOffset = {
     /** Steering speed toward the target hex. */

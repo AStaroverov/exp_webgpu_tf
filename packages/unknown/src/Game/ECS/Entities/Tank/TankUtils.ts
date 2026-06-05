@@ -82,7 +82,14 @@ export function tearOffTankPart(vehiclePartEid: number, shouldBreakConnection: b
             VehiclePart.removeComponent(world, vehiclePartEid);
         }
         resetVehiclePartJointComponent(vehiclePartEid);
-        setPhysicalCollisionGroup(vehiclePartEid, CollisionGroup.ALL & ~CollisionGroup.VEHICALE_BASE & ~CollisionGroup.BULLET);
+        setPhysicalCollisionGroup(
+            vehiclePartEid,
+            CollisionGroup.ALL
+                & ~CollisionGroup.VEHICALE_BASE
+                & ~CollisionGroup.BULLET
+                & ~CollisionGroup.TANK_TURRET_HEAD_PARTS
+                & ~CollisionGroup.TANK_TURRET_GUN_PARTS,
+        );
         removePhysicalJoint(jointPid);
     }
 }

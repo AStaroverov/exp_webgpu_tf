@@ -60,7 +60,8 @@ export function enqueueAction(
     const descriptor = ACTION_REGISTRY[spec.kind] as ActionDescriptor<EnqueueActionSpec>;
     descriptor.encode(ownerEid, slot, spec);
     ActionsQueue.setStatus(ownerEid, slot, ActionStatus.Idle);
-    ActionsQueue.scheduleRequestNext(ownerEid, slot);
+    ActionsQueue.clearRequestNext(ownerEid, slot);
+    ActionsQueue.resetElapsed(ownerEid, slot);
     ActionsQueue.count[ownerEid] = slot + 1;
     return true;
 }

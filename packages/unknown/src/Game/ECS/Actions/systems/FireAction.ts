@@ -18,7 +18,7 @@ import { MapDI } from '../../../DI/MapDI.ts';
 import { normalizeAngle } from '../../../../../../../lib/math.ts';
 import { getGameComponents } from '../../createGameWorld.ts';
 import { ActionDescriptor, encodeTarget } from '../ActionDescriptor.ts';
-import { ActionKind, ActionStatus, ActionWorldTargetSpec, TargetKind } from '../ActionTypes.ts';
+import { ActionHexTargetSpec, ActionKind, ActionStatus } from '../ActionTypes.ts';
 import {
     FireParamOffset,
     FIRE_PHASE_AIMING,
@@ -34,7 +34,7 @@ const TOLERANCE = 0.05;
 /** Enqueue spec for a Fire action — aims at the target, then fires one round. */
 export type FireActionSpec = {
     kind: ActionKind.Fire;
-    target: ActionWorldTargetSpec;
+    target: ActionHexTargetSpec;
 };
 
 export const FireActionDescriptor: ActionDescriptor<FireActionSpec> = {
@@ -77,36 +77,14 @@ export function createFireActionSystem({ world } = GameDI) {
             const phase = ActionsQueue.getParam(ownerEid, 0, FireParamOffset.phase);
 
             if (phase === FIRE_PHASE_AIMING) {
-                // Resolve the target world point.
-                let tx: number | null = null;
-                let ty: number | null = null;
-                switch (ActionsQueue.getTargetKind(ownerEid, 0)) {
-                    case TargetKind.Entity: {
-                        const targetEid = ActionsQueue.getTargetVal(ownerEid, 0, 0);
-                        tx = RigidBodyState.position.get(targetEid, 0);
-                        ty = RigidBodyState.position.get(targetEid, 1);
-                        break;
-                    }
-                    case TargetKind.Hex: {
-                        const c = MapDI.grid.hexToWorld({
-                            q: ActionsQueue.getTargetVal(ownerEid, 0, 0),
-                            r: ActionsQueue.getTargetVal(ownerEid, 0, 1),
-                        });
-                        if (c) {
-                            tx = c.x;
-                            ty = c.y;
-                        }
-                        break;
-                    }
-                    case TargetKind.Point: {
-                        tx = ActionsQueue.getTargetVal(ownerEid, 0, 0);
-                        ty = ActionsQueue.getTargetVal(ownerEid, 0, 1);
-                        break;
-                    }
-                }
+                // Resolve the target hex's world center.
+                const targetCenter = MapDI.grid.hexToWorld({
+                    q: ActionsQueue.getTargetVal(ownerEid, 0, 0),
+                    r: ActionsQueue.getTargetVal(ownerEid, 0, 1),
+                });
 
-                // Unresolvable target → can't aim; abort.
-                if (tx === null || ty === null) {
+                // Off-map target → can't aim; abort.
+                if (!targetCenter) {
                     TurretController.setRotation$(turretEid, 0);
                     ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
                     continue;
@@ -114,7 +92,7 @@ export function createFireActionSystem({ world } = GameDI) {
 
                 const turretX = RigidBodyState.position.get(turretEid, 0);
                 const turretY = RigidBodyState.position.get(turretEid, 1);
-                const desired = Math.atan2(ty - turretY, tx - turretX);
+                const desired = Math.atan2(targetCenter.y - turretY, targetCenter.x - turretX);
                 const err = normalizeAngle(desired - RigidBodyState.rotation[turretEid]);
 
                 if (Math.abs(err) <= TOLERANCE) {

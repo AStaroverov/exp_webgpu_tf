@@ -23,6 +23,7 @@ export const createActionsQueueComponent = defineComponent((ActionsQueue) => {
     const targetVals = NestedArray.f64(MAX_QUEUE * 2, delegate.defaultSize);
     const targetKind = NestedArray.u32(MAX_QUEUE, delegate.defaultSize);
     const requestNext = NestedArray.u32(MAX_QUEUE, delegate.defaultSize);
+    const elapsedMs = NestedArray.f64(MAX_QUEUE, delegate.defaultSize);
     const params = NestedArray.f64(MAX_QUEUE * PARAMS, delegate.defaultSize);
     return {
         count,
@@ -50,6 +51,19 @@ export const createActionsQueueComponent = defineComponent((ActionsQueue) => {
         },
         scheduleRequestNext(eid: number, slot: number) {
             requestNext.set(eid, slot, 1);
+        },
+        clearRequestNext(eid: number, slot: number) {
+            requestNext.set(eid, slot, 0);
+        },
+
+        getElapsed(eid: number, slot: number): number {
+            return elapsedMs.get(eid, slot);
+        },
+        addElapsed(eid: number, slot: number, delta: number) {
+            elapsedMs.set(eid, slot, elapsedMs.get(eid, slot) + delta);
+        },
+        resetElapsed(eid: number, slot: number) {
+            elapsedMs.set(eid, slot, 0);
         },
 
         getTargetKind(eid: number, slot: number): number {
@@ -81,6 +95,7 @@ export const createActionsQueueComponent = defineComponent((ActionsQueue) => {
             kind.set(eid, 0, kind.get(eid, 1));
             status.set(eid, 0, status.get(eid, 1));
             requestNext.set(eid, 0, requestNext.get(eid, 1));
+            elapsedMs.set(eid, 0, elapsedMs.get(eid, 1));
             targetKind.set(eid, 0, targetKind.get(eid, 1));
             targetVals.set(eid, 0 * 2 + 0, targetVals.get(eid, 1 * 2 + 0));
             targetVals.set(eid, 0 * 2 + 1, targetVals.get(eid, 1 * 2 + 1));
