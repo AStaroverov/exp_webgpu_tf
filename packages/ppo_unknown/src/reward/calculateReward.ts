@@ -9,19 +9,22 @@
  *                                `Score.getTotalScore`); the agent subtracts the
  *                                previous value to get the per-macro-action reward.
  *   getFramePenalty(frame)     — tiny per-decision time cost.
- *   calculateFinalReward(...)  — episode outcome with OpenAI-Five team-spirit blend.
+ *   calculateFinalReward(...)  — episode outcome with OpenAI-Five team-spirit blend
+ *                                minus a flat death penalty if the tank didn't survive.
  */
 
 import { clamp } from 'lodash';
 import { GameDI } from '../../../unknown/src/Game/DI/GameDI.ts';
 import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld.ts';
-import { getTankTeamId } from '../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts';
+import { getTankHealth, getTankTeamId } from '../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts';
 import { scoreTracker } from './ScoreTracker.ts';
 import type { UnknownAgent } from '../env/UnknownAgent.ts';
 
 const FINAL_REWARD_SCALE = 1.0;
 /** Team-spirit τ: 0 = selfish, 1 = fully cooperative. Fixed for the MVP scenario. */
 const TEAM_SPIRIT = 0.5;
+/** Flat penalty for not surviving the episode (KILL_REWARD scale). */
+const DEATH_PENALTY = 3;
 
 /** Cumulative combat score for the tank's player (delta'd by the agent). */
 export function calculateActionReward(eid: number, { world } = GameDI): number {
@@ -33,6 +36,7 @@ export function calculateActionReward(eid: number, { world } = GameDI): number {
  * Episode-end reward for `eid`. `successRatio` is team-0 perspective in [-1, 1].
  * Team-spirit blends the agent's own contribution share with an equal team split;
  * on a loss the blame is shared equally (don't punish the top performer most).
+ * Dying costs a flat DEATH_PENALTY on top of the outcome.
  */
 export function calculateFinalReward(
     eid: number,
@@ -63,5 +67,9 @@ export function calculateFinalReward(
         ? (1 - TEAM_SPIRIT) * individualShare + TEAM_SPIRIT * teamShare
         : teamShare;
 
-    return outcome * blendedShare * teamSize;
+    // Dead tank's entity is already removed — getTankHealth returns 0 for it
+    // (empty slot counts), same way getTeamHealth/decide() rely on it.
+    const deathPenalty = -(getTankHealth(eid) <= 0 ? DEATH_PENALTY : 0);
+
+    return outcome * blendedShare * teamSize + deathPenalty;
 }

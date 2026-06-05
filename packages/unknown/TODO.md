@@ -1,4 +1,3 @@
-- add penalty for death
 - add доцеливание в технику
 - add heals for tanks from parts
 - add all types of tanks
