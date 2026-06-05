@@ -20,7 +20,7 @@ import { getTankHealth, getTankTeamId } from '../../../unknown/src/Game/ECS/Enti
 import { scoreTracker } from './ScoreTracker.ts';
 import type { UnknownAgent } from '../env/UnknownAgent.ts';
 
-const FINAL_REWARD_SCALE = 1.0;
+const FINAL_REWARD_SCALE = 3.0;
 /** Team-spirit τ: 0 = selfish, 1 = fully cooperative. Fixed for the MVP scenario. */
 const TEAM_SPIRIT = 0.5;
 /** Flat penalty for not surviving the episode (KILL_REWARD scale). */
