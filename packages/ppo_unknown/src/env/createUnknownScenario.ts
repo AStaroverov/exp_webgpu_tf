@@ -1,14 +1,14 @@
 /**
  * createUnknownScenario — builds one headless training world for ppo_unknown.
  *
- * The analogue of tanks' `createScenarioGridBase` + `createScenarioCore`: a fixed
- * N-vs-N world whose ONLY curriculum axis is how the enemy team (team 1) is driven
- * — `enemy`: 'standing' | 'random' | 'self-play' (see `scenarioCompositions`). Team 0
- * is always the learning policy. Steps:
+ * The analogue of tanks' `createScenarioGridBase` + `createScenarioCore`: builds the
+ * world a `ScenarioConfig` describes — team sizes plus how the enemy team (team 1)
+ * behaves (see `scenarioCompositions`). Team 0 is always the learning policy. Steps:
  *   1. createGame headless (no render target).
- *   2. spawn TEAM_SIZE tanks for each of the 2 teams on distinct passable cells.
+ *   2. spawn `allies` + `enemies` tanks on distinct passable cells.
  *   3. drive team 0 (and team 1 under self-play) with a learning UnknownAgent;
- *      drive random enemies with a scripted RandomBot; leave standing enemies undriven.
+ *      drive moving/shooting enemies with a scripted RandomBot; leave standing
+ *      enemies undriven.
  *   4. install the policy driver as the SystemGroup.Before plugin (in place of the
  *      stand-in driver, which the base createGame no longer adds).
  *
@@ -27,15 +27,19 @@ import { spawnObstacles } from '../../../unknown/src/Game/ECS/Entities/Obstacle/
 import { VehicleType } from '../../../unknown/src/Game/Config/index.ts';
 import { getTankHealth, getTankTeamId } from '../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts';
 import { getTeamsCount } from '../../../unknown/src/Game/ECS/Components/TeamRef.ts';
-import { TEAM_SIZE, TEAMS_COUNT } from '../consts.ts';
 import { UnknownInputBoard } from '../state/board.ts';
 import { scoreTracker } from '../reward/ScoreTracker.ts';
-import { EnemyKind } from '../curriculum/types.ts';
+import { ScenarioConfig } from '../curriculum/types.ts';
 import { UnknownAgent } from './UnknownAgent.ts';
 import { RandomBot } from './RandomBot.ts';
 import { createPolicyDriverSystem, TankDriver } from './createPolicyDriverSystem.ts';
 
 const FIELD_SIZE = 1000;
+
+// RandomBot tuning per enemy behaviour: 'moving' enemies only occasionally step
+// (mostly-still targets), 'shooting' enemies wander more and return fire.
+const MOVING_BOT = { moveProb: 0.3, fireProb: 0 };
+const SHOOTING_BOT = { moveProb: 0.4, fireProb: 0.3 };
 
 const TEAM_COLORS: Array<[number, number, number, number]> = [
     [1.0, 0.4, 0.4, 1],
@@ -60,14 +64,11 @@ export type Scenario = {
 export function createUnknownScenario(options: {
     index: number;
     train?: boolean;
-    /**
-     * How the enemy team (team 1) is driven — the curriculum's single difficulty axis.
-     * Team 0 is always the learning policy. Defaults to 'self-play' (the v1 behaviour).
-     */
-    enemy?: EnemyKind;
+    /** Team sizes and enemy behaviour — one entry of `scenarioCompositions`. */
+    config: ScenarioConfig;
 }): Scenario {
     const train = options.train ?? true;
-    const enemy = options.enemy ?? 'self-play';
+    const { allies, enemies, enemy } = options.config;
     scoreTracker.reset(); // fresh combat score per episode
     const game = createGame({ width: FIELD_SIZE, height: FIELD_SIZE });
     const world = game.world;
@@ -79,7 +80,8 @@ export function createUnknownScenario(options: {
     // connected — see spawnObstacles.
     spawnObstacles();
 
-    const cells = pickDistinctCells(TEAMS_COUNT * TEAM_SIZE);
+    const teamSizes = [allies, enemies];
+    const cells = pickDistinctCells(allies + enemies);
     // `agents` are the LEARNING tanks only (team 0 always; team 1 when self-play) —
     // the episode manager emits their memory. `driverMap` holds every tank that gets
     // a per-decision driver (learning agents + scripted bots). Standing enemies get
@@ -88,8 +90,8 @@ export function createUnknownScenario(options: {
     const driverMap = new Map<number, TankDriver>();
 
     let slot = 0;
-    for (let team = 0; team < TEAMS_COUNT; team++) {
-        for (let n = 0; n < TEAM_SIZE; n++) {
+    for (let team = 0; team < teamSizes.length; team++) {
+        for (let n = 0; n < teamSizes[team]; n++) {
             const cell = cells[slot++];
             if (!cell) continue;
             const pos = MapDI.grid.hexToWorld(cell);
@@ -111,8 +113,12 @@ export function createUnknownScenario(options: {
             if (isEnemy && enemy === 'standing') {
                 continue; // no driver → enemy holds position
             }
-            if (isEnemy && enemy === 'random') {
-                driverMap.set(tankEid, new RandomBot(tankEid)); // scripted wanderer, no learning
+            if (isEnemy && enemy === 'moving') {
+                driverMap.set(tankEid, new RandomBot(tankEid, MOVING_BOT));
+                continue;
+            }
+            if (isEnemy && enemy === 'shooting') {
+                driverMap.set(tankEid, new RandomBot(tankEid, SHOOTING_BOT));
                 continue;
             }
 

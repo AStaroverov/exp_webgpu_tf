@@ -1,7 +1,7 @@
 /**
  * UnknownEpisodeManager — the ppo_unknown episode loop. Subclasses the generic
  * `EpisodeManager<Scenario>` exactly like tanks' `TankEpisodeManager`: each episode
- * is sampled from the curriculum ladder (standing → random → self-play enemies) by
+ * is sampled from the curriculum ladder (see `scenarioCompositions`) by
  * `createScenarioByCurriculumState`, driven by the curriculum state the learner
  * broadcasts over `curriculumStateChannel`.
  *

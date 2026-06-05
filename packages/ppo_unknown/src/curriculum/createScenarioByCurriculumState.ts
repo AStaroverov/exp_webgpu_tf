@@ -9,7 +9,7 @@
  *   - among unlocked scenarios, softmax-weight toward the harder/less-mastered ones,
  *     boost any that have regressed, and keep an ε-floor so none starves.
  *
- * The only ppo_unknown specifics: the index maps to an `EnemyKind`
+ * The only ppo_unknown specifics: the index maps to a `ScenarioConfig`
  * (`scenarioCompositions`), and the world is built by `createUnknownScenario`.
  */
 
@@ -26,7 +26,7 @@ export function createScenarioByCurriculumState(
     const weights = computeSamplingWeights(curriculumState, unlockedCount, threshold);
     const index = sampleIndex(weights);
 
-    return createUnknownScenario({ index, train: options.train, enemy: scenarioCompositions[index] });
+    return createUnknownScenario({ index, train: options.train, config: scenarioCompositions[index] });
 }
 
 const THRESHOLD_STEP_ITERATIONS = 500;

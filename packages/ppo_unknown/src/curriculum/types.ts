@@ -14,24 +14,45 @@ export type { Scenario } from '../env/createUnknownScenario.ts';
 /**
  * scenarioCompositions — the ppo_unknown curriculum ladder.
  *
- * Far leaner than tanks' 9-axis composition table: ppo_unknown keeps a fixed
- * N-vs-N self-play world and varies a SINGLE axis — how the enemy team (team 1)
- * is driven. Team 0 is always the learning policy.
+ * Leaner than tanks' 9-axis composition table: two axes — team sizes and how the
+ * enemy team (team 1) behaves. Team 0 is always the learning policy.
  *
- *   0 standing   — enemies hold position (no driver): a static target gallery so
- *                  the policy first learns to approach, aim and fire.
- *   1 random     — enemies wander with a light scripted bot (`RandomBot`): moving
- *                  targets, but no tactics to exploit the learner.
- *   2 self-play  — enemies are learning agents sharing the live policy (the v1
- *                  behaviour): the full competitive co-adaptation regime.
+ * Enemy behaviours:
+ *   standing  — no driver: a static target gallery so the policy first learns to
+ *               approach, aim and fire.
+ *   moving    — `RandomBot` that only occasionally steps to a random neighbour:
+ *               moving targets without tactics or return fire.
+ *   shooting  — `RandomBot` that wanders AND fires randomly: the learner meets
+ *               incoming fire for the first time.
+ *   self-play — enemies are learning agents sharing the live policy: the full
+ *               competitive co-adaptation regime.
  *
  * Index ordering is load-bearing: a network's stored
  * `mapScenarioIndexToSuccessRatio` is keyed by index, so never reorder — only append.
  */
 
-export type EnemyKind = 'standing' | 'random' | 'self-play';
+export type EnemyBehavior = 'standing' | 'moving' | 'shooting' | 'self-play';
 
-export const scenarioCompositions: readonly EnemyKind[] = ['standing', 'random', 'self-play'] as const;
+export type ScenarioConfig = {
+    /** Team 0 size — the learning policy. */
+    allies: number;
+    /** Team 1 size. */
+    enemies: number;
+    enemy: EnemyBehavior;
+};
+
+export const scenarioCompositions: readonly ScenarioConfig[] = [
+    // 0: 1 vs 5 standing targets — pure approach/aim/fire practice
+    { allies: 1, enemies: 1, enemy: 'standing' },
+    // 1: 4 vs 4 standing targets — same skill with teammates around (friendly-fire mask matters)
+    { allies: 4, enemies: 4, enemy: 'standing' },
+    // 2: 4 vs 4, enemies occasionally move
+    { allies: 4, enemies: 4, enemy: 'moving' },
+    // 3: 4 vs 4, enemies move and shoot back
+    { allies: 4, enemies: 4, enemy: 'shooting' },
+    // 4: 4 vs 4 self-play
+    { allies: 4, enemies: 4, enemy: 'self-play' },
+] as const;
 
 export type CurriculumState = {
     iteration: number;

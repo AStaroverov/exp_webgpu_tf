@@ -1,6 +1,6 @@
 /**
  * Policy / value network factories for ppo_unknown. Identical wiring to tanks'
- * `createTankNetworks` — only the trunk (Networks/v1) and head dims differ. The
+ * `createTankNetworks` — only the trunk (Networks/v2) and head dims differ. The
  * generic learner consumes these unchanged via `createNetwork: createPolicyNetwork`.
  */
 
@@ -9,7 +9,7 @@ import { CONFIG } from '../config.ts';
 import { createDenseLayer } from '../../../ppo/src/models/ApplyLayers.ts';
 import { Model } from '../../../ppo/src/models/def.ts';
 import { AdamW } from '../../../ppo/src/models/Optimizer/AdamW.ts';
-import { createNetwork } from './Networks/v1.ts';
+import { createNetwork } from './Networks/v2.ts';
 
 export { ACTION_HEAD_DIMS } from './dims.ts';
 export { shouldNoiseLayer } from '../../../ppo/src/models/noiseGate.ts';

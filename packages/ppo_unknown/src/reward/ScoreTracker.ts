@@ -26,8 +26,14 @@ import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld
 
 export const HIT_REWARD = 0.2;
 export const KILL_REWARD = 1;
-/** Reward per hex step closer to the nearest enemy (kill = 1, hit = 0.2 for scale). */
-export const APPROACH_REWARD = 0.05;
+/**
+ * Reward per hex step closer to the nearest enemy (kill = 1, hit = 0.2 for
+ * scale). 0.15 while the curriculum is on early rungs: before kills happen,
+ * approach is the only dense learning signal and must stay visible next to the
+ * rare combat spikes after advantage normalization. Lower it back (~0.05) once
+ * combat carries the learning.
+ */
+export const APPROACH_REWARD = 0.15;
 
 export class ScoreTracker {
     /** playerId → cumulative weighted score. */

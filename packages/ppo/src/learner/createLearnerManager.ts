@@ -1,6 +1,5 @@
-import { clamp } from 'lodash';
 import { catchError, concatMap, EMPTY, first, forkJoin, map, mergeMap, scan, tap } from 'rxjs';
-import { exp, log, max } from '../../../../lib/math.ts';
+import { max } from '../../../../lib/math.ts';
 import { bufferWhile } from '../../../../lib/Rx/bufferWhile.ts';
 import type { VTraceDiagnostics } from '../metrics/analyzeVTrace.ts';
 import { analyzeVTrace } from '../metrics/analyzeVTrace.ts';
@@ -12,7 +11,7 @@ import { AgentMemoryBatch, PreparedBatch } from '../memory/Memory.ts';
 import { getNetworkSettings } from '../models/networkMeta.ts';
 import { Model } from '../models/def.ts';
 import { disposeNetwork, getNetwork } from '../models/storage.ts';
-import { agentSampleChannel, learnProcessChannel, modelSettingsChannel, queueSizeChannel } from '../core/channels.ts';
+import { agentSampleChannel, learnProcessChannel, queueSizeChannel } from '../core/channels.ts';
 import { computeRetraceTargets } from '../core/train.ts';
 
 export type LearnData<S> = PreparedBatch<S> & {
@@ -29,9 +28,6 @@ export function createLearnerManager<S>({ config, createInputTensors, actionHead
 }) {
     let lastEndTime = 0;
     let queueSize = 0;
-
-    let rewardRatio = 0;
-    let emaStdReturns = 0;
 
     agentSampleChannel.obs.pipe(
         bufferWhile((batches) => {
@@ -50,16 +46,10 @@ export function createLearnerManager<S>({ config, createInputTensors, actionHead
             ]).pipe(
                 map(([policyNetwork, valueNetwork]): LearnData<S> => {
                     const settings = getNetworkSettings(policyNetwork);
-                    rewardRatio = rewardRatio || settings.rewardRatio || 1;
-                    emaStdReturns = emaStdReturns || settings.emaStdReturns || 0;
-
                     const expIteration = settings.expIteration ?? 0;
-                    const batchData = squeezeBatches<S>(samples.map(b => {
-                        b.memoryBatch.rewards.forEach((_, i, arr) => {
-                            arr[i] *= rewardRatio;
-                        })
-                        return b.memoryBatch as AgentMemoryBatch<S>
-                    }));
+                    const batchData = squeezeBatches<S>(
+                        samples.map(b => b.memoryBatch as AgentMemoryBatch<S>),
+                    );
                     const {pureLogits, ...vTraceBatchData} = computeRetraceTargets<S>(
                         policyNetwork,
                         valueNetwork,
@@ -129,12 +119,6 @@ export function createLearnerManager<S>({ config, createInputTensors, actionHead
                             const stdRatio = diagnostics.returns.std > 0
                                 ? diagnostics.values.std / diagnostics.returns.std
                                 : 0;
-                            // compute reward ratio adjustment, for correct scaling of all v-trace components
-                            emaStdReturns = (emaStdReturns || diagnostics.returns.std) * 0.9 + diagnostics.returns.std * 0.1;
-                            rewardRatio = getRewardRatio(emaStdReturns, rewardRatio);
-
-                            modelSettingsChannel.emit({emaStdReturns, rewardRatio});
-
                             waitTime !== undefined && metricsChannels.waitTime.postMessage([waitTime / 1000]);
                             metricsChannels.trainTime.postMessage([(lastEndTime - startTime) / 1000]);
                             metricsChannels.vTraceStdRatio.postMessage([stdRatio]);
@@ -171,16 +155,6 @@ function squeezeBatches<S>(batches: AgentMemoryBatch<S>[]): PreparedBatch<S> {
         rewards: flatTypedArray(batches.map(b => b.rewards)),
         logProbs: flatTypedArray(batches.map(b => b.logProbs)),
     };
-}
-
-function getRewardRatio(stdReturns: number, rewardRatio: number) {
-    const target = 1.5; // target std
-    const kp = 0.2; // adjustment speed
-    const alpha = exp(kp * (log(target) - log(max(stdReturns, 1e-6))));
-    const clampedAlpha = clamp(alpha, 0.8, 1.2);
-    const nextRewardRatio = rewardRatio * clampedAlpha;
-
-    return nextRewardRatio;
 }
 
 function reportVTraceAlerts(diagnostics: VTraceDiagnostics): void {

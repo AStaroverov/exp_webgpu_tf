@@ -16,13 +16,7 @@ import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld
 import { enqueueAction } from '../../../unknown/src/Game/ECS/Actions/ActionSchedule.ts';
 import { ActionKind, TargetKind } from '../../../unknown/src/Game/ECS/Actions/ActionTypes.ts';
 import type { HexGrid } from '../../../unknown/src/Game/Map/HexGrid.ts';
-import {
-    FIRE_ACTION_OFFSET,
-    HOLD_ACTION,
-    HOLD_DURATION_MS,
-    MOVE_ACTION_OFFSET,
-    MOVE_SPEED,
-} from '../consts.ts';
+import { HOLD_ACTION, HOLD_DURATION_MS, FIRE_ACTION_OFFSET, MOVE_ACTION_OFFSET, MOVE_SPEED } from '../consts.ts';
 
 /**
  * Shared move-passability predicate (single source of truth with

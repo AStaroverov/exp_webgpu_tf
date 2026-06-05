@@ -1,5 +1,5 @@
 /**
- * ppo_unknown consts — action space, decision cadence, scenario sizing.
+ * ppo_unknown consts — action space, decision cadence.
  *
  * Mirrors `ppo_tanks/src/consts.ts` but for the hex-grid, chess-like action space.
  * A PPO "step" here is one DECISION POINT (`needsDecision(eid)`), not one game
@@ -14,10 +14,6 @@ export const TICK_TIME_SIMULATION = Math.round(16 * 1.5);
 
 /** Total experience steps the run targets (curriculum/anneal horizon). */
 export const LEARNING_STEPS = 10_000_000;
-
-// ── Scenario sizing (v1: fixed self-play N-vs-M) ─────────────────────────────
-export const TEAMS_COUNT = 2;
-export const TEAM_SIZE = 4; // tanks per team
 
 // ── Action space (single flat categorical) ───────────────────────────────────
 
