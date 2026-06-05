@@ -109,10 +109,10 @@ export function createMoveStepActionSystem({ world } = GameDI) {
 
             // Open the slot when close to the destination (idempotent; front only).
             if (
-                ActionsQueue.getRequestNext(ownerEid, 0) !== 1 &&
+                !ActionsQueue.shouldRequestNext(ownerEid, 0) &&
                 Math.hypot(targetCenter.x - px, targetCenter.y - py) <= REQUEST_NEXT_DIST
             ) {
-                ActionsQueue.setRequestNext(ownerEid, 0, 1);
+                ActionsQueue.scheduleRequestNext(ownerEid, 0);
             }
 
             // Steer toward the single target center.

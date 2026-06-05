@@ -18,12 +18,14 @@ export class Grid2DPositionalEncodingLayer extends tf.layers.Layer {
 
     private rows: number;
     private cols: number;
+    private scale: number;
     private encoding!: tf.Tensor3D;
 
-    constructor(config: LayerArgs & { rows: number, cols: number }) {
+    constructor(config: LayerArgs & { rows: number, cols: number, scale?: number }) {
         super(config);
         this.rows = config.rows;
         this.cols = config.cols;
+        this.scale = config.scale ?? 1;
     }
 
     dispose() {
@@ -81,9 +83,11 @@ export class Grid2DPositionalEncodingLayer extends tf.layers.Layer {
 
         const rowEnc = this.sinusoidal(rowIdx, half); // [N, half]
         const colEnc = this.sinusoidal(colIdx, half); // [N, half]
-        const interleaved = tf.concat([rowEnc, colEnc], 1); // [N, dModel]
+        // Scaled down so the (small, sparse) cell content isn't drowned by the
+        // constant positional signal — see the `scale` config.
+        const interleaved = tf.concat([rowEnc, colEnc], 1).mul(this.scale); // [N, dModel]
 
-        return interleaved.expandDims(0); // [1, N, dModel]
+        return interleaved.expandDims(0) as tf.Tensor3D; // [1, N, dModel]
     }
 
     getConfig() {
@@ -92,6 +96,7 @@ export class Grid2DPositionalEncodingLayer extends tf.layers.Layer {
             ...config,
             rows: this.rows,
             cols: this.cols,
+            scale: this.scale,
         };
     }
 }

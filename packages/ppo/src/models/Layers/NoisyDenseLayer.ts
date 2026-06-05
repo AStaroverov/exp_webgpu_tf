@@ -1,14 +1,14 @@
 import * as tf from '@tensorflow/tfjs';
-import { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
+import type { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
 import {
     getInitializer,
     Initializer,
-    InitializerIdentifier,
     serializeInitializer,
 } from '@tensorflow/tfjs-layers/dist/initializers';
+import type { InitializerIdentifier } from '@tensorflow/tfjs-layers/dist/initializers';
 import { getActivation, serializeActivation } from '@tensorflow/tfjs-layers/dist/activations';
 import { Activation } from '@tensorflow/tfjs-layers/dist/activations';
-import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
+import type { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
 import * as K from '@tensorflow/tfjs-layers/dist/backend/tfjs_backend';
 import { random } from '../../../../../lib/random';
 

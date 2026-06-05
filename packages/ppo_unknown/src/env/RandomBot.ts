@@ -12,11 +12,9 @@
  */
 
 import { GameDI } from '../../../unknown/src/Game/DI/GameDI.ts';
-import { MOVE_DIR_COUNT, POLICY_ACTION_KIND_COUNT, PolicyActionKind } from '../consts.ts';
+import { HOLD_ACTION, MOVE_ACTION_OFFSET, MOVE_DIR_COUNT } from '../consts.ts';
 import { applyActionToGame } from './applyActionToGame.ts';
 import { computeActionMask } from './computeActionMask.ts';
-
-const MOVE_OFFSET = POLICY_ACTION_KIND_COUNT; // mask move slice starts after the kind slice
 
 export class RandomBot {
     constructor(
@@ -27,19 +25,16 @@ export class RandomBot {
     decide(): void {
         const mask = computeActionMask(this.tankEid, this.di);
 
-        // Collect the passable neighbour directions (mask 0 = allowed).
+        // Collect the passable move actions (mask 0 = allowed).
         const allowed: number[] = [];
         for (let dir = 0; dir < MOVE_DIR_COUNT; dir++) {
-            if (mask[MOVE_OFFSET + dir] === 0) allowed.push(dir);
+            if (mask[MOVE_ACTION_OFFSET + dir] === 0) allowed.push(MOVE_ACTION_OFFSET + dir);
         }
 
-        const actions = new Float32Array(3);
-        if (allowed.length === 0) {
-            actions[0] = PolicyActionKind.Hold;
-        } else {
-            actions[0] = PolicyActionKind.MoveStep;
-            actions[1] = allowed[Math.floor(Math.random() * allowed.length)];
-        }
+        const actions = new Float32Array(1);
+        actions[0] = allowed.length === 0
+            ? HOLD_ACTION
+            : allowed[Math.floor(Math.random() * allowed.length)];
 
         applyActionToGame(this.tankEid, actions, this.di);
     }

@@ -1,5 +1,5 @@
 import * as tf from '@tensorflow/tfjs';
-import {LayerArgs} from '@tensorflow/tfjs-layers/dist/engine/topology';
+import type {LayerArgs} from '@tensorflow/tfjs-layers/dist/engine/topology';
 
 export interface RMSNormConfig extends LayerArgs {
     /**

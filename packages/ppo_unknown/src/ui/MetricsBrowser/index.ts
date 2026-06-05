@@ -42,15 +42,16 @@ const store = {
     tdErrors: new RingBuffer(30_000),
     advantages: new RingBuffer(30_000),
 
-    ...Array.from({ length: ACTION_DIM }, (_, i) => i).reduce((acc, i) => {
-        acc[`logit${i as MetricIndex}`] = new RingBuffer(5_000);
+    ...ACTION_HEAD_DIMS.reduce((acc, dim, i) => {
+        for (let j = 0; j < dim; j++) {
+            acc[`logit${i}_${j}`] = new RingBuffer(5_000);
+        }
         return acc;
-    }, {} as Record<`logit${MetricIndex}`, RingBuffer>),
+    }, {} as Record<`logit${number}_${number}`, RingBuffer>),
 
     valueLoss: new CompressedBuffer(1_000, 5),
     policyLoss: new CompressedBuffer(1_000, 5),
     entropy: new CompressedBuffer(1_000, 5),
-    entropyAlpha: new CompressedBuffer(1_000, 5),
 
     trainTime: new CompressedBuffer(1_000, 5),
     waitTime: new CompressedBuffer(1_000, 5),
@@ -99,11 +100,14 @@ export function subscribeOnMetrics() {
         const channel = metricsChannels[key as keyof typeof metricsChannels];
         if (key === 'logit') {
             channel.onmessage = w((event) => {
-                const logits = event.data as number[][];
+                // Per head: per logit index → per-sample values across the batch.
+                const logits = event.data as number[][][];
                 for (let i = 0; i < ACTION_DIM; i++) {
-                    const series = store[`logit${i as MetricIndex}` as keyof typeof store];
-                    if (logits[i] && 'addList' in series) {
-                        (series as RingBuffer).addList(logits[i]);
+                    const head = logits[i];
+                    if (!head) continue;
+                    for (let j = 0; j < head.length; j++) {
+                        const series = store[`logit${i}_${j}` as keyof typeof store];
+                        if (series instanceof RingBuffer) series.addList(head[j]);
                     }
                 }
             });
@@ -219,9 +223,6 @@ function buildPanel(): HTMLElement {
         { getData: () => store.entropy.toArray(), color: '#b197fc', label: 'Entropy' },
         { getData: () => movingAvg(store.entropy.toArray(), 20), color: '#ff6b6b', label: 'MA', width: 2 },
     ]);
-    addChartToGrid(grid, 'Entropy α', [
-        { getData: () => store.entropyAlpha.toArray(), color: '#63e6be', label: 'α' },
-    ]);
     addChartToGrid(grid, 'V-Trace Explained Variance', [
         { getData: () => store.vTraceExplainedVariance.toArray(), color: '#4a9eff', label: 'EV' },
         { getData: () => constLine(store.vTraceExplainedVariance.toArray(), 0.65), color: '#ffd43b', label: '0.65', dashed: true },
@@ -253,9 +254,12 @@ function buildPanel(): HTMLElement {
     addSectionHeader(grid, 'Policy');
 
     for (let i = 0; i < ACTION_DIM; i++) {
-        addScatterToGrid(grid, `Logit ${i}`, [
-            { getData: () => store[`logit${i as MetricIndex}`].toArray(), color: '#4a9eff', label: `Logit ${i}` },
-        ]);
+        const dim = ACTION_HEAD_DIMS[i];
+        addChartToGrid(grid, `Logits head ${i}`, Array.from({ length: dim }, (_, j) => ({
+            getData: () => (store[`logit${i}_${j}` as keyof typeof store] as RingBuffer).toArray(),
+            color: `hsl(${Math.round(360 * j / dim)}, 70%, 60%)`,
+            label: `${j}`,
+        })));
     }
     addChartToGrid(grid, 'Policy Loss', [
         { getData: () => store.policyLoss.toArray(), color: '#ff6b6b', label: 'Policy Loss' },
@@ -339,45 +343,6 @@ function addChartToGrid(container: HTMLElement, title: string, series: SeriesDef
                 legend: { display: series.length > 1, labels: { boxWidth: 12, font: { size: 10 } } },
                 title: { display: true, text: title, font: { size: 12, weight: 'normal' } },
                 decimation: { enabled: true, algorithm: 'lttb', samples: 800 },
-            },
-        },
-    });
-
-    entries.push({ chart, series });
-}
-
-function addScatterToGrid(container: HTMLElement, title: string, series: SeriesDef[]) {
-    const wrapper = document.createElement('div');
-    Object.assign(wrapper.style, { background: '#111122', borderRadius: '4px', padding: '4px' });
-
-    const canvas = document.createElement('canvas');
-    wrapper.appendChild(canvas);
-    container.appendChild(wrapper);
-
-    const chart = new Chart(canvas, {
-        type: 'scatter',
-        data: {
-            datasets: series.map(s => ({
-                data: [] as Point[],
-                backgroundColor: s.color,
-                borderColor: s.color,
-                pointRadius: 1.2,
-                label: s.label ?? '',
-            })),
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            aspectRatio: 2,
-            animation: false,
-            parsing: false,
-            scales: {
-                x: { type: 'linear', ticks: { maxTicksLimit: 6, font: { size: 10 } }, grid: { color: '#1a1a2e' } },
-                y: { type: 'linear', ticks: { maxTicksLimit: 5, font: { size: 10 } }, grid: { color: '#1a1a2e' } },
-            },
-            plugins: {
-                legend: { display: series.length > 1, labels: { boxWidth: 12, font: { size: 10 } } },
-                title: { display: true, text: title, font: { size: 12, weight: 'normal' } },
             },
         },
     });

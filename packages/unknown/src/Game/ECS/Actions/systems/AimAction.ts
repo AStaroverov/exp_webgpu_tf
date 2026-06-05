@@ -99,7 +99,7 @@ export function createAimActionSystem({ world } = GameDI) {
                 ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Running);
                 // Tank is stationary while aiming, so the next decision's observation
                 // is already valid — open the slot immediately (§4).
-                ActionsQueue.setRequestNext(ownerEid, 0, 1);
+                ActionsQueue.scheduleRequestNext(ownerEid, 0);
             }
 
             const turretX = RigidBodyState.position.get(turretEid, 0);

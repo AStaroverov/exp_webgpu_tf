@@ -1,5 +1,5 @@
 import * as tf from '@tensorflow/tfjs';
-import { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
+import type { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
 
 interface MHAConfig extends LayerArgs {
     numHeads: number;
@@ -72,11 +72,22 @@ export class MultiHeadAttentionLayer extends tf.layers.Layer {
         return tf.tidy(() => {
             const inputArray = Array.isArray(inputs) ? inputs : [inputs];
 
-            if (inputArray.length !== 4) {
-                throw new Error(`MultiHeadAttentionLayer expects exactly 4 inputs: [qTok, qMask, kvTok, kvMask], got ${inputArray.length}`);
+            // Self-attn takes [qTok, qMask] (kvMask = qMask) or [qTok, qMask, kvMask]
+            // (asymmetric masks: e.g. all cells query, only content cells are read).
+            // kv tokens are always q tokens. Passing the same tensor twice in one
+            // input array breaks tfjs's disposal refcount (recipients are counted
+            // per layer, releases per array occurrence) — the tensor gets disposed
+            // before its other consumers (e.g. the residual add) run.
+            const validLength = this.selfAttn
+                ? inputArray.length === 2 || inputArray.length === 3
+                : inputArray.length === 4;
+            if (!validLength) {
+                throw new Error(`MultiHeadAttentionLayer expects ${this.selfAttn ? '2-3 inputs: [qTok, qMask, kvMask?]' : '4 inputs: [qTok, qMask, kvTok, kvMask]'}, got ${inputArray.length}`);
             }
 
-            const [qTok, qMask, kvTok, kvMask] = inputArray;
+            const [qTok, qMask] = inputArray;
+            const kvTok = this.selfAttn ? qTok : inputArray[2];
+            const kvMask = (this.selfAttn ? inputArray[2] : inputArray[3]) ?? qMask;
             const [B, N] = qTok.shape;
             const innerDim = this.numHeads * this.keyDim;
 

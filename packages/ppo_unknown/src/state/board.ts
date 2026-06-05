@@ -15,7 +15,8 @@
  * normalization happens later in the tensor-building step.
  */
 
-import { addComponent, World } from 'bitecs';
+import { addComponent } from 'bitecs';
+import type { World } from 'bitecs';
 import { NestedArray } from 'renderer/src/utils.ts';
 import { delegate } from 'renderer/src/delegate.ts';
 import { component } from 'renderer/src/ECS/utils.ts';
@@ -27,16 +28,16 @@ export const BOARD_CELLS = BOARD_COLS * BOARD_ROWS;
 
 /** Per-cell channels (board planes). Collapsed/trimmed per design decisions. */
 export const BoardChannel = {
-    /** The observing agent's own cell. */
-    Self: 0,
-    /** Normalized hp (0..1) of the unit on the cell; 0 if no unit. */
-    Hp: 1,
     /** Static obstacle on the cell (collapsed passable/obstacle: obstacle=1 → impassable). */
-    Obstacle: 2,
+    Obstacle: 0,
+    /** The observing agent's own cell. */
+    Self: 1,
     /** Same-team unit. */
-    Ally: 3,
+    Ally: 2,
     /** Other-team unit. */
-    Enemy: 4,
+    Enemy: 3,
+    /** Normalized hp (0..1) of the unit on the cell; 0 if no unit. */
+    Hp: 4,
     /** A cell a unit is driving into (grid `OccupantKind.Reserved`); 0/1. */
     Reserved: 5,
     /**

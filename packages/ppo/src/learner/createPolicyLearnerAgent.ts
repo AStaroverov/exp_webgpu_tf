@@ -1,7 +1,6 @@
 import { getNetworkLearningRate, getNetworkSettings } from '../models/networkMeta.ts';
 
 import * as tf from '@tensorflow/tfjs';
-import { clamp } from 'lodash-es';
 import { RingBuffer } from 'ring-buffer-ts';
 import { ceil, floor, max, median, min } from '../../../../lib/math.ts';
 import { metricsChannels } from '../infra/channels.ts';
@@ -25,11 +24,6 @@ export function createPolicyLearnerAgent<S>({ config, createInputTensors, prepar
     createNetwork: () => tf.LayersModel,
     onNetworkReady?: (network: tf.LayersModel) => void,
 }) {
-    // Compute target entropy from action head dimensions
-    // targetEntropy = targetRatio * mean(log(numClasses_i))
-    const maxEntropyPerHead = actionHeadDims.map(dim => Math.log(dim));
-    const meanMaxEntropy = maxEntropyPerHead.reduce((a, b) => a + b, 0) / maxEntropyPerHead.length;
-    const targetEntropy = config.adaptiveEntropy.targetRatio * meanMaxEntropy;
     const totalDim = actionHeadDims.reduce((a, b) => a + b, 0);
 
     const klHistory = new RingBuffer<number>(25);
@@ -41,15 +35,10 @@ export function createPolicyLearnerAgent<S>({ config, createInputTensors, prepar
         const mbc = ceil(batch.size / mbs);
         const rb = new ReplayBuffer(batch.states.length);
 
-        // Adaptive entropy coefficient: adapts to keep H(π) near target
-        let logEntropyCoeff = settings.logEntropyCoeff ?? config.adaptiveEntropy.initialLogAlpha;
-        const entropyCoeff = Math.exp(logEntropyCoeff);
-
         console.info(`[Train Policy]: Stating..
              Iteration ${expIteration},
              Sum batch size: ${batch.size},
-             Mini batch count: ${mbc} by ${mbs},
-             Entropy α=${entropyCoeff.toFixed(4)}`);
+             Mini batch count: ${mbc} by ${mbs}`);
 
         const getPolicyBatch = (batchSize: number, index: number) => {
             const indices = rb.getSample(batchSize, index * batchSize, (index + 1) * batchSize);
@@ -84,7 +73,8 @@ export function createPolicyLearnerAgent<S>({ config, createInputTensors, prepar
                     tOldLogProbs,
                     tAdvantages,
                     config.policyClipRatio,
-                    entropyCoeff,
+                    config.entropyCoeff,
+                    config.policyLogitsL2 ?? 0,
                     config.clipNorm,
                     j === mbc - 1,
                     tMasks,
@@ -109,13 +99,7 @@ export function createPolicyLearnerAgent<S>({ config, createInputTensors, prepar
             }
         }
 
-        // Update log_entropyCoeff based on average entropy vs target
         const avgEntropy = entropyList.reduce((a, b) => a + b, 0) / entropyList.length;
-        const newLogEntropyCoeff = clamp(
-            logEntropyCoeff - config.adaptiveEntropy.alphaLR * (avgEntropy - targetEntropy),
-            config.adaptiveEntropy.minLogAlpha,
-            config.adaptiveEntropy.maxLogAlpha
-        );
 
         return onReadyRead()
             .then(() => Promise.all([
@@ -135,15 +119,14 @@ export function createPolicyLearnerAgent<S>({ config, createInputTensors, prepar
                     ? getDynamicLearningRate(kl, getNetworkLearningRate(network), config.lrConfig)
                     : getNetworkLearningRate(network);
 
-                modelSettingsChannel.emit({ lr, expIteration: expIteration + batch.size, logEntropyCoeff: newLogEntropyCoeff });
+                modelSettingsChannel.emit({ lr, expIteration: expIteration + batch.size });
 
                 metricsChannels.kl.postMessage(klList);
                 metricsChannels.lr.postMessage([lr]);
                 metricsChannels.policyLoss.postMessage(policyLossList);
                 metricsChannels.entropy.postMessage([avgEntropy]);
-                metricsChannels.entropyAlpha.postMessage([Math.exp(newLogEntropyCoeff)]);
 
-                console.info(`[Train Policy]: Finish iteration=${expIteration}, entropy=${avgEntropy.toFixed(4)}, α=${Math.exp(newLogEntropyCoeff).toFixed(4)}`);
+                console.info(`[Train Policy]: Finish iteration=${expIteration}, entropy=${avgEntropy.toFixed(4)}`);
             });
     };
 

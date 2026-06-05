@@ -26,6 +26,7 @@ import { OccupantKind } from '../../../unknown/src/Game/Map/HexGrid.ts';
 import { getTankHealth } from '../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts';
 import { BoardChannel, UnknownInputBoard } from './board.ts';
 import { markBulletThreat } from './markBulletThreat.ts';
+import { needsDecision } from '../../../unknown/src/Game/ECS/Actions/ActionSchedule.ts';
 
 export function snapshotUnknownBoard({ world } = GameDI) {
     const grid = MapDI.grid;
@@ -37,6 +38,8 @@ export function snapshotUnknownBoard({ world } = GameDI) {
     for (let i = 0; i < observers.length; i++) {
         const selfEid = observers[i];
         const myTeam = TeamRef.id[selfEid];
+
+        if (!needsDecision(selfEid)) continue;         
 
         UnknownInputBoard.reset(selfEid);
 

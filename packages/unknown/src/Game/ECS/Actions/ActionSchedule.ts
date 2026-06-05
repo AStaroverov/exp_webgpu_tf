@@ -37,7 +37,7 @@ export function needsDecision(ownerEid: number, { world } = GameDI): boolean {
     const count = ActionsQueue.count[ownerEid];
     if (count >= MAX_QUEUE) return false;
     if (count === 0) return true;
-    return ActionsQueue.getRequestNext(ownerEid, 0) === 1;
+    return ActionsQueue.shouldRequestNext(ownerEid, 0);
 }
 
 /**
@@ -60,7 +60,7 @@ export function enqueueAction(
     const descriptor = ACTION_REGISTRY[spec.kind] as ActionDescriptor<EnqueueActionSpec>;
     descriptor.encode(ownerEid, slot, spec);
     ActionsQueue.setStatus(ownerEid, slot, ActionStatus.Idle);
-    ActionsQueue.setRequestNext(ownerEid, slot, 0);
+    ActionsQueue.scheduleRequestNext(ownerEid, slot);
     ActionsQueue.count[ownerEid] = slot + 1;
     return true;
 }

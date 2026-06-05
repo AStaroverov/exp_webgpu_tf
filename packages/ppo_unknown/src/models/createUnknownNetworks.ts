@@ -6,7 +6,6 @@
 
 import * as tf from '@tensorflow/tfjs';
 import { CONFIG } from '../config.ts';
-import { ACTION_HEAD_DIMS } from './dims.ts';
 import { createDenseLayer } from '../../../ppo/src/models/ApplyLayers.ts';
 import { Model } from '../../../ppo/src/models/def.ts';
 import { AdamW } from '../../../ppo/src/models/Optimizer/AdamW.ts';
@@ -16,22 +15,13 @@ export { ACTION_HEAD_DIMS } from './dims.ts';
 export { shouldNoiseLayer } from '../../../ppo/src/models/noiseGate.ts';
 
 export function createPolicyNetwork(): tf.LayersModel {
+    // The network builds its own final logits (per-cell action head in v1).
     const { inputs, heads } = createNetwork(Model.Policy);
-
-    const logitsOutputs = heads.map((head, i) =>
-        createDenseLayer({
-            name: Model.Policy + '_head_logits_' + i,
-            units: ACTION_HEAD_DIMS[i],
-            useBias: true,
-            activation: 'linear',
-            biasInitializer: 'zeros',
-        }).apply(head) as tf.SymbolicTensor,
-    );
 
     const model = tf.model({
         name: Model.Policy,
         inputs: Object.values(inputs),
-        outputs: logitsOutputs,
+        outputs: heads,
     });
     model.optimizer = new AdamW(CONFIG.lrConfig.initial);
     model.loss = 'meanSquaredError'; // placeholder; real loss is applied in train.ts

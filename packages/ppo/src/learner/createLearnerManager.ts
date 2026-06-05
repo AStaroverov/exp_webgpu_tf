@@ -76,16 +76,14 @@ export function createLearnerManager<S>({ config, createInputTensors, actionHead
                         ...vTraceBatchData,
                     };
 
+                    // Per head: per logit index → per-sample values across the batch.
                     metricsChannels.logit.postMessage(pureLogits.map((v, i) => {
                         const step = actionHeadDims[i];
-                        const actionIndexes = [];
-                        for (let j = 0; j < v.length; j += step) {
-                            const logitsSlice = v.subarray(j, j + step);
-                            const maxIndex = logitsSlice.reduce((bestIndex, value, index, array) =>
-                                value > array[bestIndex] ? index : bestIndex, 0);
-                            actionIndexes.push(maxIndex);
+                        const series: number[][] = Array.from({ length: step }, () => []);
+                        for (let j = 0; j < v.length; j++) {
+                            series[j % step].push(v[j]);
                         }
-                        return actionIndexes;
+                        return series;
                     }));
                     metricsChannels.batchSize.postMessage(samples.map(b => b.memoryBatch.size));
                     metricsChannels.versionDelta.postMessage(samples.map(b => expIteration - b.networkVersion));

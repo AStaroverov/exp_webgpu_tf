@@ -1,10 +1,9 @@
 import * as tf from '@tensorflow/tfjs';
-import { Scalar } from '@tensorflow/tfjs-core/dist/tensor';
-import { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
+import type { Scalar } from '@tensorflow/tfjs-core/dist/tensor';
+import type { NamedTensor } from '@tensorflow/tfjs-core/dist/tensor_types';
 import { flatTypedArray } from '../utils/flat.ts';
-import { PreparedBatch } from '../memory/Memory.ts';
+import type { PreparedBatch } from '../memory/Memory.ts';
 import { arrayHealthCheck, asyncUnwrapTensor, onReadyRead, syncUnwrapTensor } from '../utils/Tensor.ts';
-import { shouldNoiseLayer } from '../models/noiseGate.ts';
 import { normalize } from '../../../../lib/math.ts';
 
 // Additive invalid-action mask sentinel: 0 = allowed, MASK_NEG = forbidden.
@@ -35,6 +34,7 @@ export function trainPolicyNetwork(
     advantages: tf.Tensor,   // [B]
     clipRatio: number,
     entropyCoeff: number,
+    logitsL2Coeff: number,
     clipNorm: number,
     returnCost: boolean,
     masks?: tf.Tensor,       // [B, sum(dims)] additive mask, optional
@@ -42,7 +42,7 @@ export function trainPolicyNetwork(
     let entropyValue = 0;
     const loss = tf.tidy(() => {
         return optimize(network.optimizer, () => {
-            const predicted = network.apply(states, { training: true, noise: shouldNoiseLayer }) as tf.Tensor | tf.Tensor[];
+            const predicted = network.apply(states, { training: true }) as tf.Tensor | tf.Tensor[];
             const logitsHeads = parsePolicyOutput(predicted);
             const maskHeads = masks != null ? splitMaskFlat(masks, logitsHeads.map(h => h.shape[h.rank - 1] as number)) : undefined;
 
@@ -52,13 +52,13 @@ export function trainPolicyNetwork(
             // r = exp(newLogProb - oldLogProb)
             const ratios = tf.exp(newLogProbs.sub(oldLogProbs));                 // [B]
 
-            // // PPO
+            // PPO clipped surrogate
             const clippedRatio = ratios.clipByValue(1 - clipRatio, 1 + clipRatio);
             const surr1 = ratios.mul(advantages);
             const surr2 = clippedRatio.mul(advantages);
-            const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1);
+            const policyLoss = tf.minimum(surr1, surr2).mean().mul(-1) as tf.Scalar;
 
-            // SPO:  A * r  -  |A| * (r - 1)^2 / (2 * clipRatio)
+            // // SPO:  A * r  -  |A| * (r - 1)^2 / (2 * clipRatio)
             // const quad = ratios.sub(1).square().div(2 * clipRatio);                // [B]
             // const spoTerm = advantages.mul(ratios).sub(tf.abs(advantages).mul(quad)); // [B]
             // const policyLoss = spoTerm.mean().mul(-1) as tf.Scalar;              // scalar
@@ -67,8 +67,18 @@ export function trainPolicyNetwork(
             const rawEntropy = computeEntropyCategorical(logitsHeads, maskHeads);
             entropyValue = rawEntropy.dataSync()[0];
 
-            // Total loss = *PO - α * H(π)
-            const totalLoss = policyLoss.sub(rawEntropy.mul(entropyCoeff));
+            // L2 anchor on raw (pre-mask) logits: softmax is shift-invariant and
+            // saturated actions get ~zero entropy gradient, so without an anchor
+            // the logits drift unboundedly. See PpoConfig.policyLogitsL2.
+            const logitsPenalty = logitsL2Coeff > 0
+                ? logitsHeads
+                    .map(h => h.square().mean() as tf.Scalar)
+                    .reduce((acc, p) => acc.add(p) as tf.Scalar)
+                    .mul(logitsL2Coeff)
+                : tf.scalar(0);
+
+            // Total loss = *PO - α * H(π) + c * mean(logits²)
+            const totalLoss = policyLoss.sub(rawEntropy.mul(entropyCoeff)).add(logitsPenalty);
             return totalLoss as tf.Scalar;
         }, {clipNorm, returnCost});
     });
@@ -125,7 +135,7 @@ export function batchAct(
     policyNetwork: tf.LayersModel,
     inputTensors: tf.Tensor[],
     outputMasks?: Float32Array[],  // one flat [sum(dims)] mask per state, optional
-    options?: { greedy?: boolean; epsilon?: number; noises?: (tf.Tensor[] | undefined)[] },
+    options?: { greedy?: boolean },
 ): {
     actions: Float32Array,
     logits: Float32Array,
@@ -133,25 +143,19 @@ export function batchAct(
 }[] {
     return tf.tidy(() => {
         const batchSize = inputTensors[0].shape[0] as number;
-        const noise = options?.greedy !== true ? shouldNoiseLayer : undefined;
-        const predicted = policyNetwork.apply(inputTensors, { noise }) as tf.Tensor | tf.Tensor[];
-        // batchAct fully consumes the caller-provided input tensors (forward pass only,
-        // returns plain Float32Arrays), so dispose them here — no caller-side tidy needed.
-        tf.dispose(inputTensors);
+        const predicted = policyNetwork.apply(inputTensors) as tf.Tensor | tf.Tensor[];
         const logitsHeads = parsePolicyOutput(predicted);
         const headDims = logitsHeads.map(h => h.shape[h.rank - 1] as number);
-
         const results: {actions: Float32Array, logits: Float32Array, logProb: number}[] = [];
 
         for (let i = 0; i < batchSize; i++) {
             const stateLogitsHeads = logitsHeads.map(logits => logits.slice([i], [1]));
-            const noiseTensors = options?.noises?.[i];
             const flatMask = outputMasks?.[i];
             const maskHeads = flatMask != null
                 ? splitMaskFlat(tf.tensor2d(flatMask, [1, flatMask.length]), headDims)
                 : undefined;
             const squeezedMaskHeads = maskHeads?.map(h => h.squeeze() as tf.Tensor);
-            const sample = sampleActionsFromLogits(stateLogitsHeads.map(h => h.squeeze()), noiseTensors, squeezedMaskHeads, options);
+            const sample = sampleActionsFromLogits(stateLogitsHeads.map(h => h.squeeze()), squeezedMaskHeads, options);
             const logProb = computeLogProbCategorical(sample.actions.expandDims(0), stateLogitsHeads, maskHeads);
 
             results.push({
@@ -167,90 +171,25 @@ export function batchAct(
 
 export function sampleActionsFromLogits(
     heads: tf.Tensor[],
-    noises?: tf.Tensor[],
     maskHeads?: tf.Tensor[],
-    opts?: { greedy?: boolean; epsilon?: number },
+    opts?: { greedy?: boolean },
 ): { actions: tf.Tensor; logitsFlat: tf.Tensor } {
-    const { greedy = false, epsilon = 0 } = opts ?? {};
+    const { greedy = false } = opts ?? {};
 
     return tf.tidy(() => {
-        const results = heads.map((logits, headIdx) => {
+        const actions = heads.map((logits, headIdx) => {
             const headMask = maskHeads?.[headIdx];
-            if (greedy) {
-                // Apply mask before greedy argMax so eval never picks a forbidden action.
-                const maskedLogits = headMask != null ? logits.add(headMask) : logits;
-                return { action: tf.argMax(maskedLogits, -1), noisyLogits: maskedLogits };
-            }
-            return sampleCategorical(logits, headMask, epsilon, noises?.[headIdx]);
+            // Mask before sampling/argMax so a forbidden action is never picked.
+            const maskedLogits = headMask != null ? logits.add(headMask) : logits;
+            return greedy
+                ? tf.argMax(maskedLogits, -1)
+                : tf.multinomial(maskedLogits as tf.Tensor1D, 1).squeeze();
         });
 
         return {
-            actions: tf.stack(results.map(r => r.action), -1),
+            actions: tf.stack(actions, -1),
             // Store RAW (unmasked) logits; mask is stored separately and re-applied at train time.
             logitsFlat: tf.concat(heads, -1),
-        };
-    });
-}
-
-function sampleCategorical(
-    logits: tf.Tensor,
-    mask: undefined | tf.Tensor,
-    epsilon: number,
-    dirichletNoise: undefined | tf.Tensor,
-): { action: tf.Tensor } {
-    return tf.tidy(() => {
-        // Apply mask FIRST so ε-uniform / Dirichlet mixing happens on already-masked
-        // logits and exploration never resurrects a forbidden action.
-        if (mask != null) logits = logits.add(mask);
-        const numActions = logits.shape[logits.rank - 1]!;
-        let noisyLogits = logits;
-
-        if (dirichletNoise != null && epsilon > 0) {
-            // AlphaZero-style Dirichlet noise mixing:
-            // p' = (1 - ε) * p + ε * Dir(α)
-            const probs = tf.softmax(logits);
-            const noisyProbs = probs.mul(1 - epsilon).add(dirichletNoise.mul(epsilon));
-            noisyLogits = tf.log(noisyProbs.clipByValue(1e-8, 1));
-        } else if (epsilon > 0) {
-            const uniform = tf.fill(logits.shape, 1 / numActions);
-            const probs = tf.softmax(logits).mul(1 - epsilon).add(uniform.mul(epsilon));
-            noisyLogits = tf.log(probs.clipByValue(1e-8, 1));
-        }
-
-        // Re-apply the mask AFTER ε-uniform / Dirichlet mixing: the mixing re-adds a
-        // nonzero floor (ε/numActions, or ε·Dir) to every slot, including forbidden
-        // ones, so masking only before the mix would let multinomial resurrect an
-        // invalid action. Re-masking here drives those slots back to MASK_NEG.
-        if (mask != null) noisyLogits = noisyLogits.add(mask);
-
-        const action = tf.multinomial(noisyLogits as tf.Tensor1D, 1).squeeze();
-        return { action };
-    });
-}
-
-export function pureAct<S>(
-    policyNetwork: tf.LayersModel,
-    createInputTensors: (batch: S[]) => tf.Tensor[],
-    state: S,
-    mask?: Float32Array,     // flat [sum(dims)] mask, optional
-): {
-    actions: Float32Array,
-} {
-    return tf.tidy(() => {
-        const predicted = policyNetwork.apply(createInputTensors([state])) as tf.Tensor | tf.Tensor[];
-        const logitsHeads = parsePolicyOutput(predicted);
-        const maskHeads = mask != null
-            ? splitMaskFlat(tf.tensor2d(mask, [1, mask.length]), logitsHeads.map(h => h.shape[h.rank - 1] as number))
-            : undefined;
-        const actions = tf
-            .concat(logitsHeads.map((logits, i) => {
-                const masked = maskHeads?.[i] != null ? logits.add(maskHeads[i]) : logits;
-                return tf.argMax(masked, -1).expandDims(-1);
-            }), -1)
-            .squeeze([0]);
-
-        return {
-            actions: syncUnwrapTensor(actions) as Float32Array,
         };
     });
 }
@@ -324,7 +263,9 @@ export function computeRetraceTargets<S>(
             : undefined;
         const logProbCurrentTensor = computeLogProbCategorical(actions, logitsHeads, maskHeads);
         const logProbBehaviorTensor = tf.tensor1d(batch.logProbs);
-        const rhosTensor = logProbCurrentTensor.sub(logProbBehaviorTensor).exp();
+        // Clamp the log-ratio BEFORE exp: ρ can overflow to Inf in f32 long before
+        // min(1, ρ) ever sees it (e.g. a μ-suppressed action the current π likes).
+        const rhosTensor = logProbCurrentTensor.sub(logProbBehaviorTensor).clipByValue(-20, 20).exp();
         const valuesTensor = (valueNetwork.predict(input, {batchSize}) as tf.Tensor).squeeze();
 
         const values = syncUnwrapTensor(valuesTensor) as Float32Array;
@@ -361,14 +302,17 @@ export function computeRetraceTargets<S>(
 }
 
 /**
- * Retrace(λ) — Munos et al., "Safe and Efficient Off-Policy RL", 2016
+ * V-trace(λ) for state values — Espeholt et al., "IMPALA", 2018 (the state-value
+ * specialization of Retrace, Munos et al. 2016). Reference: deepmind/scalable_agent
+ * vtrace.py with ρ̄ = c̄ = 1 plus λ on the trace. See packages/ppo/PPO_RETRACE.md §3.
  *
- * Trace coefficient: c_t = λ · min(1, ρ_t)
- * Target:  v^ret_t = V(s_t) + Δ_t
- *   where  Δ_t = δ_t + γ · c_t · Δ_{t+1}
- *          δ_t = r_t + γ · V(s_{t+1}) - V(s_t)
- *
- * No separate ρ̄ on δ_t — off-policy correction is entirely in the trace coefficients.
+ * ρ̂_t = min(1, ρ_t),  c_t = λ · ρ̂_t
+ * δ_t  = ρ̂_t · (r_t + γ·V(s_{t+1}) − V(s_t))   ← leading IS weight on the TD term:
+ *        r_t was earned by μ's action, so the V-form needs ρ̂ on δ (the Q-form
+ *        doesn't because its δ conditions on a_t and uses E_π[Q]).
+ * Δ_t  = δ_t + γ · c_t · Δ_{t+1}               (product convention ∏_{i=t}^{k−1} c_i)
+ * v_t  = V(s_t) + Δ_t                          (value target)
+ * A_t  = ρ̂_t · (r_t + γ·v_{t+1} − V(s_t))     (PG advantage — NEXT state's target)
  */
 export function computeRetrace(
     rewards: Float32Array,
@@ -394,27 +338,32 @@ export function computeRetrace(
         const discount = dones[t] ? 0 : gamma;
         const value = values[t];
 
-        // c_t = λ · min(1, ρ_t)
-        const c = lambda * Math.min(1, rhos[t]);
+        const rhoClipped = Math.min(1, rhos[t]);
+        const c = lambda * rhoClipped;
 
-        // δ_t = r_t + γ V(s_{t+1}) - V(s_t)
+        // Raw TD error kept unweighted for diagnostics (charts).
         const tdError = rewards[t] + discount * nextValue - value;
         tdErrors[t] = tdError;
 
-        // Δ_t = δ_t + γ · c_t · Δ_{t+1}
-        delta = tdError + discount * c * delta;
-        advantages[t] = delta;
+        // Δ_t = ρ̂_t·δ_t + γ · c_t · Δ_{t+1}
+        delta = rhoClipped * tdError + discount * c * delta;
 
-        // v^ret_t = V(s_t) + Δ_t
+        // v_t = V(s_t) + Δ_t
         retraceReturns[t] = value + delta;
+
+        // A_t = ρ̂_t · (r_t + γ·v_{t+1} − V(s_t)) — uses the NEXT state's value
+        // target (retraceReturns[t+1], already computed by the reverse scan).
+        const nextTarget = dones[t] ? 0 : retraceReturns[t + 1];
+        advantages[t] = rhoClipped * (rewards[t] + discount * nextTarget - value);
     }
 
     return {retraceReturns, advantages, tdErrors};
 }
 
 function parsePolicyOutput(prediction: tf.Tensor | tf.Tensor[]): tf.Tensor[] {
-    // Return array of logits tensors: [shootLogits, moveLogits, rotLogits, turRotLogits]
-    return (prediction as tf.Tensor[]);
+    // Return array of per-head logits tensors (a single-output model predicts a
+    // bare Tensor, not a one-element array).
+    return Array.isArray(prediction) ? prediction : [prediction];
 }
 
 // Compute log probability for categorical distributions

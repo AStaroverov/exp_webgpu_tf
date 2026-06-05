@@ -60,7 +60,7 @@ export function createHoldActionSystem({ world } = GameDI) {
 
             // Open the slot a fixed margin before the timer elapses (idempotent set).
             if (elapsed >= duration - REQUEST_NEXT_MARGIN) {
-                ActionsQueue.setRequestNext(ownerEid, 0, 1);
+                ActionsQueue.scheduleRequestNext(ownerEid, 0);
             }
 
             if (elapsed >= duration) {

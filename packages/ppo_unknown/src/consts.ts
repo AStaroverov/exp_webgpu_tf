@@ -19,36 +19,35 @@ export const LEARNING_STEPS = 10_000_000;
 export const TEAMS_COUNT = 2;
 export const TEAM_SIZE = 4; // tanks per team
 
-// ── Action space (categorical multi-head) ────────────────────────────────────
+// ── Action space (single flat categorical) ───────────────────────────────────
 
-/** Discrete action kinds the policy can choose (Aim is folded into Fire for v1). */
-export enum PolicyActionKind {
-    MoveStep = 0,
-    Fire = 1,
-    Hold = 2,
-}
-export const POLICY_ACTION_KIND_COUNT = 3;
-
-/** Move head: one slot per hex neighbour direction (stable POINTY_DIRECTIONS order). */
+/** Move actions: one slot per hex neighbour direction (stable POINTY_DIRECTIONS order). */
 export const MOVE_DIR_COUNT = POINTY_DIRECTIONS.length; // 6
 
 /**
- * Fire head: one slot per hex neighbour direction (same layout/order as the move
- * head — stable POINTY_DIRECTIONS). The policy picks one of the 6 nearest hexes to
- * fire at; the fire slice is left fully unmasked (see `computeActionMask`).
+ * Fire actions: one slot per hex neighbour direction (same layout/order as the
+ * move slice — stable POINTY_DIRECTIONS). The policy picks one of the 6 nearest
+ * hexes to fire at.
  */
 export const FIRE_DIR_COUNT = MOVE_DIR_COUNT; // 6
 
 /**
- * Head layout fed to the policy network (one categorical head per entry):
- *   [0] kind     — PolicyActionKind
- *   [1] moveDir  — index into the 6 neighbour hexes
- *   [2] fireDir  — index into the 6 neighbour hexes to fire at
+ * One flat categorical action list (a single policy head samples one index):
+ *   [0]        Hold
+ *   [1 .. 6]   MoveStep into neighbour direction (index - MOVE_ACTION_OFFSET)
+ *   [7 .. 12]  Fire at neighbour direction (index - FIRE_ACTION_OFFSET)
+ * A flat space needs no "dead sub-head" handling: a fully masked slice simply
+ * can't be sampled, and Hold is never masked, so the distribution stays valid.
  */
-export const ACTION_HEAD_DIMS = [POLICY_ACTION_KIND_COUNT, MOVE_DIR_COUNT, FIRE_DIR_COUNT];
+export const HOLD_ACTION = 0;
+export const MOVE_ACTION_OFFSET = 1;
+export const FIRE_ACTION_OFFSET = MOVE_ACTION_OFFSET + MOVE_DIR_COUNT; // 7
 
-/** Total flat action-vector / mask length (sum of all head dims). */
-export const ACTION_DIM_TOTAL = ACTION_HEAD_DIMS.reduce((a, b) => a + b, 0); // 15
+/** Total flat action-list / mask length. */
+export const ACTION_DIM_TOTAL = 1 + MOVE_DIR_COUNT + FIRE_DIR_COUNT; // 13
+
+/** Head layout fed to the policy network: a single flat categorical head. */
+export const ACTION_HEAD_DIMS = [ACTION_DIM_TOTAL];
 
 /** Additive invalid-action mask sentinel: 0 = allowed, MASK_NEG = forbidden. */
 export const MASK_NEG = PPO_MASK_NEG; // -1e9

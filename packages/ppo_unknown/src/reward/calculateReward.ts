@@ -1,9 +1,9 @@
 /**
  * Reward shaping for ppo_unknown — ports the tanks `calculateReward` concept:
  * the step reward is the DELTA of a cumulative, event-based combat score
- * (`ScoreTracker`), not an hp count. Only the simplest combat events are scored
- * (hits + kills) — all physics/realtime shaping from tanks (aim alignment, turret
- * tracking, movement, approach, proximity) is intentionally removed.
+ * (`ScoreTracker`), not an hp count. Only the simplest events are scored (hits,
+ * kills, approach-to-nearest-enemy) — all physics/realtime shaping from tanks
+ * (aim alignment, turret tracking, proximity) is intentionally removed.
  *
  *   calculateActionReward(eid) — cumulative score for the tank's player (tanks'
  *                                `Score.getTotalScore`); the agent subtracts the

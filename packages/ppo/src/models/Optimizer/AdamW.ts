@@ -12,7 +12,9 @@ export class AdamW extends PatchedAdamOptimizer {
         learningRate = 0.001,
         beta1 = 0.9,
         beta2 = 0.999,
-        epsilon?: number,
+        // 1e-5, not the tf default (~1e-7/1e-8): a known PPO implementation detail
+        // ("37 details") — larger eps damps Adam's step on tiny-variance params.
+        epsilon: number = 1e-5,
         weightDecay = 1e-6
     ) {
         super(learningRate, beta1, beta2, epsilon);

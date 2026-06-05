@@ -1,5 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
-import { Layer, LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
+import { Layer } from '@tensorflow/tfjs-layers/dist/engine/topology';
+import type { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
 
 export class SliceLayer extends Layer {
     static readonly className = 'SliceLayer';

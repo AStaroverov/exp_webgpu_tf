@@ -11,20 +11,15 @@ export const CONFIG: PpoConfig & {
     episodeFrames: number;
     workerCount: number;
 } = {
-    clipNorm: 1,
+    clipNorm: 5,
 
-    gamma: (_iteration: number) => 0.99,
+    gamma: (_iteration: number) => 0.97,
 
-    adaptiveEntropy: {
-        targetRatio: 0.5,
-        alphaLR: 0.01,
-        initialLogAlpha: Math.log(0.1),
-        minLogAlpha: Math.log(0.005),
-        maxLogAlpha: Math.log(0.5),
-    },
+    entropyCoeff: 0.01,
 
     policyEpochs: (_iter: number) => 4,
     policyClipRatio: 0.2,
+    policyLogitsL2: 1e-3,
 
     valueEpochs: (_iter: number) => 4,
     valueClipRatio: 0.2,
@@ -33,11 +28,11 @@ export const CONFIG: PpoConfig & {
 
     lrConfig: {
         kl: { high: 0.013, target: 0.01, low: 0.007 },
-        initial: 1e-5,
+        initial: 1e-4,
         multHigh: 0.95,
-        multLow: 1.01,
+        multLow: 1.05,
         min: 1e-5,
-        max: 1e-3,
+        max: 1e-2,
     },
 
     batchSize: (_iteration: number) => 256 * 16,
@@ -47,7 +42,7 @@ export const CONFIG: PpoConfig & {
     // a few simulated minutes; termination is owned by ppo_unknown (no win cond
     // baked into the game).
     episodeFrames: Math.round(2 * 60 * 1000 / TICK_TIME_SIMULATION),
-    workerCount: 10,
+    workerCount: 7,
     backpressureQueueSize: 2,
     savePath: 'PPO_UNKNOWN',
 };

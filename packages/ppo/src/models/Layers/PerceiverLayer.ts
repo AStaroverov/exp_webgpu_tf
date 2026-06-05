@@ -47,8 +47,8 @@ export function applyPerceiverLayer({
             name: `${name}/self/depth${i}`,
             heads,
             token: x,
-            mask: qMaskI,
-            preNorm,
+            qMask: qMaskI,
+            kvMask: qMaskI, // same tensor → collapses to the 2-input self-attn path
         });
     }
 

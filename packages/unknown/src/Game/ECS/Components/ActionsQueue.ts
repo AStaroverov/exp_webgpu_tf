@@ -45,11 +45,11 @@ export const createActionsQueueComponent = defineComponent((ActionsQueue) => {
             status.set(eid, slot, v);
         },
 
-        getRequestNext(eid: number, slot: number): number {
-            return requestNext.get(eid, slot);
+        shouldRequestNext(eid: number, slot: number): boolean {
+            return requestNext.get(eid, slot) === 1;
         },
-        setRequestNext(eid: number, slot: number, v: number) {
-            requestNext.set(eid, slot, v);
+        scheduleRequestNext(eid: number, slot: number) {
+            requestNext.set(eid, slot, 1);
         },
 
         getTargetKind(eid: number, slot: number): number {

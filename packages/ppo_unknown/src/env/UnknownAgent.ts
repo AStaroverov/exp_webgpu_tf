@@ -29,8 +29,6 @@ import { calculateActionReward } from '../reward/calculateReward.ts';
 import { applyActionToGame } from './applyActionToGame.ts';
 import { computeActionMask } from './computeActionMask.ts';
 
-const EXPLORE_EPSILON = 0.1;
-
 // ── Worker-shared policy network updater ─────────────────────────────────────
 let sharedNetwork: tf.LayersModel | undefined;
 let sharedNetworkPromise: Promise<tf.LayersModel> | undefined;
@@ -110,10 +108,13 @@ export class UnknownAgent {
         // 2. Sample an action for the current state.
         const state = prepareInputArrays(this.tankEid);
         const mask = computeActionMask(this.tankEid);
-        const options = this.train
-            ? { greedy: false, epsilon: EXPLORE_EPSILON }
-            : { greedy: true };
-        const [result] = batchAct(sharedNetwork, createInputTensors([state]), [mask], options);
+        // Classic PPO exploration: sample the masked softmax π itself, entropy
+        // bonus does the exploring. No ε-mixing — so the recorded logProb IS the
+        // clean π_old logprob and the surrogate ratio is the canonical π/π_old.
+        const options = this.train ? { greedy: false } : { greedy: true };
+        const input = createInputTensors([state]);
+        const [result] = batchAct(sharedNetwork, input, [mask], options);
+        input.forEach(t => t.dispose());
 
         // 3. Enqueue it into the game.
         applyActionToGame(this.tankEid, result.actions);

@@ -70,7 +70,7 @@ export function createFireActionSystem({ world } = GameDI) {
                 ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Running);
                 // Tank is stationary while aiming/firing, so the next decision's
                 // observation is already valid — open the slot immediately (§4).
-                ActionsQueue.setRequestNext(ownerEid, 0, 1);
+                ActionsQueue.scheduleRequestNext(ownerEid, 0);
                 ActionsQueue.setParam(ownerEid, 0, FireParamOffset.phase, FIRE_PHASE_AIMING);
             }
 

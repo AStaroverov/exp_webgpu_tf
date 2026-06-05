@@ -21,7 +21,6 @@ export const metricsChannels = {
     valueLoss: new BroadcastChannel('valueLoss'),
     policyLoss: new BroadcastChannel('policyLoss'),
     entropy: new BroadcastChannel('entropy'),
-    entropyAlpha: new BroadcastChannel('entropyAlpha'),
     trainTime: new BroadcastChannel('trainTime'),
     waitTime: new BroadcastChannel('waitTime'),
     batchSize: new BroadcastChannel('batchSize'),

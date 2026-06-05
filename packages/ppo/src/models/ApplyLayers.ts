@@ -1,10 +1,11 @@
 import * as tf from '@tensorflow/tfjs';
 import { SymbolicTensor } from '@tensorflow/tfjs-layers/dist/engine/topology';
-import { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
-import { DenseLayerArgs } from '@tensorflow/tfjs-layers/dist/layers/core';
+import type { ActivationIdentifier } from '@tensorflow/tfjs-layers/dist/keras_format/activation_config';
+import type { DenseLayerArgs } from '@tensorflow/tfjs-layers/dist/layers/core';
 import { MaskLikeLayer } from './Layers/MaskLikeLayer.ts';
 import { MultiHeadAttentionLayer } from './Layers/MultiHeadAttentionLayer.ts';
-import { RMSNormConfig, RMSNormLayer } from "./Layers/RMSNormLayer.ts";
+import { RMSNormLayer } from "./Layers/RMSNormLayer.ts";
+import type { RMSNormConfig } from "./Layers/RMSNormLayer.ts";
 import { NoisyDenseLayer } from './Layers/NoisyDenseLayer.ts';
 
 export function tokenProj(x: tf.SymbolicTensor, dModel: number, name: string): SymbolicTensor {
@@ -110,32 +111,41 @@ export function applyCrossAttentionLayer(
     qMask ??= new MaskLikeLayer({ name: name + '_qMaskLike' }).apply(qTok) as tf.SymbolicTensor;
     kvMask ??= new MaskLikeLayer({ name: name + '_kvMaskLike' }).apply(kvTok) as tf.SymbolicTensor;
 
+    // Self-attn: never duplicate a tensor in one input array — it trips tfjs's
+    // disposal refcount (see MultiHeadAttentionLayer.call). Same mask → 2
+    // inputs; asymmetric masks (all queries, content-only keys) → 3.
     const attention = new MultiHeadAttentionLayer({
         name: name + '_MultiHeadAttentionLayer',
         keyDim: dModel / heads,
         numHeads: heads,
         selfAttn: isSameToken,
-    }).apply([qTok, qMask, kvTok, kvMask]) as tf.SymbolicTensor;
+    }).apply(
+        !isSameToken ? [qTok, qMask, kvTok, kvMask]
+            : qMask === kvMask ? [qTok, qMask]
+            : [qTok, qMask, kvMask],
+    ) as tf.SymbolicTensor;
 
     return attention;
 }
 
 /**
- * Apply a self-attention transformer layer with standard FFN.
+ * Apply a pre-LN self-attention transformer layer with standard FFN: branches
+ * normalize their own input (QNorm inside attention, ln2 before the FFN), the
+ * residual stream stays raw.
  */
 export function applySelfTransformerLayer(
     {
         name,
         heads,
         token,
-        mask,
-        preNorm = false,
+        qMask,
+        kvMask,
     }: {
         name: string,
         heads: number,
         token: tf.SymbolicTensor;
-        mask?: tf.SymbolicTensor;
-        preNorm?: boolean;
+        qMask?: tf.SymbolicTensor;
+        kvMask?: tf.SymbolicTensor;
     },
 ) {
     const dModel = token.shape[token.shape.length - 1]!;
@@ -144,10 +154,10 @@ export function applySelfTransformerLayer(
         name,
         heads,
         qTok: token,
-        qMask: mask,
+        qMask,
         kvTok: token,
-        kvMask: mask,
-        preNorm
+        kvMask,
+        preNorm: true,
     });
 
     const attnResidual = tf.layers.add({name: `${name}_residual`})
@@ -182,41 +192,52 @@ export function applySelfTransformerLayer(
         activation: 'linear',
     }).apply(ffnInner) as tf.SymbolicTensor;
 
-    const finalOut = tf.layers.add({name: `${name}_ffnAdd`})
+    return tf.layers.add({name: `${name}_ffnAdd`})
         .apply([attnResidual, ffnOut]) as tf.SymbolicTensor;
-
-    return finalOut;
 }
 
 /**
- * Apply multiple self-attention transformer layers with standard FFN.
+ * Apply a modern (GPT-2/LLaMA-style) self-attention encoder: normalize the
+ * embedding once before the first layer (raw projected tokens are usually an
+ * order below the ~1 the attention score scale assumes), pre-LN blocks, and a
+ * final norm on the output (gathers the residual stream growth that pre-LN
+ * leaves unnormalized).
  */
 export function applySelfTransformLayers(name: string, {
     depth,
     heads,
     token,
-    mask,
-    preNorm = false,
+    qMask,
+    kvMask,
 }: {
     depth: number,
     heads: number,
     token: tf.SymbolicTensor | ((name: string, i: number) => tf.SymbolicTensor),
-    mask?: tf.SymbolicTensor | ((name: string, i: number) => tf.SymbolicTensor),
-    preNorm?: boolean,
+    /** Which tokens get attention output. Omit for "all tokens query". */
+    qMask?: tf.SymbolicTensor | ((name: string, i: number) => tf.SymbolicTensor),
+    /** Which tokens can be read. Omit for "all tokens readable". */
+    kvMask?: tf.SymbolicTensor | ((name: string, i: number) => tf.SymbolicTensor),
 }) {
+    const resolve = (
+        mask: undefined | tf.SymbolicTensor | ((name: string, i: number) => tf.SymbolicTensor),
+        lName: string,
+        i: number,
+    ) => mask ? (typeof mask === 'function' ? mask(lName, i) : mask) : undefined;
+
     let x = typeof token === 'function' ? token(name, 0) : token;
+    x = createNormalizationLayer({ name: `${name}_inputNorm` }).apply(x) as tf.SymbolicTensor;
     for (let i = 0; i < depth; i++) {
         const lName = `${name}/depth${i}`;
         x = applySelfTransformerLayer({
             name: lName,
             heads,
             token: x,
-            mask: mask ? (typeof mask === 'function' ? mask(lName, i) : mask) : undefined,
-            preNorm,
+            qMask: resolve(qMask, lName, i),
+            kvMask: resolve(kvMask, lName, i),
         });
     }
 
-    return x;
+    return createNormalizationLayer({ name: `${name}_outputNorm` }).apply(x) as tf.SymbolicTensor;
 }
 
 export function applyGlobalAverage1d({ name }: { name: string }, token: tf.SymbolicTensor) {
