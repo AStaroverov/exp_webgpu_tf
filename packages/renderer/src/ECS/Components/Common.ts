@@ -31,6 +31,24 @@ export const createRoundnessComponent = defineComponent((Roundness, obs) => {
     };
 });
 
+export const createLightEmitterComponent = defineComponent((LightEmitter, obs) => {
+    const intensity = TypedArray.f64(delegate.defaultSize);
+    const radius = TypedArray.f64(delegate.defaultSize);
+    return {
+        intensity,
+        radius,
+        addComponent(world: World, eid: number, i = 1, r = 0) {
+            addComponent(world, eid, LightEmitter);
+            intensity[eid] = i;
+            radius[eid] = r;
+        },
+        set$: obs((eid: number, i: number, r: number) => {
+            intensity[eid] = i;
+            radius[eid] = r;
+        }),
+    };
+});
+
 export type TColor = [number, number, number, number] | Float32Array;
 
 export const createColorComponent = defineComponent((Color, obs) => {

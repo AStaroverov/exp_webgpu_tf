@@ -1,4 +1,4 @@
-import { onAdd, onSet, query } from 'bitecs';
+import { hasComponent, onAdd, onSet, query } from 'bitecs';
 import { shaderMeta } from './sdf.shader.ts';
 import { GPUShader } from '../../../WGSL/GPUShader.ts';
 import { getTypeTypedArray } from '../../../Shader';
@@ -11,7 +11,7 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
     device: GPUDevice,
     shadowMapTexture: GPUTexture,
 }) {
-    const { Color, GlobalTransform, Roundness, Shape } = getRenderComponents(world);
+    const { Color, GlobalTransform, LightEmitter, Roundness, Shape } = getRenderComponents(world);
     const gpuShader = new GPUShader(shaderMeta);
     
     // Set shadow map texture on shader meta before creating bind groups
@@ -39,6 +39,18 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
     
     // Main shape pipeline
     const pipelineSdf = gpuShader.getRenderPipeline(device, 'vs_main', 'fs_main', { withDepth: true });
+
+    // Emission pipeline (rgba16float, additive blend, no depth)
+    const pipelineEmit = gpuShader.getRenderPipeline(device, 'vs_emit', 'fs_emit', {
+        targetFormat: 'rgba16float',
+        autoLayout: true,
+        withDepth: false,
+        blend: 'additive',
+        bindGroups: {
+            0: ['projection'],
+            1: ['transform', 'kind', 'color', 'values', 'roundness', 'intensity'],
+        },
+    });
     
     // Main pass bind groups (includes shadow map in group 2)
     const bindGroup0 = gpuShader.getBindGroup(device, 0);
@@ -49,15 +61,21 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
     const shadowMapBindGroup0 = pipelineShadowMap ? gpuShader.getBindGroup(device, 0, 'vs_shadow_map', 'fs_shadow_map') : null;
     const shadowMapBindGroup1 = pipelineShadowMap ? gpuShader.getBindGroup(device, 1, 'vs_shadow_map', 'fs_shadow_map') : null;
 
+    // Emission pass bind groups (cached during pipeline creation)
+    const emitBindGroup0 = gpuShader.getBindGroup(device, 0, 'vs_emit', 'fs_emit');
+    const emitBindGroup1 = gpuShader.getBindGroup(device, 1, 'vs_emit', 'fs_emit');
+
     const transformCollect = getTypeTypedArray(shaderMeta.uniforms.transform.type);
     const kindCollect = getTypeTypedArray(shaderMeta.uniforms.kind.type);
     const colorCollect = getTypeTypedArray(shaderMeta.uniforms.color.type);
     const valuesCollect = getTypeTypedArray(shaderMeta.uniforms.values.type);
     const roundnessCollect = getTypeTypedArray(shaderMeta.uniforms.roundness.type);
+    const intensityCollect = getTypeTypedArray(shaderMeta.uniforms.intensity.type);
 
     const shapeChanges = createChangeDetector(world, [onAdd(Shape), onSet(Shape)]);
     const colorChanges = createChangeDetector(world, [onAdd(Color), onSet(Color)]);
     const roundnessChanges = createChangeDetector(world, [onAdd(Roundness), onSet(Roundness)]);
+    const intensityChanges = createChangeDetector(world, [onAdd(LightEmitter), onSet(LightEmitter)]);
     let prevEntityCount = 0;
     
     function updateBuffers() {
@@ -85,6 +103,10 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
             if (countChanged || roundnessChanges.hasChanges()) {
                 roundnessCollect[i] = Roundness.value[id];
             }
+
+            if (countChanged || intensityChanges.hasChanges()) {
+                intensityCollect[i] = hasComponent(world, id, LightEmitter) ? LightEmitter.intensity[id] : 0;
+            }
         }
 
         device.queue.writeBuffer(gpuShader.uniforms.projection.getGPUBuffer(device), 0, projectionMatrix as BufferSource);
@@ -101,6 +123,10 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
 
         if (countChanged || roundnessChanges.hasChanges()) {
             device.queue.writeBuffer(gpuShader.uniforms.roundness.getGPUBuffer(device), 0, roundnessCollect);
+        }
+
+        if (countChanged || intensityChanges.hasChanges()) {
+            device.queue.writeBuffer(gpuShader.uniforms.intensity.getGPUBuffer(device), 0, intensityCollect);
         }
 
         return entities.length;
@@ -127,6 +153,7 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
         shapeChanges.clear();
         colorChanges.clear();
         roundnessChanges.clear();
+        intensityChanges.clear();
     }
 
     // Shadow map pass - renders shadow silhouettes with Z height
@@ -140,5 +167,16 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
         shadowMapPass.draw(6, entityCount, 0, 0);
     }
 
-    return { drawShapes, drawShadowMap };
+    // Emission pass - renders emitters as premultiplied HDR color (occluders write coverage only)
+    function drawEmitters(passEncoder: GPURenderPassEncoder) {
+        const entityCount = updateBuffers();
+        if (entityCount === 0) return;
+
+        passEncoder.setPipeline(pipelineEmit);
+        passEncoder.setBindGroup(0, emitBindGroup0);
+        passEncoder.setBindGroup(1, emitBindGroup1);
+        passEncoder.draw(6, entityCount, 0, 0);
+    }
+
+    return { drawShapes, drawShadowMap, drawEmitters };
 }

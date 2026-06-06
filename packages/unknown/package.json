@@ -14,6 +14,7 @@
     "@types/lodash": "^4.17.15",
     "@types/lodash-es": "^4.17.12",
     "events": "^3.3.0",
+    "lil-gui": "^0.21.0",
     "lodash": "^4.17.21",
     "lodash-es": "^4.17.21",
     "ring-buffer-ts": "^1.2.0",

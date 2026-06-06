@@ -14,6 +14,7 @@ export const shaderMeta = new ShaderMeta(
         color: new VariableMeta('uColor', VariableKind.StorageRead, `array<vec4<f32>, ${ MAX_INSTANCE_COUNT }>`),
         values: new VariableMeta('uValues', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT * 6 }>`),
         roundness: new VariableMeta('uRoundness', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT }>`),
+        intensity: new VariableMeta('uIntensity', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT }>`),
 
         // Note: r32float is unfilterable, so we use textureLoad instead of textureSample
         // Put in separate group (2) so it can be excluded from shadow map pass
@@ -157,6 +158,49 @@ export const shaderMeta = new ShaderMeta(
             }
             
             return z_height;
+        }
+
+        // ============= Emission Pass =============
+        // Renders emitters as premultiplied HDR color into the emission texture.
+        // Occluders (intensity == 0) output RGB = 0, A = 1 (coverage only).
+
+        @vertex
+        fn vs_emit(
+            @builtin(vertex_index) vertex_index: u32,
+            @builtin(instance_index) instance_index: u32
+        ) -> VertexOutput {
+            let rect_vertex = compute_rect_vertex(vertex_index, instance_index);
+
+            let position = vec4<f32>(
+                to_final_position(uTransform[instance_index], rect_vertex),
+                0.0,
+                1.0
+            );
+
+            return VertexOutput(position, instance_index, rect_vertex);
+        }
+
+        @fragment
+        fn fs_emit(
+            @location(0) @interpolate(flat) instance_index: u32,
+            @location(1) local_position: vec2<f32>,
+        ) -> @location(0) vec4<f32> {
+            let dist = sd_shape(local_position, instance_index);
+
+            if (dist > 0.0) {
+                discard;
+            }
+
+            let intensity = uIntensity[instance_index];
+
+            // Ground-level decals (tread marks etc., z below the shadow threshold)
+            // neither emit nor occlude light. Emitters keep working at any z.
+            let z_height = uTransform[instance_index][3].z;
+            if (intensity == 0.0 && z_height <= SHADOW_Z_THRESHOLD) {
+                discard;
+            }
+
+            return vec4<f32>(uColor[instance_index].rgb * intensity, 1.0);
         }
 
         // ============= Visual Shadow Pass =============

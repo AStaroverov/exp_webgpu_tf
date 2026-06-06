@@ -20,7 +20,61 @@ export function createFrameTextures(device: GPUDevice, canvas: HTMLCanvasElement
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
 
-    return { renderTexture, depthTexture, shadowMapTexture };
+    return { renderTexture, depthTexture, shadowMapTexture, ...createRCTextures(device, canvas) };
+}
+
+// Radiance Cascades textures, sized rcW x rcH.
+// litTexture is canvas-sized (composite output fed to Pixelate).
+// 0.4: RC runs at 0.16x the canvas pixels (and one cascade fewer than 1.0); composite upsamples linearly.
+export const rcDownscale = 0.4;
+
+export function createRCTextures(device: GPUDevice, canvas: HTMLCanvasElement) {
+    const rcW = Math.floor(canvas.width * rcDownscale);
+    const rcH = Math.floor(canvas.height * rcDownscale);
+
+    const emissionTexture = device.createTexture({
+        size: [rcW, rcH, 1],
+        format: 'rgba16float',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+
+    const seedA = device.createTexture({
+        size: [rcW, rcH, 1],
+        format: 'rg16float',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+
+    const seedB = device.createTexture({
+        size: [rcW, rcH, 1],
+        format: 'rg16float',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+
+    const dfTexture = device.createTexture({
+        size: [rcW, rcH, 1],
+        format: 'r16float',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+
+    const cascA = device.createTexture({
+        size: [rcW, rcH, 1],
+        format: 'rgba16float',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+
+    const cascB = device.createTexture({
+        size: [rcW, rcH, 1],
+        format: 'rgba16float',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+
+    const litTexture = device.createTexture({
+        size: [canvas.width, canvas.height, 1],
+        format: 'bgra8unorm',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+
+    return { emissionTexture, seedA, seedB, dfTexture, cascA, cascB, litTexture };
 }
 
 export function createFrameTick(

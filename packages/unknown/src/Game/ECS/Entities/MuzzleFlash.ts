@@ -5,6 +5,8 @@ import { getGameComponents } from '../createGameWorld.ts';
 import { addTransformComponents, applyMatrixTranslate, applyMatrixRotateZ, applyMatrixScale, LocalTransform } from '../../../../../renderer/src/ECS/Components/Transform.ts';
 import { ZIndex } from '../../consts.ts';
 import { RenderDI } from '../../DI/RenderDI.ts';
+import { FlashLightConfig } from '../../Config/index.ts';
+import { spawnLightFlash } from './LightFlash.ts';
 
 export interface MuzzleFlashOptions {
     x: number;
@@ -30,4 +32,13 @@ export function spawnMuzzleFlash(options: MuzzleFlashOptions, { world } = GameDI
     VFX.addComponent(world, eid, VFXType.MuzzleFlash);
     Progress.addComponent(world, eid, options.duration);
     DestroyByTimeout.addComponent(world, eid, options.duration);
+
+    spawnLightFlash({
+        x: options.x,
+        y: options.y,
+        radius: options.size,
+        duration: FlashLightConfig.muzzle.duration,
+        color: FlashLightConfig.muzzle.color,
+        intensity: FlashLightConfig.muzzle.intensity,
+    });
 }

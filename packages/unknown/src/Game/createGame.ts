@@ -23,7 +23,9 @@ import { createApplyImpulseSystem } from './ECS/Systems/createApplyImpulseSystem
 import { createDrawFaunaSystem } from './ECS/Systems/Render/Fauna/createDrawFaunaSystem.ts';
 import { createSandstormSystem } from './ECS/Systems/Render/PostEffect/Sandstorm/createSandstormSystem.ts';
 import { createDrawVFXSystem } from './ECS/Systems/Render/VFX/createDrawVFXSystem.ts';
-import { createPostEffect } from './ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
+import { createPresent } from '../../../renderer/src/WGSL/createPresent.ts';
+import { createPixelatePass } from './ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
+import { createRadianceCascadesSystem } from './ECS/Systems/Render/Lighting/createRadianceCascadesSystem.ts';
 import { createVisualizationTracksSystem } from './ECS/Systems/Tank/createVisualizationTracksSystem.ts';
 import { createSpawnTreadMarksSystem } from './ECS/Systems/Tank/createSpawnTreadMarksSystem.ts';
 import { createUpdateTreadMarksSystem } from './ECS/Systems/Tank/createUpdateTreadMarksSystem.ts';
@@ -282,6 +284,13 @@ export function createGame({ width, height }: {
             device,
             shadowMapTexture: textures.shadowMapTexture,
         });
+        const pixelatePass = createPixelatePass(device, textures.renderTexture);
+        const lighting = RenderDI.lighting = createRadianceCascadesSystem({
+            device,
+            frameTextures: textures,
+            sceneTexture: pixelatePass.outputTexture,
+            drawEmitters: shapeSystem.drawEmitters,
+        });
         const drawFauna = createDrawFaunaSystem();
         const drawGrid = createDrawGridSystem();
         const drawSandstorm = createSandstormSystem();
@@ -307,16 +316,19 @@ export function createGame({ width, height }: {
             },
         );
 
-        const postEffectFrame = createPostEffect(device, context, textures.renderTexture);
+        const present = createPresent(device, context);
 
         RenderDI.renderFrame = (delta: number) => {
             const commandEncoder = device.createCommandEncoder();
-            frameTick(commandEncoder, delta);
-            postEffectFrame(commandEncoder);
+            frameTick(commandEncoder, delta);      // scene -> renderTexture
+            pixelatePass.run(commandEncoder);      // renderTexture -> pixelated scene
+            lighting.run(commandEncoder, delta);   // pixelated scene * light -> litTexture
+            present(commandEncoder, lighting.outputTexture); // final -> swapchain
             device.queue.submit([commandEncoder.finish()]);
         };
 
         RenderDI.destroy = () => {
+            lighting.destroy();
             RenderDI.enabled = false;
             RenderDI.canvas = null!;
             RenderDI.device = null!;

@@ -79,5 +79,15 @@ export const SpiceColors: TColor[] = [
     new Float32Array([0.88, 0.48, 0.12, 1]), // Amber
 ];
 
+// =============================================================================
+// SPICE LIGHT EMISSION
+// =============================================================================
+
+/** Warm melange glow emitted by spice (LightEmitter intensity, radius). */
+export const SpiceLightConfig = {
+    intensity: 1.5,
+    radius: 0,
+} as const;
+
 export type SpiceType = typeof SpiceConfig;
 

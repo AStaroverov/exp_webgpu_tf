@@ -13,6 +13,7 @@ import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld
 import { getTankTeamId } from '../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts';
 import { CONFIG } from '../config.ts';
 import { UnknownVisTestEpisodeManager } from '../agents/UnknownVisTestEpisodeManager.ts';
+import { createLightingGUI } from '../../../unknown/src/ui/createLightingGUI.ts';
 import { toggleChartsPanel, updateCharts } from './MetricsBrowser/index.ts';
 import { downloadModels, getDrawState, resetState, setDrawState, settingsReady } from './uiUtils.ts';
 
@@ -23,8 +24,10 @@ export function createDebugVisualization(container: HTMLElement, manager: Unknow
     });
     container.appendChild(gui.domElement);
 
+    const lighting = createLightingGUI({ container, side: 'left' });
+
     setupControls(gui);
-    setupInfo(gui, manager);
+    setupInfo(gui, manager, lighting.sync);
 
     document.addEventListener('keypress', (e) => {
         if (e.code === 'KeyM') toggleChartsPanel();
@@ -62,7 +65,7 @@ function setupControls(gui: GUI) {
     folder.add(controls, 'resetState').name('Reset State');
 }
 
-function setupInfo(gui: GUI, manager: UnknownVisTestEpisodeManager) {
+function setupInfo(gui: GUI, manager: UnknownVisTestEpisodeManager, syncLighting: () => void) {
     const folder = gui.addFolder('Info');
 
     const info = { workers: CONFIG.workerCount, version: 0, success: 0 };
@@ -76,6 +79,7 @@ function setupInfo(gui: GUI, manager: UnknownVisTestEpisodeManager) {
 
     function update() {
         if (!gui.domElement.isConnected) return;
+        syncLighting();
         info.version = manager.getVersion();
         info.success = parseFloat(manager.getSuccessRatio().toFixed(2));
         folder.controllers.forEach((c) => c.updateDisplay());

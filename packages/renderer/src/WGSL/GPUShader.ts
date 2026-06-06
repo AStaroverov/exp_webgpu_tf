@@ -36,6 +36,7 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
             shaderModule?: GPUShaderModule,
             targetFormat?: GPUTextureFormat,
             withBlending?: boolean,
+            blend?: 'alpha' | 'additive',
             autoLayout?: boolean,
             /** For autoLayout pipelines: specify which uniforms to include in each bind group */
             bindGroups?: Record<number, (keyof M['uniforms'])[]>,
@@ -44,10 +45,11 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
         const withDepth = options?.withDepth ?? false;
         const targetFormat = options?.targetFormat ?? navigator.gpu.getPreferredCanvasFormat();
         const withBlending = options?.withBlending ?? true;
+        const blend = options?.blend ?? 'alpha';
         const autoLayout = options?.autoLayout ?? false;
         const bindGroups = options?.bindGroups;
         const pipelineKey = `${ vertexName }-${ fragmentName }`;
-        const key = `${ pipelineKey }-${ withDepth }-${ targetFormat }-${ withBlending }-${ autoLayout }`;
+        const key = `${ pipelineKey }-${ withDepth }-${ targetFormat }-${ withBlending }-${ blend }-${ autoLayout }`;
         const shaderModule = options?.shaderModule ?? this.getShaderModule(device);
 
         if (!this.mapRenderPipeline.has(key)) {
@@ -66,7 +68,18 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
                     targets: [
                         {
                             format: targetFormat,
-                            blend: withBlending ? {
+                            blend: withBlending ? (blend === 'additive' ? {
+                                color: {
+                                    srcFactor: 'one',
+                                    dstFactor: 'one',
+                                    operation: 'add',
+                                },
+                                alpha: {
+                                    srcFactor: 'one',
+                                    dstFactor: 'one',
+                                    operation: 'add',
+                                },
+                            } : {
                                 color: {
                                     srcFactor: 'src-alpha',
                                     dstFactor: 'one-minus-src-alpha',
@@ -77,7 +90,7 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
                                     dstFactor: 'one-minus-src-alpha',
                                     operation: 'add',
                                 },
-                            } : undefined,
+                            }) : undefined,
                         },
                     ],
                 },

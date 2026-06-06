@@ -1,5 +1,6 @@
 import { createGame } from './src/Game/createGame.ts';
 import { setupDemoWorld } from './src/Game/setupDemoWorld.ts';
+import { createLightingGUI } from './src/ui/createLightingGUI.ts';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 const sndBtn = document.getElementById('snd') as HTMLButtonElement;
@@ -15,6 +16,8 @@ const game = createGame({
 setupDemoWorld();
 
 await game.setRenderTarget(canvas);
+
+createLightingGUI();
 
 sndBtn.addEventListener('click', () => {
     game.enableSound();
