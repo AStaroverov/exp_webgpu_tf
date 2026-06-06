@@ -116,8 +116,8 @@ export class HexGrid {
     // --- geometry -----------------------------------------------------------
 
     /** World-space center of a hex. */
-    hexToWorld(coord: HexCoordinates): { x: number; y: number } | undefined {
-        const hex = this.grid.getHex(coord);
+    hexToWorld(q: number, r: number): { x: number; y: number } | undefined {
+        const hex = this.grid.getHex({ q, r });
         if (!hex) return undefined;
         return { x: hex.x + this.originX, y: hex.y + this.originY };
     }

@@ -59,7 +59,7 @@ export class UnknownEpisodeManager extends EpisodeManager<Scenario> {
         scenario.agents.forEach((agent) => {
             agent.closeFinalStep();
             const networkVersion = agent.getVersion();
-            const finalReward = calculateFinalReward(agent.tankEid, successRatio, scenario.agents);
+            const finalReward = calculateFinalReward(agent.tankEid, scenario.getTeamDestroyedRatio, scenario.agents);
             const memoryBatch = agent.getMemoryBatch(finalReward);
             if (memoryBatch == null) return;
 

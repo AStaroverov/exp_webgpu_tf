@@ -5,6 +5,7 @@
  */
 
 import { PI } from '../../../../../lib/math.ts';
+import { HexGridConfig } from '../Map/HexConfig.ts';
 
 // =============================================================================
 // BULLET SPEED LIMITS
@@ -60,7 +61,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
         density: 5_000,
         damage: 3 * 3,
         linearDamping: 0.4, // Light bullets lose speed quickly
-        maxDistance: 96 * 2.4,
+        maxDistance: HexGridConfig.radius * 1.6,
     },
     
     [BulletCaliber.Medium]: {
@@ -70,7 +71,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
         density: 5_000,
         damage: 4 * 3,
         linearDamping: 0.3, // Medium bullets have moderate drag
-        maxDistance: 96 * 4.4,
+        maxDistance: HexGridConfig.radius * 2.6,
     },
     
     [BulletCaliber.Heavy]: {
@@ -80,7 +81,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
         density: 5_000,
         damage: 6 * 3,
         linearDamping: 0.2, // Heavy bullets maintain speed longer
-        maxDistance: 96 * 6.4,
+        maxDistance: HexGridConfig.radius * 3.6,
     },
 } as const;
 

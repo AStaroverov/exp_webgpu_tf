@@ -72,9 +72,15 @@ export const BoardChannel = {
      * gradient points toward them.
      */
     EnemyHeat: 7,
+    /**
+     * Normalized class of the unit on the cell: `(Vehicle.type + 1) / VEHICLE_TYPE_COUNT`
+     * (Light ≈ 0.17, Medium ≈ 0.33, Heavy = 0.5); 0 = no unit. The `+1` keeps
+     * LightTank (enum 0) distinguishable from an empty cell.
+     */
+    UnitType: 8,
 } as const;
 
-export const BOARD_CHANNELS = 8;
+export const BOARD_CHANNELS = 9;
 export const BOARD_SIZE = BOARD_CELLS * BOARD_CHANNELS;
 
 export const UnknownInputBoard = component({

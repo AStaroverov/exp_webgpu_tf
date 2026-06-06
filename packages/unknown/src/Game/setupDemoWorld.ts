@@ -37,6 +37,7 @@ export function setupDemoWorld({ world } = GameDI) {
 
     function spawnDemoTanks() {
         const grid = MapDI.grid;
+        const tankTypes = [VehicleType.LightTank, VehicleType.MediumTank, VehicleType.HeavyTank] as const;
         const palette: Array<[number, number, number, number]> = [
             [1.0, 0.4, 0.4, 1],
             [0.4, 0.7, 1.0, 1],
@@ -55,11 +56,11 @@ export function setupDemoWorld({ world } = GameDI) {
 
         for (let i = 0; i < slots.length; i++) {
             const { q, r } = slots[i];
-            const pos = grid.hexToWorld({ q, r });
+            const pos = grid.hexToWorld(q, r);
             if (!pos) continue;
 
             const tankEid = createTank({
-                type: VehicleType.MediumTank,
+                type: tankTypes[Math.floor(Math.random() * tankTypes.length)],
                 playerId: i + 1,
                 teamId: (i % 2) + 1,
                 x: pos.x,

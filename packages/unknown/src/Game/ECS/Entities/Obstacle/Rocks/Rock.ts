@@ -38,7 +38,7 @@ export function createRock(
     let rockEid: EntityId | undefined;
 
     for (const cell of plan.cells) {
-        const center = grid.hexToWorld(cell);
+        const center = grid.hexToWorld(cell.q, cell.r);
         if (!center) continue;
 
         const parts = generateGridRockShape({

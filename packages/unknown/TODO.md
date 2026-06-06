@@ -1,6 +1,4 @@
-- add доцеливание в технику
 - add heals for tanks from parts
-- add all types of tanks
 - add new types of tanks
 - add fog of war
 - add rangers

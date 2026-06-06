@@ -5,7 +5,8 @@
  * world a `ScenarioConfig` describes — team sizes plus how the enemy team (team 1)
  * behaves (see `scenarioCompositions`). Team 0 is always the learning policy. Steps:
  *   1. createGame headless (no render target).
- *   2. spawn `allies` + `enemies` tanks on distinct passable cells.
+ *   2. spawn `allies` + `enemies` tanks on distinct passable cells, each a random
+ *      class (Light/Medium/Heavy — the observation's UnitType plane tells them apart).
  *   3. drive team 0 (and team 1 under self-play) with a learning UnknownAgent;
  *      drive moving/shooting enemies with a scripted RandomBot; drive frozen
  *      enemies with a FrozenAgent (historical policy snapshot, no learning);
@@ -17,6 +18,7 @@
  */
 
 import { query, QueryResult } from 'bitecs';
+import { randomRangeInt } from '../../../../lib/random.ts';
 import { createGame } from '../../../unknown/src/Game/createGame.ts';
 import { GameDI } from '../../../unknown/src/Game/DI/GameDI.ts';
 import { MapDI } from '../../../unknown/src/Game/DI/MapDI.ts';
@@ -37,6 +39,10 @@ import { RandomBot } from './RandomBot.ts';
 import { createPolicyDriverSystem, TankDriver } from './createPolicyDriverSystem.ts';
 
 const FIELD_SIZE = 1000;
+
+// Every spawn rolls a random tank class (tanks_ml convention): type differences
+// (speed, turret, reload, size) come for free from the per-type configs.
+const TANK_TYPES = [VehicleType.LightTank, VehicleType.MediumTank, VehicleType.HeavyTank] as const;
 
 // RandomBot tuning per enemy behaviour: 'moving' enemies only occasionally step
 // (mostly-still targets), 'shooting' enemies wander more and return fire.
@@ -61,6 +67,8 @@ export type Scenario = {
     getVehicleEids: () => QueryResult;
     getTeamsCount: () => number;
     getSuccessRatio: () => number;
+    /** Fraction of `teamId`'s initial health destroyed, in [0, 1]. */
+    getTeamDestroyedRatio: (teamId: number) => number;
 };
 
 export function createUnknownScenario(options: {
@@ -96,11 +104,11 @@ export function createUnknownScenario(options: {
         for (let n = 0; n < teamSizes[team]; n++) {
             const cell = cells[slot++];
             if (!cell) continue;
-            const pos = MapDI.grid.hexToWorld(cell);
+            const pos = MapDI.grid.hexToWorld(cell.q, cell.r);
             if (!pos) continue;
 
             const tankEid = createTank({
-                type: VehicleType.MediumTank,
+                type: TANK_TYPES[randomRangeInt(0, TANK_TYPES.length - 1)],
                 playerId: slot,
                 teamId: team,
                 x: pos.x,
@@ -165,6 +173,12 @@ export function createUnknownScenario(options: {
         getSuccessRatio: () => {
             if (!initialTeamHealth) return 0;
             return computeSuccessRatio(initialTeamHealth, getTeamHealth(world));
+        },
+        getTeamDestroyedRatio: (teamId) => {
+            const init = initialTeamHealth?.[teamId] ?? 0;
+            if (init <= 0) return 0;
+            const current = getTeamHealth(world)[teamId] ?? 0;
+            return Math.min(1, Math.max(0, 1 - current / init));
         },
     };
 

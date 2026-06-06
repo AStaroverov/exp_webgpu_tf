@@ -61,10 +61,10 @@ export function createAimActionSystem({ world } = GameDI) {
             }
 
             // Resolve the target hex's world center.
-            const targetCenter = MapDI.grid.hexToWorld({
-                q: ActionsQueue.getTargetVal(ownerEid, 0, 0),
-                r: ActionsQueue.getTargetVal(ownerEid, 0, 1),
-            });
+            const targetCenter = MapDI.grid.hexToWorld(
+                ActionsQueue.getTargetVal(ownerEid, 0, 0),
+                ActionsQueue.getTargetVal(ownerEid, 0, 1),
+            );
 
             if (!targetCenter) {
                 // Off-map target — fail the action.

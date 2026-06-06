@@ -10,9 +10,9 @@
  * Per observer, per window cell (dq, dr):
  *   - Off-map OR beyond VIEW_RADIUS → `Obstacle` (not enterable / not visible).
  *   - Static obstacle              → `Obstacle` plane.
- *   - The observer's own cell      → `Self` plane (always the center, + its hp).
- *   - Same-team unit cells         → `Ally`  plane (+ hp).
- *   - Other-team unit cells        → `Enemy` plane (+ hp).
+ *   - The observer's own cell      → `Self` plane (always the center, + hp + unit type).
+ *   - Same-team unit cells         → `Ally`  plane (+ hp + unit type).
+ *   - Other-team unit cells        → `Enemy` plane (+ hp + unit type).
  *   - `Reserved` cells             → `Reserved` plane (a unit is driving into them).
  *   - Live enemy bullet paths      → `UnderFire` plane (see `markBulletThreat`).
  *   - `EnemyHeat`: max over ALL enemies of `1 − hexDist/MAX_MAP_DIST` — the
@@ -28,6 +28,7 @@ import { GameDI } from '../../../unknown/src/Game/DI/GameDI.ts';
 import { MapDI } from '../../../unknown/src/Game/DI/MapDI.ts';
 import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld.ts';
 import { HexGridConfig, HexTile } from '../../../unknown/src/Game/Map/HexConfig.ts';
+import { VEHICLE_TYPE_COUNT } from '../../../unknown/src/Game/Config/index.ts';
 import { OccupantKind } from '../../../unknown/src/Game/Map/HexGrid.ts';
 import { getTankHealth } from '../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts';
 import { BoardChannel, hexDeltaDistance, UnknownInputBoard, VIEW_RADIUS } from './board.ts';
@@ -139,6 +140,8 @@ export function snapshotUnknownBoard({ world } = GameDI) {
 
                     UnknownInputBoard.setDelta(selfEid, dq, dr, plane, 1);
                     UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.Hp, getTankHealth(unitEid));
+                    UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.UnitType,
+                        (Vehicle.type[unitEid] + 1) / VEHICLE_TYPE_COUNT);
                 }
             }
         }

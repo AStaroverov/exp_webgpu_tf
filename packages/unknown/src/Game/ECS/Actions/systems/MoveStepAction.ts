@@ -72,7 +72,7 @@ export function createMoveStepActionSystem({ world } = GameDI) {
 
             const targetQ = ActionsQueue.getTargetVal(ownerEid, 0, 0);
             const targetR = ActionsQueue.getTargetVal(ownerEid, 0, 1);
-            const targetCenter = grid.hexToWorld({ q: targetQ, r: targetR });
+            const targetCenter = grid.hexToWorld(targetQ, targetR);
 
             const px = RigidBodyState.position.get(ownerEid, 0);
             const py = RigidBodyState.position.get(ownerEid, 1);
