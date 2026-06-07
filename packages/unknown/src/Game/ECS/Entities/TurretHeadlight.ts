@@ -1,57 +1,54 @@
-import { JointData, Vector2 } from '@dimforge/rapier2d-simd';
-import { EntityId } from 'bitecs';
+import { addEntity, EntityId } from 'bitecs';
 import { GameDI } from '../../DI/GameDI.ts';
 import { getGameComponents } from '../createGameWorld.ts';
-import { addTransformComponents } from '../../../../../renderer/src/ECS/Components/Transform.ts';
+import {
+    addTransformComponents,
+    applyMatrixRotateZ,
+    applyMatrixTranslate,
+} from '../../../../../renderer/src/ECS/Components/Transform.ts';
 import { ShapeKind } from '../../../../../renderer/src/ECS/Components/Shape.ts';
-import { createRectangleRigidGroup } from '../Components/RigidGroup.ts';
-import { HeadlightConfig } from '../../Config/index.ts';
+import { HeadlightConfig, ZIndexConfig } from '../../Config/index.ts';
 import { PI } from '../../../../../../lib/math.ts';
-import { type TankOptions } from './Tank/Common/Options.ts';
 
+/** Beam z: above the hull parts (TankHull), below the turret head (TankTurret). */
 export interface TurretHeadlightOptions {
     startX: number;
     startY: number;
     length: number;
     nearWidth: number;
     farWidth: number;
+    light?: {
+        color: Float32Array;
+        intensity: number;
+        directional: boolean;
+    };
 }
 
+/**
+ * Render-only beam attached to the turret: no rigid body — the attached
+ * transform system keeps `global = turretGlobal * local` in sync each tick.
+ */
 export function createTurretHeadlight(
     turretEid: EntityId,
-    turretPid: number,
     beam: TurretHeadlightOptions,
-    options: TankOptions,
-    { world, physicalWorld } = GameDI,
+    { world } = GameDI,
 ) {
-    const { Joint, Parent, Children, Shape, Color, LightEmitter } = getGameComponents(world);
+    const { Parent, Children, Shape, Color, Roundness, Blurness, LightEmitter, LocalTransform } = getGameComponents(world);
 
-    const [eid, pid] = createRectangleRigidGroup({
-        ...options,
-        width: 1,
-        height: 1,
-        density: options.density * 0.001,
-        belongsCollisionGroup: 0,
-        interactsCollisionGroup: 0,
-    });
+    const eid = addEntity(world);
 
-    const joint = physicalWorld.createImpulseJoint(
-        JointData.fixed(
-            new Vector2(beam.startX + beam.length / 2, beam.startY), -PI / 2,
-            new Vector2(0, 0), 0,
-        ),
-        physicalWorld.getRigidBody(turretPid),
-        physicalWorld.getRigidBody(pid),
-        false,
-    );
-    Joint.addComponent(world, eid, joint.handle);
-
+    const light = beam.light ?? HeadlightConfig;
     Shape.addComponent(world, eid, ShapeKind.Trapezoid, beam.nearWidth, beam.length, beam.farWidth);
-    Color.addComponent(world, eid, ...HeadlightConfig.color);
-    LightEmitter.addComponent(world, eid,
-        HeadlightConfig.directional ? -HeadlightConfig.intensity : HeadlightConfig.intensity);
+    Color.addComponent(world, eid, ...light.color);
+    Blurness.addComponent(world, eid, 6);
+    Roundness.addComponent(world, eid, 10);
+    LightEmitter.addComponent(world, eid, light.directional ? -light.intensity : light.intensity);
 
     addTransformComponents(world, eid);
+    const local = LocalTransform.matrix.getBatch(eid);
+    applyMatrixTranslate(local, beam.startX + beam.length / 2, beam.startY, ZIndexConfig.TankHull );
+    applyMatrixRotateZ(local, -PI / 2);
+
     Parent.addComponent(world, eid, turretEid);
     Children.addComponent(world, eid);
     Children.addChildren(turretEid, eid);

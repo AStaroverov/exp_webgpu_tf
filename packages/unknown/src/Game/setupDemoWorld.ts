@@ -37,7 +37,7 @@ export function setupDemoWorld({ world } = GameDI) {
 
     function spawnDemoTanks() {
         const grid = MapDI.grid;
-        const tankTypes = [VehicleType.LightTank, VehicleType.MediumTank, VehicleType.HeavyTank] as const;
+        const tankTypes = [VehicleType.LightTank, VehicleType.MediumTank, VehicleType.HeavyTank, VehicleType.Ranger] as const;
         const palette: Array<[number, number, number, number]> = [
             [1.0, 0.4, 0.4, 1],
             [0.4, 0.7, 1.0, 1],

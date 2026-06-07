@@ -31,6 +31,22 @@ export const createRoundnessComponent = defineComponent((Roundness, obs) => {
     };
 });
 
+// Edge feather width in local-space px (0 = hard SDF edge). The shape's color
+// and emission fade in over this distance inside the outline.
+export const createBlurnessComponent = defineComponent((Blurness, obs) => {
+    const value = new Float64Array(delegate.defaultSize);
+    return {
+        value,
+        addComponent(world: World, eid: number, v = 0) {
+            addComponent(world, eid, Blurness);
+            value[eid] = v;
+        },
+        set$: obs((eid: number, v: number) => {
+            value[eid] = v;
+        }),
+    };
+});
+
 // Per-material light translucency for the RC lighting (0 = opaque occluder,
 // 1 = light passes through freely). Entities without the component use 0.
 export const createTranslucencyComponent = defineComponent((Translucency, obs) => {

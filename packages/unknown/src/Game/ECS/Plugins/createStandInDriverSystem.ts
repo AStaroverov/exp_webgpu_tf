@@ -19,7 +19,7 @@
  * chaining across ticks falls out of the request-next slot mechanism.
  */
 
-import { query } from 'bitecs';
+import { hasComponent, query } from 'bitecs';
 import { GameDI } from '../../DI/GameDI.ts';
 import { MapDI } from '../../DI/MapDI.ts';
 import { getGameComponents } from '../createGameWorld.ts';
@@ -32,14 +32,12 @@ const FIRE_CHANCE = 0.25;
 const HOLD_DURATION_MS = 1000;
 
 export function createStandInDriverSystem({ world } = GameDI) {
-    const { Tank, Vehicle, VehicleController, Children, RigidBodyState } = getGameComponents(world);
+    const { Tank, Vehicle, VehicleController, Children, RigidBodyState, Firearms } = getGameComponents(world);
 
     return function updateStandInDriver(_delta: number) {
         const grid = MapDI.grid;
         if (!grid) return;
 
-        // Living, drivable tanks: the same query the steering systems use, so we
-        // only drive real tanks (dead ones are removed by the tank-alive system).
         const tanks = query(world, [Tank, Vehicle, VehicleController, Children]);
 
         for (const eid of tanks) {
@@ -54,7 +52,6 @@ export function createStandInDriverSystem({ world } = GameDI) {
                 .neighbors({ q: here.q, r: here.r })
                 .filter((n) => grid.isPassable(n.q, n.r));
 
-            // Hemmed in: nothing to move to → hold briefly.
             if (passable.length === 0) {
                 enqueueAction(eid, {
                     kind: ActionKind.Hold,
@@ -63,9 +60,8 @@ export function createStandInDriverSystem({ world } = GameDI) {
                 continue;
             }
 
-            // Occasionally fire at the nearest other tank's hex (Fire aims itself, then
-            // shoots one round — a single self-contained action).
-            if (Math.random() < FIRE_CHANCE) {
+            const isArmed = hasComponent(world, Tank.turretEId[eid], Firearms);
+            if (isArmed && Math.random() < FIRE_CHANCE) {
                 const target = nearestOtherTankHex(eid, px, py) ?? pickRandom(passable);
                 enqueueAction(eid, {
                     kind: ActionKind.Fire,

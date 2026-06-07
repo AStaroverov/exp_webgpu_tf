@@ -14,6 +14,7 @@ export const shaderMeta = new ShaderMeta(
         color: new VariableMeta('uColor', VariableKind.StorageRead, `array<vec4<f32>, ${ MAX_INSTANCE_COUNT }>`),
         values: new VariableMeta('uValues', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT * 6 }>`),
         roundness: new VariableMeta('uRoundness', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT }>`),
+        blurness: new VariableMeta('uBlurness', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT }>`),
         intensity: new VariableMeta('uIntensity', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT }>`),
         translucency: new VariableMeta('uTranslucency', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT }>`),
 
@@ -101,20 +102,23 @@ export const shaderMeta = new ShaderMeta(
         ) -> FragmentOutput {
             let dist = sd_shape(local_position, instance_index);
             let color = uColor[instance_index];
-            
-            if (dist > 0.0 || color.a == 0.0) { 
+
+            if (dist > 0.0 || color.a == 0.0) {
                 discard;
             }
-            
+
+            // Blurness feathers the edge: alpha ramps in over uBlurness px inside the outline.
+            let edge = edge_softness(dist, instance_index);
+
             let object_z = uTransform[instance_index][3].z;
-            
+
             // Load shadow map at current screen position (r32float is unfilterable, use textureLoad)
             let shadow_z = textureLoad(uShadowMap, vec2<i32>(frag_coord.xy), 0).r;
-            
+
             // Apply shadow if shadow caster is above this object
-            var final_color = color;
+            var final_color = vec4<f32>(color.rgb, color.a * edge);
             if (shadow_z > object_z + SHADOW_Z_THRESHOLD) {
-                final_color = vec4<f32>(color.rgb * (1.0 - SHADOW_DARKNESS), color.a);
+                final_color = vec4<f32>(final_color.rgb * (1.0 - SHADOW_DARKNESS), final_color.a);
             }
 
             return FragmentOutput(final_color, object_z);
@@ -213,18 +217,27 @@ export const shaderMeta = new ShaderMeta(
             // Facing = world +X axis of the instance, taken AS IS: the vertex Y-flip
             // ((x, -y) after projection) cancels against the NDC->texture V flip, so
             // world +Y maps to texture +V and directions need no sign change.
+            // Trapezoid emitters are beams: they face along their long axis instead —
+            // local +Y, from the near (values[0]) edge out of the far (values[2]) edge.
             var dir = vec2<f32>(0.0);
             if (intensity < 0.0) {
                 let t = uTransform[instance_index];
-                dir = normalize(vec2<f32>(t[0].x, t[0].y));
+                if (uKind[instance_index] == 4u) {
+                    dir = normalize(vec2<f32>(t[1].x, t[1].y));
+                } else {
+                    dir = normalize(vec2<f32>(t[0].x, t[0].y));
+                }
             }
 
             // Alpha = per-material opacity (1 - translucency); the RC raymarch uses
             // it to let a share of farther light through translucent surfaces.
             let opacity = 1.0 - clamp(uTranslucency[instance_index], 0.0, 1.0);
 
+            // Blurness feathers the emission the same way fs_main feathers color.
+            let edge = edge_softness(dist, instance_index);
+
             return EmitOutput(
-                vec4<f32>(uColor[instance_index].rgb * abs(intensity), opacity),
+                vec4<f32>(uColor[instance_index].rgb * abs(intensity) * edge, opacity * edge),
                 dir,
             );
         }
@@ -318,6 +331,16 @@ export const shaderMeta = new ShaderMeta(
             
         fn op_round(d: f32, r: f32) -> f32 {
             return d - r;
+        }
+
+        // Edge feather factor: 1 deep inside the shape, ramping to 0 at the
+        // outline over uBlurness px. Blurness 0 keeps the hard SDF edge.
+        fn edge_softness(dist: f32, instance_index: u32) -> f32 {
+            let blur = uBlurness[instance_index];
+            if (blur <= 0.0) {
+                return 1.0;
+            }
+            return clamp(-dist / blur, 0.0, 1.0);
         }
         
         fn sd_shape(pos: vec2<f32>, instance_index: u32) -> f32 {

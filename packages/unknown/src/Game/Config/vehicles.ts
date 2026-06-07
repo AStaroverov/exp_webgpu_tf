@@ -16,6 +16,7 @@ export enum VehicleType {
     LightTank = 0,
     MediumTank = 1,
     HeavyTank = 2,
+    Ranger = 3,      // Light tank chassis with a turret searchlight instead of a gun
     Harvester = 4,   // Bulldozer with barrier and scoop for collecting debris
     MeleeCar = 5,    // Fast 4-wheeled car for ramming
 }
@@ -330,5 +331,12 @@ export function getTankConfig(type: VehicleType): TankStats | undefined {
 export const HeadlightConfig = {
     color:  new Float32Array([1.0, 1.0, 1.0, 1.0]),
     intensity: 1.2,
+    directional: true,
+} as const;
+
+/** Ranger searchlight: the turret-mounted beam emitter that replaces the gun. */
+export const SpotlightConfig = {
+    color: new Float32Array([1.0, 0.95, 0.8, 1.0]),
+    intensity: 2.5,
     directional: true,
 } as const;

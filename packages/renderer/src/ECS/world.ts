@@ -1,18 +1,19 @@
 import { createWorld as createBitecsWorld, World } from 'bitecs';
-import { createColorComponent, createLightEmitterComponent, createRoundnessComponent, createThinnessComponent, createTranslucencyComponent } from './Components/Common.ts';
+import { createBlurnessComponent, createColorComponent, createLightEmitterComponent, createRoundnessComponent, createThinnessComponent, createTranslucencyComponent } from './Components/Common.ts';
 import { createRopeComponent } from './Components/Rope.ts';
 import { createShapeComponent } from './Components/Shape.ts';
 import { GlobalTransform, LocalTransform } from './Components/Transform.ts';
 
 export function createRenderComponents(world: World) {
     return {
-        Color: createColorComponent(world),
         GlobalTransform,
         LocalTransform,
         Rope: createRopeComponent(world),
-        Roundness: createRoundnessComponent(world),
         Shape: createShapeComponent(world),
+        Color: createColorComponent(world),
         Thinness: createThinnessComponent(world),
+        Roundness: createRoundnessComponent(world),
+        Blurness: createBlurnessComponent(world),
         LightEmitter: createLightEmitterComponent(world),
         Translucency: createTranslucencyComponent(world),
     };

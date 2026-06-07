@@ -11,7 +11,7 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
     device: GPUDevice,
     shadowMapTexture: GPUTexture,
 }) {
-    const { Color, GlobalTransform, LightEmitter, Roundness, Shape, Translucency } = getRenderComponents(world);
+    const { Blurness, Color, GlobalTransform, LightEmitter, Roundness, Shape, Translucency } = getRenderComponents(world);
     const gpuShader = new GPUShader(shaderMeta);
     
     // Set shadow map texture on shader meta before creating bind groups
@@ -50,7 +50,7 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
         withDepth: false,
         bindGroups: {
             0: ['projection'],
-            1: ['transform', 'kind', 'color', 'values', 'roundness', 'intensity', 'translucency'],
+            1: ['transform', 'kind', 'color', 'values', 'roundness', 'blurness', 'intensity', 'translucency'],
         },
     });
     
@@ -72,12 +72,14 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
     const colorCollect = getTypeTypedArray(shaderMeta.uniforms.color.type);
     const valuesCollect = getTypeTypedArray(shaderMeta.uniforms.values.type);
     const roundnessCollect = getTypeTypedArray(shaderMeta.uniforms.roundness.type);
+    const blurnessCollect = getTypeTypedArray(shaderMeta.uniforms.blurness.type);
     const intensityCollect = getTypeTypedArray(shaderMeta.uniforms.intensity.type);
     const translucencyCollect = getTypeTypedArray(shaderMeta.uniforms.translucency.type);
 
     const shapeChanges = createChangeDetector(world, [onAdd(Shape), onSet(Shape)]);
     const colorChanges = createChangeDetector(world, [onAdd(Color), onSet(Color)]);
     const roundnessChanges = createChangeDetector(world, [onAdd(Roundness), onSet(Roundness)]);
+    const blurnessChanges = createChangeDetector(world, [onAdd(Blurness), onSet(Blurness)]);
     const translucencyChanges = createChangeDetector(world, [onAdd(Translucency), onSet(Translucency)]);
     const intensityChanges = createChangeDetector(world, [onAdd(LightEmitter), onSet(LightEmitter)]);
     let prevEntityCount = 0;
@@ -108,6 +110,10 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
                 roundnessCollect[i] = Roundness.value[id];
             }
 
+            if (countChanged || blurnessChanges.hasChanges()) {
+                blurnessCollect[i] = hasComponent(world, id, Blurness) ? Blurness.value[id] : 0;
+            }
+
             if (countChanged || intensityChanges.hasChanges()) {
                 intensityCollect[i] = hasComponent(world, id, LightEmitter) ? LightEmitter.intensity[id] : 0;
             }
@@ -131,6 +137,10 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
 
         if (countChanged || roundnessChanges.hasChanges()) {
             device.queue.writeBuffer(gpuShader.uniforms.roundness.getGPUBuffer(device), 0, roundnessCollect);
+        }
+
+        if (countChanged || blurnessChanges.hasChanges()) {
+            device.queue.writeBuffer(gpuShader.uniforms.blurness.getGPUBuffer(device), 0, blurnessCollect);
         }
 
         if (countChanged || intensityChanges.hasChanges()) {
@@ -165,6 +175,7 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
         shapeChanges.clear();
         colorChanges.clear();
         roundnessChanges.clear();
+        blurnessChanges.clear();
         intensityChanges.clear();
         translucencyChanges.clear();
     }

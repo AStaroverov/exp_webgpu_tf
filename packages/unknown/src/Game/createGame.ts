@@ -13,6 +13,7 @@ import { GameSession } from './ECS/Entities/GameSession.ts';
 import { GameMap } from './ECS/Entities/GameMap.ts';
 import { SystemGroup } from './ECS/Plugins/systems.ts';
 import { createApplyRigidBodyToTransformSystem } from './ECS/Systems/createApplyRigidBodyToTransformSystem.ts';
+import { createAttachedTransformSystem } from './ECS/Systems/createAttachedTransformSystem.ts';
 import { createSpawnerBulletsSystem } from './ECS/Systems/createBulletSystem.ts';
 import { createDestroyByTimeoutSystem } from './ECS/Systems/createDestroyByTimeoutSystem.ts';
 import { createDestroyByDistanceSystem } from './ECS/Systems/createDestroyByDistanceSystem.ts';
@@ -92,6 +93,7 @@ export function createGame({ width, height }: {
 
     const syncRigidBodyState = createRigidBodyStateSystem();
     const applyRigidBodyDeltaToLocalTransform = createApplyRigidBodyToTransformSystem();
+    const updateAttachedTransforms = createAttachedTransformSystem();
     const applyImpulses = createApplyImpulseSystem();
     const applyJointMotors = createJointMotorSystem();
 
@@ -108,6 +110,7 @@ export function createGame({ width, height }: {
         physicalWorld.step(eventQueue);
         syncRigidBodyState();
         applyRigidBodyDeltaToLocalTransform();
+        updateAttachedTransforms();
 
         eventQueue.drainContactForceEvents(event => {
             const handle1 = event.collider1();
