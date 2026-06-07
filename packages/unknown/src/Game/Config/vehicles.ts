@@ -8,9 +8,6 @@
 import { PI } from '../../../../../lib/math.ts';
 import { BulletCaliber, ReloadConfig, TurretSpeedConfig } from './weapons.ts';
 
-// =============================================================================
-// VEHICLE TYPES
-// =============================================================================
 
 /**
  * All available vehicle types in the game.
@@ -23,10 +20,6 @@ export enum VehicleType {
     MeleeCar = 5,    // Fast 4-wheeled car for ramming
 }
 export const VEHICLE_TYPE_COUNT = 6;
-
-// =============================================================================
-// ENGINE TYPES
-// =============================================================================
 
 /**
  * Engine types determine movement speed and power.
@@ -60,10 +53,6 @@ export const EngineConfig: Record<EngineType, { impulseMult: number; rotationMul
         rotationMult: 3.0,
     },
 };
-
-// =============================================================================
-// TANK CONFIGURATIONS
-// =============================================================================
 
 export type TankStats = {
     /** Vehicle type identifier */
@@ -273,10 +262,6 @@ export const HarvesterConfig: HarvesterStats = {
     },
 };
 
-// =============================================================================
-// MELEE CAR CONFIGURATION
-// =============================================================================
-
 export type MeleeCarStats = {
     type: VehicleType;
     engine: EngineType;
@@ -323,10 +308,6 @@ export const MeleeCarConfig: MeleeCarStats = {
     },
 };
 
-// =============================================================================
-// VEHICLE LOOKUP
-// =============================================================================
-
 /**
  * Get tank configuration by vehicle type.
  * Returns undefined for non-tank vehicles.
@@ -344,3 +325,9 @@ export function getTankConfig(type: VehicleType): TankStats | undefined {
     }
 }
 
+/** Front light bar: 4 destructible slot parts (SlotPartType.Headlight) along
+ *  the hull's front edge that emit light into the RC lighting pass. */
+export const HeadlightConfig = {
+    color:  new Float32Array([1.0, 1.0, 1.0, 1.0]),
+    intensity: 1.2,
+} as const;

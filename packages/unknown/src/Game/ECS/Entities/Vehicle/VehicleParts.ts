@@ -11,6 +11,7 @@ import { cos, min, sin } from '../../../../../../../lib/math.ts';
 import { VehicleType } from '../../Components/Vehicle.ts';
 import { getSlotPartConfig, SlotPartType } from '../../Components/SlotConfig.ts';
 import { isSlot, isSlotEmpty, isSlotFilled } from '../../Utils/SlotUtils.ts';
+import { HeadlightConfig } from '../../../Config/vehicles.ts';
 
 export type PartsData = [x: number, y: number, w: number, h: number];
 
@@ -29,13 +30,27 @@ export function createRectangleSet(
     });
 }
 
+/** Headlight slots just beyond the hull's front (+X) edge: two pairs (left and
+ *  right side), gap in the middle — car-style. `hullCols`/`hullRows` are the
+ *  hull set's grid dimensions. */
+export function createHeadlightSet(hullCols: number, hullRows: number, size: number, padding: number): PartsData[] {
+    const frontX = padding * hullCols / 2 + size / 2;
+    const clusterY = padding * hullRows / 4; // halfway between center and hull edge
+    return [-clusterY, clusterY].flatMap(cy => [
+        [frontX, cy - padding / 2, size, size],
+        [frontX, cy + padding / 2, size, size],
+    ] as PartsData[]);
+}
+
 export function updateSlotsBrightness(parentEId: EntityId, { world } = GameDI) {
-    const { Children } = getGameComponents(world);
+    const { Children, Slot } = getGameComponents(world);
     const childCount = Children.entitiesCount[parentEId];
 
     for (let i = 0; i < childCount; i++) {
         const slotEid = Children.entitiesIds.get(parentEId, i);
         if (!isSlot(slotEid)) continue;
+        // Headlights stay uniformly white — no armor-texture brightness jitter.
+        if (Slot.partType[slotEid] === SlotPartType.Headlight) continue;
         adjustBrightness(slotEid, i / childCount / 2 - 0.1, i / childCount / 2 + 0.1);
     }
 }
@@ -88,7 +103,7 @@ export function fillSlot(
 ) {
     const {
         Slot, Parent, Children, Vehicle, RigidBodyRef, Color,
-        VehiclePart, Joint, PlayerRef, TeamRef, Hitable, Damagable, VehiclePartCaterpillar,
+        VehiclePart, Joint, PlayerRef, TeamRef, Hitable, Damagable, VehiclePartCaterpillar, LightEmitter,
     } = getGameComponents(world);
 
     if (isNaN(options.x) || isNaN(options.y) || isNaN(options.rotation)) {
@@ -152,6 +167,10 @@ export function fillSlot(
 
     if (partType === SlotPartType.Caterpillar) {
         VehiclePartCaterpillar.addComponent(world, eid);
+    }
+
+    if (partType === SlotPartType.Headlight) {
+        LightEmitter.addComponent(world, eid, HeadlightConfig.intensity);
     }
 }
 

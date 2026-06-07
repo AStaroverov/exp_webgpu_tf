@@ -33,6 +33,8 @@ export enum SlotPartType {
     Shield = 6,
     /** Car wheels */
     Wheel = 7,
+    /** Front light bar pieces (emit light, destructible) */
+    Headlight = 8,
 }
 
 // =============================================================================
@@ -64,6 +66,7 @@ export const PartDensityMultiplier: Record<SlotPartType, number> = {
     [SlotPartType.Scoop]: 15,       // Heavy scoop for pushing
     [SlotPartType.Shield]: 1,    // Very light energy
     [SlotPartType.Wheel]: 4,       // Moderate weight
+    [SlotPartType.Headlight]: 2,   // Light fixture, fragile
 };
 
 // =============================================================================
@@ -171,9 +174,22 @@ export const PartPhysicsConfig: Record<SlotPartType, SlotPartPhysics> = {
         belongsSolverGroup: CollisionGroupConfig.ALL,
         interactsSolverGroup: CollisionGroupConfig.ALL,
         belongsCollisionGroup: CollisionGroupConfig.VEHICLE_HULL_PARTS,
-        interactsCollisionGroup: 
-            CollisionGroupConfig.BULLET | 
-            CollisionGroupConfig.OBSTACLE | 
+        interactsCollisionGroup:
+            CollisionGroupConfig.BULLET |
+            CollisionGroupConfig.OBSTACLE |
+            CollisionGroupConfig.VEHICLE_HULL_PARTS |
+            CollisionGroupConfig.SPICE_COLLECTOR,
+    },
+
+    // Same exposure as hull armor: shootable and rammable.
+    [SlotPartType.Headlight]: {
+        z: ZIndexConfig.TankHull,
+        belongsSolverGroup: CollisionGroupConfig.ALL,
+        interactsSolverGroup: CollisionGroupConfig.ALL,
+        belongsCollisionGroup: CollisionGroupConfig.VEHICLE_HULL_PARTS,
+        interactsCollisionGroup:
+            CollisionGroupConfig.BULLET |
+            CollisionGroupConfig.OBSTACLE |
             CollisionGroupConfig.VEHICLE_HULL_PARTS |
             CollisionGroupConfig.SPICE_COLLECTOR,
     },

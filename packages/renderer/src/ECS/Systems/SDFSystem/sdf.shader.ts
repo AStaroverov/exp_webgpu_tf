@@ -266,6 +266,9 @@ export const shaderMeta = new ShaderMeta(
             } else if (kind == 3u) {
                 // Parallelogram: extend width by skew amount
                 width += abs(uValues[instance_index*6+2]) * 2.0;
+            } else if (kind == 4u) {
+                // Trapezoid: the quad must cover the wider of the two ends
+                width = max(width, uValues[instance_index*6+2]);
             } else if (kind == 5u) {
                 // Triangle: compute bounding box from vertices
                 width = max(width, max(uValues[instance_index*6+2], uValues[instance_index*6+4])) * 2.0;

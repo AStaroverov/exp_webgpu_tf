@@ -15,6 +15,7 @@ import {
     caterpillarSetLeft,
     caterpillarSetRight,
     DENSITY,
+    headlightSet,
     hullSet,
     PADDING,
     PARTS_COUNT,
@@ -22,7 +23,7 @@ import {
     turretGunSet,
     turretHeadSet,
 } from './LightTankParts.ts';
-import { EngineType } from '../../../../Config/vehicles.ts';
+import { EngineType, HeadlightConfig } from '../../../../Config/vehicles.ts';
 
 const TRACKS_COLOR = new Float32Array([0.6, 0.6, 0.6, 1]);
 const TURRET_COLOR = new Float32Array([0.6, 1, 0.6, 1]);
@@ -77,6 +78,7 @@ export function createLightTank(opts: {
 
     // Hull parts attached to tank body
     createSlotEntities(tankEid, hullSet, options.color, SlotPartType.HullPart);
+    createSlotEntities(tankEid, headlightSet, HeadlightConfig.color, SlotPartType.Headlight);
 
     // Caterpillar parts attached to track entities
     updateColorOptions(options, TRACKS_COLOR);

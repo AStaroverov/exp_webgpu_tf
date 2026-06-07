@@ -1,10 +1,11 @@
-import { createRectangleSet, PartsData } from '../Common/TankParts.ts';
+import { createHeadlightSet, createRectangleSet, PartsData } from '../Common/TankParts.ts';
 
 export const DENSITY = 300;
 export const SIZE = 6;
 export const PADDING = SIZE + 1;
 
 export const hullSet = createRectangleSet(11, 8, SIZE, PADDING);
+export const headlightSet = createHeadlightSet(11, 8, SIZE, PADDING);
 export const turretHeadSet = createRectangleSet(7, 6, SIZE, PADDING);
 export const turretGunSet = createRectangleSet(7, 2, SIZE, PADDING);
 
@@ -29,5 +30,5 @@ export const caterpillarSetLeft: PartsData[] = caterpillarSet;
 // Right track caterpillar parts (local to right track)
 export const caterpillarSetRight: PartsData[] = caterpillarSet;
 
-export const PARTS_COUNT = hullSet.length + turretHeadSet.length + turretGunSet.length + CATERPILLAR_LINE_COUNT * 2 * 2;
+export const PARTS_COUNT = hullSet.length + headlightSet.length + turretHeadSet.length + turretGunSet.length + CATERPILLAR_LINE_COUNT * 2 * 2;
 
