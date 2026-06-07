@@ -7,6 +7,9 @@ export const MAX_INSTANCE_COUNT = 10_000;
 export const shaderMeta = new ShaderMeta(
     {
         projection: new VariableMeta('uProjection', VariableKind.Uniform, `mat4x4<f32>`),
+        // xy = light direction (pointing from light source, same convention as old LIGHT_DIR),
+        // z = shadow darkness (0 = shadows disabled), w = reserved.
+        sunShadow: new VariableMeta('uSunShadow', VariableKind.Uniform, `vec4<f32>`),
         transform: new VariableMeta('uTransform', VariableKind.StorageRead, `array<mat4x4<f32>, ${ MAX_INSTANCE_COUNT }>`),
 
         // 0: circle, 1: rectangle, 2: rhombus
@@ -43,10 +46,8 @@ export const shaderMeta = new ShaderMeta(
         
         // ============= Shadow Constants =============
         
-        // Light direction constant (normalized, pointing from light source)
-        const LIGHT_DIR: vec2<f32> = vec2<f32>(-0.5, -0.5);
-        // Shadow darkness (0 = invisible, 1 = fully black)
-        const SHADOW_DARKNESS: f32 = 0.4;
+        // Light direction + darkness come from uSunShadow (driven by the RC sun):
+        // uSunShadow.xy = light direction (pointing from light source), .z = darkness.
         // Minimum Z difference to apply shadow
         const SHADOW_Z_THRESHOLD: f32 = 0.01;
         // Visual shadow glow size relative to Z (0.5 = half of shadow offset)
@@ -59,7 +60,7 @@ export const shaderMeta = new ShaderMeta(
         
         // Computes shadow offset in world space based on object height
         fn compute_shadow_offset(z_height: f32) -> vec2<f32> {
-            return -LIGHT_DIR * z_height;
+            return -uSunShadow.xy * z_height;
         }
         
         // Projects world position to clip space with Y-flip
@@ -115,10 +116,12 @@ export const shaderMeta = new ShaderMeta(
             // Load shadow map at current screen position (r32float is unfilterable, use textureLoad)
             let shadow_z = textureLoad(uShadowMap, vec2<i32>(frag_coord.xy), 0).r;
 
-            // Apply shadow if shadow caster is above this object
+            // Apply shadow if shadow caster is above this object.
+            // Light emitters (intensity != 0) never receive baked darkening.
             var final_color = vec4<f32>(color.rgb, color.a * edge);
-            if (shadow_z > object_z + SHADOW_Z_THRESHOLD) {
-                final_color = vec4<f32>(final_color.rgb * (1.0 - SHADOW_DARKNESS), final_color.a);
+            let darkness = uSunShadow.z;
+            if (uIntensity[instance_index] == 0.0 && shadow_z > object_z + SHADOW_Z_THRESHOLD) {
+                final_color = vec4<f32>(final_color.rgb * (1.0 - darkness), final_color.a);
             }
 
             return FragmentOutput(final_color, object_z);
@@ -133,26 +136,26 @@ export const shaderMeta = new ShaderMeta(
             @builtin(instance_index) instance_index: u32
         ) -> VertexOutput {
             let z_height = uTransform[instance_index][3].z;
-            
-            // Skip objects at ground level
-            if (z_height <= SHADOW_Z_THRESHOLD) {
+
+            // Skip objects at ground level and light emitters (they don't cast baked shadows)
+            if (z_height <= SHADOW_Z_THRESHOLD || uIntensity[instance_index] != 0.0) {
                 return VertexOutput(vec4<f32>(0.0), instance_index, vec2<f32>(0.0));
             }
-            
+
             let rect_vertex = compute_rect_vertex(vertex_index, instance_index);
             let position = transform_shadow_vertex(rect_vertex, instance_index, z_height);
-            
+
             return VertexOutput(position, instance_index, rect_vertex);
         }
-        
+
         @fragment
         fn fs_shadow_map(
             @location(0) @interpolate(flat) instance_index: u32,
             @location(1) local_position: vec2<f32>,
         ) -> @location(0) f32 {
             let z_height = uTransform[instance_index][3].z;
-            
-            if (z_height <= SHADOW_Z_THRESHOLD) {
+
+            if (z_height <= SHADOW_Z_THRESHOLD || uIntensity[instance_index] != 0.0) {
                 discard;
             }
             
@@ -251,10 +254,15 @@ export const shaderMeta = new ShaderMeta(
             @builtin(instance_index) instance_index: u32
         ) -> VertexOutput {
             let z_height = uTransform[instance_index][3].z;
-            
+
+            // Light emitters don't cast baked shadows: collapse the quad.
+            if (uIntensity[instance_index] != 0.0) {
+                return VertexOutput(vec4<f32>(0.0), instance_index, vec2<f32>(0.0));
+            }
+
             // Compute glow size from Z - higher objects have larger glow
             let glow_size = z_height * SHADOW_GLOW_RATIO;
-            
+
             let original_vertex = compute_rect_vertex(vertex_index, instance_index);
             let rect_vertex = original_vertex + normalize(original_vertex) * glow_size;
             let position = transform_shadow_vertex(rect_vertex, instance_index, z_height);
@@ -268,18 +276,20 @@ export const shaderMeta = new ShaderMeta(
             @location(1) local_position: vec2<f32>,
         ) -> FragmentOutput {
             let z_height = uTransform[instance_index][3].z;
-           
-            if (z_height <= SHADOW_Z_THRESHOLD) {
+
+            if (z_height <= SHADOW_Z_THRESHOLD || uIntensity[instance_index] != 0.0) {
                 discard;
             }
-            
+
             let glow_size = z_height * SHADOW_GLOW_RATIO;
             let dist = sd_shape(local_position, instance_index);
 
-            // Compute light direction in local space
+            // Compute light direction in local space.
+            // The drop-shadow body lands along -uSunShadow.xy (see transform_shadow_vertex),
+            // so the soft glow must march the same way: along -uSunShadow.xy.
             let transform = uTransform[instance_index];
             let rotation = mat2x2<f32>(transform[0].xy, transform[1].xy);
-            let local_light_dir = normalize(LIGHT_DIR * rotation);
+            let local_light_dir = normalize(-uSunShadow.xy * rotation);
 
             let shadow_intensity = compute_shadow_intensity(local_position, local_light_dir, instance_index);
             let edge_fade = select(1.0, 1.0 - smoothstep(0.0, glow_size, abs(dist)), dist > 0.0);

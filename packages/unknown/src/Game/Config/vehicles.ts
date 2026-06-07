@@ -336,7 +336,7 @@ export const HeadlightConfig = {
 
 /** Ranger searchlight: the turret-mounted beam emitter that replaces the gun. */
 export const SpotlightConfig = {
-    color: new Float32Array([1.0, 0.95, 0.8, 1.0]),
+    color: new Float32Array([1.0, 0.95, 0.8, 0.7]),
     intensity: 2.5,
     directional: true,
 } as const;

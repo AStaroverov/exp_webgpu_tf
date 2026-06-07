@@ -4,6 +4,7 @@ import { GPUShader } from '../../../WGSL/GPUShader.ts';
 import { getTypeTypedArray } from '../../../Shader';
 import { projectionMatrix } from '../ResizeSystem.ts';
 import { createChangeDetector } from '../ChangedDetectorSystem.ts';
+import { SunLight } from '../SunLight.ts';
 import { getRenderComponents, type RenderWorldLike } from '../../world.ts';
 
 export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
@@ -28,8 +29,8 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
             withBlending: false,
             withDepth: false,
             bindGroups: {
-                0: ['projection'],
-                1: ['transform', 'kind', 'values', 'roundness'],
+                0: ['projection', 'sunShadow'],
+                1: ['transform', 'kind', 'values', 'roundness', 'intensity'],
             },
         })
         : null;
@@ -66,6 +67,12 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
     // Emission pass bind groups (cached during pipeline creation)
     const emitBindGroup0 = gpuShader.getBindGroup(device, 0, 'vs_emit', 'fs_emit');
     const emitBindGroup1 = gpuShader.getBindGroup(device, 1, 'vs_emit', 'fs_emit');
+
+    // Baked z-shadows follow the shared SunLight (read each frame, no wiring):
+    // xy = direction toward the sun, scaled by SQRT1_2 to keep the legacy
+    // LIGHT_DIR=(-0.5,-0.5) offset magnitude; z = darkness, w = reserved.
+    const SHADOW_DARKNESS = 0.4;
+    const sunShadowCollect = getTypeTypedArray(shaderMeta.uniforms.sunShadow.type);
 
     const transformCollect = getTypeTypedArray(shaderMeta.uniforms.transform.type);
     const kindCollect = getTypeTypedArray(shaderMeta.uniforms.kind.type);
@@ -123,7 +130,12 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
             }
         }
 
+        sunShadowCollect[0] = Math.cos(SunLight.angle) * Math.SQRT1_2;
+        sunShadowCollect[1] = -Math.sin(SunLight.angle) * Math.SQRT1_2;
+        sunShadowCollect[2] = SunLight.enabled ? SHADOW_DARKNESS : 0;
+
         device.queue.writeBuffer(gpuShader.uniforms.projection.getGPUBuffer(device), 0, projectionMatrix as BufferSource);
+        device.queue.writeBuffer(gpuShader.uniforms.sunShadow.getGPUBuffer(device), 0, sunShadowCollect);
         device.queue.writeBuffer(gpuShader.uniforms.transform.getGPUBuffer(device), 0, transformCollect);
 
         if (countChanged || shapeChanges.hasChanges()) {

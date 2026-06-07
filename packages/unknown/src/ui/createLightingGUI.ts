@@ -1,5 +1,6 @@
 import GUI from 'lil-gui';
 import { RenderDI } from '../Game/DI/RenderDI.ts';
+import { SunLight } from '../../../renderer/src/ECS/Systems/SunLight.ts';
 import { DEFAULT_RC_PARAMS } from '../Game/ECS/Systems/Render/Lighting/createRadianceCascadesSystem.ts';
 
 /**
@@ -24,9 +25,11 @@ export function createLightingGUI({ container, side = 'right' }: {
     }
 
     // The directional source: moon, sun, burning city — whatever the scene calls for.
+    // Direction/on-off live in the shared SunLight singleton — RC and the baked
+    // SDF shadows both read it every frame, so no apply() is needed here.
     const source = gui.addFolder('Light source');
-    source.add(params, 'enableSun').name('enabled').onChange(apply);
-    source.add(params, 'sunAngle', 0, Math.PI * 2, 0.01).name('angle').onChange(apply);
+    source.add(SunLight, 'enabled');
+    source.add(SunLight, 'angle', 0, Math.PI * 2, 0.01);
     source.addColor(params, 'sunColor').name('source color').onChange(apply);
     source.add(params, 'sunIntensity', 0, 5, 0.05).name('source intensity').onChange(apply);
     source.addColor(params, 'skyColor').name('sky color').onChange(apply);

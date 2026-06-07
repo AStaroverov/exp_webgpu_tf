@@ -6,6 +6,7 @@ import { shaderMeta as jfaMeta } from './jfa.shader.ts';
 import { shaderMeta as dfMeta } from './df.shader.ts';
 import { shaderMeta as rcMeta } from './radianceCascades.shader.ts';
 import { shaderMeta as overlayMeta, AMBIENT } from './overlay.shader.ts';
+import { SunLight } from '../../../../../../../renderer/src/ECS/Systems/SunLight.ts';
 
 type RCTextures = ReturnType<typeof createFrameTextures>;
 
@@ -14,8 +15,8 @@ export type RCParams = {
     rayInterval: number,
     intervalOverlap: number,
     srgb: number,
-    enableSun: boolean,
-    sunAngle: number,
+    // Sun direction/on-off live in the shared SunLight (renderer), not here —
+    // the baked SDF shadows read the same source.
     sunColor: [number, number, number],
     sunIntensity: number,
     skyColor: [number, number, number],
@@ -38,8 +39,6 @@ export const DEFAULT_RC_PARAMS: RCParams = {
     rayInterval: 0.25,
     intervalOverlap: 0.5,
     srgb: 1.7,
-    enableSun: true,
-    sunAngle: 3.04,
     sunColor: [1.0, 0.859, 0.161], // #ffdb29
     sunIntensity: 0.1,
     skyColor: [0.075, 0.110, 0.239], // #131c3d
@@ -163,7 +162,7 @@ export function createRadianceCascadesSystem({ device, params, frameTextures, sc
         writeScalar(device, shader, 'intervalOverlap', p.intervalOverlap);
         writeScalar(device, shader, 'srgb', p.srgb);
         writeMisc(device, shader, p);
-        writeScalar(device, shader, 'sunAngle', p.sunAngle);
+        writeScalar(device, shader, 'sunAngle', SunLight.angle);
         // sunIntensity multiplies BOTH moon and sky, so intensity 0 === moonlight off
         // (mix(moon*I, sky*I, m) == I * mix(moon, sky, m)).
         writeVec4(device, shader, 'sunColor', p.sunColor, p.sunIntensity, p.sunDistance);
@@ -211,6 +210,13 @@ export function createRadianceCascadesSystem({ device, params, frameTextures, sc
     }
 
     function run(encoder: GPUCommandEncoder, _delta: number) {
+        // The shared SunLight can change any frame (GUI, day/night scripts) —
+        // re-upload the sun scalars so RC and the baked SDF shadows never diverge.
+        for (const stage of built.cascadeStages) {
+            writeScalar(device, stage.shader, 'sunAngle', SunLight.angle);
+            writeMisc(device, stage.shader, p);
+        }
+
         // Emit pass: emitters (additive) -> emissionTexture, facing dir (replace) -> emitDirTexture
         const emitPass = encoder.beginRenderPass({
             colorAttachments: [
@@ -291,7 +297,7 @@ export function createRadianceCascadesSystem({ device, params, frameTextures, sc
             writeScalar(device, stage.shader, 'srgb', p.srgb);
             // Whole uMisc each call (incl. baked firstCascadeIndex), else live-tuning zeroes it.
             writeMisc(device, stage.shader, p);
-            writeScalar(device, stage.shader, 'sunAngle', p.sunAngle);
+            writeScalar(device, stage.shader, 'sunAngle', SunLight.angle);
             writeVec4(device, stage.shader, 'sunColor', p.sunColor, p.sunIntensity, p.sunDistance);
             writeVec4(device, stage.shader, 'skyColor', p.skyColor, p.sunIntensity, p.skyMix);
         }
@@ -314,7 +320,7 @@ function writeScalar(device: GPUDevice, shader: GPUShader<any>, key: string, val
 function writeMisc(device: GPUDevice, shader: GPUShader<any>, p: RCParams) {
     const buffer = getTypeTypedArray(shader.uniforms['misc'].variable.type);
     buffer[0] = p.firstCascadeIndex;
-    buffer[1] = p.enableSun ? 1 : 0;
+    buffer[1] = SunLight.enabled ? 1 : 0;
     buffer[2] = p.emitCone;
     buffer[3] = 1 - p.objectTranslucency;
     device.queue.writeBuffer(shader.uniforms['misc'].getGPUBuffer(device), 0, buffer);
