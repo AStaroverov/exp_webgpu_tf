@@ -3,11 +3,9 @@ import { wgsl } from '../../../../../../../renderer/src/WGSL/wgsl.ts';
 import { VariableKind, VariableMeta } from '../../../../../../../renderer/src/Struct/VariableMeta.ts';
 
 // Hand-tuned via the Lighting lil-gui panel; the directional source (sunAndSky) is the main light.
+// Single floor for everything: objects are lit for real now (boundary dilation +
+// translucent occluders), so a separate object ambient is no longer needed.
 export const AMBIENT = 0.05;
-// Fill light for object pixels: occluders receive no RC radiance (rays start inside
-// them and immediately hit their own non-emissive surface), so without a separate
-// floor they go pitch black when the ground ambient is lowered.
-export const OBJECT_AMBIENT = 0.1;
 
 export const shaderMeta = new ShaderMeta(
     {
@@ -16,7 +14,6 @@ export const shaderMeta = new ShaderMeta(
         radianceTexture: new VariableMeta('radianceTexture', VariableKind.Texture, `texture_2d<f32>`),
         emissionTexture: new VariableMeta('emissionTexture', VariableKind.Texture, `texture_2d<f32>`),
         ambient: new VariableMeta('uAmbient', VariableKind.Uniform, `f32`),
-        objectAmbient: new VariableMeta('uObjectAmbient', VariableKind.Uniform, `f32`),
         objectLightRadius: new VariableMeta('uObjectLightRadius', VariableKind.Uniform, `f32`),
     },
     {},
@@ -81,8 +78,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     radiance = mix(radiance, dilated, coverage);
   }
 
-  let ambient = mix(uAmbient, uObjectAmbient, coverage);
-  return vec4f(scene.rgb * (ambient + radiance), scene.a);
+  return vec4f(scene.rgb * (uAmbient + radiance), scene.a);
 }
     `,
 );

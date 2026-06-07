@@ -102,7 +102,10 @@ fn raymarch(rayStart: vec2f, rayEnd: vec2f, scale: f32, oneOverSize: vec2f, minS
         sampleLight = vec4f(sampleLight.rgb * pow(max(0.0, dot(-rayDir, f)), uMisc.z), sampleLight.a);
       }
 
-      return sampleLight;
+      // Alpha = hit opacity: per-material (emission.a = 1 - translucency) times
+      // the global opacity (uMisc.w). < 1 lets merge() pull a share of farther
+      // light (upper cascades) through the surface — translucent occluders.
+      return vec4f(sampleLight.rgb, clamp(sampleLight.a, 0.0, 1.0) * uMisc.w);
     }
 
     dist += df * scale;
@@ -125,7 +128,10 @@ fn getUpperCascadeTextureUv(index: f32, offset: vec2f, spacingBase: f32) -> vec2
 }
 
 fn merge(currentRadiance: vec4f, index: f32, position: vec2f, spacingBase: f32, localOffset: vec2f) -> vec4f {
-  if (currentRadiance.a > 0.0 || uCascadeIndex >= max(1.0, uCascadeCount - 1.0)) {
+  // Alpha compositing: a miss (a = 0) passes the upper cascade through fully;
+  // a hit with opacity a < 1 leaks (1 - a) of the farther light — translucency.
+  let through = 1.0 - clamp(currentRadiance.a, 0.0, 1.0);
+  if (through <= 0.0 || uCascadeIndex >= max(1.0, uCascadeCount - 1.0)) {
     return currentRadiance;
   }
 
@@ -135,7 +141,7 @@ fn merge(currentRadiance: vec4f, index: f32, position: vec2f, spacingBase: f32, 
 
   let upperSample = textureSampleLevel(lastTexture, linearSampler, upperProbePosition, 0.0).rgb;
 
-  return currentRadiance + vec4f(upperSample, 1.0);
+  return currentRadiance + vec4f(upperSample * through, through);
 }
 
 @fragment

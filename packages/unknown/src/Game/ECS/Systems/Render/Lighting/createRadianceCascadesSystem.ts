@@ -5,7 +5,7 @@ import { shaderMeta as seedMeta } from './seed.shader.ts';
 import { shaderMeta as jfaMeta } from './jfa.shader.ts';
 import { shaderMeta as dfMeta } from './df.shader.ts';
 import { shaderMeta as rcMeta } from './radianceCascades.shader.ts';
-import { shaderMeta as overlayMeta, AMBIENT, OBJECT_AMBIENT } from './overlay.shader.ts';
+import { shaderMeta as overlayMeta, AMBIENT } from './overlay.shader.ts';
 
 type RCTextures = ReturnType<typeof createFrameTextures>;
 
@@ -24,15 +24,19 @@ export type RCParams = {
     firstCascadeIndex: number,
     emitCone: number,
     ambient: number,
-    objectAmbient: number,
     objectLightRadius: number,
+    /** Global translucency (0 = opaque occluders, 1 = light passes freely);
+     *  multiplies with the per-material Translucency component. */
+    objectTranslucency: number,
 };
 
 // Hand-tuned via the Lighting lil-gui panel (warm directional source over cool night sky).
 export const DEFAULT_RC_PARAMS: RCParams = {
     baseRayCount: 4,
-    rayInterval: 1.9,
-    intervalOverlap: 0.22,
+    // Short intervals: compresses cascade seams toward the source, killing the
+    // concentric ring artifact around small bright emitters (flashes).
+    rayInterval: 0.25,
+    intervalOverlap: 0.5,
     srgb: 1.7,
     enableSun: true,
     sunAngle: 3.04,
@@ -44,9 +48,9 @@ export const DEFAULT_RC_PARAMS: RCParams = {
     firstCascadeIndex: 0,
     emitCone: 8,
     ambient: AMBIENT,
-    objectAmbient: OBJECT_AMBIENT,
     // Boundary-light dilation for object pixels, in radiance texels.
     objectLightRadius: 4,
+    objectTranslucency: 0.5,
 };
 
 export function createRadianceCascadesSystem({ device, params, frameTextures, sceneTexture, drawEmitters }: {
@@ -180,7 +184,6 @@ export function createRadianceCascadesSystem({ device, params, frameTextures, sc
     const overlayPipeline = overlayShader.getRenderPipeline(device, 'vs_main', 'fs_main', { targetFormat: 'bgra8unorm', withBlending: false });
     const overlayBindGroup = overlayShader.getBindGroup(device, 0);
     writeScalar(device, overlayShader, 'ambient', p.ambient);
-    writeScalar(device, overlayShader, 'objectAmbient', p.objectAmbient);
     writeScalar(device, overlayShader, 'objectLightRadius', p.objectLightRadius);
 
     return { seedShader, seedPipeline, seedBindGroup, jfaStages, dfShader, dfPipeline, dfBindGroup, cascadeStages, overlayShader, overlayPipeline, overlayBindGroup };
@@ -280,8 +283,6 @@ export function createRadianceCascadesSystem({ device, params, frameTextures, sc
         destroyTextures();
     }
 
-    // Live-update tunable params (lil-gui): rewrites uniform buffers on all built stages.
-    // queue.writeBuffer lands before the next submit, so values apply next frame.
     function setParams(partial: Partial<RCParams>) {
         Object.assign(p, partial);
         for (const stage of built.cascadeStages) {
@@ -295,7 +296,6 @@ export function createRadianceCascadesSystem({ device, params, frameTextures, sc
             writeVec4(device, stage.shader, 'skyColor', p.skyColor, p.sunIntensity, p.skyMix);
         }
         writeScalar(device, built.overlayShader, 'ambient', p.ambient);
-        writeScalar(device, built.overlayShader, 'objectAmbient', p.objectAmbient);
         writeScalar(device, built.overlayShader, 'objectLightRadius', p.objectLightRadius);
     }
 
@@ -309,13 +309,14 @@ function writeScalar(device: GPUDevice, shader: GPUShader<any>, key: string, val
 }
 
 // uMisc packs four independent scalars: .x = firstCascadeIndex, .y = enableSun,
-// .z = emitCone, .w = reserved. (writeVec4's rgb*mult+w shape does not fit here.)
+// .z = emitCone, .w = hit opacity (1 - objectTranslucency).
+// (writeVec4's rgb*mult+w shape does not fit here.)
 function writeMisc(device: GPUDevice, shader: GPUShader<any>, p: RCParams) {
     const buffer = getTypeTypedArray(shader.uniforms['misc'].variable.type);
     buffer[0] = p.firstCascadeIndex;
     buffer[1] = p.enableSun ? 1 : 0;
     buffer[2] = p.emitCone;
-    buffer[3] = 0;
+    buffer[3] = 1 - p.objectTranslucency;
     device.queue.writeBuffer(shader.uniforms['misc'].getGPUBuffer(device), 0, buffer);
 }
 

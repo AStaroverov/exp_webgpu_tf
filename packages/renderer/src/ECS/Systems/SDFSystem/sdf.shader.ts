@@ -15,6 +15,7 @@ export const shaderMeta = new ShaderMeta(
         values: new VariableMeta('uValues', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT * 6 }>`),
         roundness: new VariableMeta('uRoundness', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT }>`),
         intensity: new VariableMeta('uIntensity', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT }>`),
+        translucency: new VariableMeta('uTranslucency', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT }>`),
 
         // Note: r32float is unfilterable, so we use textureLoad instead of textureSample
         // Put in separate group (2) so it can be excluded from shadow map pass
@@ -218,8 +219,12 @@ export const shaderMeta = new ShaderMeta(
                 dir = normalize(vec2<f32>(t[0].x, t[0].y));
             }
 
+            // Alpha = per-material opacity (1 - translucency); the RC raymarch uses
+            // it to let a share of farther light through translucent surfaces.
+            let opacity = 1.0 - clamp(uTranslucency[instance_index], 0.0, 1.0);
+
             return EmitOutput(
-                vec4<f32>(uColor[instance_index].rgb * abs(intensity), 1.0),
+                vec4<f32>(uColor[instance_index].rgb * abs(intensity), opacity),
                 dir,
             );
         }

@@ -11,7 +11,7 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
     device: GPUDevice,
     shadowMapTexture: GPUTexture,
 }) {
-    const { Color, GlobalTransform, LightEmitter, Roundness, Shape } = getRenderComponents(world);
+    const { Color, GlobalTransform, LightEmitter, Roundness, Shape, Translucency } = getRenderComponents(world);
     const gpuShader = new GPUShader(shaderMeta);
     
     // Set shadow map texture on shader meta before creating bind groups
@@ -50,7 +50,7 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
         withDepth: false,
         bindGroups: {
             0: ['projection'],
-            1: ['transform', 'kind', 'color', 'values', 'roundness', 'intensity'],
+            1: ['transform', 'kind', 'color', 'values', 'roundness', 'intensity', 'translucency'],
         },
     });
     
@@ -73,10 +73,12 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
     const valuesCollect = getTypeTypedArray(shaderMeta.uniforms.values.type);
     const roundnessCollect = getTypeTypedArray(shaderMeta.uniforms.roundness.type);
     const intensityCollect = getTypeTypedArray(shaderMeta.uniforms.intensity.type);
+    const translucencyCollect = getTypeTypedArray(shaderMeta.uniforms.translucency.type);
 
     const shapeChanges = createChangeDetector(world, [onAdd(Shape), onSet(Shape)]);
     const colorChanges = createChangeDetector(world, [onAdd(Color), onSet(Color)]);
     const roundnessChanges = createChangeDetector(world, [onAdd(Roundness), onSet(Roundness)]);
+    const translucencyChanges = createChangeDetector(world, [onAdd(Translucency), onSet(Translucency)]);
     const intensityChanges = createChangeDetector(world, [onAdd(LightEmitter), onSet(LightEmitter)]);
     let prevEntityCount = 0;
     
@@ -109,6 +111,10 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
             if (countChanged || intensityChanges.hasChanges()) {
                 intensityCollect[i] = hasComponent(world, id, LightEmitter) ? LightEmitter.intensity[id] : 0;
             }
+
+            if (countChanged || translucencyChanges.hasChanges()) {
+                translucencyCollect[i] = hasComponent(world, id, Translucency) ? Translucency.value[id] : 0;
+            }
         }
 
         device.queue.writeBuffer(gpuShader.uniforms.projection.getGPUBuffer(device), 0, projectionMatrix as BufferSource);
@@ -129,6 +135,10 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
 
         if (countChanged || intensityChanges.hasChanges()) {
             device.queue.writeBuffer(gpuShader.uniforms.intensity.getGPUBuffer(device), 0, intensityCollect);
+        }
+
+        if (countChanged || translucencyChanges.hasChanges()) {
+            device.queue.writeBuffer(gpuShader.uniforms.translucency.getGPUBuffer(device), 0, translucencyCollect);
         }
 
         return entities.length;
@@ -156,6 +166,7 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
         colorChanges.clear();
         roundnessChanges.clear();
         intensityChanges.clear();
+        translucencyChanges.clear();
     }
 
     // Shadow map pass - renders shadow silhouettes with Z height

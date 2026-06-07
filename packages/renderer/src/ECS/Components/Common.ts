@@ -31,6 +31,22 @@ export const createRoundnessComponent = defineComponent((Roundness, obs) => {
     };
 });
 
+// Per-material light translucency for the RC lighting (0 = opaque occluder,
+// 1 = light passes through freely). Entities without the component use 0.
+export const createTranslucencyComponent = defineComponent((Translucency, obs) => {
+    const value = new Float64Array(delegate.defaultSize);
+    return {
+        value,
+        addComponent(world: World, eid: number, v = 0) {
+            addComponent(world, eid, Translucency);
+            value[eid] = v;
+        },
+        set$: obs((eid: number, v: number) => {
+            value[eid] = v;
+        }),
+    };
+});
+
 export const createLightEmitterComponent = defineComponent((LightEmitter, obs) => {
     const intensity = TypedArray.f64(delegate.defaultSize);
     const radius = TypedArray.f64(delegate.defaultSize);
