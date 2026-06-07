@@ -102,9 +102,6 @@ export function createRanger(opts: {
     fillAllSlots(rightTrackEid, options);
 
     // Searchlight beam attached to the turret (directional light emitter).
-    // Created AFTER the hull/track parts but BEFORE the turret head parts:
-    // the SDF pass layers same-depth shapes by draw (creation) order, so this
-    // puts the beam on top of the hull yet under the turret.
     createTurretHeadlight(turretEid, {
         startX: PADDING * 2,
         startY: 0,
