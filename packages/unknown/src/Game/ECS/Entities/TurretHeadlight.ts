@@ -48,7 +48,8 @@ export function createTurretHeadlight(
 
     Shape.addComponent(world, eid, ShapeKind.Trapezoid, beam.nearWidth, beam.length, beam.farWidth);
     Color.addComponent(world, eid, ...HeadlightConfig.color);
-    LightEmitter.addComponent(world, eid, HeadlightConfig.intensity);
+    LightEmitter.addComponent(world, eid,
+        HeadlightConfig.directional ? -HeadlightConfig.intensity : HeadlightConfig.intensity);
 
     addTransformComponents(world, eid);
     Parent.addComponent(world, eid, turretEid);

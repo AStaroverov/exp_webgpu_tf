@@ -37,6 +37,7 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
             targetFormat?: GPUTextureFormat,
             withBlending?: boolean,
             blend?: 'alpha' | 'additive',
+            targets?: { format: GPUTextureFormat, blend?: 'alpha' | 'additive' | 'none' }[],
             autoLayout?: boolean,
             /** For autoLayout pipelines: specify which uniforms to include in each bind group */
             bindGroups?: Record<number, (keyof M['uniforms'])[]>,
@@ -48,8 +49,42 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
         const blend = options?.blend ?? 'alpha';
         const autoLayout = options?.autoLayout ?? false;
         const bindGroups = options?.bindGroups;
+
+        const targets: { format: GPUTextureFormat, blend: 'alpha' | 'additive' | 'none' }[] =
+            options?.targets?.map((t) => ({ format: t.format, blend: t.blend ?? 'alpha' }))
+            ?? [{ format: targetFormat, blend: withBlending ? blend : 'none' }];
+
+        const makeBlend = (mode: 'alpha' | 'additive' | 'none'): GPUBlendState | undefined => {
+            if (mode === 'none') return undefined;
+            if (mode === 'additive') return {
+                color: {
+                    srcFactor: 'one',
+                    dstFactor: 'one',
+                    operation: 'add',
+                },
+                alpha: {
+                    srcFactor: 'one',
+                    dstFactor: 'one',
+                    operation: 'add',
+                },
+            };
+            return {
+                color: {
+                    srcFactor: 'src-alpha',
+                    dstFactor: 'one-minus-src-alpha',
+                    operation: 'add',
+                },
+                alpha: {
+                    srcFactor: 'one',
+                    dstFactor: 'one-minus-src-alpha',
+                    operation: 'add',
+                },
+            };
+        };
+
         const pipelineKey = `${ vertexName }-${ fragmentName }`;
-        const key = `${ pipelineKey }-${ withDepth }-${ targetFormat }-${ withBlending }-${ blend }-${ autoLayout }`;
+        const targetsKey = targets.map((t) => `${ t.format }:${ t.blend }`).join(',');
+        const key = `${ pipelineKey }-${ withDepth }-${ targetsKey }-${ autoLayout }`;
         const shaderModule = options?.shaderModule ?? this.getShaderModule(device);
 
         if (!this.mapRenderPipeline.has(key)) {
@@ -65,34 +100,10 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
                 fragment: {
                     module: shaderModule,
                     entryPoint: fragmentName,
-                    targets: [
-                        {
-                            format: targetFormat,
-                            blend: withBlending ? (blend === 'additive' ? {
-                                color: {
-                                    srcFactor: 'one',
-                                    dstFactor: 'one',
-                                    operation: 'add',
-                                },
-                                alpha: {
-                                    srcFactor: 'one',
-                                    dstFactor: 'one',
-                                    operation: 'add',
-                                },
-                            } : {
-                                color: {
-                                    srcFactor: 'src-alpha',
-                                    dstFactor: 'one-minus-src-alpha',
-                                    operation: 'add',
-                                },
-                                alpha: {
-                                    srcFactor: 'one',
-                                    dstFactor: 'one-minus-src-alpha',
-                                    operation: 'add',
-                                },
-                            }) : undefined,
-                        },
-                    ],
+                    targets: targets.map((t) => ({
+                        format: t.format,
+                        blend: makeBlend(t.blend),
+                    })),
                 },
                 depthStencil: withDepth ? {
                     format: 'depth32float',

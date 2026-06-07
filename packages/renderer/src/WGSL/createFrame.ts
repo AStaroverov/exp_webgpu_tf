@@ -38,6 +38,14 @@ export function createRCTextures(device: GPUDevice, canvas: HTMLCanvasElement) {
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
 
+    // Per-emitter facing direction (normalized, Y-flipped) for directional cones.
+    // (0,0) means omni; written by the emit pass as a second color attachment.
+    const emitDirTexture = device.createTexture({
+        size: [rcW, rcH, 1],
+        format: 'rg16float',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+
     const seedA = device.createTexture({
         size: [rcW, rcH, 1],
         format: 'rg16float',
@@ -74,7 +82,7 @@ export function createRCTextures(device: GPUDevice, canvas: HTMLCanvasElement) {
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
 
-    return { emissionTexture, seedA, seedB, dfTexture, cascA, cascB, litTexture };
+    return { emissionTexture, emitDirTexture, seedA, seedB, dfTexture, cascA, cascB, litTexture };
 }
 
 export function createFrameTick(

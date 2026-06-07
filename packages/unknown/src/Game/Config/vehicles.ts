@@ -330,4 +330,5 @@ export function getTankConfig(type: VehicleType): TankStats | undefined {
 export const HeadlightConfig = {
     color:  new Float32Array([1.0, 1.0, 1.0, 1.0]),
     intensity: 1.2,
+    directional: true,
 } as const;

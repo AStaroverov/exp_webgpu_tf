@@ -170,7 +170,8 @@ export function fillSlot(
     }
 
     if (partType === SlotPartType.Headlight) {
-        LightEmitter.addComponent(world, eid, HeadlightConfig.intensity);
+        LightEmitter.addComponent(world, eid,
+            HeadlightConfig.directional ? -HeadlightConfig.intensity : HeadlightConfig.intensity);
     }
 }
 

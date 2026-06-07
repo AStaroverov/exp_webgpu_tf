@@ -10,6 +10,7 @@ export const shaderMeta = new ShaderMeta(
         sceneTexture: new VariableMeta('sceneTexture', VariableKind.Texture, `texture_2d<f32>`),
         distanceTexture: new VariableMeta('distanceTexture', VariableKind.Texture, `texture_2d<f32>`),
         lastTexture: new VariableMeta('lastTexture', VariableKind.Texture, `texture_2d<f32>`),
+        emitDirTexture: new VariableMeta('emitDirTexture', VariableKind.Texture, `texture_2d<f32>`),
         resolution: new VariableMeta('uResolution', VariableKind.Uniform, `vec2<f32>`),
         cascadeCount: new VariableMeta('uCascadeCount', VariableKind.Uniform, `f32`),
         cascadeIndex: new VariableMeta('uCascadeIndex', VariableKind.Uniform, `f32`),
@@ -17,11 +18,8 @@ export const shaderMeta = new ShaderMeta(
         rayInterval: new VariableMeta('uRayInterval', VariableKind.Uniform, `f32`),
         intervalOverlap: new VariableMeta('uIntervalOverlap', VariableKind.Uniform, `f32`),
         srgb: new VariableMeta('uSrgb', VariableKind.Uniform, `f32`),
-        firstCascadeIndex: new VariableMeta('uFirstCascadeIndex', VariableKind.Uniform, `f32`),
-        enableSun: new VariableMeta('uEnableSun', VariableKind.Uniform, `f32`),
+        misc: new VariableMeta('uMisc', VariableKind.Uniform, `vec4<f32>`),
         sunAngle: new VariableMeta('uSunAngle', VariableKind.Uniform, `f32`),
-        // Packed to stay under the 12 uniform-buffers-per-stage WebGPU limit:
-        // rgb = color, w = sunDistance / skyMix.
         sunColor: new VariableMeta('uSunColor', VariableKind.Uniform, `vec4<f32>`),
         skyColor: new VariableMeta('uSkyColor', VariableKind.Uniform, `vec4<f32>`),
     },
@@ -93,6 +91,17 @@ fn raymarch(rayStart: vec2f, rayEnd: vec2f, scale: f32, oneOverSize: vec2f, minS
     if (df <= minStepSize) {
       var sampleLight = textureSampleLevel(sceneTexture, linearSampler, rayUv, 0.0);
       sampleLight = vec4f(pow(sampleLight.rgb, vec3f(uSrgb)), sampleLight.a);
+
+      // Directional emitter cone. textureLoad (NEAREST, no sampler) avoids blending
+      // the unit facing with cleared (0,0) at emitter edges. length > 0.5 classifies
+      // directional vs omni ((0,0)). Light travels emitter->receiver, i.e. -rayDir.
+      let dirTexel = vec2<i32>(rayUv * uResolution);
+      let emitDir  = textureLoad(emitDirTexture, dirTexel, 0).xy;
+      if (length(emitDir) > 0.5) {
+        let f = normalize(emitDir);
+        sampleLight = vec4f(sampleLight.rgb * pow(max(0.0, dot(-rayDir, f)), uMisc.z), sampleLight.a);
+      }
+
       return sampleLight;
     }
 
@@ -176,7 +185,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let raymarched = raymarch(rayStart, rayEnd, scale, oneOverSize, minStepSize);
     var mergedRadiance = merge(raymarched, index, probeRelativePosition, spacingBase, vec2f(0.5));
 
-    if (uEnableSun > 0.5 && uCascadeIndex == uCascadeCount - 1.0) {
+    if (uMisc.y > 0.5 && uCascadeIndex == uCascadeCount - 1.0) {
       mergedRadiance = vec4f(max(sunAndSky(angle), mergedRadiance.rgb), mergedRadiance.a);
     }
 
@@ -186,7 +195,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let result = select(
     pow(totalRadiance.rgb, vec3f(1.0 / uSrgb)),
     totalRadiance.rgb,
-    uCascadeIndex > uFirstCascadeIndex
+    uCascadeIndex > uMisc.x
   );
 
   return vec4f(result, 1.0);

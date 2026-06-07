@@ -40,12 +40,14 @@ export function createDrawShapeSystem({ device, world, shadowMapTexture }: {
     // Main shape pipeline
     const pipelineSdf = gpuShader.getRenderPipeline(device, 'vs_main', 'fs_main', { withDepth: true });
 
-    // Emission pipeline (rgba16float, additive blend, no depth)
+    // Emission pipeline: color (rgba16float, additive) + facing dir (rg16float, replace), no depth
     const pipelineEmit = gpuShader.getRenderPipeline(device, 'vs_emit', 'fs_emit', {
-        targetFormat: 'rgba16float',
+        targets: [
+            { format: 'rgba16float', blend: 'additive' },
+            { format: 'rg16float', blend: 'none' },
+        ],
         autoLayout: true,
         withDepth: false,
-        blend: 'additive',
         bindGroups: {
             0: ['projection'],
             1: ['transform', 'kind', 'color', 'values', 'roundness', 'intensity'],

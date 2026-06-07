@@ -17,6 +17,7 @@ export const shaderMeta = new ShaderMeta(
         emissionTexture: new VariableMeta('emissionTexture', VariableKind.Texture, `texture_2d<f32>`),
         ambient: new VariableMeta('uAmbient', VariableKind.Uniform, `f32`),
         objectAmbient: new VariableMeta('uObjectAmbient', VariableKind.Uniform, `f32`),
+        objectLightRadius: new VariableMeta('uObjectLightRadius', VariableKind.Uniform, `f32`),
     },
     {},
     // language=WGSL
@@ -51,12 +52,35 @@ fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {var output:
   return output;
 }
 
+// 8-tap ring used to pull boundary light onto object pixels (occluders receive
+// no RC radiance themselves — rays inside them immediately hit their own surface).
+const DIR_COUNT = 8u;
+const TAP_DIRS = array<vec2f, 8>(
+    vec2f(1.0, 0.0), vec2f(0.7071, 0.7071),
+    vec2f(0.0, 1.0), vec2f(-0.7071, 0.7071),
+    vec2f(-1.0, 0.0), vec2f(-0.7071, -0.7071),
+    vec2f(0.0, -1.0), vec2f(0.7071, -0.7071)
+);
+
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let scene = textureSample(sceneTexture, textureSampler, input.texCoord);
-  let radiance = textureSample(radianceTexture, textureSampler, input.texCoord).rgb;
+  var radiance = textureSample(radianceTexture, textureSampler, input.texCoord).rgb;
   // Coverage = object pixel (occluder/emitter); linear sampler softens the edge.
   let coverage = clamp(textureSample(emissionTexture, textureSampler, input.texCoord).a, 0.0, 1.0);
+
+  // Object pixels: pull light from the boundary (dilated radiance). The max over
+  // the ring keeps the light-facing side brighter than the shadow side.
+  if (coverage > 0.0 && uObjectLightRadius > 0.0) {
+    let texel = uObjectLightRadius / vec2f(textureDimensions(radianceTexture));
+    var dilated = radiance;
+    for (var i = 0u; i < DIR_COUNT; i = i + 1u) {
+      let tap = textureSampleLevel(radianceTexture, textureSampler, input.texCoord + TAP_DIRS[i] * texel, 0.0).rgb;
+      dilated = max(dilated, tap);
+    }
+    radiance = mix(radiance, dilated, coverage);
+  }
+
   let ambient = mix(uAmbient, uObjectAmbient, coverage);
   return vec4f(scene.rgb * (ambient + radiance), scene.a);
 }

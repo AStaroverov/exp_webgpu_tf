@@ -163,6 +163,12 @@ export const shaderMeta = new ShaderMeta(
         // ============= Emission Pass =============
         // Renders emitters as premultiplied HDR color into the emission texture.
         // Occluders (intensity == 0) output RGB = 0, A = 1 (coverage only).
+        // Second attachment carries the emitter facing direction (M2: always (0,0)).
+
+        struct EmitOutput {
+            @location(0) color: vec4<f32>,
+            @location(1) dir:   vec2<f32>,
+        };
 
         @vertex
         fn vs_emit(
@@ -184,7 +190,7 @@ export const shaderMeta = new ShaderMeta(
         fn fs_emit(
             @location(0) @interpolate(flat) instance_index: u32,
             @location(1) local_position: vec2<f32>,
-        ) -> @location(0) vec4<f32> {
+        ) -> EmitOutput {
             let dist = sd_shape(local_position, instance_index);
 
             if (dist > 0.0) {
@@ -200,7 +206,22 @@ export const shaderMeta = new ShaderMeta(
                 discard;
             }
 
-            return vec4<f32>(uColor[instance_index].rgb * intensity, 1.0);
+            // Sign of intensity encodes the directional flag: negative = directional,
+            // non-negative = omni (write (0,0)).
+            // Color always uses abs() so the flag never darkens the emitter.
+            // Facing = world +X axis of the instance, taken AS IS: the vertex Y-flip
+            // ((x, -y) after projection) cancels against the NDC->texture V flip, so
+            // world +Y maps to texture +V and directions need no sign change.
+            var dir = vec2<f32>(0.0);
+            if (intensity < 0.0) {
+                let t = uTransform[instance_index];
+                dir = normalize(vec2<f32>(t[0].x, t[0].y));
+            }
+
+            return EmitOutput(
+                vec4<f32>(uColor[instance_index].rgb * abs(intensity), 1.0),
+                dir,
+            );
         }
 
         // ============= Visual Shadow Pass =============

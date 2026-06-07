@@ -36,7 +36,9 @@ export function createLightingGUI({ container, side = 'right' }: {
     const mix = gui.addFolder('Mix');
     mix.add(params, 'ambient', 0, 1, 0.01).name('ambient (ground)').onChange(apply);
     mix.add(params, 'objectAmbient', 0, 1, 0.01).name('ambient (objects)').onChange(apply);
+    mix.add(params, 'objectLightRadius', 0, 12, 0.5).name('object light radius').onChange(apply);
     mix.add(params, 'srgb', 1, 2.6, 0.05).onChange(apply);
+    mix.add(params, 'emitCone', 0, 64, 1).name('emit cone').onChange(apply);
 
     const rays = gui.addFolder('Rays');
     rays.add(params, 'rayInterval', 0.25, 4, 0.05).onChange(apply);

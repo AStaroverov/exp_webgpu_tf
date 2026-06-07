@@ -22,8 +22,10 @@ export type RCParams = {
     skyMix: number,
     sunDistance: number,
     firstCascadeIndex: number,
+    emitCone: number,
     ambient: number,
     objectAmbient: number,
+    objectLightRadius: number,
 };
 
 // Hand-tuned via the Lighting lil-gui panel (warm directional source over cool night sky).
@@ -40,8 +42,11 @@ export const DEFAULT_RC_PARAMS: RCParams = {
     skyMix: 0.32,
     sunDistance: 0.65,
     firstCascadeIndex: 0,
+    emitCone: 8,
     ambient: AMBIENT,
     objectAmbient: OBJECT_AMBIENT,
+    // Boundary-light dilation for object pixels, in radiance texels.
+    objectLightRadius: 4,
 };
 
 export function createRadianceCascadesSystem({ device, params, frameTextures, sceneTexture, drawEmitters }: {
@@ -66,6 +71,7 @@ export function createRadianceCascadesSystem({ device, params, frameTextures, sc
     // RC-owned textures (recreated on resize). The litTexture is canvas-sized.
     let rcTextures = {
         emissionTexture: frameTextures.emissionTexture,
+        emitDirTexture: frameTextures.emitDirTexture,
         seedA: frameTextures.seedA,
         seedB: frameTextures.seedB,
         dfTexture: frameTextures.dfTexture,
@@ -137,6 +143,8 @@ export function createRadianceCascadesSystem({ device, params, frameTextures, sc
         rcMeta.uniforms.sceneTexture.setTexture(rcTextures.emissionTexture);
         rcMeta.uniforms.distanceTexture.setTexture(rcTextures.dfTexture);
         rcMeta.uniforms.lastTexture.setTexture(last);
+        // Must be set BEFORE getBindGroup, else the bind-group snapshots an unset texture.
+        rcMeta.uniforms.emitDirTexture.setTexture(rcTextures.emitDirTexture);
         const shader = new GPUShader(rcMeta);
         const pipeline = shader.getRenderPipeline(device, 'vs_main', 'fs_main', { targetFormat: 'rgba16float', withBlending: false });
         const bindGroup = shader.getBindGroup(device, 0);
@@ -150,8 +158,7 @@ export function createRadianceCascadesSystem({ device, params, frameTextures, sc
         writeScalar(device, shader, 'rayInterval', p.rayInterval);
         writeScalar(device, shader, 'intervalOverlap', p.intervalOverlap);
         writeScalar(device, shader, 'srgb', p.srgb);
-        writeScalar(device, shader, 'firstCascadeIndex', p.firstCascadeIndex);
-        writeScalar(device, shader, 'enableSun', p.enableSun ? 1 : 0);
+        writeMisc(device, shader, p);
         writeScalar(device, shader, 'sunAngle', p.sunAngle);
         // sunIntensity multiplies BOTH moon and sky, so intensity 0 === moonlight off
         // (mix(moon*I, sky*I, m) == I * mix(moon, sky, m)).
@@ -174,6 +181,7 @@ export function createRadianceCascadesSystem({ device, params, frameTextures, sc
     const overlayBindGroup = overlayShader.getBindGroup(device, 0);
     writeScalar(device, overlayShader, 'ambient', p.ambient);
     writeScalar(device, overlayShader, 'objectAmbient', p.objectAmbient);
+    writeScalar(device, overlayShader, 'objectLightRadius', p.objectLightRadius);
 
     return { seedShader, seedPipeline, seedBindGroup, jfaStages, dfShader, dfPipeline, dfBindGroup, cascadeStages, overlayShader, overlayPipeline, overlayBindGroup };
     }
@@ -200,14 +208,22 @@ export function createRadianceCascadesSystem({ device, params, frameTextures, sc
     }
 
     function run(encoder: GPUCommandEncoder, _delta: number) {
-        // Emit pass: emitters (additive) -> emissionTexture
+        // Emit pass: emitters (additive) -> emissionTexture, facing dir (replace) -> emitDirTexture
         const emitPass = encoder.beginRenderPass({
-            colorAttachments: [{
-                view: rcTextures.emissionTexture.createView(),
-                clearValue: [0, 0, 0, 0],
-                loadOp: 'clear',
-                storeOp: 'store',
-            }],
+            colorAttachments: [
+                {
+                    view: rcTextures.emissionTexture.createView(),
+                    clearValue: [0, 0, 0, 0],
+                    loadOp: 'clear',
+                    storeOp: 'store',
+                },
+                {
+                    view: rcTextures.emitDirTexture.createView(),
+                    clearValue: [0, 0, 0, 0],
+                    loadOp: 'clear',
+                    storeOp: 'store',
+                },
+            ],
         });
         drawEmitters(emitPass);
         emitPass.end();
@@ -242,6 +258,7 @@ export function createRadianceCascadesSystem({ device, params, frameTextures, sc
 
     function destroyTextures() {
         rcTextures.emissionTexture.destroy();
+        rcTextures.emitDirTexture.destroy();
         rcTextures.seedA.destroy();
         rcTextures.seedB.destroy();
         rcTextures.dfTexture.destroy();
@@ -271,13 +288,15 @@ export function createRadianceCascadesSystem({ device, params, frameTextures, sc
             writeScalar(device, stage.shader, 'rayInterval', p.rayInterval);
             writeScalar(device, stage.shader, 'intervalOverlap', p.intervalOverlap);
             writeScalar(device, stage.shader, 'srgb', p.srgb);
-            writeScalar(device, stage.shader, 'enableSun', p.enableSun ? 1 : 0);
+            // Whole uMisc each call (incl. baked firstCascadeIndex), else live-tuning zeroes it.
+            writeMisc(device, stage.shader, p);
             writeScalar(device, stage.shader, 'sunAngle', p.sunAngle);
             writeVec4(device, stage.shader, 'sunColor', p.sunColor, p.sunIntensity, p.sunDistance);
             writeVec4(device, stage.shader, 'skyColor', p.skyColor, p.sunIntensity, p.skyMix);
         }
         writeScalar(device, built.overlayShader, 'ambient', p.ambient);
         writeScalar(device, built.overlayShader, 'objectAmbient', p.objectAmbient);
+        writeScalar(device, built.overlayShader, 'objectLightRadius', p.objectLightRadius);
     }
 
     return { run, recreate, destroy, setParams, params: p, get outputTexture() { return rcTextures.litTexture; } };
@@ -287,6 +306,17 @@ function writeScalar(device: GPUDevice, shader: GPUShader<any>, key: string, val
     const buffer = getTypeTypedArray(shader.uniforms[key].variable.type);
     buffer[0] = value;
     device.queue.writeBuffer(shader.uniforms[key].getGPUBuffer(device), 0, buffer);
+}
+
+// uMisc packs four independent scalars: .x = firstCascadeIndex, .y = enableSun,
+// .z = emitCone, .w = reserved. (writeVec4's rgb*mult+w shape does not fit here.)
+function writeMisc(device: GPUDevice, shader: GPUShader<any>, p: RCParams) {
+    const buffer = getTypeTypedArray(shader.uniforms['misc'].variable.type);
+    buffer[0] = p.firstCascadeIndex;
+    buffer[1] = p.enableSun ? 1 : 0;
+    buffer[2] = p.emitCone;
+    buffer[3] = 0;
+    device.queue.writeBuffer(shader.uniforms['misc'].getGPUBuffer(device), 0, buffer);
 }
 
 // rgb * mult into .xyz, `w` packs an extra scalar (sunDistance / skyMix).
