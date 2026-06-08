@@ -5,9 +5,8 @@
  * world a `ScenarioConfig` describes — team sizes plus how the enemy team (team 1)
  * behaves (see `scenarioCompositions`). Team 0 is always the learning policy. Steps:
  *   1. createGame headless (no render target).
- *   2. spawn `allies` + `enemies` units on distinct passable cells: each team of 2+
- *      gets one Ranger scout (searchlight, no gun — exercises the spotting channels),
- *      the rest a random class (Light/Medium/Heavy — class is read from the units vector).
+ *   2. spawn `allies` + `enemies` units on distinct passable cells, each a random
+ *      class (Light/Medium/Heavy — class is read from the units vector).
  *   3. drive team 0 (and team 1 under self-play) with a learning UnknownAgent;
  *      drive standing/moving enemies with a scripted RandomBot (both fire
  *      sporadically, standing just doesn't move); drive frozen enemies with a
@@ -27,7 +26,6 @@ import { PluginDI } from '../../../unknown/src/Game/DI/PluginDI.ts';
 import { SystemGroup } from '../../../unknown/src/Game/ECS/Plugins/systems.ts';
 import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld.ts';
 import { createTank } from '../../../unknown/src/Game/ECS/Entities/Tank/createTank.ts';
-import { createRanger } from '../../../unknown/src/Game/ECS/Entities/Tank/Ranger/Ranger.ts';
 import { spawnObstacles } from '../../../unknown/src/Game/ECS/Entities/Obstacle/spawnObstacles.ts';
 import { VehicleType } from '../../../unknown/src/Game/Config/index.ts';
 import { getTankHealth, getTankTeamId } from '../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts';
@@ -107,7 +105,6 @@ export function createUnknownScenario(options: {
             const pos = MapDI.grid.hexToWorld(cell.q, cell.r);
             if (!pos) continue;
 
-            const isRanger = n === 0 && teamSizes[team] >= 2;
             const spawn = {
                 playerId,
                 teamId: team,
@@ -116,15 +113,13 @@ export function createUnknownScenario(options: {
                 rotation: Math.random() * Math.PI * 2,
                 color: new Float32Array(TEAM_COLORS[team % TEAM_COLORS.length]),
             };
-            const tankEid = isRanger
-                ? createRanger(spawn)
-                : createTank({ ...spawn, type: TANK_TYPES[randomRangeInt(0, TANK_TYPES.length - 1)] });
+            const tankEid = createTank({ ...spawn, type: TANK_TYPES[randomRangeInt(0, TANK_TYPES.length - 1)] });
             VehicleController.setMove$(tankEid, 0);
             VehicleController.setRotate$(tankEid, 0);
 
             const isEnemy = team !== 0;
             if (isEnemy && enemy === 'standing') {
-                // Holds position but occasionally fires (a gunless Ranger just no-ops it).
+                // Holds position but occasionally fires.
                 driverMap.set(tankEid, new RandomBot(tankEid, STANDING_BOT));
                 continue;
             }

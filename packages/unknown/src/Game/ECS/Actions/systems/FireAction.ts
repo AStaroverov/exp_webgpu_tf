@@ -20,8 +20,6 @@ import { MapDI } from '../../../DI/MapDI.ts';
 import { normalizeAngle } from '../../../../../../../lib/math.ts';
 import { getGameComponents } from '../../createGameWorld.ts';
 import { OccupantKind } from '../../../Map/HexGrid.ts';
-import { VehicleType } from '../../Components/Vehicle.ts';
-import { activateBeam } from '../../Entities/Beam.ts';
 import { ActionDescriptor, encodeTarget } from '../ActionDescriptor.ts';
 import { ActionHexTargetSpec, ActionKind, ActionStatus } from '../ActionTypes.ts';
 import {
@@ -104,13 +102,8 @@ export function createFireActionSystem({ world } = GameDI) {
 
                 if (Math.abs(err) <= TOLERANCE) {
                     TurretController.setRotation$(turretEid, 0);
-                    if (Vehicle.type[ownerEid] === VehicleType.Ranger) {
-                        activateBeam(ownerEid);
-                        ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
-                    } else {
-                        // Gun tank → wait for the weapon, then fire a round.
-                        ActionsQueue.setParam(ownerEid, 0, FireParamOffset.phase, FIRE_PHASE_WAIT_READY);
-                    }
+                    // On target → wait for the weapon, then fire a round.
+                    ActionsQueue.setParam(ownerEid, 0, FireParamOffset.phase, FIRE_PHASE_WAIT_READY);
                     continue;
                 }
 

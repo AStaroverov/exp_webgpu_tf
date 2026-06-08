@@ -46,9 +46,6 @@ export type ScenarioConfig = {
 };
 
 export const scenarioCompositions: readonly ScenarioConfig[] = [
-    // 0: 2 vs 2 near-static targets (each team gets a Ranger scout) — approach/aim/fire
-    //    with sporadic return fire, spotting channels exercised from the first rung
-    { allies: 2, enemies: 2, enemy: 'standing' },
     // 1: 4 vs 4 near-static targets — same skill with a full team (friendly-fire mask matters)
     { allies: 4, enemies: 4, enemy: 'standing' },
     // 2: 4 vs 4, enemies occasionally move and fire

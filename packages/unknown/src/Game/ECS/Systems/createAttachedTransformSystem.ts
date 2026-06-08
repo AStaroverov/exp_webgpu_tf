@@ -5,7 +5,7 @@ import { getGameComponents } from '../createGameWorld.ts';
 
 /**
  * Render-only attachments: entities that follow a physics-driven parent without
- * a rigid body of their own (e.g. the Ranger's searchlight beam on its turret).
+ * a rigid body of their own.
  *
  * The generic TransformSystem propagates parent -> child globals, but it runs
  * BEFORE the physics step, so a bodiless child would lag a frame behind and get

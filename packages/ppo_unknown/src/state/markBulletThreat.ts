@@ -14,16 +14,14 @@
  *    currently sits in is never treated as a blocker (it just left the muzzle).
  *    Straight-line walk via `grid.raycast`; no honeycomb allocation.
  *
- * 2. PREDICTED FIRE. An enemy that is `isVisible` to the observer team and has a
- *    queued `Fire` action (front slot 0, or pending slot 1) telegraphs where it is
- *    about to shoot. The Fire action's target is a NEIGHBOUR hex used as a DIRECTION
- *    (one axial step); the executor walks the straight hex ray from the owner along
- *    that delta and stops at the first `Unit`/`Obstacle` (skipping `Reserved`). We
- *    walk the SAME ray from the enemy's hex, bounded by that vehicle's bullet flight
- *    distance, and mark it `UnderFire` too. Only `isVisible` enemies contribute — we
- *    must not leak unspotted-enemy intentions. The projection uses the queued Fire
- *    neighbour delta, NOT the turret's current world heading. A bare `Aim` is never
- *    projected; only a queued `Fire`.
+ * 2. PREDICTED FIRE. An enemy that has a queued `Fire` action (front slot 0, or
+ *    pending slot 1) telegraphs where it is about to shoot. The Fire action's target
+ *    is a NEIGHBOUR hex used as a DIRECTION (one axial step); the executor walks the
+ *    straight hex ray from the owner along that delta and stops at the first
+ *    `Unit`/`Obstacle` (skipping `Reserved`). We walk the SAME ray from the enemy's
+ *    hex, bounded by that vehicle's bullet flight distance, and mark it `UnderFire`
+ *    too. The projection uses the queued Fire neighbour delta, NOT the turret's
+ *    current world heading. A bare `Aim` is never projected; only a queued `Fire`.
  *
  * Marks are written into the observer's EGOCENTRIC window (axial deltas from
  * `(selfQ, selfR)`, see board.ts); path cells beyond the view radius are walked
@@ -45,7 +43,7 @@ const ORIGIN_EPS = 1e-3;
 /**
  * Bullet flight distance (world units) for a vehicle type, or 0 if it has no gun.
  * Same source `vehicleStats.range` normalizes from: `BulletCaliberConfig[…].maxDistance`.
- * Gunless vehicles (Ranger: no `gun` group, non-tanks: no config) never fire.
+ * Gunless vehicles (non-tanks: no config) never fire.
  */
 function bulletMaxDistance(type: VehicleType): number {
     const config = getTankConfig(type);
@@ -61,7 +59,7 @@ export function markBulletThreat(
     grid: HexGrid,
     world: World = GameDI.world,
 ): void {
-    const { Bullet, RigidBodyState, DestroyByDistance, TeamRef, Vehicle, ActionsQueue, Spottable } =
+    const { Bullet, RigidBodyState, DestroyByDistance, TeamRef, Vehicle, ActionsQueue } =
         getGameComponents(world);
     const bullets = query(world, [Bullet, RigidBodyState, DestroyByDistance, TeamRef]);
 
@@ -102,16 +100,15 @@ export function markBulletThreat(
         grid.raycast(px, py, dirX, dirY, remaining, threatRayVisit(selfEid, selfQ, selfR, true));
     }
 
-    // ── Pass 2: predicted fire from visible enemies with a queued Fire action ──
-    const vehicles = query(world, [Vehicle, ActionsQueue, RigidBodyState, TeamRef, Spottable]);
+    // ── Pass 2: predicted fire from enemies with a queued Fire action ──
+    const vehicles = query(world, [Vehicle, ActionsQueue, RigidBodyState, TeamRef]);
 
     for (let i = 0; i < vehicles.length; i++) {
         const eid = vehicles[i];
         if (TeamRef.id[eid] === myTeam) continue; // only enemy fire is a threat
-        if (!Spottable.isVisible(eid)) continue; // don't leak unspotted intentions
 
         const maxDist = bulletMaxDistance(Vehicle.type[eid] as VehicleType);
-        if (maxDist <= 0) continue; // gunless (Ranger / non-tank) — never fires
+        if (maxDist <= 0) continue; // gunless (non-tank) — never fires
 
         // The enemy's current hex (origin of the projected ray).
         const here = grid.worldToHex(

@@ -16,7 +16,6 @@ export enum VehicleType {
     LightTank = 0,
     MediumTank = 1,
     HeavyTank = 2,
-    Ranger = 3,      // Light tank chassis with a turret searchlight instead of a gun
     Harvester = 4,   // Bulldozer with barrier and scoop for collecting debris
     MeleeCar = 5,    // Fast 4-wheeled car for ramming
 }
@@ -93,8 +92,8 @@ export type VehicleStats = {
 
 /**
  * Gun armament — present ONLY on vehicles that fire rounds. A gunless vehicle
- * (e.g. the Ranger, whose turret carries a beam instead) omits this group entirely,
- * so "gunless" is the absence of `gun`, not a gun full of zeroed-out values.
+ * omits this group entirely, so "gunless" is the absence of `gun`, not a gun full
+ * of zeroed-out values.
  */
 export type GunStats = {
     /** Turret gun grid [cols, rows] */
@@ -199,33 +198,6 @@ export const HeavyTankConfig: TankStats = {
     colors: {
         tracks: new Float32Array([0.5, 0.5, 0.5, 1]),
         turret: new Float32Array([0.5, 1, 0.5, 1]),
-    },
-};
-
-/**
- * Ranger Configuration
- * Light tank chassis with a turret beam instead of a gun: fast scout, no firepower.
- * Derived from the light tank row but with NO `gun` group — gunless is the absence
- * of the armament, not a gun full of zeroed-out values.
- */
-export const RangerConfig: TankStats = {
-    type: VehicleType.Ranger,
-    engine: EngineType.v6,
-    size: 5,
-    padding: 6, // size + 1
-    density: 250,
-    colliderRadius: 50,
-    hullSize: [8, 10],
-    turretSize: [6, 6],
-    hullGrid: [8, 10],
-    turretHeadGrid: [5, 6],
-    caterpillarLines: 12,
-    caterpillarSize: 6, // size - 1
-    trackAnchorXMult: 4,
-    turretSpeed: TurretSpeedConfig.light,
-    colors: {
-        tracks: new Float32Array([0.6, 0.6, 0.6, 1]),
-        turret: new Float32Array([0.6, 1, 0.6, 1]),
     },
 };
 
@@ -364,8 +336,6 @@ export function getTankConfig(type: VehicleType): TankStats {
             return MediumTankConfig;
         case VehicleType.HeavyTank:
             return HeavyTankConfig;
-        case VehicleType.Ranger:
-            return RangerConfig;
         default:
             throw new Error(`Unknown vehicle type ${type}`)
     }
@@ -377,14 +347,4 @@ export const HeadlightConfig = {
     color:  new Float32Array([1.0, 1.0, 1.0, 1.0]),
     intensity: 1.2,
     directional: true,
-} as const;
-
-/** Ranger searchlight: the turret-mounted beam emitter that replaces the gun.
- *  Off by default; a Fire action pulses it on for `pulseMs` (see Beam). */
-export const SpotlightConfig = {
-    color: new Float32Array([1.0, 0.95, 0.8, 0.7]),
-    intensity: 2.5,
-    directional: true,
-    /** How long one "shot" keeps the beam lit (ms). */
-    pulseMs: 1000,
 } as const;

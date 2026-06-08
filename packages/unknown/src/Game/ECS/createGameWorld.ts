@@ -32,8 +32,6 @@ import {
 import { createPlayerRefComponent } from './Components/PlayerRef.ts';
 import { createProgressComponent } from './Components/Progress.ts';
 import { createSlotComponent } from './Components/Slot.ts';
-import { createBeamRefComponent } from './Components/BeamRef.ts';
-import { createSpottableComponent } from './Components/Spottable.ts';
 import {
     createSoundComponent,
     createDestroyOnSoundFinishComponent,
@@ -85,8 +83,6 @@ function createGameOnlyComponents(world: World) {
         RigidBodyRef: createRigidBodyRefComponent(world),
         RigidBodyState: createRigidBodyStateComponent(world),
         Slot: createSlotComponent(world),
-        BeamRef: createBeamRefComponent(world),
-        Spottable: createSpottableComponent(world),
         Sound: createSoundComponent(world),
         SoundParentRelative: createSoundParentRelativeComponent(world),
         Tank: createTankComponent(world),

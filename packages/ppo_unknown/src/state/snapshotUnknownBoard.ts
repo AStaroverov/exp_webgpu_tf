@@ -5,40 +5,26 @@
  * view of the world — a single (2R+1)×(2R+1) window of axial deltas centered on the
  * observer (see board.ts). Occupancy is read straight off `MapDI.grid` (kept in sync by
  * `createGridOccupancySystem`), so the spatial planes touch NO physics — the board is the
- * position, the planes are the pieces. The light channel `UnderBeam` comes from the
- * spotting system's beam-cell accessor; `CoordX/CoordY` are pure window geometry.
+ * position, the planes are the pieces. `CoordX/CoordY` are pure window geometry.
  *
  * Per observer, per window cell (dq, dr):
  *   - Off-map OR beyond VIEW_RADIUS → `Obstacle` (not enterable / not visible).
  *   - Static obstacle              → `Obstacle` plane.
- *   - The observer's own cell       → `Self` plane (always the center) + hp + stats +
- *     `SpotConfidence` = "am I spotted by the enemy" (`getConfidence` — single value).
+ *   - The observer's own cell       → `Self` plane (always the center) + hp + stats.
  *   - Same-team unit cells          → `Ally`  plane + hp + stats.
- *   - Other-team unit cells         → `Enemy` plane + hp + stats + `SpotConfidence`, but
- *     ONLY when the enemy is currently visible to the observer's team (Spotting).
- *   - `Reserved` cells              → `Reserved` plane (a unit is driving into them),
- *     but ONLY when the reserving unit is an ally or a visible enemy — an unspotted
- *     enemy's reservation must not leak.
+ *   - Other-team unit cells         → `Enemy` plane + hp + stats.
+ *   - `Reserved` cells              → `Reserved` plane (a unit is driving into them).
  *   - Live enemy bullet paths       → `UnderFire` plane (see `markBulletThreat`);
  *     bullets in the air are always visible regardless of who fired them.
  *   - `CoordX/CoordY`               → normalized 0..1 cell-center window coords, written
  *     for EVERY in-view cell (pure geometry, not gated by occupancy).
- *   - `UnderBeam`                   → every in-view hex covered by any Ranger searchlight
- *     beam this tick (`isBeamCell` from the spotting system); always visible, like live
- *     bullets, regardless of whether the emitting Ranger is itself spotted.
- *   - `EnemyHeat`: max over enemies KNOWN to the observer's team of
- *     `confidence · (1 − hexDist/MAX_MAP_DIST)` — the gradient that lets the agent sense
- *     enemies beyond the view radius.
+ *   - `EnemyHeat`: max over ALL enemies of `1 − hexDist/MAX_MAP_DIST` — the gradient
+ *     that lets the agent sense enemies beyond the view radius.
  *   - `Role/Mobility/Firepower/Reload/Range`: the unit's normalized identity + combat
  *     stats from `vehicleStats.ts`, written on the unit's own cell (self/ally/enemy).
  *
- * Spotting (засвет) rules: enemy positions are always HONEST (real current hex); each
- * enemy contributes only if the opposing side has spotted him recently. Confidence is a
- * single per-victim value (two-sided game), so `Spottable.getConfidence(enemyEid)` is
- * the fading weight (1 right after a spot, → 0 over a 3 s memory window) that scales his
- * heat AND fills `SpotConfidence`; `Spottable.isVisible` gates the discrete Enemy/Hp/stat
- * planes (proximity / searchlight this very tick). An enemy revealed only by firing has
- * heat but is not "visible".
+ * Enemy positions are always HONEST (real current hex) and fully observable — every
+ * unit inside the view window is shown on its real cell.
  *
  * Prereq: each observing tank must have `UnknownInputBoard` added (agent setup calls
  * `UnknownInputBoard.addComponent(world, tankEid)`).
@@ -51,7 +37,6 @@ import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld
 import { HexGridConfig } from '../../../unknown/src/Game/Map/HexConfig.ts';
 import { OccupantKind, type HexGrid } from '../../../unknown/src/Game/Map/HexGrid.ts';
 import { getTankHealth } from '../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts';
-import { isBeamCell } from '../../../unknown/src/Game/ECS/Systems/Spotting/createSpottingSystem.ts';
 import {
     BOARD_COLS,
     BOARD_ROWS,
@@ -67,7 +52,7 @@ import { needsDecision } from '../../../unknown/src/Game/ECS/Actions/ActionSched
 
 type GameComponents = ReturnType<typeof getGameComponents>;
 
-/** Enemies KNOWN to the observer's team this tick: parallel arrays of real hex + fading weight. */
+/** Enemies in the world this tick: parallel arrays of real hex + heat weight (1). */
 type KnownEnemies = { q: number[]; r: number[]; w: number[] };
 
 /** Everything the per-cell writers need — bundled so each step takes a tiny signature. */
@@ -80,14 +65,13 @@ type SnapshotCtx = {
     enemies: KnownEnemies;
     Vehicle: GameComponents['Vehicle'];
     TeamRef: GameComponents['TeamRef'];
-    Spottable: GameComponents['Spottable'];
 };
 
 export function snapshotUnknownBoard({ world } = GameDI) {
     const grid = MapDI.grid;
     if (!grid) return;
 
-    const { Tank, Vehicle, TeamRef, Spottable } = getGameComponents(world);
+    const { Tank, Vehicle, TeamRef } = getGameComponents(world);
     const observers = query(world, [Vehicle, Tank, UnknownInputBoard]);
 
     for (let i = 0; i < observers.length; i++) {
@@ -95,7 +79,7 @@ export function snapshotUnknownBoard({ world } = GameDI) {
         if (!needsDecision(selfEid)) continue;
 
         const myTeamId = TeamRef.id[selfEid];
-        const field = scanField(grid, selfEid, myTeamId, TeamRef, Spottable);
+        const field = scanField(grid, selfEid, myTeamId, TeamRef);
         if (!field) continue; // not on the grid (mid-transition) — keep last snapshot
 
         UnknownInputBoard.reset(selfEid);
@@ -109,7 +93,6 @@ export function snapshotUnknownBoard({ world } = GameDI) {
             enemies: field.enemies,
             Vehicle,
             TeamRef,
-            Spottable,
         };
         fillWindow(ctx);
 
@@ -120,16 +103,15 @@ export function snapshotUnknownBoard({ world } = GameDI) {
 }
 
 /**
- * Sweep the grid once for this observer: locate its own hex and every enemy KNOWN to
- * its team (confidence > 0), at the enemies' real current hexes. Returns null when the
- * observer isn't on the grid (mid-transition).
+ * Sweep the grid once for this observer: locate its own hex and every enemy, at the
+ * enemies' real current hexes. Returns null when the observer isn't on the grid
+ * (mid-transition).
  */
 function scanField(
     grid: HexGrid,
     selfEid: number,
     myTeam: number,
     TeamRef: GameComponents['TeamRef'],
-    Spottable: GameComponents['Spottable'],
 ): { selfQ: number; selfR: number; enemies: KnownEnemies } | null {
     let selfQ = NaN;
     let selfR = NaN;
@@ -141,11 +123,9 @@ function scanField(
             selfQ = hex.q;
             selfR = hex.r;
         } else if (TeamRef.id[unitEid] !== myTeam) {
-            const w = Spottable.getConfidence(unitEid);
-            if (w === 0) return; // unknown to my team — does not exist for this observer
             enemies.q.push(hex.q);
             enemies.r.push(hex.r);
-            enemies.w.push(w);
+            enemies.w.push(1);
         }
     });
     if (Number.isNaN(selfQ)) return null;
@@ -171,7 +151,6 @@ function fillCell(ctx: SnapshotCtx, dq: number, dr: number) {
     }
 
     writeWindowGeometry(ctx, dq, dr);
-    writeUnderBeam(ctx, dq, dr);
     writeOccupant(ctx, dq, dr);
 }
 
@@ -192,13 +171,6 @@ function writeWindowGeometry(ctx: SnapshotCtx, dq: number, dr: number) {
     const row = dr + VIEW_RADIUS;
     UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.CoordX, col / (BOARD_COLS - 1));
     UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.CoordY, row / (BOARD_ROWS - 1));
-}
-
-/** UnderBeam: any hex lit by a Ranger searchlight this tick. */
-function writeUnderBeam(ctx: SnapshotCtx, dq: number, dr: number) {
-    if (isBeamCell(ctx.selfQ + dq, ctx.selfR + dr)) {
-        UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.UnderBeam, 1);
-    }
 }
 
 /** Dispatch an in-view cell's occupancy to the matching plane. */
@@ -227,39 +199,22 @@ function markObstacle(ctx: SnapshotCtx, dq: number, dr: number) {
     UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.Obstacle, 1);
 }
 
-/**
- * Reserved cell (a unit is driving into it). Don't leak an unspotted enemy's
- * reservation: mark only when the reserving unit is an ally or a visible enemy.
- */
-function writeReserved(ctx: SnapshotCtx, dq: number, dr: number, reserverEid: number) {
-    const reserverIsAlly = ctx.TeamRef.id[reserverEid] === ctx.myTeamId;
-    if (reserverIsAlly || ctx.Spottable.isVisible(reserverEid)) {
-        UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.Reserved, 1);
-    }
+/** Reserved cell (a unit is driving into it). */
+function writeReserved(ctx: SnapshotCtx, dq: number, dr: number, _reserverEid: number) {
+    UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.Reserved, 1);
 }
 
-/** Unit cell → Self/Ally/Enemy plane + hp + stats + SpotConfidence. */
+/** Unit cell → Self/Ally/Enemy plane + hp + stats. */
 function writeUnit(ctx: SnapshotCtx, dq: number, dr: number, unitEid: number) {
-    const { selfEid, myTeamId: myTeam, Spottable } = ctx;
+    const { selfEid, myTeamId: myTeam } = ctx;
     const isSelf = unitEid === selfEid;
     const isAlly = ctx.TeamRef.id[unitEid] === myTeam;
-
-    // An enemy occupies the cell only when currently spotted; otherwise the cell
-    // reads as empty (he still feeds heat above).
-    if (!isSelf && !isAlly && !Spottable.isVisible(unitEid)) return;
 
     const plane = isSelf ? BoardChannel.Self : isAlly ? BoardChannel.Ally : BoardChannel.Enemy;
 
     UnknownInputBoard.setDelta(selfEid, dq, dr, plane, 1);
     UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.Hp, getTankHealth(unitEid));
     writeStats(selfEid, dq, dr, unitEid, ctx.Vehicle);
-
-    // SpotConfidence (single per-victim value): on an enemy cell, how confidently I see
-    // him; on my own cell, how confidently the enemy sees me ("am I spotted").
-    if (isSelf || plane === BoardChannel.Enemy) {
-        UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.SpotConfidence,
-            Spottable.getConfidence(unitEid));
-    }
 }
 
 /**

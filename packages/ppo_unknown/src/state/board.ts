@@ -73,14 +73,10 @@ export const BoardChannel = {
      */
     UnderFire: 6,
     /**
-     * Enemy heat (0..1): per-cell max over enemies KNOWN to the observer's team
-     * (spotting confidence > 0) of `confidence · (1 − hexDist(cell, enemy) /
-     * MAX_MAP_DIST)`. The peak sits on the enemy's REAL current cell (positions
-     * stay honest — no stale ghosts) and is scaled by his fading spotting weight:
-     * 1 right after a spot, decaying to 0 over a 3 s memory window. Unspotted
-     * enemies (confidence 0) contribute nothing. This is how enemies beyond the
-     * view radius — and recently-lost ones — are sensed: the in-window gradient
-     * points toward them while it lasts.
+     * Enemy heat (0..1): per-cell max over ALL enemies of `1 − hexDist(cell, enemy)
+     * / MAX_MAP_DIST`. The peak sits on the enemy's REAL current cell. This is how
+     * enemies beyond the view radius are sensed: the in-window gradient points
+     * toward them.
      */
     EnemyHeat: 7,
     /**
@@ -94,37 +90,22 @@ export const BoardChannel = {
      */
     CoordY: 9,
     /**
-     * Fading spotting confidence (0..1), a single per-victim value (two-sided game).
-     * On an ENEMY cell: `Spottable.getConfidence` (the spot source + freshness — beam 1,
-     * fire 0.5, proximity 0.25, fading from there), gated by `isVisible`. On the SELF
-     * cell the same call reads "am I spotted by the enemy". 0 elsewhere; the
-     * `Self`/`Enemy` planes disambiguate which meaning applies.
-     */
-    SpotConfidence: 10,
-    /**
-     * Under beam (0/1): a hex geometrically intersecting any Ranger searchlight
-     * beam this tick (the swept capsule from `Beam.getBeamTargets`).
-     * Always written, regardless of whether the emitting Ranger is itself spotted —
-     * light is physically visible, same principle as live bullets in `UnderFire`.
-     */
-    UnderBeam: 11,
-    /**
      * Per-unit identity + combat stats of the unit on the cell (0 if no unit), from
-     * `vehicleStats.ts` — written for self/ally/visible-enemy cells, same normalizers
-     * the units vector used. `Role`: 0 = fighter (gun), 1 = scout (Ranger).
+     * `vehicleStats.ts` — written for self/ally/enemy cells, same normalizers
+     * the units vector used. `Role`: 0 = fighter (gun).
      */
-    Role: 12,
+    Role: 10,
     /** Engine speed 0..1. */
-    Mobility: 13,
+    Mobility: 11,
     /** Gun damage 0..1 (0 if gunless). */
-    Firepower: 14,
+    Firepower: 12,
     /** Reload speed 0..1, faster = higher (0 if gunless). */
-    Reload: 15,
+    Reload: 13,
     /** Bullet range 0..1 (0 if gunless). */
-    Range: 16,
+    Range: 14,
 } as const;
 
-export const BOARD_CHANNELS = 17;
+export const BOARD_CHANNELS = 15;
 export const BOARD_SIZE = BOARD_CELLS * BOARD_CHANNELS;
 
 export const UnknownInputBoard = component({

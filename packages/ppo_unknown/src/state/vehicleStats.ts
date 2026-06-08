@@ -12,11 +12,7 @@
  *   - range      ← `BulletCaliberConfig[caliber].maxDistance` (bullet flight
  *                  distance), divided by the longest range. Same source the
  *                  predicted-fire projection in `markBulletThreat` uses.
- *   - role       ← scout (Ranger) vs fighter (gun tanks): `RoleStat`.
- *
- * Ranger is the gunless scout: `role = scout`, and firepower/reload/range are all 0
- * (its `RangerConfig` has no `gun` group at all). Its mobility still comes from its
- * real engine (`EngineType.v6`, same as LightTank).
+ *   - role       ← every tank is a gun fighter: `RoleStat.Fighter`.
  */
 
 import {
@@ -30,13 +26,11 @@ import { BulletCaliberConfig } from '../../../unknown/src/Game/Config/weapons.ts
 export const RoleStat = {
     /** Gun vehicle (Light/Medium/Heavy tank). */
     Fighter: 0,
-    /** Searchlight scout (Ranger) — no gun. */
-    Scout: 1,
 } as const;
 
 /** Normalized observation attributes for one vehicle type. All fields 0..1. */
 export type VehicleStats = {
-    /** `RoleStat`: 0 = fighter (gun), 1 = scout (Ranger). */
+    /** `RoleStat`: 0 = fighter (gun). */
     role: number;
     /** Engine impulse relative to the fastest engine. */
     mobility: number;
@@ -85,9 +79,9 @@ function computeStats(type: VehicleType): VehicleStats {
     };
 }
 
-/** Precomputed normalized stats per `VehicleType` (computed once at module load). */
+/** Precomputed normalized stats per gun-tank `VehicleType` (computed once at module load). */
 const STATS: readonly VehicleStats[] = Array.from(
-    { length: 4 },
+    { length: 3 },
     (_, t) => computeStats(t as VehicleType),
 );
 

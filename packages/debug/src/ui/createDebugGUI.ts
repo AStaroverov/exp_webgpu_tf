@@ -88,7 +88,6 @@ export function createDebugGUI(canvas: HTMLCanvasElement) {
         LightTank: VehicleType.LightTank,
         MediumTank: VehicleType.MediumTank,
         HeavyTank: VehicleType.HeavyTank,
-        Ranger: VehicleType.Ranger,
     });
     spawnFolder.add(spawn, 'team', Object.keys(TEAM_COLORS).map(Number));
     spawnFolder.add(spawn, 'spawn').name('Spawn at random cell');
@@ -210,8 +209,8 @@ function applyAction(eid: number, kind: ActionKind) {
         return;
     }
 
-    // Fire: unarmed turrets (the Ranger's searchlight) have no Firearms — their
-    // Fire action would hang waiting for a reload that never starts.
+    // Fire: unarmed turrets have no Firearms — their Fire action would hang
+    // waiting for a reload that never starts.
     if (!hasComponent(world, Tank.turretEId[eid], Firearms)) {
         console.warn(`[debug] vehicle #${eid} is unarmed, Fire skipped`);
         return;
