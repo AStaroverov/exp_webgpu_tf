@@ -1,10 +1,9 @@
 /**
  * InputArrays — the per-decision observation `S` for ppo_unknown.
  *
- * Unlike tanks (many physics groups), the unknown game is chess-like: a single
- * multi-plane board IS the whole observation (see board.ts / snapshotUnknownBoard).
- * `S` is therefore just a flat copy of one tank's board buffer — plain typed array,
- * cheap to clone into `AgentMemory` and to ship across the learner channel.
+ * A single egocentric multi-plane board window (see board.ts / snapshotUnknownBoard):
+ * spatial/strategic planes plus per-unit identity written on each unit's cell. A plain
+ * typed array, cheap to clone into `AgentMemory` and to ship across the learner channel.
  */
 
 import { BOARD_SIZE, UnknownInputBoard } from './board.ts';
@@ -19,9 +18,10 @@ export type InputArrays = {
  * Prereq: `snapshotUnknownBoard` must have run this tick so the SoA row is fresh.
  */
 export function prepareInputArrays(eid: number): InputArrays {
-    const view = UnknownInputBoard.board.getBatch(eid); // f64 view, length BOARD_SIZE
+    const boardView = UnknownInputBoard.board.getBatch(eid); // f64 view, length BOARD_SIZE
     const board = new Float32Array(BOARD_SIZE);
-    board.set(view);
+    board.set(boardView);
+
     return { board };
 }
 

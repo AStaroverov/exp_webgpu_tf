@@ -93,7 +93,7 @@ function setupInfo(gui: GUI, manager: UnknownVisTestEpisodeManager, syncLighting
 
 function getAgentsDebug(manager: UnknownVisTestEpisodeManager): string {
     if (!GameDI.world) return '';
-    const { Color } = getGameComponents(GameDI.world);
+    const { Color, Spottable } = getGameComponents(GameDI.world);
 
     let result = '';
     for (const agent of manager.getAgents()) {
@@ -103,9 +103,13 @@ function getAgentsDebug(manager: UnknownVisTestEpisodeManager): string {
         const g = (Color.getG(eid) * 255) | 0;
         const b = (Color.getB(eid) * 255) | 0;
         const a = Color.getA(eid);
+        // "Am I spotted by the enemy" — the unit's single confidence value.
+        const spotted = Spottable.getConfidence(eid).toFixed(2);
+
         result += `<div style="background:rgba(${r},${g},${b},${a});padding:4px;margin:2px 0">
             <div>Tank ${eid} | Team ${teamId}</div>
-            <div>Recent reward: ${agent.getRecentReward().toFixed(2)}</div>
+            <div>Reward: ${agent.getRecentReward().toFixed(2)}</div>
+            <div>Spotted: ${spotted}</div>
         </div>`;
     }
     return result;

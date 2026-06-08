@@ -1,8 +1,8 @@
 /**
- * Network inputs for ppo_unknown — a single spatial board head
- * [ROWS, COLS, CHANNELS]. Mirrors tanks' `Inputs.ts` (createInputs) but with one
- * input instead of many groups. The returned object's value order must match the
- * tensor order produced by `state/InputTensors.ts`.
+ * Network inputs for ppo_unknown — the single egocentric board map plus its
+ * content mask. The returned object's value order MUST match the tensor order
+ * produced by `state/InputTensors.ts`:
+ *   board [ROWS, COLS, CH] → boardMask [CELLS].
  */
 
 import * as tf from '@tensorflow/tfjs';

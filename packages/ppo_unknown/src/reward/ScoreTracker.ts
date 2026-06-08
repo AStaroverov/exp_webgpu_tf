@@ -13,7 +13,18 @@
  *   - approach:  ±APPROACH_REWARD per hex step closer to / away from the nearest
  *     enemy (per-tick distance delta, so it telescopes over a macro-action; ticks
  *     where the *nearest enemy itself* changed — death or target switch — are
- *     skipped, not scored, to avoid phantom jumps).
+ *     skipped, not scored, to avoid phantom jumps);
+ *   - spot:      per enemy spotted, every contributing unit (proximity / search-
+ *     light) earns its ROLE rate × (confidence gain). NOT split between them: the
+ *     scout (Ranger) — who cannot deal damage and has no other income — earns the
+ *     full RANGER_SPOT_REWARD, while a fighter that merely drove close earns the
+ *     smaller FIGHTER_SPOT_REWARD. Attribution is computed once, by the spotting
+ *     system, into `Spottable`'s monotonic spotter ledger (the game owns "who spotted
+ *     me, how much"); we just diff it per tick, like hits. Confidence jumps to 1 on a
+ *     spot and fades over `memoryMs`, so re-spotting a still-lit enemy pays NOTHING
+ *     (gain 0); the gain is exactly the faded amount, capping each contributor's
+ *     per-enemy income at its role rate per memory window. A self-reveal by firing
+ *     (`revealByFire`) has no contributor, hence no ledger entry, hence no points.
  *
  * `update()` must run every tick (hits/deaths happen between decisions); the policy
  * driver calls it. `reset()` is called per episode.
@@ -23,6 +34,7 @@ import { query } from 'bitecs';
 import { GameDI } from '../../../unknown/src/Game/DI/GameDI.ts';
 import { MapDI } from '../../../unknown/src/Game/DI/MapDI.ts';
 import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld.ts';
+import { VehicleType } from '../../../unknown/src/Game/ECS/Components/Vehicle.ts';
 
 export const HIT_REWARD = 0.2;
 export const KILL_REWARD = 1;
@@ -34,6 +46,19 @@ export const KILL_REWARD = 1;
  * combat carries the learning.
  */
 export const APPROACH_REWARD = 0.15;
+/**
+ * Reward for a FRESH spot (confidence 0 → 1) of one enemy, per contributing
+ * spotter (not split). Scaled by the confidence gain, so each contributor's
+ * income per enemy is bounded by the fade rate (at most its role rate per
+ * `memoryMs`) — camping or blinking the same target earns no more than letting
+ * it fade and re-spotting.
+ *
+ * The Ranger is a pure scout: no gun, so spotting is its ONLY income — it gets
+ * the high rate (above a hit, near a kill). A fighter spotting "with its body"
+ * is a side effect of positioning, worth a fraction.
+ */
+export const RANGER_SPOT_REWARD = 0.4;
+export const FIGHTER_SPOT_REWARD = 0.15;
 
 export class ScoreTracker {
     /** playerId → cumulative weighted score. */
@@ -42,11 +67,14 @@ export class ScoreTracker {
     private prevHits = new Map<number, Map<number, number>>();
     /** vehicleEid → last tick's nearest enemy + hex distance, to diff per tick. */
     private prevApproach = new Map<number, { enemy: number; dist: number }>();
+    /** victimEid → (spotterPlayerId → last-seen ledger credit), to diff per tick. */
+    private prevSpot = new Map<number, Map<number, number>>();
 
     reset(): void {
         this.score.clear();
         this.prevHits.clear();
         this.prevApproach.clear();
+        this.prevSpot.clear();
     }
 
     getScore(playerId: number): number {
@@ -60,6 +88,7 @@ export class ScoreTracker {
     update({ world } = GameDI): void {
         this.updateCombat(world);
         this.updateApproach(world);
+        this.updateSpotting(world);
     }
 
     /**
@@ -150,6 +179,52 @@ export class ScoreTracker {
 
         for (const eid of this.prevApproach.keys()) {
             if (!alive.has(eid)) this.prevApproach.delete(eid);
+        }
+    }
+
+    /**
+     * Spotting reward: diff the per-victim spotter ledger that the spotting system
+     * wrote this tick (`Spottable.forEachSpotters`). Each spotter's stored credit is
+     * the monotonic sum of the confidence GAINS it caused; the per-tick increase is
+     * that spotter's fresh spotting income, scaled by its ROLE rate (Ranger vs
+     * fighter — not split, the scout's income must not be diluted by a fighter
+     * standing near). The system credits no one for a fire self-reveal, so it scores
+     * nothing. Mirrors `updateCombat` — the physics/proximity scan lives once, in the
+     * game system, not here.
+     */
+    private updateSpotting(world = GameDI.world): void {
+        const { Vehicle, PlayerRef, Spottable } = getGameComponents(world);
+        const vehicles = query(world, [Vehicle, PlayerRef, Spottable]);
+        const alive = new Set<number>(vehicles);
+
+        // playerId → role rate, from each potential spotter's vehicle type this tick.
+        const rateByPlayer = new Map<number, number>();
+        for (let i = 0; i < vehicles.length; i++) {
+            const eid = vehicles[i];
+            rateByPlayer.set(
+                PlayerRef.id[eid],
+                Vehicle.type[eid] === VehicleType.Ranger ? RANGER_SPOT_REWARD : FIGHTER_SPOT_REWARD,
+            );
+        }
+
+        for (let i = 0; i < vehicles.length; i++) {
+            const victim = vehicles[i];
+
+            let prev = this.prevSpot.get(victim);
+            if (!prev) {
+                prev = new Map<number, number>();
+                this.prevSpot.set(victim, prev);
+            }
+
+            Spottable.forEachSpotters(victim, (playerId: number, credit: number) => {
+                const inc = credit - (prev!.get(playerId) ?? 0);
+                prev!.set(playerId, credit);
+                if (inc > 0) this.add(playerId, (rateByPlayer.get(playerId) ?? 0) * inc);
+            });
+        }
+
+        for (const victim of this.prevSpot.keys()) {
+            if (!alive.has(victim)) this.prevSpot.delete(victim);
         }
     }
 }

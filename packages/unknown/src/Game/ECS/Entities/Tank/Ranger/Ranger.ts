@@ -11,7 +11,7 @@ import { createVehicleTurret } from '../../Vehicle/VehicleBase.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from '../Common/Options.ts';
 import { createTankBase, createTankTracks } from '../Common/Tank.ts';
 import { createTankExhaustPipes } from '../../ExhaustPipe.ts';
-import { createTurretHeadlight } from '../../TurretHeadlight.ts';
+import { createBeam, deactivateBeam } from '../../Beam.ts';
 import { SIZE } from '../Medium/MediumTankParts.ts';
 import {
     CATERPILLAR_LINE_COUNT,
@@ -42,7 +42,7 @@ export function createRanger(opts: {
     rotation: number,
     color: TColor,
 }, { world } = GameDI): EntityId {
-    const { Tank } = getGameComponents(world);
+    const { Tank, BeamRef } = getGameComponents(world);
 
     const options = resetOptions(mutatedOptions, opts);
     options.partsCount = PARTS_COUNT;
@@ -101,8 +101,9 @@ export function createRanger(opts: {
     updateSlotsBrightness(rightTrackEid);
     fillAllSlots(rightTrackEid, options);
 
-    // Searchlight beam attached to the turret (directional light emitter).
-    createTurretHeadlight(turretEid, {
+    // Searchlight beam attached to the turret (directional light emitter). Off by
+    // default — a Fire action pulses it on (see BeamRef / activateBeam).
+    const beamEid = createBeam(turretEid, {
         startX: PADDING * 2,
         startY: 0,
         length: PADDING * 40,
@@ -110,6 +111,8 @@ export function createRanger(opts: {
         farWidth: PADDING * 8,
         light: SpotlightConfig,
     });
+    BeamRef.addComponent(world, tankEid, beamEid);
+    deactivateBeam(tankEid); // start in the off/hidden state
 
     updateSlotsBrightness(turretEid);
     fillAllSlots(turretEid, options);

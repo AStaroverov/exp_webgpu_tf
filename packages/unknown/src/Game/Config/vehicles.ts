@@ -20,7 +20,6 @@ export enum VehicleType {
     Harvester = 4,   // Bulldozer with barrier and scoop for collecting debris
     MeleeCar = 5,    // Fast 4-wheeled car for ramming
 }
-export const VEHICLE_TYPE_COUNT = 6;
 
 /**
  * Engine types determine movement speed and power.
@@ -55,7 +54,8 @@ export const EngineConfig: Record<EngineType, { impulseMult: number; rotationMul
     },
 };
 
-export type TankStats = {
+/** Chassis/turret stats shared by every tank, armed or not. */
+export type VehicleStats = {
     /** Vehicle type identifier */
     type: VehicleType;
     /** Engine type */
@@ -76,8 +76,6 @@ export type TankStats = {
     hullGrid: [number, number];
     /** Turret head grid [cols, rows] */
     turretHeadGrid: [number, number];
-    /** Turret gun grid [cols, rows] */
-    turretGunGrid: [number, number];
     /** Number of caterpillar lines */
     caterpillarLines: number;
     /** Caterpillar part size */
@@ -86,18 +84,30 @@ export type TankStats = {
     trackAnchorXMult: number;
     /** Turret rotation speed (radians/sec) */
     turretSpeed: number;
-    /** Reload duration in ms */
-    reloadTime: number;
-    /** Bullet caliber */
-    bulletCaliber: BulletCaliber;
-    /** Bullet start position Y offset multiplier */
-    bulletOffsetYMult: number;
     /** Colors */
     colors: {
         tracks: Float32Array;
         turret: Float32Array;
     };
 };
+
+/**
+ * Gun armament — present ONLY on vehicles that fire rounds. A gunless vehicle
+ * (e.g. the Ranger, whose turret carries a beam instead) omits this group entirely,
+ * so "gunless" is the absence of `gun`, not a gun full of zeroed-out values.
+ */
+export type GunStats = {
+    /** Turret gun grid [cols, rows] */
+    gunGrid: [number, number];
+    /** Reload duration in ms */
+    reloadTime: number;
+    /** Bullet caliber */
+    caliber: BulletCaliber;
+    /** Bullet start position Y offset multiplier */
+    bulletOffsetYMult: number;
+};
+
+export type TankStats = VehicleStats & { gun?: GunStats };
 
 /**
  * Light Tank Configuration
@@ -114,14 +124,16 @@ export const LightTankConfig: TankStats = {
     turretSize: [6, 6],
     hullGrid: [8, 10],
     turretHeadGrid: [5, 6],
-    turretGunGrid: [2, 6],
     caterpillarLines: 12,
     caterpillarSize: 6, // size - 1
     trackAnchorXMult: 4,
     turretSpeed: TurretSpeedConfig.light,
-    reloadTime: ReloadConfig.light,
-    bulletCaliber: BulletCaliber.Light,
-    bulletOffsetYMult: 9,
+    gun: {
+        gunGrid: [2, 6],
+        reloadTime: ReloadConfig.light,
+        caliber: BulletCaliber.Light,
+        bulletOffsetYMult: 9,
+    },
     colors: {
         tracks: new Float32Array([0.6, 0.6, 0.6, 1]),
         turret: new Float32Array([0.6, 1, 0.6, 1]),
@@ -143,14 +155,16 @@ export const MediumTankConfig: TankStats = {
     turretSize: [8, 8],
     hullGrid: [8, 11],
     turretHeadGrid: [6, 7],
-    turretGunGrid: [2, 10],
     caterpillarLines: 22,
     caterpillarSize: 3,
     trackAnchorXMult: 5,
     turretSpeed: TurretSpeedConfig.medium,
-    reloadTime: ReloadConfig.medium,
-    bulletCaliber: BulletCaliber.Medium,
-    bulletOffsetYMult: 13,
+    gun: {
+        gunGrid: [2, 10],
+        reloadTime: ReloadConfig.medium,
+        caliber: BulletCaliber.Medium,
+        bulletOffsetYMult: 13,
+    },
     colors: {
         tracks: new Float32Array([0.5, 0.5, 0.5, 1]),
         turret: new Float32Array([0.5, 1, 0.5, 1]),
@@ -172,17 +186,46 @@ export const HeavyTankConfig: TankStats = {
     turretSize: [8, 8],
     hullGrid: [10, 14],
     turretHeadGrid: [7, 9],
-    turretGunGrid: [2, 8],
     caterpillarLines: 22,
     caterpillarSize: 5,
     trackAnchorXMult: 6,
     turretSpeed: TurretSpeedConfig.heavy,
-    reloadTime: ReloadConfig.heavy,
-    bulletCaliber: BulletCaliber.Heavy,
-    bulletOffsetYMult: 13,
+    gun: {
+        gunGrid: [2, 8],
+        reloadTime: ReloadConfig.heavy,
+        caliber: BulletCaliber.Heavy,
+        bulletOffsetYMult: 13,
+    },
     colors: {
         tracks: new Float32Array([0.5, 0.5, 0.5, 1]),
         turret: new Float32Array([0.5, 1, 0.5, 1]),
+    },
+};
+
+/**
+ * Ranger Configuration
+ * Light tank chassis with a turret beam instead of a gun: fast scout, no firepower.
+ * Derived from the light tank row but with NO `gun` group — gunless is the absence
+ * of the armament, not a gun full of zeroed-out values.
+ */
+export const RangerConfig: TankStats = {
+    type: VehicleType.Ranger,
+    engine: EngineType.v6,
+    size: 5,
+    padding: 6, // size + 1
+    density: 250,
+    colliderRadius: 50,
+    hullSize: [8, 10],
+    turretSize: [6, 6],
+    hullGrid: [8, 10],
+    turretHeadGrid: [5, 6],
+    caterpillarLines: 12,
+    caterpillarSize: 6, // size - 1
+    trackAnchorXMult: 4,
+    turretSpeed: TurretSpeedConfig.light,
+    colors: {
+        tracks: new Float32Array([0.6, 0.6, 0.6, 1]),
+        turret: new Float32Array([0.6, 1, 0.6, 1]),
     },
 };
 
@@ -313,7 +356,7 @@ export const MeleeCarConfig: MeleeCarStats = {
  * Get tank configuration by vehicle type.
  * Returns undefined for non-tank vehicles.
  */
-export function getTankConfig(type: VehicleType): TankStats | undefined {
+export function getTankConfig(type: VehicleType): TankStats {
     switch (type) {
         case VehicleType.LightTank:
             return LightTankConfig;
@@ -321,8 +364,10 @@ export function getTankConfig(type: VehicleType): TankStats | undefined {
             return MediumTankConfig;
         case VehicleType.HeavyTank:
             return HeavyTankConfig;
+        case VehicleType.Ranger:
+            return RangerConfig;
         default:
-            return undefined;
+            throw new Error(`Unknown vehicle type ${type}`)
     }
 }
 
@@ -334,9 +379,12 @@ export const HeadlightConfig = {
     directional: true,
 } as const;
 
-/** Ranger searchlight: the turret-mounted beam emitter that replaces the gun. */
+/** Ranger searchlight: the turret-mounted beam emitter that replaces the gun.
+ *  Off by default; a Fire action pulses it on for `pulseMs` (see Beam). */
 export const SpotlightConfig = {
     color: new Float32Array([1.0, 0.95, 0.8, 0.7]),
     intensity: 2.5,
     directional: true,
+    /** How long one "shot" keeps the beam lit (ms). */
+    pulseMs: 1000,
 } as const;

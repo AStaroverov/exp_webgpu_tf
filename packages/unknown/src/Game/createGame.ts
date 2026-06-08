@@ -52,6 +52,8 @@ import { createDrawGridSystem } from './ECS/Systems/Render/Grid/createDrawGridSy
 import { createRunExecutors } from './ECS/Actions/registry.ts';
 import { createActionSchedulerSystem } from './ECS/Actions/systems/ActionScheduler.ts';
 import { createGridOccupancySystem } from './ECS/Systems/Map/createGridOccupancySystem.ts';
+import { createBeamSystem } from './ECS/Systems/Tank/createBeamSystem.ts';
+import { createSpottingSystem } from './ECS/Systems/Spotting/createSpottingSystem.ts';
 
 export type Game = ReturnType<typeof createGame>;
 
@@ -164,6 +166,8 @@ export function createGame({ width, height }: {
     const regenerateShields = createShieldRegenerationSystem();
 
     const updateGridOccupancy = createGridOccupancySystem();
+    const updateBeam = createBeamSystem();
+    const updateSpotting = createSpottingSystem();
 
     const runActionExecutors = createRunExecutors();
     const actionScheduler = createActionSchedulerSystem();
@@ -183,6 +187,8 @@ export function createGame({ width, height }: {
         physicalFrame(delta);
 
         updateGridOccupancy(); // rebuild the grid's Unit/Reserved layer from vehicle state
+        updateBeam(); // hide Ranger beams whose pulse ended, before spotting reads them
+        updateSpotting(delta);  // per-team enemy visibility/confidence, read by the snapshot driver
 
         updateActions(delta);
 

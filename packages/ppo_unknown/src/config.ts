@@ -32,7 +32,7 @@ export const CONFIG: PpoConfig & {
         multHigh: 0.95,
         multLow: 1.05,
         min: 1e-5,
-        max: 1e-2,
+        max: 1e-3,
     },
 
     batchSize: (_iteration: number) => 256 * 16,
@@ -44,5 +44,5 @@ export const CONFIG: PpoConfig & {
     episodeFrames: Math.round(2 * 60 * 1000 / TICK_TIME_SIMULATION),
     workerCount: 4,
     backpressureQueueSize: 2,
-    savePath: 'PPO_UNKNOWN',
+    savePath: 'PPO_UNKNOWN_V3',
 };

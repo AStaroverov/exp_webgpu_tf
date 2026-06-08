@@ -36,8 +36,7 @@ export type HexCell = {
     occupantKind: OccupantKind | null;
 };
 
-const cellKey = (q: number, r: number): string => `${q},${r}`;
-const rowColKey = (row: number, col: number): string => `${row}:${col}`;
+export const cellKey = (q: number, r: number): string => `${q},${r}`;
 
 export class HexGrid {
     /** honeycomb grid — source of truth for geometry & which hexes exist. */
@@ -80,7 +79,7 @@ export class HexGrid {
                 occupantEid: null,
                 occupantKind: null,
             });
-            this.hexByRowCol.set(rowColKey(hex.row, hex.col), hex);
+            this.hexByRowCol.set(cellKey(hex.row, hex.col), hex);
         });
     }
 
@@ -103,7 +102,7 @@ export class HexGrid {
      * flat cell index `idx` decodes as `row = idx / cols`, `col = idx % cols`.
      */
     cellAt(row: number, col: number): HexTile | undefined {
-        return this.hexByRowCol.get(rowColKey(row, col));
+        return this.hexByRowCol.get(cellKey(row, col));
     }
 
     forEachCell(fn: (cell: HexCell, hex: HexTile) => void): void {
@@ -151,6 +150,38 @@ export class HexGrid {
             }
         });
         return { minX, minY, maxX, maxY };
+    }
+
+    /**
+     * March a straight ray from a world-space point, visiting each distinct hex
+     * it crosses in order. The sample stride is half the hex radius (below the
+     * inradius), so no cell is skipped. The walk stops at the grid edge (a
+     * straight ray never re-enters), after `maxDistance` world units, or when
+     * `visit` returns false. The starting cell is visited with `isFirst = true`
+     * so callers can skip it or exempt it from blocking.
+     */
+    raycast(
+        startX: number,
+        startY: number,
+        dirX: number,
+        dirY: number,
+        maxDistance: number,
+        visit: (cell: HexCell, hex: HexTile, isFirst: boolean) => boolean,
+    ): void {
+        const stride = HexGridConfig.radius * 0.5;
+        let lastQ = NaN;
+        let lastR = NaN;
+        let first = true;
+        for (let t = 0; t <= maxDistance; t += stride) {
+            const hex = this.worldToHex(startX + dirX * t, startY + dirY * t);
+            if (!hex) return;
+            if (hex.q === lastQ && hex.r === lastR) continue;
+            lastQ = hex.q;
+            lastR = hex.r;
+            const cell = this.cells.get(cellKey(hex.q, hex.r))!;
+            if (!visit(cell, hex, first)) return;
+            first = false;
+        }
     }
 
     /** Hex distance (number of steps) between two cells. */

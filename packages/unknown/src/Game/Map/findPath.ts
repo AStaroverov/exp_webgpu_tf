@@ -8,7 +8,7 @@
  */
 
 import type { HexCoordinates } from 'honeycomb-grid';
-import { HexGrid } from './HexGrid.ts';
+import { cellKey, HexGrid } from './HexGrid.ts';
 
 export type PathHex = { q: number; r: number };
 
@@ -20,8 +20,6 @@ export type FindPathOptions = {
      */
     isBlocked?: (q: number, r: number) => boolean;
 };
-
-const key = (q: number, r: number): string => `${q},${r}`;
 
 /** Minimal binary min-heap keyed by fScore. */
 class MinHeap {
@@ -82,8 +80,8 @@ export function findPath(
 
     const isBlocked = options.isBlocked ?? ((q, r) => !grid.isPassable(q, r));
 
-    const startKey = key(start.q, start.r);
-    const goalKey = key(goal.q, goal.r);
+    const startKey = cellKey(start.q, start.r);
+    const goalKey = cellKey(goal.q, goal.r);
 
     const cameFrom = new Map<string, PathHex>();
     const gScore = new Map<string, number>([[startKey, 0]]);
@@ -105,7 +103,7 @@ export function findPath(
         const g = gScore.get(currentKey)!;
 
         for (const n of grid.neighbors(current as HexCoordinates)) {
-            const nKey = key(n.q, n.r);
+            const nKey = cellKey(n.q, n.r);
             if (closed.has(nKey)) continue;
             // The start cell is always steppable; otherwise apply the block test.
             if (nKey !== startKey && isBlocked(n.q, n.r)) continue;
@@ -130,12 +128,12 @@ function reconstruct(
     startKey: string,
 ): PathHex[] {
     const path: PathHex[] = [goal];
-    let curKey = key(goal.q, goal.r);
+    let curKey = cellKey(goal.q, goal.r);
     while (curKey !== startKey) {
         const prev = cameFrom.get(curKey);
         if (!prev) break;
         path.push(prev);
-        curKey = key(prev.q, prev.r);
+        curKey = cellKey(prev.q, prev.r);
     }
     path.reverse();
     return path;

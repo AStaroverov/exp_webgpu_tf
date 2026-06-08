@@ -13,12 +13,10 @@
 
 import { GameDI } from '../../../DI/GameDI.ts';
 import { MapDI } from '../../../DI/MapDI.ts';
-import { HexGrid } from '../../../Map/HexGrid.ts';
+import { cellKey, HexGrid } from '../../../Map/HexGrid.ts';
 import { ObstacleConfig } from '../../../Config/index.ts';
 import { createRock } from './Rocks/Rock.ts';
 import { ObstaclePlan } from './types.ts';
-
-const cellKey = (q: number, r: number): string => `${q},${r}`;
 
 export function spawnObstacles({ grid } = MapDI, { world } = GameDI): void {
     let plans: ObstaclePlan[] = [];

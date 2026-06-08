@@ -1,6 +1,6 @@
 /**
- * RandomBot — a scripted, non-learning driver for the curriculum's 'moving' and
- * 'shooting' enemy behaviours.
+ * RandomBot — a scripted, non-learning driver for the curriculum's 'standing' and
+ * 'moving' enemy behaviours (both fire sporadically; they differ only in moveProb).
  *
  * Same decision seam as `UnknownAgent` (the policy driver calls `decide()` when the
  * tank `needsDecision`), but with no network, no memory and no reward bookkeeping.

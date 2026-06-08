@@ -20,6 +20,8 @@ import { MapDI } from '../../../DI/MapDI.ts';
 import { normalizeAngle } from '../../../../../../../lib/math.ts';
 import { getGameComponents } from '../../createGameWorld.ts';
 import { OccupantKind } from '../../../Map/HexGrid.ts';
+import { VehicleType } from '../../Components/Vehicle.ts';
+import { activateBeam } from '../../Entities/Beam.ts';
 import { ActionDescriptor, encodeTarget } from '../ActionDescriptor.ts';
 import { ActionHexTargetSpec, ActionKind, ActionStatus } from '../ActionTypes.ts';
 import {
@@ -73,10 +75,8 @@ export function createFireActionSystem({ world } = GameDI) {
 
             if (ActionsQueue.getStatus(ownerEid, 0) === ActionStatus.Idle) {
                 ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Running);
-                // Tank is stationary while aiming/firing, so the next decision's
-                // observation is already valid — open the slot immediately (§4).
-                ActionsQueue.scheduleRequestNext(ownerEid, 0);
                 ActionsQueue.setParam(ownerEid, 0, FireParamOffset.phase, FIRE_PHASE_AIMING);
+                ActionsQueue.scheduleRequestNext(ownerEid, 0);
             }
 
             const phase = ActionsQueue.getParam(ownerEid, 0, FireParamOffset.phase);
@@ -103,9 +103,14 @@ export function createFireActionSystem({ world } = GameDI) {
                 const err = normalizeAngle(desired - RigidBodyState.rotation[turretEid]);
 
                 if (Math.abs(err) <= TOLERANCE) {
-                    // On target → stop rotating, move on to firing.
                     TurretController.setRotation$(turretEid, 0);
-                    ActionsQueue.setParam(ownerEid, 0, FireParamOffset.phase, FIRE_PHASE_WAIT_READY);
+                    if (Vehicle.type[ownerEid] === VehicleType.Ranger) {
+                        activateBeam(ownerEid);
+                        ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
+                    } else {
+                        // Gun tank → wait for the weapon, then fire a round.
+                        ActionsQueue.setParam(ownerEid, 0, FireParamOffset.phase, FIRE_PHASE_WAIT_READY);
+                    }
                     continue;
                 }
 

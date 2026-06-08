@@ -18,12 +18,11 @@ export type { Scenario } from '../env/createUnknownScenario.ts';
  * enemy team (team 1) behaves. Team 0 is always the learning policy.
  *
  * Enemy behaviours:
- *   standing  — no driver: a static target gallery so the policy first learns to
- *               approach, aim and fire.
- *   moving    — `RandomBot` that only occasionally steps to a random neighbour:
- *               moving targets without tactics or return fire.
- *   shooting  — `RandomBot` that wanders AND fires randomly: the learner meets
- *               incoming fire for the first time.
+ *   standing  — `RandomBot` that holds position but occasionally fires down a
+ *               random direction: a near-static target gallery with sporadic
+ *               return fire, so the policy first learns to approach, aim and fire.
+ *   moving    — `RandomBot` that occasionally steps to a random neighbour AND
+ *               occasionally fires: moving targets with undirected return fire.
  *   frozen    — enemies run a FROZEN historical snapshot of the policy
  *               (`FrozenAgent`): a stable opponent before live co-adaptation.
  *   self-play — enemies are learning agents sharing the live policy: the full
@@ -31,11 +30,12 @@ export type { Scenario } from '../env/createUnknownScenario.ts';
  *
  * Index ordering is load-bearing: a network's stored
  * `mapScenarioIndexToSuccessRatio` is keyed by index, so never reorder — only append.
- * (Known one-time exception: 'frozen' was inserted at index 4, so a pre-existing
- * ratio at 4 — formerly self-play — is reinterpreted as frozen. Accepted.)
+ * (The 'shooting' rung and its index were dropped here when standing/moving gained
+ * sporadic return fire of their own; ratios are re-keyed from scratch since the v3
+ * observation change already forces a retrain.)
  */
 
-export type EnemyBehavior = 'standing' | 'moving' | 'shooting' | 'frozen' | 'self-play';
+export type EnemyBehavior = 'standing' | 'moving' | 'frozen' | 'self-play';
 
 export type ScenarioConfig = {
     /** Team 0 size — the learning policy. */
@@ -46,17 +46,16 @@ export type ScenarioConfig = {
 };
 
 export const scenarioCompositions: readonly ScenarioConfig[] = [
-    // 0: 1 vs 5 standing targets — pure approach/aim/fire practice
-    { allies: 1, enemies: 1, enemy: 'standing' },
-    // 1: 4 vs 4 standing targets — same skill with teammates around (friendly-fire mask matters)
+    // 0: 2 vs 2 near-static targets (each team gets a Ranger scout) — approach/aim/fire
+    //    with sporadic return fire, spotting channels exercised from the first rung
+    { allies: 2, enemies: 2, enemy: 'standing' },
+    // 1: 4 vs 4 near-static targets — same skill with a full team (friendly-fire mask matters)
     { allies: 4, enemies: 4, enemy: 'standing' },
-    // 2: 4 vs 4, enemies occasionally move
+    // 2: 4 vs 4, enemies occasionally move and fire
     { allies: 4, enemies: 4, enemy: 'moving' },
-    // 3: 4 vs 4, enemies move and shoot back
-    { allies: 4, enemies: 4, enemy: 'shooting' },
-    // 4: 4 vs 4 against a frozen historical snapshot of the policy
+    // 3: 4 vs 4 against a frozen historical snapshot of the policy
     { allies: 4, enemies: 4, enemy: 'frozen' },
-    // 5: 4 vs 4 self-play
+    // 4: 4 vs 4 self-play
     { allies: 4, enemies: 4, enemy: 'self-play' },
 ] as const;
 

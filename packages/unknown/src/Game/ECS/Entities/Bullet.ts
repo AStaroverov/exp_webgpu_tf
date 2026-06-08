@@ -19,6 +19,7 @@ import { BulletCaliber, mapBulletCaliber, MAX_BULLET_SPEED } from '../Components
 import { getGameComponents } from '../createGameWorld.ts';
 import { min, PI } from '../../../../../../lib/math.ts';
 import { ExplosionConfig, SoundConfig } from '../../Config/index.ts';
+import { revealByFire } from './Vehicle/VehicleBase.ts';
 
 type Options = Parameters<typeof createRectangleRR>[0];
 const optionsBulletRR: Options = {
@@ -126,6 +127,8 @@ export function spawnBullet(vehicleEid: number, { world } = GameDI) {
         duration: ExplosionConfig.muzzleFlashDuration,
         rotation: optionsSpawnBullet.rotation + PI / 2,
     });
+
+    revealByFire(vehicleEid);
 
     const soundVolume = SoundConfig.shootBaseVolume + (bulletCaliber.width * SoundConfig.shootVolumePerWidth);
     spawnSoundAtPosition({
