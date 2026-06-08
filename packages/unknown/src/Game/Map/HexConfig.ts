@@ -15,8 +15,8 @@ export const HexGridConfig = {
     /** Hex "radius" in world pixels (xRadius === yRadius -> regular hex). */
     radius: 96,
     /** Grid size in hexes. */
-    cols: 8,
-    rows: 8,
+    cols: 12,
+    rows: 12,
     /** Orientation — pointy-top. */
     orientation: Orientation.POINTY,
 } as const;

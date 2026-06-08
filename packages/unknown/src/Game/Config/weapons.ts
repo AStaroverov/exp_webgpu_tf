@@ -61,7 +61,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
         density: 5_000,
         damage: 3 * 3,
         linearDamping: 0.4, // Light bullets lose speed quickly
-        maxDistance: HexGridConfig.radius * 1.6,
+        maxDistance: HexGridConfig.radius * 2.6,
     },
     
     [BulletCaliber.Medium]: {
@@ -71,7 +71,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
         density: 5_000,
         damage: 4 * 3,
         linearDamping: 0.3, // Medium bullets have moderate drag
-        maxDistance: HexGridConfig.radius * 2.6,
+        maxDistance: HexGridConfig.radius * 4.6,
     },
     
     [BulletCaliber.Heavy]: {
@@ -81,7 +81,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
         density: 5_000,
         damage: 6 * 3,
         linearDamping: 0.2, // Heavy bullets maintain speed longer
-        maxDistance: HexGridConfig.radius * 3.6,
+        maxDistance: HexGridConfig.radius * 6.6,
     },
 } as const;
 
