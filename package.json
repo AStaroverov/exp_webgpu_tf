@@ -10,6 +10,8 @@
     "packages/ppo_tanks",
     "packages/tanksV2",
     "packages/unknown",
-    "packages/debug"
+    "packages/debug",
+    "packages/ppo",
+    "packages/ppo_unknown"
   ]
 }
