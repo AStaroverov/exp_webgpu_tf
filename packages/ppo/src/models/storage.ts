@@ -82,7 +82,7 @@ export async function getPenultimateNetworkVersion(name: Model, savePath: string
 }
 
 export async function shouldSaveHistoricalVersion(name: Model, version: number, savePath: string) {
-    const step = 500_000;
+    const step = 200_000;
     const penultimateNetworkVersion = await getPenultimateNetworkVersion(name, savePath);
 
     if (penultimateNetworkVersion == null) {
