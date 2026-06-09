@@ -5,7 +5,7 @@ import { shaderMeta as seedMeta } from './seed.shader.ts';
 import { shaderMeta as jfaMeta } from './jfa.shader.ts';
 import { shaderMeta as dfMeta } from './df.shader.ts';
 import { shaderMeta as rcMeta } from './radianceCascades.shader.ts';
-import { shaderMeta as overlayMeta, AMBIENT } from './overlay.shader.ts';
+import { shaderMeta as overlayMeta } from './overlay.shader.ts';
 import { SunLight } from '../../../../../../../renderer/src/ECS/Systems/SunLight.ts';
 
 type RCTextures = ReturnType<typeof createFrameTextures>;
@@ -38,18 +38,18 @@ export const DEFAULT_RC_PARAMS: RCParams = {
     // concentric ring artifact around small bright emitters (flashes).
     rayInterval: 0.25,
     intervalOverlap: 0.5,
-    srgb: 1.7,
+    srgb: 1.95,
     sunColor: [1.0, 0.859, 0.161], // #ffdb29
     sunIntensity: 0.1,
     skyColor: [0.075, 0.110, 0.239], // #131c3d
     skyMix: 0.32,
     sunDistance: 0.65,
     firstCascadeIndex: 0,
-    emitCone: 8,
-    ambient: AMBIENT,
+    emitCone: 18,
+    ambient: 0.1,
     // Boundary-light dilation for object pixels, in radiance texels.
-    objectLightRadius: 4,
-    objectTranslucency: 0.5,
+    objectLightRadius: 6,
+    objectTranslucency: 1,
 };
 
 export function createRadianceCascadesSystem({ device, params, frameTextures, sceneTexture, drawEmitters }: {

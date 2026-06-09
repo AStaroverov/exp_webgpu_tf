@@ -50,10 +50,19 @@ export class HexGrid {
     /** Reverse index: `row:col` → the honeycomb hex at that grid position. */
     private readonly hexByRowCol = new Map<string, HexTile>();
 
-    constructor(opts?: { originX?: number; originY?: number; center?: { x: number; y: number } }) {
+    constructor(opts?: {
+        originX?: number;
+        originY?: number;
+        center?: { x: number; y: number };
+        cols?: number;
+        rows?: number;
+    }) {
         this.grid = new Grid(
             HexTile,
-            rectangle({ width: HexGridConfig.cols, height: HexGridConfig.rows }),
+            rectangle({
+                width: opts?.cols ?? HexGridConfig.cols,
+                height: opts?.rows ?? HexGridConfig.rows,
+            }),
         );
 
         if (opts?.center) {

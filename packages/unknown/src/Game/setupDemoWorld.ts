@@ -16,7 +16,7 @@ import { PluginDI } from './DI/PluginDI.ts';
 import { getGameComponents } from './ECS/createGameWorld.ts';
 import { SystemGroup } from './ECS/Plugins/systems.ts';
 import { createTank } from './ECS/Entities/Tank/createTank.ts';
-import { VehicleType } from './Config/index.ts';
+import { VehicleType, teamBaseColor } from './Config/index.ts';
 import { spawnObstacles } from './ECS/Entities/Obstacle/spawnObstacles.ts';
 import { createStandInDriverSystem } from './ECS/Plugins/createStandInDriverSystem.ts';
 import { createShapeCountDiagnosticSystem } from './ECS/Plugins/createShapeCountDiagnosticSystem.ts';
@@ -38,13 +38,7 @@ export function setupDemoWorld({ world } = GameDI) {
     function spawnDemoTanks() {
         const grid = MapDI.grid;
         const tankTypes = [VehicleType.LightTank, VehicleType.MediumTank, VehicleType.HeavyTank] as const;
-        const palette: Array<[number, number, number, number]> = [
-            [1.0, 0.4, 0.4, 1],
-            [0.4, 0.7, 1.0, 1],
-            [0.6, 1.0, 0.5, 1],
-            [1.0, 0.9, 0.4, 1],
-            [0.8, 0.3, 0.2, 1], // rocket tank — dark red/orange, matches its turret
-        ];
+        const TANK_COUNT = 5;
 
         // Pick distinct random cells to place the tanks on.
         const allCells: Array<{ q: number; r: number }> = [];
@@ -53,7 +47,7 @@ export function setupDemoWorld({ world } = GameDI) {
             const j = Math.floor(Math.random() * (i + 1));
             [allCells[i], allCells[j]] = [allCells[j], allCells[i]];
         }
-        const slots = allCells.slice(0, palette.length);
+        const slots = allCells.slice(0, TANK_COUNT);
 
         for (let i = 0; i < slots.length; i++) {
             const { q, r } = slots[i];
@@ -62,16 +56,17 @@ export function setupDemoWorld({ world } = GameDI) {
 
             // Last slot is always the Rocket tank so it is guaranteed visible in the demo.
             const isRocketSlot = i === slots.length - 1;
+            const teamId = (i % 2) + 1;
             const tankEid = createTank({
                 type: isRocketSlot
                     ? VehicleType.RocketTank
                     : tankTypes[Math.floor(Math.random() * tankTypes.length)],
                 playerId: i + 1,
-                teamId: (i % 2) + 1,
+                teamId,
                 x: pos.x,
                 y: pos.y,
                 rotation: Math.random() * Math.PI * 2,
-                color: new Float32Array(palette[i % palette.length]),
+                color: new Float32Array(teamBaseColor(teamId)),
             });
 
             VehicleController.setMove$(tankEid, 0);

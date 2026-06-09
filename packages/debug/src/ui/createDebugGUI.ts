@@ -18,17 +18,15 @@ import { createTank, type TankVehicleType } from '../../../unknown/src/Game/ECS/
 import { destroyTank, getTankTeamId } from '../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts';
 import { enqueueAction } from '../../../unknown/src/Game/ECS/Actions/ActionSchedule.ts';
 import { ActionKind, TargetKind } from '../../../unknown/src/Game/ECS/Actions/ActionTypes.ts';
-import { VehicleType } from '../../../unknown/src/Game/Config/index.ts';
+import { VehicleType, TEAM_BASE_COLORS } from '../../../unknown/src/Game/Config/index.ts';
 import { setCameraZoom } from '../../../renderer/src/ECS/Systems/ResizeSystem.ts';
-import { recreateDebugGame } from '../createDebugGame.ts';
+import { DEFAULT_FIELD_SIZE, recreateDebugGame } from '../createDebugGame.ts';
+import { spawnObstacles } from '../../../unknown/src/Game/ECS/Entities/Obstacle/spawnObstacles.ts';
 import { createLightingGUI } from '../../../unknown/src/ui/createLightingGUI.ts';
 
-const TEAM_COLORS: Record<number, [number, number, number, number]> = {
-    1: [1.0, 0.4, 0.4, 1],
-    2: [0.4, 0.7, 1.0, 1],
-    3: [0.6, 1.0, 0.5, 1],
-    4: [1.0, 0.9, 0.4, 1],
-};
+// Team identity colors — sourced from the shared vehicle palette so the debug
+// swatches and spawned tanks match.
+const TEAM_COLORS: Record<number, Float32Array> = TEAM_BASE_COLORS;
 
 const HOLD_DURATION_MS = 1000;
 const AIM_TOLERANCE = 0.05;
@@ -55,13 +53,19 @@ export function createDebugGUI(canvas: HTMLCanvasElement) {
     const lighting = createLightingGUI({ container: document.body, side: 'left' });
 
     // ── Field ─────────────────────────────────────────────────────────────
-    gui.add({
+    // Field starts empty at the chosen size; obstacles are opt-in (button).
+    const field = { cols: DEFAULT_FIELD_SIZE.cols, rows: DEFAULT_FIELD_SIZE.rows };
+    const fieldFolder = gui.addFolder('Field');
+    fieldFolder.add(field, 'cols', 2, 30, 1).name('cols');
+    fieldFolder.add(field, 'rows', 2, 30, 1).name('rows');
+    fieldFolder.add({
         recreate: async () => {
-            await recreateDebugGame(canvas);
+            await recreateDebugGame(canvas, { cols: field.cols, rows: field.rows });
             applyZoom(); // createGame resets the zoom to the auto-fit value
             lighting.sync(); // re-apply panel values to the freshly created lighting system
         },
     }, 'recreate').name('Recreate field');
+    fieldFolder.add({ go: () => spawnObstacles() }, 'go').name('Spawn obstacles');
 
     // ── Camera ────────────────────────────────────────────────────────────
     // Multiplier on top of the auto-fit zoom createGame computes (>1 closer).

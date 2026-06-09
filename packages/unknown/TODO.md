@@ -1,4 +1,2 @@
 - add heals for tanks from parts
 - add new types of tanks
-- add fog of war
-- add rangers

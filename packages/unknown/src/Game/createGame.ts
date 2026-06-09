@@ -26,7 +26,6 @@ import { createDrawFaunaSystem } from './ECS/Systems/Render/Fauna/createDrawFaun
 import { createSandstormSystem } from './ECS/Systems/Render/PostEffect/Sandstorm/createSandstormSystem.ts';
 import { createDrawVFXSystem } from './ECS/Systems/Render/VFX/createDrawVFXSystem.ts';
 import { createPresent } from '../../../renderer/src/WGSL/createPresent.ts';
-import { createPixelatePass } from './ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts';
 import { createRadianceCascadesSystem } from './ECS/Systems/Render/Lighting/createRadianceCascadesSystem.ts';
 import { createVisualizationTracksSystem } from './ECS/Systems/Tank/createVisualizationTracksSystem.ts';
 import { createSpawnTreadMarksSystem } from './ECS/Systems/Tank/createSpawnTreadMarksSystem.ts';
@@ -56,9 +55,11 @@ import { createGridOccupancySystem } from './ECS/Systems/Map/createGridOccupancy
 
 export type Game = ReturnType<typeof createGame>;
 
-export function createGame({ width, height }: {
+export function createGame({ width, height, cols, rows }: {
     width: number,
     height: number,
+    cols?: number,
+    rows?: number,
 }) {
     const world = createGameWorld();
     const physicalWorld = initPhysicalWorld();
@@ -72,7 +73,7 @@ export function createGame({ width, height }: {
     GameMap.setOffset(width / 2, height / 2);
     initCameraPosition();
 
-    MapDI.grid = new HexGrid({ center: { x: width / 2, y: height / 2 } });
+    MapDI.grid = new HexGrid({ center: { x: width / 2, y: height / 2 }, cols, rows });
 
     // Camera: sit at the field center and zoom out so the whole grid fits on
     // screen (with a small margin). No target — the camera stays put.
@@ -290,11 +291,11 @@ export function createGame({ width, height }: {
             device,
             shadowMapTexture: textures.shadowMapTexture,
         });
-        const pixelatePass = createPixelatePass(device, textures.renderTexture);
+        // const pixelatePass = createPixelatePass(device, textures.renderTexture);
         const lighting = RenderDI.lighting = createRadianceCascadesSystem({
             device,
             frameTextures: textures,
-            sceneTexture: pixelatePass.outputTexture,
+            // sceneTexture: pixelatePass.outputTexture,
             drawEmitters: shapeSystem.drawEmitters,
         });
         const drawFauna = createDrawFaunaSystem();
@@ -327,7 +328,7 @@ export function createGame({ width, height }: {
         RenderDI.renderFrame = (delta: number) => {
             const commandEncoder = device.createCommandEncoder();
             frameTick(commandEncoder, delta);      // scene -> renderTexture
-            pixelatePass.run(commandEncoder);      // renderTexture -> pixelated scene
+            // pixelatePass.run(commandEncoder);      // renderTexture -> pixelated scene
             lighting.run(commandEncoder, delta);   // pixelated scene * light -> litTexture
             present(commandEncoder, lighting.outputTexture); // final -> swapchain
             device.queue.submit([commandEncoder.finish()]);

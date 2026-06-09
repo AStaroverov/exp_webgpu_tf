@@ -9,7 +9,7 @@
  * Acts only on slot-0 fronts of its kind; owners run concurrently.
  */
 
-import { query } from 'bitecs';
+import { hasComponent, query } from 'bitecs';
 import { GameDI } from '../../../DI/GameDI.ts';
 import { MapDI } from '../../../DI/MapDI.ts';
 import { normalizeAngle } from '../../../../../../../lib/math.ts';
@@ -43,7 +43,7 @@ export const AimActionDescriptor: ActionDescriptor<AimActionSpec> = {
 };
 
 export function createAimActionSystem({ world } = GameDI) {
-    const { ActionsQueue, Vehicle, Tank, TurretController, RigidBodyState } = getGameComponents(world);
+    const { ActionsQueue, Vehicle, Tank, TurretController, VehicleController, HullAimed, RigidBodyState } = getGameComponents(world);
 
     return function updateAim(_delta: number) {
         const eids = query(world, [ActionsQueue, Vehicle, RigidBodyState]);
@@ -60,6 +60,14 @@ export function createAimActionSystem({ world } = GameDI) {
                 continue;
             }
 
+            // HullAimed vehicles steer the body to aim (fixed turret); the rest
+            // rotate the turret. `aimerEid` is whichever entity's heading we read.
+            const hullAimed = hasComponent(world, ownerEid, HullAimed);
+            const aimerEid = hullAimed ? ownerEid : turretEid;
+            const steer = (dir: number) => hullAimed
+                ? VehicleController.setRotate$(ownerEid, dir)
+                : TurretController.setRotation$(turretEid, dir);
+
             // Resolve the target hex's world center.
             const targetCenter = MapDI.grid.hexToWorld(
                 ActionsQueue.getTargetVal(ownerEid, 0, 0),
@@ -68,7 +76,7 @@ export function createAimActionSystem({ world } = GameDI) {
 
             if (!targetCenter) {
                 // Off-map target — fail the action.
-                TurretController.setRotation$(turretEid, 0);
+                steer(0);
                 ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
                 continue;
             }
@@ -80,21 +88,21 @@ export function createAimActionSystem({ world } = GameDI) {
                 ActionsQueue.scheduleRequestNext(ownerEid, 0);
             }
 
-            const turretX = RigidBodyState.position.get(turretEid, 0);
-            const turretY = RigidBodyState.position.get(turretEid, 1);
-            const desired = Math.atan2(targetCenter.y - turretY, targetCenter.x - turretX);
-            const err = normalizeAngle(desired - RigidBodyState.rotation[turretEid]);
+            const aimerX = RigidBodyState.position.get(aimerEid, 0);
+            const aimerY = RigidBodyState.position.get(aimerEid, 1);
+            const desired = Math.atan2(targetCenter.y - aimerY, targetCenter.x - aimerX);
+            const err = normalizeAngle(desired - RigidBodyState.rotation[aimerEid]);
 
             const tolerance = ActionsQueue.getParam(ownerEid, 0, AimParamOffset.tolerance) || 0.05;
             if (Math.abs(err) <= tolerance) {
-                TurretController.setRotation$(turretEid, 0);
+                steer(0);
                 ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
                 continue;
             }
 
             // Proportional within SLOW_BAND, full speed outside it.
             const dir = Math.abs(err) >= SLOW_BAND ? Math.sign(err) : err / SLOW_BAND;
-            TurretController.setRotation$(turretEid, dir);
+            steer(dir);
         }
     };
 }

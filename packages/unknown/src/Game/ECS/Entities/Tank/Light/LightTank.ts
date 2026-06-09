@@ -24,9 +24,8 @@ import {
     turretHeadSet,
 } from './LightTankParts.ts';
 import { EngineType, HeadlightConfig } from '../../../../Config/vehicles.ts';
+import { randomVehiclePalette } from '../../../../Config/vehiclePalette.ts';
 
-const TRACKS_COLOR = new Float32Array([0.6, 0.6, 0.6, 1]);
-const TURRET_COLOR = new Float32Array([0.6, 1, 0.6, 1]);
 const APPROXIMATE_COLLIDER_RADIUS = 50;
 
 export function createLightTank(opts: {
@@ -76,17 +75,21 @@ export function createLightTank(opts: {
     options.firearms.bulletStartPosition = [9 * PADDING, 0];
     const [turretEid, gunEid] = createTankTurret(options, tankEid, tankPid);
 
+    // Body uses a random contrastive palette; the gun carries the team color.
+    const palette = randomVehiclePalette();
+
     // Hull parts attached to tank body
+    updateColorOptions(options, palette.hull);
     createSlotEntities(tankEid, hullSet, options.color, SlotPartType.HullPart);
     createSlotEntities(tankEid, headlightSet, HeadlightConfig.color, SlotPartType.Headlight);
 
     // Caterpillar parts attached to track entities
-    updateColorOptions(options, TRACKS_COLOR);
+    updateColorOptions(options, palette.tracks);
     createSlotEntities(leftTrackEid, caterpillarSetLeft, options.color, SlotPartType.Caterpillar);
     createSlotEntities(rightTrackEid, caterpillarSetRight, options.color, SlotPartType.Caterpillar);
 
-    // Turret parts
-    updateColorOptions(options, TURRET_COLOR);
+    // Turret + gun (orudie) = team color.
+    updateColorOptions(options, opts.color);
     createSlotEntities(turretEid, turretHeadSet, options.color, SlotPartType.TurretHead);
     createSlotEntities(gunEid, turretGunSet, options.color, SlotPartType.TurretGun);
 

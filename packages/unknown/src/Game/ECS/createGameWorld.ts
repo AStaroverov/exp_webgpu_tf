@@ -12,6 +12,7 @@ import {
 } from './Components/Destroy.ts';
 import { createExhaustPipeComponent } from './Components/ExhaustPipe.ts';
 import { createExplodableComponent } from './Components/Explodable.ts';
+import { createHullAimedComponent } from './Components/HullAimed.ts';
 import { createFirearmsComponent } from './Components/Firearms.ts';
 import { createHeuristicsDataComponent } from './Components/HeuristicsData.ts';
 import { createHitableComponent } from './Components/Hitable.ts';
@@ -71,6 +72,7 @@ function createGameOnlyComponents(world: World) {
         Explodable: createExplodableComponent(world),
         Firearms: createFirearmsComponent(world),
         HeuristicsData: createHeuristicsDataComponent(world),
+        HullAimed: createHullAimedComponent(world),
         Hitable: createHitableComponent(world),
         Impulse: createImpulseComponent(world),
         ImpulseAtPoint: createImpulseAtPointComponent(world),

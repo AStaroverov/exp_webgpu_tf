@@ -14,7 +14,7 @@
  * Acts only on slot-0 fronts of its kind; owners run concurrently.
  */
 
-import { query } from 'bitecs';
+import { hasComponent, query } from 'bitecs';
 import { GameDI } from '../../../DI/GameDI.ts';
 import { MapDI } from '../../../DI/MapDI.ts';
 import { normalizeAngle } from '../../../../../../../lib/math.ts';
@@ -52,7 +52,7 @@ export const FireActionDescriptor: ActionDescriptor<FireActionSpec> = {
 };
 
 export function createFireActionSystem({ world } = GameDI) {
-    const { ActionsQueue, Vehicle, Tank, TurretController, Firearms, RigidBodyState } = getGameComponents(world);
+    const { ActionsQueue, Vehicle, Tank, TurretController, VehicleController, HullAimed, Firearms, RigidBodyState } = getGameComponents(world);
 
     const sharedAimPoint = { x: 0, y: 0 };
     function tick(_delta: number) {
@@ -71,6 +71,14 @@ export function createFireActionSystem({ world } = GameDI) {
                 continue;
             }
 
+            // HullAimed vehicles steer the body to aim (fixed turret); the rest
+            // rotate the turret. `aimerEid` is whichever entity's heading we read.
+            const hullAimed = hasComponent(world, ownerEid, HullAimed);
+            const aimerEid = hullAimed ? ownerEid : turretEid;
+            const steer = (dir: number) => hullAimed
+                ? VehicleController.setRotate$(ownerEid, dir)
+                : TurretController.setRotation$(turretEid, dir);
+
             if (ActionsQueue.getStatus(ownerEid, 0) === ActionStatus.Idle) {
                 ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Running);
                 ActionsQueue.setParam(ownerEid, 0, FireParamOffset.phase, FIRE_PHASE_AIMING);
@@ -87,7 +95,7 @@ export function createFireActionSystem({ world } = GameDI) {
 
                 // Off-map target → can't aim; abort.
                 if (!targetCenter) {
-                    TurretController.setRotation$(turretEid, 0);
+                    steer(0);
                     ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
                     continue;
                 }
@@ -95,13 +103,13 @@ export function createFireActionSystem({ world } = GameDI) {
                 // Re-resolved every tick so the aim tracks a moving unit.
                 const aimPoint = resolveAimPoint(ownerEid, targetQ, targetR, sharedAimPoint) ?? targetCenter;
 
-                const turretX = RigidBodyState.position.get(turretEid, 0);
-                const turretY = RigidBodyState.position.get(turretEid, 1);
-                const desired = Math.atan2(aimPoint.y - turretY, aimPoint.x - turretX);
-                const err = normalizeAngle(desired - RigidBodyState.rotation[turretEid]);
+                const aimerX = RigidBodyState.position.get(aimerEid, 0);
+                const aimerY = RigidBodyState.position.get(aimerEid, 1);
+                const desired = Math.atan2(aimPoint.y - aimerY, aimPoint.x - aimerX);
+                const err = normalizeAngle(desired - RigidBodyState.rotation[aimerEid]);
 
                 if (Math.abs(err) <= TOLERANCE) {
-                    TurretController.setRotation$(turretEid, 0);
+                    steer(0);
                     // On target → wait for the weapon, then fire a round.
                     ActionsQueue.setParam(ownerEid, 0, FireParamOffset.phase, FIRE_PHASE_WAIT_READY);
                     continue;
@@ -109,7 +117,7 @@ export function createFireActionSystem({ world } = GameDI) {
 
                 // Proportional within SLOW_BAND, full speed outside it.
                 const dir = Math.abs(err) >= SLOW_BAND ? Math.sign(err) : err / SLOW_BAND;
-                TurretController.setRotation$(turretEid, dir);
+                steer(dir);
                 continue;
             }
 

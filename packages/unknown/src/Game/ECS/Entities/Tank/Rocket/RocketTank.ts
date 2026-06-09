@@ -1,31 +1,31 @@
-import { PI } from '../../../../../../../../lib/math.ts';
 import { TColor } from '../../../../../../../renderer/src/ECS/Components/Common.ts';
 import { BulletCaliber } from '../../../Components/Bullet.ts';
 import { SlotPartType } from '../../../Components/SlotConfig.ts';
 import { VehicleType } from '../../../Components/Vehicle.ts';
+import { getGameComponents } from '../../../createGameWorld.ts';
+import { GameDI } from '../../../../DI/GameDI.ts';
 import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../../Vehicle/VehicleParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from '../Common/Options.ts';
 import { createTankBase, createTankTracks, createTankTurret } from '../Common/Tank.ts';
 import { createTankExhaustPipes } from '../../ExhaustPipe.ts';
 import {
+    cabinSet,
     caterpillarLength,
     caterpillarSetLeft,
     caterpillarSetRight,
     DENSITY,
     headlightSet,
+    HULL_ROWS,
     hullSet,
     PADDING,
     PARTS_COUNT,
+    railSet,
+    RAIL_Y,
     SIZE,
     TRACK_ANCHOR_Y,
-    turretGunSet,
-    turretHeadSet,
-} from '../Heavy/HeavyTankParts.ts';
-import { EngineType, HeadlightConfig, ReloadConfig } from '../../../../Config/index.ts';
+} from './RocketTankParts.ts';
+import { EngineType, HeadlightConfig, ReloadConfig, randomVehiclePalette } from '../../../../Config/index.ts';
 
-const TRACKS_COLOR = new Float32Array([0.5, 0.5, 0.5, 1]);
-// Distinct dark red/orange turret so the launcher reads as a launcher.
-const TURRET_COLOR = new Float32Array([0.8, 0.3, 0.2, 1]);
 const APPROXIMATE_COLLIDER_RADIUS = 80;
 
 export function createRocketTank(opts: {
@@ -36,6 +36,9 @@ export function createRocketTank(opts: {
     rotation: number,
     color: TColor,
 }) {
+    const { world } = GameDI;
+    const { HullAimed } = getGameComponents(world);
+
     const options = resetOptions(mutatedOptions, opts);
     options.partsCount = PARTS_COUNT;
     options.size = SIZE;
@@ -45,10 +48,14 @@ export function createRocketTank(opts: {
     options.engineType = EngineType.v12;
     options.trackLength = caterpillarLength;
 
+    // Elongated hull — length (+X / forward) clearly exceeds width.
     options.density = DENSITY * 14;
-    options.width = PADDING * 12;
-    options.height = PADDING * 8;
+    options.width = PADDING * 14;
+    options.height = PADDING * HULL_ROWS;
     const [tankEid, tankPid] = createTankBase(options);
+
+    // The launcher is bolted to the hull, so the whole vehicle turns to aim.
+    HullAimed.addComponent(world, tankEid);
 
     // Create left and right tracks as independent entities
     const [leftTrackEid, rightTrackEid] = createTankTracks(
@@ -65,29 +72,35 @@ export function createRocketTank(opts: {
     );
 
     options.density = DENSITY;
-    options.width = PADDING * 7;
-    options.height = PADDING * 6;
-    options.turret.rotationSpeed = PI * 0.08;
-    options.turret.gunWidth = PADDING * 8;
-    options.turret.gunHeight = PADDING * 2.2;
+    options.width = PADDING * 16;
+    options.height = PADDING * HULL_ROWS;
+    options.turret.rotationSpeed = 0;
+    options.turret.gunWidth = PADDING;
+    options.turret.gunHeight = PADDING;
     options.firearms.reloadingDuration = ReloadConfig.rocketLauncher;
     options.firearms.bulletCaliber = BulletCaliber.Rocket;
-    options.firearms.bulletStartPosition = [13 * PADDING, 0];
-    const [turretEid, gunEid] = createTankTurret(options, tankEid, tankPid);
+    options.firearms.bulletStartPosition = [PADDING * 10, RAIL_Y];
+    const [turretEid] = createTankTurret(options, tankEid, tankPid);
+
+    // Body uses a random contrastive palette; the launch rail (weapon) = team color.
+    const palette = randomVehiclePalette();
 
     // Hull parts attached to tank body
+    updateColorOptions(options, palette.hull);
     createSlotEntities(tankEid, hullSet, options.color, SlotPartType.HullPart);
     createSlotEntities(tankEid, headlightSet, HeadlightConfig.color, SlotPartType.Headlight);
 
     // Caterpillar parts attached to track entities
-    updateColorOptions(options, TRACKS_COLOR);
+    updateColorOptions(options, palette.tracks);
     createSlotEntities(leftTrackEid, caterpillarSetLeft, options.color, SlotPartType.Caterpillar);
     createSlotEntities(rightTrackEid, caterpillarSetRight, options.color, SlotPartType.Caterpillar);
 
-    // Turret parts
-    updateColorOptions(options, TURRET_COLOR);
-    createSlotEntities(gunEid, turretGunSet, options.color, SlotPartType.TurretGun);
-    createSlotEntities(turretEid, turretHeadSet, options.color, SlotPartType.TurretHead);
+    // Launch rail (orudie) = team color; pilot cabin from the palette — both
+    // bolted to the (fixed) launcher carrier.
+    updateColorOptions(options, opts.color);
+    createSlotEntities(turretEid, railSet, options.color, SlotPartType.TurretGun);
+    updateColorOptions(options, palette.turret);
+    createSlotEntities(turretEid, cabinSet, options.color, SlotPartType.TurretHead);
 
     // Fill all slots with physical parts
     updateSlotsBrightness(tankEid);
@@ -98,11 +111,9 @@ export function createRocketTank(opts: {
     fillAllSlots(rightTrackEid, options);
     updateSlotsBrightness(turretEid);
     fillAllSlots(turretEid, options);
-    updateSlotsBrightness(gunEid);
-    fillAllSlots(gunEid, options);
 
     // Add exhaust pipes
-    createTankExhaustPipes(tankEid, PADDING * 12, PADDING * 8);
+    createTankExhaustPipes(tankEid, PADDING * 14, PADDING * HULL_ROWS);
 
     return tankEid;
 }

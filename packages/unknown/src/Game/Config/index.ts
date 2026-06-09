@@ -8,3 +8,4 @@ export * from './spice.ts';
 export * from './sound.ts';
 export * from './vfx.ts';
 export * from './gameplay.ts';
+export * from './vehiclePalette.ts';
