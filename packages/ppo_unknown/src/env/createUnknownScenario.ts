@@ -32,6 +32,7 @@ import { getTankHealth, getTankTeamId } from '../../../unknown/src/Game/ECS/Enti
 import { getTeamsCount } from '../../../unknown/src/Game/ECS/Components/TeamRef.ts';
 import { UnknownInputBoard } from '../state/board.ts';
 import { scoreTracker } from '../reward/ScoreTracker.ts';
+import { getShapingWeight } from '../reward/calculateReward.ts';
 import { ScenarioConfig } from '../curriculum/types.ts';
 import { UnknownAgent } from './UnknownAgent.ts';
 import { FrozenAgent } from './FrozenAgent.ts';
@@ -69,8 +70,6 @@ export type Scenario = {
     getVehicleEids: () => QueryResult;
     getTeamsCount: () => number;
     getSuccessRatio: () => number;
-    /** Fraction of `teamId`'s initial health destroyed, in [0, 1]. */
-    getTeamDestroyedRatio: (teamId: number) => number;
 };
 
 export function createUnknownScenario(options: {
@@ -78,8 +77,11 @@ export function createUnknownScenario(options: {
     train?: boolean;
     /** Team sizes and enemy behaviour — one entry of `scenarioCompositions`. */
     config: ScenarioConfig;
+    /** Network iteration, drives the dense-shaping anneal (see `getShapingWeight`). */
+    iteration?: number;
 }): Scenario {
     const train = options.train ?? true;
+    const shapingWeight = getShapingWeight(options.iteration ?? 0);
     const { allies, enemies, enemy } = options.config;
     scoreTracker.reset(); // fresh combat score per episode
     const game = createGame({ width: FIELD_SIZE, height: FIELD_SIZE });
@@ -134,7 +136,7 @@ export function createUnknownScenario(options: {
             }
 
             UnknownInputBoard.addComponent(world, tankEid);
-            const agent = new UnknownAgent(tankEid, train);
+            const agent = new UnknownAgent(tankEid, train, shapingWeight);
             agents.push(agent);
             driverMap.set(tankEid, agent);
         }
@@ -165,12 +167,6 @@ export function createUnknownScenario(options: {
         getSuccessRatio: () => {
             if (!initialTeamHealth) return 0;
             return computeSuccessRatio(initialTeamHealth, getTeamHealth(world));
-        },
-        getTeamDestroyedRatio: (teamId) => {
-            const init = initialTeamHealth?.[teamId] ?? 0;
-            if (init <= 0) return 0;
-            const current = getTeamHealth(world)[teamId] ?? 0;
-            return Math.min(1, Math.max(0, 1 - current / init));
         },
     };
 

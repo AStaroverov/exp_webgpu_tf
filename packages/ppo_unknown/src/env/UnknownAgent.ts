@@ -51,6 +51,8 @@ export class UnknownAgent {
     constructor(
         public readonly tankEid: number,
         public readonly train: boolean,
+        /** Dense-shaping anneal factor for this episode (see `getShapingWeight`). */
+        public readonly shapingWeight: number,
     ) {}
 
     /** Pull the latest policy weights (called once per episode by the manager). */
@@ -64,7 +66,7 @@ export class UnknownAgent {
 
     closeFinalStep(): void {
         if (!this.train || !this.opened) return;
-        const delta = calculateActionReward(this.tankEid) - this.prevPotential;
+        const delta = (calculateActionReward(this.tankEid) - this.prevPotential) * this.shapingWeight;
         this.memory.updateSecondPart(delta, true);
         this.opened = false;
     }
@@ -96,7 +98,7 @@ export class UnknownAgent {
 
         // 1. Close the previous macro-action with its accumulated reward.
         if (this.opened && this.train) {
-            const delta = calculateActionReward(this.tankEid) - this.prevPotential;
+            const delta = (calculateActionReward(this.tankEid) - this.prevPotential) * this.shapingWeight;
             const done = getTankHealth(this.tankEid) <= 0;
             this.memory.updateSecondPart(delta, done);
             if (done) {

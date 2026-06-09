@@ -9,10 +9,10 @@
  *                                `Score.getTotalScore`); the agent subtracts the
  *                                previous value to get the per-macro-action reward.
  *   getFramePenalty(frame)     — tiny per-decision time cost.
- *   calculateFinalReward(...)  — episode outcome: win (enemy team ≥80% destroyed)
- *                                pays a contribution-weighted reward; anything short
- *                                of a win costs a penalty that shrinks linearly with
- *                                progress towards the win threshold.
+ *   calculateFinalReward(...)  — episode outcome: a continuous reward proportional
+ *                                to the team's success ratio (relative surviving-health
+ *                                advantage in [-1, 1]); a positive outcome is split by
+ *                                combat contribution, a loss/draw is shared equally.
  */
 
 import { clamp } from 'lodash';
@@ -22,12 +22,25 @@ import { getTankTeamId } from '../../../unknown/src/Game/ECS/Entities/Tank/TankU
 import { scoreTracker } from './ScoreTracker.ts';
 import type { UnknownAgent } from '../env/UnknownAgent.ts';
 
-/** Enemy team destroyed at least this much → the episode counts as a win. */
-const WIN_THRESHOLD = 0.8;
-/** Reward for a win (an average-contribution tank gets exactly this). */
+/**
+ * Dense-shaping anneal: the per-macro-action reward (hit/kill/approach delta) is
+ * faded with the network iteration so late training leans on the terminal win/loss
+ * signal. Multiplicative, applied to the WHOLE shaping delta in `UnknownAgent`, so
+ * `ScoreTracker`'s raw score (used here for win-contribution weighting) stays intact.
+ *   weight = 1 until SHAPING_FULL_UNTIL, then linear to SHAPING_FLOOR at SHAPING_ZERO_AT.
+ */
+const SHAPING_FLOOR = 0.1;
+const SHAPING_FULL_UNTIL = 50_000;
+const SHAPING_ZERO_AT = 150_000;
+
+/** Multiplicative weight on the dense shaping reward for the given network iteration. */
+export function getShapingWeight(iteration: number): number {
+    const t = clamp((iteration - SHAPING_FULL_UNTIL) / (SHAPING_ZERO_AT - SHAPING_FULL_UNTIL), 0, 1);
+    return 1 + (SHAPING_FLOOR - 1) * t;
+}
+
+/** Reward magnitude at a perfect outcome (success ratio = ±1). */
 const WIN_REWARD = 3;
-/** Penalty at 0% enemy damage; fades linearly to 0 at WIN_THRESHOLD. */
-const MAX_LOSS_PENALTY = 3;
 /** Team-spirit τ: 0 = selfish, 1 = fully cooperative. Fixed for the MVP scenario. */
 const TEAM_SPIRIT = 0.5;
 
@@ -38,28 +51,26 @@ export function calculateActionReward(eid: number, { world } = GameDI): number {
 }
 
 /**
- * Episode-end reward for `eid`. `getTeamDestroyedRatio` reports how much of a
- * team's initial health is gone, in [0, 1] (Scenario.getTeamDestroyedRatio).
+ * Episode-end reward for `eid`. `successRatioTeam0` is the episode success ratio from
+ * team 0's perspective in [-1, 1] (Scenario.getSuccessRatio): the relative
+ * surviving-health advantage, +1 = team 0 intact while team 1 is wiped.
  *
- * Win (enemy team ≥ WIN_THRESHOLD destroyed): WIN_REWARD weighted by the tank's
- * relative combat-score contribution, team-spirit blended — the tank that did the
- * killing earns more than one that just drove around, team average stays WIN_REWARD.
- * Otherwise: a penalty shared equally, MAX_LOSS_PENALTY at 0% enemy damage and
- * shrinking linearly to 0 as the team approaches the win threshold.
+ * The team reward is continuous: WIN_REWARD × success ratio from THIS tank's team
+ * perspective (+1 = enemy wiped while we're intact, -1 = the reverse, 0 = even trade).
+ * A positive outcome is then weighted by the tank's relative combat-score contribution
+ * (team-spirit blended; team average stays the team reward). A loss/draw is shared
+ * equally — the tank that fought hardest is not punished more than the one that hid.
  */
 export function calculateFinalReward(
     eid: number,
-    getTeamDestroyedRatio: (teamId: number) => number,
+    successRatioTeam0: number,
     agents: UnknownAgent[],
     { world } = GameDI,
 ): number {
     const myTeam = getTankTeamId(eid);
-    const enemyDestroyed = getTeamDestroyedRatio(1 - myTeam);
-    const progress = clamp(enemyDestroyed / WIN_THRESHOLD, 0, 1);
-
-    if (progress < 1) {
-        return -MAX_LOSS_PENALTY * (1 - progress);
-    }
+    const successRatio = myTeam === 0 ? successRatioTeam0 : -successRatioTeam0;
+    const teamReward = WIN_REWARD * successRatio;
+    if (teamReward <= 0) return teamReward;
 
     const { PlayerRef } = getGameComponents(world);
     const teammates = agents.filter((a) => getTankTeamId(a.tankEid) === myTeam);
@@ -76,5 +87,5 @@ export function calculateFinalReward(
         : 1;
     const contribution = (1 - TEAM_SPIRIT) * relativeShare + TEAM_SPIRIT;
 
-    return WIN_REWARD * contribution;
+    return teamReward * contribution;
 }

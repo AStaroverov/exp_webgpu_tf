@@ -37,7 +37,7 @@ const optionsBulletRR: Options = {
     linearDamping: 0.1,
     collisionEvent: ActiveEvents.CONTACT_FORCE_EVENTS,
     belongsCollisionGroup: CollisionGroup.BULLET,
-    interactsCollisionGroup: CollisionGroup.ALL & ~CollisionGroup.TANK_TURRET_GUN_PARTS,
+    interactsCollisionGroup: CollisionGroup.ALL & ~CollisionGroup.TANK_TURRET_GUN_PARTS & ~CollisionGroup.BULLET,
 };
 const defaultOptionsBulletRR = structuredClone(optionsBulletRR);
 const tmpSpeed = vec2.create();

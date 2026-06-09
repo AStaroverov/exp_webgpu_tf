@@ -26,7 +26,12 @@ export function createScenarioByCurriculumState(
     const weights = computeSamplingWeights(curriculumState, unlockedCount, threshold);
     const index = sampleIndex(weights);
 
-    return createUnknownScenario({ index, train: options.train, config: scenarioCompositions[index] });
+    return createUnknownScenario({
+        index,
+        train: options.train,
+        config: scenarioCompositions[index],
+        iteration: curriculumState.iteration,
+    });
 }
 
 const THRESHOLD_STEP_ITERATIONS = 500;
