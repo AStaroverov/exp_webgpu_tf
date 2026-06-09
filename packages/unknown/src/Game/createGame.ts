@@ -184,6 +184,13 @@ export function createGame({ width, height, cols, rows }: {
     GameDI.gameTick = (delta: number) => {
         if (GameDI.world === null) return;
 
+        // Spawn at the top of the tick (consuming flags/requests raised last tick) so
+        // freshly spawned entities flow through this tick's physics step and transform
+        // resolution (execTransform → applyRigidBodyToTransform → attached) inside
+        // `physicalFrame`. Spawning after that chain would leave their GlobalTransform at
+        // identity until the next tick — rendering one frame at the origin (0,0).
+        spawnFrame(delta);
+
         physicalFrame(delta);
 
         updateGridOccupancy(); // rebuild the grid's Unit/Reserved layer from vehicle state
@@ -204,7 +211,6 @@ export function createGame({ width, height, cols, rows }: {
         setCameraPosition(CameraState.x, CameraState.y);
 
         destroyFrame(delta);
-        spawnFrame(delta);
 
         RenderDI.renderFrame?.(delta);
         SoundDI.soundFrame?.(delta);
