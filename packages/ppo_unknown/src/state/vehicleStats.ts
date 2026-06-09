@@ -57,7 +57,7 @@ const MAX_DAMAGE = Math.max(
 
 /** Quickest reload time across guns (the inverted-reload numerator). */
 const MIN_RELOAD = Math.min(
-    ...GUN_TYPES.map((t) => getTankConfig(t).gun!.reloadTime),
+    ...GUN_TYPES.map((t) => BulletCaliberConfig[getTankConfig(t).gun!.caliber].reloadTime),
 );
 
 /** Longest bullet flight distance (the range normalizer). */
@@ -73,7 +73,7 @@ function computeStats(type: VehicleType): VehicleStats {
     return {
         role: RoleStat.Fighter,
         mobility,
-        reload: gun ? MIN_RELOAD / gun.reloadTime : 0,
+        reload: caliber ? MIN_RELOAD / caliber.reloadTime : 0,
         range: caliber ? caliber.maxDistance / MAX_RANGE : 0,
         firepower: caliber ? caliber.damage / MAX_DAMAGE : 0,
     };

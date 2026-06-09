@@ -6,7 +6,7 @@
  */
 
 import { PI } from '../../../../../lib/math.ts';
-import { BulletCaliber, ReloadConfig, TurretSpeedConfig } from './weapons.ts';
+import { BulletCaliber, TurretSpeedConfig } from './weapons.ts';
 
 
 /**
@@ -37,19 +37,27 @@ export const EngineLabels: Record<EngineType, string> = {
 };
 
 /**
+ * Global multiplier applied to EVERY engine's movement impulse below.
+ * Bump this to speed up (or slow down) all vehicles at once.
+ * Module-local: it is baked into {@link EngineConfig}, not exported.
+ */
+const MovementSpeedMult = 1.5;
+
+/**
  * Engine power multipliers relative to base values.
+ * `impulseMult` is already scaled by {@link MovementSpeedMult}.
  */
 export const EngineConfig: Record<EngineType, { impulseMult: number; rotationMult: number }> = {
     [EngineType.v6]: {
-        impulseMult: 0.8,
+        impulseMult: 0.8 * MovementSpeedMult,
         rotationMult: 0.9,
     },
     [EngineType.v8]: {
-        impulseMult: 1.0,
+        impulseMult: 1.0 * MovementSpeedMult,
         rotationMult: 1.0,
     },
     [EngineType.v12]: {
-        impulseMult: 2.0,
+        impulseMult: 2.0 * MovementSpeedMult,
         rotationMult: 3.0,
     },
 };
@@ -99,9 +107,7 @@ export type VehicleStats = {
 export type GunStats = {
     /** Turret gun grid [cols, rows] */
     gunGrid: [number, number];
-    /** Reload duration in ms */
-    reloadTime: number;
-    /** Bullet caliber */
+    /** Bullet caliber (its config carries damage, reload, range) */
     caliber: BulletCaliber;
     /** Bullet start position Y offset multiplier */
     bulletOffsetYMult: number;
@@ -130,7 +136,6 @@ export const LightTankConfig: TankStats = {
     turretSpeed: TurretSpeedConfig.light,
     gun: {
         gunGrid: [2, 6],
-        reloadTime: ReloadConfig.light,
         caliber: BulletCaliber.Light,
         bulletOffsetYMult: 9,
     },
@@ -161,7 +166,6 @@ export const MediumTankConfig: TankStats = {
     turretSpeed: TurretSpeedConfig.medium,
     gun: {
         gunGrid: [2, 10],
-        reloadTime: ReloadConfig.medium,
         caliber: BulletCaliber.Medium,
         bulletOffsetYMult: 13,
     },
@@ -192,7 +196,6 @@ export const HeavyTankConfig: TankStats = {
     turretSpeed: TurretSpeedConfig.heavy,
     gun: {
         gunGrid: [2, 8],
-        reloadTime: ReloadConfig.heavy,
         caliber: BulletCaliber.Heavy,
         bulletOffsetYMult: 13,
     },
@@ -224,7 +227,6 @@ export const RocketTankConfig: TankStats = {
     turretSpeed: TurretSpeedConfig.heavy,
     gun: {
         gunGrid: [2, 8],
-        reloadTime: ReloadConfig.rocketLauncher,
         caliber: BulletCaliber.Rocket,
         bulletOffsetYMult: 13,
     },

@@ -1,4 +1,3 @@
-import { PI } from '../../../../../../../lib/math.ts';
 import { TColor } from '../../../../../../renderer/src/ECS/Components/Common.ts';
 import { SlotPartType } from '../../Components/SlotConfig.ts';
 import { VehicleType } from '../../Components/Vehicle.ts';
@@ -21,6 +20,7 @@ import {
 } from './HarvesterParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from './Options.ts';
 import { EngineType } from '../../../Config/vehicles.ts';
+import { TurretSpeedConfig } from '../../../Config/weapons.ts';
 
 // Harvester colors - industrial/utility look
 const TRACKS_COLOR = new Float32Array([0.4, 0.4, 0.4, 1]);
@@ -69,7 +69,7 @@ export function createHarvester(opts: {
     options.density = DENSITY * 2;
     options.width = PADDING * 10;
     options.height = PADDING * 6;
-    options.turret.rotationSpeed = PI * 0.4; // Slower rotation for heavy barrier
+    options.turret.rotationSpeed = TurretSpeedConfig.harvester; // Slower rotation for heavy barrier
     const [barrierEid] = createHarvesterTurret(options, harvesterEid, harvesterPid);
 
     // Hull parts attached to harvester body

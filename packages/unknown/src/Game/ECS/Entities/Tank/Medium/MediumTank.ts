@@ -1,4 +1,3 @@
-import { PI } from '../../../../../../../../lib/math.ts';
 import { TColor } from '../../../../../../../renderer/src/ECS/Components/Common.ts';
 import { BulletCaliber } from '../../../Components/Bullet.ts';
 import { SlotPartType } from '../../../Components/SlotConfig.ts';
@@ -22,6 +21,7 @@ import {
     turretHeadSet,
 } from './MediumTankParts.ts';
 import { EngineType, HeadlightConfig } from '../../../../Config/vehicles.ts';
+import { BulletCaliberConfig, TurretSpeedConfig } from '../../../../Config/weapons.ts';
 import { randomVehiclePalette } from '../../../../Config/vehiclePalette.ts';
 
 const APPROXIMATE_COLLIDER_RADIUS = 60;
@@ -65,11 +65,11 @@ export function createMediumTank(opts: {
     options.density = DENSITY;
     options.width = PADDING * 6;
     options.height = PADDING * 5;
-    options.turret.rotationSpeed = PI * 0.2;
+    options.turret.rotationSpeed = TurretSpeedConfig.medium;
     options.turret.gunWidth = PADDING * 6;
     options.turret.gunHeight = PADDING * 2;
-    options.firearms.reloadingDuration = 1500;
     options.firearms.bulletCaliber = BulletCaliber.Medium;
+    options.firearms.reloadingDuration = BulletCaliberConfig[BulletCaliber.Medium].reloadTime;
     options.firearms.bulletStartPosition = [11 * PADDING, 0];
     const [turretEid, gunEid] = createTankTurret(options, tankEid, tankPid);
 

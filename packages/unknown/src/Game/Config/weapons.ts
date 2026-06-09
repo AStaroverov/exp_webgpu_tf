@@ -45,6 +45,8 @@ export type BulletCaliberStats = {
     density: number;
     /** Damage dealt on hit */
     damage: number;
+    /** Reload duration in ms for a gun firing this caliber */
+    reloadTime: number;
     /** Linear damping (speed loss over time) */
     linearDamping: number;
     /** Maximum distance the bullet may travel from its spawn point before it is destroyed */
@@ -64,45 +66,49 @@ export type BulletCaliberStats = {
  */
 export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     [BulletCaliber.Light]: {
-        width: 8 * 1.6,
-        height: 3 * 1.6,
-        speed: 450 * 1.6,
+        width: 8,
+        height: 3,
+        speed: 650,
         density: 5_000,
         damage: 3 * 3,
+        reloadTime: 750, // Light tank - fast reload
         linearDamping: 0.4, // Light bullets lose speed quickly
         maxDistance: HexGridConfig.radius * 2.6,
         health: (3 * 1.6) / 10,
     },
     
     [BulletCaliber.Medium]: {
-        width: 10 * 1.6,
-        height: 4 * 1.6,
-        speed: 525 * 1.6,
+        width: 10,
+        height: 4,
+        speed: 800,
         density: 5_000,
         damage: 4 * 3,
+        reloadTime: 1500, // Medium tank - balanced reload
         linearDamping: 0.3, // Medium bullets have moderate drag
         maxDistance: HexGridConfig.radius * 4.6,
         health: (4 * 1.6) / 10,
     },
     
     [BulletCaliber.Heavy]: {
-        width: 12 * 1.6,
-        height: 5 * 1.6,
-        speed: 600 * 1.6,
+        width: 12,
+        height: 5,
+        speed: 950,
         density: 5_000,
         damage: 6 * 3,
+        reloadTime: 3000, // Heavy tank - slow reload
         linearDamping: 0.2, // Heavy bullets maintain speed longer
         maxDistance: HexGridConfig.radius * 6.6,
         health: (5 * 1.6) / 10,
     },
 
     [BulletCaliber.Rocket]: {
-        width: 20 * 1.6,
-        height: 8 * 1.6,
-        speed: 350 * 1.6, 
+        width: 20,
+        height: 8,
+        speed: 450, 
         density: 5_000,
-        damage: 10,       
-        linearDamping: 0.1,    
+        damage: 10,
+        reloadTime: 5000, // Rocket launcher - very long reload
+        linearDamping: 0.1,
         maxDistance: HexGridConfig.radius * 8,
         health: 0.001,         
         explosion: {
@@ -119,51 +125,33 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
 // =============================================================================
 
 /**
- * Default turret rotation speeds for different tank classes.
- * Values are in radians per second.
+ * Global multiplier applied to EVERY turret rotation speed below.
+ * Bump this to speed up (or slow down) all turrets at once.
+ * Module-local: it is baked into {@link TurretSpeedConfig}, not exported.
  */
-export const TurretSpeedConfig = {
-    /** Light tank turret - very fast */
-    light: PI * 0.8,
-    
-    /** Medium tank turret - balanced */
-    medium: PI * 0.6,
-    
-    /** Heavy tank turret - slow but powerful */
-    heavy: PI * 0.25,
-    
-    /** Player tank turret - enhanced speed */
-    player: PI * 0.8,
-    
-    /** Harvester barrier - slow rotation */
-    harvester: PI * 0.4,
-} as const;
-
-// =============================================================================
-// RELOAD TIMES
-// =============================================================================
+const TurretSpeedMult = 2;
 
 /**
- * Reload durations in milliseconds.
+ * Turret rotation speeds (radians/sec) per vehicle class — the single source of
+ * truth read by entity factories. {@link TurretSpeedMult} is already baked in.
  */
-export const ReloadConfig = {
-    /** Light tank - fast reload */
-    light: 800,
-    
-    /** Medium tank - balanced reload */
-    medium: 1200,
-    
-    /** Heavy tank - slow reload */
-    heavy: 1600,
-    
-    /** Player tank - enhanced reload */
-    player: 300,
+export const TurretSpeedConfig = {
+    /** Light tank turret */
+    light: PI * 0.3 * TurretSpeedMult,
 
-    /** Rocket launcher - very long reload */
-    rocketLauncher: 5000,
+    /** Medium tank turret */
+    medium: PI * 0.2 * TurretSpeedMult,
+
+    /** Heavy tank turret - slow but powerful */
+    heavy: PI * 0.1 * TurretSpeedMult,
+
+    /** Rocket tank - launcher is bolted to the hull, no turret rotation */
+    rocket: 0,
+
+    /** Harvester barrier - slow rotation for heavy barrier */
+    harvester: PI * 0.4 * TurretSpeedMult,
 } as const;
 
 export type BulletSpeedType = typeof BulletSpeedConfig;
 export type TurretSpeedType = typeof TurretSpeedConfig;
-export type ReloadType = typeof ReloadConfig;
 

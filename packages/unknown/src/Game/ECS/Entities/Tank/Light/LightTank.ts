@@ -1,7 +1,6 @@
 import { TColor } from '../../../../../../../renderer/src/ECS/Components/Common.ts';
 
 import { EntityId } from 'bitecs';
-import { PI } from '../../../../../../../../lib/math.ts';
 import { BulletCaliber } from '../../../Components/Bullet.ts';
 import { SlotPartType } from '../../../Components/SlotConfig.ts';
 import { VehicleType } from '../../../Components/Vehicle.ts';
@@ -24,6 +23,7 @@ import {
     turretHeadSet,
 } from './LightTankParts.ts';
 import { EngineType, HeadlightConfig } from '../../../../Config/vehicles.ts';
+import { BulletCaliberConfig, TurretSpeedConfig } from '../../../../Config/weapons.ts';
 import { randomVehiclePalette } from '../../../../Config/vehiclePalette.ts';
 
 const APPROXIMATE_COLLIDER_RADIUS = 50;
@@ -67,11 +67,11 @@ export function createLightTank(opts: {
     options.density = DENSITY;
     options.width = PADDING * 6;
     options.height = PADDING * 6;
-    options.turret.rotationSpeed = PI * 0.3;
+    options.turret.rotationSpeed = TurretSpeedConfig.light;
     options.turret.gunWidth = PADDING * 6;
     options.turret.gunHeight = PADDING * 2;
-    options.firearms.reloadingDuration = 750;
     options.firearms.bulletCaliber = BulletCaliber.Light;
+    options.firearms.reloadingDuration = BulletCaliberConfig[BulletCaliber.Light].reloadTime;
     options.firearms.bulletStartPosition = [9 * PADDING, 0];
     const [turretEid, gunEid] = createTankTurret(options, tankEid, tankPid);
 

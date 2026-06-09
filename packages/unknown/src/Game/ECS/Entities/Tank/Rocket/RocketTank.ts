@@ -24,7 +24,7 @@ import {
     SIZE,
     TRACK_ANCHOR_Y,
 } from './RocketTankParts.ts';
-import { EngineType, HeadlightConfig, ReloadConfig, randomVehiclePalette } from '../../../../Config/index.ts';
+import { BulletCaliberConfig, EngineType, HeadlightConfig, TurretSpeedConfig, randomVehiclePalette } from '../../../../Config/index.ts';
 
 const APPROXIMATE_COLLIDER_RADIUS = 80;
 
@@ -74,11 +74,11 @@ export function createRocketTank(opts: {
     options.density = DENSITY;
     options.width = PADDING * 16;
     options.height = PADDING * HULL_ROWS;
-    options.turret.rotationSpeed = 0;
+    options.turret.rotationSpeed = TurretSpeedConfig.rocket;
     options.turret.gunWidth = PADDING;
     options.turret.gunHeight = PADDING;
-    options.firearms.reloadingDuration = ReloadConfig.rocketLauncher;
     options.firearms.bulletCaliber = BulletCaliber.Rocket;
+    options.firearms.reloadingDuration = BulletCaliberConfig[BulletCaliber.Rocket].reloadTime;
     options.firearms.bulletStartPosition = [PADDING * 10, RAIL_Y];
     const [turretEid] = createTankTurret(options, tankEid, tankPid);
 
