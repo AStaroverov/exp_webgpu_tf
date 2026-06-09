@@ -11,6 +11,7 @@ import {
     createDestroyByTimeoutComponent,
 } from './Components/Destroy.ts';
 import { createExhaustPipeComponent } from './Components/ExhaustPipe.ts';
+import { createExplodableComponent } from './Components/Explodable.ts';
 import { createFirearmsComponent } from './Components/Firearms.ts';
 import { createHeuristicsDataComponent } from './Components/HeuristicsData.ts';
 import { createHitableComponent } from './Components/Hitable.ts';
@@ -67,6 +68,7 @@ function createGameOnlyComponents(world: World) {
         DestroyByTimeout: createDestroyByTimeoutComponent(world),
         DestroyOnSoundFinish: createDestroyOnSoundFinishComponent(world),
         ExhaustPipe: createExhaustPipeComponent(world),
+        Explodable: createExplodableComponent(world),
         Firearms: createFirearmsComponent(world),
         HeuristicsData: createHeuristicsDataComponent(world),
         Hitable: createHitableComponent(world),

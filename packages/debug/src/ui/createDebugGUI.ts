@@ -1,8 +1,10 @@
 /**
  * Debug control panel (lil-gui):
  *   - Field:    recreate the whole game with a fresh obstacle layout;
- *   - Spawn:    add a vehicle of the chosen type/team onto a random free cell;
- *   - Vehicles: pick a living vehicle, enqueue an action for it, or remove it.
+ *   - Spawn:    pick a team + optional q,r, then a button per vehicle type
+ *               (empty q/r spawns on a random free cell);
+ *   - Vehicles: pick a living vehicle; each action kind is its own section with
+ *               its settings and an Apply button.
  *
  * Every handler re-reads `GameDI.world` so the panel survives field recreation.
  */
@@ -19,6 +21,7 @@ import { ActionKind, TargetKind } from '../../../unknown/src/Game/ECS/Actions/Ac
 import { VehicleType } from '../../../unknown/src/Game/Config/index.ts';
 import { setCameraZoom } from '../../../renderer/src/ECS/Systems/ResizeSystem.ts';
 import { recreateDebugGame } from '../createDebugGame.ts';
+import { createLightingGUI } from '../../../unknown/src/ui/createLightingGUI.ts';
 
 const TEAM_COLORS: Record<number, [number, number, number, number]> = {
     1: [1.0, 0.4, 0.4, 1],
@@ -47,11 +50,16 @@ export function createDebugGUI(canvas: HTMLCanvasElement) {
     }
     applyZoom();
 
+    // ── Lighting ──────────────────────────────────────────────────────────
+    // Own lil-gui window, pinned left so it clears the Debug panel (top-right).
+    const lighting = createLightingGUI({ container: document.body, side: 'left' });
+
     // ── Field ─────────────────────────────────────────────────────────────
     gui.add({
         recreate: async () => {
             await recreateDebugGame(canvas);
             applyZoom(); // createGame resets the zoom to the auto-fit value
+            lighting.sync(); // re-apply panel values to the freshly created lighting system
         },
     }, 'recreate').name('Recreate field');
 
@@ -61,61 +69,78 @@ export function createDebugGUI(canvas: HTMLCanvasElement) {
     
     // ── Spawn ─────────────────────────────────────────────────────────────
     const spawn = {
-        type: VehicleType.LightTank as TankVehicleType,
         team: 1,
-        spawn() {
-            const cell = pickRandomFreeCell();
-            if (!cell) {
-                console.warn('[debug] no free cell to spawn on');
-                return;
-            }
-            const pos = MapDI.grid.hexToWorld(cell.q, cell.r);
-            if (!pos) return;
-
-            createTank({
-                type: spawn.type,
-                playerId: nextPlayerId++,
-                teamId: spawn.team,
-                x: pos.x,
-                y: pos.y,
-                rotation: Math.random() * Math.PI * 2,
-                color: new Float32Array(TEAM_COLORS[spawn.team] ?? TEAM_COLORS[1]),
-            });
-        },
+        q: '', // empty → random free cell
+        r: '',
     };
     const spawnFolder = gui.addFolder('Spawn');
-    spawnFolder.add(spawn, 'type', {
-        LightTank: VehicleType.LightTank,
-        MediumTank: VehicleType.MediumTank,
-        HeavyTank: VehicleType.HeavyTank,
-    });
-    spawnFolder.add(spawn, 'team', Object.keys(TEAM_COLORS).map(Number));
-    spawnFolder.add(spawn, 'spawn').name('Spawn at random cell');
+    addTeamSwitcher(spawnFolder, spawn);
+    spawnFolder.add(spawn, 'q');
+    spawnFolder.add(spawn, 'r');
+
+    // One button per vehicle type — spawns it for the chosen team at q,r
+    // (or a random free cell when q/r are left empty).
+    const SPAWN_TYPES: Array<[string, TankVehicleType]> = [
+        ['Light Tank', VehicleType.LightTank],
+        ['Medium Tank', VehicleType.MediumTank],
+        ['Heavy Tank', VehicleType.HeavyTank],
+        ['Rocket Tank', VehicleType.RocketTank],
+    ];
+    for (const [label, type] of SPAWN_TYPES) {
+        spawnFolder
+            .add({ go: () => spawnVehicle(type, spawn.team, spawn.q, spawn.r, nextPlayerId++) }, 'go')
+            .name(label);
+    }
+
+    // ── Duel ──────────────────────────────────────────────────────────────
+    // Spawn two tanks (team 1 vs team 2) facing each other, `distance` hexes
+    // apart along the E-W axis, centered on the grid.
+    const duel = { type: VehicleType.MediumTank as TankVehicleType, distance: 5 };
+    const duelFolder = gui.addFolder('Duel');
+    duelFolder.add(duel, 'type', {
+        'Light Tank': VehicleType.LightTank,
+        'Medium Tank': VehicleType.MediumTank,
+        'Heavy Tank': VehicleType.HeavyTank,
+        'Rocket Tank': VehicleType.RocketTank,
+    }).name('vehicle');
+    duelFolder.add(duel, 'distance', 1, 20, 1).name('distance (hexes)');
+    duelFolder
+        .add({ go: () => { nextPlayerId = spawnDuel(duel.type, duel.distance, nextPlayerId); } }, 'go')
+        .name('Spawn duel');
 
     // ── Vehicles ──────────────────────────────────────────────────────────
-    const veh = {
-        eid: 0,
-        action: ActionKind.MoveStep,
-        apply() {
-            if (veh.eid) applyAction(veh.eid, veh.action);
-        },
-        remove() {
-            if (veh.eid) destroyTank(veh.eid);
-        },
-    };
+    const veh = { eid: 0 };
     const vehFolder = gui.addFolder('Vehicles');
     // The eid dropdown lives in its own folder: lil-gui's `options()` replaces
     // the controller by appending a new one, which would otherwise reorder rows.
     const pickFolder = vehFolder.addFolder('Selected');
     let eidCtrl: Controller = pickFolder.add(veh, 'eid', {});
-    vehFolder.add(veh, 'action', {
-        MoveStep: ActionKind.MoveStep,
-        Aim: ActionKind.Aim,
-        Fire: ActionKind.Fire,
-        Hold: ActionKind.Hold,
-    });
-    vehFolder.add(veh, 'apply').name('Apply action');
-    vehFolder.add(veh, 'remove').name('Remove vehicle');
+    vehFolder.add({ go: () => { if (veh.eid) destroyTank(veh.eid); } }, 'go').name('Remove vehicle');
+
+    // One section per action kind, each with its own settings + an Apply button.
+    // MoveStep/Aim/Fire are directional — `dir` indexes POINTY_DIRECTIONS (the
+    // target hex is the neighbour in that direction).
+    const move = { dir: 0, speed: 1 };
+    const moveFolder = vehFolder.addFolder('MoveStep');
+    addDirectionSwitcher(moveFolder, move);
+    moveFolder.add(move, 'speed', 0.1, 3, 0.1).name('speed');
+    moveFolder.add({ go: () => { if (veh.eid) doMoveStep(veh.eid, move.dir, move.speed); } }, 'go').name('Apply MoveStep');
+
+    const aim = { dir: 0, tolerance: AIM_TOLERANCE };
+    const aimFolder = vehFolder.addFolder('Aim');
+    addDirectionSwitcher(aimFolder, aim);
+    aimFolder.add(aim, 'tolerance', 0.01, 0.5, 0.01).name('tolerance');
+    aimFolder.add({ go: () => { if (veh.eid) doAim(veh.eid, aim.dir, aim.tolerance); } }, 'go').name('Apply Aim');
+
+    const fire = { dir: 0 };
+    const fireFolder = vehFolder.addFolder('Fire');
+    addDirectionSwitcher(fireFolder, fire);
+    fireFolder.add({ go: () => { if (veh.eid) doFire(veh.eid, fire.dir); } }, 'go').name('Apply Fire');
+
+    const hold = { duration: HOLD_DURATION_MS };
+    const holdFolder = vehFolder.addFolder('Hold');
+    holdFolder.add(hold, 'duration', 100, 5000, 100).name('duration (ms)');
+    holdFolder.add({ go: () => { if (veh.eid) doHold(veh.eid, hold.duration); } }, 'go').name('Apply Hold');
 
     // Keep the vehicle dropdown in sync with the world (spawns/deaths/recreate).
     let lastKeys = '';
@@ -130,6 +155,10 @@ export function createDebugGUI(canvas: HTMLCanvasElement) {
         }
         eidCtrl = eidCtrl.options(options);
     }, 300);
+
+    // Collapse every section by default (Debug + Lighting) — open on demand.
+    gui.foldersRecursive().forEach((f) => f.close());
+    lighting.gui.foldersRecursive().forEach((f) => f.close());
 
     return gui;
 }
@@ -146,6 +175,95 @@ function listVehicles(): Record<string, number> {
     return options;
 }
 
+function spawnVehicle(type: TankVehicleType, team: number, qStr: string, rStr: string, playerId: number) {
+    const grid = MapDI.grid;
+    if (!grid) return;
+    const cell = resolveSpawnCell(qStr, rStr);
+    if (!cell) return;
+    const pos = grid.hexToWorld(cell.q, cell.r);
+    if (!pos) return;
+
+    createTank({
+        type,
+        playerId,
+        teamId: team,
+        x: pos.x,
+        y: pos.y,
+        rotation: Math.random() * Math.PI * 2,
+        color: new Float32Array(TEAM_COLORS[team] ?? TEAM_COLORS[1]),
+    });
+}
+
+/**
+ * Spawn two tanks (team 1 vs team 2) `distance` hexes apart on the E-W axis,
+ * centered on the grid, each rotated to face the other. Returns the next free
+ * player id. DIRECTIONS index: E = 0, W = 3.
+ */
+function spawnDuel(type: TankVehicleType, distance: number, nextPlayerId: number): number {
+    const grid = MapDI.grid;
+    if (!grid) return nextPlayerId;
+
+    const bounds = grid.worldBounds();
+    const center = grid.worldToHex((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2);
+    if (!center) { console.warn('[debug] no center cell to spawn the duel on'); return nextPlayerId; }
+
+    // Split the gap around the center: left walks W, right walks E.
+    const left = walkHexes(center, 3, Math.floor(distance / 2));
+    const right = walkHexes(center, 0, Math.ceil(distance / 2));
+    if (!left || !right) { console.warn(`[debug] duel distance ${distance} runs off the grid`); return nextPlayerId; }
+
+    const lPos = grid.hexToWorld(left.q, left.r);
+    const rPos = grid.hexToWorld(right.q, right.r);
+    if (!lPos || !rPos) return nextPlayerId;
+
+    createTank({
+        type, playerId: nextPlayerId++, teamId: 1, x: lPos.x, y: lPos.y,
+        rotation: Math.atan2(rPos.y - lPos.y, rPos.x - lPos.x),
+        color: new Float32Array(TEAM_COLORS[1]),
+    });
+    createTank({
+        type, playerId: nextPlayerId++, teamId: 2, x: rPos.x, y: rPos.y,
+        rotation: Math.atan2(lPos.y - rPos.y, lPos.x - rPos.x),
+        color: new Float32Array(TEAM_COLORS[2]),
+    });
+    return nextPlayerId;
+}
+
+/** Walk `steps` hexes from `start` in direction `dir`, or null if it leaves the grid. */
+function walkHexes(start: { q: number; r: number }, dir: number, steps: number): { q: number; r: number } | null {
+    const grid = MapDI.grid;
+    if (!grid) return null;
+    let cur: { q: number; r: number } = start;
+    for (let i = 0; i < steps; i++) {
+        const next = grid.neighborAt(cur, dir);
+        if (!next) return null;
+        cur = { q: next.q, r: next.r };
+    }
+    return cur;
+}
+
+/** Resolve the spawn cell from the q/r inputs: empty → random free cell. */
+function resolveSpawnCell(qStr: string, rStr: string): { q: number; r: number } | null {
+    const qt = qStr.trim();
+    const rt = rStr.trim();
+    if (qt === '' || rt === '') {
+        const cell = pickRandomFreeCell();
+        if (!cell) console.warn('[debug] no free cell to spawn on');
+        return cell;
+    }
+    const q = Math.round(Number(qt));
+    const r = Math.round(Number(rt));
+    if (!Number.isFinite(q) || !Number.isFinite(r)) {
+        console.warn(`[debug] invalid q/r: "${qStr}", "${rStr}"`);
+        return null;
+    }
+    if (!MapDI.grid?.hexToWorld(q, r)) {
+        console.warn(`[debug] hex (${q}, ${r}) is off the grid`);
+        return null;
+    }
+    return { q, r };
+}
+
 function pickRandomFreeCell(): { q: number; r: number } | null {
     const grid = MapDI.grid;
     if (!grid) return null;
@@ -156,59 +274,103 @@ function pickRandomFreeCell(): { q: number; r: number } | null {
     return free.length > 0 ? free[Math.floor(Math.random() * free.length)] : null;
 }
 
-function applyAction(eid: number, kind: ActionKind) {
+/** A row of colored team buttons (the active one highlighted) — a compact team switcher. */
+function addTeamSwitcher(folder: GUI, target: { team: number }) {
+    const row = document.createElement('div');
+    Object.assign(row.style, { display: 'flex', gap: '4px', padding: '6px 8px', alignItems: 'center' });
+
+    const label = document.createElement('span');
+    label.textContent = 'team';
+    Object.assign(label.style, { flex: '1', fontSize: '11px' });
+    row.appendChild(label);
+
+    const teams = Object.keys(TEAM_COLORS).map(Number);
+    const buttons: HTMLButtonElement[] = [];
+    const refresh = () => buttons.forEach((b, i) => {
+        const active = teams[i] === target.team;
+        b.style.outline = active ? '2px solid #fff' : 'none';
+        b.style.opacity = active ? '1' : '0.4';
+    });
+
+    for (const t of teams) {
+        const [r, g, b] = TEAM_COLORS[t];
+        const btn = document.createElement('button');
+        btn.textContent = String(t);
+        Object.assign(btn.style, {
+            width: '22px', height: '22px', cursor: 'pointer', border: 'none', borderRadius: '3px',
+            color: '#000', fontWeight: 'bold',
+            background: `rgb(${(r * 255) | 0}, ${(g * 255) | 0}, ${(b * 255) | 0})`,
+        });
+        btn.addEventListener('click', () => { target.team = t; refresh(); });
+        buttons.push(btn);
+        row.appendChild(btn);
+    }
+    refresh();
+    folder.$children.appendChild(row);
+}
+
+/** Direction labels, indexed to match POINTY_DIRECTIONS (HexGrid.neighborAt). */
+const DIRECTIONS = ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const;
+
+/** Current hex of a vehicle, or null if it is off the grid. */
+function vehicleHex(eid: number): { q: number; r: number } | null {
     const world = GameDI.world;
     const grid = MapDI.grid;
-    if (!world || !grid) return;
-    const { Tank, Firearms, RigidBodyState } = getGameComponents(world);
-
-    if (kind === ActionKind.Hold) {
-        enqueueAction(eid, { kind, params: { duration: HOLD_DURATION_MS } });
-        return;
-    }
-
+    if (!world || !grid) return null;
+    const { RigidBodyState } = getGameComponents(world);
     const px = RigidBodyState.position.get(eid, 0);
     const py = RigidBodyState.position.get(eid, 1);
     const here = grid.worldToHex(px, py);
     if (!here) {
         console.warn(`[debug] vehicle #${eid} is off the grid`);
+        return null;
+    }
+    return { q: here.q, r: here.r };
+}
+
+/** Neighbour hex of the vehicle in the chosen direction, or null (off grid). */
+function targetHexInDirection(eid: number, dir: number): { q: number; r: number } | null {
+    const grid = MapDI.grid;
+    const here = vehicleHex(eid);
+    if (!grid || !here) return null;
+    const dest = grid.neighborAt(here, dir);
+    if (!dest) {
+        console.warn(`[debug] no hex ${DIRECTIONS[dir]} of vehicle #${eid} (edge of grid)`);
+        return null;
+    }
+    return { q: dest.q, r: dest.r };
+}
+
+function doMoveStep(eid: number, dir: number, speed: number) {
+    const grid = MapDI.grid;
+    const dest = targetHexInDirection(eid, dir);
+    if (!grid || !dest) return;
+    if (!grid.isPassable(dest.q, dest.r)) {
+        console.warn(`[debug] hex ${DIRECTIONS[dir]} of vehicle #${eid} is blocked`);
         return;
     }
+    enqueueAction(eid, {
+        kind: ActionKind.MoveStep,
+        target: { kind: TargetKind.Hex, q: dest.q, r: dest.r },
+        params: { speed },
+    });
+}
 
-    if (kind === ActionKind.MoveStep) {
-        const passable = grid
-            .neighbors({ q: here.q, r: here.r })
-            .filter((n) => grid.isPassable(n.q, n.r));
-        if (passable.length === 0) {
-            console.warn(`[debug] vehicle #${eid} is hemmed in, nowhere to move`);
-            return;
-        }
-        const dest = passable[Math.floor(Math.random() * passable.length)];
-        enqueueAction(eid, {
-            kind,
-            target: { kind: TargetKind.Hex, q: dest.q, r: dest.r },
-            params: { speed: 1 },
-        });
-        return;
-    }
+function doAim(eid: number, dir: number, tolerance: number) {
+    const dest = targetHexInDirection(eid, dir);
+    if (!dest) return;
+    enqueueAction(eid, {
+        kind: ActionKind.Aim,
+        target: { kind: TargetKind.Hex, q: dest.q, r: dest.r },
+        params: { tolerance },
+    });
+}
 
-    // Aim / Fire — point at the nearest other vehicle, or a random neighbour.
-    const target = nearestOtherVehicleHex(eid, px, py)
-        ?? pickRandomNeighbor(here.q, here.r);
-    if (!target) {
-        console.warn(`[debug] vehicle #${eid} has nothing to aim at`);
-        return;
-    }
-
-    if (kind === ActionKind.Aim) {
-        enqueueAction(eid, {
-            kind,
-            target: { kind: TargetKind.Hex, q: target.q, r: target.r },
-            params: { tolerance: AIM_TOLERANCE },
-        });
-        return;
-    }
-
+function doFire(eid: number, dir: number) {
+    const world = GameDI.world;
+    const dest = targetHexInDirection(eid, dir);
+    if (!world || !dest) return;
+    const { Tank, Firearms } = getGameComponents(world);
     // Fire: unarmed turrets have no Firearms — their Fire action would hang
     // waiting for a reload that never starts.
     if (!hasComponent(world, Tank.turretEId[eid], Firearms)) {
@@ -217,35 +379,46 @@ function applyAction(eid: number, kind: ActionKind) {
     }
     enqueueAction(eid, {
         kind: ActionKind.Fire,
-        target: { kind: TargetKind.Hex, q: target.q, r: target.r },
+        target: { kind: TargetKind.Hex, q: dest.q, r: dest.r },
     });
 }
 
-function pickRandomNeighbor(q: number, r: number): { q: number; r: number } | null {
-    const neighbors = MapDI.grid.neighbors({ q, r });
-    return neighbors.length > 0
-        ? neighbors[Math.floor(Math.random() * neighbors.length)]
-        : null;
+function doHold(eid: number, duration: number) {
+    enqueueAction(eid, { kind: ActionKind.Hold, params: { duration } });
 }
 
-/** Hex of the closest other living vehicle, or null if there is none. */
-function nearestOtherVehicleHex(selfEid: number, px: number, py: number): { q: number; r: number } | null {
-    const world = GameDI.world;
-    const { Tank, Vehicle, Children, RigidBodyState } = getGameComponents(world);
-    let bestHex: { q: number; r: number } | null = null;
-    let bestDist = Infinity;
-    for (const other of query(world, [Tank, Vehicle, Children])) {
-        if (other === selfEid) continue;
-        const ox = RigidBodyState.position.get(other, 0);
-        const oy = RigidBodyState.position.get(other, 1);
-        const d = (ox - px) * (ox - px) + (oy - py) * (oy - py);
-        if (d < bestDist) {
-            const hex = MapDI.grid.worldToHex(ox, oy);
-            if (hex) {
-                bestDist = d;
-                bestHex = { q: hex.q, r: hex.r };
-            }
-        }
-    }
-    return bestHex;
+/** A row of the 6 pointy-hex directions (the active one highlighted). */
+function addDirectionSwitcher(folder: GUI, target: { dir: number }) {
+    const wrap = document.createElement('div');
+    Object.assign(wrap.style, { padding: '6px 8px' });
+
+    const label = document.createElement('div');
+    label.textContent = 'direction';
+    Object.assign(label.style, { fontSize: '11px', marginBottom: '4px' });
+    wrap.appendChild(label);
+
+    const row = document.createElement('div');
+    Object.assign(row.style, { display: 'flex', gap: '4px', flexWrap: 'wrap' });
+
+    const buttons: HTMLButtonElement[] = [];
+    const refresh = () => buttons.forEach((b, i) => {
+        const active = i === target.dir;
+        b.style.background = active ? '#5b8def' : '#3a3a3a';
+        b.style.outline = active ? '2px solid #fff' : 'none';
+    });
+
+    DIRECTIONS.forEach((name, i) => {
+        const btn = document.createElement('button');
+        btn.textContent = name;
+        Object.assign(btn.style, {
+            minWidth: '30px', height: '22px', cursor: 'pointer', border: 'none',
+            borderRadius: '3px', color: '#fff', fontSize: '11px',
+        });
+        btn.addEventListener('click', () => { target.dir = i; refresh(); });
+        buttons.push(btn);
+        row.appendChild(btn);
+    });
+    refresh();
+    wrap.appendChild(row);
+    folder.$children.appendChild(wrap);
 }

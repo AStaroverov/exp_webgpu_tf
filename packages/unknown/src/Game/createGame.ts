@@ -19,6 +19,7 @@ import { createDestroyByTimeoutSystem } from './ECS/Systems/createDestroyByTimeo
 import { createDestroyByDistanceSystem } from './ECS/Systems/createDestroyByDistanceSystem.ts';
 import { createDestroyOutOfZoneSystem } from './ECS/Systems/createDestroyOutOfZoneSystem.ts';
 import { createDestroySystem } from './ECS/Systems/createDestroySystem.ts';
+import { createExplodeSystem } from './ECS/Systems/createExplodeSystem.ts';
 import { createRigidBodyStateSystem } from './ECS/Systems/createRigidBodyStateSystem.ts';
 import { createApplyImpulseSystem } from './ECS/Systems/createApplyImpulseSystem.ts';
 import { createDrawFaunaSystem } from './ECS/Systems/Render/Fauna/createDrawFaunaSystem.ts';
@@ -148,10 +149,12 @@ export function createGame({ width, height }: {
     const destroyOutOfZone = createDestroyOutOfZoneSystem();
     const destroyByTimeout = createDestroyByTimeoutSystem();
     const destroyByDistance = createDestroyByDistanceSystem();
+    const explode = createExplodeSystem();
     const destroyFrame = (delta: number) => {
         destroyByTimeout(delta);
         destroyByDistance();
         destroyOutOfZone();
+        explode(); // Explodable + Destroy → detonate, before the entities are removed.
         destroy();
     };
 

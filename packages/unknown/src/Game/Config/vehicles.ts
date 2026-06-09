@@ -16,6 +16,7 @@ export enum VehicleType {
     LightTank = 0,
     MediumTank = 1,
     HeavyTank = 2,
+    RocketTank = 3,  // Heavy chassis mounting a slow-reload rocket launcher
     Harvester = 4,   // Bulldozer with barrier and scoop for collecting debris
     MeleeCar = 5,    // Fast 4-wheeled car for ramming
 }
@@ -201,6 +202,38 @@ export const HeavyTankConfig: TankStats = {
     },
 };
 
+/**
+ * Rocket Tank Configuration
+ * Heavy chassis with a slow-reload rocket launcher. Mirrors the Heavy tank
+ * stats but swaps the gun to the rocket launcher.
+ */
+export const RocketTankConfig: TankStats = {
+    type: VehicleType.RocketTank,
+    engine: EngineType.v12,
+    size: 8,
+    padding: 9, // size + 1
+    density: 350,
+    colliderRadius: 150,
+    hullSize: [10, 14],
+    turretSize: [8, 8],
+    hullGrid: [10, 14],
+    turretHeadGrid: [7, 9],
+    caterpillarLines: 22,
+    caterpillarSize: 5,
+    trackAnchorXMult: 6,
+    turretSpeed: TurretSpeedConfig.heavy,
+    gun: {
+        gunGrid: [2, 8],
+        reloadTime: ReloadConfig.rocketLauncher,
+        caliber: BulletCaliber.Rocket,
+        bulletOffsetYMult: 13,
+    },
+    colors: {
+        tracks: new Float32Array([0.5, 0.5, 0.5, 1]),
+        turret: new Float32Array([0.8, 0.3, 0.2, 1]),
+    },
+};
+
 // =============================================================================
 // HARVESTER CONFIGURATION
 // =============================================================================
@@ -336,6 +369,8 @@ export function getTankConfig(type: VehicleType): TankStats {
             return MediumTankConfig;
         case VehicleType.HeavyTank:
             return HeavyTankConfig;
+        case VehicleType.RocketTank:
+            return RocketTankConfig;
         default:
             throw new Error(`Unknown vehicle type ${type}`)
     }

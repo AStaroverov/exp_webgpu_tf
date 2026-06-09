@@ -47,7 +47,7 @@ export function createBullet(options: Partial<Options> & {
     playerId: number,
     teamId: number
 }, { world } = GameDI) {
-    const { Bullet, TeamRef, PlayerRef, Hitable, Damagable, DestroyByDistance } = getGameComponents(world);
+    const { Bullet, TeamRef, PlayerRef, Hitable, Damagable, DestroyByDistance, Explodable } = getGameComponents(world);
 
     Object.assign(optionsBulletRR, defaultOptionsBulletRR);
     Object.assign(optionsBulletRR, options);
@@ -69,9 +69,13 @@ export function createBullet(options: Partial<Options> & {
     Bullet.addComponent(world, bulletId, options.calibre);
     TeamRef.addComponent(world, bulletId, options.teamId);
     PlayerRef.addComponent(world, bulletId, options.playerId);
-    Hitable.addComponent(world, bulletId, min(bulletCaliber.width, bulletCaliber.height) / 10);
+    Hitable.addComponent(world, bulletId, bulletCaliber.health);
     Damagable.addComponent(world, bulletId, bulletCaliber.damage);
     DestroyByDistance.addComponent(world, bulletId, optionsBulletRR.x, optionsBulletRR.y, bulletCaliber.maxDistance);
+
+    if (bulletCaliber.explosion) {
+        Explodable.addComponent(world, bulletId, bulletCaliber.explosion);
+    }
 
     return bulletId;
 }

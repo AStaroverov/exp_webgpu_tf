@@ -6,6 +6,7 @@
 
 import { PI } from '../../../../../lib/math.ts';
 import { HexGridConfig } from '../Map/HexConfig.ts';
+import { ExplodableSettings } from '../ECS/Components/Explodable.ts';
 
 // =============================================================================
 // BULLET SPEED LIMITS
@@ -30,6 +31,7 @@ export enum BulletCaliber {
     Light = 0,
     Medium = 1,
     Heavy = 2,
+    Rocket = 3,
 }
 
 export type BulletCaliberStats = {
@@ -47,6 +49,13 @@ export type BulletCaliberStats = {
     linearDamping: number;
     /** Maximum distance the bullet may travel from its spawn point before it is destroyed */
     maxDistance: number;
+    /**
+     * Hit-points of the projectile itself. A tiny value makes the projectile die
+     * (and, for rockets, detonate) on any contact.
+     */
+    health: number;
+    /** When set, the projectile detonates (VFX + area damage) on destruction. */
+    explosion?: ExplodableSettings;
 };
 
 /**
@@ -62,6 +71,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
         damage: 3 * 3,
         linearDamping: 0.4, // Light bullets lose speed quickly
         maxDistance: HexGridConfig.radius * 2.6,
+        health: (3 * 1.6) / 10,
     },
     
     [BulletCaliber.Medium]: {
@@ -72,6 +82,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
         damage: 4 * 3,
         linearDamping: 0.3, // Medium bullets have moderate drag
         maxDistance: HexGridConfig.radius * 4.6,
+        health: (4 * 1.6) / 10,
     },
     
     [BulletCaliber.Heavy]: {
@@ -82,6 +93,24 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
         damage: 6 * 3,
         linearDamping: 0.2, // Heavy bullets maintain speed longer
         maxDistance: HexGridConfig.radius * 6.6,
+        health: (5 * 1.6) / 10,
+    },
+
+    [BulletCaliber.Rocket]: {
+        width: 20 * 1.6,
+        height: 8 * 1.6,
+        speed: 350 * 1.6, 
+        density: 5_000,
+        damage: 10,       
+        linearDamping: 0.1,    
+        maxDistance: HexGridConfig.radius * 8,
+        health: 0.001,         
+        explosion: {
+            damage: 10,         
+            radius: 100,        
+            vfxSize: 30 * 6,
+            lightRadius: 30 * 8,
+        },
     },
 } as const;
 
@@ -129,6 +158,9 @@ export const ReloadConfig = {
     
     /** Player tank - enhanced reload */
     player: 300,
+
+    /** Rocket launcher - very long reload */
+    rocketLauncher: 5000,
 } as const;
 
 export type BulletSpeedType = typeof BulletSpeedConfig;

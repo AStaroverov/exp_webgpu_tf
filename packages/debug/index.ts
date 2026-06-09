@@ -4,8 +4,11 @@ import { createDebugGUI } from './src/ui/createDebugGUI.ts';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 
-canvas.width = window.innerWidth * window.devicePixelRatio;
-canvas.height = window.innerHeight * window.devicePixelRatio;
+// Square canvas (CSS is 100vmin square): size the backing store to the same
+// square so the render isn't stretched and matches the square play field.
+const side = Math.min(window.innerWidth, window.innerHeight) * window.devicePixelRatio;
+canvas.width = side;
+canvas.height = side;
 
 await createDebugGame(canvas);
 

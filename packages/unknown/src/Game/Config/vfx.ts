@@ -21,5 +21,6 @@ export type ExplosionType = typeof ExplosionConfig;
 export const FlashLightConfig = {
     muzzle: { color: [1.0, 0.75, 0.4], intensity: 3.0, duration: 300 },
     hit: { color: [1.0, 0.55, 0.25], intensity: 3.0, duration: 300 },
+    explosion: { color: [1.0, 0.5, 0.2], intensity: 6.0, duration: 600 },
 } as const;
 

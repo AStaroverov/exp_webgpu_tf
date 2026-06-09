@@ -20,7 +20,7 @@ export function createVehicleTurretRotationSystem({ world } = GameDI) {
             const relTurretRot = normalizeAngle(turretRot - vehicleRot);
             const deltaRot = turretRotDir * maxRotationSpeed * (delta / 1000);
 
-            JointMotor.setTargetPosition$(turretEid, normalizeAngle(relTurretRot + deltaRot));
+            JointMotor.setTargetPosition$(turretEid, relTurretRot + deltaRot);
         }
     };
 }

@@ -5,7 +5,7 @@ import { VariableKind, VariableMeta } from '../../../../../../../renderer/src/St
 // Hand-tuned via the Lighting lil-gui panel; the directional source (sunAndSky) is the main light.
 // Single floor for everything: objects are lit for real now (boundary dilation +
 // translucent occluders), so a separate object ambient is no longer needed.
-export const AMBIENT = 0.05;
+export const AMBIENT = 0.5;
 
 export const shaderMeta = new ShaderMeta(
     {

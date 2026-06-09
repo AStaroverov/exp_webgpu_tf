@@ -43,6 +43,7 @@ export function setupDemoWorld({ world } = GameDI) {
             [0.4, 0.7, 1.0, 1],
             [0.6, 1.0, 0.5, 1],
             [1.0, 0.9, 0.4, 1],
+            [0.8, 0.3, 0.2, 1], // rocket tank — dark red/orange, matches its turret
         ];
 
         // Pick distinct random cells to place the tanks on.
@@ -59,8 +60,12 @@ export function setupDemoWorld({ world } = GameDI) {
             const pos = grid.hexToWorld(q, r);
             if (!pos) continue;
 
+            // Last slot is always the Rocket tank so it is guaranteed visible in the demo.
+            const isRocketSlot = i === slots.length - 1;
             const tankEid = createTank({
-                type: tankTypes[Math.floor(Math.random() * tankTypes.length)],
+                type: isRocketSlot
+                    ? VehicleType.RocketTank
+                    : tankTypes[Math.floor(Math.random() * tankTypes.length)],
                 playerId: i + 1,
                 teamId: (i % 2) + 1,
                 x: pos.x,
