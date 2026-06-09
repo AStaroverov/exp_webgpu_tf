@@ -1,9 +1,23 @@
 # Unknown — game prototype
 
-> Prototype of a new game (working name `unknown`). Desert / "dune" setting:
-> sand, spice, harvesters, sandstorms, desert flora. Built on the same
-> ECS + WebGPU + Rapier foundation as the `tanks` package, but it is a separate
-> clean prototype into which only the needed mechanics are ported.
+> A clean game prototype (working name `unknown`, desert / "dune" setting) built on
+> an ECS + WebGPU + Rapier foundation. This file describes how the code is organized
+> and the **principles for working in the ECS** — not the game mechanics (those live
+> in, and are discoverable from, the code under `src/Game`).
+
+## Packages (monorepo)
+
+- **`renderer`** — shared WebGPU rendering engine: GPU init, the frame loop, WGSL/SDF
+  shape passes, and the base render ECS components (`Color`, `Shape`,
+  `Local/GlobalTransform`, …) and systems (`Transform`, `ChangedDetector`, `Resize`).
+  Game packages import it directly via relative paths (`../../../renderer/src/...`).
+- **`unknown`** — *this package*. The game prototype: ECS world + Rapier physics +
+  `renderer`. Runs with or without rendering (headless for training).
+- **`debug`** — dev-only debug GUI overlay (`createDebugGUI`) for inspecting/tweaking
+  a running game.
+- **`ppo`** — standalone PPO reinforcement-learning implementation (TensorFlow.js).
+- **`ppo_unknown`** — training harness that drives `unknown` headless through `ppo`
+  (scenario setup + decision driver).
 
 ## Running
 
@@ -13,180 +27,119 @@ npm run build    # tsc + vite build
 npm run preview
 ```
 
-Entry point: `index.html` → `index.ts` → `src/Game/createGame.ts`.
-`index.ts` creates the canvas, calls `createGame({width, height})`,
-`game.setRenderTarget(canvas)`, and runs a `requestAnimationFrame` loop calling
-`game.gameTick(delta)` (delta is clamped to 16.6667 ms).
-Sound is enabled via a button (browser user-gesture requirement) → `game.enableSound()`.
+Entry point: `index.html` → `index.ts` → `src/Game/createGame.ts`. `index.ts` creates
+the canvas, calls `createGame({width, height})`, `game.setRenderTarget(canvas)`, and
+runs a `requestAnimationFrame` loop calling `game.gameTick(delta)` (delta clamped to
+16.6667 ms). Sound is enabled lazily on a user gesture → `game.enableSound()`.
 
 ## Stack
 
 - **ECS**: [`bitecs`](https://github.com/NateTheGreatt/biteCS) `^0.4.0`
 - **Physics**: `@dimforge/rapier2d-simd` (2D, WASM)
-- **Rendering**: WebGPU via the local `packages/renderer` package (SDF shapes, WGSL shaders)
-- **Reactivity**: `rxjs`, plus the `delegate`/`obs` helpers for components
-- **Hex grid**: `honeycomb-grid` `^4.1.5` (geometry, neighbors, distance)
+- **Rendering**: WebGPU via `packages/renderer`
+- **Reactivity**: `rxjs` + the `delegate`/`obs` component helpers
+- **Hex grid**: `honeycomb-grid` (geometry, neighbors, distance) + A* on top
 - **Build**: Vite 6 + `vite-plugin-wasm` + `vite-plugin-top-level-await`
 
-## Architecture
+## Architecture (structure only)
 
-### Dependency on `packages/renderer`
-The prototype imports the rendering base directly via relative paths
-(`../../../renderer/src/...`): WebGPU init (`gpu.ts`), the frame loop
-(`WGSL/createFrame.ts`), the `TransformSystem`, `SDFSystem/createDrawShapeSystem`,
-`ChangedDetectorSystem`, `ResizeSystem` systems, and the base render components
-(`Color`, `Shape`, `LocalTransform`/`GlobalTransform`, `Roundness`, `Thinness`, `Rope`).
+- **ECS world — `src/Game/ECS/createGameWorld.ts`.** Builds a `bitecs` world with a
+  `{ components, time }` context. `GameComponents = RenderComponents + game components`.
+  Components live in `ECS/Components/*`, created via the `defineComponent` factory and
+  registered in `createGameWorld`. Read them anywhere with `getGameComponents(world)`.
+- **DI singletons — `src/Game/DI/`.** Module-level objects, not classes: `GameDI`
+  (world, physics, `gameTick`, public API), `RenderDI` (GPU; optional), `SoundDI`
+  (lazy), `PluginDI` (`addSystem(group, …)` for `SystemGroup.{Before,After}`),
+  `PlayerEnvDI`.
+- **Frame — `GameDI.gameTick(delta)` (see `createGame.ts`).** Deterministic system
+  order: `physicalFrame` → `plugins[Before]` → gameplay systems → camera →
+  `destroyFrame` / `spawnFrame` → render/sound → `plugins[After]`. **System order is
+  load-bearing** — see the ECS principles below.
+- **Where things live:** `ECS/Components/*` (data), `ECS/Systems/*` (logic),
+  `ECS/Entities/*` (entity factories / composition), `ECS/Actions/*` (decision-layer
+  action queue, its own world), `Config/*` (re-exported via `Config/index.ts`),
+  `Map/*` (hex grid, decoupled from the ECS world), `Physical/*` (Rapier glue).
+  `createGame` wires only systems; build-specific world content (spawns + driver) is
+  added by the caller (`setupDemoWorld` for dev, `ppo_unknown` for training).
 
-### ECS world — `src/Game/ECS/createGameWorld.ts`
-`createGameWorld()` builds a `bitecs` world with a `{ components, time }` context.
-`GameComponents = RenderComponents (from renderer) + game components`.
-Game components live in `ECS/Components/*`, created via the `defineComponent`
-factory (renderer) using the `obs(...)`/`TypedArray` pattern for reactive fields.
+---
 
-### DI singletons — `src/Game/DI/`
-State is kept in module-level objects (not classes):
-- **`GameDI`** — the main game object. Holds `world`, `physicalWorld`, `width/height`
-  and the public methods: `gameTick`, `destroy`, `enableSound`, `setRenderTarget`,
-  `setCameraTarget`, plus `plugins`. `createGame()` returns `GameDI` itself.
-- **`RenderDI`** — GPU device/context/canvas, `renderFrame`, `destroy`. Rendering is
-  optional (the game can run without rendering — for future headless/ML use).
-- **`SoundDI`** — sound state, `soundFrame`, `destroy`. Enabled lazily.
-- **`PluginDI`** — extensibility: `addSystem(group, system, dispose)`,
-  where `group ∈ SystemGroup.{Before, After}` (`ECS/Plugins/systems.ts`).
-  These systems run inside `gameTick` before/after the core logic.
-- **`PlayerEnvDI`** — the current player's tankEid.
+# Principles for working in the ECS
 
-### Frame — `GameDI.gameTick(delta)`
-Order (see `createGame.ts`):
-1. `physicalFrame` — control (track/wheel/turret) → transform → impulses →
-   `physicalWorld.step(eventQueue)` → rigid body sync → contact-force events
-   (deals damage via `Hitable.hit$`).
-2. `plugins[Before]`
-3. Gameplay: hitable, tank-alive, shield regeneration, tracks, progress, tread marks.
-4. Camera → `setCameraPosition`.
-5. `destroyFrame` (timeout / speed / out-of-zone / destroy) and `spawnFrame`
-   (bullets, tread marks, exhaust).
-6. `RenderDI.renderFrame?` + `SoundDI.soundFrame?`
-7. `plugins[After]`
+The single rule everything else follows from: **components are data, systems are
+behavior, and the trigger for a behavior is a query — not a conditional buried inside
+a system.** When you add a feature, the question is *"what component expresses this,
+and which system queries it?"* — not *"which existing system do I edit?"*.
 
-### Entities — `src/Game/ECS/Entities/`
-Composition "vehicle = base + slots + parts" (`Vehicle/`, `Slot`, `VehiclePart`).
-Vehicle types are in `Config/vehicles.ts` (`VehicleType`):
-`LightTank, MediumTank, HeavyTank, PlayerTank, Harvester, MeleeCar`.
-Tanks: `Entities/Tank/{Common,Light,Medium,Heavy,Player}`. Also `Harvester`, `MeleeCar`,
-`Wheel`, `Track`. Effects: `Explosion, MuzzleFlash, HitFlash, ExhaustSmoke, TreadMark`.
-`GameSession`, `GameMap`, `Player`, `Sound`.
+## Anti-pattern — how NOT to add behavior
 
-### Render systems — `ECS/Systems/Render/`
-SDF shapes (via renderer) + custom WGSL passes: `Fauna` (desert flora),
-`Grass`, `VFX`, `Grid` (hex grid overlay), post-effects `Sandstorm` and `Pixelate`.
-Background is a sand color.
+A worked example (adding "a rocket projectile explodes on impact or at the end of its
+range"). The tempting-but-wrong approach was to bolt the new behavior onto whatever
+systems happened to be nearby:
 
-Frame draw order (in `createGame` `frameTick`): `fauna → grid → shapes → vfx → sandstorm`.
-Note: the SDF shape pass writes clip-space `z = 0` for everything, so **layering is by
-draw order**, not depth — the grid is drawn after fauna and before shapes so it sits
-under the tanks. The `Grid` pass (`Render/Grid/`) is instanced (one quad per hex) and
-draws a pointy-hex SDF outline + faint fill; cell centers come from `MapDI.grid`.
+- **Special-casing a type inside a generic system** — `if (caliber === Rocket) { spawn
+  explosion … }` inside the generic hit-processing system. The system now knows about
+  one specific entity kind.
+- **Adding side-effects to a single-purpose system** — making the
+  "destroy-when-too-far" system *also* spawn an explosion. That system's one job is to
+  add a `Destroy` marker; detonation is unrelated to it.
+- **A one-off helper called from many sites** — an `explodeRocket()` function invoked
+  from both the hit system and the distance system, with the *same* trigger condition
+  (`is it a rocket? is it being destroyed?`) duplicated at every call site.
 
-### ActionSchedule — `src/Game/ECS/Actions/`
-An event-driven action system in its **own ECS world** (`createActionWorld` →
-`ActionScheduleDI.world`), kept separate from the game world; an action only
-*references* game entities by id (`ownerEid`, an Entity target's `eid`) — disjoint
-id spaces. **Per-owner FIFO queues, concurrent across owners** (no single global
-stack): each owner's **front** action is its smallest-`seq` live action and the only
-one that *runs*; different owners run concurrently each tick. Queue depth is bounded
-(`MAX_QUEUE = 2`: one running + one pre-decided next). Each action has a `status`
-(`Idle/Running/Finished`), a `kind` (`ActionKind`), an owner, a `seq` (per-owner FIFO
-key), a `requestNext` flag, an `ActionTarget` (entity/hex/point — Shape-style
-`kind`+`values`), and a per-kind params component. Each kind is one **descriptor**
-(`ActionDescriptor<Spec>`, co-located with its system, optional `onCancel` hook);
-`ACTION_REGISTRY` maps kind → descriptor and `EnqueueActionSpec` is *derived* from it.
-Split of responsibility:
-- **Executor systems** (`systems/create<Kind>ActionSystem.ts`, one per kind, wired via
-  `registry.ts` → `createRunExecutors`) iterate `liveOwners()`, take each owner's
-  `getFrontAction`, and if it's their kind drive it `Idle → Running → Finished`
-  (physics-driven completion). Completion is real simulation state (vehicle arrived /
-  round fired), not a wall-clock timer — so fast tanks finish and re-decide sooner.
-- **Scheduler** (`createActionSchedulerSystem`) is the reaper: deletes **all**
-  `Finished` actions each tick. Runs after the executors in `gameTick`'s
-  `updateActions(delta)` block, before the gameplay systems.
+Why it's bad: the feature is **smeared across several systems**, each now coupled to
+it; the trigger condition is **duplicated and can drift**; and every new variant
+("a barrel explodes", "a mine explodes") forces yet another branch in yet another
+system. Simple systems stop being simple.
 
-**Request-next "slot" model (the seam to the decision/ML layer):** a running action
-raises its `requestNext` flag from inside its executor at a kind-specific moment
-(`MoveStep` near the destination; `Aim`/`Fire` immediately; `Hold` near timer end) —
-this *opens a slot*. An idle owner is an always-open slot. `needsDecision(ownerEid)`
-(= `queueDepth < MAX_QUEUE && (isIdle || requestNext[front])`) reports open slots; the
-decision driver *fills* them via `enqueueAction` (which returns `null` when the queue
-is full). `clearForOwner(ownerEid)` is the interrupt: it calls each cleared running
-front's `onCancel` (zero controllers, release grid reservations) before deleting.
-This module never calls the policy; the driver never touches physics. The driver lives
-**outside** this module as a `PluginDI` system in `SystemGroup.Before`
-(`ECS/Plugins/createStandInDriverSystem.ts` is the current placeholder; the ML policy
-will replace it at the same seam).
+## The pattern — how to add behavior
 
-Enqueue with `enqueueAction(ownerEid, { kind, target, params })`. Atomic kinds:
-`MoveStep` (one hop to a neighbour hex via `VehicleController`; reserves the target
-cell `free → Reserved → Unit`, see Hex grid `OccupantKind.Reserved`), `Aim` (rotate
-the turret toward a hex via `TurretController`, finishes within `tolerance`), `Fire`
-(one round: wait for `!isReloading`, raise `TurretController.shoot`, the bullet spawner
-fires it), `Hold` (tactical timer pause). See `Actions/PLAN.md` (design) and
-`Actions/IMPLEMENTATION.md` (build steps).
+Express the behavior as **data on a component**, and let **one dedicated system** act
+on the query. The same example, done right:
 
-### Config — `src/Game/Config/` (re-exported via `Config/index.ts`)
-`vehicles, weapons, parts, obstacles, physics, gameplay, sound, vfx, spice, zindex`.
-Physics: collision groups (bitmasks), damping, movement impulses (`physics.ts`).
+1. **A component carries the parameters** — `Explodable { damage, radius, vfxSize, … }`.
+   It is pure data; it holds no logic.
+2. **One system's query *is* the trigger** — `createExplodeSystem` queries
+   `[Explodable, Destroy]` → detonate. It is ordered deliberately: it runs *before*
+   the destroy system removes the entity, so the entity still exists when it explodes.
+3. **The existing systems stay dumb** — they only add the `Destroy` marker. Every cause
+   of destruction (collision, max range, timeout, out-of-zone) now produces the
+   explosion **uniformly, with zero edits to those systems**.
+4. **New explosive things just get the component** — attach `Explodable` at spawn; no
+   system changes.
 
-### `GameMap` — `ECS/Entities/GameMap.ts`
-Holds the world offset for an "infinite" map and world↔view coordinate conversion.
-Currently the offset is static at the screen center.
+The trigger lives in the **combination of components** (`Explodable + Destroy`), so the
+behavior is defined in exactly one place and composes with everything else.
 
-### Hex grid — `src/Game/Map/`
-The walkable grid units move on. Built on `honeycomb-grid` (pointy-top, rectangular
-`cols × rows`), kept **separate from the game ECS world** — occupancy is stored by
-reference so it can be wired to ECS later.
-- **`HexConfig.ts`** — grid config (hex `radius`, `cols/rows`, pointy orientation),
-  the `HexTile` class (`defineHex`), and `POINTY_DIRECTIONS` (the 6 valid neighbor
-  directions: E/W + 4 diagonals).
-- **`HexGrid.ts`** — wraps the honeycomb `Grid` plus a per-cell store. Each `HexCell`
-  has `walkable` + an occupant reference `(occupantEid, occupantWorldId)`.
-  `MapWorldId` distinguishes which world an occupant id belongs to (entity id spaces
-  are disjoint between worlds). Helpers: `hexToWorld`/`worldToHex`/`cornersOf`,
-  `neighbors`, `distance`, `isPassable`, `occupy`/`vacate`/`getOccupant`. The grid is
-  centered on the world via the `center` constructor option (origin offset).
-- **`findPath.ts`** — A* over the grid (honeycomb has no pathfinder). Heuristic =
-  exact hex distance (admissible → optimal); blocked cells are skipped dynamically
-  via `isPassable`/a custom `isBlocked`, so no graph rebuild on occupancy change.
-  Binary-heap open set. Verified: detours around walls, returns `null` when blocked.
-- **`MapDI.ts`** — singleton `{ grid }`, set in `createGame`, cleared on destroy.
+**Generalize it:** prefer *"add a component + a system that queries it"* over
+*"branch inside an existing system"* or *"call a shared helper from N sites"*. If you
+find yourself writing `if (specificType)` in a generic system, that condition probably
+wants to be a component. If a system does two unrelated things, split it.
 
-## Current state (as of 2026-05-30)
+## Best practices
 
-- Working prototype: `createGame()` spawns 4 demo tanks (`spawnDemoTanks`) in a circle;
-  they drive forward, rotate, and shoot; the camera follows the first one.
-- Full physics → render → sound pipeline works.
-- `createMapSystem.ts` is **fully commented out** (the old tile/matrix map generation
-  from the `tanks` package) — there is no map yet.
-- ML/training from `tanks`/`ppo` is **not ported** here (comment mentions are legacy).
+Distilled from the sources below and our own conventions:
 
-## Goals / Roadmap
+- **Components are data.** No behavior in components — at most trivial readonly
+  helpers. Logic belongs in systems.
+- **One system, one responsibility.** Depend on the *minimum* set of components: it
+  reads clearer, refactors easier, and is reusable across entity kinds.
+- **Don't pile unrelated fields into one component.** Split a component that mixes
+  concerns into focused ones; only consolidate data that is *always* processed
+  together.
+- **Drive behavior with marker / "command" components, not flags + branches.** Add a
+  tag (or a one-frame command component), let a system query it, and remove it after
+  processing. The query selects the entities; the system never type-checks.
+- **System order is part of the design.** Sequence dependent systems so state lands in
+  the same frame (avoid one-frame lag). Example: `explode()` runs before `destroy()`.
+- **Keep hot loops cache-friendly.** Iterate query results directly, reuse scratch
+  allocations across iterations, and avoid random cross-entity lookups inside tight
+  loops.
+- **Favor refactorability over a perfect first cut.** If a behavior is genuinely
+  one-off, a small helper/script is fine — promote it to a component + system as soon
+  as the pattern repeats (as the explosion example did).
 
-### 🎯 Goal 1 (current): Hex grid for unit movement
-Build a hexagonal grid (hex grid) for units to move across.
+## Sources
 
-Decisions: pointy-top, rectangular `cols × rows`, `honeycomb-grid` as the geometry
-base, A* pathfinding on top. Grid is decoupled from the ECS world (integration later).
-
-Subtasks:
-- [x] Hex coordinate data model (honeycomb axial `{q, r}`) + hex↔world converters
-      (pointy-top). → `Map/HexConfig.ts`, `HexGrid.hexToWorld`/`worldToHex`.
-- [x] Grid storage structure (rectangular grid, walkability, occupancy by
-      `(eid, worldId)`). → `Map/HexGrid.ts`.
-- [x] Pathfinding over the grid (A* over neighbors, dynamic blocking). → `Map/findPath.ts`.
-- [x] Grid rendering (instanced pointy-hex SDF overlay). → `ECS/Systems/Render/Grid/`.
-- [x] Place demo tanks on random distinct cells, occupy those cells, movement
-      disabled. → `createGame.spawnDemoTanks`.
-- [ ] Unit movement across hexes: pick target hex → path → move the physics body
-      toward the hex center (and `occupy`/`vacate` cells as it moves).
-- [ ] ECS integration: wire occupancy to real game entities / separate grid world.
-
-> When a goal is done — move it to a "Done" section and promote the next one.
+- [ECS — design notes (Dreaming381)](https://gist.github.com/Dreaming381/89d65f81b9b430ffead443a2d430defc)
+- [Design decisions when building games using ECS (Ariel Coppes)](https://arielcoppes.dev/2023/07/13/design-decisions-when-building-games-using-ecs.html)
