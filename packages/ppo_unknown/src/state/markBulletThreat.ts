@@ -41,9 +41,8 @@ import { BoardChannel, hexDeltaDistance, UnknownInputBoard, VIEW_RADIUS } from '
 const ORIGIN_EPS = 1e-3;
 
 /**
- * Bullet flight distance (world units) for a vehicle type, or 0 if it has no gun.
- * Same source `vehicleStats.range` normalizes from: `BulletCaliberConfig[…].maxDistance`.
- * Gunless vehicles (non-tanks: no config) never fire.
+ * Bullet flight distance (world units) for a vehicle type, or 0 if it has no gun:
+ * `BulletCaliberConfig[…].maxDistance`. Gunless vehicles (non-tanks: no config) never fire.
  */
 function bulletMaxDistance(type: VehicleType): number {
     const config = getTankConfig(type);

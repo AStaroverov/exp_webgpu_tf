@@ -45,8 +45,8 @@ export function hexDeltaDistance(dq: number, dr: number): number {
  * strategic planes AND per-unit identity (class + combat stats) written on the
  * unit's own cell — a unit's position IS its cell, so no separate token store is
  * needed. The `CoordX`/`CoordY` planes carry normalized window geometry (kept in
- * addition to the network's positional encoding). Stat channels
- * (`Role..Range`) come from `vehicleStats.ts`, written for self/ally/enemy cells.
+ * addition to the network's positional encoding). Unit identity is a one-hot
+ * `VehicleType` (`Type*` planes) + live reload state, written for self/ally/enemy cells.
  */
 let C = 0;
 export const BoardChannel = {
@@ -61,18 +61,17 @@ export const BoardChannel = {
      */
     CoordY: C++,
     /**
+     * Enemy heat (0..1): per-cell max over ALL enemies of `1 − hexDist(cell, enemy)
+     * / MAX_MAP_DIST`. The peak sits on the enemy's REAL current cell. This is how
+     * enemies beyond the view radius are sensed: the in-window gradient points
+     * toward them.
+     */
+    EnemyHeat: C++,
+    /**
      * Not enterable / not visible (0/1): a static obstacle, an off-map cell, or a
      * cell beyond the view radius (the square window's corners).
      */
     Obstacle: C++,
-    /** The observing agent's own cell — always the window center. */
-    Self: C++,
-    /** Same-team unit. */
-    Ally: C++,
-    /** Other-team unit. */
-    Enemy: C++,
-    /** Normalized hp (0..1) of the unit on the cell; 0 if no unit. */
-    Hp: C++,
     /** A cell a unit is driving into (grid `OccupantKind.Reserved`); 0/1. */
     Reserved: C++,
     /**
@@ -83,27 +82,14 @@ export const BoardChannel = {
      * (not its current cell). See `markBulletThreat`.
      */
     UnderFire: C++,
-    /**
-     * Enemy heat (0..1): per-cell max over ALL enemies of `1 − hexDist(cell, enemy)
-     * / MAX_MAP_DIST`. The peak sits on the enemy's REAL current cell. This is how
-     * enemies beyond the view radius are sensed: the in-window gradient points
-     * toward them.
-     */
-    EnemyHeat: C++,
-    /**
-     * Per-unit identity + combat stats of the unit on the cell (0 if no unit), from
-     * `vehicleStats.ts` — written for self/ally/enemy cells, same normalizers
-     * the units vector used. `Role`: 0 = fighter (gun).
-     */
-    Role: C++,
-    /** Engine speed 0..1. */
-    Mobility: C++,
-    /** Gun damage 0..1 (0 if gunless). */
-    Firepower: C++,
-    /** Reload speed 0..1, faster = higher (0 if gunless). */
-    Reload: C++,
-    /** Bullet range 0..1 (0 if gunless). */
-    Range: C++,
+    /** The observing agent's own cell — always the window center. */
+    Self: C++,
+    /** Same-team unit. */
+    Ally: C++,
+    /** Other-team unit. */
+    Enemy: C++,
+    /** Normalized hp (0..1) of the unit on the cell; 0 if no unit. */
+    Hp: C++,
     /**
      * Damage statuses of the unit on the cell (flamethrower / freeze gun, §8 of
      * the stream-weapon design). `Dot` lives per-part in the game — aggregated
@@ -116,6 +102,23 @@ export const BoardChannel = {
      * (the dense default), 1 = fully frozen — frost hits accumulate it.
      */
     Slow: C++,
+    /**
+     * Remaining reload time of the unit's gun, log-squashed:
+     * `log1p(remaining_ms / 1000)` — 0 = ready to fire (or no reloading gun:
+     * gunless / stream weapon), grows slowly with longer waits.
+     */
+    Reload: C++,
+    /**
+     * One-hot `VehicleType` of the unit on the cell (0/1 each, 0 if no unit) —
+     * the type implies all static combat stats (mobility/damage/range/...), the
+     * network learns them from the configs' behavior instead of hand-fed scalars.
+     */
+    TypeLightTank: C++,
+    TypeMediumTank: C++,
+    TypeHeavyTank: C++,
+    TypeRocketTank: C++,
+    TypeFlameTank: C++,
+    TypeFrostTank: C++,
 } as const;
 
 export const BOARD_CHANNELS = C;

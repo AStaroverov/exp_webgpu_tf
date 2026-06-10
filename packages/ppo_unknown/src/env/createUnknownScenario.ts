@@ -47,6 +47,7 @@ const TANK_TYPES = [
     VehicleType.LightTank,
     VehicleType.MediumTank,
     VehicleType.HeavyTank,
+    VehicleType.RocketTank,
     VehicleType.FlameTank,
     VehicleType.FrostTank,
 ] as const;

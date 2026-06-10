@@ -20,8 +20,9 @@
  *     for EVERY in-view cell (pure geometry, not gated by occupancy).
  *   - `EnemyHeat`: max over ALL enemies of `1 − hexDist/MAX_MAP_DIST` — the gradient
  *     that lets the agent sense enemies beyond the view radius.
- *   - `Role/Mobility/Firepower/Reload/Range`: the unit's normalized identity + combat
- *     stats from `vehicleStats.ts`, written on the unit's own cell (self/ally/enemy).
+ *   - `Type*` one-hot + `Reload`: the unit's `VehicleType` plane and its gun's
+ *     remaining reload (log-squashed), written on the unit's own cell
+ *     (self/ally/enemy).
  *
  * Enemy positions are always HONEST (real current hex) and fully observable — every
  * unit inside the view window is shown on its real cell.
@@ -46,7 +47,7 @@ import {
     UnknownInputBoard,
     VIEW_RADIUS,
 } from './board.ts';
-import { getVehicleStats } from './vehicleStats.ts';
+import { VehicleType } from '../../../unknown/src/Game/Config/vehicles.ts';
 import { markBulletThreat } from './markBulletThreat.ts';
 import { needsDecision } from '../../../unknown/src/Game/ECS/Actions/ActionSchedule.ts';
 
@@ -58,11 +59,11 @@ type KnownEnemies = { q: number[]; r: number[]; w: number[] };
 
 /** Everything the per-cell writers need — bundled so each step takes a tiny signature. */
 type SnapshotCtx = {
+    grid: HexGrid;
     selfEid: number;
     selfQ: number;
     selfR: number;
     myTeamId: number;
-    grid: HexGrid;
     enemies: KnownEnemies;
     world: (typeof GameDI)['world'];
     Vehicle: GameComponents['Vehicle'];
@@ -71,13 +72,24 @@ type SnapshotCtx = {
     Children: GameComponents['Children'];
     Dot: GameComponents['Dot'];
     Slowed: GameComponents['Slowed'];
+    Firearms: GameComponents['Firearms'];
+};
+
+/** `VehicleType` → its one-hot board plane (non-tank types have no plane). */
+const TANK_TYPE_CHANNEL: Partial<Record<VehicleType, number>> = {
+    [VehicleType.LightTank]: BoardChannel.TypeLightTank,
+    [VehicleType.MediumTank]: BoardChannel.TypeMediumTank,
+    [VehicleType.HeavyTank]: BoardChannel.TypeHeavyTank,
+    [VehicleType.RocketTank]: BoardChannel.TypeRocketTank,
+    [VehicleType.FlameTank]: BoardChannel.TypeFlameTank,
+    [VehicleType.FrostTank]: BoardChannel.TypeFrostTank,
 };
 
 export function snapshotUnknownBoard({ world } = GameDI) {
     const grid = MapDI.grid;
     if (!grid) return;
 
-    const { Tank, Vehicle, TeamRef, Children, Dot, Slowed } = getGameComponents(world);
+    const { Tank, Vehicle, TeamRef, Children, Dot, Slowed, Firearms } = getGameComponents(world);
     const observers = query(world, [Vehicle, Tank, UnknownInputBoard]);
 
     for (let i = 0; i < observers.length; i++) {
@@ -104,6 +116,7 @@ export function snapshotUnknownBoard({ world } = GameDI) {
             Children,
             Dot,
             Slowed,
+            Firearms,
         };
         fillWindow(ctx);
 
@@ -223,8 +236,9 @@ function writeUnit(ctx: SnapshotCtx, dq: number, dr: number, unitEid: number) {
 
     UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, plane, 1);
     UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.Hp, getTankHealth(unitEid));
-    writeStats(ctx.selfEid, dq, dr, unitEid, ctx.Vehicle);
+    writeReload(ctx, dq, dr, unitEid);
     writeDamageStatuses(ctx, dq, dr, unitEid);
+    writeTypeOneHot(ctx, dq, dr, unitEid);
 }
 
 /**
@@ -265,22 +279,25 @@ function sumDotDps(ctx: SnapshotCtx, parentEid: number): number {
     return dps;
 }
 
+/** One-hot `VehicleType` plane of the unit on cell (dq, dr). */
+function writeTypeOneHot(ctx: SnapshotCtx, dq: number, dr: number, unitEid: number) {
+    const channel = TANK_TYPE_CHANNEL[ctx.Vehicle.type[unitEid] as VehicleType];
+    if (channel !== undefined) {
+        UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, channel, 1);
+    }
+}
+
 /**
- * Write the normalized vehicle-stat channels (role/mobility/firepower/reload/range) for
- * the unit on cell (dq, dr) into the observer's board. `unitEid` is the unit whose
- * vehicle type the stats come from.
+ * Remaining reload of the unit's gun, log-squashed: `log1p(remaining_ms / 1000)`.
+ * 0 (the dense default) = ready to fire; stream guns and gunless vehicles have no
+ * `Firearms` and stay 0.
  */
-function writeStats(
-    selfEid: number,
-    dq: number,
-    dr: number,
-    unitEid: number,
-    Vehicle: { type: ArrayLike<number> },
-) {
-    const stats = getVehicleStats(Vehicle.type[unitEid]);
-    UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.Role, stats.role);
-    UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.Mobility, stats.mobility);
-    UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.Firepower, stats.firepower);
-    UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.Reload, stats.reload);
-    UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.Range, stats.range);
+function writeReload(ctx: SnapshotCtx, dq: number, dr: number, unitEid: number) {
+    const { selfEid, world, Tank, Firearms } = ctx;
+    const turretEid = Tank.turretEId[unitEid];
+    if (turretEid === 0 || !hasComponent(world, turretEid, Firearms)) return;
+    const remainingMs = Firearms.reloading[turretEid];
+    if (remainingMs > 0) {
+        UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.Reload, Math.log1p(remainingMs / 1000));
+    }
 }
