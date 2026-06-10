@@ -1,6 +1,9 @@
-import { ShaderMeta } from '../../../../../../../renderer/src/WGSL/ShaderMeta.ts';
-import { wgsl } from '../../../../../../../renderer/src/WGSL/wgsl.ts';
-import { VariableKind, VariableMeta } from '../../../../../../../renderer/src/Struct/VariableMeta.ts';
+import { ShaderMeta } from "../../../../../../../renderer/src/WGSL/ShaderMeta.ts";
+import { wgsl } from "../../../../../../../renderer/src/WGSL/wgsl.ts";
+import {
+  VariableKind,
+  VariableMeta,
+} from "../../../../../../../renderer/src/Struct/VariableMeta.ts";
 
 // Hand-tuned via the Lighting lil-gui panel; the directional source (sunAndSky) is the main light.
 // Single floor for everything: objects are lit for real now (boundary dilation +
@@ -8,17 +11,17 @@ import { VariableKind, VariableMeta } from '../../../../../../../renderer/src/St
 export const AMBIENT = 0.5;
 
 export const shaderMeta = new ShaderMeta(
-    {
-        inputSampler: new VariableMeta('textureSampler', VariableKind.Sampler, `sampler`),
-        sceneTexture: new VariableMeta('sceneTexture', VariableKind.Texture, `texture_2d<f32>`),
-        radianceTexture: new VariableMeta('radianceTexture', VariableKind.Texture, `texture_2d<f32>`),
-        emissionTexture: new VariableMeta('emissionTexture', VariableKind.Texture, `texture_2d<f32>`),
-        ambient: new VariableMeta('uAmbient', VariableKind.Uniform, `f32`),
-        objectLightRadius: new VariableMeta('uObjectLightRadius', VariableKind.Uniform, `f32`),
-    },
-    {},
-    // language=WGSL
-    wgsl/* wgsl */ `
+  {
+    inputSampler: new VariableMeta("textureSampler", VariableKind.Sampler, `sampler`),
+    sceneTexture: new VariableMeta("sceneTexture", VariableKind.Texture, `texture_2d<f32>`),
+    radianceTexture: new VariableMeta("radianceTexture", VariableKind.Texture, `texture_2d<f32>`),
+    emissionTexture: new VariableMeta("emissionTexture", VariableKind.Texture, `texture_2d<f32>`),
+    ambient: new VariableMeta("uAmbient", VariableKind.Uniform, `f32`),
+    objectLightRadius: new VariableMeta("uObjectLightRadius", VariableKind.Uniform, `f32`),
+  },
+  {},
+  // language=WGSL
+  wgsl /* wgsl */ `
 const POSITION = array<vec2f, 6>(
     vec2f(-1.0, -1.0),
     vec2f(1.0, -1.0),

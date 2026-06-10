@@ -6,6 +6,6 @@
  * occupy a single cell; the array leaves room for multi-cell obstacles later.
  */
 export type ObstaclePlan = {
-    anchor: { q: number; r: number };
-    cells: Array<{ q: number; r: number }>;
+  anchor: { q: number; r: number };
+  cells: Array<{ q: number; r: number }>;
 };

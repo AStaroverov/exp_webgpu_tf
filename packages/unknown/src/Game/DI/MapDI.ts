@@ -3,10 +3,10 @@
  * GameDI/RenderDI/SoundDI pattern. Set during `createGame`, cleared on destroy.
  */
 
-import { HexGrid } from '../Map/HexGrid.ts';
+import { HexGrid } from "../Map/HexGrid.ts";
 
 export const MapDI: {
-    grid: HexGrid;
+  grid: HexGrid;
 } = {
-    grid: null as any,
+  grid: null as any,
 };

@@ -22,32 +22,32 @@ export const MAX_ACTION_MS = 5000;
 
 /** Per-kind `params` offsets (`p0..p3`). */
 export const MoveStepParamOffset = {
-    /** Steering speed toward the target hex. */
-    speed: 0,
+  /** Steering speed toward the target hex. */
+  speed: 0,
 } as const;
 
 export const AimParamOffset = {
-    /** Aim accuracy (radians). */
-    tolerance: 0,
+  /** Aim accuracy (radians). */
+  tolerance: 0,
 } as const;
 
 export const FireParamOffset = {
-    /** Fire phase: 0 = aiming, 1 = waitReady, 2 = firing. */
-    phase: 0,
+  /** Fire phase: 0 = aiming, 1 = waitReady, 2 = firing. */
+  phase: 0,
 } as const;
 
 export const HoldParamOffset = {
-    /** Hold duration (ms). */
-    duration: 0,
-    /** Accumulated elapsed time (ms). */
-    elapsed: 1,
+  /** Hold duration (ms). */
+  duration: 0,
+  /** Accumulated elapsed time (ms). */
+  elapsed: 1,
 } as const;
 
 export const FireStreamParamOffset = {
-    /** Stream phase: 0 = aiming, 1 = holding. */
-    phase: 0,
-    /** Accumulated hold time (ms). */
-    elapsed: 1,
+  /** Stream phase: 0 = aiming, 1 = holding. */
+  phase: 0,
+  /** Accumulated hold time (ms). */
+  elapsed: 1,
 } as const;
 
 /** Fire phases (stored in the `phase` param): aim the turret, wait for reload, fire. */

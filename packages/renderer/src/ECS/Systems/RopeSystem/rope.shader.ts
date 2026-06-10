@@ -1,23 +1,39 @@
-import { VariableKind, VariableMeta } from '../../../Struct/VariableMeta.ts';
-import { ShaderMeta } from '../../../WGSL/ShaderMeta.ts';
-import { wgsl } from '../../../WGSL/wgsl.ts';
-import { ROPE_POINTS_COUNT } from '../../Components/Rope.ts';
+import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
+import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
+import { wgsl } from "../../../WGSL/wgsl.ts";
+import { ROPE_POINTS_COUNT } from "../../Components/Rope.ts";
 
 export const MAX_ROPES_COUNT = 1000;
 export const MAX_INSTANCE_COUNT = MAX_ROPES_COUNT * ROPE_POINTS_COUNT;
 
 export const shaderMeta = new ShaderMeta(
-    {
-        projection: new VariableMeta('uProjection', VariableKind.Uniform, `mat4x4<f32>`),
-        transform: new VariableMeta('uTransform', VariableKind.StorageRead, `array<mat4x4<f32>, ${ MAX_ROPES_COUNT }>`),
+  {
+    projection: new VariableMeta("uProjection", VariableKind.Uniform, `mat4x4<f32>`),
+    transform: new VariableMeta(
+      "uTransform",
+      VariableKind.StorageRead,
+      `array<mat4x4<f32>, ${MAX_ROPES_COUNT}>`,
+    ),
 
-        color: new VariableMeta('uColor', VariableKind.StorageRead, `array<vec4<f32>, ${ MAX_ROPES_COUNT }>`),
-        points: new VariableMeta('uPoints', VariableKind.StorageRead, `array<vec2<f32>, ${ MAX_INSTANCE_COUNT }>`),
-        thinness: new VariableMeta('uThinness', VariableKind.StorageRead, `array<f32, ${ MAX_ROPES_COUNT }>`),
-    },
-    {},
-    // language=WGSL
-    wgsl`
+    color: new VariableMeta(
+      "uColor",
+      VariableKind.StorageRead,
+      `array<vec4<f32>, ${MAX_ROPES_COUNT}>`,
+    ),
+    points: new VariableMeta(
+      "uPoints",
+      VariableKind.StorageRead,
+      `array<vec2<f32>, ${MAX_INSTANCE_COUNT}>`,
+    ),
+    thinness: new VariableMeta(
+      "uThinness",
+      VariableKind.StorageRead,
+      `array<f32, ${MAX_ROPES_COUNT}>`,
+    ),
+  },
+  {},
+  // language=WGSL
+  wgsl`
         struct VertexOutput {
             @builtin(position) position: vec4<f32>,
             @location(0) @interpolate(flat) instance_index: u32

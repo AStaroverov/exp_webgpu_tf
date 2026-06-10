@@ -1,20 +1,23 @@
-import { ShaderMeta } from '../../../../../../../renderer/src/WGSL/ShaderMeta.ts';
-import { wgsl } from '../../../../../../../renderer/src/WGSL/wgsl.ts';
-import { VariableKind, VariableMeta } from '../../../../../../../renderer/src/Struct/VariableMeta.ts';
+import { ShaderMeta } from "../../../../../../../renderer/src/WGSL/ShaderMeta.ts";
+import { wgsl } from "../../../../../../../renderer/src/WGSL/wgsl.ts";
+import {
+  VariableKind,
+  VariableMeta,
+} from "../../../../../../../renderer/src/Struct/VariableMeta.ts";
 
-export const inputTextureName = 'inputTexture';
-export const oneOverSizeName = 'oneOverSize';
-export const uOffsetName = 'uOffset';
+export const inputTextureName = "inputTexture";
+export const oneOverSizeName = "oneOverSize";
+export const uOffsetName = "uOffset";
 
 export const shaderMeta = new ShaderMeta(
-    {
-        inputTexture: new VariableMeta(inputTextureName, VariableKind.Texture, `texture_2d<f32>`),
-        oneOverSize: new VariableMeta(oneOverSizeName, VariableKind.Uniform, `vec2<f32>`),
-        uOffset: new VariableMeta(uOffsetName, VariableKind.Uniform, `f32`),
-    },
-    {},
-    // language=WGSL
-    wgsl/* wgsl */ `
+  {
+    inputTexture: new VariableMeta(inputTextureName, VariableKind.Texture, `texture_2d<f32>`),
+    oneOverSize: new VariableMeta(oneOverSizeName, VariableKind.Uniform, `vec2<f32>`),
+    uOffset: new VariableMeta(uOffsetName, VariableKind.Uniform, `f32`),
+  },
+  {},
+  // language=WGSL
+  wgsl /* wgsl */ `
 const POSITION = array<vec2f, 6>(
     vec2f(-1.0, -1.0),
     vec2f(1.0, -1.0),

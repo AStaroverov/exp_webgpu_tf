@@ -1,22 +1,22 @@
-import { GameDI } from '../../DI/GameDI.ts';
-import { query } from 'bitecs';
-import { scheduleRemoveEntity } from '../Utils/typicalRemoveEntity.ts';
-import { getGameComponents } from '../createGameWorld.ts';
+import { GameDI } from "../../DI/GameDI.ts";
+import { query } from "bitecs";
+import { scheduleRemoveEntity } from "../Utils/typicalRemoveEntity.ts";
+import { getGameComponents } from "../createGameWorld.ts";
 
 export function createDestroyByTimeoutSystem({ world } = GameDI) {
-    const { DestroyByTimeout } = getGameComponents(world);
+  const { DestroyByTimeout } = getGameComponents(world);
 
-    return (delta: number) => {
-        const eids = query(world, [DestroyByTimeout]);
+  return (delta: number) => {
+    const eids = query(world, [DestroyByTimeout]);
 
-        for (let i = 0; i < eids.length; i++) {
-            const eid = eids[i];
+    for (let i = 0; i < eids.length; i++) {
+      const eid = eids[i];
 
-            DestroyByTimeout.updateTimeout(eid, delta);
+      DestroyByTimeout.updateTimeout(eid, delta);
 
-            if (DestroyByTimeout.timeout[eid] <= 0) {
-                scheduleRemoveEntity(eid);
-            }
-        }
-    };
+      if (DestroyByTimeout.timeout[eid] <= 0) {
+        scheduleRemoveEntity(eid);
+      }
+    }
+  };
 }

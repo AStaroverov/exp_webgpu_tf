@@ -6,8 +6,8 @@
  * tick — see PLAN §2 (semi-MDP / options model).
  */
 
-import { POINTY_DIRECTIONS } from '../../unknown/src/Game/Map/HexConfig.ts';
-import { MASK_NEG as PPO_MASK_NEG } from '../../ppo/src/core/train.ts';
+import { POINTY_DIRECTIONS } from "../../unknown/src/Game/Map/HexConfig.ts";
+import { MASK_NEG as PPO_MASK_NEG } from "../../ppo/src/core/train.ts";
 
 /** Game tick used while simulating headless (ms). Matches tanks' cadence. */
 export const TICK_TIME_SIMULATION = Math.round(16 * 1.5);

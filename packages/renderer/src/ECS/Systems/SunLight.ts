@@ -6,7 +6,7 @@
  *   - the baked SDF z-shadows (SDFSystem/createDrawShapeSystem).
  */
 export const SunLight = {
-    enabled: true,
-    /** Direction toward the sun, radians, screen frame (+X right, +Y down). */
-    angle: 3.04,
+  enabled: true,
+  /** Direction toward the sun, radians, screen frame (+X right, +Y down). */
+  angle: 3.04,
 };

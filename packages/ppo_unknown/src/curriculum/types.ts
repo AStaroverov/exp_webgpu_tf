@@ -9,7 +9,7 @@
  * re-exported here so curriculum consumers import a single module.
  */
 
-export type { Scenario } from '../env/createUnknownScenario.ts';
+export type { Scenario } from "../env/createUnknownScenario.ts";
 
 /**
  * scenarioCompositions — the ppo_unknown curriculum ladder.
@@ -35,33 +35,33 @@ export type { Scenario } from '../env/createUnknownScenario.ts';
  * observation change already forces a retrain.)
  */
 
-export type EnemyBehavior = 'standing' | 'moving' | 'frozen' | 'self-play';
+export type EnemyBehavior = "standing" | "moving" | "frozen" | "self-play";
 
 export type ScenarioConfig = {
-    /** Team 0 size — the learning policy. */
-    allies: number;
-    /** Team 1 size. */
-    enemies: number;
-    enemy: EnemyBehavior;
+  /** Team 0 size — the learning policy. */
+  allies: number;
+  /** Team 1 size. */
+  enemies: number;
+  enemy: EnemyBehavior;
 };
 
 export const scenarioCompositions: readonly ScenarioConfig[] = [
-    // 1: 4 vs 4 near-static targets — same skill with a full team (friendly-fire mask matters)
-    { allies: 4, enemies: 4, enemy: 'standing' },
-    // 2: 4 vs 4, enemies occasionally move and fire
-    { allies: 4, enemies: 4, enemy: 'moving' },
-    // 3: 4 vs 4 against a frozen historical snapshot of the policy
-    { allies: 4, enemies: 4, enemy: 'frozen' },
-    // 4: 4 vs 4 self-play
-    { allies: 4, enemies: 4, enemy: 'self-play' },
+  // 1: 4 vs 4 near-static targets — same skill with a full team (friendly-fire mask matters)
+  { allies: 4, enemies: 4, enemy: "standing" },
+  // 2: 4 vs 4, enemies occasionally move and fire
+  { allies: 4, enemies: 4, enemy: "moving" },
+  // 3: 4 vs 4 against a frozen historical snapshot of the policy
+  { allies: 4, enemies: 4, enemy: "frozen" },
+  // 4: 4 vs 4 self-play
+  { allies: 4, enemies: 4, enemy: "self-play" },
 ] as const;
 
 export type CurriculumState = {
-    iteration: number;
-    mapScenarioIndexToSuccessRatio: Record<number, number>;
+  iteration: number;
+  mapScenarioIndexToSuccessRatio: Record<number, number>;
 };
 
 export const DEFAULT_CURRICULUM_STATE: CurriculumState = {
-    iteration: 0,
-    mapScenarioIndexToSuccessRatio: {},
+  iteration: 0,
+  mapScenarioIndexToSuccessRatio: {},
 };

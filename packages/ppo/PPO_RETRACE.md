@@ -12,11 +12,11 @@ section lists where our implementation deviates.
 In an async setup there are **three distinct distributions** per step, all defined
 over the SAME masked action set:
 
-| Symbol | What it is | Where it lives |
-|---|---|---|
-| **μ** (behavior) | The distribution the action was ACTUALLY sampled from on the actor: stale network snapshot, **after** the action mask **and after** ε-mixing | Recorded at act time (`logProb`) |
-| **π_old** | The learner's policy snapshot anchoring the PPO trust region (no ε) | Snapshot at the start of an update phase |
-| **π** (current) | The learner's policy being optimized, recomputed every gradient step | Learner |
+| Symbol           | What it is                                                                                                                                   | Where it lives                           |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| **μ** (behavior) | The distribution the action was ACTUALLY sampled from on the actor: stale network snapshot, **after** the action mask **and after** ε-mixing | Recorded at act time (`logProb`)         |
+| **π_old**        | The learner's policy snapshot anchoring the PPO trust region (no ε)                                                                          | Snapshot at the start of an update phase |
+| **π** (current)  | The learner's policy being optimized, recomputed every gradient step                                                                         | Learner                                  |
 
 And **two ratios with different jobs** that must never be conflated:
 
@@ -25,8 +25,8 @@ And **two ratios with different jobs** that must never be conflated:
 r_t = π(a_t|s_t) / π_old(a_t|s_t)    — trust region (PPO/SPO surrogate, actor)
 ```
 
-- ρ corrects for *what actually generated the data* (staleness + exploration).
-- r bounds *how far the current update may move* from a recent anchor.
+- ρ corrects for _what actually generated the data_ (staleness + exploration).
+- r bounds _how far the current update may move_ from a recent anchor.
 - Using μ as the surrogate denominator merges the two; it is acceptable **only at
   low staleness and small ε** (OpenAI Five ran this way at staleness ≤ 1 version).
   Under high lag it anchors the clip to a stale policy and step sizes collapse.
@@ -123,7 +123,7 @@ separate optimizers/LRs.
 - Remedy: **logit L2** `β·mean(logits²)`, β ~ 1e-4…1e-2 (AlphaStar-style), and/or
   KL-to-reference. Entropy bonus alone does NOT fix saturation (its gradient dies
   with the probabilities).
-- Entropy under masks: zero the masked terms *before* summation
+- Entropy under masks: zero the masked terms _before_ summation
   (`where(valid, p·logp, 0)`); max is `log(n_valid)`. Normalizing by `log(n_valid)`
   is optional and only matters when the valid-set size varies a lot (guard n=1).
 - Masking is part of the distribution definition: the same stored mask must be
@@ -133,18 +133,18 @@ separate optimizers/LRs.
 
 ### Canonical hyperparameters (discrete)
 
-| Knob | Canon |
-|---|---|
-| clip ε | 0.1–0.2 |
-| epochs × minibatches | 4 × 4 |
-| advantage norm | per minibatch |
-| entropy coef | ~0.01 (or adaptive-α toward a target entropy — non-canonical add-on) |
-| target KL (early stop) | 0.01–0.05, break at ~1.5× |
-| grad clip (global norm) | 0.5 |
-| Adam eps | 1e-5 (not the framework default) |
-| LR | 2.5e-4…3e-4, linearly annealed (or KL-adaptive ×0.95/×1.05 variant) |
-| γ / λ | 0.99 / 0.95 |
-| staleness | keep actors within ~1–2 versions (OpenAI Five); Sample Factory: <20–30 SGD steps |
+| Knob                    | Canon                                                                            |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| clip ε                  | 0.1–0.2                                                                          |
+| epochs × minibatches    | 4 × 4                                                                            |
+| advantage norm          | per minibatch                                                                    |
+| entropy coef            | ~0.01 (or adaptive-α toward a target entropy — non-canonical add-on)             |
+| target KL (early stop)  | 0.01–0.05, break at ~1.5×                                                        |
+| grad clip (global norm) | 0.5                                                                              |
+| Adam eps                | 1e-5 (not the framework default)                                                 |
+| LR                      | 2.5e-4…3e-4, linearly annealed (or KL-adaptive ×0.95/×1.05 variant)              |
+| γ / λ                   | 0.99 / 0.95                                                                      |
+| staleness               | keep actors within ~1–2 versions (OpenAI Five); Sample Factory: <20–30 SGD steps |
 
 ## 5. Pitfall checklist
 
@@ -201,11 +201,11 @@ Mapping to `packages/ppo/src/core/train.ts` & learner:
 
 ## References
 
-- Schulman et al. 2017, *PPO* — arXiv:1707.06347
-- Munos et al. 2016, *Safe and Efficient Off-Policy RL (Retrace λ)* — arXiv:1606.02647
-- Espeholt et al. 2018, *IMPALA (V-trace)* — arXiv:1802.01561; reference `vtrace.py` in deepmind/scalable_agent
-- Huang & Ontañón 2020, *A Closer Look at Invalid Action Masking* — arXiv:2006.14171
-- Huang et al., *The 37 Implementation Details of PPO* — ICLR blog track 2022
-- Schulman, *Approximating KL Divergence* — joschu.net/blog/kl-approx
-- Luo et al. 2019, *IMPACT* (PPO+V-trace hybrid, target-net trust region) — arXiv:1912.00167
+- Schulman et al. 2017, _PPO_ — arXiv:1707.06347
+- Munos et al. 2016, _Safe and Efficient Off-Policy RL (Retrace λ)_ — arXiv:1606.02647
+- Espeholt et al. 2018, _IMPALA (V-trace)_ — arXiv:1802.01561; reference `vtrace.py` in deepmind/scalable_agent
+- Huang & Ontañón 2020, _A Closer Look at Invalid Action Masking_ — arXiv:2006.14171
+- Huang et al., _The 37 Implementation Details of PPO_ — ICLR blog track 2022
+- Schulman, _Approximating KL Divergence_ — joschu.net/blog/kl-approx
+- Luo et al. 2019, _IMPACT_ (PPO+V-trace hybrid, target-net trust region) — arXiv:1912.00167
 - OpenAI Five (staleness & sample reuse ablations) — cdn.openai.com/dota-2.pdf

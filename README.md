@@ -9,7 +9,7 @@ monorepo and execute across Web Workers.
 
 The real goal is to **push the browser to its absolute limit** — to see how much
 a single tab can actually do. Run a physics sim, render it on the GPU, and train
-neural networks on it *at the same time*, all client-side, and find where it
+neural networks on it _at the same time_, all client-side, and find where it
 breaks. It's a stress test for the platform as much as anything else; not a
 product.
 
@@ -40,7 +40,7 @@ Everything runs client-side, fanned out across Web Workers from a single page
   by the latest saved policy, plus a realtime metrics dashboard (React +
   HeroUI), reading channels published by the learners.
 
-The RL setup treats a step as a *decision point* rather than a single game tick
+The RL setup treats a step as a _decision point_ rather than a single game tick
 (a semi-MDP / options framing), with action masking for invalid moves and a
 curriculum that grows scenario difficulty over the run.
 

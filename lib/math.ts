@@ -20,72 +20,70 @@ export const pow = Math.pow;
 export const log1p = Math.log1p;
 
 export function ufloor(n: number): number {
-    return sign(n) * floor(abs(n));
+  return sign(n) * floor(abs(n));
 }
 
 export function uceil(n: number): number {
-    return sign(n) * ceil(abs(n));
+  return sign(n) * ceil(abs(n));
 }
 
 export function uround(n: number): number {
-    return sign(n) * round(abs(n));
+  return sign(n) * round(abs(n));
 }
 
 export function dist2(x1: number, y1: number, x2: number, y2: number): number {
-    return hypot(x2 - x1, y2 - y1);
+  return hypot(x2 - x1, y2 - y1);
 }
 
 export function smoothstep(a: number, b: number, x: number): number {
-    const t = max(0, min(1, (x - a) / (b - a)));
-    return t * t * (3 - 2 * t);
+  const t = max(0, min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
 }
 
 export function centerStep(a: number, b: number, x: number): number {
-    let t = (x - a) / (b - a);
-    t = 2 * t - 1;
-    return max(0, 1 - t * t);
+  let t = (x - a) / (b - a);
+  t = 2 * t - 1;
+  return max(0, 1 - t * t);
 }
 
 // lerp(200, 400, 0.5) = 300
 export function lerp(a: number, b: number, x: number): number {
-    return a + (b - a) * x;
+  return a + (b - a) * x;
 }
 
 // unlerp(200, 400, 300) = 0.5
 export function unlerp(a: number, b: number, x: number): number {
-    return (x - a) / (b - a);
+  return (x - a) / (b - a);
 }
 
 export function mean(args: number[] | Float32Array | Float64Array): number {
-    let sum = 0;
-    for (let i = 0; i < args.length; i++) {
-        sum += args[i];
-    }
-    return sum / args.length;
+  let sum = 0;
+  for (let i = 0; i < args.length; i++) {
+    sum += args[i];
+  }
+  return sum / args.length;
 }
 
 export function median(args: number[] | Float32Array | Float64Array): number {
-    const sorted = args.toSorted((a, b) => a - b);
-    const mid = floor(sorted.length / 2);
-    return sorted.length % 2 === 0
-        ? (sorted[mid - 1] + sorted[mid]) / 2
-        : sorted[mid];
+  const sorted = args.toSorted((a, b) => a - b);
+  const mid = floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
 export function std(args: number[] | Float32Array | Float64Array, mean: number): number {
-    let val = 0;
-    for (let i = 0; i < args.length; i++) {
-        const diff = args[i] - mean;
-        val += diff * diff;
-    }
-    val /= args.length;
-    return sqrt(val);
+  let val = 0;
+  for (let i = 0; i < args.length; i++) {
+    const diff = args[i] - mean;
+    val += diff * diff;
+  }
+  val /= args.length;
+  return sqrt(val);
 }
 
 export function normalize<T extends number[] | Float32Array | Float64Array>(args: T): T {
-    const m = mean(args);
-    const s = std(args, m) + 1e-8;
-    return args.map((v) => (v - m) / s) as T;
+  const m = mean(args);
+  const s = std(args, m) + 1e-8;
+  return args.map((v) => (v - m) / s) as T;
 }
 
 /**
@@ -95,8 +93,8 @@ export function normalize<T extends number[] | Float32Array | Float64Array>(args
  * @returns {number} Преобразованное значение.
  */
 export function signedLog(x: number, base: number): number {
-    // Формула: sign(x) * log(1 + |x|) / log(1 + base)
-    return sign(x) * log(1 + abs(x)) / log(1 + base);
+  // Формула: sign(x) * log(1 + |x|) / log(1 + base)
+  return (sign(x) * log(1 + abs(x))) / log(1 + base);
 }
 
 /**
@@ -107,15 +105,15 @@ export function signedLog(x: number, base: number): number {
  * @returns {number[]} Масштабированный массив.
  */
 export function linearScale(arr: number[], targetMin: number, targetMax: number): number[] {
-    const minVal = min(...arr);
-    const maxVal = max(...arr);
-    // Если все значения равны, вернем массив с targetMin (или можно иначе обработать)
-    if (maxVal === minVal) {
-        return arr.map(() => targetMin);
-    }
-    return arr.map(val =>
-        ((val - minVal) / (maxVal - minVal)) * (targetMax - targetMin) + targetMin,
-    );
+  const minVal = min(...arr);
+  const maxVal = max(...arr);
+  // Если все значения равны, вернем массив с targetMin (или можно иначе обработать)
+  if (maxVal === minVal) {
+    return arr.map(() => targetMin);
+  }
+  return arr.map(
+    (val) => ((val - minVal) / (maxVal - minVal)) * (targetMax - targetMin) + targetMin,
+  );
 }
 
 /**
@@ -126,41 +124,37 @@ export function linearScale(arr: number[], targetMin: number, targetMax: number)
  * @param upperPerc - Верхний процентиль (0..1). Например, 0.95 обрежет верхние 5%.
  * @returns Новый массив, где выбросы обрезаны, а значения нормализованы.
  */
-export function winsorize(
-    advantages: number[],
-    lowerPerc = 0.05,
-    upperPerc = 0.95,
-): number[] {
-    if (advantages.length < 2) {
-        // Если массив слишком короткий, вернём копию (или можно вернуть сам массив)
-        return [...advantages];
-    }
+export function winsorize(advantages: number[], lowerPerc = 0.05, upperPerc = 0.95): number[] {
+  if (advantages.length < 2) {
+    // Если массив слишком короткий, вернём копию (или можно вернуть сам массив)
+    return [...advantages];
+  }
 
-    // 1) Копируем и сортируем массив, чтобы найти пороговые значения
-    const sorted = [...advantages].sort((a, b) => a - b);
-    const n = sorted.length;
+  // 1) Копируем и сортируем массив, чтобы найти пороговые значения
+  const sorted = [...advantages].sort((a, b) => a - b);
+  const n = sorted.length;
 
-    // Индексы для процентилей
-    const lowerIndex = Math.floor(n * lowerPerc);
-    const upperIndex = Math.floor(n * upperPerc);
+  // Индексы для процентилей
+  const lowerIndex = Math.floor(n * lowerPerc);
+  const upperIndex = Math.floor(n * upperPerc);
 
-    // Извлекаем значения на границах
-    const lowerVal = sorted[Math.max(0, lowerIndex)];                 // защита от выхода за диапазон
-    const upperVal = sorted[Math.min(upperIndex, n - 1)];
+  // Извлекаем значения на границах
+  const lowerVal = sorted[Math.max(0, lowerIndex)]; // защита от выхода за диапазон
+  const upperVal = sorted[Math.min(upperIndex, n - 1)];
 
-    // 2) Winsorization (обрезаем значения, выходящие за эти границы)
-    const winsorized = advantages.map(a => {
-        if (a < lowerVal) return lowerVal;
-        if (a > upperVal) return upperVal;
-        return a;
-    });
+  // 2) Winsorization (обрезаем значения, выходящие за эти границы)
+  const winsorized = advantages.map((a) => {
+    if (a < lowerVal) return lowerVal;
+    if (a > upperVal) return upperVal;
+    return a;
+  });
 
-    return winsorized;
+  return winsorized;
 }
 
 // Функция нормализации угла в диапазоне [-π, π]
 export function normalizeAngle(angle: number): number {
-    while (angle < -Math.PI) angle += 2 * Math.PI;
-    while (angle > Math.PI) angle -= 2 * Math.PI;
-    return angle;
+  while (angle < -Math.PI) angle += 2 * Math.PI;
+  while (angle > Math.PI) angle -= 2 * Math.PI;
+  return angle;
 }

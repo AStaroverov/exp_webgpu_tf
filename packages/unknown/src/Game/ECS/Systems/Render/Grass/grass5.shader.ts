@@ -1,24 +1,27 @@
-import { ShaderMeta } from '../../../../../../../renderer/src/WGSL/ShaderMeta.ts';
-import { VariableKind, VariableMeta } from '../../../../../../../renderer/src/Struct/VariableMeta.ts';
-import { wgsl } from '../../../../../../../renderer/src/WGSL/wgsl.ts';
+import { ShaderMeta } from "../../../../../../../renderer/src/WGSL/ShaderMeta.ts";
+import {
+  VariableKind,
+  VariableMeta,
+} from "../../../../../../../renderer/src/Struct/VariableMeta.ts";
+import { wgsl } from "../../../../../../../renderer/src/WGSL/wgsl.ts";
 
 export const shaderMeta = new ShaderMeta(
-    {
-        screenSize: new VariableMeta('uScreenSize', VariableKind.Uniform, `vec2<f32>`),
-        time: new VariableMeta('uTime', VariableKind.Uniform, `f32`),
-        mapOffset: new VariableMeta('uMapOffset', VariableKind.Uniform, `vec2<f32>`),
+  {
+    screenSize: new VariableMeta("uScreenSize", VariableKind.Uniform, `vec2<f32>`),
+    time: new VariableMeta("uTime", VariableKind.Uniform, `f32`),
+    mapOffset: new VariableMeta("uMapOffset", VariableKind.Uniform, `vec2<f32>`),
 
-        // Tile size is now in physical pixels
-        tileSize: new VariableMeta('uTileSize', VariableKind.Uniform, `f32`),
-        pixelSize: new VariableMeta('uPixelSize', VariableKind.Uniform, `f32`),
-        colorCount: new VariableMeta('uColorCount', VariableKind.Uniform, `f32`),
-        grassDensity: new VariableMeta('uGrassDensity', VariableKind.Uniform, `f32`),
-        windStrength: new VariableMeta('uWindStrength', VariableKind.Uniform, `f32`),
-        windDirection: new VariableMeta('uWindDirection', VariableKind.Uniform, `vec2<f32>`),
-    },
-    {},
-    // language=WGSL
-    wgsl`        
+    // Tile size is now in physical pixels
+    tileSize: new VariableMeta("uTileSize", VariableKind.Uniform, `f32`),
+    pixelSize: new VariableMeta("uPixelSize", VariableKind.Uniform, `f32`),
+    colorCount: new VariableMeta("uColorCount", VariableKind.Uniform, `f32`),
+    grassDensity: new VariableMeta("uGrassDensity", VariableKind.Uniform, `f32`),
+    windStrength: new VariableMeta("uWindStrength", VariableKind.Uniform, `f32`),
+    windDirection: new VariableMeta("uWindDirection", VariableKind.Uniform, `vec2<f32>`),
+  },
+  {},
+  // language=WGSL
+  wgsl`        
         struct VertexOutput {
             @builtin(position) position: vec4f,
         };

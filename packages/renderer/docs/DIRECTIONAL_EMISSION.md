@@ -171,6 +171,7 @@ wins. Per-emitter ширина конуса не вводится — ширин
 ## 7. Точный список правок по файлам
 
 ### renderer/src/WGSL/GPUShader.ts
+
 - Новая опция `targets?: { format: GPUTextureFormat, blend?: 'alpha' | 'additive' | 'none' }[]`.
 - `fragment.targets` строится из массива (по одному `{format, blend}` на
   attachment). `makeBlend('none') → undefined` (replace).
@@ -183,11 +184,13 @@ wins. Per-emitter ширина конуса не вводится — ширин
   зависит — не трогаем.
 
 ### renderer/src/WGSL/createFrame.ts
+
 - В `createRCTextures` добавить `emitDirTexture`: формат `rg16float`,
   usage `RENDER_ATTACHMENT | TEXTURE_BINDING`, размер `rcW × rcH`. Вернуть его
   из функции (строка 77).
 
 ### renderer/src/ECS/Systems/SDFSystem/sdf.shader.ts
+
 - `fs_emit` возвращает структуру:
   ```wgsl
   struct EmitOutput {
@@ -204,11 +207,13 @@ wins. Per-emitter ширина конуса не вводится — ширин
   без конуса (корректно).
 
 ### renderer/src/ECS/Systems/SDFSystem/createDrawShapeSystem.ts
+
 - `pipelineEmit` → `targets: [{ format: 'rgba16float', blend: 'additive' }, { format: 'rg16float', blend: 'none' }]`.
 - **НЕТ** изменений bind-group (нового uniform нет). **НЕТ** `uEmitCone`/SoA.
   `intensityCollect[i]` уже несёт знаковое значение (строка 108).
 
 ### unknown/.../Lighting/createRadianceCascadesSystem.ts
+
 - Добавить `emitDirTexture` в литерал `rcTextures` (строки 67-75) — **ручное
   копирование по имени, иначе начальный build не увидит текстуру** (finding M:
   recreate). Добавить в `destroyTextures` (строки 243-251). `recreate` уже
@@ -235,6 +240,7 @@ wins. Per-emitter ширина конуса не вводится — ширин
   (строки 30-45).
 
 ### unknown/.../Lighting/radianceCascades.shader.ts
+
 - 4-я текстура: `emitDirTexture: texture_2d<f32>` (3/16 → 4/16 — запас есть).
 - Свернуть `uFirstCascadeIndex` + `uEnableSun` в `uMisc: vec4<f32>`
   (`.x`/`.y`/`.z = emitCone`). Обновить два read-site'а: `uEnableSun > 0.5` →
@@ -252,41 +258,54 @@ wins. Per-emitter ширина конуса не вводится — ширин
   ```
 
 ### unknown/.../Vehicle/VehicleParts.ts (строка 173)
+
 ```ts
-LightEmitter.addComponent(world, eid,
-  HeadlightConfig.directional ? -HeadlightConfig.intensity : HeadlightConfig.intensity);
+LightEmitter.addComponent(
+  world,
+  eid,
+  HeadlightConfig.directional ? -HeadlightConfig.intensity : HeadlightConfig.intensity,
+);
 ```
 
 ### unknown/.../Entities/TurretHeadlight.ts (строка 51) — finding M (MAJOR)
+
 То же самое изменение. Это **луч-трапеция** (Shape.Trapezoid, строка 49) —
 именно ему конус нужен больше всего. С глобальным `directional: true` на
 `HeadlightConfig` оба места должны получить знак-флип, иначе турельная фара
 осталась бы omni:
+
 ```ts
-LightEmitter.addComponent(world, eid,
-  HeadlightConfig.directional ? -HeadlightConfig.intensity : HeadlightConfig.intensity);
+LightEmitter.addComponent(
+  world,
+  eid,
+  HeadlightConfig.directional ? -HeadlightConfig.intensity : HeadlightConfig.intensity,
+);
 ```
+
 **LightFlash.ts:31** (`options.intensity`, положительный) — осознанно оставляем
 omni (вспышка); прочие omni-эмиттеры (spice 1.5, vfx muzzle/hit 3.0) тоже
 положительны → не затронуты.
 
 ### unknown/src/Game/Config/vehicles.ts (HeadlightConfig, строки 330-333)
+
 Добавить `directional: true`. Поле `coneExponent` НЕ нужно (ширина глобальна).
 
 ### unknown/src/ui/createLightingGUI.ts
+
 - Слайдер `emitCone` (диапазон 0..64), `.onChange(apply)`. `params` —
   `structuredClone(DEFAULT_RC_PARAMS)` (строка 15), поэтому `emitCone` появится
   автоматически. `setParams` должен пере-эмитить `emitCone` в `uMisc` каждый кадр.
 
 ### renderer/src/ECS/Components/Common.ts
+
 - **БЕЗ изменений** (`radius` остаётся нетронутым).
 
 ## 8. Параметры и GUI
 
-| Параметр | Где | Default | Диапазон GUI | Назначение |
-|---|---|---|---|---|
-| `emitCone` | `RCParams` / `uMisc.z` | `8` | 0..64 | глобальный показатель степени конуса (больше = уже пучок) |
-| `HeadlightConfig.directional` | config | `true` | — | переключает фары между directional и omni |
+| Параметр                      | Где                    | Default | Диапазон GUI | Назначение                                                |
+| ----------------------------- | ---------------------- | ------- | ------------ | --------------------------------------------------------- |
+| `emitCone`                    | `RCParams` / `uMisc.z` | `8`     | 0..64        | глобальный показатель степени конуса (больше = уже пучок) |
+| `HeadlightConfig.directional` | config                 | `true`  | —            | переключает фары между directional и omni                 |
 
 `emitCone` живёт в `uMisc.z` (свёрнутом vec4), пишется в `build` и live в
 `setParams`. Паттерн упаковки скаляров в vec4 уже существует
@@ -299,26 +318,26 @@ omni (вспышка); прочие omni-эмиттеры (spice 1.5, vfx muzzle
 `getRenderPipeline` на `targets: [{format, blend}]` **И** свернуть ключ кэша на
 полный дескриптор targets в том же шаге (иначе вызовы с `targets` но без старых
 скаляров коллизируют). Все вызовы переведены.
-*DONE:* сцена рендерится попиксельно идентично текущей (emit/seed/jfa/df/cascade/
+_DONE:_ сцена рендерится попиксельно идентично текущей (emit/seed/jfa/df/cascade/
 overlay без визуальной разницы).
 
 **M2 — второй attachment + текстура направлений.** Добавить `emitDirTexture` в
 `createRCTextures` + литерал `rcTextures` + `destroyTextures`; второй
 colorAttachment в emit-пассе; `pipelineEmit` с двумя targets; `fs_emit` →
 `EmitOutput` со `@location(1) dir`. Пока `dir` всегда `(0,0)`.
-*DONE:* сцена по-прежнему идентична (dir не читается), нет validation-ошибок,
+_DONE:_ сцена по-прежнему идентична (dir не читается), нет validation-ошибок,
 emit-пасс компилируется с 2-компонентным `@location(1)` в `rg16float`.
 
 **M3 — facing + конус-фактор.** `fs_emit` пишет facing при `intensity < 0`;
 4-я текстура в cascade-шейдере; `uMisc` fold; конус-множитель в hit-ветке.
 `emitCone` захардкожен временным числом.
-*DONE:* эмиттер с отрицательным intensity, повёрнутый в +X, освещает приёмники
+_DONE:_ эмиттер с отрицательным intensity, повёрнутый в +X, освещает приёмники
 справа от себя; omni-эмиттеры светят как раньше.
 
 **M4 — directional headlights + GUI.** `HeadlightConfig.directional: true`;
 знак-флип в VehicleParts.ts:173 И TurretHeadlight.ts:51; слайдер `emitCone` в
 createLightingGUI; live-tuning через `uMisc` в `setParams`.
-*DONE:* фары танка (включая турельную трапецию) дают видимый направленный пучок,
+_DONE:_ фары танка (включая турельную трапецию) дают видимый направленный пучок,
 поворачивающийся вместе с корпусом/башней; слайдер `emitCone` сужает/расширяет
 пучок в реальном времени.
 

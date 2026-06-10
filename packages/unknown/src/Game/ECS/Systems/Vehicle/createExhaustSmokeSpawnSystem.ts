@@ -1,15 +1,15 @@
-import { hasComponent, query } from 'bitecs';
-import { GameDI } from '../../../DI/GameDI.ts';
-import { ExhaustSmokeOptions, spawnExhaustSmoke } from '../../Entities/ExhaustSmoke.ts';
+import { hasComponent, query } from "bitecs";
+import { GameDI } from "../../../DI/GameDI.ts";
+import { ExhaustSmokeOptions, spawnExhaustSmoke } from "../../Entities/ExhaustSmoke.ts";
 import {
-    GlobalTransform,
-    getMatrixTranslationX,
-    getMatrixTranslationY,
-    getMatrixRotationZ,
-} from '../../../../../../renderer/src/ECS/Components/Transform.ts';
-import { random } from '../../../../../../../lib/random.ts';
-import { hypot } from '../../../../../../../lib/math.ts';
-import { getGameComponents } from '../../createGameWorld.ts';
+  GlobalTransform,
+  getMatrixTranslationX,
+  getMatrixTranslationY,
+  getMatrixRotationZ,
+} from "../../../../../../renderer/src/ECS/Components/Transform.ts";
+import { random } from "../../../../../../../lib/random.ts";
+import { hypot } from "../../../../../../../lib/math.ts";
+import { getGameComponents } from "../../createGameWorld.ts";
 
 const ACCELERATION_EMISSION_MULTI = 5;
 const SMOKE_SIZE_MIN = 3;
@@ -18,70 +18,71 @@ const SMOKE_VELOCITY_BASE = 15;
 const SMOKE_VELOCITY_VARIANCE = 5;
 
 const exhaustSmokeOptions: ExhaustSmokeOptions = {
-    x: 0,
-    y: 0,
-    velocityX: 0,
-    velocityY: 0,
-    size: 0,
+  x: 0,
+  y: 0,
+  velocityX: 0,
+  velocityY: 0,
+  size: 0,
 };
 
 export function createExhaustSmokeSpawnSystem({ world } = GameDI) {
-    const { ExhaustPipe, Parent, Vehicle, RigidBodyState } = getGameComponents(world);
+  const { ExhaustPipe, Parent, Vehicle, RigidBodyState } = getGameComponents(world);
 
-    return (delta: number) => {
-        const pipeEids = query(world, [ExhaustPipe]);
-        const deltaSeconds = delta / 1000;
+  return (delta: number) => {
+    const pipeEids = query(world, [ExhaustPipe]);
+    const deltaSeconds = delta / 1000;
 
-        for (const pipeEid of pipeEids) {
-            const vehicleEid = Parent.id[pipeEid];
+    for (const pipeEid of pipeEids) {
+      const vehicleEid = Parent.id[pipeEid];
 
-            if (!hasComponent(world, vehicleEid, Vehicle)) continue;
+      if (!hasComponent(world, vehicleEid, Vehicle)) continue;
 
-            const vehicleMatrix = GlobalTransform.matrix.getBatch(vehicleEid);
-            const vehicleX = getMatrixTranslationX(vehicleMatrix);
-            const vehicleY = getMatrixTranslationY(vehicleMatrix);
-            const vehicleRotation = getMatrixRotationZ(vehicleMatrix);
+      const vehicleMatrix = GlobalTransform.matrix.getBatch(vehicleEid);
+      const vehicleX = getMatrixTranslationX(vehicleMatrix);
+      const vehicleY = getMatrixTranslationY(vehicleMatrix);
+      const vehicleRotation = getMatrixRotationZ(vehicleMatrix);
 
-            let speed = 0;
-            if (hasComponent(world, vehicleEid, RigidBodyState)) {
-                const linvel = RigidBodyState.linvel.getBatch(vehicleEid);
-                speed = hypot(linvel[0], linvel[1]);
-            }
+      let speed = 0;
+      if (hasComponent(world, vehicleEid, RigidBodyState)) {
+        const linvel = RigidBodyState.linvel.getBatch(vehicleEid);
+        speed = hypot(linvel[0], linvel[1]);
+      }
 
-            const speedFactor = Math.min(speed / 50, 1);
-            const emissionRate = ExhaustPipe.emissionRate[pipeEid] * (1 + speedFactor * ACCELERATION_EMISSION_MULTI);
+      const speedFactor = Math.min(speed / 50, 1);
+      const emissionRate =
+        ExhaustPipe.emissionRate[pipeEid] * (1 + speedFactor * ACCELERATION_EMISSION_MULTI);
 
-            ExhaustPipe.emissionAccumulator[pipeEid] += deltaSeconds * emissionRate;
+      ExhaustPipe.emissionAccumulator[pipeEid] += deltaSeconds * emissionRate;
 
-            const relX = ExhaustPipe.relativeX[pipeEid];
-            const relY = ExhaustPipe.relativeY[pipeEid];
-            const cos = Math.cos(vehicleRotation);
-            const sin = Math.sin(vehicleRotation);
+      const relX = ExhaustPipe.relativeX[pipeEid];
+      const relY = ExhaustPipe.relativeY[pipeEid];
+      const cos = Math.cos(vehicleRotation);
+      const sin = Math.sin(vehicleRotation);
 
-            const worldX = vehicleX + relX * cos - relY * sin;
-            const worldY = vehicleY + relX * sin + relY * cos;
+      const worldX = vehicleX + relX * cos - relY * sin;
+      const worldY = vehicleY + relX * sin + relY * cos;
 
-            const exhaustDir = vehicleRotation + ExhaustPipe.direction[pipeEid];
+      const exhaustDir = vehicleRotation + ExhaustPipe.direction[pipeEid];
 
-            while (ExhaustPipe.emissionAccumulator[pipeEid] >= 1) {
-                ExhaustPipe.emissionAccumulator[pipeEid] -= 1;
+      while (ExhaustPipe.emissionAccumulator[pipeEid] >= 1) {
+        ExhaustPipe.emissionAccumulator[pipeEid] -= 1;
 
-                const velocityMagnitude = SMOKE_VELOCITY_BASE + random() * SMOKE_VELOCITY_VARIANCE;
-                const spread = (random() - 0.5) * 0.5;
-                const finalDir = exhaustDir + spread;
+        const velocityMagnitude = SMOKE_VELOCITY_BASE + random() * SMOKE_VELOCITY_VARIANCE;
+        const spread = (random() - 0.5) * 0.5;
+        const finalDir = exhaustDir + spread;
 
-                const velocityX = Math.cos(finalDir) * velocityMagnitude;
-                const velocityY = Math.sin(finalDir) * velocityMagnitude;
+        const velocityX = Math.cos(finalDir) * velocityMagnitude;
+        const velocityY = Math.sin(finalDir) * velocityMagnitude;
 
-                const size = SMOKE_SIZE_MIN + random() * (SMOKE_SIZE_MAX - SMOKE_SIZE_MIN);
+        const size = SMOKE_SIZE_MIN + random() * (SMOKE_SIZE_MAX - SMOKE_SIZE_MIN);
 
-                exhaustSmokeOptions.x = worldX;
-                exhaustSmokeOptions.y = worldY;
-                exhaustSmokeOptions.size = size;
-                exhaustSmokeOptions.velocityX = velocityX;
-                exhaustSmokeOptions.velocityY = velocityY;
-                spawnExhaustSmoke(exhaustSmokeOptions);
-            }
-        }
-    };
+        exhaustSmokeOptions.x = worldX;
+        exhaustSmokeOptions.y = worldY;
+        exhaustSmokeOptions.size = size;
+        exhaustSmokeOptions.velocityX = velocityX;
+        exhaustSmokeOptions.velocityY = velocityY;
+        spawnExhaustSmoke(exhaustSmokeOptions);
+      }
+    }
+  };
 }

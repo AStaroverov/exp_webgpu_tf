@@ -4,45 +4,45 @@
  * `savePath` and episode sizing diverge for the hex game.
  */
 
-import type { PpoConfig } from '../../ppo/src/config.ts';
-import { TICK_TIME_SIMULATION } from './consts.ts';
+import type { PpoConfig } from "../../ppo/src/config.ts";
+import { TICK_TIME_SIMULATION } from "./consts.ts";
 
 export const CONFIG: PpoConfig & {
-    episodeFrames: number;
-    workerCount: number;
+  episodeFrames: number;
+  workerCount: number;
 } = {
-    clipNorm: 5,
+  clipNorm: 5,
 
-    gamma: (_iteration: number) => 0.97,
+  gamma: (_iteration: number) => 0.97,
 
-    entropyCoeff: 0.01,
+  entropyCoeff: 0.01,
 
-    policyEpochs: (_iter: number) => 4,
-    policyClipRatio: 0.2,
-    policyLogitsL2: 1e-3,
+  policyEpochs: (_iter: number) => 4,
+  policyClipRatio: 0.2,
+  policyLogitsL2: 1e-3,
 
-    valueEpochs: (_iter: number) => 4,
-    valueClipRatio: 0.2,
-    valueLossCoeff: 0.5,
-    valueLRCoeff: 1,
+  valueEpochs: (_iter: number) => 4,
+  valueClipRatio: 0.2,
+  valueLossCoeff: 0.5,
+  valueLRCoeff: 1,
 
-    lrConfig: {
-        kl: { high: 0.013, target: 0.01, low: 0.007 },
-        initial: 1e-4,
-        multHigh: 0.95,
-        multLow: 1.05,
-        min: 1e-5,
-        max: 1e-3,
-    },
+  lrConfig: {
+    kl: { high: 0.013, target: 0.01, low: 0.007 },
+    initial: 1e-4,
+    multHigh: 0.95,
+    multLow: 1.05,
+    min: 1e-5,
+    max: 1e-3,
+  },
 
-    batchSize: (_iteration: number) => 256 * 16,
-    miniBatchSize: (_iteration: number) => 256,
+  batchSize: (_iteration: number) => 256 * 16,
+  miniBatchSize: (_iteration: number) => 256,
 
-    // Decision-based episodes are short in STEPS but long in TICKS. Cap ticks at
-    // a few simulated minutes; termination is owned by ppo_unknown (no win cond
-    // baked into the game).
-    episodeFrames: Math.round(2 * 60 * 1000 / TICK_TIME_SIMULATION),
-    workerCount: 4,
-    backpressureQueueSize: 2,
-    savePath: 'PPO_UNKNOWN_V3',
+  // Decision-based episodes are short in STEPS but long in TICKS. Cap ticks at
+  // a few simulated minutes; termination is owned by ppo_unknown (no win cond
+  // baked into the game).
+  episodeFrames: Math.round((2 * 60 * 1000) / TICK_TIME_SIMULATION),
+  workerCount: 4,
+  backpressureQueueSize: 2,
+  savePath: "PPO_UNKNOWN_V3",
 };

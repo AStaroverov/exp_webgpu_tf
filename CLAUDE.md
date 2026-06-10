@@ -11,7 +11,7 @@
   shape passes, and the base render ECS components (`Color`, `Shape`,
   `Local/GlobalTransform`, …) and systems (`Transform`, `ChangedDetector`, `Resize`).
   Game packages import it directly via relative paths (`../../../renderer/src/...`).
-- **`unknown`** — *this package*. The game prototype: ECS world + Rapier physics +
+- **`unknown`** — _this package_. The game prototype: ECS world + Rapier physics +
   `renderer`. Runs with or without rendering (headless for training).
 - **`debug`** — dev-only debug GUI overlay (`createDebugGUI`) for inspecting/tweaking
   a running game.
@@ -38,7 +38,7 @@ runs a `requestAnimationFrame` loop calling `game.gameTick(delta)` (delta clampe
 - **Physics**: `@dimforge/rapier2d-simd` (2D, WASM)
 - **Rendering**: WebGPU via `packages/renderer`
 - **Reactivity**: `rxjs` + the `delegate`/`obs` component helpers
-- **Hex grid**: `honeycomb-grid` (geometry, neighbors, distance) + A* on top
+- **Hex grid**: `honeycomb-grid` (geometry, neighbors, distance) + A\* on top
 - **Build**: Vite 6 + `vite-plugin-wasm` + `vite-plugin-top-level-await`
 
 ## Architecture (structure only)
@@ -68,8 +68,8 @@ runs a `requestAnimationFrame` loop calling `game.gameTick(delta)` (delta clampe
 
 The single rule everything else follows from: **components are data, systems are
 behavior, and the trigger for a behavior is a query — not a conditional buried inside
-a system.** When you add a feature, the question is *"what component expresses this,
-and which system queries it?"* — not *"which existing system do I edit?"*.
+a system.** When you add a feature, the question is _"what component expresses this,
+and which system queries it?"_ — not _"which existing system do I edit?"_.
 
 ## Anti-pattern — how NOT to add behavior
 
@@ -78,13 +78,13 @@ range"). The tempting-but-wrong approach was to bolt the new behavior onto whate
 systems happened to be nearby:
 
 - **Special-casing a type inside a generic system** — `if (caliber === Rocket) { spawn
-  explosion … }` inside the generic hit-processing system. The system now knows about
+explosion … }` inside the generic hit-processing system. The system now knows about
   one specific entity kind.
 - **Adding side-effects to a single-purpose system** — making the
-  "destroy-when-too-far" system *also* spawn an explosion. That system's one job is to
+  "destroy-when-too-far" system _also_ spawn an explosion. That system's one job is to
   add a `Destroy` marker; detonation is unrelated to it.
 - **A one-off helper called from many sites** — an `explodeRocket()` function invoked
-  from both the hit system and the distance system, with the *same* trigger condition
+  from both the hit system and the distance system, with the _same_ trigger condition
   (`is it a rocket? is it being destroyed?`) duplicated at every call site.
 
 Why it's bad: the feature is **smeared across several systems**, each now coupled to
@@ -99,8 +99,8 @@ on the query. The same example, done right:
 
 1. **A component carries the parameters** — `Explodable { damage, radius, vfxSize, … }`.
    It is pure data; it holds no logic.
-2. **One system's query *is* the trigger** — `createExplodeSystem` queries
-   `[Explodable, Destroy]` → detonate. It is ordered deliberately: it runs *before*
+2. **One system's query _is_ the trigger** — `createExplodeSystem` queries
+   `[Explodable, Destroy]` → detonate. It is ordered deliberately: it runs _before_
    the destroy system removes the entity, so the entity still exists when it explodes.
 3. **The existing systems stay dumb** — they only add the `Destroy` marker. Every cause
    of destruction (collision, max range, timeout, out-of-zone) now produces the
@@ -111,8 +111,8 @@ on the query. The same example, done right:
 The trigger lives in the **combination of components** (`Explodable + Destroy`), so the
 behavior is defined in exactly one place and composes with everything else.
 
-**Generalize it:** prefer *"add a component + a system that queries it"* over
-*"branch inside an existing system"* or *"call a shared helper from N sites"*. If you
+**Generalize it:** prefer _"add a component + a system that queries it"_ over
+_"branch inside an existing system"_ or _"call a shared helper from N sites"_. If you
 find yourself writing `if (specificType)` in a generic system, that condition probably
 wants to be a component. If a system does two unrelated things, split it.
 
@@ -122,15 +122,15 @@ Distilled from the sources below and our own conventions:
 
 - **Components are data.** No behavior in components — at most trivial readonly
   helpers. Logic belongs in systems.
-- **One system, one responsibility.** Depend on the *minimum* set of components: it
+- **One system, one responsibility.** Depend on the _minimum_ set of components: it
   reads clearer, refactors easier, and is reusable across entity kinds.
 - **Don't pile unrelated fields into one component.** Split a component that mixes
-  concerns into focused ones; only consolidate data that is *always* processed
+  concerns into focused ones; only consolidate data that is _always_ processed
   together.
 - **Drive behavior with marker / "command" components, not flags + branches.** Add a
   tag (or a one-frame command component), let a system query it, and remove it after
   processing. The query selects the entities; the system never type-checks.
-- **Existence-based processing — presence of a component *is* the boolean.** Don't
+- **Existence-based processing — presence of a component _is_ the boolean.** Don't
   store `isAlive` / `isActive` / a `state` enum and branch on it per entity. Model
   state as **membership**: a "dead" entity simply lacks the component; a transition is
   add-one-tag / remove-another, and the query does the selecting. No per-entity `if`
@@ -173,7 +173,7 @@ to stay aligned with that model and with how V8 optimizes, not to hand-roll memo
   properties (`delete obj.foo`) triggers hidden-class transitions and deopts. State
   changes go through component add/remove, not object mutation.
 - **The fastest search is the one you don't do.** Maintain the matching set as data
-  (it's what a query *is*) instead of scanning all entities and testing a condition
+  (it's what a query _is_) instead of scanning all entities and testing a condition
   every frame. For spatial proximity, build a grid / spatial hash into a **reused**
   buffer (clear-and-refill each frame) to kill O(n²) scans — never allocate it fresh.
 - **Sort indices/ids, not data, and only when it pays.** A sort is justified only if it
@@ -192,14 +192,14 @@ engine, and what to ignore:
   iteration; algorithmic wins (skip the search, spatial index, batching, deferred
   events); data-only components; sequential access over scattered random indexing;
   replacing pointer chains (`a.b.c.d`) with a single `id → index` indirection.
-- **Does *not* transfer — don't attempt:** manual cache-line packing / struct padding /
+- **Does _not_ transfer — don't attempt:** manual cache-line packing / struct padding /
   alignment, prefetch, streaming stores, aliasing hints — V8 hides memory layout.
   There is no SIMD auto-vectorization in plain JS: if you genuinely need vector kernels,
   go **WASM SIMD** or **WebGPU compute** (the SoA layout keeps data lane-ready for that).
   False sharing is irrelevant single-threaded — it only re-emerges across Web Workers
   over `SharedArrayBuffer`.
 - **Inverts in JS:** "immutability everywhere" (object spreads, `Object.freeze`, a new
-  object per tick) is a *pessimization* here — it creates GC pressure. Prefer in-place
+  object per tick) is a _pessimization_ here — it creates GC pressure. Prefer in-place
   writes into typed arrays and buffer-level double-buffering.
 
 ## When NOT to optimize / abstract
@@ -210,12 +210,12 @@ engine, and what to ignore:
   shared helper/abstraction only when the pattern actually repeats (3rd real use).
   Over-parameterized generic code tends to go megamorphic and deopt in V8.
 - **Don't over-split components/archetypes** either: too fine adds indexing overhead,
-  too coarse forces reading fields you don't use. Split when *different systems* touch
+  too coarse forces reading fields you don't use. Split when _different systems_ touch
   disjoint field subsets; keep together when always co-accessed.
 - **Dirty-flag laziness isn't always a win** — an unpredictable per-entity `if (dirty)`
   can be slower than just recomputing a cheap value in a straight monomorphic loop.
 - Keep cold / setup code readable — abstractions, closures, and the like are fine
-  *outside* hot loops.
+  _outside_ hot loops.
 
 ## Project rules (distilled from review)
 
@@ -226,7 +226,7 @@ each one exists because the opposite was written first and rejected in review.
 
 - **A component stores its config ROW KEY + live per-entity state — never copies of
   config values.** `Firearms = {caliber, reloading}`, `StreamFirearms = {caliberRef,
-  emitAccMs}`; systems read tunables via `Config[key]` at the use site (config is
+emitAccMs}`; systems read tunables via `Config[key]` at the use site (config is
   global). No config-table imports inside `addComponent`; the stored `reloadingDuration`
   copy was removed for exactly this. Per-entity data that is NOT in any config (e.g.
   a gun-tip offset) is legitimately stored in a component.
@@ -257,7 +257,7 @@ each one exists because the opposite was written first and rejected in review.
 - **ALL damage flows through `Hitable.hit$(eid, sourceEid, finalDamage, kind)` and is
   applied in ONE place** (`createHitableSystem.applyDamage`). Each recorder computes
   its own final value at the source (contact: `min(1, force/CONTACT_FORCE_TARGET) ×
-  Damagable[source]`; blast: `damage × proximity`; DoT tick: `dps × delta`). Direct
+Damagable[source]`; blast: `damage × proximity`; DoT tick: `dps × delta`). Direct
   `Hitable.health -=` writes anywhere else are forbidden (the old "decrement + force-0
   flag hit" trick was removed).
 - **Damage-kind specialties live in the hitable pipeline, keyed by `DamageKind` riding
@@ -286,7 +286,7 @@ each one exists because the opposite was written first and rejected in review.
   built by their factory. Downstream code keys off component presence
   (`hasComponent(turret, StreamFirearms)`), never off a weapon-type enum branch.
 - **A new `CollisionGroup` must be added to BOTH sides' `interacts` masks.** Rapier
-  filters pairs bidirectionally — a one-sided mask produces zero events *silently*
+  filters pairs bidirectionally — a one-sided mask produces zero events _silently_
   (the stream weapon was dead until parts accepted `PARTICLE`). When adding a group,
   grep every `interactsCollisionGroup` that should see it.
 

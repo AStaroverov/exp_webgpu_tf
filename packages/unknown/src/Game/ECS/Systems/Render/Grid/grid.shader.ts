@@ -1,11 +1,11 @@
-import { ShaderMeta } from 'renderer/src/WGSL/ShaderMeta.ts';
-import { VariableKind, VariableMeta } from 'renderer/src/Struct/VariableMeta.ts';
-import { wgsl } from 'renderer/src/WGSL/wgsl.ts';
+import { ShaderMeta } from "renderer/src/WGSL/ShaderMeta.ts";
+import { VariableKind, VariableMeta } from "renderer/src/Struct/VariableMeta.ts";
+import { wgsl } from "renderer/src/WGSL/wgsl.ts";
 
 /** Max number of hex cells drawn per frame (instances). */
 export const MAX_HEX_COUNT = 2048;
 
-const WGSL_VERTEX = /* wgsl */`
+const WGSL_VERTEX = /* wgsl */ `
     struct VertexOutput {
         @builtin(position) position: vec4f,
         @location(0) local_position: vec2f,
@@ -34,7 +34,7 @@ const WGSL_VERTEX = /* wgsl */`
     }
 `;
 
-const WGSL_FRAGMENT = /* wgsl */`
+const WGSL_FRAGMENT = /* wgsl */ `
     const DEG60: f32 = 1.0471975512; // 60 degrees in radians
 
     // Signed distance to a POINTY-top regular hexagon, via 6 edge half-planes.
@@ -74,14 +74,18 @@ const WGSL_FRAGMENT = /* wgsl */`
 `;
 
 export const shaderMeta = new ShaderMeta(
-    {
-        projection: new VariableMeta('uProjection', VariableKind.Uniform, `mat4x4<f32>`),
-        params: new VariableMeta('uParams', VariableKind.Uniform, `vec4<f32>`),
-        color: new VariableMeta('uColor', VariableKind.Uniform, `vec4<f32>`),
-        cells: new VariableMeta('uCells', VariableKind.StorageRead, `array<vec4<f32>, ${MAX_HEX_COUNT}>`),
-    },
-    {},
-    wgsl`
+  {
+    projection: new VariableMeta("uProjection", VariableKind.Uniform, `mat4x4<f32>`),
+    params: new VariableMeta("uParams", VariableKind.Uniform, `vec4<f32>`),
+    color: new VariableMeta("uColor", VariableKind.Uniform, `vec4<f32>`),
+    cells: new VariableMeta(
+      "uCells",
+      VariableKind.StorageRead,
+      `array<vec4<f32>, ${MAX_HEX_COUNT}>`,
+    ),
+  },
+  {},
+  wgsl`
         ${WGSL_VERTEX}
         ${WGSL_FRAGMENT}
     `,

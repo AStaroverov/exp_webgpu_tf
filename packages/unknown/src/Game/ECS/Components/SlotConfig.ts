@@ -1,14 +1,10 @@
 /**
  * Slot Configuration Component
- * 
+ *
  * Re-exports from centralized Config for backward compatibility.
  */
 
-import {
-    SlotPartType,
-    getSlotPartConfig,
-    SlotPartPhysics,
-} from '../../Config/index.ts';
+import { SlotPartType, getSlotPartConfig, SlotPartPhysics } from "../../Config/index.ts";
 
 export { SlotPartType, getSlotPartConfig };
 

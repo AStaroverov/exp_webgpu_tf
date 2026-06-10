@@ -1,7 +1,7 @@
-import { EntityId } from 'bitecs';
+import { EntityId } from "bitecs";
 
 export const PlayerEnvDI: {
-    tankEid: null | EntityId;
+  tankEid: null | EntityId;
 } = {
-    tankEid: null,
+  tankEid: null,
 };

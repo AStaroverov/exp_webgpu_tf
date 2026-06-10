@@ -15,12 +15,12 @@
  *                                combat contribution, a loss/draw is shared equally.
  */
 
-import { clamp } from 'lodash';
-import { GameDI } from '../../../unknown/src/Game/DI/GameDI.ts';
-import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld.ts';
-import { getTankTeamId } from '../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts';
-import { scoreTracker } from './ScoreTracker.ts';
-import type { UnknownAgent } from '../env/UnknownAgent.ts';
+import { clamp } from "lodash";
+import { GameDI } from "../../../unknown/src/Game/DI/GameDI.ts";
+import { getGameComponents } from "../../../unknown/src/Game/ECS/createGameWorld.ts";
+import { getTankTeamId } from "../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts";
+import { scoreTracker } from "./ScoreTracker.ts";
+import type { UnknownAgent } from "../env/UnknownAgent.ts";
 
 /**
  * Dense-shaping anneal: the per-macro-action reward (hit/kill/approach delta) is
@@ -35,8 +35,8 @@ const SHAPING_ZERO_AT = 150_000;
 
 /** Multiplicative weight on the dense shaping reward for the given network iteration. */
 export function getShapingWeight(iteration: number): number {
-    const t = clamp((iteration - SHAPING_FULL_UNTIL) / (SHAPING_ZERO_AT - SHAPING_FULL_UNTIL), 0, 1);
-    return 1 + (SHAPING_FLOOR - 1) * t;
+  const t = clamp((iteration - SHAPING_FULL_UNTIL) / (SHAPING_ZERO_AT - SHAPING_FULL_UNTIL), 0, 1);
+  return 1 + (SHAPING_FLOOR - 1) * t;
 }
 
 /** Reward magnitude at a perfect outcome (success ratio = ±1). */
@@ -46,8 +46,8 @@ const TEAM_SPIRIT = 0.5;
 
 /** Cumulative combat score for the tank's player (delta'd by the agent). */
 export function calculateActionReward(eid: number, { world } = GameDI): number {
-    const { PlayerRef } = getGameComponents(world);
-    return scoreTracker.getScore(PlayerRef.id[eid]);
+  const { PlayerRef } = getGameComponents(world);
+  return scoreTracker.getScore(PlayerRef.id[eid]);
 }
 
 /**
@@ -62,30 +62,28 @@ export function calculateActionReward(eid: number, { world } = GameDI): number {
  * equally — the tank that fought hardest is not punished more than the one that hid.
  */
 export function calculateFinalReward(
-    eid: number,
-    successRatioTeam0: number,
-    agents: UnknownAgent[],
-    { world } = GameDI,
+  eid: number,
+  successRatioTeam0: number,
+  agents: UnknownAgent[],
+  { world } = GameDI,
 ): number {
-    const myTeam = getTankTeamId(eid);
-    const successRatio = myTeam === 0 ? successRatioTeam0 : -successRatioTeam0;
-    const teamReward = WIN_REWARD * successRatio;
-    if (teamReward <= 0) return teamReward;
+  const myTeam = getTankTeamId(eid);
+  const successRatio = myTeam === 0 ? successRatioTeam0 : -successRatioTeam0;
+  const teamReward = WIN_REWARD * successRatio;
+  if (teamReward <= 0) return teamReward;
 
-    const { PlayerRef } = getGameComponents(world);
-    const teammates = agents.filter((a) => getTankTeamId(a.tankEid) === myTeam);
-    const teamSize = Math.max(1, teammates.length);
+  const { PlayerRef } = getGameComponents(world);
+  const teammates = agents.filter((a) => getTankTeamId(a.tankEid) === myTeam);
+  const teamSize = Math.max(1, teammates.length);
 
-    const myScore = scoreTracker.getScore(PlayerRef.id[eid]);
-    const totalTeamScore = teammates.reduce(
-        (sum, a) => sum + scoreTracker.getScore(PlayerRef.id[a.tankEid]),
-        0,
-    );
-    // Relative contribution: 1 = team average, teamSize = did everything alone.
-    const relativeShare = totalTeamScore > 0
-        ? (myScore / totalTeamScore) * teamSize
-        : 1;
-    const contribution = (1 - TEAM_SPIRIT) * relativeShare + TEAM_SPIRIT;
+  const myScore = scoreTracker.getScore(PlayerRef.id[eid]);
+  const totalTeamScore = teammates.reduce(
+    (sum, a) => sum + scoreTracker.getScore(PlayerRef.id[a.tankEid]),
+    0,
+  );
+  // Relative contribution: 1 = team average, teamSize = did everything alone.
+  const relativeShare = totalTeamScore > 0 ? (myScore / totalTeamScore) * teamSize : 1;
+  const contribution = (1 - TEAM_SPIRIT) * relativeShare + TEAM_SPIRIT;
 
-    return teamReward * contribution;
+  return teamReward * contribution;
 }

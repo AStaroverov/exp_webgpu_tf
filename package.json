@@ -1,9 +1,7 @@
 {
   "name": "game-monorepo",
-  "private": true,
   "version": "0.0.0",
-  "type": "module",
-  "scripts": {},
+  "private": true,
   "workspaces": [
     "packages/renderer",
     "packages/tanks",
@@ -13,5 +11,14 @@
     "packages/debug",
     "packages/ppo",
     "packages/ppo_unknown"
-  ]
+  ],
+  "type": "module",
+  "scripts": {
+    "lint": "oxlint",
+    "fmt": "oxfmt"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.54.0",
+    "oxlint": "^1.69.0"
+  }
 }

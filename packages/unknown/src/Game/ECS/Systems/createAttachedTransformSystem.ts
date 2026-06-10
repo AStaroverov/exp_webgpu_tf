@@ -1,7 +1,7 @@
-import { mat4 } from 'gl-matrix';
-import { Not, query } from 'bitecs';
-import { GameDI } from '../../DI/GameDI.ts';
-import { getGameComponents } from '../createGameWorld.ts';
+import { mat4 } from "gl-matrix";
+import { Not, query } from "bitecs";
+import { GameDI } from "../../DI/GameDI.ts";
+import { getGameComponents } from "../createGameWorld.ts";
 
 /**
  * Render-only attachments: entities that follow a physics-driven parent without
@@ -14,17 +14,17 @@ import { getGameComponents } from '../createGameWorld.ts';
  * no RigidBodyRef] entities — one hierarchy level, like the Children graph itself.
  */
 export function createAttachedTransformSystem({ world } = GameDI) {
-    const { Parent, LocalTransform, GlobalTransform, RigidBodyRef } = getGameComponents(world);
+  const { Parent, LocalTransform, GlobalTransform, RigidBodyRef } = getGameComponents(world);
 
-    return function updateAttachedTransforms() {
-        const entities = query(world, [Parent, LocalTransform, GlobalTransform, Not(RigidBodyRef)]);
+  return function updateAttachedTransforms() {
+    const entities = query(world, [Parent, LocalTransform, GlobalTransform, Not(RigidBodyRef)]);
 
-        for (let i = 0; i < entities.length; i++) {
-            const eid = entities[i];
-            const parentGlobal = GlobalTransform.matrix.getBatch(Parent.id[eid]);
-            const local = LocalTransform.matrix.getBatch(eid);
-            const global = GlobalTransform.matrix.getBatch(eid);
-            mat4.multiply(global, parentGlobal, local);
-        }
-    };
+    for (let i = 0; i < entities.length; i++) {
+      const eid = entities[i];
+      const parentGlobal = GlobalTransform.matrix.getBatch(Parent.id[eid]);
+      const local = LocalTransform.matrix.getBatch(eid);
+      const global = GlobalTransform.matrix.getBatch(eid);
+      mat4.multiply(global, parentGlobal, local);
+    }
+  };
 }

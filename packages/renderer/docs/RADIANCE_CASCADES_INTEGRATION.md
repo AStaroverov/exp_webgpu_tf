@@ -4,8 +4,8 @@
 
 Add a 2D global-illumination (GI) lighting pass to the WebGPU renderer using the
 **Radiance Cascades** (RC) technique. RC computes soft, colored, omnidirectional
-light propagation with penumbrae and bounce-like fill, driven by an *emission map*
-(colored light sources) and an *occluder coverage map* (everything solid). This
+light propagation with penumbrae and bounce-like fill, driven by an _emission map_
+(colored light sources) and an _occluder coverage map_ (everything solid). This
 replaces — or, during bring-up, coexists with — the current single fixed-direction
 height-shadow system baked into `sdf.shader.ts`.
 
@@ -16,6 +16,7 @@ with WebGPU-TF learners). Budget is generous — correctness and look matter mor
 per-frame cost.
 
 **Reference implementation:** radiance-cascades.com single-file WebGL2/GLSL demo.
+
 - Online: https://github.com/radiance-cascades/radiance-cascades.com/blob/main/public/js/rc.js
 - Local copy: `/tmp/rc.js`
 
@@ -46,6 +47,7 @@ runs, every frame, six stages:
 6. **Overlay / composite** — combine cascade-0 radiance with the scene to screen.
 
 Key formulas to preserve exactly (see `/tmp/rc.js` and §"GLSL→WGSL porting notes"):
+
 - `cascadeCount = ceil(log(diag) / log(baseRayCount)) + 1`, `diag = sqrt(w² + h²)`.
 - `spacingBase = sqrt(baseRayCount)`, `spacing = pow(spacingBase, cascadeIndex)`.
 - Interval: `start = (idx==0 ? 0 : base^(idx-1)) * modInterval`,
@@ -105,15 +107,15 @@ separate-encoder + immediate-submit is a legacy hack we explicitly do not replic
 Added to `createFrameTextures` in `packages/renderer/src/WGSL/createFrame.ts`, all
 sized `rcW × rcH` where `rcW = floor(canvas.width * rcDownscale)` (default `1.0`).
 
-| Name              | Format        | Size      | Filter   | Sampled via         | Usage |
-|-------------------|---------------|-----------|----------|---------------------|-------|
-| `emissionTexture` | `rgba16float` | rcW × rcH | linear   | `textureSampleLevel`| RA \| TB — RGB = premult HDR emitter color, A = coverage |
-| `seedA`           | `rg16float`   | rcW × rcH | nearest  | `textureLoad`       | RA \| TB — JFA ping (seed UV) |
-| `seedB`           | `rg16float`   | rcW × rcH | nearest  | `textureLoad`       | RA \| TB — JFA pong |
-| `dfTexture`       | `r16float`    | rcW × rcH | nearest  | `textureLoad`       | RA \| TB — distance field (UV units) |
-| `cascA`           | `rgba16float` | rcW × rcH | linear   | `textureSampleLevel`| RA \| TB — cascade ping (radiance) |
-| `cascB`           | `rgba16float` | rcW × rcH | linear   | `textureSampleLevel`| RA \| TB — cascade pong |
-| `litTexture`      | `bgra8unorm`  | canvas    | nearest  | `textureSample`     | RA \| TB — composite output, fed to Pixelate |
+| Name              | Format        | Size      | Filter  | Sampled via          | Usage                                                    |
+| ----------------- | ------------- | --------- | ------- | -------------------- | -------------------------------------------------------- |
+| `emissionTexture` | `rgba16float` | rcW × rcH | linear  | `textureSampleLevel` | RA \| TB — RGB = premult HDR emitter color, A = coverage |
+| `seedA`           | `rg16float`   | rcW × rcH | nearest | `textureLoad`        | RA \| TB — JFA ping (seed UV)                            |
+| `seedB`           | `rg16float`   | rcW × rcH | nearest | `textureLoad`        | RA \| TB — JFA pong                                      |
+| `dfTexture`       | `r16float`    | rcW × rcH | nearest | `textureLoad`        | RA \| TB — distance field (UV units)                     |
+| `cascA`           | `rgba16float` | rcW × rcH | linear  | `textureSampleLevel` | RA \| TB — cascade ping (radiance)                       |
+| `cascB`           | `rgba16float` | rcW × rcH | linear  | `textureSampleLevel` | RA \| TB — cascade pong                                  |
+| `litTexture`      | `bgra8unorm`  | canvas    | nearest | `textureSample`      | RA \| TB — composite output, fed to Pixelate             |
 
 RA = `RENDER_ATTACHMENT`, TB = `TEXTURE_BINDING`. **Single mip on all** (no
 mip-gen, because `basePixelsBetweenProbes = 1`). We use `rgba16float` rather than the
@@ -155,13 +157,21 @@ File: `packages/renderer/src/ECS/Components/Common.ts` (follows the existing
 
 ```ts
 export const createLightEmitterComponent = defineComponent((LightEmitter, obs) => {
-    const intensity = TypedArray.f64(delegate.defaultSize); // emission multiplier; 0 = pure occluder
-    const radius    = TypedArray.f64(delegate.defaultSize); // optional falloff hint
-    return {
-        intensity, radius,
-        addComponent(world, eid, i = 1, r = 0) { addComponent(world, eid, LightEmitter); intensity[eid] = i; radius[eid] = r; },
-        set$: obs((eid, i, r) => { intensity[eid] = i; radius[eid] = r; }),
-    };
+  const intensity = TypedArray.f64(delegate.defaultSize); // emission multiplier; 0 = pure occluder
+  const radius = TypedArray.f64(delegate.defaultSize); // optional falloff hint
+  return {
+    intensity,
+    radius,
+    addComponent(world, eid, i = 1, r = 0) {
+      addComponent(world, eid, LightEmitter);
+      intensity[eid] = i;
+      radius[eid] = r;
+    },
+    set$: obs((eid, i, r) => {
+      intensity[eid] = i;
+      radius[eid] = r;
+    }),
+  };
 });
 ```
 
@@ -172,7 +182,7 @@ Register it in `createRenderComponents` in
 LightEmitter: createLightEmitterComponent(world),
 ```
 
-**No `Occluder` component.** Coverage = any drawn SDF alpha. *Every* SDF shape
+**No `Occluder` component.** Coverage = any drawn SDF alpha. _Every_ SDF shape
 occludes; shapes tagged `LightEmitter` additionally emit. Emission encoding reuses the
 existing `Color` component: emitted color = `Color.rgb * intensity`, `A = coverage`.
 Occluders (no emitter, or `intensity = 0`) write `RGB = 0, A = 1`. This avoids adding
@@ -191,7 +201,7 @@ existing `vs_shadow_map` / `fs_shadow_map` subpass exactly:
   `vec4(Color.rgb * intensity, 1.0)` inside (intensity supplied via the `LightEmitter`
   uniform/storage already bound, or `1.0` if absent — occluders pass `intensity = 0`).
 - `pipelineEmit`: `getRenderPipeline(device, 'vs_emit', 'fs_emit', { autoLayout: true,
-  bindGroups: {...}, targetFormat: 'rgba16float', withDepth: false, blend: 'additive' })`.
+bindGroups: {...}, targetFormat: 'rgba16float', withDepth: false, blend: 'additive' })`.
 
 This gives perfect spatial registration with the scene (same transforms, same SDF
 evaluation) and reuses the SoA upload that already runs for `drawShapes`.
@@ -220,18 +230,31 @@ modeled on `createPostEffect` / `createDrawShapeSystem`. `createFrameTick` stays
 The single wiring point. Inside `setRenderTarget`:
 
 ```ts
-const textures = createFrameTextures(device, canvas);              // now also has RC textures
-const shapeSystem = createDrawShapeSystem({ world, device, shadowMapTexture: textures.shadowMapTexture });
-const lighting = createRadianceCascadesSystem({ world, device, textures, drawEmitters: shapeSystem.drawEmitters });
-const frameTick = createFrameTick({ ...textures, canvas, device, background, getPixelRatio }, mainCb, shadowMapCb);
+const textures = createFrameTextures(device, canvas); // now also has RC textures
+const shapeSystem = createDrawShapeSystem({
+  world,
+  device,
+  shadowMapTexture: textures.shadowMapTexture,
+});
+const lighting = createRadianceCascadesSystem({
+  world,
+  device,
+  textures,
+  drawEmitters: shapeSystem.drawEmitters,
+});
+const frameTick = createFrameTick(
+  { ...textures, canvas, device, background, getPixelRatio },
+  mainCb,
+  shadowMapCb,
+);
 const postEffectFrame = createPostEffect(device, context, lighting.outputTexture); // was textures.renderTexture
 
 RenderDI.renderFrame = (delta) => {
-    const commandEncoder = device.createCommandEncoder();
-    frameTick(commandEncoder, delta);   // scene → renderTexture (+ shadow pass, own submit)
-    lighting.run(commandEncoder, delta);// emit/seed/jfa/df/cascades/composite → litTexture
-    postEffectFrame(commandEncoder);    // litTexture → swapchain
-    device.queue.submit([commandEncoder.finish()]);
+  const commandEncoder = device.createCommandEncoder();
+  frameTick(commandEncoder, delta); // scene → renderTexture (+ shadow pass, own submit)
+  lighting.run(commandEncoder, delta); // emit/seed/jfa/df/cascades/composite → litTexture
+  postEffectFrame(commandEncoder); // litTexture → swapchain
+  device.queue.submit([commandEncoder.finish()]);
 };
 ```
 
@@ -242,6 +265,7 @@ The composite stays fully self-contained in `/Lighting/`. Reverting RC is one li
 ### Emitter tagging (game content)
 
 Tag entities with `LightEmitter` where light should radiate:
+
 - `packages/unknown/src/Game/Config/spice.ts` — spice (warm melange glow).
 - VFX entities — `Explosion`, `MuzzleFlash`, `HitFlash` (strong transient emitters).
 - Bullets / tracers — moving point lights.
@@ -261,7 +285,7 @@ selector, e.g. `blend?: 'alpha' | 'additive'` mapping additive to
 `src = one, dst = one, op = add`.
 
 **Critical:** the pipeline cache key (line 50) is currently
-``` `${vertexName}-${fragmentName}-${withDepth}-${targetFormat}-${withBlending}-${autoLayout}` ```
+`` `${vertexName}-${fragmentName}-${withDepth}-${targetFormat}-${withBlending}-${autoLayout}` ``
 and does **not** include the blend variant (nor `bindGroups`). The new blend mode
 **must be added to the key**, otherwise an additive pipeline and an alpha pipeline
 with the same `vs/fs/format/withDepth/autoLayout` tuple collide in the cache (first
@@ -280,14 +304,14 @@ JFA `classic()` kernel, the seed and DF shaders, and optionally `sunAndSky` /
 
 Mechanical translation rules:
 
-| GLSL | WGSL |
-|------|------|
-| `texelFetch(tex, ivec2, 0)` | `textureLoad(tex, vec2<i32>(...), 0)` — seed/JFA/DF (no sampler) |
-| `texture(tex, uv)` / `textureLod(tex, uv, 0.0)` | `textureSampleLevel(tex, samp, uv, 0.0)` — raymarch + merge |
-| `mod(a, b)` | `a - b * floor(a / b)` (helper `fn fmod`) |
-| `cond ? a : b` | `select(b, a, cond)` |
-| `for (float dist=0.; dist<len;)` | bounded loop with `MAX_STEPS` cap (no infinite march) |
-| `vec4 FragColor` | `@location(0) vec4f`; extra channels dropped by `rg16/r16` targets |
+| GLSL                                            | WGSL                                                               |
+| ----------------------------------------------- | ------------------------------------------------------------------ |
+| `texelFetch(tex, ivec2, 0)`                     | `textureLoad(tex, vec2<i32>(...), 0)` — seed/JFA/DF (no sampler)   |
+| `texture(tex, uv)` / `textureLod(tex, uv, 0.0)` | `textureSampleLevel(tex, samp, uv, 0.0)` — raymarch + merge        |
+| `mod(a, b)`                                     | `a - b * floor(a / b)` (helper `fn fmod`)                          |
+| `cond ? a : b`                                  | `select(b, a, cond)`                                               |
+| `for (float dist=0.; dist<len;)`                | bounded loop with `MAX_STEPS` cap (no infinite march)              |
+| `vec4 FragColor`                                | `@location(0) vec4f`; extra channels dropped by `rg16/r16` targets |
 
 **`textureSampleLevel` is mandatory inside the raymarch loop.** `textureSample` is
 illegal in WebGPU under non-uniform control flow (the conditional, data-dependent
@@ -304,18 +328,21 @@ flipped `TEX_COORDS` V before any JFA/raymarch work, or every downstream pass is
 upside-down.
 
 Seed:
+
 ```glsl
 float alpha = texelFetch(surfaceTexture, ivec2(gl_FragCoord.xy), 0).a;
 FragColor = vUv * ceil(alpha);
 ```
 
 Distance field:
+
 ```glsl
 vec2 nearestSeed = texelFetch(jfaTexture, texel, 0).xy;
 FragColor = clamp(distance(vUv, nearestSeed), 0.0, 1.0);
 ```
 
 Raymarch (sphere-trace the DF; sRGB-decode scene on hit):
+
 ```glsl
 vec2 rayDir = normalize(rayEnd - rayStart);
 float rayLength = length(rayEnd - rayStart);
@@ -335,6 +362,7 @@ return vec4(0.0);
 ```
 
 Merge (the bilinear-fix upper fetch):
+
 ```glsl
 if (currentRadiance.a > 0.0 || cascadeIndex >= max(1.0, cascadeCount - 1.0))
   return currentRadiance; // hit, or top cascade: nothing to merge
@@ -345,6 +373,7 @@ return currentRadiance + vec4(upper, 1.0);
 ```
 
 Cascade `main()` interval + ray loop (preserve every magic number):
+
 ```glsl
 float rayCount = pow(base, cascadeIndex + 1.0);
 float spacing  = pow(sqrt(base), cascadeIndex);
@@ -374,18 +403,18 @@ composite (multiplying radiance into LDR display-space color) double-darkens.
 `RCParams`, all radial/probe quantities derived from `rcW, rcH` and recomputed in
 `recreate()`:
 
-| Param | Default | Notes |
-|-------|---------|-------|
-| `baseRayCount` | `4` | angular rays per probe |
-| `basePixelsBetweenProbes` | `1` (**fixed**) | forces merge LOD 0 → no mips |
-| `rayInterval` | `1.0` | radial interval scale |
-| `intervalOverlap` | `0.1` | overlap term in `end` |
-| `cascadeInterval` | `1.0` | hardcoded in reference |
-| `srgb` | `2.2` | `1.0` = escape hatch |
-| `enableSun` | `false` | sun/sky injection at top cascade |
-| `firstCascadeIndex` | `0` | visible cascade / sRGB-encode branch |
-| `rcDownscale` | `1.0` | run RC at e.g. `0.5×` on high-DPR, upsample in composite |
-| `ambient` | `~0.15` | composite floor so unlit areas aren't pure black |
+| Param                     | Default         | Notes                                                    |
+| ------------------------- | --------------- | -------------------------------------------------------- |
+| `baseRayCount`            | `4`             | angular rays per probe                                   |
+| `basePixelsBetweenProbes` | `1` (**fixed**) | forces merge LOD 0 → no mips                             |
+| `rayInterval`             | `1.0`           | radial interval scale                                    |
+| `intervalOverlap`         | `0.1`           | overlap term in `end`                                    |
+| `cascadeInterval`         | `1.0`           | hardcoded in reference                                   |
+| `srgb`                    | `2.2`           | `1.0` = escape hatch                                     |
+| `enableSun`               | `false`         | sun/sky injection at top cascade                         |
+| `firstCascadeIndex`       | `0`             | visible cascade / sRGB-encode branch                     |
+| `rcDownscale`             | `1.0`           | run RC at e.g. `0.5×` on high-DPR, upsample in composite |
+| `ambient`                 | `~0.15`         | composite floor so unlit areas aren't pure black         |
 
 Derived: `cascadeCount = ceil(log(sqrt(rcW²+rcH²)) / log(baseRayCount)) + 1`;
 JFA `passes = ceil(log2(max(rcW, rcH))) + 1`.
@@ -407,8 +436,8 @@ Each milestone is independently verifiable on screen in the debug tab.
   **Verify:** blit `emissionTexture` to screen — emitters glow as colored blobs at the
   right positions; occluders are dark.
 - **M1 — Seed (PIN ORIENTATION).** Seed pass → `seedA`. **Verify:** visualize seed UV
-  as RG — surfaces show their own UV, empty space is black, and the image is *right way
-  up*. Reconcile the `(cos, -sin)` y-flip vs quad V here before proceeding.
+  as RG — surfaces show their own UV, empty space is black, and the image is _right way
+  up_. Reconcile the `(cos, -sin)` y-flip vs quad V here before proceeding.
 - **M2 — JFA + DF.** JFA loop + DF pass. Highest-bug-risk stage. **Verify:** the DF
   grayscale ramps smoothly from 0 at surfaces to 1 far away — this is the key
   correctness signal for the whole pipeline.
@@ -429,7 +458,7 @@ Each milestone is independently verifiable on screen in the debug tab.
 ## Risks & performance notes
 
 - **Resize (top risk).** `createFrameTextures` creates textures **once** and never
-  recreates them on resize, while the canvas *is* resized — a latent bug today. The new
+  recreates them on resize, while the canvas _is_ resized — a latent bug today. The new
   RC textures inherit it. Handle in M0 via `recreate(canvas)`; recompute
   `cascadeCount`/resolution and rebuild dependent bind groups + textures on the
   `ResizeSystem` size-change signal.
@@ -454,7 +483,7 @@ Each milestone is independently verifiable on screen in the debug tab.
 - **Do not** extract a generic `runFullscreenPass` helper up front — each pass is a
   `createPostEffect`-shaped closure; extract only if duplication actually hurts after M4.
 - **Do not** add mip generation, `getComputePipeline`, storage-texture support, or
-  `rg32float` seed up front. `rg32float` seed is the isolated escape hatch *only* if
+  `rg32float` seed up front. `rg32float` seed is the isolated escape hatch _only_ if
   JFA artifacts appear at high DPR (seed/JFA already use `textureLoad`, so no filtering
   is lost by switching).
 - **Do not** add a separate `Occluder` component or a new `emitIntensity` SoA channel —

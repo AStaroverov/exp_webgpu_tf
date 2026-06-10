@@ -1,17 +1,17 @@
-import Dexie from 'dexie';
+import Dexie from "dexie";
 
-const db = new Dexie('unknown-rl');
+const db = new Dexie("unknown-rl");
 
 db.version(1).stores({
-    'agent-log': '&id',
+  "agent-log": "&id",
 });
 
 type AgentLog = object;
 
-export function setAgentLog(state: Omit<AgentLog, 'id'>) {
-    return db.table('agent-log').put({ id: 0, ...state });
+export function setAgentLog(state: Omit<AgentLog, "id">) {
+  return db.table("agent-log").put({ id: 0, ...state });
 }
 
 export function getAgentLog(): Promise<undefined | AgentLog> {
-    return db.table<AgentLog>('agent-log').get(0);
+  return db.table<AgentLog>("agent-log").get(0);
 }

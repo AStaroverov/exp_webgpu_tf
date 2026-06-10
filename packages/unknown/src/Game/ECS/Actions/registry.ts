@@ -5,25 +5,25 @@
  * (plus its system + descriptor file) — no hand-maintained union, no switches.
  */
 
-import { ActionKind } from './ActionTypes.ts';
-import { MoveStepActionDescriptor } from './systems/MoveStepAction.ts';
-import { HoldActionDescriptor } from './systems/HoldAction.ts';
-import { AimActionDescriptor } from './systems/AimAction.ts';
-import { FireActionDescriptor } from './systems/FireAction.ts';
-import { FireStreamActionDescriptor } from './systems/FireStreamAction.ts';
+import { ActionKind } from "./ActionTypes.ts";
+import { MoveStepActionDescriptor } from "./systems/MoveStepAction.ts";
+import { HoldActionDescriptor } from "./systems/HoldAction.ts";
+import { AimActionDescriptor } from "./systems/AimAction.ts";
+import { FireActionDescriptor } from "./systems/FireAction.ts";
+import { FireStreamActionDescriptor } from "./systems/FireStreamAction.ts";
 
 export const ACTION_REGISTRY = {
-    [ActionKind.MoveStep]: MoveStepActionDescriptor,
-    [ActionKind.Hold]: HoldActionDescriptor,
-    [ActionKind.Aim]: AimActionDescriptor,
-    [ActionKind.Fire]: FireActionDescriptor,
-    [ActionKind.FireStream]: FireStreamActionDescriptor,
+  [ActionKind.MoveStep]: MoveStepActionDescriptor,
+  [ActionKind.Hold]: HoldActionDescriptor,
+  [ActionKind.Aim]: AimActionDescriptor,
+  [ActionKind.Fire]: FireActionDescriptor,
+  [ActionKind.FireStream]: FireStreamActionDescriptor,
 };
 
 type Registry = typeof ACTION_REGISTRY;
 
 /** Enqueue spec union — derived from every registered descriptor's `encode`. */
-export type EnqueueActionSpec = Parameters<Registry[keyof Registry]['encode']>[2];
+export type EnqueueActionSpec = Parameters<Registry[keyof Registry]["encode"]>[2];
 
 /**
  * Build all registered executor systems once and return a function that runs
@@ -31,11 +31,11 @@ export type EnqueueActionSpec = Parameters<Registry[keyof Registry]['encode']>[2
  * action is its responsibility.
  */
 export function createRunExecutors(): (delta: number) => void {
-    const systems = Object.values(ACTION_REGISTRY).map((d) => d.createSystem());
+  const systems = Object.values(ACTION_REGISTRY).map((d) => d.createSystem());
 
-    return function runExecutors(delta: number) {
-        for (let i = 0; i < systems.length; i++) {
-            systems[i](delta);
-        }
-    };
+  return function runExecutors(delta: number) {
+    for (let i = 0; i < systems.length; i++) {
+      systems[i](delta);
+    }
+  };
 }

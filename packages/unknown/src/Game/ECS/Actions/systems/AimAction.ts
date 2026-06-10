@@ -9,14 +9,14 @@
  * Acts only on slot-0 fronts of its kind; owners run concurrently.
  */
 
-import { hasComponent, query } from 'bitecs';
-import { GameDI } from '../../../DI/GameDI.ts';
-import { MapDI } from '../../../DI/MapDI.ts';
-import { normalizeAngle } from '../../../../../../../lib/math.ts';
-import { getGameComponents } from '../../createGameWorld.ts';
-import { ActionDescriptor, encodeTarget } from '../ActionDescriptor.ts';
-import { ActionHexTargetSpec, ActionKind, ActionStatus } from '../ActionTypes.ts';
-import { AimParamOffset } from '../ActionSlot.ts';
+import { hasComponent, query } from "bitecs";
+import { GameDI } from "../../../DI/GameDI.ts";
+import { MapDI } from "../../../DI/MapDI.ts";
+import { normalizeAngle } from "../../../../../../../lib/math.ts";
+import { getGameComponents } from "../../createGameWorld.ts";
+import { ActionDescriptor, encodeTarget } from "../ActionDescriptor.ts";
+import { ActionHexTargetSpec, ActionKind, ActionStatus } from "../ActionTypes.ts";
+import { AimParamOffset } from "../ActionSlot.ts";
 
 /** Heading-error band (rad) below which we steer proportionally instead of full speed. */
 const SLOW_BAND = 0.3;
@@ -26,83 +26,92 @@ export type AimParamsSpec = { tolerance: number };
 
 /** Enqueue spec for an Aim action. */
 export type AimActionSpec = {
-    kind: ActionKind.Aim;
-    target: ActionHexTargetSpec;
-    params: AimParamsSpec;
+  kind: ActionKind.Aim;
+  target: ActionHexTargetSpec;
+  params: AimParamsSpec;
 };
 
 export const AimActionDescriptor: ActionDescriptor<AimActionSpec> = {
-    kind: ActionKind.Aim,
-    encode(eid, slot, spec) {
-        const { ActionsQueue } = getGameComponents(GameDI.world);
-        ActionsQueue.setKind(eid, slot, ActionKind.Aim);
-        encodeTarget(ActionsQueue, eid, slot, spec.target);
-        ActionsQueue.setParam(eid, slot, AimParamOffset.tolerance, spec.params.tolerance);
-    },
-    createSystem: () => createAimActionSystem(),
+  kind: ActionKind.Aim,
+  encode(eid, slot, spec) {
+    const { ActionsQueue } = getGameComponents(GameDI.world);
+    ActionsQueue.setKind(eid, slot, ActionKind.Aim);
+    encodeTarget(ActionsQueue, eid, slot, spec.target);
+    ActionsQueue.setParam(eid, slot, AimParamOffset.tolerance, spec.params.tolerance);
+  },
+  createSystem: () => createAimActionSystem(),
 };
 
 export function createAimActionSystem({ world } = GameDI) {
-    const { ActionsQueue, Vehicle, Tank, TurretController, VehicleController, HullAimed, RigidBodyState } = getGameComponents(world);
+  const {
+    ActionsQueue,
+    Vehicle,
+    Tank,
+    TurretController,
+    VehicleController,
+    HullAimed,
+    RigidBodyState,
+  } = getGameComponents(world);
 
-    return function updateAim(_delta: number) {
-        const eids = query(world, [ActionsQueue, Vehicle, RigidBodyState]);
-        for (const ownerEid of eids) {
-            if (ActionsQueue.count[ownerEid] === 0) continue;
-            if (ActionsQueue.getKind(ownerEid, 0) !== ActionKind.Aim) continue;
-            if (ActionsQueue.getStatus(ownerEid, 0) === ActionStatus.Finished) continue;
+  return function updateAim(_delta: number) {
+    const eids = query(world, [ActionsQueue, Vehicle, RigidBodyState]);
+    for (const ownerEid of eids) {
+      if (ActionsQueue.count[ownerEid] === 0) continue;
+      if (ActionsQueue.getKind(ownerEid, 0) !== ActionKind.Aim) continue;
+      if (ActionsQueue.getStatus(ownerEid, 0) === ActionStatus.Finished) continue;
 
-            const turretEid = Tank.turretEId[ownerEid];
+      const turretEid = Tank.turretEId[ownerEid];
 
-            // No turret to aim → nothing we can do; finish.
-            if (!turretEid) {
-                ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
-                continue;
-            }
+      // No turret to aim → nothing we can do; finish.
+      if (!turretEid) {
+        ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
+        continue;
+      }
 
-            // HullAimed vehicles steer the body to aim (fixed turret); the rest
-            // rotate the turret. `aimerEid` is whichever entity's heading we read.
-            const hullAimed = hasComponent(world, ownerEid, HullAimed);
-            const aimerEid = hullAimed ? ownerEid : turretEid;
-            const steer = (dir: number) => hullAimed
-                ? VehicleController.setRotate$(ownerEid, dir)
-                : TurretController.setRotation$(turretEid, dir);
+      // HullAimed vehicles steer the body to aim (fixed turret); the rest
+      // rotate the turret. `aimerEid` is whichever entity's heading we read.
+      const hullAimed = hasComponent(world, ownerEid, HullAimed);
+      const aimerEid = hullAimed ? ownerEid : turretEid;
+      const steer = (dir: number) =>
+        hullAimed
+          ? VehicleController.setRotate$(ownerEid, dir)
+          : TurretController.setRotation$(turretEid, dir);
 
-            // Resolve the target hex's world center.
-            const targetCenter = MapDI.grid.hexToWorld(
-                ActionsQueue.getTargetVal(ownerEid, 0, 0),
-                ActionsQueue.getTargetVal(ownerEid, 0, 1),
-            );
+      // Resolve the target hex's world center.
+      const targetCenter = MapDI.grid.hexToWorld(
+        ActionsQueue.getTargetVal(ownerEid, 0, 0),
+        ActionsQueue.getTargetVal(ownerEid, 0, 1),
+      );
 
-            if (!targetCenter) {
-                // Off-map target — fail the action.
-                steer(0);
-                ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
-                continue;
-            }
+      if (!targetCenter) {
+        // Off-map target — fail the action.
+        steer(0);
+        ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
+        continue;
+      }
 
-            if (ActionsQueue.getStatus(ownerEid, 0) === ActionStatus.Idle) {
-                ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Running);
-                // Tank is stationary while aiming, so the next decision's observation
-                // is already valid — open the slot immediately (§4).
-                ActionsQueue.scheduleRequestNext(ownerEid, 0);
-            }
+      if (ActionsQueue.getStatus(ownerEid, 0) === ActionStatus.Idle) {
+        ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Running);
+        // Tank is stationary while aiming, so the next decision's observation
+        // is already valid — open the slot immediately (§4).
+        ActionsQueue.scheduleRequestNext(ownerEid, 0);
+      }
 
-            const aimerX = RigidBodyState.position.get(aimerEid, 0);
-            const aimerY = RigidBodyState.position.get(aimerEid, 1);
-            const desired = Math.atan2(targetCenter.y - aimerY, targetCenter.x - aimerX);
-            const err = normalizeAngle(desired - RigidBodyState.rotation[aimerEid]);
+      const aimerX = RigidBodyState.position.get(aimerEid, 0);
+      const aimerY = RigidBodyState.position.get(aimerEid, 1);
+      const desired = Math.atan2(targetCenter.y - aimerY, targetCenter.x - aimerX);
+      const err = normalizeAngle(desired - RigidBodyState.rotation[aimerEid]);
 
-            const tolerance = ActionsQueue.getParam(ownerEid, 0, AimParamOffset.tolerance) || 0.05;
-            if (Math.abs(err) <= tolerance) {
-                steer(0);
-                ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
-                continue;
-            }
+      const tolerance = ActionsQueue.getParam(ownerEid, 0, AimParamOffset.tolerance) || 0.05;
+      if (Math.abs(err) <= tolerance) {
+        steer(0);
+        ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
+        continue;
+      }
 
-            // Proportional within SLOW_BAND, full speed outside it.
-            const dir = Math.abs(err) >= SLOW_BAND ? Math.sign(err) : err / SLOW_BAND;
-            steer(dir);
-        }
-    };
+      // Proportional within SLOW_BAND, full speed outside it.
+      const dir = Math.abs(err) >= SLOW_BAND ? Math.sign(err) : err / SLOW_BAND;
+      steer(dir);
+    }
+  };
 }

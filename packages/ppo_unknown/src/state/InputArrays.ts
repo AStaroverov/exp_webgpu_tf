@@ -6,11 +6,11 @@
  * typed array, cheap to clone into `AgentMemory` and to ship across the learner channel.
  */
 
-import { BOARD_SIZE, UnknownInputBoard } from './board.ts';
+import { BOARD_SIZE, UnknownInputBoard } from "./board.ts";
 
 export type InputArrays = {
-    /** Flat board buffer, cell-major [ROWS, COLS, CHANNELS]; length BOARD_SIZE. */
-    board: Float32Array;
+  /** Flat board buffer, cell-major [ROWS, COLS, CHANNELS]; length BOARD_SIZE. */
+  board: Float32Array;
 };
 
 /**
@@ -18,16 +18,16 @@ export type InputArrays = {
  * Prereq: `snapshotUnknownBoard` must have run this tick so the SoA row is fresh.
  */
 export function prepareInputArrays(eid: number): InputArrays {
-    const boardView = UnknownInputBoard.board.getBatch(eid); // f64 view, length BOARD_SIZE
-    const board = new Float32Array(BOARD_SIZE);
-    board.set(boardView);
+  const boardView = UnknownInputBoard.board.getBatch(eid); // f64 view, length BOARD_SIZE
+  const board = new Float32Array(BOARD_SIZE);
+  board.set(boardView);
 
-    return { board };
+  return { board };
 }
 
 /** Random state for warmup / shape probes (matches the real board layout). */
 export function prepareRandomInputArrays(): InputArrays {
-    const board = new Float32Array(BOARD_SIZE);
-    for (let i = 0; i < board.length; i++) board[i] = Math.random();
-    return { board };
+  const board = new Float32Array(BOARD_SIZE);
+  for (let i = 0; i < board.length; i++) board[i] = Math.random();
+  return { board };
 }

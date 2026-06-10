@@ -1,12 +1,15 @@
 {
   "name": "ppo_unknown",
-  "private": true,
   "version": "0.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --config config.vite.ts",
     "build": "tsc && vite build --config config.vite.ts",
     "preview": "vite preview --config config.vite.ts"
+  },
+  "dependencies": {
+    "bitecs": "^0.4.0"
   },
   "devDependencies": {
     "@dimforge/rapier2d": "^0.14.0",
@@ -41,8 +44,5 @@
     "vite": "^6.3.5",
     "vite-plugin-top-level-await": "^1.5.0",
     "vite-plugin-wasm": "^3.4.1"
-  },
-  "dependencies": {
-    "bitecs": "^0.4.0"
   }
 }

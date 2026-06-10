@@ -24,19 +24,25 @@
  *       ACTION_HEAD_DIMS entry; Value: a single feature (heads[0]).
  */
 
-import * as tf from '@tensorflow/tfjs';
-import { Model } from '../../../../ppo/src/models/def.ts';
+import * as tf from "@tensorflow/tfjs";
+import { Model } from "../../../../ppo/src/models/def.ts";
 import {
-    createDenseLayer, createNormalizationLayer, tokenProj,
-} from '../../../../ppo/src/models/ApplyLayers.ts';
-import { applyPerceiverLayer } from '../../../../ppo/src/models/Layers/PerceiverLayer.ts';
-import { SliceLayer } from '../../../../ppo/src/models/Layers/SliceLayer.ts';
-import { SlotEmbeddingLayer } from '../../../../ppo/src/models/Layers/SlotEmbeddingLayer.ts';
-import { HexNeighborGatherLayer } from '../Layers/HexNeighborGatherLayer.ts';
+  createDenseLayer,
+  createNormalizationLayer,
+  tokenProj,
+} from "../../../../ppo/src/models/ApplyLayers.ts";
+import { applyPerceiverLayer } from "../../../../ppo/src/models/Layers/PerceiverLayer.ts";
+import { SliceLayer } from "../../../../ppo/src/models/Layers/SliceLayer.ts";
+import { SlotEmbeddingLayer } from "../../../../ppo/src/models/Layers/SlotEmbeddingLayer.ts";
+import { HexNeighborGatherLayer } from "../Layers/HexNeighborGatherLayer.ts";
 import {
-    BOARD_CELLS, BOARD_CHANNELS, BoardChannel, FIRE_DIR_COUNT, MOVE_DIR_COUNT
-} from '../dims.ts';
-import { createInputs } from '../Inputs.ts';
+  BOARD_CELLS,
+  BOARD_CHANNELS,
+  BoardChannel,
+  FIRE_DIR_COUNT,
+  MOVE_DIR_COUNT,
+} from "../dims.ts";
+import { createInputs } from "../Inputs.ts";
 
 type NetworkConfig = { dim: number; heads: number; depth: number };
 
@@ -44,138 +50,167 @@ const policyConfig: NetworkConfig = { dim: 128, heads: 4, depth: 4 };
 const valueConfig: NetworkConfig = { dim: 64, heads: 2, depth: 2 };
 
 export function createNetwork(
-    modelName: Model,
-    config: NetworkConfig = modelName === Model.Policy ? policyConfig : valueConfig,
+  modelName: Model,
+  config: NetworkConfig = modelName === Model.Policy ? policyConfig : valueConfig,
 ) {
-    const inputs = createInputs(modelName);
+  const inputs = createInputs(modelName);
 
-    // [B, ROWS, COLS, CH] → [B, ROWS*COLS, CH]: one token per board cell.
-    const cellTokens = tf.layers.reshape({
-        name: modelName + '_cellTokens',
-        targetShape: [BOARD_CELLS, BOARD_CHANNELS],
-    }).apply(inputs.boardInput) as tf.SymbolicTensor;
+  // [B, ROWS, COLS, CH] → [B, ROWS*COLS, CH]: one token per board cell.
+  const cellTokens = tf.layers
+    .reshape({
+      name: modelName + "_cellTokens",
+      targetShape: [BOARD_CELLS, BOARD_CHANNELS],
+    })
+    .apply(inputs.boardInput) as tf.SymbolicTensor;
 
-    // Only content cells can be READ by the cross-attention (~55 of 64 are
-    // empty; their pure-posenc tokens would dilute every attention average).
-    const contentMask = inputs.contentMaskInput; // [B, BOARD_CELLS]
+  // Only content cells can be READ by the cross-attention (~55 of 64 are
+  // empty; their pure-posenc tokens would dilute every attention average).
+  const contentMask = inputs.contentMaskInput; // [B, BOARD_CELLS]
 
-    const projected = tokenProj(cellTokens, config.dim, modelName + '_cell');
+  const projected = tokenProj(cellTokens, config.dim, modelName + "_cell");
 
-    // Latents = the 7 action cells: self + 6 hex neighbors (POINTY_DIRECTIONS
-    // order, same as the move/fire action layout). Seeded with their own board
-    // tokens (content + posenc), so each latent starts as "what is at my cell".
-    const selfPlane = tf.layers.reshape({
-        name: modelName + '_selfPlane',
-        targetShape: [BOARD_CELLS],
-    }).apply(new SliceLayer({
-        name: modelName + '_selfChannel',
+  // Latents = the 7 action cells: self + 6 hex neighbors (POINTY_DIRECTIONS
+  // order, same as the move/fire action layout). Seeded with their own board
+  // tokens (content + posenc), so each latent starts as "what is at my cell".
+  const selfPlane = tf.layers
+    .reshape({
+      name: modelName + "_selfPlane",
+      targetShape: [BOARD_CELLS],
+    })
+    .apply(
+      new SliceLayer({
+        name: modelName + "_selfChannel",
         beginSlice: [0, 0, BoardChannel.Self],
         sliceSize: [-1, -1, 1],
-    }).apply(cellTokens) as tf.SymbolicTensor) as tf.SymbolicTensor; // [B, BOARD_CELLS]
+      }).apply(cellTokens) as tf.SymbolicTensor,
+    ) as tf.SymbolicTensor; // [B, BOARD_CELLS]
 
-    const selfLatent = tf.layers.reshape({
-        name: modelName + '_selfLatent',
-        targetShape: [1, config.dim],
-    }).apply(tf.layers.dot({
-        name: modelName + '_selfToken',
-        axes: [1, 1], // one-hot picks the self cell's board token
-    }).apply([projected, selfPlane]) as tf.SymbolicTensor) as tf.SymbolicTensor; // [B, 1, dim]
+  const selfLatent = tf.layers
+    .reshape({
+      name: modelName + "_selfLatent",
+      targetShape: [1, config.dim],
+    })
+    .apply(
+      tf.layers
+        .dot({
+          name: modelName + "_selfToken",
+          axes: [1, 1], // one-hot picks the self cell's board token
+        })
+        .apply([projected, selfPlane]) as tf.SymbolicTensor,
+    ) as tf.SymbolicTensor; // [B, 1, dim]
 
-    const neighborLatents = new HexNeighborGatherLayer({
-        name: modelName + '_neighborTokens',
-    }).apply([projected, selfPlane]) as tf.SymbolicTensor; // [B, 6, dim]
+  const neighborLatents = new HexNeighborGatherLayer({
+    name: modelName + "_neighborTokens",
+  }).apply([projected, selfPlane]) as tf.SymbolicTensor; // [B, 6, dim]
 
-    // Learned slot identity: "I am the self slot / the E-neighbor slot / ...".
-    // Posenc above is absolute position; the ROLE relative to self is what must
-    // transfer across states (and what off-board zero tokens fall back to).
-    const latentSeed = new SlotEmbeddingLayer({
-        name: modelName + '_slotEmb',
-    }).apply(tf.layers.concatenate({
-        name: modelName + '_latentSeed',
+  // Learned slot identity: "I am the self slot / the E-neighbor slot / ...".
+  // Posenc above is absolute position; the ROLE relative to self is what must
+  // transfer across states (and what off-board zero tokens fall back to).
+  const latentSeed = new SlotEmbeddingLayer({
+    name: modelName + "_slotEmb",
+  }).apply(
+    tf.layers
+      .concatenate({
+        name: modelName + "_latentSeed",
         axis: 1,
-    }).apply([selfLatent, neighborLatents]) as tf.SymbolicTensor) as tf.SymbolicTensor; // [B, 7, dim]
+      })
+      .apply([selfLatent, neighborLatents]) as tf.SymbolicTensor,
+  ) as tf.SymbolicTensor; // [B, 7, dim]
 
-    // Modern norm placement, same recipe as applySelfTransformLayers: normalize
-    // the seed once, pre-LN blocks (preNorm: true → QNorm/KVNorm inside cross,
-    // ln2 before FFN), final norm gathers the residual stream growth.
-    const latentNorm = createNormalizationLayer({
-        name: modelName + '_latentInputNorm',
-    }).apply(latentSeed) as tf.SymbolicTensor;
+  // Modern norm placement, same recipe as applySelfTransformLayers: normalize
+  // the seed once, pre-LN blocks (preNorm: true → QNorm/KVNorm inside cross,
+  // ln2 before FFN), final norm gathers the residual stream growth.
+  const latentNorm = createNormalizationLayer({
+    name: modelName + "_latentInputNorm",
+  }).apply(latentSeed) as tf.SymbolicTensor;
 
-    const perceived = applyPerceiverLayer({
-        name: modelName + '_perceiver',
-        depth: config.depth,
-        heads: config.heads,
-        qTok: latentNorm,
-        kvTok: projected,
-        kvMask: contentMask, // qMask omitted: all 7 latents always query
-        preNorm: true,
-    });
+  const perceived = applyPerceiverLayer({
+    name: modelName + "_perceiver",
+    depth: config.depth,
+    heads: config.heads,
+    qTok: latentNorm,
+    kvTok: projected,
+    kvMask: contentMask, // qMask omitted: all 7 latents always query
+    preNorm: true,
+  });
 
-    const encoded = createNormalizationLayer({
-        name: modelName + '_outputNorm',
-    }).apply(perceived) as tf.SymbolicTensor; // [B, 7, dim]
+  const encoded = createNormalizationLayer({
+    name: modelName + "_outputNorm",
+  }).apply(perceived) as tf.SymbolicTensor; // [B, 7, dim]
 
-    if (modelName === Model.Policy) {
-        // Per-cell action head, same as v1: hold from the self latent, move/fire
-        // d from the d-direction latent; move/fire scorers are weight-shared
-        // across the 6 directions ("is this a cell worth entering/shooting at"
-        // is learned once for all directions).
-        const holdToken = tf.layers.reshape({
-            name: modelName + '_holdToken',
-            targetShape: [config.dim],
-        }).apply(new SliceLayer({
-            name: modelName + '_holdSlice',
-            beginSlice: [0, 0, 0],
-            sliceSize: [-1, 1, -1],
-        }).apply(encoded) as tf.SymbolicTensor) as tf.SymbolicTensor; // [B, dim]
+  if (modelName === Model.Policy) {
+    // Per-cell action head, same as v1: hold from the self latent, move/fire
+    // d from the d-direction latent; move/fire scorers are weight-shared
+    // across the 6 directions ("is this a cell worth entering/shooting at"
+    // is learned once for all directions).
+    const holdToken = tf.layers
+      .reshape({
+        name: modelName + "_holdToken",
+        targetShape: [config.dim],
+      })
+      .apply(
+        new SliceLayer({
+          name: modelName + "_holdSlice",
+          beginSlice: [0, 0, 0],
+          sliceSize: [-1, 1, -1],
+        }).apply(encoded) as tf.SymbolicTensor,
+      ) as tf.SymbolicTensor; // [B, dim]
 
-        const dirTokens = new SliceLayer({
-            name: modelName + '_dirSlice',
-            beginSlice: [0, 1, 0],
-            sliceSize: [-1, MOVE_DIR_COUNT, -1],
-        }).apply(encoded) as tf.SymbolicTensor; // [B, 6, dim]
+    const dirTokens = new SliceLayer({
+      name: modelName + "_dirSlice",
+      beginSlice: [0, 1, 0],
+      sliceSize: [-1, MOVE_DIR_COUNT, -1],
+    }).apply(encoded) as tf.SymbolicTensor; // [B, 6, dim]
 
-        // Near-zero init on the scorers: logits start ≈ uniform (no random
-        // constant prior), state signal shows as crossings immediately.
-        const logitInit = () => tf.initializers.orthogonal({ gain: 0.2 });
-        const holdLogit = createDenseLayer({
-            name: modelName + '_holdLogit',
-            units: 1,
-            useBias: true,
-            activation: 'linear',
-            biasInitializer: 'zeros',
-            kernelInitializer: logitInit(),
-        }).apply(holdToken) as tf.SymbolicTensor; // [B, 1]
+    // Near-zero init on the scorers: logits start ≈ uniform (no random
+    // constant prior), state signal shows as crossings immediately.
+    const logitInit = () => tf.initializers.orthogonal({ gain: 0.2 });
+    const holdLogit = createDenseLayer({
+      name: modelName + "_holdLogit",
+      units: 1,
+      useBias: true,
+      activation: "linear",
+      biasInitializer: "zeros",
+      kernelInitializer: logitInit(),
+    }).apply(holdToken) as tf.SymbolicTensor; // [B, 1]
 
-        const dirLogits = (kind: string, dirs: number) => tf.layers.reshape({
-            name: modelName + `_${kind}Logits`,
-            targetShape: [dirs],
-        }).apply(createDenseLayer({
+    const dirLogits = (kind: string, dirs: number) =>
+      tf.layers
+        .reshape({
+          name: modelName + `_${kind}Logits`,
+          targetShape: [dirs],
+        })
+        .apply(
+          createDenseLayer({
             name: modelName + `_${kind}Scorer`,
             units: 1,
             useBias: true,
-            activation: 'linear',
-            biasInitializer: 'zeros',
+            activation: "linear",
+            biasInitializer: "zeros",
             kernelInitializer: logitInit(),
-        }).apply(dirTokens) as tf.SymbolicTensor) as tf.SymbolicTensor; // [B, dirs]
+          }).apply(dirTokens) as tf.SymbolicTensor,
+        ) as tf.SymbolicTensor; // [B, dirs]
 
-        const logits = tf.layers.concatenate({
-            name: modelName + '_logits',
-        }).apply([
-            holdLogit,
-            dirLogits('move', MOVE_DIR_COUNT),
-            dirLogits('fire', FIRE_DIR_COUNT),
-        ]) as tf.SymbolicTensor; // [B, ACTION_DIM_TOTAL], order = consts.ts layout
+    const logits = tf.layers
+      .concatenate({
+        name: modelName + "_logits",
+      })
+      .apply([
+        holdLogit,
+        dirLogits("move", MOVE_DIR_COUNT),
+        dirLogits("fire", FIRE_DIR_COUNT),
+      ]) as tf.SymbolicTensor; // [B, ACTION_DIM_TOTAL], order = consts.ts layout
 
-        return { inputs, heads: [logits] };
-    }
+    return { inputs, heads: [logits] };
+  }
 
-    // Value: flatten the 7 latents into a single feature; createValueNetwork
-    // appends the scalar output.
-    const feature = tf.layers.flatten({
-        name: modelName + '_flatReadout',
-    }).apply(encoded) as tf.SymbolicTensor; // [B, 7 * dim]
+  // Value: flatten the 7 latents into a single feature; createValueNetwork
+  // appends the scalar output.
+  const feature = tf.layers
+    .flatten({
+      name: modelName + "_flatReadout",
+    })
+    .apply(encoded) as tf.SymbolicTensor; // [B, 7 * dim]
 
-    return { inputs, heads: [feature] };
+  return { inputs, heads: [feature] };
 }

@@ -10,87 +10,87 @@
  * `AgentMemoryBatch` (with its terminal reward) and the episode success ratio.
  */
 
-import { max } from '../../../../lib/math.ts';
-import { random } from '../../../../lib/random.ts';
-import { EpisodeManager } from '../../../ppo/src/core/EpisodeManager.ts';
-import { agentSampleChannel, episodeSampleChannel } from '../../../ppo/src/core/channels.ts';
-import { CONFIG } from '../config.ts';
-import { TICK_TIME_SIMULATION } from '../consts.ts';
-import { calculateFinalReward } from '../reward/calculateReward.ts';
-import { Scenario } from '../env/createUnknownScenario.ts';
-import { UnknownAgent } from '../env/UnknownAgent.ts';
-import { FrozenAgent } from '../env/FrozenAgent.ts';
-import { createScenarioByCurriculumState } from '../curriculum/createScenarioByCurriculumState.ts';
-import { CurriculumState, DEFAULT_CURRICULUM_STATE } from '../curriculum/types.ts';
-import { curriculumStateChannel } from '../curriculumChannel.ts';
+import { max } from "../../../../lib/math.ts";
+import { random } from "../../../../lib/random.ts";
+import { EpisodeManager } from "../../../ppo/src/core/EpisodeManager.ts";
+import { agentSampleChannel, episodeSampleChannel } from "../../../ppo/src/core/channels.ts";
+import { CONFIG } from "../config.ts";
+import { TICK_TIME_SIMULATION } from "../consts.ts";
+import { calculateFinalReward } from "../reward/calculateReward.ts";
+import { Scenario } from "../env/createUnknownScenario.ts";
+import { UnknownAgent } from "../env/UnknownAgent.ts";
+import { FrozenAgent } from "../env/FrozenAgent.ts";
+import { createScenarioByCurriculumState } from "../curriculum/createScenarioByCurriculumState.ts";
+import { CurriculumState, DEFAULT_CURRICULUM_STATE } from "../curriculum/types.ts";
+import { curriculumStateChannel } from "../curriculumChannel.ts";
 
 const MAX_FRAMES = CONFIG.episodeFrames;
 
 export class UnknownEpisodeManager extends EpisodeManager<Scenario> {
-    protected curriculumState: CurriculumState = DEFAULT_CURRICULUM_STATE;
+  protected curriculumState: CurriculumState = DEFAULT_CURRICULUM_STATE;
 
-    constructor() {
-        super({
-            backpressureQueueSize: CONFIG.backpressureQueueSize,
-            simulationTickTime: TICK_TIME_SIMULATION,
-        });
-        curriculumStateChannel.obs.subscribe((state) => {
-            this.curriculumState = state;
-        });
-    }
+  constructor() {
+    super({
+      backpressureQueueSize: CONFIG.backpressureQueueSize,
+      simulationTickTime: TICK_TIME_SIMULATION,
+    });
+    curriculumStateChannel.obs.subscribe((state) => {
+      this.curriculumState = state;
+    });
+  }
 
-    protected beforeEpisode(): Scenario {
-        return createScenarioByCurriculumState(this.curriculumState, { train: random() < 0.9 });
-    }
+  protected beforeEpisode(): Scenario {
+    return createScenarioByCurriculumState(this.curriculumState, { train: random() < 0.9 });
+  }
 
-    protected afterEpisode(scenario: Scenario): void {
-        const successRatio = scenario.getSuccessRatio();
-        const isReference = !scenario.train;
+  protected afterEpisode(scenario: Scenario): void {
+    const successRatio = scenario.getSuccessRatio();
+    const isReference = !scenario.train;
 
-        episodeSampleChannel.emit({
-            maxNetworkVersion: max(...scenario.agents.map((a) => a.getVersion()), 0),
-            scenarioIndex: scenario.index,
-            successRatio,
-            isReference,
-        });
+    episodeSampleChannel.emit({
+      maxNetworkVersion: max(...scenario.agents.map((a) => a.getVersion()), 0),
+      scenarioIndex: scenario.index,
+      successRatio,
+      isReference,
+    });
 
-        if (isReference) return;
+    if (isReference) return;
 
-        scenario.agents.forEach((agent) => {
-            agent.closeFinalStep();
-            const networkVersion = agent.getVersion();
-            const finalReward = calculateFinalReward(agent.tankEid, successRatio, scenario.agents);
-            const memoryBatch = agent.getMemoryBatch(finalReward);
-            if (memoryBatch == null) return;
+    scenario.agents.forEach((agent) => {
+      agent.closeFinalStep();
+      const networkVersion = agent.getVersion();
+      const finalReward = calculateFinalReward(agent.tankEid, successRatio, scenario.agents);
+      const memoryBatch = agent.getMemoryBatch(finalReward);
+      if (memoryBatch == null) return;
 
-            agentSampleChannel.emit({
-                networkVersion,
-                scenarioIndex: scenario.index,
-                memoryBatch,
-            });
-        });
-    }
+      agentSampleChannel.emit({
+        networkVersion,
+        scenarioIndex: scenario.index,
+        memoryBatch,
+      });
+    });
+  }
 
-    protected cleanupEpisode(scenario: Scenario): void {
-        scenario.agents.forEach((a) => a.dispose());
-        scenario.destroy();
-    }
+  protected cleanupEpisode(scenario: Scenario): void {
+    scenario.agents.forEach((a) => a.dispose());
+    scenario.destroy();
+  }
 
-    protected awaitAgentsSync(): Promise<unknown> {
-        // FrozenAgent.sync() also re-rolls which historical version the frozen
-        // opponents play this episode.
-        return Promise.all([UnknownAgent.sync(), FrozenAgent.sync()]);
-    }
+  protected awaitAgentsSync(): Promise<unknown> {
+    // FrozenAgent.sync() also re-rolls which historical version the frozen
+    // opponents play this episode.
+    return Promise.all([UnknownAgent.sync(), FrozenAgent.sync()]);
+  }
 
-    protected runGameTick(frame: number, deltaTime: number, scenario: Scenario): boolean {
-        const aliveTanks = scenario.getVehicleEids();
-        const gameOverByTeamWin = scenario.getTeamsCount() <= 1;
-        const gameOverByTankCount = aliveTanks.length <= 1;
-        const gameOverByTime = frame > MAX_FRAMES;
-        const gameOver = gameOverByTeamWin || gameOverByTankCount || gameOverByTime;
+  protected runGameTick(frame: number, deltaTime: number, scenario: Scenario): boolean {
+    const aliveTanks = scenario.getVehicleEids();
+    const gameOverByTeamWin = scenario.getTeamsCount() <= 1;
+    const gameOverByTankCount = aliveTanks.length <= 1;
+    const gameOverByTime = frame > MAX_FRAMES;
+    const gameOver = gameOverByTeamWin || gameOverByTankCount || gameOverByTime;
 
-        scenario.gameTick(deltaTime);
+    scenario.gameTick(deltaTime);
 
-        return gameOver;
-    }
+    return gameOver;
+  }
 }

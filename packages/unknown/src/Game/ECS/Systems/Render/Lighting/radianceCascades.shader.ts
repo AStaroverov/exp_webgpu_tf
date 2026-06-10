@@ -1,31 +1,34 @@
-import { ShaderMeta } from '../../../../../../../renderer/src/WGSL/ShaderMeta.ts';
-import { VariableKind, VariableMeta } from '../../../../../../../renderer/src/Struct/VariableMeta.ts';
-import { wgsl } from '../../../../../../../renderer/src/WGSL/wgsl.ts';
+import { ShaderMeta } from "../../../../../../../renderer/src/WGSL/ShaderMeta.ts";
+import {
+  VariableKind,
+  VariableMeta,
+} from "../../../../../../../renderer/src/Struct/VariableMeta.ts";
+import { wgsl } from "../../../../../../../renderer/src/WGSL/wgsl.ts";
 
 export const RC_MAX_STEPS = 36;
 
 export const shaderMeta = new ShaderMeta(
-    {
-        linearSampler: new VariableMeta('linearSampler', VariableKind.Sampler, `sampler`),
-        sceneTexture: new VariableMeta('sceneTexture', VariableKind.Texture, `texture_2d<f32>`),
-        distanceTexture: new VariableMeta('distanceTexture', VariableKind.Texture, `texture_2d<f32>`),
-        lastTexture: new VariableMeta('lastTexture', VariableKind.Texture, `texture_2d<f32>`),
-        emitDirTexture: new VariableMeta('emitDirTexture', VariableKind.Texture, `texture_2d<f32>`),
-        resolution: new VariableMeta('uResolution', VariableKind.Uniform, `vec2<f32>`),
-        cascadeCount: new VariableMeta('uCascadeCount', VariableKind.Uniform, `f32`),
-        cascadeIndex: new VariableMeta('uCascadeIndex', VariableKind.Uniform, `f32`),
-        baseRayCount: new VariableMeta('uBaseRayCount', VariableKind.Uniform, `f32`),
-        rayInterval: new VariableMeta('uRayInterval', VariableKind.Uniform, `f32`),
-        intervalOverlap: new VariableMeta('uIntervalOverlap', VariableKind.Uniform, `f32`),
-        srgb: new VariableMeta('uSrgb', VariableKind.Uniform, `f32`),
-        misc: new VariableMeta('uMisc', VariableKind.Uniform, `vec4<f32>`),
-        sunAngle: new VariableMeta('uSunAngle', VariableKind.Uniform, `f32`),
-        sunColor: new VariableMeta('uSunColor', VariableKind.Uniform, `vec4<f32>`),
-        skyColor: new VariableMeta('uSkyColor', VariableKind.Uniform, `vec4<f32>`),
-    },
-    {},
-    // language=WGSL
-    wgsl/* wgsl */ `
+  {
+    linearSampler: new VariableMeta("linearSampler", VariableKind.Sampler, `sampler`),
+    sceneTexture: new VariableMeta("sceneTexture", VariableKind.Texture, `texture_2d<f32>`),
+    distanceTexture: new VariableMeta("distanceTexture", VariableKind.Texture, `texture_2d<f32>`),
+    lastTexture: new VariableMeta("lastTexture", VariableKind.Texture, `texture_2d<f32>`),
+    emitDirTexture: new VariableMeta("emitDirTexture", VariableKind.Texture, `texture_2d<f32>`),
+    resolution: new VariableMeta("uResolution", VariableKind.Uniform, `vec2<f32>`),
+    cascadeCount: new VariableMeta("uCascadeCount", VariableKind.Uniform, `f32`),
+    cascadeIndex: new VariableMeta("uCascadeIndex", VariableKind.Uniform, `f32`),
+    baseRayCount: new VariableMeta("uBaseRayCount", VariableKind.Uniform, `f32`),
+    rayInterval: new VariableMeta("uRayInterval", VariableKind.Uniform, `f32`),
+    intervalOverlap: new VariableMeta("uIntervalOverlap", VariableKind.Uniform, `f32`),
+    srgb: new VariableMeta("uSrgb", VariableKind.Uniform, `f32`),
+    misc: new VariableMeta("uMisc", VariableKind.Uniform, `vec4<f32>`),
+    sunAngle: new VariableMeta("uSunAngle", VariableKind.Uniform, `f32`),
+    sunColor: new VariableMeta("uSunColor", VariableKind.Uniform, `vec4<f32>`),
+    skyColor: new VariableMeta("uSkyColor", VariableKind.Uniform, `vec4<f32>`),
+  },
+  {},
+  // language=WGSL
+  wgsl /* wgsl */ `
 const POSITION = array<vec2f, 6>(
     vec2f(-1.0, -1.0),
     vec2f(1.0, -1.0),
@@ -81,7 +84,7 @@ fn raymarch(rayStart: vec2f, rayEnd: vec2f, scale: f32, oneOverSize: vec2f, minS
   var rayUv = rayStart * oneOverSize;
 
   var dist = 0.0;
-  for (var step = 0; step < ${ RC_MAX_STEPS } && dist < rayLength; step = step + 1) {
+  for (var step = 0; step < ${RC_MAX_STEPS} && dist < rayLength; step = step + 1) {
     if (any(rayUv < vec2f(0.0)) || any(rayUv > vec2f(1.0))) {
       break;
     }

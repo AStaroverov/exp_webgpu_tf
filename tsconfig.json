@@ -2,11 +2,7 @@
   "compilerOptions": {
     "target": "esnext",
     "module": "esnext",
-    "lib": [
-      "esnext",
-      "dom",
-      "dom.iterable"
-    ],
+    "lib": ["esnext", "dom", "dom.iterable"],
     "skipLibCheck": true,
     /* Bundler mode */
     "moduleResolution": "bundler",
@@ -19,15 +15,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "typeRoots": [
-      "./node_modules/@webgpu/types",
-      "./node_modules/@types"
-    ]
+    "typeRoots": ["./node_modules/@webgpu/types", "./node_modules/@types"]
   },
-  "exclude": [
-    "node_modules",
-    "**/node_modules",
-    "dist",
-    "**/dist"
-  ]
+  "exclude": ["node_modules", "**/node_modules", "dist", "**/dist"]
 }

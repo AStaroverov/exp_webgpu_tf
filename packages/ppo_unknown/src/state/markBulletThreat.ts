@@ -28,14 +28,14 @@
  * (the shot still flies there) but not marked (not visible).
  */
 
-import { query, World } from 'bitecs';
-import { GameDI } from '../../../unknown/src/Game/DI/GameDI.ts';
-import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld.ts';
-import { ActionKind } from '../../../unknown/src/Game/ECS/Actions/ActionTypes.ts';
-import { OccupantKind, type HexCell, type HexGrid } from '../../../unknown/src/Game/Map/HexGrid.ts';
-import { getTankConfig, type VehicleType } from '../../../unknown/src/Game/Config/vehicles.ts';
-import { BulletCaliberConfig } from '../../../unknown/src/Game/Config/weapons.ts';
-import { BoardChannel, hexDeltaDistance, UnknownInputBoard, VIEW_RADIUS } from './board.ts';
+import { query, World } from "bitecs";
+import { GameDI } from "../../../unknown/src/Game/DI/GameDI.ts";
+import { getGameComponents } from "../../../unknown/src/Game/ECS/createGameWorld.ts";
+import { ActionKind } from "../../../unknown/src/Game/ECS/Actions/ActionTypes.ts";
+import { OccupantKind, type HexCell, type HexGrid } from "../../../unknown/src/Game/Map/HexGrid.ts";
+import { getTankConfig, type VehicleType } from "../../../unknown/src/Game/Config/vehicles.ts";
+import { BulletCaliberConfig } from "../../../unknown/src/Game/Config/weapons.ts";
+import { BoardChannel, hexDeltaDistance, UnknownInputBoard, VIEW_RADIUS } from "./board.ts";
 
 /** Below this travelled distance the direction comes from velocity, not (pos − origin). */
 const ORIGIN_EPS = 1e-3;
@@ -45,96 +45,96 @@ const ORIGIN_EPS = 1e-3;
  * `BulletCaliberConfig[…].maxDistance`. Gunless vehicles (non-tanks: no config) never fire.
  */
 function bulletMaxDistance(type: VehicleType): number {
-    const config = getTankConfig(type);
-    if (config?.gun === undefined) return 0;
-    return BulletCaliberConfig[config.gun.caliber].maxDistance;
+  const config = getTankConfig(type);
+  if (config?.gun === undefined) return 0;
+  return BulletCaliberConfig[config.gun.caliber].maxDistance;
 }
 
 export function markBulletThreat(
-    selfEid: number,
-    myTeam: number,
-    selfQ: number,
-    selfR: number,
-    grid: HexGrid,
-    world: World = GameDI.world,
+  selfEid: number,
+  myTeam: number,
+  selfQ: number,
+  selfR: number,
+  grid: HexGrid,
+  world: World = GameDI.world,
 ): void {
-    const { Bullet, RigidBodyState, DestroyByDistance, TeamRef, Vehicle, ActionsQueue } =
-        getGameComponents(world);
-    const bullets = query(world, [Bullet, RigidBodyState, DestroyByDistance, TeamRef]);
+  const { Bullet, RigidBodyState, DestroyByDistance, TeamRef, Vehicle, ActionsQueue } =
+    getGameComponents(world);
+  const bullets = query(world, [Bullet, RigidBodyState, DestroyByDistance, TeamRef]);
 
-    for (let i = 0; i < bullets.length; i++) {
-        const eid = bullets[i];
-        if (TeamRef.id[eid] === myTeam) continue; // only enemy fire is a threat
+  for (let i = 0; i < bullets.length; i++) {
+    const eid = bullets[i];
+    if (TeamRef.id[eid] === myTeam) continue; // only enemy fire is a threat
 
-        const px = RigidBodyState.position.get(eid, 0);
-        const py = RigidBodyState.position.get(eid, 1);
-        const ox = DestroyByDistance.origin.get(eid, 0);
-        const oy = DestroyByDistance.origin.get(eid, 1);
+    const px = RigidBodyState.position.get(eid, 0);
+    const py = RigidBodyState.position.get(eid, 1);
+    const ox = DestroyByDistance.origin.get(eid, 0);
+    const oy = DestroyByDistance.origin.get(eid, 1);
 
-        const dx = px - ox;
-        const dy = py - oy;
-        const travelled = Math.hypot(dx, dy);
+    const dx = px - ox;
+    const dy = py - oy;
+    const travelled = Math.hypot(dx, dy);
 
-        // Direction: along (pos − origin) once moving, else along velocity at spawn.
-        let dirX: number;
-        let dirY: number;
-        if (travelled > ORIGIN_EPS) {
-            dirX = dx / travelled;
-            dirY = dy / travelled;
-        } else {
-            const vx = RigidBodyState.linvel.get(eid, 0);
-            const vy = RigidBodyState.linvel.get(eid, 1);
-            const speed = Math.hypot(vx, vy);
-            if (speed <= ORIGIN_EPS) continue; // unknown heading → skip
-            dirX = vx / speed;
-            dirY = vy / speed;
-        }
-
-        const maxDist = Math.sqrt(DestroyByDistance.maxDistanceSq[eid]);
-        const remaining = maxDist - travelled;
-        if (remaining <= 0) continue;
-
-        // Walk the remaining path, marking each distinct hex it crosses. The current
-        // cell (isFirst) is marked too — the bullet sits in it — but never blocks.
-        grid.raycast(px, py, dirX, dirY, remaining, threatRayVisit(selfEid, selfQ, selfR, true));
+    // Direction: along (pos − origin) once moving, else along velocity at spawn.
+    let dirX: number;
+    let dirY: number;
+    if (travelled > ORIGIN_EPS) {
+      dirX = dx / travelled;
+      dirY = dy / travelled;
+    } else {
+      const vx = RigidBodyState.linvel.get(eid, 0);
+      const vy = RigidBodyState.linvel.get(eid, 1);
+      const speed = Math.hypot(vx, vy);
+      if (speed <= ORIGIN_EPS) continue; // unknown heading → skip
+      dirX = vx / speed;
+      dirY = vy / speed;
     }
 
-    // ── Pass 2: predicted fire from enemies with a queued Fire action ──
-    const vehicles = query(world, [Vehicle, ActionsQueue, RigidBodyState, TeamRef]);
+    const maxDist = Math.sqrt(DestroyByDistance.maxDistanceSq[eid]);
+    const remaining = maxDist - travelled;
+    if (remaining <= 0) continue;
 
-    for (let i = 0; i < vehicles.length; i++) {
-        const eid = vehicles[i];
-        if (TeamRef.id[eid] === myTeam) continue; // only enemy fire is a threat
+    // Walk the remaining path, marking each distinct hex it crosses. The current
+    // cell (isFirst) is marked too — the bullet sits in it — but never blocks.
+    grid.raycast(px, py, dirX, dirY, remaining, threatRayVisit(selfEid, selfQ, selfR, true));
+  }
 
-        const maxDist = bulletMaxDistance(Vehicle.type[eid] as VehicleType);
-        if (maxDist <= 0) continue; // gunless (non-tank) — never fires
+  // ── Pass 2: predicted fire from enemies with a queued Fire action ──
+  const vehicles = query(world, [Vehicle, ActionsQueue, RigidBodyState, TeamRef]);
 
-        // The enemy's current hex (origin of the projected ray).
-        const here = grid.worldToHex(
-            RigidBodyState.position.get(eid, 0),
-            RigidBodyState.position.get(eid, 1),
-        );
-        if (!here) continue;
+  for (let i = 0; i < vehicles.length; i++) {
+    const eid = vehicles[i];
+    if (TeamRef.id[eid] === myTeam) continue; // only enemy fire is a threat
 
-        const count = ActionsQueue.count[eid];
-        // Scan the live queue slots (0 = front, 1 = pre-decided next) for a Fire.
-        for (let slot = 0; slot < count; slot++) {
-            if (ActionsQueue.getKind(eid, slot) !== ActionKind.Fire) continue;
+    const maxDist = bulletMaxDistance(Vehicle.type[eid] as VehicleType);
+    if (maxDist <= 0) continue; // gunless (non-tank) — never fires
 
-            // Fire's target is a neighbour hex used as a DIRECTION (one axial step).
-            const targetQ = ActionsQueue.getTargetVal(eid, slot, 0);
-            const targetR = ActionsQueue.getTargetVal(eid, slot, 1);
-            const dq = targetQ - here.q;
-            const dr = targetR - here.r;
-            if (dq === 0 && dr === 0) continue; // no direction
+    // The enemy's current hex (origin of the projected ray).
+    const here = grid.worldToHex(
+      RigidBodyState.position.get(eid, 0),
+      RigidBodyState.position.get(eid, 1),
+    );
+    if (!here) continue;
 
-            // Walk the straight ray from the owner in that direction (skip `Reserved`,
-            // stop at the first `Unit`/`Obstacle` or the grid edge), the same hexes the
-            // Fire executor walks. Bounded by the bullet's world flight distance
-            // (centre-to-centre from the firing hex).
-            markPredictedFireRay(selfEid, here.q, here.r, dq, dr, maxDist, selfQ, selfR, grid);
-        }
+    const count = ActionsQueue.count[eid];
+    // Scan the live queue slots (0 = front, 1 = pre-decided next) for a Fire.
+    for (let slot = 0; slot < count; slot++) {
+      if (ActionsQueue.getKind(eid, slot) !== ActionKind.Fire) continue;
+
+      // Fire's target is a neighbour hex used as a DIRECTION (one axial step).
+      const targetQ = ActionsQueue.getTargetVal(eid, slot, 0);
+      const targetR = ActionsQueue.getTargetVal(eid, slot, 1);
+      const dq = targetQ - here.q;
+      const dr = targetR - here.r;
+      if (dq === 0 && dr === 0) continue; // no direction
+
+      // Walk the straight ray from the owner in that direction (skip `Reserved`,
+      // stop at the first `Unit`/`Obstacle` or the grid edge), the same hexes the
+      // Fire executor walks. Bounded by the bullet's world flight distance
+      // (centre-to-centre from the firing hex).
+      markPredictedFireRay(selfEid, here.q, here.r, dq, dr, maxDist, selfQ, selfR, grid);
     }
+  }
 }
 
 /**
@@ -149,16 +149,19 @@ export function markBulletThreat(
  * either way — `Reserved` cells are transparent, `Unit`/`Obstacle` stop the shot.
  */
 function threatRayVisit(selfEid: number, selfQ: number, selfR: number, markFirst: boolean) {
-    return (cell: HexCell, hex: { q: number; r: number }, isFirst: boolean): boolean => {
-        if (markFirst || !isFirst) {
-            const dq = hex.q - selfQ;
-            const dr = hex.r - selfR;
-            if (hexDeltaDistance(dq, dr) <= VIEW_RADIUS) {
-                UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.UnderFire, 1);
-            }
-        }
-        return isFirst || (cell.occupantKind !== OccupantKind.Unit && cell.occupantKind !== OccupantKind.Obstacle);
-    };
+  return (cell: HexCell, hex: { q: number; r: number }, isFirst: boolean): boolean => {
+    if (markFirst || !isFirst) {
+      const dq = hex.q - selfQ;
+      const dr = hex.r - selfR;
+      if (hexDeltaDistance(dq, dr) <= VIEW_RADIUS) {
+        UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.UnderFire, 1);
+      }
+    }
+    return (
+      isFirst ||
+      (cell.occupantKind !== OccupantKind.Unit && cell.occupantKind !== OccupantKind.Obstacle)
+    );
+  };
 }
 
 /**
@@ -171,24 +174,31 @@ function threatRayVisit(selfEid: number, selfQ: number, selfR: number, markFirst
  * that centre).
  */
 function markPredictedFireRay(
-    selfEid: number,
-    fromQ: number,
-    fromR: number,
-    dq: number,
-    dr: number,
-    maxDist: number,
-    selfQ: number,
-    selfR: number,
-    grid: HexGrid,
+  selfEid: number,
+  fromQ: number,
+  fromR: number,
+  dq: number,
+  dr: number,
+  maxDist: number,
+  selfQ: number,
+  selfR: number,
+  grid: HexGrid,
 ): void {
-    const origin = grid.hexToWorld(fromQ, fromR);
-    const next = grid.hexToWorld(fromQ + dq, fromR + dr);
-    if (!origin || !next) return;
+  const origin = grid.hexToWorld(fromQ, fromR);
+  const next = grid.hexToWorld(fromQ + dq, fromR + dr);
+  if (!origin || !next) return;
 
-    const dirX = next.x - origin.x;
-    const dirY = next.y - origin.y;
-    const len = Math.hypot(dirX, dirY);
-    if (len === 0) return;
+  const dirX = next.x - origin.x;
+  const dirY = next.y - origin.y;
+  const len = Math.hypot(dirX, dirY);
+  if (len === 0) return;
 
-    grid.raycast(origin.x, origin.y, dirX / len, dirY / len, maxDist, threatRayVisit(selfEid, selfQ, selfR, false));
+  grid.raycast(
+    origin.x,
+    origin.y,
+    dirX / len,
+    dirY / len,
+    maxDist,
+    threatRayVisit(selfEid, selfQ, selfR, false),
+  );
 }

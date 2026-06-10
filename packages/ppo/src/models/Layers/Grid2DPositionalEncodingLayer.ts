@@ -1,5 +1,5 @@
-import * as tf from '@tensorflow/tfjs';
-import type { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
+import * as tf from "@tensorflow/tfjs";
+import type { LayerArgs } from "@tensorflow/tfjs-layers/dist/engine/topology";
 
 /**
  * 2D sinusoidal positional encoding for a flattened ROWS×COLS grid of tokens.
@@ -14,91 +14,92 @@ import type { LayerArgs } from '@tensorflow/tfjs-layers/dist/engine/topology';
  * each needing an even count for the sin/cos pair).
  */
 export class Grid2DPositionalEncodingLayer extends tf.layers.Layer {
-    static readonly className = 'Grid2DPositionalEncodingLayer';
+  static readonly className = "Grid2DPositionalEncodingLayer";
 
-    private rows: number;
-    private cols: number;
-    private scale: number;
-    private encoding!: tf.Tensor3D;
+  private rows: number;
+  private cols: number;
+  private scale: number;
+  private encoding!: tf.Tensor3D;
 
-    constructor(config: LayerArgs & { rows: number, cols: number, scale?: number }) {
-        super(config);
-        this.rows = config.rows;
-        this.cols = config.cols;
-        this.scale = config.scale ?? 1;
+  constructor(config: LayerArgs & { rows: number; cols: number; scale?: number }) {
+    super(config);
+    this.rows = config.rows;
+    this.cols = config.cols;
+    this.scale = config.scale ?? 1;
+  }
+
+  dispose() {
+    this.encoding?.dispose();
+    return super.dispose();
+  }
+
+  build(inputShape: tf.Shape | tf.Shape[]) {
+    const shape = (
+      inputShape[0] === null || typeof inputShape[0] === "number" ? inputShape : inputShape[0]
+    ) as tf.Shape;
+
+    const [, N, dModel] = shape as [number, number, number];
+
+    if (N !== this.rows * this.cols) {
+      throw new Error(
+        `Grid2DPositionalEncodingLayer: token count ${N} != rows*cols ` +
+          `(${this.rows}*${this.cols}=${this.rows * this.cols}).`,
+      );
+    }
+    if (dModel % 4 !== 0) {
+      throw new Error(`Grid2DPositionalEncodingLayer: dModel (${dModel}) must be divisible by 4.`);
     }
 
-    dispose() {
-        this.encoding?.dispose();
-        return super.dispose();
-    }
+    this.encoding = this.createEncoding(dModel); // [1, N, dModel]
+    this.built = true;
+  }
 
-    build(inputShape: tf.Shape | tf.Shape[]) {
-        const shape = ((inputShape[0] === null || typeof inputShape[0] === 'number')
-            ? inputShape
-            : inputShape[0]) as tf.Shape;
+  call(inputs: tf.Tensor | tf.Tensor[]): tf.Tensor {
+    const input = Array.isArray(inputs) ? inputs[0] : inputs;
+    // broadcasting addition: [B, N, dModel] + [1, N, dModel]
+    return tf.add(input, this.encoding);
+  }
 
-        const [, N, dModel] = shape as [number, number, number];
+  /** Sinusoidal encoding of `positions` [N] over `dim` (even) → [N, dim]. */
+  private sinusoidal(positions: tf.Tensor1D, dim: number): tf.Tensor {
+    const pos = positions.toFloat().expandDims(1); // [N, 1]
+    const divTerm = tf.exp(tf.mul(tf.range(0, dim, 2).div(dim), tf.scalar(-Math.log(10000.0)))); // [dim/2]
+    const angleRates = tf.matMul(pos, divTerm.expandDims(0)); // [N, dim/2]
+    return tf.concat([tf.sin(angleRates), tf.cos(angleRates)], 1); // [N, dim]
+  }
 
-        if (N !== this.rows * this.cols) {
-            throw new Error(
-                `Grid2DPositionalEncodingLayer: token count ${N} != rows*cols ` +
-                `(${this.rows}*${this.cols}=${this.rows * this.cols}).`,
-            );
-        }
-        if (dModel % 4 !== 0) {
-            throw new Error(
-                `Grid2DPositionalEncodingLayer: dModel (${dModel}) must be divisible by 4.`,
-            );
-        }
+  private createEncoding(dModel: number): tf.Tensor3D {
+    const half = dModel / 2;
+    // row/col index of every cell, cell-major (idx = row*cols + col).
+    const rowIdx = tf
+      .range(0, this.rows)
+      .expandDims(1)
+      .tile([1, this.cols])
+      .reshape([-1]) as tf.Tensor1D;
+    const colIdx = tf
+      .range(0, this.cols)
+      .expandDims(0)
+      .tile([this.rows, 1])
+      .reshape([-1]) as tf.Tensor1D;
 
-        this.encoding = this.createEncoding(dModel); // [1, N, dModel]
-        this.built = true;
-    }
+    const rowEnc = this.sinusoidal(rowIdx, half); // [N, half]
+    const colEnc = this.sinusoidal(colIdx, half); // [N, half]
+    // Scaled down so the (small, sparse) cell content isn't drowned by the
+    // constant positional signal — see the `scale` config.
+    const interleaved = tf.concat([rowEnc, colEnc], 1).mul(this.scale); // [N, dModel]
 
-    call(inputs: tf.Tensor | tf.Tensor[]): tf.Tensor {
-        const input = Array.isArray(inputs) ? inputs[0] : inputs;
-        // broadcasting addition: [B, N, dModel] + [1, N, dModel]
-        return tf.add(input, this.encoding);
-    }
+    return interleaved.expandDims(0) as tf.Tensor3D; // [1, N, dModel]
+  }
 
-    /** Sinusoidal encoding of `positions` [N] over `dim` (even) → [N, dim]. */
-    private sinusoidal(positions: tf.Tensor1D, dim: number): tf.Tensor {
-        const pos = positions.toFloat().expandDims(1); // [N, 1]
-        const divTerm = tf.exp(
-            tf.mul(
-                tf.range(0, dim, 2).div(dim),
-                tf.scalar(-Math.log(10000.0)),
-            ),
-        ); // [dim/2]
-        const angleRates = tf.matMul(pos, divTerm.expandDims(0)); // [N, dim/2]
-        return tf.concat([tf.sin(angleRates), tf.cos(angleRates)], 1); // [N, dim]
-    }
-
-    private createEncoding(dModel: number): tf.Tensor3D {
-        const half = dModel / 2;
-        // row/col index of every cell, cell-major (idx = row*cols + col).
-        const rowIdx = tf.range(0, this.rows).expandDims(1).tile([1, this.cols]).reshape([-1]) as tf.Tensor1D;
-        const colIdx = tf.range(0, this.cols).expandDims(0).tile([this.rows, 1]).reshape([-1]) as tf.Tensor1D;
-
-        const rowEnc = this.sinusoidal(rowIdx, half); // [N, half]
-        const colEnc = this.sinusoidal(colIdx, half); // [N, half]
-        // Scaled down so the (small, sparse) cell content isn't drowned by the
-        // constant positional signal — see the `scale` config.
-        const interleaved = tf.concat([rowEnc, colEnc], 1).mul(this.scale); // [N, dModel]
-
-        return interleaved.expandDims(0) as tf.Tensor3D; // [1, N, dModel]
-    }
-
-    getConfig() {
-        const config = super.getConfig();
-        return {
-            ...config,
-            rows: this.rows,
-            cols: this.cols,
-            scale: this.scale,
-        };
-    }
+  getConfig() {
+    const config = super.getConfig();
+    return {
+      ...config,
+      rows: this.rows,
+      cols: this.cols,
+      scale: this.scale,
+    };
+  }
 }
 
 tf.serialization.registerClass(Grid2DPositionalEncodingLayer);

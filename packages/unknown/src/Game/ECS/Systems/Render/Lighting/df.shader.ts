@@ -1,16 +1,19 @@
-import { ShaderMeta } from '../../../../../../../renderer/src/WGSL/ShaderMeta.ts';
-import { wgsl } from '../../../../../../../renderer/src/WGSL/wgsl.ts';
-import { VariableKind, VariableMeta } from '../../../../../../../renderer/src/Struct/VariableMeta.ts';
+import { ShaderMeta } from "../../../../../../../renderer/src/WGSL/ShaderMeta.ts";
+import { wgsl } from "../../../../../../../renderer/src/WGSL/wgsl.ts";
+import {
+  VariableKind,
+  VariableMeta,
+} from "../../../../../../../renderer/src/Struct/VariableMeta.ts";
 
-export const jfaTextureName = 'jfaTexture';
+export const jfaTextureName = "jfaTexture";
 
 export const shaderMeta = new ShaderMeta(
-    {
-        jfaTexture: new VariableMeta(jfaTextureName, VariableKind.Texture, `texture_2d<f32>`),
-    },
-    {},
-    // language=WGSL
-    wgsl/* wgsl */ `
+  {
+    jfaTexture: new VariableMeta(jfaTextureName, VariableKind.Texture, `texture_2d<f32>`),
+  },
+  {},
+  // language=WGSL
+  wgsl /* wgsl */ `
 const POSITION = array<vec2f, 6>(
     vec2f(-1.0, -1.0),
     vec2f(1.0, -1.0),

@@ -22,10 +22,10 @@
  * driver calls it. `reset()` is called per episode.
  */
 
-import { query } from 'bitecs';
-import { GameDI } from '../../../unknown/src/Game/DI/GameDI.ts';
-import { MapDI } from '../../../unknown/src/Game/DI/MapDI.ts';
-import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld.ts';
+import { query } from "bitecs";
+import { GameDI } from "../../../unknown/src/Game/DI/GameDI.ts";
+import { MapDI } from "../../../unknown/src/Game/DI/MapDI.ts";
+import { getGameComponents } from "../../../unknown/src/Game/ECS/createGameWorld.ts";
 
 /**
  * Reward per point of damage dealt. Scaled so one Medium bullet (12 damage)
@@ -44,122 +44,133 @@ export const KILL_REWARD = 1;
 export const APPROACH_REWARD = 0.15;
 
 export class ScoreTracker {
-    /** playerId → cumulative weighted score. */
-    private score = new Map<number, number>();
-    /** victimEid → (attackerPlayerId → last-seen accumulated damage), to diff per tick. */
-    private prevDamage = new Map<number, Map<number, number>>();
-    /** vehicleEid → last tick's nearest enemy + hex distance, to diff per tick. */
-    private prevApproach = new Map<number, { enemy: number; dist: number }>();
+  /** playerId → cumulative weighted score. */
+  private score = new Map<number, number>();
+  /** victimEid → (attackerPlayerId → last-seen accumulated damage), to diff per tick. */
+  private prevDamage = new Map<number, Map<number, number>>();
+  /** vehicleEid → last tick's nearest enemy + hex distance, to diff per tick. */
+  private prevApproach = new Map<number, { enemy: number; dist: number }>();
 
-    reset(): void {
-        this.score.clear();
-        this.prevDamage.clear();
-        this.prevApproach.clear();
+  reset(): void {
+    this.score.clear();
+    this.prevDamage.clear();
+    this.prevApproach.clear();
+  }
+
+  getScore(playerId: number): number {
+    return this.score.get(playerId) ?? 0;
+  }
+
+  private add(playerId: number, amount: number): void {
+    this.score.set(playerId, (this.score.get(playerId) ?? 0) + amount);
+  }
+
+  update({ world } = GameDI): void {
+    this.updateCombat(world);
+    this.updateApproach(world);
+  }
+
+  /**
+   * Combat scoring: damage dealt this tick (increase in each victim's per-attacker
+   * accumulated damage) and kills (vehicles tracked last tick but gone now → KILL
+   * split between attackers by damage share).
+   */
+  private updateCombat(world = GameDI.world): void {
+    const { Vehicle, LastHitters } = getGameComponents(world);
+    const vehicles = query(world, [Vehicle, LastHitters]);
+    const alive = new Set<number>();
+
+    // Damage dealt this tick = increase in each victim's per-attacker damage.
+    for (let i = 0; i < vehicles.length; i++) {
+      const victim = vehicles[i];
+      alive.add(victim);
+
+      const prev = this.prevDamage.get(victim);
+      const curr = new Map<number, number>();
+      LastHitters.forEachHitters(victim, (playerId: number, damage: number) => {
+        curr.set(playerId, damage);
+        const inc = damage - (prev?.get(playerId) ?? 0);
+        if (inc > 0) this.add(playerId, DAMAGE_REWARD * inc);
+      });
+      this.prevDamage.set(victim, curr);
     }
 
-    getScore(playerId: number): number {
-        return this.score.get(playerId) ?? 0;
+    // Kills = vehicles tracked last tick but gone now → split KILL by damage share.
+    for (const [victim, prev] of this.prevDamage) {
+      if (alive.has(victim)) continue;
+
+      let totalDamage = 0;
+      prev.forEach((damage) => {
+        totalDamage += damage;
+      });
+      if (totalDamage > 0) {
+        prev.forEach((damage, playerId) => {
+          this.add(playerId, KILL_REWARD * (damage / totalDamage));
+        });
+      }
+      this.prevDamage.delete(victim);
     }
+  }
 
-    private add(playerId: number, amount: number): void {
-        this.score.set(playerId, (this.score.get(playerId) ?? 0) + amount);
-    }
+  /**
+   * Approach shaping: per tick, score the change in hex distance to the nearest
+   * enemy (closer → +, away → −). Per-tick deltas telescope, so over a macro-action
+   * the agent sees exactly `APPROACH_REWARD × (hexes gained)` — wiggling back and
+   * forth nets zero. A tick where the nearest enemy CHANGED (died / overtaken by
+   * another) only re-bases the distance, so kills don't leak a phantom penalty.
+   */
+  private updateApproach(world = GameDI.world): void {
+    const grid = MapDI.grid;
+    if (!grid) return;
 
-    update({ world } = GameDI): void {
-        this.updateCombat(world);
-        this.updateApproach(world);
-    }
+    const { Vehicle, TeamRef, PlayerRef, RigidBodyState } = getGameComponents(world);
+    const vehicles = query(world, [Vehicle, TeamRef, PlayerRef, RigidBodyState]);
+    const alive = new Set<number>(vehicles);
 
-    /**
-     * Combat scoring: damage dealt this tick (increase in each victim's per-attacker
-     * accumulated damage) and kills (vehicles tracked last tick but gone now → KILL
-     * split between attackers by damage share).
-     */
-    private updateCombat(world = GameDI.world): void {
-        const { Vehicle, LastHitters } = getGameComponents(world);
-        const vehicles = query(world, [Vehicle, LastHitters]);
-        const alive = new Set<number>();
+    for (let i = 0; i < vehicles.length; i++) {
+      const eid = vehicles[i];
+      const myHex = grid.worldToHex(
+        RigidBodyState.position.get(eid, 0),
+        RigidBodyState.position.get(eid, 1),
+      );
+      if (!myHex) {
+        this.prevApproach.delete(eid);
+        continue;
+      }
 
-        // Damage dealt this tick = increase in each victim's per-attacker damage.
-        for (let i = 0; i < vehicles.length; i++) {
-            const victim = vehicles[i];
-            alive.add(victim);
-
-            const prev = this.prevDamage.get(victim);
-            const curr = new Map<number, number>();
-            LastHitters.forEachHitters(victim, (playerId: number, damage: number) => {
-                curr.set(playerId, damage);
-                const inc = damage - (prev?.get(playerId) ?? 0);
-                if (inc > 0) this.add(playerId, DAMAGE_REWARD * inc);
-            });
-            this.prevDamage.set(victim, curr);
+      // Nearest cross-team vehicle by exact hex distance.
+      let nearest = 0;
+      let minDist = Infinity;
+      for (let j = 0; j < vehicles.length; j++) {
+        const other = vehicles[j];
+        if (TeamRef.id[other] === TeamRef.id[eid]) continue;
+        const otherHex = grid.worldToHex(
+          RigidBodyState.position.get(other, 0),
+          RigidBodyState.position.get(other, 1),
+        );
+        if (!otherHex) continue;
+        const dist = grid.distance(myHex, otherHex);
+        if (dist < minDist) {
+          minDist = dist;
+          nearest = other;
         }
+      }
+      if (nearest === 0) {
+        this.prevApproach.delete(eid);
+        continue;
+      }
 
-        // Kills = vehicles tracked last tick but gone now → split KILL by damage share.
-        for (const [victim, prev] of this.prevDamage) {
-            if (alive.has(victim)) continue;
-
-            let totalDamage = 0;
-            prev.forEach((damage) => { totalDamage += damage; });
-            if (totalDamage > 0) {
-                prev.forEach((damage, playerId) => {
-                    this.add(playerId, KILL_REWARD * (damage / totalDamage));
-                });
-            }
-            this.prevDamage.delete(victim);
-        }
+      const prev = this.prevApproach.get(eid);
+      if (prev && prev.enemy === nearest) {
+        this.add(PlayerRef.id[eid], APPROACH_REWARD * (prev.dist - minDist));
+      }
+      this.prevApproach.set(eid, { enemy: nearest, dist: minDist });
     }
 
-    /**
-     * Approach shaping: per tick, score the change in hex distance to the nearest
-     * enemy (closer → +, away → −). Per-tick deltas telescope, so over a macro-action
-     * the agent sees exactly `APPROACH_REWARD × (hexes gained)` — wiggling back and
-     * forth nets zero. A tick where the nearest enemy CHANGED (died / overtaken by
-     * another) only re-bases the distance, so kills don't leak a phantom penalty.
-     */
-    private updateApproach(world = GameDI.world): void {
-        const grid = MapDI.grid;
-        if (!grid) return;
-
-        const { Vehicle, TeamRef, PlayerRef, RigidBodyState } = getGameComponents(world);
-        const vehicles = query(world, [Vehicle, TeamRef, PlayerRef, RigidBodyState]);
-        const alive = new Set<number>(vehicles);
-
-        for (let i = 0; i < vehicles.length; i++) {
-            const eid = vehicles[i];
-            const myHex = grid.worldToHex(
-                RigidBodyState.position.get(eid, 0),
-                RigidBodyState.position.get(eid, 1),
-            );
-            if (!myHex) { this.prevApproach.delete(eid); continue; }
-
-            // Nearest cross-team vehicle by exact hex distance.
-            let nearest = 0;
-            let minDist = Infinity;
-            for (let j = 0; j < vehicles.length; j++) {
-                const other = vehicles[j];
-                if (TeamRef.id[other] === TeamRef.id[eid]) continue;
-                const otherHex = grid.worldToHex(
-                    RigidBodyState.position.get(other, 0),
-                    RigidBodyState.position.get(other, 1),
-                );
-                if (!otherHex) continue;
-                const dist = grid.distance(myHex, otherHex);
-                if (dist < minDist) { minDist = dist; nearest = other; }
-            }
-            if (nearest === 0) { this.prevApproach.delete(eid); continue; }
-
-            const prev = this.prevApproach.get(eid);
-            if (prev && prev.enemy === nearest) {
-                this.add(PlayerRef.id[eid], APPROACH_REWARD * (prev.dist - minDist));
-            }
-            this.prevApproach.set(eid, { enemy: nearest, dist: minDist });
-        }
-
-        for (const eid of this.prevApproach.keys()) {
-            if (!alive.has(eid)) this.prevApproach.delete(eid);
-        }
+    for (const eid of this.prevApproach.keys()) {
+      if (!alive.has(eid)) this.prevApproach.delete(eid);
     }
+  }
 }
 
 /** Worker-shared tracker (episodes run sequentially per worker; reset between them). */

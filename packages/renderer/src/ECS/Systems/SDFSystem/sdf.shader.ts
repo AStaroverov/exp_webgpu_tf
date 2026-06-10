@@ -1,36 +1,64 @@
-import { VariableKind, VariableMeta } from '../../../Struct/VariableMeta.ts';
-import { ShaderMeta } from '../../../WGSL/ShaderMeta.ts';
-import { wgsl } from '../../../WGSL/wgsl.ts';
+import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
+import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
+import { wgsl } from "../../../WGSL/wgsl.ts";
 
 export const MAX_INSTANCE_COUNT = 10_000;
 
 export const shaderMeta = new ShaderMeta(
-    {
-        projection: new VariableMeta('uProjection', VariableKind.Uniform, `mat4x4<f32>`),
-        // xy = light direction (pointing from light source, same convention as old LIGHT_DIR),
-        // z = shadow darkness (0 = shadows disabled), w = reserved.
-        sunShadow: new VariableMeta('uSunShadow', VariableKind.Uniform, `vec4<f32>`),
-        transform: new VariableMeta('uTransform', VariableKind.StorageRead, `array<mat4x4<f32>, ${ MAX_INSTANCE_COUNT }>`),
+  {
+    projection: new VariableMeta("uProjection", VariableKind.Uniform, `mat4x4<f32>`),
+    // xy = light direction (pointing from light source, same convention as old LIGHT_DIR),
+    // z = shadow darkness (0 = shadows disabled), w = reserved.
+    sunShadow: new VariableMeta("uSunShadow", VariableKind.Uniform, `vec4<f32>`),
+    transform: new VariableMeta(
+      "uTransform",
+      VariableKind.StorageRead,
+      `array<mat4x4<f32>, ${MAX_INSTANCE_COUNT}>`,
+    ),
 
-        // 0: circle, 1: rectangle, 2: rhombus
-        kind: new VariableMeta('uKind', VariableKind.StorageRead, `array<u32, ${ MAX_INSTANCE_COUNT }>`),
-        color: new VariableMeta('uColor', VariableKind.StorageRead, `array<vec4<f32>, ${ MAX_INSTANCE_COUNT }>`),
-        values: new VariableMeta('uValues', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT * 6 }>`),
-        roundness: new VariableMeta('uRoundness', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT }>`),
-        blurness: new VariableMeta('uBlurness', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT }>`),
-        intensity: new VariableMeta('uIntensity', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT }>`),
-        translucency: new VariableMeta('uTranslucency', VariableKind.StorageRead, `array<f32, ${ MAX_INSTANCE_COUNT }>`),
+    // 0: circle, 1: rectangle, 2: rhombus
+    kind: new VariableMeta("uKind", VariableKind.StorageRead, `array<u32, ${MAX_INSTANCE_COUNT}>`),
+    color: new VariableMeta(
+      "uColor",
+      VariableKind.StorageRead,
+      `array<vec4<f32>, ${MAX_INSTANCE_COUNT}>`,
+    ),
+    values: new VariableMeta(
+      "uValues",
+      VariableKind.StorageRead,
+      `array<f32, ${MAX_INSTANCE_COUNT * 6}>`,
+    ),
+    roundness: new VariableMeta(
+      "uRoundness",
+      VariableKind.StorageRead,
+      `array<f32, ${MAX_INSTANCE_COUNT}>`,
+    ),
+    blurness: new VariableMeta(
+      "uBlurness",
+      VariableKind.StorageRead,
+      `array<f32, ${MAX_INSTANCE_COUNT}>`,
+    ),
+    intensity: new VariableMeta(
+      "uIntensity",
+      VariableKind.StorageRead,
+      `array<f32, ${MAX_INSTANCE_COUNT}>`,
+    ),
+    translucency: new VariableMeta(
+      "uTranslucency",
+      VariableKind.StorageRead,
+      `array<f32, ${MAX_INSTANCE_COUNT}>`,
+    ),
 
-        // Note: r32float is unfilterable, so we use textureLoad instead of textureSample
-        // Put in separate group (2) so it can be excluded from shadow map pass
-        shadowMap: new VariableMeta('uShadowMap', VariableKind.Texture, 'texture_2d<f32>', {
-            group: 2,
-            visibility: GPUShaderStage.FRAGMENT,
-            textureSampleType: 'unfilterable-float',
-        }),
-    },
-    {},
-    wgsl/* WGSL */`
+    // Note: r32float is unfilterable, so we use textureLoad instead of textureSample
+    // Put in separate group (2) so it can be excluded from shadow map pass
+    shadowMap: new VariableMeta("uShadowMap", VariableKind.Texture, "texture_2d<f32>", {
+      group: 2,
+      visibility: GPUShaderStage.FRAGMENT,
+      textureSampleType: "unfilterable-float",
+    }),
+  },
+  {},
+  wgsl /* WGSL */ `
         // ============= Structures =============
         
         struct VertexOutput {

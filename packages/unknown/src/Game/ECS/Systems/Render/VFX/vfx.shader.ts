@@ -1,6 +1,6 @@
-import { ShaderMeta } from 'renderer/src/WGSL/ShaderMeta.ts';
-import { VariableKind, VariableMeta } from 'renderer/src/Struct/VariableMeta.ts';
-import { wgsl } from 'renderer/src/WGSL/wgsl.ts';
+import { ShaderMeta } from "renderer/src/WGSL/ShaderMeta.ts";
+import { VariableKind, VariableMeta } from "renderer/src/Struct/VariableMeta.ts";
+import { wgsl } from "renderer/src/WGSL/wgsl.ts";
 
 // Maximum number of VFX instances (combined for all effect types)
 export const MAX_VFX_COUNT = 512;
@@ -9,7 +9,7 @@ export const MAX_VFX_COUNT = 512;
 // WGSL Code Fragments
 // ============================================
 
-const WGSL_CONSTANTS = /* wgsl */`
+const WGSL_CONSTANTS = /* wgsl */ `
     const VFX_EXHAUST_SMOKE: u32 = 0u;
     const VFX_EXPLOSION: u32 = 1u;
     const VFX_HIT_FLASH: u32 = 2u;
@@ -18,7 +18,7 @@ const WGSL_CONSTANTS = /* wgsl */`
     const VFX_FROST: u32 = 5u;
 `;
 
-const WGSL_VERTEX_OUTPUT = /* wgsl */`
+const WGSL_VERTEX_OUTPUT = /* wgsl */ `
     struct VertexOutput {
         @builtin(position) position: vec4f,
         @location(0) @interpolate(flat) instance_index: u32,
@@ -26,7 +26,7 @@ const WGSL_VERTEX_OUTPUT = /* wgsl */`
     };
 `;
 
-const WGSL_VERTEX_MAIN = /* wgsl */`
+const WGSL_VERTEX_MAIN = /* wgsl */ `
     @vertex
     fn vs_main(
         @builtin(vertex_index) vertex_index: u32,
@@ -54,7 +54,7 @@ const WGSL_VERTEX_MAIN = /* wgsl */`
     }
 `;
 
-const WGSL_UTILS = /* wgsl */`
+const WGSL_UTILS = /* wgsl */ `
     fn hash21(p: vec2f) -> f32 {
         var p3 = fract(vec3f(p.xyx) * vec3f(0.1031, 0.1030, 0.0973));
         p3 += dot(p3, p3.yzx + 19.19);
@@ -96,7 +96,7 @@ const WGSL_UTILS = /* wgsl */`
 // EXHAUST SMOKE EFFECT
 // ============================================
 
-const WGSL_EXHAUST_SMOKE = /* wgsl */`
+const WGSL_EXHAUST_SMOKE = /* wgsl */ `
     fn exhaustSmoke_pattern(localPos: vec2f, progress: f32, seed: f32) -> vec4f {
         let dist = length(localPos);
         let expandFactor = 1.0 + progress * 4.0;
@@ -184,7 +184,7 @@ const WGSL_EXHAUST_SMOKE = /* wgsl */`
 // EXPLOSION EFFECT
 // ============================================
 
-const WGSL_EXPLOSION = /* wgsl */`
+const WGSL_EXPLOSION = /* wgsl */ `
     fn explosion_fireball(localPos: vec2f, size: f32, progress: f32, seed: f32) -> vec4f {
         let dist = length(localPos);
         let expandProgress = min(progress * 3.0, 1.0);
@@ -338,7 +338,7 @@ const WGSL_EXPLOSION = /* wgsl */`
 // HIT FLASH EFFECT
 // ============================================
 
-const WGSL_HIT_FLASH = /* wgsl */`
+const WGSL_HIT_FLASH = /* wgsl */ `
     fn hitFlash_sparks(localPos: vec2f, size: f32, progress: f32, seed: f32) -> f32 {
         let scaledSize = size * 2.0;
         let dist = length(localPos);
@@ -426,7 +426,7 @@ const WGSL_HIT_FLASH = /* wgsl */`
 // MUZZLE FLASH EFFECT
 // ============================================
 
-const WGSL_MUZZLE_FLASH = /* wgsl */`
+const WGSL_MUZZLE_FLASH = /* wgsl */ `
     fn muzzleFlash_smoke(localPos: vec2f, size: f32, progress: f32, seed: f32) -> f32 {
         let expandedSize = size * (0.5 + progress * 1.8);
         var stretchedPos = localPos;
@@ -607,7 +607,7 @@ const WGSL_MUZZLE_FLASH = /* wgsl */`
 // FLAME EFFECT (stream particle)
 // ============================================
 
-const WGSL_FLAME = /* wgsl */`
+const WGSL_FLAME = /* wgsl */ `
     fn renderFlame(localPos: vec2f, progress: f32, seed: f32) -> vec4f {
         // Must mirror getMaxRadius[VFXType.Flame] in createDrawVFXSystem.ts.
         let currentSize = 9.0 * (1.0 + progress * 1.4);
@@ -650,7 +650,7 @@ const WGSL_FLAME = /* wgsl */`
 // FROST EFFECT (stream particle)
 // ============================================
 
-const WGSL_FROST = /* wgsl */`
+const WGSL_FROST = /* wgsl */ `
     fn renderFrost(localPos: vec2f, progress: f32, seed: f32) -> vec4f {
         // Must mirror getMaxRadius[VFXType.Frost] in createDrawVFXSystem.ts.
         let currentSize = 9.0 * (1.0 + progress * 1.4);
@@ -698,7 +698,7 @@ const WGSL_FROST = /* wgsl */`
 // FRAGMENT MAIN
 // ============================================
 
-const WGSL_FRAGMENT_MAIN = /* wgsl */`
+const WGSL_FRAGMENT_MAIN = /* wgsl */ `
     @fragment
     fn fs_main(
         @location(0) @interpolate(flat) instance_index: u32,
@@ -748,13 +748,21 @@ const WGSL_FRAGMENT_MAIN = /* wgsl */`
 // ============================================
 
 export const shaderMeta = new ShaderMeta(
-    {
-        projection: new VariableMeta('uProjection', VariableKind.Uniform, `mat4x4<f32>`),
-        transform: new VariableMeta('uTransform', VariableKind.StorageRead, `array<mat4x4<f32>, ${MAX_VFX_COUNT}>`),
-        vfxData: new VariableMeta('uVFXData', VariableKind.StorageRead, `array<vec4<f32>, ${MAX_VFX_COUNT}>`),
-    },
-    {},
-    wgsl`
+  {
+    projection: new VariableMeta("uProjection", VariableKind.Uniform, `mat4x4<f32>`),
+    transform: new VariableMeta(
+      "uTransform",
+      VariableKind.StorageRead,
+      `array<mat4x4<f32>, ${MAX_VFX_COUNT}>`,
+    ),
+    vfxData: new VariableMeta(
+      "uVFXData",
+      VariableKind.StorageRead,
+      `array<vec4<f32>, ${MAX_VFX_COUNT}>`,
+    ),
+  },
+  {},
+  wgsl`
         ${WGSL_CONSTANTS}
         ${WGSL_VERTEX_OUTPUT}
         ${WGSL_VERTEX_MAIN}

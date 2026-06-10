@@ -4,5 +4,5 @@
  * threaded through factories, but the generic ppo training step uses this default.
  */
 export const shouldNoiseLayer = (_name: string, _iteration?: number): boolean => {
-    return true;
+  return true;
 };

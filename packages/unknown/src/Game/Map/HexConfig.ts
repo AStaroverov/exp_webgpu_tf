@@ -9,16 +9,16 @@
  * occupancy is tracked by reference (entity id + world id), see `HexGrid`.
  */
 
-import { defineHex, Direction, Orientation } from 'honeycomb-grid';
+import { defineHex, Direction, Orientation } from "honeycomb-grid";
 
 export const HexGridConfig = {
-    /** Hex "radius" in world pixels (xRadius === yRadius -> regular hex). */
-    radius: 96,
-    /** Grid size in hexes. */
-    cols: 12,
-    rows: 12,
-    /** Orientation — pointy-top. */
-    orientation: Orientation.POINTY,
+  /** Hex "radius" in world pixels (xRadius === yRadius -> regular hex). */
+  radius: 96,
+  /** Grid size in hexes. */
+  cols: 12,
+  rows: 12,
+  /** Orientation — pointy-top. */
+  orientation: Orientation.POINTY,
 } as const;
 
 /**
@@ -27,9 +27,9 @@ export const HexGridConfig = {
  * centers directly (before any grid origin offset, see `HexGrid`).
  */
 export const HexTile = defineHex({
-    dimensions: HexGridConfig.radius,
-    orientation: HexGridConfig.orientation,
-    origin: { x: 0, y: 0 },
+  dimensions: HexGridConfig.radius,
+  orientation: HexGridConfig.orientation,
+  origin: { x: 0, y: 0 },
 });
 
 export type HexTile = InstanceType<typeof HexTile>;
@@ -39,10 +39,10 @@ export type HexTile = InstanceType<typeof HexTile>;
  * (N and S are invalid for pointy orientation.)
  */
 export const POINTY_DIRECTIONS: readonly Direction[] = [
-    Direction.E,
-    Direction.NE,
-    Direction.NW,
-    Direction.W,
-    Direction.SW,
-    Direction.SE,
+  Direction.E,
+  Direction.NE,
+  Direction.NW,
+  Direction.W,
+  Direction.SW,
+  Direction.SE,
 ];

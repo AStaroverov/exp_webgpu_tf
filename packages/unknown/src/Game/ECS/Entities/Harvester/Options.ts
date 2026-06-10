@@ -1,17 +1,18 @@
 import {
-    mutatedVehicleOptions as vehicleMutatedOptions, resetOptions as resetVehicleOptions,
-    updateColorOptions,
-    type VehicleOptions,
-    type VehicleCreationOpts
-} from '../Vehicle/Options.ts';
+  mutatedVehicleOptions as vehicleMutatedOptions,
+  resetOptions as resetVehicleOptions,
+  updateColorOptions,
+  type VehicleOptions,
+  type VehicleCreationOpts,
+} from "../Vehicle/Options.ts";
 
 // Harvester-specific options that extend vehicle options
 export const harvesterOptions = {
-    trackLength: 0,
+  trackLength: 0,
 
-    turret: {
-        rotationSpeed: 0,
-    },
+  turret: {
+    rotationSpeed: 0,
+  },
 };
 
 export const defaultHarvesterOptions = structuredClone(harvesterOptions);
@@ -20,21 +21,20 @@ export type HarvesterOptions = VehicleOptions & typeof harvesterOptions;
 
 // Combined mutable options object for harvester creation
 export const mutatedOptions: HarvesterOptions = {
-    ...vehicleMutatedOptions,
-    ...harvesterOptions,
+  ...vehicleMutatedOptions,
+  ...harvesterOptions,
 };
 
-export const resetOptions = (target: HarvesterOptions, source?: Partial<VehicleCreationOpts>): HarvesterOptions => {
-    resetVehicleOptions(target, source);
+export const resetOptions = (
+  target: HarvesterOptions,
+  source?: Partial<VehicleCreationOpts>,
+): HarvesterOptions => {
+  resetVehicleOptions(target, source);
 
-    target.trackLength = defaultHarvesterOptions.trackLength;
-    target.turret.rotationSpeed = defaultHarvesterOptions.turret.rotationSpeed;
+  target.trackLength = defaultHarvesterOptions.trackLength;
+  target.turret.rotationSpeed = defaultHarvesterOptions.turret.rotationSpeed;
 
-    return target;
+  return target;
 };
 
-export {
-    updateColorOptions,
-    type VehicleCreationOpts,
-};
-
+export { updateColorOptions, type VehicleCreationOpts };

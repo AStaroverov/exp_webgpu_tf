@@ -1,61 +1,76 @@
-import { copy, create, get, set, setSource } from './methods/base';
-import { fromNestedArray } from './methods/from';
-import { every, fill, find, forEach, map, reduce, seed, slice, some } from './methods/iterators/base';
-import { match, matchAll, matchShuffle, matchShuffleAll } from './methods/match';
-import { matchReplace, matchReplaceAll, matchReplaceShuffle, matchReplaceShuffleAll } from './methods/matchReplace';
-import { getSide } from './methods/side';
-import { findSubMatrices, findSubMatrix, isSubMatrix } from './methods/submatrix';
-import { toArray, toItemsArray, toNestedArray } from './methods/to';
-import { flipX, flipY, getAllVariants, rotate, transpose } from './methods/transform';
-import { STOP_ITERATE } from './methods/utils';
+import { copy, create, get, set, setSource } from "./methods/base";
+import { fromNestedArray } from "./methods/from";
+import {
+  every,
+  fill,
+  find,
+  forEach,
+  map,
+  reduce,
+  seed,
+  slice,
+  some,
+} from "./methods/iterators/base";
+import { match, matchAll, matchShuffle, matchShuffleAll } from "./methods/match";
+import {
+  matchReplace,
+  matchReplaceAll,
+  matchReplaceShuffle,
+  matchReplaceShuffleAll,
+} from "./methods/matchReplace";
+import { getSide } from "./methods/side";
+import { findSubMatrices, findSubMatrix, isSubMatrix } from "./methods/submatrix";
+import { toArray, toItemsArray, toNestedArray } from "./methods/to";
+import { flipX, flipY, getAllVariants, rotate, transpose } from "./methods/transform";
+import { STOP_ITERATE } from "./methods/utils";
 
-export type TMatrix<T = unknown> = { w: number, h: number, buffer: T[] };
+export type TMatrix<T = unknown> = { w: number; h: number; buffer: T[] };
 export type TMatrixSeed<T> = (x: number, y: number, i: number) => T;
 
 export const Matrix = {
-    create,
-    seed,
-    setSource,
+  create,
+  seed,
+  setSource,
 
-    STOP_ITERATE,
-    slice,
-    forEach,
-    reduce,
-    find,
-    some,
-    every,
-    fill,
-    map,
-    get,
-    set,
-    copy,
+  STOP_ITERATE,
+  slice,
+  forEach,
+  reduce,
+  find,
+  some,
+  every,
+  fill,
+  map,
+  get,
+  set,
+  copy,
 
-    fromNestedArray,
+  fromNestedArray,
 
-    toArray,
-    toItemsArray,
-    toNestedArray,
+  toArray,
+  toItemsArray,
+  toNestedArray,
 
-    transpose,
-    flipX,
-    flipY,
-    rotate,
+  transpose,
+  flipX,
+  flipY,
+  rotate,
 
-    isSubMatrix,
-    findSubMatrix,
-    findSubMatrices,
+  isSubMatrix,
+  findSubMatrix,
+  findSubMatrices,
 
-    getSide,
+  getSide,
 
-    getAllVariants,
+  getAllVariants,
 
-    match,
-    matchAll,
-    matchShuffle,
-    matchShuffleAll,
+  match,
+  matchAll,
+  matchShuffle,
+  matchShuffleAll,
 
-    matchReplace,
-    matchReplaceAll,
-    matchReplaceShuffle,
-    matchReplaceShuffleAll,
+  matchReplace,
+  matchReplaceAll,
+  matchReplaceShuffle,
+  matchReplaceShuffleAll,
 };

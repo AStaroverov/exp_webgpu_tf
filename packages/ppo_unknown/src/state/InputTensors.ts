@@ -14,29 +14,37 @@
  * those two planes.
  */
 
-import * as tf from '@tensorflow/tfjs';
-import { BOARD_CELLS, BOARD_CHANNELS, BOARD_COLS, BOARD_ROWS, BOARD_SIZE, BoardChannel } from './board.ts';
-import type { InputArrays } from './InputArrays.ts';
+import * as tf from "@tensorflow/tfjs";
+import {
+  BOARD_CELLS,
+  BOARD_CHANNELS,
+  BOARD_COLS,
+  BOARD_ROWS,
+  BOARD_SIZE,
+  BoardChannel,
+} from "./board.ts";
+import type { InputArrays } from "./InputArrays.ts";
 
-const CONTENT_CHANNELS = Array.from({ length: BOARD_CHANNELS }, (_, ch) => ch)
-    .filter((ch) => ch !== BoardChannel.CoordX && ch !== BoardChannel.CoordY);
+const CONTENT_CHANNELS = Array.from({ length: BOARD_CHANNELS }, (_, ch) => ch).filter(
+  (ch) => ch !== BoardChannel.CoordX && ch !== BoardChannel.CoordY,
+);
 
 export function createInputTensors(batch: InputArrays[]): tf.Tensor[] {
-    const B = batch.length;
-    const boardBuf = new Float32Array(B * BOARD_SIZE);
-    const maskBuf = new Float32Array(B * BOARD_CELLS);
+  const B = batch.length;
+  const boardBuf = new Float32Array(B * BOARD_SIZE);
+  const maskBuf = new Float32Array(B * BOARD_CELLS);
 
-    for (let b = 0; b < B; b++) {
-        const board = batch[b].board;
-        boardBuf.set(board, b * BOARD_SIZE);
-        for (let c = 0; c < BOARD_CELLS; c++) {
-            const base = c * BOARD_CHANNELS;
-            const hasContent = CONTENT_CHANNELS.some((ch) => board[base + ch] !== 0);
-            maskBuf[b * BOARD_CELLS + c] = hasContent ? 1 : 0;
-        }
+  for (let b = 0; b < B; b++) {
+    const board = batch[b].board;
+    boardBuf.set(board, b * BOARD_SIZE);
+    for (let c = 0; c < BOARD_CELLS; c++) {
+      const base = c * BOARD_CHANNELS;
+      const hasContent = CONTENT_CHANNELS.some((ch) => board[base + ch] !== 0);
+      maskBuf[b * BOARD_CELLS + c] = hasContent ? 1 : 0;
     }
-    return [
-        tf.tensor4d(boardBuf, [B, BOARD_ROWS, BOARD_COLS, BOARD_CHANNELS]),
-        tf.tensor2d(maskBuf, [B, BOARD_CELLS]),
-    ];
+  }
+  return [
+    tf.tensor4d(boardBuf, [B, BOARD_ROWS, BOARD_COLS, BOARD_CHANNELS]),
+    tf.tensor2d(maskBuf, [B, BOARD_CELLS]),
+  ];
 }

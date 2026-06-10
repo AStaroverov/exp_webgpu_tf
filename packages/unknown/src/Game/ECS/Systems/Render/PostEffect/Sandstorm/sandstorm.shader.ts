@@ -1,18 +1,21 @@
-import { ShaderMeta } from '../../../../../../../../renderer/src/WGSL/ShaderMeta.ts';
-import { VariableKind, VariableMeta } from '../../../../../../../../renderer/src/Struct/VariableMeta.ts';
-import { wgsl } from '../../../../../../../../renderer/src/WGSL/wgsl.ts';
-import { noiseWGSL } from '../../noise.wgsl.ts';
+import { ShaderMeta } from "../../../../../../../../renderer/src/WGSL/ShaderMeta.ts";
+import {
+  VariableKind,
+  VariableMeta,
+} from "../../../../../../../../renderer/src/Struct/VariableMeta.ts";
+import { wgsl } from "../../../../../../../../renderer/src/WGSL/wgsl.ts";
+import { noiseWGSL } from "../../noise.wgsl.ts";
 
 export const shaderMeta = new ShaderMeta(
-    {
-        screenSize: new VariableMeta('uScreenSize', VariableKind.Uniform, `vec2<f32>`),
-        time: new VariableMeta('uTime', VariableKind.Uniform, `f32`),
-        windDirection: new VariableMeta('uWindDirection', VariableKind.Uniform, `vec2<f32>`),
-        uMapOffset: new VariableMeta('uMapOffset', VariableKind.Uniform, `vec2<f32>`),
-    },
-    {},
-    // language=WGSL
-    wgsl`
+  {
+    screenSize: new VariableMeta("uScreenSize", VariableKind.Uniform, `vec2<f32>`),
+    time: new VariableMeta("uTime", VariableKind.Uniform, `f32`),
+    windDirection: new VariableMeta("uWindDirection", VariableKind.Uniform, `vec2<f32>`),
+    uMapOffset: new VariableMeta("uMapOffset", VariableKind.Uniform, `vec2<f32>`),
+  },
+  {},
+  // language=WGSL
+  wgsl`
         ${noiseWGSL}
 
         struct VertexOutput {
@@ -109,5 +112,5 @@ export const shaderMeta = new ShaderMeta(
 
             return vec4f(finalColor, alpha);
         }
-    `
+    `,
 );

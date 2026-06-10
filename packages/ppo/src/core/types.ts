@@ -1,4 +1,4 @@
 export type ModelSettings = {
-    lr?: number,
-    expIteration?: number,
-}
+  lr?: number;
+  expIteration?: number;
+};

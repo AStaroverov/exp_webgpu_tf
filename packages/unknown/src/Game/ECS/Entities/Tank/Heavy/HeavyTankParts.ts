@@ -1,4 +1,4 @@
-import { createHeadlightSet, createRectangleSet, PartsData } from '../Common/TankParts.ts';
+import { createHeadlightSet, createRectangleSet, PartsData } from "../Common/TankParts.ts";
 
 export const SIZE = 6;
 export const PADDING = SIZE + 1;
@@ -18,9 +18,12 @@ export const TRACK_ANCHOR_Y = PADDING * 5 + SIZE * 0.3;
 
 // Caterpillar parts - local coordinates relative to track entity (centered at 0,0)
 export const caterpillarSet = createRectangleSet(
-    CATERPILLAR_LINE_COUNT, 2,
-    CATERPILLAR_SIZE, CATERPILLAR_PADDING,
-    SIZE, PADDING,
+  CATERPILLAR_LINE_COUNT,
+  2,
+  CATERPILLAR_SIZE,
+  CATERPILLAR_PADDING,
+  SIZE,
+  PADDING,
 );
 
 // Left track caterpillar parts (local to left track)
@@ -29,5 +32,9 @@ export const caterpillarSetLeft: PartsData[] = caterpillarSet;
 // Right track caterpillar parts (local to right track)
 export const caterpillarSetRight: PartsData[] = caterpillarSet;
 
-export const PARTS_COUNT = hullSet.length + headlightSet.length + turretHeadSet.length + turretGunSet.length + CATERPILLAR_LINE_COUNT * 2 * 2;
-
+export const PARTS_COUNT =
+  hullSet.length +
+  headlightSet.length +
+  turretHeadSet.length +
+  turretGunSet.length +
+  CATERPILLAR_LINE_COUNT * 2 * 2;
