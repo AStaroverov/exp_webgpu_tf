@@ -32,7 +32,6 @@ export const mutatedVehicleOptions = {
     partsCount: 0,
     size: 0,
     padding: 0,
-    approximateColliderRadius: 0,
 
     vehicleType: VehicleType.LightTank,
     engineType: EngineType.v6,
@@ -74,7 +73,6 @@ export const resetOptions = (target: VehicleOptions, source?: Partial<VehicleCre
     target.partsCount = defaultVehicleOptions.partsCount;
     target.size = defaultVehicleOptions.size;
     target.padding = defaultVehicleOptions.padding;
-    target.approximateColliderRadius = defaultVehicleOptions.approximateColliderRadius;
 
     target.vehicleType = defaultVehicleOptions.vehicleType;
     target.engineType = defaultVehicleOptions.engineType;

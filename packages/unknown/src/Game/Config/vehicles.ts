@@ -76,8 +76,6 @@ export type VehicleStats = {
     padding: number;
     /** Base density multiplier */
     density: number;
-    /** Approximate collider radius for broad phase */
-    colliderRadius: number;
     /** Hull dimensions [width, height] in padding units */
     hullSize: [number, number];
     /** Turret dimensions [width, height] in padding units */
@@ -133,7 +131,6 @@ export const LightTankConfig: TankStats = {
     size: 5,
     padding: 6, // size + 1
     density: 250,
-    colliderRadius: 50,
     hullSize: [8, 10],
     turretSize: [6, 6],
     hullGrid: [8, 10],
@@ -162,8 +159,7 @@ export const MediumTankConfig: TankStats = {
     engine: EngineType.v8,
     size: 6,
     padding: 7, // size + 1
-    density: 300,
-    colliderRadius: 80,
+    density: 275,
     hullSize: [8, 12],
     turretSize: [8, 8],
     hullGrid: [8, 11],
@@ -192,8 +188,7 @@ export const HeavyTankConfig: TankStats = {
     engine: EngineType.v12,
     size: 8,
     padding: 9, // size + 1
-    density: 350,
-    colliderRadius: 150,
+    density: 300,
     hullSize: [10, 14],
     turretSize: [8, 8],
     hullGrid: [10, 14],
@@ -220,11 +215,10 @@ export const HeavyTankConfig: TankStats = {
  */
 export const RocketTankConfig: TankStats = {
     type: VehicleType.RocketTank,
-    engine: EngineType.v12,
-    size: 8,
+    engine: EngineType.v6,
+    size: 9,
     padding: 9, // size + 1
-    density: 350,
-    colliderRadius: 150,
+    density: 450,
     hullSize: [10, 14],
     turretSize: [8, 8],
     hullGrid: [10, 14],
@@ -232,7 +226,7 @@ export const RocketTankConfig: TankStats = {
     caterpillarLines: 22,
     caterpillarSize: 5,
     trackAnchorXMult: 6,
-    turretSpeed: TurretSpeedConfig.heavy,
+    turretSpeed: 0,
     gun: {
         gunGrid: [2, 8],
         caliber: BulletCaliber.Rocket,
@@ -318,52 +312,6 @@ export const HarvesterConfig: HarvesterStats = {
         barrier: new Float32Array([0.8, 0.6, 0.2, 1]),
         scoop: new Float32Array([0.6, 0.5, 0.3, 1]),
         shield: new Float32Array([0.3, 0.7, 1.0, 0.6]),
-    },
-};
-
-export type MeleeCarStats = {
-    type: VehicleType;
-    engine: EngineType;
-    size: number;
-    padding: number;
-    density: number;
-    colliderRadius: number;
-    hullSize: [number, number];
-    hullGrid: [number, number];
-    /** Physics damping (less = more sliding) */
-    linearDamping: number;
-    angularDamping: number;
-    /** Wheel configuration */
-    wheel: {
-        size: number;
-        heightMult: number;
-        maxSteeringAngle: number;
-        steeringSpeed: number;
-    };
-    colors: {
-        wheel: Float32Array;
-    };
-};
-
-export const MeleeCarConfig: MeleeCarStats = {
-    type: VehicleType.MeleeCar,
-    engine: EngineType.v8,
-    size: 4,
-    padding: 5,
-    density: 200,
-    colliderRadius: 45,
-    hullSize: [6, 10],
-    hullGrid: [6, 10],
-    linearDamping: 3,
-    angularDamping: 4,
-    wheel: {
-        size: 6,
-        heightMult: 1.5,
-        maxSteeringAngle: PI / 5, // ~36 degrees
-        steeringSpeed: PI * 3,
-    },
-    colors: {
-        wheel: new Float32Array([0.2, 0.2, 0.2, 1]),
     },
 };
 

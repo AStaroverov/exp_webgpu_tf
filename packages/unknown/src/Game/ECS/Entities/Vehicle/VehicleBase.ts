@@ -23,7 +23,7 @@ const volumeByType: Record<VehicleType, number> = {
 export function createVehicleBase(options: VehicleOptions, { world } = GameDI): [number, number] {
     const {
         Vehicle, Color, Children, TeamRef, PlayerRef, LastHitters,
-        HeuristicsData, ImpulseAtPoint, VehicleController, SoundParentRelative,
+        ImpulseAtPoint, VehicleController, SoundParentRelative,
     } = getGameComponents(world);
 
     options.belongsCollisionGroup = CollisionGroup.VEHICALE_BASE;
@@ -39,7 +39,6 @@ export function createVehicleBase(options: VehicleOptions, { world } = GameDI): 
     TeamRef.addComponent(world, vehicleEid, options.teamId);
     PlayerRef.addComponent(world, vehicleEid, options.playerId);
     LastHitters.addComponent(world, vehicleEid);
-    HeuristicsData.addComponent(world, vehicleEid, options.approximateColliderRadius);
 
     ImpulseAtPoint.addComponent(world, vehicleEid);
 

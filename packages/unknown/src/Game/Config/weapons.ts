@@ -68,52 +68,52 @@ export type BulletCaliberStats = {
 export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     [BulletCaliber.Light]: {
         width: 8,
-        height: 3,
+        height: 5,
         speed: 650,
         density: 5_000,
         damage: 3 * 3,
         reloadTime: 750, // Light tank - fast reload
         linearDamping: 0.4, // Light bullets lose speed quickly
-        maxDistance: HexGridConfig.radius * 2.6,
+        maxDistance: HexGridConfig.radius * 4.6,
         health: (3 * 1.6) / 10,
     },
     
     [BulletCaliber.Medium]: {
         width: 10,
-        height: 4,
+        height: 6,
         speed: 800,
         density: 5_000,
         damage: 4 * 3,
         reloadTime: 1500, // Medium tank - balanced reload
         linearDamping: 0.3, // Medium bullets have moderate drag
-        maxDistance: HexGridConfig.radius * 4.6,
+        maxDistance: HexGridConfig.radius * 6.6,
         health: (4 * 1.6) / 10,
     },
     
     [BulletCaliber.Heavy]: {
         width: 12,
-        height: 5,
+        height: 7,
         speed: 950,
         density: 5_000,
         damage: 6 * 3,
         reloadTime: 3000, // Heavy tank - slow reload
         linearDamping: 0.2, // Heavy bullets maintain speed longer
-        maxDistance: HexGridConfig.radius * 6.6,
+        maxDistance: HexGridConfig.radius * 8.6,
         health: (5 * 1.6) / 10,
     },
 
     [BulletCaliber.Rocket]: {
         width: 20,
-        height: 8,
+        height: 12,
         speed: 450, 
         density: 5_000,
         damage: 10,
-        reloadTime: 5000, // Rocket launcher - very long reload
+        reloadTime: 6000, // Rocket launcher - very long reload
         linearDamping: 0.1,
         maxDistance: HexGridConfig.radius * 8,
-        health: 0.001,         
+        health: 0.001,        
         explosion: {
-            damage: 10,         
+            damage: 5,
             radius: 100,        
             vfxSize: 30 * 6,
             lightRadius: 30 * 8,
@@ -245,9 +245,6 @@ export const TurretSpeedConfig = {
 
     /** Heavy tank turret - slow but powerful */
     heavy: PI * 0.1 * TurretSpeedMult,
-
-    /** Rocket tank - launcher is bolted to the hull, no turret rotation */
-    rocket: 0,
 
     /** Harvester barrier - slow rotation for heavy barrier */
     harvester: PI * 0.4 * TurretSpeedMult,

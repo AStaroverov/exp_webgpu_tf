@@ -13,7 +13,6 @@ import {
     caterpillarLength,
     caterpillarSetLeft,
     caterpillarSetRight,
-    DENSITY,
     headlightSet,
     hullSet,
     PADDING,
@@ -22,11 +21,9 @@ import {
     turretGunSet,
     turretHeadSet,
 } from './LightTankParts.ts';
-import { EngineType, HeadlightConfig } from '../../../../Config/vehicles.ts';
+import { HeadlightConfig, LightTankConfig } from '../../../../Config/vehicles.ts';
 import { TurretSpeedConfig } from '../../../../Config/weapons.ts';
 import { randomVehiclePalette } from '../../../../Config/vehiclePalette.ts';
-
-const APPROXIMATE_COLLIDER_RADIUS = 50;
 
 export function createLightTank(opts: {
     playerId: number,
@@ -40,12 +37,11 @@ export function createLightTank(opts: {
     options.partsCount = PARTS_COUNT;
     options.size = SIZE;
     options.padding = PADDING;
-    options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
     options.vehicleType = VehicleType.LightTank;
-    options.engineType = EngineType.v6;
+    options.engineType = LightTankConfig.engine;
     options.trackLength = caterpillarLength;
 
-    options.density = DENSITY * 14;
+    options.density = LightTankConfig.density * 14;
     options.width = PADDING * 10;
     options.height = PADDING * 8;
     const [tankEid, tankPid] = createTankBase(options);
@@ -64,7 +60,7 @@ export function createLightTank(opts: {
         tankPid,
     );
 
-    options.density = DENSITY;
+    options.density = LightTankConfig.density;
     options.width = PADDING * 6;
     options.height = PADDING * 6;
     options.turret.rotationSpeed = TurretSpeedConfig.light;

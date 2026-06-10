@@ -9,7 +9,6 @@ import {
     caterpillarLength,
     caterpillarSetLeft,
     caterpillarSetRight,
-    DENSITY,
     hullSet,
     PADDING,
     PARTS_COUNT,
@@ -19,7 +18,7 @@ import {
     TRACK_ANCHOR_Y,
 } from './HarvesterParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from './Options.ts';
-import { EngineType } from '../../../Config/vehicles.ts';
+import { HarvesterConfig } from '../../../Config/vehicles.ts';
 import { TurretSpeedConfig } from '../../../Config/weapons.ts';
 
 // Harvester colors - industrial/utility look
@@ -27,7 +26,6 @@ const TRACKS_COLOR = new Float32Array([0.4, 0.4, 0.4, 1]);
 const BARRIER_COLOR = new Float32Array([0.8, 0.6, 0.2, 1]); // Orange/yellow warning color
 const SCOOP_COLOR = new Float32Array([0.6, 0.5, 0.3, 1]);   // Rusty metal color
 const SHIELD_COLOR = new Float32Array([0.3, 0.7, 1.0, 0.6]); // Cyan semi-transparent energy shield
-const APPROXIMATE_COLLIDER_RADIUS = 85;
 
 export function createHarvester(opts: {
     playerId: number,
@@ -41,13 +39,12 @@ export function createHarvester(opts: {
     options.partsCount = PARTS_COUNT;
     options.size = SIZE;
     options.padding = PADDING;
-    options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
     options.vehicleType = VehicleType.Harvester;
-    options.engineType = EngineType.v12;
+    options.engineType = HarvesterConfig.engine;
     options.trackLength = caterpillarLength;
 
     // Heavy base for bulldozer
-    options.density = DENSITY * 16;
+    options.density = HarvesterConfig.density * 16;
     options.width = PADDING * 10;
     options.height = PADDING * 10;
     const [harvesterEid, harvesterPid] = createHarvesterBase(options);
@@ -66,7 +63,7 @@ export function createHarvester(opts: {
         harvesterPid,
     );
 
-    options.density = DENSITY * 2;
+    options.density = HarvesterConfig.density * 2;
     options.width = PADDING * 10;
     options.height = PADDING * 6;
     options.turret.rotationSpeed = TurretSpeedConfig.harvester; // Slower rotation for heavy barrier

@@ -1,6 +1,5 @@
 import { createHeadlightSet, createRectangleSet, PartsData } from '../Common/TankParts.ts';
 
-export const DENSITY = 250;
 export const SIZE = 5;
 export const PADDING = SIZE + 1;
 

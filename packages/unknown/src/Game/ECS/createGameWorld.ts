@@ -46,6 +46,7 @@ import { createDotableComponent } from './Components/Dotable.ts';
 import { createDotComponent } from './Components/Dot.ts';
 import { createSensorHitsComponent } from './Components/SensorHits.ts';
 import { createOriginalColorComponent } from './Components/OriginalColor.ts';
+import { createLightEmitterAnimationComponent } from './Components/LightEmitterAnimation.ts';
 import { createStreamFirearmsComponent } from './Components/StreamFirearms.ts';
 import { createTankComponent } from './Components/Tank.ts';
 import { createTeamRefComponent } from './Components/TeamRef.ts';
@@ -104,6 +105,7 @@ function createGameOnlyComponents(world: World) {
         Dot: createDotComponent(world),
         SensorHits: createSensorHitsComponent(world),
         OriginalColor: createOriginalColorComponent(world),
+        LightEmitterAnimation: createLightEmitterAnimationComponent(world),
         StreamFirearms: createStreamFirearmsComponent(world),
         Tank: createTankComponent(world),
         TeamRef: createTeamRefComponent(world),

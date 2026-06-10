@@ -21,7 +21,6 @@ import { mutatedOptions, resetOptions, updateColorOptions } from './Options.ts';
 
 // MeleeCar colors - aggressive sporty look
 const WHEEL_COLOR = new Float32Array([0.2, 0.2, 0.2, 1]);     // Dark rubber
-const APPROXIMATE_COLLIDER_RADIUS = 45;
 
 export function createMeleeCar(opts: {
     playerId: number,
@@ -35,7 +34,6 @@ export function createMeleeCar(opts: {
     options.partsCount = PARTS_COUNT;
     options.size = SIZE;
     options.padding = PADDING;
-    options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
     options.vehicleType = VehicleType.MeleeCar;
     options.engineType = EngineType.v8; // Fast v8 engine
     options.wheelBase = wheelBase;

@@ -64,11 +64,11 @@ export const createTranslucencyComponent = defineComponent((Translucency, obs) =
 });
 
 export const createLightEmitterComponent = defineComponent((LightEmitter, obs) => {
-    const intensity = TypedArray.f64(delegate.defaultSize);
     const radius = TypedArray.f64(delegate.defaultSize);
+    const intensity = TypedArray.f64(delegate.defaultSize);
     return {
-        intensity,
         radius,
+        intensity,
         addComponent(world: World, eid: number, i = 1, r = 0) {
             addComponent(world, eid, LightEmitter);
             intensity[eid] = i;

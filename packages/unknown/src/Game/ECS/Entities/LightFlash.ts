@@ -20,7 +20,7 @@ export interface LightFlashOptions {
 export function spawnLightFlash(options: LightFlashOptions, { world } = GameDI, { enabled } = RenderDI) {
     if (!enabled) return;
 
-    const { Shape, Color, LightEmitter, DestroyByTimeout } = getGameComponents(world);
+    const { Shape, Color, LightEmitter, LightEmitterAnimation, Progress, DestroyByTimeout } = getGameComponents(world);
     const eid = addEntity(world);
 
     addTransformComponents(world, eid);
@@ -29,5 +29,9 @@ export function spawnLightFlash(options: LightFlashOptions, { world } = GameDI, 
     Shape.addComponent(world, eid, ShapeKind.Circle, options.radius);
     Color.addComponent(world, eid, options.color[0], options.color[1], options.color[2], 0);
     LightEmitter.addComponent(world, eid, options.intensity);
+    // Animation track + Progress clock → createLightEmitterAnimationSystem decays
+    // the light to zero over `duration` instead of a hard cutoff at destroy time.
+    LightEmitterAnimation.addComponent(world, eid, options.intensity);
+    Progress.addComponent(world, eid, options.duration);
     DestroyByTimeout.addComponent(world, eid, options.duration);
 }

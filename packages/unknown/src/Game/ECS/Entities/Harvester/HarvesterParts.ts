@@ -1,7 +1,6 @@
 import { cos, floor, PI, sin } from '../../../../../../../lib/math.ts';
 import { createRectangleSet, PartsData } from '../Vehicle/VehicleParts.ts';
 
-export const DENSITY = 350;
 export const SIZE = 6;
 export const PADDING = SIZE + 1;
 

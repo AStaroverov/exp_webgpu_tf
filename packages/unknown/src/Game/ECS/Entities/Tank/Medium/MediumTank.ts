@@ -10,7 +10,6 @@ import {
     caterpillarLength,
     caterpillarSetLeft,
     caterpillarSetRight,
-    DENSITY,
     headlightSet,
     hullSet,
     PADDING,
@@ -20,11 +19,9 @@ import {
     turretGunSet,
     turretHeadSet,
 } from './MediumTankParts.ts';
-import { EngineType, HeadlightConfig } from '../../../../Config/vehicles.ts';
+import { HeadlightConfig, MediumTankConfig } from '../../../../Config/vehicles.ts';
 import { TurretSpeedConfig } from '../../../../Config/weapons.ts';
 import { randomVehiclePalette } from '../../../../Config/vehiclePalette.ts';
-
-const APPROXIMATE_COLLIDER_RADIUS = 60;
 
 export function createMediumTank(opts: {
     playerId: number,
@@ -38,12 +35,11 @@ export function createMediumTank(opts: {
     options.partsCount = PARTS_COUNT;
     options.size = SIZE;
     options.padding = PADDING;
-    options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
     options.vehicleType = VehicleType.MediumTank;
-    options.engineType = EngineType.v8;
+    options.engineType = MediumTankConfig.engine;
     options.trackLength = caterpillarLength;
 
-    options.density = DENSITY * 14;
+    options.density = MediumTankConfig.density * 14;
     options.width = PADDING * 11;
     options.height = PADDING * 7;
     const [tankEid, tankPid] = createTankBase(options);
@@ -62,7 +58,7 @@ export function createMediumTank(opts: {
         tankPid,
     );
 
-    options.density = DENSITY;
+    options.density = MediumTankConfig.density;
     options.width = PADDING * 6;
     options.height = PADDING * 5;
     options.turret.rotationSpeed = TurretSpeedConfig.medium;

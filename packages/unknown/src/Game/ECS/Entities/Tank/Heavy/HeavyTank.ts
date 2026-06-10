@@ -10,7 +10,6 @@ import {
     caterpillarLength,
     caterpillarSetLeft,
     caterpillarSetRight,
-    DENSITY,
     headlightSet,
     hullSet,
     PADDING,
@@ -20,11 +19,9 @@ import {
     turretGunSet,
     turretHeadSet,
 } from './HeavyTankParts.ts';
-import { EngineType, HeadlightConfig, } from '../../../../Config/vehicles.ts';
+import { HeadlightConfig, HeavyTankConfig } from '../../../../Config/vehicles.ts';
 import { TurretSpeedConfig } from '../../../../Config/weapons.ts';
 import { randomVehiclePalette } from '../../../../Config/vehiclePalette.ts';
-
-const APPROXIMATE_COLLIDER_RADIUS = 80;
 
 export function createHeavyTank(opts: {
     playerId: number,
@@ -38,12 +35,11 @@ export function createHeavyTank(opts: {
     options.partsCount = PARTS_COUNT;
     options.size = SIZE;
     options.padding = PADDING;
-    options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
     options.vehicleType = VehicleType.HeavyTank;
-    options.engineType = EngineType.v12;
+    options.engineType = HeavyTankConfig.engine;
     options.trackLength = caterpillarLength;
 
-    options.density = DENSITY * 14;
+    options.density = HeavyTankConfig.density * 14;
     options.width = PADDING * 12;
     options.height = PADDING * 8;
     const [tankEid, tankPid] = createTankBase(options);
@@ -62,7 +58,7 @@ export function createHeavyTank(opts: {
         tankPid,
     );
 
-    options.density = DENSITY;
+    options.density = HeavyTankConfig.density;
     options.width = PADDING * 7;
     options.height = PADDING * 6;
     options.turret.rotationSpeed = TurretSpeedConfig.heavy;

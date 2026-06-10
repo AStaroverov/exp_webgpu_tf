@@ -31,6 +31,7 @@ import { createDrawFaunaSystem } from './ECS/Systems/Render/Fauna/createDrawFaun
 import { createSandstormSystem } from './ECS/Systems/Render/PostEffect/Sandstorm/createSandstormSystem.ts';
 import { createDrawVFXSystem } from './ECS/Systems/Render/VFX/createDrawVFXSystem.ts';
 import { createTintSystem } from './ECS/Systems/Render/createTintSystem.ts';
+import { createLightEmitterAnimationSystem } from './ECS/Systems/Render/createLightEmitterAnimationSystem.ts';
 import { createPresent } from '../../../renderer/src/WGSL/createPresent.ts';
 import { createRadianceCascadesSystem } from './ECS/Systems/Render/Lighting/createRadianceCascadesSystem.ts';
 import { createVisualizationTracksSystem } from './ECS/Systems/Tank/createVisualizationTracksSystem.ts';
@@ -202,6 +203,7 @@ export function createGame({ width, height, cols, rows }: {
     const dotTick = createDotSystem();
     const slowedExpiry = createSlowedExpirySystem();
     const statusTint = createTintSystem();
+    const animateLightEmitters = createLightEmitterAnimationSystem();
 
     const updateGridOccupancy = createGridOccupancySystem();
 
@@ -246,6 +248,7 @@ export function createGame({ width, height, cols, rows }: {
         visTracksUpdate(delta);
         statusTint(delta); // render-only: status recolor after the statuses settle
         updateProgress(delta);
+        animateLightEmitters(); // render-only: decay light flashes from this frame's progress
         updateTreadMarks();
 
         updateCamera(delta);

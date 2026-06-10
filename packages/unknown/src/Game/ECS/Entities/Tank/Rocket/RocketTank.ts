@@ -13,7 +13,6 @@ import {
     caterpillarLength,
     caterpillarSetLeft,
     caterpillarSetRight,
-    DENSITY,
     headlightSet,
     HULL_ROWS,
     hullSet,
@@ -24,9 +23,7 @@ import {
     SIZE,
     TRACK_ANCHOR_Y,
 } from './RocketTankParts.ts';
-import { EngineType, HeadlightConfig, TurretSpeedConfig, randomVehiclePalette } from '../../../../Config/index.ts';
-
-const APPROXIMATE_COLLIDER_RADIUS = 80;
+import { HeadlightConfig, randomVehiclePalette, RocketTankConfig } from '../../../../Config/index.ts';
 
 export function createRocketTank(opts: {
     playerId: number,
@@ -43,13 +40,12 @@ export function createRocketTank(opts: {
     options.partsCount = PARTS_COUNT;
     options.size = SIZE;
     options.padding = PADDING;
-    options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
     options.vehicleType = VehicleType.RocketTank;
-    options.engineType = EngineType.v12;
+    options.engineType = RocketTankConfig.engine;
     options.trackLength = caterpillarLength;
 
     // Elongated hull — length (+X / forward) clearly exceeds width.
-    options.density = DENSITY * 14;
+    options.density = RocketTankConfig.density * 14;
     options.width = PADDING * 14;
     options.height = PADDING * HULL_ROWS;
     const [tankEid, tankPid] = createTankBase(options);
@@ -71,10 +67,9 @@ export function createRocketTank(opts: {
         tankPid,
     );
 
-    options.density = DENSITY;
+    options.density = RocketTankConfig.density;
     options.width = PADDING * 16;
     options.height = PADDING * HULL_ROWS;
-    options.turret.rotationSpeed = TurretSpeedConfig.rocket;
     options.turret.gunWidth = PADDING;
     options.turret.gunHeight = PADDING;
     options.firearms.bulletCaliber = BulletCaliber.Rocket;

@@ -9,7 +9,6 @@ import {
     caterpillarLength,
     caterpillarSetLeft,
     caterpillarSetRight,
-    DENSITY,
     headlightSet,
     hullSet,
     PADDING,
@@ -19,11 +18,9 @@ import {
     turretGunSet,
     turretHeadSet,
 } from './MediumTankParts.ts';
-import { EngineType, getTankConfig, HeadlightConfig } from '../../../../Config/vehicles.ts';
+import { getTankConfig, HeadlightConfig } from '../../../../Config/vehicles.ts';
 import { TurretSpeedConfig } from '../../../../Config/weapons.ts';
 import { randomVehiclePalette } from '../../../../Config/vehiclePalette.ts';
-
-const APPROXIMATE_COLLIDER_RADIUS = 60;
 
 /**
  * Stream-gun tank on the Medium chassis: same hull/tracks/turret geometry, but
@@ -39,19 +36,19 @@ export function createStreamTank(opts: {
     rotation: number,
     color: TColor,
 }) {
-    const stream = getTankConfig(opts.type).stream;
+    const config = getTankConfig(opts.type);
+    const stream = config.stream;
     if (stream === undefined) throw new Error(`Vehicle type ${opts.type} has no stream armament`);
 
     const options = resetOptions(mutatedOptions, opts);
     options.partsCount = PARTS_COUNT;
     options.size = SIZE;
     options.padding = PADDING;
-    options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
     options.vehicleType = opts.type;
-    options.engineType = EngineType.v8;
+    options.engineType = config.engine;
     options.trackLength = caterpillarLength;
 
-    options.density = DENSITY * 14;
+    options.density = config.density * 14;
     options.width = PADDING * 11;
     options.height = PADDING * 7;
     const [tankEid, tankPid] = createTankBase(options);
@@ -70,7 +67,7 @@ export function createStreamTank(opts: {
         tankPid,
     );
 
-    options.density = DENSITY;
+    options.density = config.density;
     options.width = PADDING * 6;
     options.height = PADDING * 5;
     options.turret.rotationSpeed = TurretSpeedConfig.medium;
