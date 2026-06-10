@@ -64,7 +64,42 @@ export function createTankTurret(
     tankPid: number,
     { world } = GameDI,
 ) {
-    const { Tank, Firearms } = getGameComponents(world);
+    const { Firearms } = getGameComponents(world);
+
+    const [turretEid, gunEid] = createTankTurretBase(options, tankEid, tankPid);
+
+    Firearms.addComponent(world, turretEid, options.firearms.bulletCaliber);
+
+    return [turretEid, gunEid] as const;
+}
+
+/**
+ * Turret armed with a stream weapon (flame / frost hose): `StreamFirearms`
+ * instead of `Firearms` — the spawners stay disjoint by component.
+ */
+export function createStreamTankTurret(
+    options: TankOptions,
+    tankEid: number,
+    tankPid: number,
+    caliber: number,
+    { world } = GameDI,
+) {
+    const { StreamFirearms } = getGameComponents(world);
+
+    const [turretEid, gunEid] = createTankTurretBase(options, tankEid, tankPid);
+
+    StreamFirearms.addComponent(world, turretEid, caliber);
+
+    return [turretEid, gunEid] as const;
+}
+
+function createTankTurretBase(
+    options: TankOptions,
+    tankEid: number,
+    tankPid: number,
+    { world } = GameDI,
+) {
+    const { Tank, SpawnDeltaPosition } = getGameComponents(world);
 
     const [turretEid, turretPid] = createVehicleTurret(
         options,
@@ -76,10 +111,7 @@ export function createTankTurret(
     const [gunEid] = createTankGun(options, turretEid, turretPid);
 
     Tank.setTurretEid(tankEid, turretEid);
-
-    Firearms.addComponent(world, turretEid);
-    Firearms.setData(turretEid, options.firearms.bulletStartPosition, options.firearms.bulletCaliber);
-    Firearms.setReloadingDuration(turretEid, options.firearms.reloadingDuration);
+    SpawnDeltaPosition.addComponent(world, turretEid, options.spawnDeltaPosition[0], options.spawnDeltaPosition[1]);
 
     return [turretEid, gunEid] as const;
 }

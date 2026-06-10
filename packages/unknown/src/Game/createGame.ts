@@ -15,16 +15,22 @@ import { SystemGroup } from './ECS/Plugins/systems.ts';
 import { createApplyRigidBodyToTransformSystem } from './ECS/Systems/createApplyRigidBodyToTransformSystem.ts';
 import { createAttachedTransformSystem } from './ECS/Systems/createAttachedTransformSystem.ts';
 import { createSpawnerBulletsSystem } from './ECS/Systems/createBulletSystem.ts';
+import { createStreamFirearmsSystem } from './ECS/Systems/createStreamFirearmsSystem.ts';
+import { createApplySensorHitsSystem } from './ECS/Systems/createApplySensorHitsSystem.ts';
+import { createDotSystem } from './ECS/Systems/createDotSystem.ts';
+import { createSlowedExpirySystem } from './ECS/Systems/createSlowedExpirySystem.ts';
 import { createDestroyByTimeoutSystem } from './ECS/Systems/createDestroyByTimeoutSystem.ts';
 import { createDestroyByDistanceSystem } from './ECS/Systems/createDestroyByDistanceSystem.ts';
 import { createDestroyOutOfZoneSystem } from './ECS/Systems/createDestroyOutOfZoneSystem.ts';
 import { createDestroySystem } from './ECS/Systems/createDestroySystem.ts';
 import { createExplodeSystem } from './ECS/Systems/createExplodeSystem.ts';
 import { createRigidBodyStateSystem } from './ECS/Systems/createRigidBodyStateSystem.ts';
+import { createWanderSystem } from './ECS/Systems/createWanderSystem.ts';
 import { createApplyImpulseSystem } from './ECS/Systems/createApplyImpulseSystem.ts';
 import { createDrawFaunaSystem } from './ECS/Systems/Render/Fauna/createDrawFaunaSystem.ts';
 import { createSandstormSystem } from './ECS/Systems/Render/PostEffect/Sandstorm/createSandstormSystem.ts';
 import { createDrawVFXSystem } from './ECS/Systems/Render/VFX/createDrawVFXSystem.ts';
+import { createTintSystem } from './ECS/Systems/Render/createTintSystem.ts';
 import { createPresent } from '../../../renderer/src/WGSL/createPresent.ts';
 import { createRadianceCascadesSystem } from './ECS/Systems/Render/Lighting/createRadianceCascadesSystem.ts';
 import { createVisualizationTracksSystem } from './ECS/Systems/Tank/createVisualizationTracksSystem.ts';
@@ -52,6 +58,9 @@ import { createDrawGridSystem } from './ECS/Systems/Render/Grid/createDrawGridSy
 import { createRunExecutors } from './ECS/Actions/registry.ts';
 import { createActionSchedulerSystem } from './ECS/Actions/systems/ActionScheduler.ts';
 import { createGridOccupancySystem } from './ECS/Systems/Map/createGridOccupancySystem.ts';
+import { CONTACT_FORCE_TARGET } from './Config/index.ts';
+import { min } from '../../../../lib/math.ts';
+import { DamageKind } from './ECS/Components/Damagable.ts';
 
 export type Game = ReturnType<typeof createGame>;
 
@@ -63,7 +72,7 @@ export function createGame({ width, height, cols, rows }: {
 }) {
     const world = createGameWorld();
     const physicalWorld = initPhysicalWorld();
-    const { Children, Hitable, RigidBodyRef } = getGameComponents(world);
+    const { Children, Hitable, Damagable, RigidBodyRef, SensorHits } = getGameComponents(world);
 
     GameDI.width = width;
     GameDI.height = height;
@@ -98,6 +107,7 @@ export function createGame({ width, height, cols, rows }: {
     const updateAttachedTransforms = createAttachedTransformSystem();
     const applyImpulses = createApplyImpulseSystem();
     const applyJointMotors = createJointMotorSystem();
+    const applyWander = createWanderSystem();
 
     const eventQueue = new EventQueue(true);
 
@@ -109,6 +119,7 @@ export function createGame({ width, height, cols, rows }: {
         execTransformSystem();
         applyImpulses();
         applyJointMotors(delta);
+        applyWander(delta);
         physicalWorld.step(eventQueue);
         syncRigidBodyState();
         applyRigidBodyDeltaToLocalTransform();
@@ -124,23 +135,44 @@ export function createGame({ width, height, cols, rows }: {
 
             if (eid1 == null || eid2 == null) return;
 
-            const forceMagnitude = event.totalForceMagnitude();
+            // hit$ carries FINAL damage: contact saturation coeff × the source's Damagable.
+            const forceCoeff = min(1, event.totalForceMagnitude() / CONTACT_FORCE_TARGET);
 
             if (hasComponent(world, eid1, Hitable)) {
-                Hitable.hit$(eid1, eid2, forceMagnitude);
+                Hitable.hit$(eid1, eid2, hasComponent(world, eid2, Damagable) ? forceCoeff * Damagable.damage[eid2] : 0, DamageKind.Physical);
             }
             if (hasComponent(world, eid2, Hitable)) {
-                Hitable.hit$(eid2, eid1, forceMagnitude);
+                Hitable.hit$(eid2, eid1, hasComponent(world, eid1, Damagable) ? forceCoeff * Damagable.damage[eid1] : 0, DamageKind.Physical);
+            }
+        });
+
+        eventQueue.drainCollisionEvents((handle1, handle2, started) => {
+            if (!started) return; // only entry overlaps
+
+            const rb1 = physicalWorld.getCollider(handle1).parent();
+            const rb2 = physicalWorld.getCollider(handle2).parent();
+            const eid1 = rb1 && getEntityIdByPhysicalId(rb1.handle);
+            const eid2 = rb2 && getEntityIdByPhysicalId(rb2.handle);
+
+            if (eid1 == null || eid2 == null) return;
+
+            if (hasComponent(world, eid1, SensorHits)) {
+                SensorHits.hit$(eid1, eid2);
+            }
+            if (hasComponent(world, eid2, SensorHits)) {
+                SensorHits.hit$(eid2, eid1);
             }
         });
     };
 
     const spawnBullets = createSpawnerBulletsSystem();
+    const streamEmit = createStreamFirearmsSystem();
     const spawnTreadMarks = createSpawnTreadMarksSystem();
     const spawnWheelTreadMarks = createSpawnWheelTreadMarksSystem();
     const spawnExhaustSmoke = createExhaustSmokeSpawnSystem();
     const spawnFrame = (delta: number) => {
         spawnBullets(delta);
+        streamEmit(delta);
         spawnTreadMarks(delta);
         spawnWheelTreadMarks(delta);
         spawnExhaustSmoke(delta);
@@ -166,6 +198,10 @@ export function createGame({ width, height, cols, rows }: {
     const updateHitableSystem = createHitableSystem();
     const updateTankAliveSystem = createTankAliveSystem();
     const regenerateShields = createShieldRegenerationSystem();
+    const applySensorHits = createApplySensorHitsSystem();
+    const dotTick = createDotSystem();
+    const slowedExpiry = createSlowedExpirySystem();
+    const statusTint = createTintSystem();
 
     const updateGridOccupancy = createGridOccupancySystem();
 
@@ -197,13 +233,18 @@ export function createGame({ width, height, cols, rows }: {
 
         updateActions(delta);
 
+        applySensorHits(); // drain the projectiles' overlap rings, hit + stamp Dots before hitable
+
         GameDI.plugins.systems[SystemGroup.Before].forEach(system => system(delta));
 
         updateHitableSystem(delta);
         updateTankAliveSystem();
         regenerateShields(delta);
+        dotTick(delta);
+        slowedExpiry(delta);
 
         visTracksUpdate(delta);
+        statusTint(delta); // render-only: status recolor after the statuses settle
         updateProgress(delta);
         updateTreadMarks();
 

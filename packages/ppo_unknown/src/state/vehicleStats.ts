@@ -79,11 +79,21 @@ function computeStats(type: VehicleType): VehicleStats {
     };
 }
 
-/** Precomputed normalized stats per gun-tank `VehicleType` (computed once at module load). */
-const STATS: readonly VehicleStats[] = Array.from(
-    { length: 3 },
-    (_, t) => computeStats(t as VehicleType),
-);
+/** Every spawnable tank type (gun and stream; non-tank types have no stats row). */
+const TANK_STAT_TYPES = [
+    VehicleType.LightTank,
+    VehicleType.MediumTank,
+    VehicleType.HeavyTank,
+    VehicleType.RocketTank,
+    VehicleType.FlameTank,
+    VehicleType.FrostTank,
+];
+
+/** Precomputed normalized stats per tank `VehicleType` (computed once at module load). */
+const STATS: readonly VehicleStats[] = TANK_STAT_TYPES.reduce<VehicleStats[]>((acc, t) => {
+    acc[t] = computeStats(t);
+    return acc;
+}, []);
 
 /** Normalized observation stats for a vehicle type. Single source of truth. */
 export function getVehicleStats(type: VehicleType): VehicleStats {

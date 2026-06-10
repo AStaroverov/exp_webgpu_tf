@@ -8,6 +8,8 @@ export const VFXType = {
     Explosion: 1,
     HitFlash: 2,
     MuzzleFlash: 3,
+    Flame: 4,
+    Frost: 5,
 } as const;
 
 export type VFXTypeValue = (typeof VFXType)[keyof typeof VFXType];

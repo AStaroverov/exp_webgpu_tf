@@ -23,7 +23,7 @@ import {
     turretHeadSet,
 } from './LightTankParts.ts';
 import { EngineType, HeadlightConfig } from '../../../../Config/vehicles.ts';
-import { BulletCaliberConfig, TurretSpeedConfig } from '../../../../Config/weapons.ts';
+import { TurretSpeedConfig } from '../../../../Config/weapons.ts';
 import { randomVehiclePalette } from '../../../../Config/vehiclePalette.ts';
 
 const APPROXIMATE_COLLIDER_RADIUS = 50;
@@ -71,8 +71,7 @@ export function createLightTank(opts: {
     options.turret.gunWidth = PADDING * 6;
     options.turret.gunHeight = PADDING * 2;
     options.firearms.bulletCaliber = BulletCaliber.Light;
-    options.firearms.reloadingDuration = BulletCaliberConfig[BulletCaliber.Light].reloadTime;
-    options.firearms.bulletStartPosition = [9 * PADDING, 0];
+    options.spawnDeltaPosition = [9 * PADDING, 0];
     const [turretEid, gunEid] = createTankTurret(options, tankEid, tankPid);
 
     // Body uses a random contrastive palette; the gun carries the team color.

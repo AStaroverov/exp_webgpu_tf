@@ -21,7 +21,7 @@ import {
     turretHeadSet,
 } from './HeavyTankParts.ts';
 import { EngineType, HeadlightConfig, } from '../../../../Config/vehicles.ts';
-import { BulletCaliberConfig, TurretSpeedConfig } from '../../../../Config/weapons.ts';
+import { TurretSpeedConfig } from '../../../../Config/weapons.ts';
 import { randomVehiclePalette } from '../../../../Config/vehiclePalette.ts';
 
 const APPROXIMATE_COLLIDER_RADIUS = 80;
@@ -69,8 +69,7 @@ export function createHeavyTank(opts: {
     options.turret.gunWidth = PADDING * 7;
     options.turret.gunHeight = PADDING * 2;
     options.firearms.bulletCaliber = BulletCaliber.Heavy;
-    options.firearms.reloadingDuration = BulletCaliberConfig[BulletCaliber.Heavy].reloadTime;
-    options.firearms.bulletStartPosition = [13 * PADDING, 0];
+    options.spawnDeltaPosition = [13 * PADDING, 0];
     const [turretEid, gunEid] = createTankTurret(options, tankEid, tankPid);
 
     // Body uses a random contrastive palette; the gun carries the team color.

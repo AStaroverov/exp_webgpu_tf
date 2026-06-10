@@ -3,6 +3,8 @@ import { createRenderComponents, RenderComponents } from '../../../../renderer/s
 
 import { createActionsQueueComponent } from './Components/ActionsQueue.ts';
 import { createBulletComponent } from './Components/Bullet.ts';
+
+import { createSlowedComponent } from './Components/Slowed.ts';
 import { createChildrenComponent } from './Components/Children.ts';
 import { createDamagableComponent } from './Components/Damagable.ts';
 import {
@@ -14,6 +16,7 @@ import { createExhaustPipeComponent } from './Components/ExhaustPipe.ts';
 import { createExplodableComponent } from './Components/Explodable.ts';
 import { createHullAimedComponent } from './Components/HullAimed.ts';
 import { createFirearmsComponent } from './Components/Firearms.ts';
+import { createSpawnDeltaPositionComponent } from './Components/SpawnDeltaPosition.ts';
 import { createHeuristicsDataComponent } from './Components/HeuristicsData.ts';
 import { createHitableComponent } from './Components/Hitable.ts';
 import {
@@ -39,6 +42,11 @@ import {
     createDestroyOnSoundFinishComponent,
     createSoundParentRelativeComponent,
 } from './Components/Sound.ts';
+import { createDotableComponent } from './Components/Dotable.ts';
+import { createDotComponent } from './Components/Dot.ts';
+import { createSensorHitsComponent } from './Components/SensorHits.ts';
+import { createOriginalColorComponent } from './Components/OriginalColor.ts';
+import { createStreamFirearmsComponent } from './Components/StreamFirearms.ts';
 import { createTankComponent } from './Components/Tank.ts';
 import { createTeamRefComponent } from './Components/TeamRef.ts';
 import { createTrackComponent } from './Components/Track.ts';
@@ -52,6 +60,7 @@ import {
     createVehiclePartCaterpillarComponent,
 } from './Components/VehiclePart.ts';
 import { createVehicleTurretComponent } from './Components/VehicleTurret.ts';
+import { createWanderComponent } from './Components/Wander.ts';
 import {
     createWheelComponent,
     createWheelDriveComponent,
@@ -63,6 +72,7 @@ function createGameOnlyComponents(world: World) {
         ActionsQueue: createActionsQueueComponent(world),
         Bullet: createBulletComponent(world),
         Children: createChildrenComponent(world),
+        Slowed: createSlowedComponent(world),
         Damagable: createDamagableComponent(world),
         Destroy: createDestroyComponent(world),
         DestroyByDistance: createDestroyByDistanceComponent(world),
@@ -71,6 +81,7 @@ function createGameOnlyComponents(world: World) {
         ExhaustPipe: createExhaustPipeComponent(world),
         Explodable: createExplodableComponent(world),
         Firearms: createFirearmsComponent(world),
+        SpawnDeltaPosition: createSpawnDeltaPositionComponent(world),
         HeuristicsData: createHeuristicsDataComponent(world),
         HullAimed: createHullAimedComponent(world),
         Hitable: createHitableComponent(world),
@@ -89,6 +100,11 @@ function createGameOnlyComponents(world: World) {
         Slot: createSlotComponent(world),
         Sound: createSoundComponent(world),
         SoundParentRelative: createSoundParentRelativeComponent(world),
+        Dotable: createDotableComponent(world),
+        Dot: createDotComponent(world),
+        SensorHits: createSensorHitsComponent(world),
+        OriginalColor: createOriginalColorComponent(world),
+        StreamFirearms: createStreamFirearmsComponent(world),
         Tank: createTankComponent(world),
         TeamRef: createTeamRefComponent(world),
         TorqueImpulse: createTorqueImpulseComponent(world),
@@ -101,6 +117,7 @@ function createGameOnlyComponents(world: World) {
         VehiclePart: createVehiclePartComponent(world),
         VehiclePartCaterpillar: createVehiclePartCaterpillarComponent(world),
         VehicleTurret: createVehicleTurretComponent(world),
+        Wander: createWanderComponent(world),
         Wheel: createWheelComponent(world),
         WheelDrive: createWheelDriveComponent(world),
         WheelSteerable: createWheelSteerableComponent(world),

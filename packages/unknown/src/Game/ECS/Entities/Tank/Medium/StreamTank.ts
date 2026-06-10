@@ -1,34 +1,37 @@
 import { TColor } from '../../../../../../../renderer/src/ECS/Components/Common.ts';
-import { BulletCaliber } from '../../../Components/Bullet.ts';
 import { SlotPartType } from '../../../Components/SlotConfig.ts';
 import { VehicleType } from '../../../Components/Vehicle.ts';
-import { getGameComponents } from '../../../createGameWorld.ts';
-import { GameDI } from '../../../../DI/GameDI.ts';
 import { createSlotEntities, fillAllSlots, updateSlotsBrightness } from '../../Vehicle/VehicleParts.ts';
 import { mutatedOptions, resetOptions, updateColorOptions } from '../Common/Options.ts';
-import { createTankBase, createTankTracks, createTankTurret } from '../Common/Tank.ts';
+import { createStreamTankTurret, createTankBase, createTankTracks } from '../Common/Tank.ts';
 import { createTankExhaustPipes } from '../../ExhaustPipe.ts';
 import {
-    cabinSet,
     caterpillarLength,
     caterpillarSetLeft,
     caterpillarSetRight,
     DENSITY,
     headlightSet,
-    HULL_ROWS,
     hullSet,
     PADDING,
     PARTS_COUNT,
-    railSet,
-    RAIL_Y,
     SIZE,
     TRACK_ANCHOR_Y,
-} from './RocketTankParts.ts';
-import { EngineType, HeadlightConfig, TurretSpeedConfig, randomVehiclePalette } from '../../../../Config/index.ts';
+    turretGunSet,
+    turretHeadSet,
+} from './MediumTankParts.ts';
+import { EngineType, getTankConfig, HeadlightConfig } from '../../../../Config/vehicles.ts';
+import { TurretSpeedConfig } from '../../../../Config/weapons.ts';
+import { randomVehiclePalette } from '../../../../Config/vehiclePalette.ts';
 
-const APPROXIMATE_COLLIDER_RADIUS = 80;
+const APPROXIMATE_COLLIDER_RADIUS = 60;
 
-export function createRocketTank(opts: {
+/**
+ * Stream-gun tank on the Medium chassis: same hull/tracks/turret geometry, but
+ * the turret mounts a `StreamFirearms` (flame / frost hose) instead of
+ * `Firearms`. The stream caliber comes from the vehicle type's config row.
+ */
+export function createStreamTank(opts: {
+    type: typeof VehicleType.FlameTank | typeof VehicleType.FrostTank,
     playerId: number,
     teamId: number,
     x: number,
@@ -36,26 +39,22 @@ export function createRocketTank(opts: {
     rotation: number,
     color: TColor,
 }) {
-    const { world } = GameDI;
-    const { HullAimed } = getGameComponents(world);
+    const stream = getTankConfig(opts.type).stream;
+    if (stream === undefined) throw new Error(`Vehicle type ${opts.type} has no stream armament`);
 
     const options = resetOptions(mutatedOptions, opts);
     options.partsCount = PARTS_COUNT;
     options.size = SIZE;
     options.padding = PADDING;
     options.approximateColliderRadius = APPROXIMATE_COLLIDER_RADIUS;
-    options.vehicleType = VehicleType.RocketTank;
-    options.engineType = EngineType.v12;
+    options.vehicleType = opts.type;
+    options.engineType = EngineType.v8;
     options.trackLength = caterpillarLength;
 
-    // Elongated hull — length (+X / forward) clearly exceeds width.
     options.density = DENSITY * 14;
-    options.width = PADDING * 14;
-    options.height = PADDING * HULL_ROWS;
+    options.width = PADDING * 11;
+    options.height = PADDING * 7;
     const [tankEid, tankPid] = createTankBase(options);
-
-    // The launcher is bolted to the hull, so the whole vehicle turns to aim.
-    HullAimed.addComponent(world, tankEid);
 
     // Create left and right tracks as independent entities
     const [leftTrackEid, rightTrackEid] = createTankTracks(
@@ -72,16 +71,18 @@ export function createRocketTank(opts: {
     );
 
     options.density = DENSITY;
-    options.width = PADDING * 16;
-    options.height = PADDING * HULL_ROWS;
-    options.turret.rotationSpeed = TurretSpeedConfig.rocket;
-    options.turret.gunWidth = PADDING;
-    options.turret.gunHeight = PADDING;
-    options.firearms.bulletCaliber = BulletCaliber.Rocket;
-    options.spawnDeltaPosition = [PADDING * 10, RAIL_Y];
-    const [turretEid] = createTankTurret(options, tankEid, tankPid);
+    options.width = PADDING * 6;
+    options.height = PADDING * 5;
+    options.turret.rotationSpeed = TurretSpeedConfig.medium;
+    options.turret.gunWidth = PADDING * 6;
+    options.turret.gunHeight = PADDING * 2;
+    options.spawnDeltaPosition = [11 * PADDING, 0];
+    const [turretEid, gunEid] = createStreamTankTurret(options, tankEid, tankPid, stream.caliber);
 
-    // Body uses a random contrastive palette; the launch rail (weapon) = team color.
+    // Add exhaust pipes
+    createTankExhaustPipes(tankEid, PADDING * 11, PADDING * 7);
+
+    // Body uses a random contrastive palette; the gun carries the team color.
     const palette = randomVehiclePalette();
 
     // Hull parts attached to tank body
@@ -94,12 +95,10 @@ export function createRocketTank(opts: {
     createSlotEntities(leftTrackEid, caterpillarSetLeft, options.color, SlotPartType.Caterpillar);
     createSlotEntities(rightTrackEid, caterpillarSetRight, options.color, SlotPartType.Caterpillar);
 
-    // Launch rail (orudie) = team color; pilot cabin from the palette — both
-    // bolted to the (fixed) launcher carrier.
+    // Turret + gun (orudie) = team color.
     updateColorOptions(options, opts.color);
-    createSlotEntities(turretEid, railSet, options.color, SlotPartType.TurretGun);
-    updateColorOptions(options, palette.turret);
-    createSlotEntities(turretEid, cabinSet, options.color, SlotPartType.TurretHead);
+    createSlotEntities(gunEid, turretGunSet, options.color, SlotPartType.TurretGun);
+    createSlotEntities(turretEid, turretHeadSet, options.color, SlotPartType.TurretHead);
 
     // Fill all slots with physical parts
     updateSlotsBrightness(tankEid);
@@ -110,9 +109,8 @@ export function createRocketTank(opts: {
     fillAllSlots(rightTrackEid, options);
     updateSlotsBrightness(turretEid);
     fillAllSlots(turretEid, options);
-
-    // Add exhaust pipes
-    createTankExhaustPipes(tankEid, PADDING * 14, PADDING * HULL_ROWS);
+    updateSlotsBrightness(gunEid);
+    fillAllSlots(gunEid, options);
 
     return tankEid;
 }

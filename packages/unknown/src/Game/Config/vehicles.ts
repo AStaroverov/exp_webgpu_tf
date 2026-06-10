@@ -6,7 +6,7 @@
  */
 
 import { PI } from '../../../../../lib/math.ts';
-import { BulletCaliber, TurretSpeedConfig } from './weapons.ts';
+import { BulletCaliber, StreamCaliber, TurretSpeedConfig } from './weapons.ts';
 
 
 /**
@@ -19,6 +19,8 @@ export enum VehicleType {
     RocketTank = 3,  // Heavy chassis mounting a slow-reload rocket launcher
     Harvester = 4,   // Bulldozer with barrier and scoop for collecting debris
     MeleeCar = 5,    // Fast 4-wheeled car for ramming
+    FlameTank = 6,   // Medium chassis mounting the flamethrower stream gun
+    FrostTank = 7,   // Medium chassis mounting the freeze stream gun
 }
 
 /**
@@ -113,7 +115,13 @@ export type GunStats = {
     bulletOffsetYMult: number;
 };
 
-export type TankStats = VehicleStats & { gun?: GunStats };
+/** Stream armament — present ONLY on stream-gun vehicles (flame / frost hose). */
+export type StreamStats = {
+    /** Row of `StreamCaliberConfig` the turret's `StreamFirearms` points at */
+    caliber: StreamCaliber;
+};
+
+export type TankStats = VehicleStats & { gun?: GunStats; stream?: StreamStats };
 
 /**
  * Light Tank Configuration
@@ -360,6 +368,25 @@ export const MeleeCarConfig: MeleeCarStats = {
 };
 
 /**
+ * Stream tanks: the Medium chassis with the gun swapped for a stream weapon
+ * (`StreamFirearms` on the turret instead of `Firearms`), parameterized by the
+ * stream caliber.
+ */
+const { gun: _mediumGun, ...MediumChassis } = MediumTankConfig;
+
+export const FlameTankConfig: TankStats = {
+    ...MediumChassis,
+    type: VehicleType.FlameTank,
+    stream: { caliber: StreamCaliber.Flamethrower },
+};
+
+export const FrostTankConfig: TankStats = {
+    ...MediumChassis,
+    type: VehicleType.FrostTank,
+    stream: { caliber: StreamCaliber.FreezeGun },
+};
+
+/**
  * Get tank configuration by vehicle type.
  * Returns undefined for non-tank vehicles.
  */
@@ -373,6 +400,10 @@ export function getTankConfig(type: VehicleType): TankStats {
             return HeavyTankConfig;
         case VehicleType.RocketTank:
             return RocketTankConfig;
+        case VehicleType.FlameTank:
+            return FlameTankConfig;
+        case VehicleType.FrostTank:
+            return FrostTankConfig;
         default:
             throw new Error(`Unknown vehicle type ${type}`)
     }

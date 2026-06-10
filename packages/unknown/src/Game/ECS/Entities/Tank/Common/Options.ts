@@ -11,6 +11,9 @@ import {
 export const tankOptions = {
     trackLength: 0,
 
+    /** Projectile spawn offset (gun tip) in the turret's local space. */
+    spawnDeltaPosition: [0, 0] as number[],
+
     turret: {
         rotationSpeed: 0,
         gunWidth: 0,
@@ -18,8 +21,6 @@ export const tankOptions = {
     },
 
     firearms: {
-        reloadingDuration: 0,
-        bulletStartPosition: [0, 0] as number[],
         bulletCaliber: BulletCaliber.Light,
     },
 };
@@ -38,11 +39,10 @@ export const resetOptions = (target: TankOptions, source?: Partial<VehicleCreati
     resetVehicleOptions(target, source);
 
     target.trackLength = defaultTankOptions.trackLength;
+    target.spawnDeltaPosition = defaultTankOptions.spawnDeltaPosition;
     target.turret.rotationSpeed = defaultTankOptions.turret.rotationSpeed;
     target.turret.gunWidth = defaultTankOptions.turret.gunWidth;
     target.turret.gunHeight = defaultTankOptions.turret.gunHeight;
-    target.firearms.reloadingDuration = defaultTankOptions.firearms.reloadingDuration;
-    target.firearms.bulletStartPosition = defaultTankOptions.firearms.bulletStartPosition;
     target.firearms.bulletCaliber = defaultTankOptions.firearms.bulletCaliber;
 
     return target;

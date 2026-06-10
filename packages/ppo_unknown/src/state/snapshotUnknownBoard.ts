@@ -30,13 +30,16 @@
  * `UnknownInputBoard.addComponent(world, tankEid)`).
  */
 
-import { query } from 'bitecs';
+import { hasComponent, query } from 'bitecs';
 import { GameDI } from '../../../unknown/src/Game/DI/GameDI.ts';
 import { MapDI } from '../../../unknown/src/Game/DI/MapDI.ts';
 import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld.ts';
 import { HexGridConfig } from '../../../unknown/src/Game/Map/HexConfig.ts';
 import { OccupantKind, type HexGrid } from '../../../unknown/src/Game/Map/HexGrid.ts';
 import { getTankHealth } from '../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts';
+import { getSlotFillerEid, isSlot, isSlotEmpty } from '../../../unknown/src/Game/ECS/Utils/SlotUtils.ts';
+import { DamageKind } from '../../../unknown/src/Game/ECS/Components/Damagable.ts';
+import { StreamCaliberConfig } from '../../../unknown/src/Game/Config/weapons.ts';
 import {
     BOARD_COLS,
     BOARD_ROWS,
@@ -52,6 +55,13 @@ import { needsDecision } from '../../../unknown/src/Game/ECS/Actions/ActionSched
 
 type GameComponents = ReturnType<typeof getGameComponents>;
 
+/**
+ * Per-part dot-dps normalizer: the flamethrower's dps (the strongest DoT),
+ * straight from the config so it tracks tuning.
+ */
+const DOT_DPS_NORM = StreamCaliberConfig
+    .find((c) => c.kind === DamageKind.Fire)!.dot.dps;
+
 /** Enemies in the world this tick: parallel arrays of real hex + heat weight (1). */
 type KnownEnemies = { q: number[]; r: number[]; w: number[] };
 
@@ -63,15 +73,20 @@ type SnapshotCtx = {
     myTeamId: number;
     grid: HexGrid;
     enemies: KnownEnemies;
+    world: (typeof GameDI)['world'];
     Vehicle: GameComponents['Vehicle'];
     TeamRef: GameComponents['TeamRef'];
+    Tank: GameComponents['Tank'];
+    Children: GameComponents['Children'];
+    Dot: GameComponents['Dot'];
+    Slowed: GameComponents['Slowed'];
 };
 
 export function snapshotUnknownBoard({ world } = GameDI) {
     const grid = MapDI.grid;
     if (!grid) return;
 
-    const { Tank, Vehicle, TeamRef } = getGameComponents(world);
+    const { Tank, Vehicle, TeamRef, Children, Dot, Slowed } = getGameComponents(world);
     const observers = query(world, [Vehicle, Tank, UnknownInputBoard]);
 
     for (let i = 0; i < observers.length; i++) {
@@ -91,8 +106,13 @@ export function snapshotUnknownBoard({ world } = GameDI) {
             selfR: field.selfR,
             myTeamId,
             enemies: field.enemies,
+            world,
             Vehicle,
             TeamRef,
+            Tank,
+            Children,
+            Dot,
+            Slowed,
         };
         fillWindow(ctx);
 
@@ -206,15 +226,56 @@ function writeReserved(ctx: SnapshotCtx, dq: number, dr: number, _reserverEid: n
 
 /** Unit cell → Self/Ally/Enemy plane + hp + stats. */
 function writeUnit(ctx: SnapshotCtx, dq: number, dr: number, unitEid: number) {
-    const { selfEid, myTeamId: myTeam } = ctx;
-    const isSelf = unitEid === selfEid;
-    const isAlly = ctx.TeamRef.id[unitEid] === myTeam;
+    const plane = unitEid === ctx.selfEid ? BoardChannel.Self
+        : ctx.TeamRef.id[unitEid] === ctx.myTeamId ? BoardChannel.Ally
+            : BoardChannel.Enemy;
 
-    const plane = isSelf ? BoardChannel.Self : isAlly ? BoardChannel.Ally : BoardChannel.Enemy;
+    UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, plane, 1);
+    UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.Hp, getTankHealth(unitEid));
+    writeStats(ctx.selfEid, dq, dr, unitEid, ctx.Vehicle);
+    writeDamageStatuses(ctx, dq, dr, unitEid);
+}
 
-    UnknownInputBoard.setDelta(selfEid, dq, dr, plane, 1);
-    UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.Hp, getTankHealth(unitEid));
-    writeStats(selfEid, dq, dr, unitEid, ctx.Vehicle);
+/** Reused per-unit dot accumulator (no alloc in the cell writers). */
+const dotAcc = { alive: 0, dps: 0 };
+
+/**
+ * Damage-status channels of the unit on cell (dq, dr): per-part `Dot` aggregated
+ * up to the vehicle as one scalar (summed dps over the max possible), and the
+ * vehicle-level slow multiplier (dense default `1` = not slowed, full speed).
+ */
+function writeDamageStatuses(ctx: SnapshotCtx, dq: number, dr: number, unitEid: number) {
+    const { selfEid, world, Tank, Slowed } = ctx;
+
+    dotAcc.alive = 0;
+    dotAcc.dps = 0;
+    // The same part set getTankHealth counts: hull slots + turret slots.
+    scanDotParts(ctx, unitEid);
+    scanDotParts(ctx, Tank.turretEId[unitEid]);
+
+    if (dotAcc.alive > 0 && dotAcc.dps > 0) {
+        UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.Dot,
+            Math.min(1, dotAcc.dps / (DOT_DPS_NORM * dotAcc.alive)));
+    }
+
+    const slowed = hasComponent(world, unitEid, Slowed);
+    UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.SlowMul, slowed ? Slowed.slowMul[unitEid] : 1);
+}
+
+/** Accumulate the alive part count + summed dot dps over one parent's filled slots into `dotAcc`. */
+function scanDotParts(ctx: SnapshotCtx, parentEid: number) {
+    const { world, Children, Dot } = ctx;
+    const childCount = Children.entitiesCount[parentEid];
+    for (let i = 0; i < childCount; i++) {
+        const slotEid = Children.entitiesIds.get(parentEid, i);
+        if (!isSlot(slotEid) || isSlotEmpty(slotEid)) continue;
+        const partEid = getSlotFillerEid(slotEid);
+        if (partEid === 0) continue;
+        dotAcc.alive++;
+        if (hasComponent(world, partEid, Dot)) {
+            dotAcc.dps += Dot.dps[partEid];
+        }
+    }
 }
 
 /**

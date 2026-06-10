@@ -23,6 +23,7 @@ export enum ActionKind {
     Aim = 1,
     Fire = 2,
     Hold = 3,
+    FireStream = 4,
 }
 
 // ── Target addressing — discriminated union over TargetKind ──────────────────

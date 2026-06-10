@@ -10,6 +10,7 @@
  * list `Hold | move dir 0..5 | fire dir 0..5` (see consts.ts layout).
  */
 
+import { hasComponent } from 'bitecs';
 import { GameDI } from '../../../unknown/src/Game/DI/GameDI.ts';
 import { MapDI } from '../../../unknown/src/Game/DI/MapDI.ts';
 import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld.ts';
@@ -41,7 +42,7 @@ export function applyActionToGame(eid: number, actions: Float32Array, { world } 
     const grid = MapDI.grid;
     if (!grid) return;
 
-    const { RigidBodyState } = getGameComponents(world);
+    const { RigidBodyState, Tank, StreamFirearms } = getGameComponents(world);
     const px = RigidBodyState.position.get(eid, 0);
     const py = RigidBodyState.position.get(eid, 1);
     const here = grid.worldToHex(px, py);
@@ -70,6 +71,15 @@ export function applyActionToGame(eid: number, actions: Float32Array, { world } 
     // direction-stable (NOT the compacted neighbors), matching computeActionMask.
     const target = grid.neighborAt(here, action - FIRE_ACTION_OFFSET);
     if (!target) return; // off-grid direction → no-op (defensive)
+    // Stream-weapon turrets (StreamFirearms, no Firearms) hold a spray instead of
+    // firing a round — presence of the component IS the weapon kind, no enum branch.
+    if (hasComponent(world, Tank.turretEId[eid], StreamFirearms)) {
+        enqueueAction(eid, {
+            kind: ActionKind.FireStream,
+            target: { kind: TargetKind.Hex, q: target.q, r: target.r },
+        });
+        return;
+    }
     enqueueAction(eid, {
         kind: ActionKind.Fire,
         target: { kind: TargetKind.Hex, q: target.q, r: target.r },

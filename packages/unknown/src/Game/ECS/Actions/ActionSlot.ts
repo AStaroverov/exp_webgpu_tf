@@ -43,7 +43,18 @@ export const HoldParamOffset = {
     elapsed: 1,
 } as const;
 
+export const FireStreamParamOffset = {
+    /** Stream phase: 0 = aiming, 1 = holding. */
+    phase: 0,
+    /** Accumulated hold time (ms). */
+    elapsed: 1,
+} as const;
+
 /** Fire phases (stored in the `phase` param): aim the turret, wait for reload, fire. */
 export const FIRE_PHASE_AIMING = 0;
 export const FIRE_PHASE_WAIT_READY = 1;
 export const FIRE_PHASE_FIRING = 2;
+
+/** FireStream phases (stored in the `phase` param): aim the turret, hold the spray window. */
+export const FIRE_STREAM_PHASE_AIMING = 0;
+export const FIRE_STREAM_PHASE_HOLDING = 1;

@@ -95,11 +95,11 @@ const tmpMatrix = mat4.create();
 const tmpPosition = vec3.create() as Float32Array;
 
 export function spawnBullet(vehicleEid: number, { world } = GameDI) {
-    const { Tank, Firearms, TeamRef, PlayerRef, Color } = getGameComponents(world);
+    const { Tank, Firearms, SpawnDeltaPosition, TeamRef, PlayerRef, Color } = getGameComponents(world);
 
     const turretEid = Tank.turretEId[vehicleEid];
     const globalTransform = GlobalTransform.matrix.getBatch(turretEid);
-    const bulletPosition = Firearms.bulletStartPosition.getBatch(turretEid);
+    const bulletPosition = SpawnDeltaPosition.position.getBatch(turretEid);
     const bulletCaliber = mapBulletCaliber[Firearms.caliber[turretEid] as BulletCaliber];
 
     tmpPosition.set(bulletPosition);

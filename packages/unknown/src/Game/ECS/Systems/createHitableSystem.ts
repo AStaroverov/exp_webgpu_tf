@@ -10,10 +10,12 @@ import {
     getMatrixTranslationY,
     GlobalTransform,
 } from '../../../../../renderer/src/ECS/Components/Transform.ts';
-import { clamp } from 'lodash';
 import { SoundType } from '../Components/Sound.ts';
 import { spawnSoundAtParent } from '../Entities/Sound.ts';
 import { getGameComponents } from '../createGameWorld.ts';
+import { DamageKind } from '../Components/Damagable.ts';
+import { FrostSlowConfig } from '../../Config/weapons.ts';
+import { findVehicleEidByPartEid } from '../Utils/findPartVehicle.ts';
 
 export function createHitableSystem({ world } = GameDI) {
     const { Hitable, Bullet, VehiclePart, Parent, Vehicle } = getGameComponents(world);
@@ -32,11 +34,12 @@ export function createHitableSystem({ world } = GameDI) {
             const vehiclePartEid = vehiclePartEids[i];
             if (!hitableChanges.has(vehiclePartEid)) continue;
 
-            const hitEids = Hitable.getHitEids(vehiclePartEid);
             const vehicleEid = Parent.id[Parent.id[vehiclePartEid]];
 
+            // Readers of the hit ring go first — applyDamage resets it.
+            applyKindEffects(vehiclePartEid);
+            saveHitters(vehiclePartEid, vehicleEid);
             applyDamage(vehiclePartEid);
-            saveHitters(vehiclePartEid, vehicleEid, hitEids);
 
             if (hasComponent(world, vehicleEid, Vehicle)) {
                 hittedVehicles.add(vehicleEid);
@@ -93,38 +96,48 @@ export function createHitableSystem({ world } = GameDI) {
     };
 }
 
-const FORCE_TARGET = 1_000_000_000;
-
+// The hit ring carries FINAL damage values (computed by each recorder:
+// contact drain, explode, DoT, …) — this is the single place they apply.
 function applyDamage(targetEid: number, { world } = GameDI) {
-    const { Hitable, Damagable } = getGameComponents(world);
+    const { Hitable } = getGameComponents(world);
     const count = Hitable.hitIndex[targetEid];
-    const hits = Hitable.hits.getBatch(targetEid);
 
     for (let i = 0; i < count; i++) {
-        const sourceEid = hits[i * 2];
-        const forceCoeff = clamp(hits[i * 2 + 1] / FORCE_TARGET, 0, 1);
-        const damage = hasComponent(world, sourceEid, Damagable)
-            ? forceCoeff * Damagable.damage[sourceEid]
-            : 0;
-
-        Hitable.health[targetEid] -= damage;
+        Hitable.health[targetEid] -= Hitable.getDamage(targetEid, i);
     }
     Hitable.resetHits(targetEid);
+}
+
+// Damage-kind specialties, triggered per recorded hit on a vehicle part:
+// Frost → one slow contribution to the part's vehicle (`Slowed` averages them).
+function applyKindEffects(partEid: number, { world } = GameDI) {
+    const { Hitable, Slowed } = getGameComponents(world);
+    const count = Hitable.hitIndex[partEid];
+
+    for (let i = 0; i < count; i++) {
+        if (Hitable.getKind(partEid, i) !== DamageKind.Frost) continue;
+
+        const vehicleEid = findVehicleEidByPartEid(partEid);
+        if (vehicleEid === undefined) continue; // torn-off debris — nothing to slow
+
+        Slowed.addContribution(world, vehicleEid, FrostSlowConfig.slowMul, FrostSlowConfig.durationMs);
+    }
 }
 
 function saveHitters(
     hittableEid: EntityId,
     vehicleEid: EntityId,
-    hitEids: Float64Array,
     { world } = GameDI,
 ) {
-    const { LastHitters, TeamRef, PlayerRef } = getGameComponents(world);
+    const { Hitable, LastHitters, TeamRef, PlayerRef } = getGameComponents(world);
     if (!hasComponent(world, vehicleEid, LastHitters)) return;
     if (!hasComponent(world, hittableEid, TeamRef)) return;
 
     const vehiclePartTeamId = TeamRef.id[hittableEid];
+    const count = Hitable.hitIndex[hittableEid];
 
-    for (const hitEid of hitEids) {
+    for (let i = 0; i < count; i++) {
+        const hitEid = Hitable.getSecondEid(hittableEid, i);
         if (!hasComponent(world, hitEid, PlayerRef)) continue;
         if (!hasComponent(world, hitEid, TeamRef)) continue;
 

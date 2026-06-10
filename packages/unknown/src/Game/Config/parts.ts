@@ -52,6 +52,8 @@ export const VehicleBaseDensity: Record<VehicleType, number> = {
     [VehicleType.RocketTank]: 35 * 3,
     [VehicleType.Harvester]: 35 * 3,
     [VehicleType.MeleeCar]: 20 * 3,
+    [VehicleType.FlameTank]: 30 * 3,
+    [VehicleType.FrostTank]: 30 * 3,
 };
 
 /**
@@ -98,6 +100,7 @@ export const PartPhysicsConfig: Record<SlotPartType, SlotPartPhysics> = {
         belongsCollisionGroup: CollisionGroupConfig.VEHICLE_HULL_PARTS,
         interactsCollisionGroup: 
             CollisionGroupConfig.BULLET | 
+            CollisionGroupConfig.PARTICLE |
             CollisionGroupConfig.OBSTACLE | 
             CollisionGroupConfig.VEHICLE_HULL_PARTS |
             CollisionGroupConfig.SPICE_COLLECTOR,
@@ -110,6 +113,7 @@ export const PartPhysicsConfig: Record<SlotPartType, SlotPartPhysics> = {
         belongsCollisionGroup: CollisionGroupConfig.VEHICLE_HULL_PARTS,
         interactsCollisionGroup: 
             CollisionGroupConfig.BULLET | 
+            CollisionGroupConfig.PARTICLE |
             CollisionGroupConfig.OBSTACLE | 
             CollisionGroupConfig.VEHICLE_HULL_PARTS |
             CollisionGroupConfig.SPICE_COLLECTOR,
@@ -122,6 +126,7 @@ export const PartPhysicsConfig: Record<SlotPartType, SlotPartPhysics> = {
         belongsCollisionGroup: CollisionGroupConfig.TANK_TURRET_HEAD_PARTS,
         interactsCollisionGroup: 
             CollisionGroupConfig.BULLET | 
+            CollisionGroupConfig.PARTICLE |
             CollisionGroupConfig.OBSTACLE | 
             CollisionGroupConfig.TANK_TURRET_HEAD_PARTS | 
             CollisionGroupConfig.TANK_TURRET_GUN_PARTS |
@@ -135,6 +140,7 @@ export const PartPhysicsConfig: Record<SlotPartType, SlotPartPhysics> = {
         belongsCollisionGroup: CollisionGroupConfig.TANK_TURRET_GUN_PARTS,
         interactsCollisionGroup: 
             CollisionGroupConfig.BULLET | 
+            CollisionGroupConfig.PARTICLE |
             CollisionGroupConfig.OBSTACLE | 
             CollisionGroupConfig.TANK_TURRET_HEAD_PARTS | 
             CollisionGroupConfig.TANK_TURRET_GUN_PARTS |
@@ -177,6 +183,7 @@ export const PartPhysicsConfig: Record<SlotPartType, SlotPartPhysics> = {
         belongsCollisionGroup: CollisionGroupConfig.VEHICLE_HULL_PARTS,
         interactsCollisionGroup:
             CollisionGroupConfig.BULLET |
+            CollisionGroupConfig.PARTICLE |
             CollisionGroupConfig.OBSTACLE |
             CollisionGroupConfig.VEHICLE_HULL_PARTS |
             CollisionGroupConfig.SPICE_COLLECTOR,
@@ -190,6 +197,7 @@ export const PartPhysicsConfig: Record<SlotPartType, SlotPartPhysics> = {
         belongsCollisionGroup: CollisionGroupConfig.VEHICLE_HULL_PARTS,
         interactsCollisionGroup:
             CollisionGroupConfig.BULLET |
+            CollisionGroupConfig.PARTICLE |
             CollisionGroupConfig.OBSTACLE |
             CollisionGroupConfig.VEHICLE_HULL_PARTS |
             CollisionGroupConfig.SPICE_COLLECTOR,

@@ -24,3 +24,13 @@ export const FlashLightConfig = {
     explosion: { color: [1.0, 0.5, 0.2], intensity: 6.0, duration: 600 },
 } as const;
 
+/**
+ * Light carried by each stream particle (alpha-0 SDF circle + LightEmitter on
+ * the particle entity itself, so the glow follows it). Intensities are a
+ * fraction of the standard flash (3.0): flame 30%, frost 10%.
+ */
+export const StreamParticleLightConfig = {
+    flame: { color: [1.0, 0.55, 0.15], intensity: 3.0 * 0.3, radius: 12 },
+    frost: { color: [0.45, 0.78, 1.0], intensity: 3.0 * 0.1, radius: 12 },
+} as const;
+

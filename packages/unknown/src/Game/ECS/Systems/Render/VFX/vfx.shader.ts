@@ -14,6 +14,8 @@ const WGSL_CONSTANTS = /* wgsl */`
     const VFX_EXPLOSION: u32 = 1u;
     const VFX_HIT_FLASH: u32 = 2u;
     const VFX_MUZZLE_FLASH: u32 = 3u;
+    const VFX_FLAME: u32 = 4u;
+    const VFX_FROST: u32 = 5u;
 `;
 
 const WGSL_VERTEX_OUTPUT = /* wgsl */`
@@ -602,6 +604,97 @@ const WGSL_MUZZLE_FLASH = /* wgsl */`
 `;
 
 // ============================================
+// FLAME EFFECT (stream particle)
+// ============================================
+
+const WGSL_FLAME = /* wgsl */`
+    fn renderFlame(localPos: vec2f, progress: f32, seed: f32) -> vec4f {
+        // Must mirror getMaxRadius[VFXType.Flame] in createDrawVFXSystem.ts.
+        let currentSize = 9.0 * (1.0 + progress * 1.4);
+        let t = progress * 2.5 + seed * 43.0;
+
+        // Normalized coords + domain warp: the blob churns and billows as it ages.
+        var p = localPos / currentSize;
+        let warp = vec2f(
+            fbm(p * 2.2 + vec2f(t, seed * 17.0), 3),
+            fbm(p * 2.2 + vec2f(seed * 29.0, t * 1.3), 3),
+        );
+        p += (warp - 0.5) * 0.8;
+
+        let dist = length(p);
+        if (dist > 1.0) {
+            return vec4f(0.0);
+        }
+
+        // Puffy body: fbm density carved by the radial falloff → distinct tongues
+        // of flame instead of a uniform disc.
+        let body = fbm(p * 3.0 + vec2f(seed * 53.0, t * 1.1), 4);
+        var density = (1.0 - smoothstep(0.1, 1.0, dist)) * (0.25 + body * 1.3);
+        density = clamp(density, 0.0, 1.0);
+
+        // Heat drives the color ramp: dense young fire is white-hot, thin old
+        // fire cools into dark smoky red.
+        let heat = density * (1.0 - progress * 0.6);
+        var color = mix(vec3f(0.35, 0.05, 0.01), vec3f(1.0, 0.45, 0.05), smoothstep(0.1, 0.5, heat));
+        color = mix(color, vec3f(1.0, 0.92, 0.6), smoothstep(0.5, 0.85, heat));
+
+        let fadeIn = smoothstep(0.0, 0.08, progress);
+        let fadeOut = 1.0 - smoothstep(0.5, 1.0, progress);
+        let alpha = density * fadeIn * fadeOut;
+
+        return vec4f(color, alpha);
+    }
+`;
+
+// ============================================
+// FROST EFFECT (stream particle)
+// ============================================
+
+const WGSL_FROST = /* wgsl */`
+    fn renderFrost(localPos: vec2f, progress: f32, seed: f32) -> vec4f {
+        // Must mirror getMaxRadius[VFXType.Frost] in createDrawVFXSystem.ts.
+        let currentSize = 9.0 * (1.0 + progress * 1.4);
+        let t = progress * 1.4 + seed * 31.0;
+
+        // Normalized coords + a slow swirl: cold mist rolls instead of flickering.
+        var p = localPos / currentSize;
+        let swirl = (fbm(p * 1.5 + vec2f(seed * 21.0, t), 3) - 0.5) * 1.6;
+        let ca = cos(swirl);
+        let sa = sin(swirl);
+        p = vec2f(p.x * ca - p.y * sa, p.x * sa + p.y * ca);
+        let warp = vec2f(
+            fbm(p * 1.8 + vec2f(t * 0.7, seed * 13.0), 3),
+            fbm(p * 1.8 + vec2f(seed * 7.0, t * 0.9), 3),
+        );
+        p += (warp - 0.5) * 0.6;
+
+        let dist = length(p);
+        if (dist > 1.0) {
+            return vec4f(0.0);
+        }
+
+        // Billowy cloud body — soft, layered, with ragged fbm edges.
+        let body = fbm(p * 2.6 + vec2f(seed * 33.0, t * 0.5), 4);
+        var density = (1.0 - smoothstep(0.05, 1.0, dist)) * (0.3 + body * 1.15);
+        density = clamp(density, 0.0, 1.0);
+
+        // Dense core reads white, thin edges deep icy blue.
+        var color = mix(vec3f(0.2, 0.45, 0.9), vec3f(0.65, 0.88, 1.0), smoothstep(0.1, 0.55, density));
+        color = mix(color, vec3f(0.97, 1.0, 1.0), smoothstep(0.55, 0.9, density));
+
+        // Sparse ice glints drifting inside the mist.
+        let glint = pow(noise2D(p * 12.0 + vec2f(seed * 91.0, t * 2.0)), 7.0);
+        color += vec3f(0.9, 0.97, 1.0) * glint * density;
+
+        let fadeIn = smoothstep(0.0, 0.1, progress);
+        let fadeOut = 1.0 - smoothstep(0.5, 1.0, progress);
+        let alpha = density * 0.9 * fadeIn * fadeOut;
+
+        return vec4f(color, alpha);
+    }
+`;
+
+// ============================================
 // FRAGMENT MAIN
 // ============================================
 
@@ -630,6 +723,12 @@ const WGSL_FRAGMENT_MAIN = /* wgsl */`
             }
             case VFX_MUZZLE_FLASH: {
                 result = renderMuzzleFlash(local_position, progress, seed);
+            }
+            case VFX_FLAME: {
+                result = renderFlame(local_position, progress, seed);
+            }
+            case VFX_FROST: {
+                result = renderFrost(local_position, progress, seed);
             }
             default: {
                 result = vec4f(1.0, 0.0, 1.0, 1.0); // Debug: magenta for unknown type
@@ -664,6 +763,8 @@ export const shaderMeta = new ShaderMeta(
         ${WGSL_EXPLOSION}
         ${WGSL_HIT_FLASH}
         ${WGSL_MUZZLE_FLASH}
+        ${WGSL_FLAME}
+        ${WGSL_FROST}
         ${WGSL_FRAGMENT_MAIN}
     `,
 );

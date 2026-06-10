@@ -10,12 +10,14 @@ import { MoveStepActionDescriptor } from './systems/MoveStepAction.ts';
 import { HoldActionDescriptor } from './systems/HoldAction.ts';
 import { AimActionDescriptor } from './systems/AimAction.ts';
 import { FireActionDescriptor } from './systems/FireAction.ts';
+import { FireStreamActionDescriptor } from './systems/FireStreamAction.ts';
 
 export const ACTION_REGISTRY = {
     [ActionKind.MoveStep]: MoveStepActionDescriptor,
     [ActionKind.Hold]: HoldActionDescriptor,
     [ActionKind.Aim]: AimActionDescriptor,
     [ActionKind.Fire]: FireActionDescriptor,
+    [ActionKind.FireStream]: FireStreamActionDescriptor,
 };
 
 type Registry = typeof ACTION_REGISTRY;

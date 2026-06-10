@@ -45,6 +45,9 @@ export const CollisionGroupConfig = {
     
     /** Spice collector sensor (detects spice intersection) */
     SPICE_COLLECTOR: 0b1000000000,
+
+    /** Stream weapon sensor particles (flame / frost spray) */
+    PARTICLE: 0b10000000000,
 } as const;
 
 export const ALL_VEHICLE_PARTS_MASK = 
@@ -91,6 +94,16 @@ export const DampingConfig: {
     /** Angular damping for bullets */
     bulletAngular: 0.1,
 };
+
+// =============================================================================
+// CONTACT DAMAGE
+// =============================================================================
+
+/**
+ * Contact force at which a collision deals the source's full `Damagable.damage`
+ * (the force→damage coefficient saturates at 1 here).
+ */
+export const CONTACT_FORCE_TARGET = 1_000_000_000;
 
 // =============================================================================
 // MOVEMENT PHYSICS

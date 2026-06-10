@@ -43,7 +43,13 @@ const FIELD_SIZE = 1000;
 
 // Every spawn rolls a random tank class (tanks_ml convention): type differences
 // (speed, turret, reload, size) come for free from the per-type configs.
-const TANK_TYPES = [VehicleType.LightTank, VehicleType.MediumTank, VehicleType.HeavyTank] as const;
+const TANK_TYPES = [
+    VehicleType.LightTank,
+    VehicleType.MediumTank,
+    VehicleType.HeavyTank,
+    VehicleType.FlameTank,
+    VehicleType.FrostTank,
+] as const;
 
 // RandomBot tuning per enemy behaviour. Both now return sporadic undirected fire
 // (a random allowed direction) so the learner meets incoming rounds from rung 0;

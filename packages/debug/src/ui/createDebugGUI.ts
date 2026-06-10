@@ -90,6 +90,8 @@ export function createDebugGUI(canvas: HTMLCanvasElement, manualControl?: Manual
         ['Medium Tank', VehicleType.MediumTank],
         ['Heavy Tank', VehicleType.HeavyTank],
         ['Rocket Tank', VehicleType.RocketTank],
+        ['Frost Tank', VehicleType.FrostTank],
+        ['Flame Tank', VehicleType.FlameTank],
     ];
     for (const [label, type] of SPAWN_TYPES) {
         spawnFolder
@@ -100,14 +102,9 @@ export function createDebugGUI(canvas: HTMLCanvasElement, manualControl?: Manual
     // ── Duel ──────────────────────────────────────────────────────────────
     // Spawn two tanks (team 1 vs team 2) facing each other, `distance` hexes
     // apart along the E-W axis, centered on the grid.
-    const duel = { type: VehicleType.MediumTank as TankVehicleType, distance: 5 };
+    const duel = { type: VehicleType.MediumTank as TankVehicleType, distance: 3 };
     const duelFolder = gui.addFolder('Duel');
-    duelFolder.add(duel, 'type', {
-        'Light Tank': VehicleType.LightTank,
-        'Medium Tank': VehicleType.MediumTank,
-        'Heavy Tank': VehicleType.HeavyTank,
-        'Rocket Tank': VehicleType.RocketTank,
-    }).name('vehicle');
+    duelFolder.add(duel, 'type', Object.fromEntries(SPAWN_TYPES)).name('vehicle');
     duelFolder.add(duel, 'distance', 1, 20, 1).name('distance (hexes)');
     duelFolder
         .add({ go: () => { nextPlayerId = spawnDuel(duel.type, duel.distance, nextPlayerId); } }, 'go')

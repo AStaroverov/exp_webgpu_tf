@@ -7,6 +7,7 @@
 import { PI } from '../../../../../lib/math.ts';
 import { HexGridConfig } from '../Map/HexConfig.ts';
 import { ExplodableSettings } from '../ECS/Components/Explodable.ts';
+import { DamageKind } from '../ECS/Components/Damagable.ts';
 
 // =============================================================================
 // BULLET SPEED LIMITS
@@ -119,6 +120,106 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
         },
     },
 } as const;
+
+// =============================================================================
+// STREAM WEAPONS (flamethrower / freeze gun)
+// =============================================================================
+
+/**
+ * Frost-kind damage specialty: every Frost hit adds one slow contribution to
+ * the victim vehicle (`Slowed` averages them) and refreshes its duration.
+ */
+export const FrostSlowConfig = {
+    /** Slow contribution per Frost-kind damage event (the average converges here) */
+    slowMul: 0.6,
+    /** Slow lifetime in ms; refreshed by every Frost-kind damage event */
+    durationMs: 1500,
+} as const;
+
+export type StreamCaliberStats = {
+    /** Particles per emit */
+    count: number;
+    /** Particle launch speed */
+    speed: number;
+    /** Half-angle of the spray cone in radians */
+    spreadRad: number;
+    /** Particle lifetime in ms (DestroyByTimeout) */
+    lifetimeMs: number;
+    /** Each enemy-part overlap subtracts this from the particle's remaining lifetime (pass-through decay) */
+    hitLifeCostMs: number;
+    /** Sensor collider radius in world pixels */
+    particleRadius: number;
+    /** Linear damping so particles decelerate and dissipate like a spray */
+    linearDamping: number;
+    /** Min ms between emits while the held flag is up (framerate-independent rate) */
+    emitIntervalMs: number;
+    /** FireStream held-window duration (~1000) */
+    holdMs: number;
+    /** Fraction of holdMs at which to scheduleRequestNext (~0.8) */
+    requestNextFrac: number;
+    /** Seeded sinusoidal steering — particles meander like real flame tongues / cold wisps */
+    wander: {
+        /** Peak turn rate in rad/s (amplitude of the steering sine) */
+        angularSpeed: number;
+        /** Steering oscillation frequency in Hz */
+        frequency: number;
+    };
+    /** THE divergence field: the damage kind particles deal (Fire / Frost) */
+    kind: DamageKind;
+    /** Instant damage to the struck part per overlap */
+    damage: number;
+    /** Damage-over-time stamped on the struck part; duration refreshed per overlap */
+    dot: { dps: number; durationMs: number };
+    /** Tint applied to struck tank parts while the effect is active */
+    tint: [number, number, number];
+};
+
+/** Index into `StreamCaliberConfig` — the rows are ordered by this enum. */
+export enum StreamCaliber {
+    Flamethrower = 0,
+    FreezeGun = 1,
+}
+
+/**
+ * Stream weapon rows — identical in shape; only `kind`, the damage numbers and
+ * `tint` differ between the flamethrower and the freeze gun.
+ */
+export const StreamCaliberConfig: StreamCaliberStats[] = [
+    /* Flamethrower */ {
+        count: 4,
+        speed: 240,
+        spreadRad: 0.20,
+        lifetimeMs: 450,
+        hitLifeCostMs: 20,
+        particleRadius: 4,
+        linearDamping: 1.6,
+        emitIntervalMs: 40,
+        holdMs: 1000,
+        requestNextFrac: 0.8,
+        wander: { angularSpeed: 3.5, frequency: 2.5 },
+        kind: DamageKind.Fire,
+        damage: 0.05,
+        dot: { dps: 0.05, durationMs: 3000 },
+        tint: [1.0, 0.45, 0.1],
+    },
+    /* Freeze gun */ {
+        count: 4,
+        speed: 240,
+        spreadRad: 0.20,
+        lifetimeMs: 450,
+        hitLifeCostMs: 20,
+        particleRadius: 4,
+        linearDamping: 1.6,
+        emitIntervalMs: 40,
+        holdMs: 1000,
+        requestNextFrac: 0.8,
+        wander: { angularSpeed: 2.5, frequency: 1.8 },
+        kind: DamageKind.Frost,
+        damage: 0.02,
+        dot: { dps: 0.02, durationMs: 5000 },
+        tint: [0.3, 0.7, 1.0],
+    },
+];
 
 // =============================================================================
 // TURRET CONFIGURATION

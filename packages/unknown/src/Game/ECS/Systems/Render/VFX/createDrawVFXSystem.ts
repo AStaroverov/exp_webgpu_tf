@@ -27,6 +27,10 @@ const getMaxRadius: Record<VFXTypeValue, (progress: number) => number> = {
         const expandedSize = 1.0 * (0.6 + progress * 1.44);
         return expandedSize * 2.0;
     },
+    // Stream particles ride a rigid body, so their transform scale is 1 —
+    // the world-pixel size lives entirely in maxRadius.
+    [VFXType.Flame]: (progress) => 9.0 * (1.0 + progress * 1.4),
+    [VFXType.Frost]: (progress) => 9.0 * (1.0 + progress * 1.4),
 };
 
 // Seed multiplier per effect type
@@ -35,6 +39,8 @@ const seedMultiplier: Record<VFXTypeValue, number> = {
     [VFXType.Explosion]: 0.1,
     [VFXType.HitFlash]: 0.1,
     [VFXType.MuzzleFlash]: 0.1,
+    [VFXType.Flame]: 0.173,
+    [VFXType.Frost]: 0.211,
 };
 
 export function createDrawVFXSystem({ device } = RenderDI, { world } = GameDI) {

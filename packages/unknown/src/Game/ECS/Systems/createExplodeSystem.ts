@@ -9,6 +9,7 @@ import {
 import { spawnExplosion } from '../Entities/Explosion.ts';
 import { spawnLightFlash } from '../Entities/LightFlash.ts';
 import { ExplosionConfig, FlashLightConfig } from '../../Config/index.ts';
+import { DamageKind } from '../Components/Damagable.ts';
 
 /**
  * Detonates every entity that is both `Explodable` and scheduled for `Destroy`,
@@ -61,10 +62,7 @@ export function createExplodeSystem({ world } = GameDI) {
                 if (distSq > radiusSq) continue;
 
                 const proximity = 1 - Math.sqrt(distSq) / radius;
-                Hitable.health[targetEid] -= damage * proximity;
-                // Force 0 adds no extra damage in the hitable system's applyDamage;
-                // it only flags the target so its new health is processed next frame.
-                Hitable.hit$(targetEid, eid, 0);
+                Hitable.hit$(targetEid, eid, damage * proximity, DamageKind.Physical);
             }
         }
     };

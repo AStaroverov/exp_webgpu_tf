@@ -103,9 +103,21 @@ export const BoardChannel = {
     Reload: 13,
     /** Bullet range 0..1 (0 if gunless). */
     Range: 14,
+    /**
+     * Damage statuses of the unit on the cell (flamethrower / freeze gun, §8 of
+     * the stream-weapon design). `Dot` lives per-part in the game — aggregated
+     * up to the vehicle here.
+     */
+    /** Damage-over-time: summed part dps over the max possible (alive parts x fire dps), 0..1. */
+    Dot: 15,
+    /**
+     * The vehicle's movement/turret slow multiplier (`Slowed`); DENSE DEFAULT 1
+     * (full speed) for every unit cell — the average of frost contributions.
+     */
+    SlowMul: 16,
 } as const;
 
-export const BOARD_CHANNELS = 15;
+export const BOARD_CHANNELS = 17;
 export const BOARD_SIZE = BOARD_CELLS * BOARD_CHANNELS;
 
 export const UnknownInputBoard = component({

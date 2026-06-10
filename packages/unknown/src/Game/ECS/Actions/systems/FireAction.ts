@@ -34,111 +34,24 @@ const SLOW_BAND = 0.3;
 /** Heading error (rad) within which the turret counts as on-target and may fire. */
 const TOLERANCE = 0.05;
 
-/** Enqueue spec for a Fire action — aims at the target, then fires one round. */
-export type FireActionSpec = {
-    kind: ActionKind.Fire;
-    target: ActionHexTargetSpec;
-};
+/** `aimAtHexTarget` outcomes. */
+export const AIM_OFF_MAP = -1;
+export const AIM_TURNING = 0;
+export const AIM_ON_TARGET = 1;
 
-export const FireActionDescriptor: ActionDescriptor<FireActionSpec> = {
-    kind: ActionKind.Fire,
-    encode(eid, slot, spec) {
-        const { ActionsQueue } = getGameComponents(GameDI.world);
-        ActionsQueue.setKind(eid, slot, ActionKind.Fire);
-        encodeTarget(ActionsQueue, eid, slot, spec.target);
-        ActionsQueue.setParam(eid, slot, FireParamOffset.phase, FIRE_PHASE_AIMING);
-    },
-    createSystem: () => createFireActionSystem(),
-};
-
-export function createFireActionSystem({ world } = GameDI) {
-    const { ActionsQueue, Vehicle, Tank, TurretController, VehicleController, HullAimed, Firearms, RigidBodyState } = getGameComponents(world);
+/**
+ * Shared hex-target aimer (used by Fire and FireStream). The hex target is a
+ * *direction*: if a unit sits on a hex along the trajectory, the aim refines onto
+ * that unit's actual body center, re-resolved every tick to track movement.
+ * Steers via the provided callback (proportional slow-down within SLOW_BAND,
+ * zeroed on abort/on-target) and returns an AIM_* outcome.
+ */
+export function createHexAimer({ world }: Pick<typeof GameDI, 'world'> = GameDI) {
+    const { RigidBodyState } = getGameComponents(world);
 
     const sharedAimPoint = { x: 0, y: 0 };
-    function tick(_delta: number) {
-        const eids = query(world, [ActionsQueue, Vehicle, RigidBodyState]);
-
-        for (const ownerEid of eids) {
-            if (ActionsQueue.count[ownerEid] === 0) continue;
-            if (ActionsQueue.getKind(ownerEid, 0) !== ActionKind.Fire) continue;
-            if (ActionsQueue.getStatus(ownerEid, 0) === ActionStatus.Finished) continue;
-
-            const turretEid = Tank.turretEId[ownerEid];
-
-            // No turret to fire from → finish immediately.
-            if (!turretEid) {
-                ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
-                continue;
-            }
-
-            // HullAimed vehicles steer the body to aim (fixed turret); the rest
-            // rotate the turret. `aimerEid` is whichever entity's heading we read.
-            const hullAimed = hasComponent(world, ownerEid, HullAimed);
-            const aimerEid = hullAimed ? ownerEid : turretEid;
-            const steer = (dir: number) => hullAimed
-                ? VehicleController.setRotate$(ownerEid, dir)
-                : TurretController.setRotation$(turretEid, dir);
-
-            if (ActionsQueue.getStatus(ownerEid, 0) === ActionStatus.Idle) {
-                ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Running);
-                ActionsQueue.setParam(ownerEid, 0, FireParamOffset.phase, FIRE_PHASE_AIMING);
-                ActionsQueue.scheduleRequestNext(ownerEid, 0);
-            }
-
-            const phase = ActionsQueue.getParam(ownerEid, 0, FireParamOffset.phase);
-
-            if (phase === FIRE_PHASE_AIMING) {
-                const targetQ = ActionsQueue.getTargetVal(ownerEid, 0, 0);
-                const targetR = ActionsQueue.getTargetVal(ownerEid, 0, 1);
-                // Resolve the target hex's world center.
-                const targetCenter = MapDI.grid.hexToWorld(targetQ, targetR);
-
-                // Off-map target → can't aim; abort.
-                if (!targetCenter) {
-                    steer(0);
-                    ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
-                    continue;
-                }
-
-                // Re-resolved every tick so the aim tracks a moving unit.
-                const aimPoint = resolveAimPoint(ownerEid, targetQ, targetR, sharedAimPoint) ?? targetCenter;
-
-                const aimerX = RigidBodyState.position.get(aimerEid, 0);
-                const aimerY = RigidBodyState.position.get(aimerEid, 1);
-                const desired = Math.atan2(aimPoint.y - aimerY, aimPoint.x - aimerX);
-                const err = normalizeAngle(desired - RigidBodyState.rotation[aimerEid]);
-
-                if (Math.abs(err) <= TOLERANCE) {
-                    steer(0);
-                    // On target → wait for the weapon, then fire a round.
-                    ActionsQueue.setParam(ownerEid, 0, FireParamOffset.phase, FIRE_PHASE_WAIT_READY);
-                    continue;
-                }
-
-                // Proportional within SLOW_BAND, full speed outside it.
-                const dir = Math.abs(err) >= SLOW_BAND ? Math.sign(err) : err / SLOW_BAND;
-                steer(dir);
-                continue;
-            }
-
-            if (phase === FIRE_PHASE_WAIT_READY) {
-                // Wait until the weapon is ready, then raise the shoot flag. The spawner
-                // (run later this tick) fires the round and starts the reload.
-                if (Firearms.isReloading(turretEid)) continue;
-                TurretController.setShooting$(turretEid, 1);
-                ActionsQueue.setParam(ownerEid, 0, FireParamOffset.phase, FIRE_PHASE_FIRING);
-                continue;
-            }
-
-            // phase === FIRE_PHASE_FIRING: the reload starting confirms the round was fired.
-            if (Firearms.isReloading(turretEid)) {
-                TurretController.setShooting$(turretEid, 0);
-                ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
-            }
-        }
-    };
-
     const sharedTarget = { q: 0, r: 0 };
+
     function resolveAimPoint(
         ownerEid: number,
         targetQ: number,
@@ -176,6 +89,131 @@ export function createFireActionSystem({ world } = GameDI) {
             // Reserved → keep scanning past it.
         }
     }
+
+    return function aimAtHexTarget(
+        ownerEid: number,
+        aimerEid: number,
+        targetQ: number,
+        targetR: number,
+        steer: (dir: number) => void,
+    ): number {
+        // Resolve the target hex's world center.
+        const targetCenter = MapDI.grid.hexToWorld(targetQ, targetR);
+
+        // Off-map target → can't aim.
+        if (!targetCenter) {
+            steer(0);
+            return AIM_OFF_MAP;
+        }
+
+        // Re-resolved every tick so the aim tracks a moving unit.
+        const aimPoint = resolveAimPoint(ownerEid, targetQ, targetR, sharedAimPoint) ?? targetCenter;
+
+        const aimerX = RigidBodyState.position.get(aimerEid, 0);
+        const aimerY = RigidBodyState.position.get(aimerEid, 1);
+        const desired = Math.atan2(aimPoint.y - aimerY, aimPoint.x - aimerX);
+        const err = normalizeAngle(desired - RigidBodyState.rotation[aimerEid]);
+
+        if (Math.abs(err) <= TOLERANCE) {
+            steer(0);
+            return AIM_ON_TARGET;
+        }
+
+        // Proportional within SLOW_BAND, full speed outside it.
+        steer(Math.abs(err) >= SLOW_BAND ? Math.sign(err) : err / SLOW_BAND);
+        return AIM_TURNING;
+    };
+}
+
+/** Enqueue spec for a Fire action — aims at the target, then fires one round. */
+export type FireActionSpec = {
+    kind: ActionKind.Fire;
+    target: ActionHexTargetSpec;
+};
+
+export const FireActionDescriptor: ActionDescriptor<FireActionSpec> = {
+    kind: ActionKind.Fire,
+    encode(eid, slot, spec) {
+        const { ActionsQueue } = getGameComponents(GameDI.world);
+        ActionsQueue.setKind(eid, slot, ActionKind.Fire);
+        encodeTarget(ActionsQueue, eid, slot, spec.target);
+        ActionsQueue.setParam(eid, slot, FireParamOffset.phase, FIRE_PHASE_AIMING);
+    },
+    createSystem: () => createFireActionSystem(),
+};
+
+export function createFireActionSystem({ world } = GameDI) {
+    const { ActionsQueue, Vehicle, Tank, TurretController, VehicleController, HullAimed, Firearms, RigidBodyState } = getGameComponents(world);
+    const aimAtHexTarget = createHexAimer({ world });
+
+    function tick(_delta: number) {
+        const eids = query(world, [ActionsQueue, Vehicle, RigidBodyState]);
+
+        for (const ownerEid of eids) {
+            if (ActionsQueue.count[ownerEid] === 0) continue;
+            if (ActionsQueue.getKind(ownerEid, 0) !== ActionKind.Fire) continue;
+            if (ActionsQueue.getStatus(ownerEid, 0) === ActionStatus.Finished) continue;
+
+            const turretEid = Tank.turretEId[ownerEid];
+
+            // No turret to fire from → finish immediately.
+            if (!turretEid) {
+                ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
+                continue;
+            }
+
+            // HullAimed vehicles steer the body to aim (fixed turret); the rest
+            // rotate the turret. `aimerEid` is whichever entity's heading we read.
+            const hullAimed = hasComponent(world, ownerEid, HullAimed);
+            const aimerEid = hullAimed ? ownerEid : turretEid;
+            const steer = (dir: number) => hullAimed
+                ? VehicleController.setRotate$(ownerEid, dir)
+                : TurretController.setRotation$(turretEid, dir);
+
+            if (ActionsQueue.getStatus(ownerEid, 0) === ActionStatus.Idle) {
+                ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Running);
+                ActionsQueue.setParam(ownerEid, 0, FireParamOffset.phase, FIRE_PHASE_AIMING);
+                ActionsQueue.scheduleRequestNext(ownerEid, 0);
+            }
+
+            const phase = ActionsQueue.getParam(ownerEid, 0, FireParamOffset.phase);
+
+            if (phase === FIRE_PHASE_AIMING) {
+                const aim = aimAtHexTarget(
+                    ownerEid,
+                    aimerEid,
+                    ActionsQueue.getTargetVal(ownerEid, 0, 0),
+                    ActionsQueue.getTargetVal(ownerEid, 0, 1),
+                    steer,
+                );
+                // Off-map target → can't aim; abort.
+                if (aim === AIM_OFF_MAP) {
+                    ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
+                    continue;
+                }
+                if (aim === AIM_ON_TARGET) {
+                    // On target → wait for the weapon, then fire a round.
+                    ActionsQueue.setParam(ownerEid, 0, FireParamOffset.phase, FIRE_PHASE_WAIT_READY);
+                }
+                continue;
+            }
+
+            if (phase === FIRE_PHASE_WAIT_READY) {
+                // Wait until the weapon is ready, then raise the shoot flag. The spawner
+                // (run later this tick) fires the round and starts the reload.
+                if (Firearms.isReloading(turretEid)) continue;
+                TurretController.setShooting$(turretEid, 1);
+                ActionsQueue.setParam(ownerEid, 0, FireParamOffset.phase, FIRE_PHASE_FIRING);
+                continue;
+            }
+
+            // phase === FIRE_PHASE_FIRING: the reload starting confirms the round was fired.
+            if (Firearms.isReloading(turretEid)) {
+                TurretController.setShooting$(turretEid, 0);
+                ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);
+            }
+        }
+    };
 
     return tick;
 }
