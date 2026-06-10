@@ -217,6 +217,89 @@ engine, and what to ignore:
 - Keep cold / setup code readable — abstractions, closures, and the like are fine
   *outside* hot loops.
 
+## Project rules (distilled from review)
+
+Hard rules established while building the stream-weapon (flame/frost) feature —
+each one exists because the opposite was written first and rejected in review.
+
+### Components & data
+
+- **A component stores its config ROW KEY + live per-entity state — never copies of
+  config values.** `Firearms = {caliber, reloading}`, `StreamFirearms = {caliberRef,
+  emitAccMs}`; systems read tunables via `Config[key]` at the use site (config is
+  global). No config-table imports inside `addComponent`; the stored `reloadingDuration`
+  copy was removed for exactly this. Per-entity data that is NOT in any config (e.g.
+  a gun-tip offset) is legitimately stored in a component.
+- **No god components.** `Affliction` (kind + magnitudes + duration + hit ring +
+  lifetime cost) was dissolved into orthogonal pieces: `Damagable{damage, kind}`,
+  `Dotable{dps, durationMs, kind}`, `SensorHits{ring}`. If a component's fields serve
+  several unrelated mechanisms, split it along the mechanisms.
+- **Shared per-entity data used by several mechanisms gets its own component.**
+  `SpawnDeltaPosition` (projectile spawn offset) is one component reused by bullets
+  AND stream particles — not a field duplicated on each weapon component.
+- **Naming:** a name says what the thing IS or stores, in domain terms.
+  Generic prefixes are rejected (`StatusOnHit`, `writeStatus` — "status of what?").
+  Logic-level state names are decoupled from visuals (`Slowed`, not `Chilled`).
+  A save-slot component is named for its payload (`OriginalColor`, not `Tinted`).
+  Sibling mechanisms get symmetric names (`Firearms` / `StreamFirearms`).
+- **Index/stride arithmetic stays inside the component.** Expose accessors
+  (`Hitable.getSecondEid/getDamage/getKind(eid, i)`) — `hits[i * 3 + 2]` in a system
+  is unreadable and couples it to the layout.
+
+### Events & damage
+
+- **Physics-event capture is component state, not a module-level buffer.** The drain
+  callback records into a per-entity `obs` ring ON the component (`Hitable.hit$`,
+  `SensorHits.hit$` — symmetric `if (hasComponent(e1, C)) C.hit$(e1, e2)` both ways);
+  the consuming system queries `[C]` and drains each entity's ring. An exported
+  `pushXxx()` + module array is "тупая императивщина" — the world state must reflect
+  what happened.
+- **ALL damage flows through `Hitable.hit$(eid, sourceEid, finalDamage, kind)` and is
+  applied in ONE place** (`createHitableSystem.applyDamage`). Each recorder computes
+  its own final value at the source (contact: `min(1, force/CONTACT_FORCE_TARGET) ×
+  Damagable[source]`; blast: `damage × proximity`; DoT tick: `dps × delta`). Direct
+  `Hitable.health -=` writes anywhere else are forbidden (the old "decrement + force-0
+  flag hit" trick was removed).
+- **Damage-kind specialties live in the hitable pipeline, keyed by `DamageKind` riding
+  every hit** (Frost → `Slowed.addContribution`). Delivery systems (sensor-hit apply,
+  DoT tick) stay kind-agnostic; adding a kind = enum value + one branch in
+  `applyKindEffects` + config row.
+- **Ring readers run before the ring reset** — order `applyKindEffects` /
+  `saveHitters` / `applyDamage` deliberately; don't snapshot the ring into a fresh
+  array to dodge the ordering (that allocates).
+
+### Resolution & lookups
+
+- **Entity resolution returns a VERIFIED eid or explicit absence — never a guess.**
+  `findVehicleEidByPartEid` checks `hasComponent(…, Vehicle)` on every candidate and
+  returns `undefined` for torn-off debris; callers handle absence explicitly. An
+  unverified `Parent.id[…]` fallback means "we have no idea what we're touching".
+- **Never index one table by another table's enum.** `StreamCaliberConfig[StatusKind.X]`
+  worked only by row-order coincidence; carry the right key (or the needed value) on
+  the entity, or `find` by the discriminant field.
+
+### Composition & wiring
+
+- **Loadout/composition is decided by entity factories + the vehicle-type pool, not by
+  scenario/curriculum config.** `ScenarioConfig.streamCaliber` + post-spawn component
+  swapping was removed; stream tanks are `VehicleType`s (`FlameTank`/`FrostTank`)
+  built by their factory. Downstream code keys off component presence
+  (`hasComponent(turret, StreamFirearms)`), never off a weapon-type enum branch.
+- **A new `CollisionGroup` must be added to BOTH sides' `interacts` masks.** Rapier
+  filters pairs bidirectionally — a one-sided mask produces zero events *silently*
+  (the stream weapon was dead until parts accepted `PARTICLE`). When adding a group,
+  grep every `interactsCollisionGroup` that should see it.
+
+### Effects & observations
+
+- **Visual feedback scales with the effect's magnitude** — blend
+  `lerp(OriginalColor, tint, intensity)` per frame (`dps/cap`, `1 − slowMul`), not a
+  binary set-once recolor.
+- **RL observation channels are few and dense.** One `Dot` scalar replaced
+  burning-fraction + dps channels; the `Chilled` 0/1 flag was dropped because
+  `SlowMul` (dense default `1`) already encodes presence. Don't add a channel another
+  channel implies.
+
 ## Sources
 
 - [ECS — design notes (Dreaming381)](https://gist.github.com/Dreaming381/89d65f81b9b430ffead443a2d430defc)
