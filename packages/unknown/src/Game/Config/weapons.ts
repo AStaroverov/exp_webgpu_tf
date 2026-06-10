@@ -126,14 +126,14 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
 // =============================================================================
 
 /**
- * Frost-kind damage specialty: every Frost hit adds one slow contribution to
- * the victim vehicle (`Slowed` averages them) and refreshes its duration.
+ * Frost-kind damage specialty: every Frost hit on a part deepens the victim
+ * vehicle's freeze (`Slowed.slowMul` grows, cap 1); it thaws back per tick.
  */
 export const FrostSlowConfig = {
-    /** Slow contribution per Frost-kind damage event (the average converges here) */
-    slowMul: 0.6,
-    /** Slow lifetime in ms; refreshed by every Frost-kind damage event */
-    durationMs: 1500,
+    /** Freeze added per Frost-kind damage event (`slowMul` grows by this) */
+    freezePerHit: 0.05,
+    /** Freeze thawed per tick (`slowMul` shrinks by this each game tick) */
+    thawPerTick: 0.25,
 } as const;
 
 export type StreamCaliberStats = {
@@ -189,10 +189,10 @@ export const StreamCaliberConfig: StreamCaliberStats[] = [
         count: 4,
         speed: 240,
         spreadRad: 0.20,
-        lifetimeMs: 450,
+        lifetimeMs: 800,
         hitLifeCostMs: 20,
         particleRadius: 4,
-        linearDamping: 1.6,
+        linearDamping: 1.2,
         emitIntervalMs: 40,
         holdMs: 1000,
         requestNextFrac: 0.8,
@@ -206,10 +206,10 @@ export const StreamCaliberConfig: StreamCaliberStats[] = [
         count: 4,
         speed: 240,
         spreadRad: 0.20,
-        lifetimeMs: 450,
+        lifetimeMs: 800,
         hitLifeCostMs: 20,
         particleRadius: 4,
-        linearDamping: 1.6,
+        linearDamping: 1.2,
         emitIntervalMs: 40,
         holdMs: 1000,
         requestNextFrac: 0.8,

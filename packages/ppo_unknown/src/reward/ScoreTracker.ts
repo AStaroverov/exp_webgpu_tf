@@ -6,10 +6,13 @@
  * the agent takes the per-decision DELTA of it.
  *
  * Scored events — combat plus one movement shaping term:
- *   - hitEnemy: +HIT_REWARD per cross-team hit dealt (the game already attributes
- *     hits to the attacker player in `LastHitters`, friendly fire excluded at source);
- *   - killEnemy: +KILL_REWARD per kill, split between attackers by their hit share
- *     of the dying vehicle (a vehicle that was tracked last tick and is gone now);
+ *   - damage: +DAMAGE_REWARD per point of cross-team damage dealt (the game
+ *     attributes damage to the attacker player in `LastHitters`, friendly fire
+ *     excluded at source). Damage — not hit-event count — is the unit, so a
+ *     12-damage bullet and a stream of 0.05-damage particle overlaps earn the
+ *     same reward for the same damage dealt;
+ *   - killEnemy: +KILL_REWARD per kill, split between attackers by their damage
+ *     share of the dying vehicle (a vehicle tracked last tick and gone now);
  *   - approach:  ±APPROACH_REWARD per hex step closer to / away from the nearest
  *     enemy (per-tick distance delta, so it telescopes over a macro-action; ticks
  *     where the *nearest enemy itself* changed — death or target switch — are
@@ -24,11 +27,16 @@ import { GameDI } from '../../../unknown/src/Game/DI/GameDI.ts';
 import { MapDI } from '../../../unknown/src/Game/DI/MapDI.ts';
 import { getGameComponents } from '../../../unknown/src/Game/ECS/createGameWorld.ts';
 
-export const HIT_REWARD = 0.2;
+/**
+ * Reward per point of damage dealt. Scaled so one Medium bullet (12 damage)
+ * earns ≈0.2 — the old per-hit reward — while stream weapons, whose damage
+ * arrives as hundreds of tiny overlap events, earn proportionally, not per event.
+ */
+export const DAMAGE_REWARD = 0.02;
 export const KILL_REWARD = 1;
 /**
- * Reward per hex step closer to the nearest enemy (kill = 1, hit = 0.2 for
- * scale). 0.15 while the curriculum is on early rungs: before kills happen,
+ * Reward per hex step closer to the nearest enemy (kill = 1, a bullet hit ≈ 0.2
+ * for scale). 0.15 while the curriculum is on early rungs: before kills happen,
  * approach is the only dense learning signal and must stay visible next to the
  * rare combat spikes after advantage normalization. Lower it back (~0.05) once
  * combat carries the learning.
@@ -38,14 +46,14 @@ export const APPROACH_REWARD = 0.15;
 export class ScoreTracker {
     /** playerId → cumulative weighted score. */
     private score = new Map<number, number>();
-    /** victimEid → (attackerPlayerId → last-seen hit count), to diff per tick. */
-    private prevHits = new Map<number, Map<number, number>>();
+    /** victimEid → (attackerPlayerId → last-seen accumulated damage), to diff per tick. */
+    private prevDamage = new Map<number, Map<number, number>>();
     /** vehicleEid → last tick's nearest enemy + hex distance, to diff per tick. */
     private prevApproach = new Map<number, { enemy: number; dist: number }>();
 
     reset(): void {
         this.score.clear();
-        this.prevHits.clear();
+        this.prevDamage.clear();
         this.prevApproach.clear();
     }
 
@@ -63,42 +71,42 @@ export class ScoreTracker {
     }
 
     /**
-     * Combat scoring: hits dealt this tick (increase in each victim's per-attacker
-     * hit count) and kills (vehicles tracked last tick but gone now → KILL split
-     * between attackers by hit share).
+     * Combat scoring: damage dealt this tick (increase in each victim's per-attacker
+     * accumulated damage) and kills (vehicles tracked last tick but gone now → KILL
+     * split between attackers by damage share).
      */
     private updateCombat(world = GameDI.world): void {
         const { Vehicle, LastHitters } = getGameComponents(world);
         const vehicles = query(world, [Vehicle, LastHitters]);
         const alive = new Set<number>();
 
-        // Hits dealt this tick = increase in each victim's per-attacker hit count.
+        // Damage dealt this tick = increase in each victim's per-attacker damage.
         for (let i = 0; i < vehicles.length; i++) {
             const victim = vehicles[i];
             alive.add(victim);
 
-            const prev = this.prevHits.get(victim);
+            const prev = this.prevDamage.get(victim);
             const curr = new Map<number, number>();
-            LastHitters.forEachHitters(victim, (playerId: number, hitCount: number) => {
-                curr.set(playerId, hitCount);
-                const inc = hitCount - (prev?.get(playerId) ?? 0);
-                if (inc > 0) this.add(playerId, HIT_REWARD * inc);
+            LastHitters.forEachHitters(victim, (playerId: number, damage: number) => {
+                curr.set(playerId, damage);
+                const inc = damage - (prev?.get(playerId) ?? 0);
+                if (inc > 0) this.add(playerId, DAMAGE_REWARD * inc);
             });
-            this.prevHits.set(victim, curr);
+            this.prevDamage.set(victim, curr);
         }
 
-        // Kills = vehicles tracked last tick but gone now → split KILL by hit share.
-        for (const [victim, prev] of this.prevHits) {
+        // Kills = vehicles tracked last tick but gone now → split KILL by damage share.
+        for (const [victim, prev] of this.prevDamage) {
             if (alive.has(victim)) continue;
 
-            let totalHits = 0;
-            prev.forEach((count) => { totalHits += count; });
-            if (totalHits > 0) {
-                prev.forEach((count, playerId) => {
-                    this.add(playerId, KILL_REWARD * (count / totalHits));
+            let totalDamage = 0;
+            prev.forEach((damage) => { totalDamage += damage; });
+            if (totalDamage > 0) {
+                prev.forEach((damage, playerId) => {
+                    this.add(playerId, KILL_REWARD * (damage / totalDamage));
                 });
             }
-            this.prevHits.delete(victim);
+            this.prevDamage.delete(victim);
         }
     }
 

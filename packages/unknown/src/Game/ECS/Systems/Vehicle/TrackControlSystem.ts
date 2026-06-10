@@ -43,7 +43,7 @@ export function createTrackControlSystem({ world } = GameDI) {
             const engineType = Vehicle.engineType[vehicleEid] as EngineType;
             const impulseFactor = mapTypeToTrackImpulse[engineType];
             const vehicleRotation = RigidBodyState.rotation[vehicleEid];
-            const slow = hasComponent(world, vehicleEid, Slowed) ? Slowed.slowMul[vehicleEid] : 1;
+            const slow = hasComponent(world, vehicleEid, Slowed) ? 1 - Slowed.slowMul[vehicleEid] : 1;
 
             const turnFactor = -0.7;
 

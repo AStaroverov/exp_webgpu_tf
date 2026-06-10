@@ -109,18 +109,17 @@ function applyDamage(targetEid: number, { world } = GameDI) {
 }
 
 // Damage-kind specialties, triggered per recorded hit on a vehicle part:
-// Frost → one slow contribution to the part's vehicle (`Slowed` averages them).
+// Frost → one freeze contribution to the part's vehicle (`Slowed` accumulates them).
 function applyKindEffects(partEid: number, { world } = GameDI) {
     const { Hitable, Slowed } = getGameComponents(world);
     const count = Hitable.hitIndex[partEid];
 
     for (let i = 0; i < count; i++) {
-        if (Hitable.getKind(partEid, i) !== DamageKind.Frost) continue;
-
-        const vehicleEid = findVehicleEidByPartEid(partEid);
-        if (vehicleEid === undefined) continue; // torn-off debris — nothing to slow
-
-        Slowed.addContribution(world, vehicleEid, FrostSlowConfig.slowMul, FrostSlowConfig.durationMs);
+        if (Hitable.getKind(partEid, i) === DamageKind.Frost) {
+            const vehicleEid = findVehicleEidByPartEid(partEid);
+            if (vehicleEid === undefined) continue;
+            Slowed.addContribution(world, vehicleEid, FrostSlowConfig.freezePerHit);
+        }
     }
 }
 
@@ -145,7 +144,7 @@ function saveHitters(
         if (attackerTeamId === vehiclePartTeamId) continue;
 
         const attackerPlayerId = PlayerRef.id[hitEid];
-        LastHitters.addHit(vehicleEid, attackerPlayerId);
+        LastHitters.addDamage(vehicleEid, attackerPlayerId, Hitable.getDamage(hittableEid, i));
     }
 }
 

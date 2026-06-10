@@ -15,7 +15,7 @@ const FROST = StreamCaliberConfig.find((c) => c.kind === DamageKind.Frost)!;
  * Single owner of all damage-status recoloring (render-only, skipped headless).
  * Each frame a part's color is blended from its `OriginalColor` snapshot toward
  * the effect tint, proportional to the effect magnitude: a Fire-`Dot` part by
- * `dps / fire dps`, every part of a `Slowed` vehicle by `1 - slowMul`
+ * `dps / fire dps`, every part of a `Slowed` vehicle by `slowMul`
  * (Fire wins per part). The snapshot — the slot color after brightness
  * jitter — is taken lazily on the first tint and restored once neither applies.
  */
@@ -71,7 +71,7 @@ export function createTintSystem({ world } = GameDI) {
         const slowedEids = query(world, [Slowed, Children]);
         for (let i = 0; i < slowedEids.length; i++) {
             const vehicleEid = slowedEids[i];
-            frostTintSlotParts(vehicleEid, 1 - Slowed.slowMul[vehicleEid]);
+            frostTintSlotParts(vehicleEid, Slowed.slowMul[vehicleEid]);
         }
 
         // Revert: backwards — removeComponent swap-removes inside the query's dense array.

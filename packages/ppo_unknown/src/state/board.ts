@@ -48,22 +48,33 @@ export function hexDeltaDistance(dq: number, dr: number): number {
  * addition to the network's positional encoding). Stat channels
  * (`Role..Range`) come from `vehicleStats.ts`, written for self/ally/enemy cells.
  */
+let C = 0;
 export const BoardChannel = {
+    /**
+     * Normalized window COLUMN of the cell center: `col / (BOARD_COLS − 1)` → 0..1.
+     * Written for EVERY in-view cell (pure window geometry, not gated by occupancy).
+     */
+    CoordX: C++,
+    /**
+     * Normalized window ROW of the cell center: `row / (BOARD_ROWS − 1)` → 0..1.
+     * Written for EVERY in-view cell; pairs with `CoordX`.
+     */
+    CoordY: C++,
     /**
      * Not enterable / not visible (0/1): a static obstacle, an off-map cell, or a
      * cell beyond the view radius (the square window's corners).
      */
-    Obstacle: 0,
+    Obstacle: C++,
     /** The observing agent's own cell — always the window center. */
-    Self: 1,
+    Self: C++,
     /** Same-team unit. */
-    Ally: 2,
+    Ally: C++,
     /** Other-team unit. */
-    Enemy: 3,
+    Enemy: C++,
     /** Normalized hp (0..1) of the unit on the cell; 0 if no unit. */
-    Hp: 4,
+    Hp: C++,
     /** A cell a unit is driving into (grid `OccupantKind.Reserved`); 0/1. */
-    Reserved: 5,
+    Reserved: C++,
     /**
      * Under fire (0/1): a cell lying on the remaining flight path of an enemy
      * bullet currently in the air, OR on the predicted fire line of a visible
@@ -71,53 +82,43 @@ export const BoardChannel = {
      * straight line, so the whole stretch a live bullet will still cross is marked
      * (not its current cell). See `markBulletThreat`.
      */
-    UnderFire: 6,
+    UnderFire: C++,
     /**
      * Enemy heat (0..1): per-cell max over ALL enemies of `1 − hexDist(cell, enemy)
      * / MAX_MAP_DIST`. The peak sits on the enemy's REAL current cell. This is how
      * enemies beyond the view radius are sensed: the in-window gradient points
      * toward them.
      */
-    EnemyHeat: 7,
-    /**
-     * Normalized window COLUMN of the cell center: `col / (BOARD_COLS − 1)` → 0..1.
-     * Written for EVERY in-view cell (pure window geometry, not gated by occupancy).
-     */
-    CoordX: 8,
-    /**
-     * Normalized window ROW of the cell center: `row / (BOARD_ROWS − 1)` → 0..1.
-     * Written for EVERY in-view cell; pairs with `CoordX`.
-     */
-    CoordY: 9,
+    EnemyHeat: C++,
     /**
      * Per-unit identity + combat stats of the unit on the cell (0 if no unit), from
      * `vehicleStats.ts` — written for self/ally/enemy cells, same normalizers
      * the units vector used. `Role`: 0 = fighter (gun).
      */
-    Role: 10,
+    Role: C++,
     /** Engine speed 0..1. */
-    Mobility: 11,
+    Mobility: C++,
     /** Gun damage 0..1 (0 if gunless). */
-    Firepower: 12,
+    Firepower: C++,
     /** Reload speed 0..1, faster = higher (0 if gunless). */
-    Reload: 13,
+    Reload: C++,
     /** Bullet range 0..1 (0 if gunless). */
-    Range: 14,
+    Range: C++,
     /**
      * Damage statuses of the unit on the cell (flamethrower / freeze gun, §8 of
      * the stream-weapon design). `Dot` lives per-part in the game — aggregated
      * up to the vehicle here.
      */
     /** Damage-over-time: summed part dps over the max possible (alive parts x fire dps), 0..1. */
-    Dot: 15,
+    Dot: C++,
     /**
-     * The vehicle's movement/turret slow multiplier (`Slowed`); DENSE DEFAULT 1
-     * (full speed) for every unit cell — the average of frost contributions.
+     * The vehicle's freeze amount (`Slowed.slowMul`), 0..1: 0 = full speed
+     * (the dense default), 1 = fully frozen — frost hits accumulate it.
      */
-    SlowMul: 16,
+    Slow: C++,
 } as const;
 
-export const BOARD_CHANNELS = 17;
+export const BOARD_CHANNELS = C;
 export const BOARD_SIZE = BOARD_CELLS * BOARD_CHANNELS;
 
 export const UnknownInputBoard = component({

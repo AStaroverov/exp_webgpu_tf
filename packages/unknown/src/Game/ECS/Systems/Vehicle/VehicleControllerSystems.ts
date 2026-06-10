@@ -16,7 +16,7 @@ export function createVehicleTurretRotationSystem({ world } = GameDI) {
             const turretRot = RigidBodyState.rotation[turretEid];
             const turretRotDir = TurretController.rotation[turretEid];
             const maxRotationSpeed = VehicleTurret.rotationSpeed[turretEid];
-            const slow = hasComponent(world, vehicleEid, Slowed) ? Slowed.slowMul[vehicleEid] : 1;
+            const slow = hasComponent(world, vehicleEid, Slowed) ? 1 - Slowed.slowMul[vehicleEid] : 1;
 
             const relTurretRot = normalizeAngle(turretRot - vehicleRot);
             const deltaRot = turretRotDir * maxRotationSpeed * slow * (delta / 1000);

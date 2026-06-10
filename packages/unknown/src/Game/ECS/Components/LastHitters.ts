@@ -6,6 +6,12 @@ import { defineComponent } from '../../../../../renderer/src/ECS/utils.ts';
 const MAX_HITTERS = 10;
 const ENTRY_SIZE = 2;
 
+/**
+ * Per-vehicle damage attribution: (attacker playerId, accumulated damage) pairs.
+ * Damage — not hit-event count — is the unit, so a 12-damage bullet and 240
+ * stream-particle overlaps of 0.05 weigh the same; rewards/kill credit derived
+ * from this stay commensurate across weapon types.
+ */
 export const createLastHittersComponent = defineComponent((LastHitters) => {
     const data = NestedArray.f64(MAX_HITTERS * ENTRY_SIZE, delegate.defaultSize);
 
@@ -20,12 +26,12 @@ export const createLastHittersComponent = defineComponent((LastHitters) => {
             reset(eid);
         },
         reset,
-        addHit(eid: EntityId, playerId: number) {
+        addDamage(eid: EntityId, playerId: number, damage: number) {
             const arr = data.getBatch(eid);
 
             for (let i = 0; i < MAX_HITTERS * ENTRY_SIZE; i += ENTRY_SIZE) {
                 if (arr[i] === playerId) {
-                    arr[i + 1]++;
+                    arr[i + 1] += damage;
                     return;
                 }
             }
@@ -33,23 +39,23 @@ export const createLastHittersComponent = defineComponent((LastHitters) => {
             for (let i = 0; i < MAX_HITTERS * ENTRY_SIZE; i += ENTRY_SIZE) {
                 if (arr[i] === 0) {
                     arr[i] = playerId;
-                    arr[i + 1] = 1;
+                    arr[i + 1] = damage;
                     return;
                 }
             }
 
             let minIndex = 0;
-            let minCount = arr[1];
+            let minDamage = arr[1];
             for (let i = ENTRY_SIZE; i < MAX_HITTERS * ENTRY_SIZE; i += ENTRY_SIZE) {
-                if (arr[i + 1] < minCount) {
-                    minCount = arr[i + 1];
+                if (arr[i + 1] < minDamage) {
+                    minDamage = arr[i + 1];
                     minIndex = i;
                 }
             }
             arr[minIndex] = playerId;
-            arr[minIndex + 1] = 1;
+            arr[minIndex + 1] = damage;
         },
-        getHitCount(eid: EntityId, playerId: number): number {
+        getDamage(eid: EntityId, playerId: number): number {
             const arr = data.getBatch(eid);
             for (let i = 0; i < MAX_HITTERS * ENTRY_SIZE; i += ENTRY_SIZE) {
                 if (arr[i] === playerId) return arr[i + 1];
@@ -57,7 +63,7 @@ export const createLastHittersComponent = defineComponent((LastHitters) => {
             }
             return 0;
         },
-        getTotalHits(eid: EntityId): number {
+        getTotalDamage(eid: EntityId): number {
             const arr = data.getBatch(eid);
             let total = 0;
             for (let i = 0; i < MAX_HITTERS * ENTRY_SIZE; i += ENTRY_SIZE) {
@@ -66,7 +72,7 @@ export const createLastHittersComponent = defineComponent((LastHitters) => {
             }
             return total;
         },
-        forEachHitters(eid: EntityId, callback: (playerId: number, hitCount: number) => void) {
+        forEachHitters(eid: EntityId, callback: (playerId: number, damage: number) => void) {
             const arr = data.getBatch(eid);
             for (let i = 0; i < MAX_HITTERS * ENTRY_SIZE; i += ENTRY_SIZE) {
                 if (arr[i] === 0) break;

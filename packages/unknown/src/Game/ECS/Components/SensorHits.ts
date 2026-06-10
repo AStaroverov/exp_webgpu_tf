@@ -15,6 +15,7 @@ const HITS_LIMIT = 10;
 export const createSensorHitsComponent = defineComponent((SensorHits, obs) => {
     const hitIndex = TypedArray.i8(delegate.defaultSize);
     const hits = NestedArray.f64(HITS_LIMIT, delegate.defaultSize);
+    //@todo: separate component for the hitLifeCostMs
     const hitLifeCostMs = TypedArray.f64(delegate.defaultSize);
 
     function resetHits(eid: number) {
@@ -32,7 +33,6 @@ export const createSensorHitsComponent = defineComponent((SensorHits, obs) => {
             hitLifeCostMs[eid] = hitLifeCost;
         },
         hit$: obs((eid: number, otherEid: EntityId) => {
-            console.log(`[SensorHits] hit$ eid=${eid} otherEid=${otherEid}`);
             const index = hitIndex[eid];
             if (index === HITS_LIMIT) {
                 console.warn(`[SensorHits] Limit on hits`);
