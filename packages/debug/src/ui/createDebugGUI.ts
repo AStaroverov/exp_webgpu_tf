@@ -23,6 +23,7 @@ import { setCameraZoom } from '../../../renderer/src/ECS/Systems/ResizeSystem.ts
 import { DEFAULT_FIELD_SIZE, recreateDebugGame } from '../createDebugGame.ts';
 import { spawnObstacles } from '../../../unknown/src/Game/ECS/Entities/Obstacle/spawnObstacles.ts';
 import { createLightingGUI } from '../../../unknown/src/ui/createLightingGUI.ts';
+import type { ManualControl } from '../input/createManualControl.ts';
 
 // Team identity colors — sourced from the shared vehicle palette so the debug
 // swatches and spawned tanks match.
@@ -31,7 +32,7 @@ const TEAM_COLORS: Record<number, Float32Array> = TEAM_BASE_COLORS;
 const HOLD_DURATION_MS = 1000;
 const AIM_TOLERANCE = 0.05;
 
-export function createDebugGUI(canvas: HTMLCanvasElement) {
+export function createDebugGUI(canvas: HTMLCanvasElement, manualControl?: ManualControl) {
     let nextPlayerId = 1;
     const gui = new GUI({ title: 'Debug' });
     const camera = { zoom: 0.5 };
@@ -118,8 +119,21 @@ export function createDebugGUI(canvas: HTMLCanvasElement) {
     // The eid dropdown lives in its own folder: lil-gui's `options()` replaces
     // the controller by appending a new one, which would otherwise reorder rows.
     const pickFolder = vehFolder.addFolder('Selected');
-    let eidCtrl: Controller = pickFolder.add(veh, 'eid', {});
+    let eidCtrl: Controller = pickFolder.add(veh, 'eid', {})
+        .onChange((v: number) => manualControl?.setEid(v));
+    manualControl?.setEid(veh.eid);
     vehFolder.add({ go: () => { if (veh.eid) destroyTank(veh.eid); } }, 'go').name('Remove vehicle');
+
+    // ── Manual control (keyboard + mouse) ─────────────────────────────────
+    // Drives the *selected* vehicle directly (bypassing the action queue):
+    // arrows = hull move/turn, mouse = turret aim, left mouse button = fire.
+    // Don't enqueue actions on a tank while it is under manual control.
+    if (manualControl) {
+        const manual = { enabled: false };
+        vehFolder.add(manual, 'enabled')
+            .name('⌨/🖱 control selected')
+            .onChange((v: boolean) => manualControl.setEnabled(v));
+    }
 
     // One section per action kind, each with its own settings + an Apply button.
     // MoveStep/Aim/Fire are directional — `dir` indexes POINTY_DIRECTIONS (the
@@ -156,8 +170,9 @@ export function createDebugGUI(canvas: HTMLCanvasElement) {
 
         if (!Object.values(options).includes(veh.eid)) {
             veh.eid = Object.values(options)[0] ?? 0;
+            manualControl?.setEid(veh.eid);
         }
-        eidCtrl = eidCtrl.options(options);
+        eidCtrl = eidCtrl.options(options).onChange((v: number) => manualControl?.setEid(v));
     }, 300);
 
     // Collapse every section by default (Debug + Lighting) — open on demand.
