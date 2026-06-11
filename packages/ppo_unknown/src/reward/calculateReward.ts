@@ -29,9 +29,9 @@ import type { UnknownAgent } from "../env/UnknownAgent.ts";
  * `ScoreTracker`'s raw score (used here for win-contribution weighting) stays intact.
  *   weight = 1 until SHAPING_FULL_UNTIL, then linear to SHAPING_FLOOR at SHAPING_ZERO_AT.
  */
-const SHAPING_FLOOR = 0.1;
-const SHAPING_FULL_UNTIL = 50_000;
-const SHAPING_ZERO_AT = 150_000;
+const SHAPING_FLOOR = 0.2;
+const SHAPING_FULL_UNTIL = 200_000;
+const SHAPING_ZERO_AT = SHAPING_FULL_UNTIL * 5;
 
 /** Multiplicative weight on the dense shaping reward for the given network iteration. */
 export function getShapingWeight(iteration: number): number {

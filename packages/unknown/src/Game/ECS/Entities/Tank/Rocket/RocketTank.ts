@@ -18,11 +18,13 @@ import {
   caterpillarSetLeft,
   caterpillarSetRight,
   headlightSet,
+  HULL_COLS,
   HULL_ROWS,
   hullSet,
   PADDING,
   PARTS_COUNT,
   railSet,
+  RAIL_FRONT_X,
   RAIL_Y,
   SIZE,
   TRACK_ANCHOR_Y,
@@ -54,7 +56,7 @@ export function createRocketTank(opts: {
 
   // Elongated hull — length (+X / forward) clearly exceeds width.
   options.density = RocketTankConfig.density * 14;
-  options.width = PADDING * 14;
+  options.width = PADDING * HULL_COLS;
   options.height = PADDING * HULL_ROWS;
   const [tankEid, tankPid] = createTankBase(options);
 
@@ -76,12 +78,16 @@ export function createRocketTank(opts: {
   );
 
   options.density = RocketTankConfig.density;
-  options.width = PADDING * 16;
+  // Carrier platform: one cell of overhang past the hull on each end, so it
+  // fully contains the rearward-shifted rail (rigid groups must contain
+  // every bolted block).
+  options.width = PADDING * (HULL_COLS + 2);
   options.height = PADDING * HULL_ROWS;
   options.turret.gunWidth = PADDING;
   options.turret.gunHeight = PADDING;
   options.firearms.bulletCaliber = BulletCaliber.Rocket;
-  options.spawnDeltaPosition = [PADDING * 10, RAIL_Y];
+  // Rocket muzzle: 4 cells ahead of the rail's forward edge.
+  options.spawnDeltaPosition = [RAIL_FRONT_X + PADDING * 4, RAIL_Y];
   const [turretEid] = createTankTurret(options, tankEid, tankPid);
 
   // Body uses a random contrastive palette; the launch rail (weapon) = team color.
@@ -115,7 +121,7 @@ export function createRocketTank(opts: {
   fillAllSlots(turretEid, options);
 
   // Add exhaust pipes
-  createTankExhaustPipes(tankEid, PADDING * 14, PADDING * HULL_ROWS);
+  createTankExhaustPipes(tankEid, PADDING * HULL_COLS, PADDING * HULL_ROWS);
 
   return tankEid;
 }

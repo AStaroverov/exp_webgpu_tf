@@ -18,8 +18,10 @@ import { toggleChartsPanel, updateCharts } from "./MetricsBrowser/index.ts";
 import {
   downloadModels,
   getDrawState,
+  getGreedyState,
   resetState,
   setDrawState,
+  setGreedyState,
   settingsReady,
 } from "./uiUtils.ts";
 
@@ -49,6 +51,10 @@ export function createDebugVisualization(
       controls.render = !controls.render;
       setDrawState(controls.render);
     }
+    if (e.code === "KeyG") {
+      controls.greedy = !controls.greedy;
+      setGreedyState(controls.greedy);
+    }
   });
 
   return gui.domElement;
@@ -56,6 +62,7 @@ export function createDebugVisualization(
 
 const controls = {
   render: false,
+  greedy: false,
   charts: toggleChartsPanel,
   downloadModels,
   resetState() {
@@ -70,6 +77,7 @@ function setupControls(gui: GUI) {
 
   settingsReady.then(() => {
     controls.render = getDrawState();
+    controls.greedy = getGreedyState();
     folder.controllers.forEach((c) => c.updateDisplay());
   });
 
@@ -77,6 +85,10 @@ function setupControls(gui: GUI) {
     .add(controls, "render")
     .name("Render (P)")
     .onChange((v: boolean) => setDrawState(v));
+  folder
+    .add(controls, "greedy")
+    .name("Greedy (G)")
+    .onChange((v: boolean) => setGreedyState(v));
   folder.add(controls, "charts").name("Charts (M)");
   folder.add(controls, "downloadModels").name("Download Models");
   folder.add(controls, "resetState").name("Reset State");

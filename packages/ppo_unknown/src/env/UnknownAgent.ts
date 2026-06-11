@@ -43,6 +43,16 @@ async function refreshSharedNetwork(): Promise<tf.LayersModel> {
   return next;
 }
 
+// ── Inference-mode override (vis tab) ────────────────────────────────────────
+// When set, overrides the train-based sampling choice in `decide()`. Only the
+// main tab's dashboard toggles this; actor workers never call it, so training
+// keeps stochastic sampling.
+let greedyOverride: boolean | undefined;
+
+export function setGreedyInference(value: boolean | undefined): void {
+  greedyOverride = value;
+}
+
 export class UnknownAgent {
   private memory = new AgentMemory<InputArrays>();
   private opened = false;
@@ -110,7 +120,7 @@ export class UnknownAgent {
     // 2. Sample an action for the current state.
     const state = prepareInputArrays(this.tankEid);
     const mask = computeActionMask(this.tankEid);
-    const options = this.train ? { greedy: false } : { greedy: true };
+    const options = { greedy: greedyOverride ?? !this.train };
     const input = createInputTensors([state]);
     const [result] = batchAct(sharedNetwork, input, [mask], options);
     input.forEach((t) => t.dispose());

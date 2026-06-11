@@ -13,6 +13,10 @@
  *     same reward for the same damage dealt;
  *   - killEnemy: +KILL_REWARD per kill, split between attackers by their damage
  *     share of the dying vehicle (a vehicle tracked last tick and gone now);
+ *     every attacker's share is floored at KILL_ASSIST_MIN_REWARD, so even a
+ *     tiny assist pays (the shares may then sum past KILL_REWARD);
+ *   - friendlyFire: −FRIENDLY_FIRE_PENALTY per point of same-team damage dealt
+ *     (from `FriendlyHitters`; self-hits excluded at source, no kill credit);
  *   - approach:  ±APPROACH_REWARD per hex step closer to / away from the nearest
  *     enemy (per-tick distance delta, so it telescopes over a macro-action; ticks
  *     where the *nearest enemy itself* changed — death or target switch — are
@@ -33,7 +37,21 @@ import { getGameComponents } from "../../../unknown/src/Game/ECS/createGameWorld
  * arrives as hundreds of tiny overlap events, earn proportionally, not per event.
  */
 export const DAMAGE_REWARD = 0.02;
+/**
+ * Penalty per point of friendly-fire damage dealt (read from `FriendlyHitters`,
+ * the same-team twin of `LastHitters`; self-hits are excluded at source).
+ * 2 × DAMAGE_REWARD: hurting an ally must cost more than the same damage on an
+ * enemy earns, or splash through a teammate would still net positive.
+ */
+export const FRIENDLY_FIRE_PENALTY = 0.04;
 export const KILL_REWARD = 1;
+/**
+ * Floor for a kill-assist share: anyone who damaged the victim gets at least
+ * this much when it dies, however small their damage share (one Medium bullet
+ * hit ≈ 0.2 for scale). The shares can then sum past KILL_REWARD — accepted:
+ * rewarding every participant matters more than conserving the total.
+ */
+export const KILL_ASSIST_MIN_REWARD = 0.2;
 /**
  * Reward per hex step closer to the nearest enemy (kill = 1, a bullet hit ≈ 0.2
  * for scale). 0.15 while the curriculum is on early rungs: before kills happen,
@@ -48,12 +66,15 @@ export class ScoreTracker {
   private score = new Map<number, number>();
   /** victimEid → (attackerPlayerId → last-seen accumulated damage), to diff per tick. */
   private prevDamage = new Map<number, Map<number, number>>();
+  /** Same, for friendly-fire damage (`FriendlyHitters`). */
+  private prevFriendlyDamage = new Map<number, Map<number, number>>();
   /** vehicleEid → last tick's nearest enemy + hex distance, to diff per tick. */
   private prevApproach = new Map<number, { enemy: number; dist: number }>();
 
   reset(): void {
     this.score.clear();
     this.prevDamage.clear();
+    this.prevFriendlyDamage.clear();
     this.prevApproach.clear();
   }
 
@@ -76,7 +97,7 @@ export class ScoreTracker {
    * split between attackers by damage share).
    */
   private updateCombat(world = GameDI.world): void {
-    const { Vehicle, LastHitters } = getGameComponents(world);
+    const { Vehicle, LastHitters, FriendlyHitters } = getGameComponents(world);
     const vehicles = query(world, [Vehicle, LastHitters]);
     const alive = new Set<number>();
 
@@ -93,6 +114,16 @@ export class ScoreTracker {
         if (inc > 0) this.add(playerId, DAMAGE_REWARD * inc);
       });
       this.prevDamage.set(victim, curr);
+
+      // Friendly fire dealt this tick → penalty for the shooter.
+      const prevFriendly = this.prevFriendlyDamage.get(victim);
+      const currFriendly = new Map<number, number>();
+      FriendlyHitters.forEachHitters(victim, (playerId: number, damage: number) => {
+        currFriendly.set(playerId, damage);
+        const inc = damage - (prevFriendly?.get(playerId) ?? 0);
+        if (inc > 0) this.add(playerId, -FRIENDLY_FIRE_PENALTY * inc);
+      });
+      this.prevFriendlyDamage.set(victim, currFriendly);
     }
 
     // Kills = vehicles tracked last tick but gone now → split KILL by damage share.
@@ -105,10 +136,17 @@ export class ScoreTracker {
       });
       if (totalDamage > 0) {
         prev.forEach((damage, playerId) => {
-          this.add(playerId, KILL_REWARD * (damage / totalDamage));
+          this.add(
+            playerId,
+            Math.max(KILL_ASSIST_MIN_REWARD, KILL_REWARD * (damage / totalDamage)),
+          );
         });
       }
       this.prevDamage.delete(victim);
+    }
+
+    for (const victim of this.prevFriendlyDamage.keys()) {
+      if (!alive.has(victim)) this.prevFriendlyDamage.delete(victim);
     }
   }
 

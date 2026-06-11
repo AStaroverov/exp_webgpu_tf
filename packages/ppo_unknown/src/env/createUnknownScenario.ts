@@ -50,7 +50,6 @@ const FIELD_SIZE = 1000;
 const TANK_TYPES = [
   VehicleType.LightTank,
   VehicleType.MediumTank,
-  VehicleType.HeavyTank,
   VehicleType.RocketTank,
   VehicleType.FlameTank,
   VehicleType.FrostTank,

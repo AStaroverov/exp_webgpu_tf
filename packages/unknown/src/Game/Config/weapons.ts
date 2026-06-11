@@ -67,36 +67,36 @@ export type BulletCaliberStats = {
  */
 export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
   [BulletCaliber.Light]: {
-    width: 8,
-    height: 5,
+    width: 10,
+    height: 7,
     speed: 650,
     density: 5_000,
     damage: 15,
     reloadTime: 1000, // Light tank - fast reload
     linearDamping: 0.4, // Light bullets lose speed quickly
-    maxDistance: HexGridConfig.radius * 4.6,
+    maxDistance: HexGridConfig.radius * 6.6,
     health: 0.001, // dies (and detonates) on any contact
     explosion: {
-      damage: 3,
-      radius: 5,
+      damage: 10,
+      radius: 6,
       vfxSize: 0, // damage-only blast: no explosion VFX / light flash
       lightRadius: 0,
     },
   },
 
   [BulletCaliber.Medium]: {
-    width: 10,
-    height: 6,
+    width: 14,
+    height: 10,
     speed: 800,
     density: 5_000,
     damage: 25,
     reloadTime: 1250, // Medium tank - balanced reload
     linearDamping: 0.3, // Medium bullets have moderate drag
-    maxDistance: HexGridConfig.radius * 6.6,
+    maxDistance: HexGridConfig.radius * 8.6,
     health: 0.001, // dies (and detonates) on any contact
     explosion: {
-      damage: 6,
-      radius: 5,
+      damage: 15,
+      radius: 9,
       vfxSize: 0, // damage-only blast: no explosion VFX / light flash
       lightRadius: 0,
     },
@@ -110,11 +110,11 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     damage: 50,
     reloadTime: 1500, // Heavy tank - slow reload
     linearDamping: 0.2, // Heavy bullets maintain speed longer
-    maxDistance: HexGridConfig.radius * 8.6,
+    maxDistance: HexGridConfig.radius * 10.6,
     health: 0.001, // dies (and detonates) on any contact
     explosion: {
-      damage: 9,
-      radius: 5,
+      damage: 20,
+      radius: 12,
       vfxSize: 0, // damage-only blast: no explosion VFX / light flash
       lightRadius: 0,
     },

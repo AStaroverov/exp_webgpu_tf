@@ -89,6 +89,7 @@ function createGameOnlyComponents(world: World) {
     Joint: createJointComponent(world),
     JointMotor: createJointMotorComponent(world),
     LastHitters: createLastHittersComponent(world),
+    FriendlyHitters: createLastHittersComponent(world),
     Obstacle: createObstacleComponent(world),
     ObstacleFootprint: createObstacleFootprintComponent(world),
     Parent: createParentComponent(world),

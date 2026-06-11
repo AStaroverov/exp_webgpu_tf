@@ -85,12 +85,11 @@ export function createPolicyLearnerAgent<S>({
           tAdvantages,
           config.policyClipRatio,
           config.entropyCoeff,
-          config.policyLogitsL2 ?? 0,
           config.clipNorm,
           j === mbc - 1,
           tMasks,
         );
-        loss && policyLossList.push(loss);
+        if (loss) policyLossList.push(loss);
         entropyList.push(entropy);
 
         tf.dispose(tStates);

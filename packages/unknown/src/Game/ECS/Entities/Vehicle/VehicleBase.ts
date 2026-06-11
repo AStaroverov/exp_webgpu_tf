@@ -28,6 +28,7 @@ export function createVehicleBase(options: VehicleOptions, { world } = GameDI): 
     TeamRef,
     PlayerRef,
     LastHitters,
+    FriendlyHitters,
     ImpulseAtPoint,
     VehicleController,
     SoundParentRelative,
@@ -46,6 +47,7 @@ export function createVehicleBase(options: VehicleOptions, { world } = GameDI): 
   TeamRef.addComponent(world, vehicleEid, options.teamId);
   PlayerRef.addComponent(world, vehicleEid, options.playerId);
   LastHitters.addComponent(world, vehicleEid);
+  FriendlyHitters.addComponent(world, vehicleEid);
 
   ImpulseAtPoint.addComponent(world, vehicleEid);
 

@@ -3,9 +3,9 @@ import { createHeadlightSet, createRectangleSet, PartsData } from "../Common/Tan
 export const SIZE = 6;
 export const PADDING = SIZE + 1;
 
-// Elongated hull: clearly longer (14 along +X / forward) than wide (6) so the
+// Elongated hull: clearly longer (10 along +X / forward) than wide (6) so the
 // vehicle reads as a launcher chassis rather than a tank.
-export const HULL_COLS = 14;
+export const HULL_COLS = 10;
 export const HULL_ROWS = 6;
 export const hullSet = createRectangleSet(HULL_COLS, HULL_ROWS, SIZE, PADDING);
 export const headlightSet = createHeadlightSet(HULL_COLS, HULL_ROWS, SIZE, PADDING);
@@ -44,7 +44,7 @@ export const RAIL_Y = SIDE_OFFSET;
 
 export const CATERPILLAR_SIZE = 3;
 export const CATERPILLAR_PADDING = CATERPILLAR_SIZE + 1;
-export const CATERPILLAR_LINE_COUNT = 26;
+export const CATERPILLAR_LINE_COUNT = 18;
 export const caterpillarLength = CATERPILLAR_LINE_COUNT * CATERPILLAR_PADDING;
 
 // Track anchor (distance from hull center to track center): just outside the

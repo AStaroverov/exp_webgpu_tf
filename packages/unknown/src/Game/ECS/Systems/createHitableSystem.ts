@@ -124,11 +124,12 @@ function applyKindEffects(partEid: number, { world } = GameDI) {
 }
 
 function saveHitters(hittableEid: EntityId, vehicleEid: EntityId, { world } = GameDI) {
-  const { Hitable, LastHitters, TeamRef, PlayerRef } = getGameComponents(world);
+  const { Hitable, LastHitters, FriendlyHitters, TeamRef, PlayerRef } = getGameComponents(world);
   if (!hasComponent(world, vehicleEid, LastHitters)) return;
   if (!hasComponent(world, hittableEid, TeamRef)) return;
 
   const vehiclePartTeamId = TeamRef.id[hittableEid];
+  const vehiclePlayerId = PlayerRef.id[vehicleEid];
   const count = Hitable.hitIndex[hittableEid];
 
   for (let i = 0; i < count; i++) {
@@ -137,10 +138,14 @@ function saveHitters(hittableEid: EntityId, vehicleEid: EntityId, { world } = Ga
     if (!hasComponent(world, hitEid, TeamRef)) continue;
 
     const attackerTeamId = TeamRef.id[hitEid];
-    if (attackerTeamId === vehiclePartTeamId) continue;
-
     const attackerPlayerId = PlayerRef.id[hitEid];
-    LastHitters.addDamage(vehicleEid, attackerPlayerId, Hitable.getDamage(hittableEid, i));
+    if (attackerTeamId === vehiclePartTeamId) {
+      if (attackerPlayerId !== vehiclePlayerId) {
+        FriendlyHitters.addDamage(vehicleEid, attackerPlayerId, Hitable.getDamage(hittableEid, i));
+      }
+    } else {
+      LastHitters.addDamage(vehicleEid, attackerPlayerId, Hitable.getDamage(hittableEid, i));
+    }
   }
 }
 

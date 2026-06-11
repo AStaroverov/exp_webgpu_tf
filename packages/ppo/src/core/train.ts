@@ -39,7 +39,6 @@ export function trainPolicyNetwork(
   advantages: tf.Tensor, // [B]
   clipRatio: number,
   entropyCoeff: number,
-  logitsL2Coeff: number,
   clipNorm: number,
   returnCost: boolean,
   masks?: tf.Tensor, // [B, sum(dims)] additive mask, optional
