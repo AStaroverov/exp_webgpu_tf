@@ -7,7 +7,7 @@
  * defensive fallbacks stay.
  *
  * actions = [index] (Float32Array from batchAct) — an index into the flat action
- * list `Hold | move dir 0..5 | fire dir 0..5` (see consts.ts layout).
+ * list `Hold | move dir 0..5 | fire target 0..35` (see consts.ts layout).
  */
 
 import { hasComponent } from "bitecs";
@@ -21,6 +21,7 @@ import {
   HOLD_ACTION,
   HOLD_DURATION_MS,
   FIRE_ACTION_OFFSET,
+  FIRE_TARGET_OFFSETS,
   MOVE_ACTION_OFFSET,
   MOVE_SPEED,
 } from "../consts.ts";
@@ -72,22 +73,21 @@ export function applyActionToGame(eid: number, actions: Float32Array, { world } 
     return;
   }
 
-  // Fire: a neighbour direction 0..5 (same layout as the move slice) — fire at
-  // the in-grid neighbour hex in that FIXED direction. neighborAt keeps the slot
-  // direction-stable (NOT the compacted neighbors), matching computeActionMask.
-  const target = grid.neighborAt(here, action - FIRE_ACTION_OFFSET);
-  if (!target) return; // off-grid direction → no-op (defensive)
-  // Stream-weapon turrets (StreamFirearms, no Firearms) hold a spray instead of
-  // firing a round — presence of the component IS the weapon kind, no enum branch.
+  const offset = FIRE_TARGET_OFFSETS[action - FIRE_ACTION_OFFSET];
+  if (!offset) return;
+  const target = { q: here.q + offset[0], r: here.r + offset[1] };
+  if (!grid.has(target)) return;
   if (hasComponent(world, Tank.turretEId[eid], StreamFirearms)) {
     enqueueAction(eid, {
       kind: ActionKind.FireStream,
       target: { kind: TargetKind.Hex, q: target.q, r: target.r },
     });
     return;
+  } else {
+    enqueueAction(eid, {
+      kind: ActionKind.Fire,
+      target: { kind: TargetKind.Hex, q: target.q, r: target.r },
+    });
+    return;
   }
-  enqueueAction(eid, {
-    kind: ActionKind.Fire,
-    target: { kind: TargetKind.Hex, q: target.q, r: target.r },
-  });
 }

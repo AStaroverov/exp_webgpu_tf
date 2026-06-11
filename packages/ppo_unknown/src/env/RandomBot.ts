@@ -17,7 +17,7 @@
 import { GameDI } from "../../../unknown/src/Game/DI/GameDI.ts";
 import {
   FIRE_ACTION_OFFSET,
-  FIRE_DIR_COUNT,
+  FIRE_TARGET_COUNT,
   HOLD_ACTION,
   MOVE_ACTION_OFFSET,
   MOVE_DIR_COUNT,
@@ -45,7 +45,7 @@ export class RandomBot {
     const roll = Math.random();
 
     if (roll < this.opts.fireProb) {
-      const fire = collectAllowed(mask, FIRE_ACTION_OFFSET, FIRE_DIR_COUNT);
+      const fire = collectAllowed(mask, FIRE_ACTION_OFFSET, FIRE_TARGET_COUNT);
       if (fire.length > 0) return fire[Math.floor(Math.random() * fire.length)];
     }
 

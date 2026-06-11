@@ -5,8 +5,9 @@
  * Three in-slot phases (param `phase`):
  *   1. AIMING     — rotate the turret toward the target (proportional slow-down near
  *                   the goal); advance once heading error ≤ TOLERANCE. The hex target
- *                   is a *direction*: if a unit sits on a hex along the trajectory,
- *                   the aim refines onto that unit's actual body center.
+ *                   is a *precise cell*: an enemy in it (or, failing that, the enemy
+ *                   nearest to its centre in the surrounding ring) is locked and
+ *                   tracked until the shot; with no enemy around, the hex centre.
  *   2. WAIT_READY — wait until the weapon is not reloading, then raise the shoot flag
  *                   (the bullet spawner, later this tick, fires the round + starts reload).
  *   3. FIRING     — the freshly started reload confirms the shot; lower the flag, finish.
@@ -14,7 +15,7 @@
  * Acts only on slot-0 fronts of its kind; owners run concurrently.
  */
 
-import { hasComponent, query } from "bitecs";
+import { entityExists, hasComponent, query } from "bitecs";
 import { GameDI } from "../../../DI/GameDI.ts";
 import { MapDI } from "../../../DI/MapDI.ts";
 import { normalizeAngle } from "../../../../../../../lib/math.ts";
@@ -41,53 +42,65 @@ export const AIM_ON_TARGET = 1;
 
 /**
  * Shared hex-target aimer (used by Fire and FireStream). The hex target is a
- * *direction*: if a unit sits on a hex along the trajectory, the aim refines onto
- * that unit's actual body center, re-resolved every tick to track movement.
+ * *precise cell* (mechanics: 3 radii of fire targets):
+ *   • an enemy unit IN the hex → lock it and aim at its live body centre until
+ *     the shot ("аимить именно в нее до выстрела");
+ *   • no unit in the hex → the enemy in the surrounding ring (the hex's 6
+ *     neighbours) nearest to the hex CENTRE is locked instead;
+ *   • no enemy at all → aim at the hex centre.
+ * The lock lives in the slot's `targetEidParam` (slot 0): it is resolved once
+ * and re-resolved only while empty or when the locked unit is destroyed, so a
+ * locked unit is tracked even if it leaves the hex.
  * Steers via the provided callback (proportional slow-down within SLOW_BAND,
  * zeroed on abort/on-target) and returns an AIM_* outcome.
  */
 export function createHexAimer({ world }: Pick<typeof GameDI, "world"> = GameDI) {
-  const { RigidBodyState } = getGameComponents(world);
+  const { ActionsQueue, RigidBodyState, Vehicle, TeamRef } = getGameComponents(world);
 
-  const sharedAimPoint = { x: 0, y: 0 };
   const sharedTarget = { q: 0, r: 0 };
 
-  function resolveAimPoint(
+  /** The locked unit still exists and is still a vehicle (eids get recycled). */
+  function isAliveVehicle(eid: number): boolean {
+    return eid !== 0 && entityExists(world, eid) && hasComponent(world, eid, Vehicle);
+  }
+
+  function resolveTargetEid(
     ownerEid: number,
     targetQ: number,
     targetR: number,
-    out?: { x: number; y: number },
-  ): { x: number; y: number } | null {
+    centerX: number,
+    centerY: number,
+  ): number {
     const grid = MapDI.grid;
-    const here = grid.worldToHex(
-      RigidBodyState.position.get(ownerEid, 0),
-      RigidBodyState.position.get(ownerEid, 1),
-    );
-    if (!here) return null;
+    const myTeam = TeamRef.id[ownerEid];
 
-    // The target is a neighbour hex, so the delta is one axial step — adding it
-    // repeatedly walks the straight hex ray in that direction.
-    const dq = targetQ - here.q;
-    const dr = targetR - here.r;
-    if (dq === 0 && dr === 0) return null;
-
-    sharedTarget.q = here.q;
-    sharedTarget.r = here.r;
-    while (true) {
-      sharedTarget.q += dq;
-      sharedTarget.r += dr;
-      if (!grid.has(sharedTarget)) return null;
-      const occupant = grid.getOccupant(sharedTarget.q, sharedTarget.r);
-      if (!occupant || occupant.eid === ownerEid) continue;
-      if (occupant.kind === OccupantKind.Unit) {
-        out = out ?? { x: 0, y: 0 };
-        out.x = RigidBodyState.position.get(occupant.eid, 0);
-        out.y = RigidBodyState.position.get(occupant.eid, 1);
-        return out;
-      }
-      if (occupant.kind === OccupantKind.Obstacle) return null;
-      // Reserved → keep scanning past it.
+    // An enemy in the target hex itself wins outright.
+    const inHex = grid.getOccupant(targetQ, targetR);
+    if (inHex && inHex.kind === OccupantKind.Unit && TeamRef.id[inHex.eid] !== myTeam) {
+      return inHex.eid;
     }
+
+    // Otherwise the nearest ring: the enemy whose body centre is closest to
+    // the TARGET HEX centre among the hex's 6 neighbours.
+    sharedTarget.q = targetQ;
+    sharedTarget.r = targetR;
+    let best = 0;
+    let bestDistSq = Infinity;
+    for (let dir = 0; dir < 6; dir++) {
+      const n = grid.neighborAt(sharedTarget, dir);
+      if (!n) continue;
+      const occupant = grid.getOccupant(n.q, n.r);
+      if (!occupant || occupant.kind !== OccupantKind.Unit) continue;
+      if (TeamRef.id[occupant.eid] === myTeam) continue;
+      const dx = RigidBodyState.position.get(occupant.eid, 0) - centerX;
+      const dy = RigidBodyState.position.get(occupant.eid, 1) - centerY;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < bestDistSq) {
+        bestDistSq = distSq;
+        best = occupant.eid;
+      }
+    }
+    return best;
   }
 
   return function aimAtHexTarget(
@@ -95,6 +108,7 @@ export function createHexAimer({ world }: Pick<typeof GameDI, "world"> = GameDI)
     aimerEid: number,
     targetQ: number,
     targetR: number,
+    targetEidParam: number,
     steer: (dir: number) => void,
   ): number {
     // Resolve the target hex's world center.
@@ -106,12 +120,22 @@ export function createHexAimer({ world }: Pick<typeof GameDI, "world"> = GameDI)
       return AIM_OFF_MAP;
     }
 
-    // Re-resolved every tick so the aim tracks a moving unit.
-    const aimPoint = resolveAimPoint(ownerEid, targetQ, targetR, sharedAimPoint) ?? targetCenter;
+    // Lock-on: keep the resolved unit until the shot; re-resolve only while
+    // there is none (a unit may enter the hex mid-aim) or it was destroyed.
+    let targetEid = ActionsQueue.getParam(ownerEid, 0, targetEidParam);
+    if (!isAliveVehicle(targetEid)) {
+      targetEid = resolveTargetEid(ownerEid, targetQ, targetR, targetCenter.x, targetCenter.y);
+      ActionsQueue.setParam(ownerEid, 0, targetEidParam, targetEid);
+    }
+
+    // A locked unit is aimed at its LIVE body centre (tracks movement); with
+    // no unit around, the shot goes to the hex centre.
+    const aimX = targetEid !== 0 ? RigidBodyState.position.get(targetEid, 0) : targetCenter.x;
+    const aimY = targetEid !== 0 ? RigidBodyState.position.get(targetEid, 1) : targetCenter.y;
 
     const aimerX = RigidBodyState.position.get(aimerEid, 0);
     const aimerY = RigidBodyState.position.get(aimerEid, 1);
-    const desired = Math.atan2(aimPoint.y - aimerY, aimPoint.x - aimerX);
+    const desired = Math.atan2(aimY - aimerY, aimX - aimerX);
     const err = normalizeAngle(desired - RigidBodyState.rotation[aimerEid]);
 
     if (Math.abs(err) <= TOLERANCE) {
@@ -138,6 +162,7 @@ export const FireActionDescriptor: ActionDescriptor<FireActionSpec> = {
     ActionsQueue.setKind(eid, slot, ActionKind.Fire);
     encodeTarget(ActionsQueue, eid, slot, spec.target);
     ActionsQueue.setParam(eid, slot, FireParamOffset.phase, FIRE_PHASE_AIMING);
+    ActionsQueue.setParam(eid, slot, FireParamOffset.targetEid, 0);
   },
   createSystem: () => createFireActionSystem(),
 };
@@ -194,6 +219,7 @@ export function createFireActionSystem({ world } = GameDI) {
           aimerEid,
           ActionsQueue.getTargetVal(ownerEid, 0, 0),
           ActionsQueue.getTargetVal(ownerEid, 0, 1),
+          FireParamOffset.targetEid,
           steer,
         );
         // Off-map target → can't aim; abort.

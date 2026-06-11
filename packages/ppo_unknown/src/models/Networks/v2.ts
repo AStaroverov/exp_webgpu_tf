@@ -42,9 +42,11 @@ import {
   BOARD_COLS,
   BOARD_ROWS,
   BoardChannel,
-  FIRE_DIR_COUNT,
   MOVE_DIR_COUNT,
 } from "../dims.ts";
+
+// Historical 6-direction fire slice (pre ring-target action space, see v4).
+const FIRE_DIR_COUNT = MOVE_DIR_COUNT;
 import { createInputs } from "../Inputs.ts";
 
 type NetworkConfig = { dim: number; heads: number; depth: number };

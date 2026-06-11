@@ -43,6 +43,7 @@ export const FireStreamActionDescriptor: ActionDescriptor<FireStreamActionSpec> 
     encodeTarget(ActionsQueue, eid, slot, spec.target);
     ActionsQueue.setParam(eid, slot, FireStreamParamOffset.phase, FIRE_STREAM_PHASE_AIMING);
     ActionsQueue.setParam(eid, slot, FireStreamParamOffset.elapsed, 0);
+    ActionsQueue.setParam(eid, slot, FireStreamParamOffset.targetEid, 0);
   },
   createSystem: () => createFireStreamActionSystem(),
 };
@@ -101,6 +102,7 @@ export function createFireStreamActionSystem({ world } = GameDI) {
           aimerEid,
           ActionsQueue.getTargetVal(ownerEid, 0, 0),
           ActionsQueue.getTargetVal(ownerEid, 0, 1),
+          FireStreamParamOffset.targetEid,
           steer,
         );
         // Off-map target → can't aim; abort. The flag may be inherited

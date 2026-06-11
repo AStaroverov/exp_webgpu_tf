@@ -8,7 +8,7 @@
 /** Bounded per-owner queue depth: one running action + one pre-decided next. */
 export const MAX_QUEUE = 2;
 
-/** Per-kind param/scratch floats per slot (≤2 used today, headroom). */
+/** Per-kind param/scratch floats per slot (≤3 used today, headroom). */
 export const PARAMS = 4;
 
 /**
@@ -34,6 +34,8 @@ export const AimParamOffset = {
 export const FireParamOffset = {
   /** Fire phase: 0 = aiming, 1 = waitReady, 2 = firing. */
   phase: 0,
+  /** Locked aim target: enemy eid resolved in/near the target hex, 0 = none (hex centre). */
+  targetEid: 1,
 } as const;
 
 export const HoldParamOffset = {
@@ -48,6 +50,8 @@ export const FireStreamParamOffset = {
   phase: 0,
   /** Accumulated hold time (ms). */
   elapsed: 1,
+  /** Locked aim target: enemy eid resolved in/near the target hex, 0 = none (hex centre). */
+  targetEid: 2,
 } as const;
 
 /** Fire phases (stored in the `phase` param): aim the turret, wait for reload, fire. */

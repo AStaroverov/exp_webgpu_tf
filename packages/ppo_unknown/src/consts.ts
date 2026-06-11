@@ -8,6 +8,9 @@
 
 import { POINTY_DIRECTIONS } from "../../unknown/src/Game/Map/HexConfig.ts";
 import { MASK_NEG as PPO_MASK_NEG } from "../../ppo/src/core/train.ts";
+import { FIRE_TARGET_OFFSETS } from "./state/hexNeighbors.ts";
+
+export { FIRE_RING_RADIUS, FIRE_TARGET_OFFSETS } from "./state/hexNeighbors.ts";
 
 /** Game tick used while simulating headless (ms). Matches tanks' cadence. */
 export const TICK_TIME_SIMULATION = Math.round(16 * 1.5);
@@ -21,17 +24,18 @@ export const LEARNING_STEPS = 10_000_000;
 export const MOVE_DIR_COUNT = POINTY_DIRECTIONS.length; // 6
 
 /**
- * Fire actions: one slot per hex neighbour direction (same layout/order as the
- * move slice — stable POINTY_DIRECTIONS). The policy picks one of the 6 nearest
- * hexes to fire at.
+ * Fire actions: one slot per TARGET HEX in rings 1..FIRE_RING_RADIUS around the
+ * tank (36 = 6 + 12 + 18; ring 1 first, in the move slice's POINTY_DIRECTIONS
+ * order — see `FIRE_TARGET_OFFSETS`). The policy picks the precise hex to fire
+ * at, not just a direction.
  */
-export const FIRE_DIR_COUNT = MOVE_DIR_COUNT; // 6
+export const FIRE_TARGET_COUNT = FIRE_TARGET_OFFSETS.length; // 36
 
 /**
  * One flat categorical action list (a single policy head samples one index):
  *   [0]        Hold
  *   [1 .. 6]   MoveStep into neighbour direction (index - MOVE_ACTION_OFFSET)
- *   [7 .. 12]  Fire at neighbour direction (index - FIRE_ACTION_OFFSET)
+ *   [7 .. 42]  Fire at the ring hex `FIRE_TARGET_OFFSETS[index - FIRE_ACTION_OFFSET]`
  * A flat space needs no "dead sub-head" handling: a fully masked slice simply
  * can't be sampled, and Hold is never masked, so the distribution stays valid.
  */
@@ -40,7 +44,7 @@ export const MOVE_ACTION_OFFSET = 1;
 export const FIRE_ACTION_OFFSET = MOVE_ACTION_OFFSET + MOVE_DIR_COUNT; // 7
 
 /** Total flat action-list / mask length. */
-export const ACTION_DIM_TOTAL = 1 + MOVE_DIR_COUNT + FIRE_DIR_COUNT; // 13
+export const ACTION_DIM_TOTAL = 1 + MOVE_DIR_COUNT + FIRE_TARGET_COUNT; // 43
 
 /** Head layout fed to the policy network: a single flat categorical head. */
 export const ACTION_HEAD_DIMS = [ACTION_DIM_TOTAL];

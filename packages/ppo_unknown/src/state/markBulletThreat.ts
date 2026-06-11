@@ -16,12 +16,14 @@
  *
  * 2. PREDICTED FIRE. An enemy that has a queued `Fire` action (front slot 0, or
  *    pending slot 1) telegraphs where it is about to shoot. The Fire action's target
- *    is a NEIGHBOUR hex used as a DIRECTION (one axial step); the executor walks the
- *    straight hex ray from the owner along that delta and stops at the first
- *    `Unit`/`Obstacle` (skipping `Reserved`). We walk the SAME ray from the enemy's
- *    hex, bounded by that vehicle's bullet flight distance, and mark it `UnderFire`
- *    too. The projection uses the queued Fire neighbour delta, NOT the turret's
- *    current world heading. A bare `Aim` is never projected; only a queued `Fire`.
+ *    is a PRECISE ring hex (rings 1..FIRE_RING_RADIUS); the shot flies the straight
+ *    world line from the owner through that hex's centre (and past it). We walk that
+ *    line from the enemy's hex, bounded by the vehicle's bullet flight distance and
+ *    stopping at the first `Unit`/`Obstacle` (skipping `Reserved`), and mark it
+ *    `UnderFire` too. The projection uses the queued Fire target hex, NOT the
+ *    turret's current world heading (nor the executor's aim-lock refinement onto a
+ *    unit near the hex — centre-line is a close, cheap approximation). A bare `Aim`
+ *    is never projected; only a queued `Fire`.
  *
  * Marks are written into the observer's EGOCENTRIC window (axial deltas from
  * `(selfQ, selfR)`, see board.ts); path cells beyond the view radius are walked
@@ -121,17 +123,17 @@ export function markBulletThreat(
     for (let slot = 0; slot < count; slot++) {
       if (ActionsQueue.getKind(eid, slot) !== ActionKind.Fire) continue;
 
-      // Fire's target is a neighbour hex used as a DIRECTION (one axial step).
+      // Fire's target is a precise ring hex; the shot's line passes through its centre.
       const targetQ = ActionsQueue.getTargetVal(eid, slot, 0);
       const targetR = ActionsQueue.getTargetVal(eid, slot, 1);
       const dq = targetQ - here.q;
       const dr = targetR - here.r;
       if (dq === 0 && dr === 0) continue; // no direction
 
-      // Walk the straight ray from the owner in that direction (skip `Reserved`,
-      // stop at the first `Unit`/`Obstacle` or the grid edge), the same hexes the
-      // Fire executor walks. Bounded by the bullet's world flight distance
-      // (centre-to-centre from the firing hex).
+      // Walk the straight world line from the owner through the target hex centre
+      // (skip `Reserved`, stop at the first `Unit`/`Obstacle` or the grid edge).
+      // Bounded by the bullet's world flight distance (centre-to-centre from the
+      // firing hex).
       markPredictedFireRay(selfEid, here.q, here.r, dq, dr, maxDist, selfQ, selfR, grid);
     }
   }
@@ -166,12 +168,10 @@ function threatRayVisit(selfEid: number, selfQ: number, selfR: number, markFirst
 
 /**
  * Walk the projected fire ray from `(fromQ, fromR)` along axial delta `(dq, dr)`
- * and mark in-window cells `UnderFire = 1`. `(dq, dr)` is one neighbour step (the
- * Fire target is a neighbour hex), so the world centres along it are collinear and
- * evenly spaced (`hexToWorld` is affine) — a world-space `raycast` along that
- * direction visits exactly the hexes the Fire executor steps through. Bounded by
- * `maxDist` world units centre-to-centre from the firing hex (the raycast starts at
- * that centre).
+ * (the offset to the queued Fire's target hex) and mark in-window cells
+ * `UnderFire = 1`: a world-space `raycast` along the line through the target hex's
+ * centre visits every hex the shot crosses. Bounded by `maxDist` world units
+ * centre-to-centre from the firing hex (the raycast starts at that centre).
  */
 function markPredictedFireRay(
   selfEid: number,

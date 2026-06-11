@@ -35,13 +35,10 @@ import { applyPerceiverLayer } from "../../../../ppo/src/models/Layers/Perceiver
 import { SliceLayer } from "../../../../ppo/src/models/Layers/SliceLayer.ts";
 import { SlotEmbeddingLayer } from "../../../../ppo/src/models/Layers/SlotEmbeddingLayer.ts";
 import { HexNeighborGatherLayer } from "../Layers/HexNeighborGatherLayer.ts";
-import {
-  BOARD_CELLS,
-  BOARD_CHANNELS,
-  BoardChannel,
-  FIRE_DIR_COUNT,
-  MOVE_DIR_COUNT,
-} from "../dims.ts";
+import { BOARD_CELLS, BOARD_CHANNELS, BoardChannel, MOVE_DIR_COUNT } from "../dims.ts";
+
+// Historical 6-direction fire slice (pre ring-target action space, see v4).
+const FIRE_DIR_COUNT = MOVE_DIR_COUNT;
 import { createInputs } from "../Inputs.ts";
 
 type NetworkConfig = { dim: number; heads: number; depth: number };

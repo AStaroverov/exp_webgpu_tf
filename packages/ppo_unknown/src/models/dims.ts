@@ -12,4 +12,4 @@ export {
   BOARD_SIZE,
   BoardChannel,
 } from "../state/board.ts";
-export { ACTION_HEAD_DIMS, MOVE_DIR_COUNT, FIRE_DIR_COUNT } from "../consts.ts";
+export { ACTION_HEAD_DIMS, MOVE_DIR_COUNT, FIRE_TARGET_COUNT } from "../consts.ts";
