@@ -4,7 +4,7 @@ import { NestedArray, TypedArray } from "../../../../../renderer/src/utils.ts";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 import { DamageKind } from "./Damagable.ts";
 
-const HITS_LIMIT = 10;
+const HITS_LIMIT = 30;
 const HIT_STRIDE = 3; // sourceEid, damage, kind
 
 export const createHitableComponent = defineComponent((Hitable, obs) => {
