@@ -76,6 +76,7 @@ type SnapshotCtx = {
   Dot: GameComponents["Dot"];
   Slowed: GameComponents["Slowed"];
   Firearms: GameComponents["Firearms"];
+  StreamFirearms: GameComponents["StreamFirearms"];
 };
 
 /** `VehicleType` → its one-hot board plane (non-tank types have no plane). */
@@ -92,7 +93,8 @@ export function snapshotUnknownBoard({ world } = GameDI) {
   const grid = MapDI.grid;
   if (!grid) return;
 
-  const { Tank, Vehicle, TeamRef, Children, Dot, Slowed, Firearms } = getGameComponents(world);
+  const { Tank, Vehicle, TeamRef, Children, Dot, Slowed, Firearms, StreamFirearms } =
+    getGameComponents(world);
   const observers = query(world, [Vehicle, Tank, UnknownInputBoard]);
 
   for (let i = 0; i < observers.length; i++) {
@@ -120,6 +122,7 @@ export function snapshotUnknownBoard({ world } = GameDI) {
       Dot,
       Slowed,
       Firearms,
+      StreamFirearms,
     };
     fillWindow(ctx);
 
@@ -297,14 +300,19 @@ function writeTypeOneHot(ctx: SnapshotCtx, dq: number, dr: number, unitEid: numb
 
 /**
  * Remaining reload of the unit's gun, log-squashed: `log1p(remaining_ms / 1000)`.
- * 0 (the dense default) = ready to fire; stream guns and gunless vehicles have no
- * `Firearms` and stay 0.
+ * 0 (the dense default) = ready to fire; bullet guns read `Firearms.reloading`,
+ * stream guns `StreamFirearms.reloading`; gunless vehicles stay 0.
  */
 function writeReload(ctx: SnapshotCtx, dq: number, dr: number, unitEid: number) {
-  const { selfEid, world, Tank, Firearms } = ctx;
+  const { selfEid, world, Tank, Firearms, StreamFirearms } = ctx;
   const turretEid = Tank.turretEId[unitEid];
-  if (turretEid === 0 || !hasComponent(world, turretEid, Firearms)) return;
-  const remainingMs = Firearms.reloading[turretEid];
+  if (turretEid === 0) return;
+  let remainingMs = 0;
+  if (hasComponent(world, turretEid, Firearms)) {
+    remainingMs = Firearms.reloading[turretEid];
+  } else if (hasComponent(world, turretEid, StreamFirearms)) {
+    remainingMs = StreamFirearms.reloading[turretEid];
+  }
   if (remainingMs > 0) {
     UnknownInputBoard.setDelta(
       selfEid,

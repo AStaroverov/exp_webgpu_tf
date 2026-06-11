@@ -6,7 +6,8 @@
  *
  * Two in-slot phases (param `phase`):
  *   1. AIMING  — rotate the turret toward the target (shared `createHexAimer`).
- *   2. HOLDING — raise the shoot flag every tick and accumulate `elapsed`; at
+ *   2. HOLDING — raise the shoot flag every tick and accumulate `elapsed` (both
+ *                paused while the stream magazine reloads); at
  *                `requestNextFrac · holdMs` open the slot so the next decision
  *                overlaps the tail of the hold; at `holdMs` finish, lowering the
  *                flag ONLY IF the pre-decided next action is not another
@@ -123,6 +124,14 @@ export function createFireStreamActionSystem({ world } = GameDI) {
 
       // phase === FIRE_STREAM_PHASE_HOLDING — hold the flag, count the window.
       const cfg = StreamCaliberConfig[StreamFirearms.caliberRef[turretEid]];
+
+      // Magazine spent → pause the window until the reload finishes (the flag
+      // is lowered so the held state stays honest; `elapsed` stops counting).
+      if (StreamFirearms.isReloading(turretEid)) {
+        TurretController.setShooting$(turretEid, 0);
+        continue;
+      }
+
       TurretController.setShooting$(turretEid, 1);
 
       const elapsed = ActionsQueue.getParam(ownerEid, 0, FireStreamParamOffset.elapsed) + delta;

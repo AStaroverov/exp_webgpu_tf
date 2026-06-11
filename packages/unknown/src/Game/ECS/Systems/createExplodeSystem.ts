@@ -32,20 +32,25 @@ export function createExplodeSystem({ world } = GameDI) {
       const x = getMatrixTranslationX(matrix);
       const y = getMatrixTranslationY(matrix);
 
-      spawnExplosion({
-        x,
-        y,
-        size: Explodable.vfxSize[eid],
-        duration: ExplosionConfig.defaultDuration,
-      });
-      spawnLightFlash({
-        x,
-        y,
-        radius: Explodable.lightRadius[eid],
-        duration: FlashLightConfig.explosion.duration,
-        color: FlashLightConfig.explosion.color,
-        intensity: FlashLightConfig.explosion.intensity,
-      });
+      // Damage-only blasts (plain bullets) carry zero VFX/light sizes — skip the visuals.
+      if (Explodable.vfxSize[eid] > 0) {
+        spawnExplosion({
+          x,
+          y,
+          size: Explodable.vfxSize[eid],
+          duration: ExplosionConfig.defaultDuration,
+        });
+      }
+      if (Explodable.lightRadius[eid] > 0) {
+        spawnLightFlash({
+          x,
+          y,
+          radius: Explodable.lightRadius[eid],
+          duration: FlashLightConfig.explosion.duration,
+          color: FlashLightConfig.explosion.color,
+          intensity: FlashLightConfig.explosion.intensity,
+        });
+      }
 
       const damage = Explodable.damage[eid];
       const radius = Explodable.radius[eid];

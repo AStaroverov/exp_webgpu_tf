@@ -8,9 +8,9 @@ export type ExplodableSettings = {
   damage: number;
   /** Damage radius in world pixels. */
   radius: number;
-  /** Explosion VFX sprite size. */
+  /** Explosion VFX sprite size; `0` = damage-only blast, no VFX. */
   vfxSize: number;
-  /** Light-flash radius. */
+  /** Light-flash radius; `0` = damage-only blast, no flash. */
   lightRadius: number;
 };
 

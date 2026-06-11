@@ -45,7 +45,8 @@ const optionsParticleRigid: RigidOptions = {
 
 /**
  * Sprays sensor particles from every `StreamFirearms` turret while its shoot
- * flag is held. Disjoint from the bullet spawner by component (`StreamFirearms`
+ * flag is held and the magazine isn't spent (`fireDurationMs` of emission →
+ * `reloadMs` pause). Disjoint from the bullet spawner by component (`StreamFirearms`
  * vs `Firearms`). Each particle is composed inline: the gameplay pieces
  * (sensor body + `Damagable`/`Dotable`/`SensorHits` + `DestroyByTimeout`) are added unconditionally
  * so the weapon works headless; the visual pieces only when rendering is on.
@@ -142,11 +143,22 @@ export function createStreamFirearmsSystem({ world } = GameDI) {
 
     for (let i = 0; i < turretEids.length; i++) {
       const turretEid = turretEids[i];
-      const interval = StreamCaliberConfig[StreamFirearms.caliberRef[turretEid]].emitIntervalMs;
+      const cfg = StreamCaliberConfig[StreamFirearms.caliberRef[turretEid]];
+      const interval = cfg.emitIntervalMs;
 
-      if (!TurretController.shouldShoot(turretEid)) {
-        // Primed reset: a fresh hold emits on its very first tick.
+      StreamFirearms.updateReloading(turretEid, delta);
+
+      if (StreamFirearms.isReloading(turretEid) || !TurretController.shouldShoot(turretEid)) {
+        // Primed reset: a fresh (post-reload) hold emits on its very first tick.
         StreamFirearms.emitAccMs[turretEid] = interval;
+        continue;
+      }
+
+      // Magazine: `firedMs` of emission spent; releasing the trigger does NOT
+      // refill it — only the reload does (see `startReloading`).
+      StreamFirearms.firedMs[turretEid] += delta;
+      if (StreamFirearms.firedMs[turretEid] >= cfg.fireDurationMs) {
+        StreamFirearms.startReloading(turretEid, cfg.reloadMs);
         continue;
       }
 

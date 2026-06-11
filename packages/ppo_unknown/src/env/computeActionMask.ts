@@ -10,12 +10,15 @@
  *   Hold [0]      — never masked, so the distribution always has a valid action.
  *   move [1..6]   — `0` for each passable hex neighbour (shared predicate with
  *                   `applyActionToGame.moveDestination`), `MASK_NEG` otherwise.
- *   fire [7..12]  — `MASK_NEG` for each direction whose line-of-fire hits a friendly
+ *   fire [7..12]  — `MASK_NEG` for the WHOLE slice while the agent's gun is reloading
+ *                   (`Firearms` or `StreamFirearms` — a shot is impossible anyway);
+ *                   otherwise `MASK_NEG` per direction whose line-of-fire hits a friendly
  *                   Unit before any enemy (no friendly fire), `0` otherwise. Firing
  *                   down an empty line just wastes the shot — the reward, not the
  *                   mask, discourages that.
  */
 
+import { hasComponent } from "bitecs";
 import { GameDI } from "../../../unknown/src/Game/DI/GameDI.ts";
 import { MapDI } from "../../../unknown/src/Game/DI/MapDI.ts";
 import { getGameComponents } from "../../../unknown/src/Game/ECS/createGameWorld.ts";
@@ -35,7 +38,7 @@ export function computeActionMask(eid: number, { world } = GameDI): Float32Array
   const grid = MapDI.grid;
   if (!grid) return mask; // no grid → nothing to forbid
 
-  const { RigidBodyState, TeamRef } = getGameComponents(world);
+  const { RigidBodyState, TeamRef, Tank, Firearms, StreamFirearms } = getGameComponents(world);
 
   // ── move slice [1..6] ─────────────────────────────────────────────────────
   const px = RigidBodyState.position.get(eid, 0);
@@ -51,6 +54,19 @@ export function computeActionMask(eid: number, { world } = GameDI): Float32Array
   // if `here` is undefined we leave the move slice all 0 (no info → don't forbid).
 
   // ── fire slice [7..12] ────────────────────────────────────────────────────
+  // A reloading gun cannot shoot in ANY direction — forbid the whole slice.
+  const turretEid = Tank.turretEId[eid];
+  const gunReloading =
+    turretEid !== 0 &&
+    ((hasComponent(world, turretEid, Firearms) && Firearms.isReloading(turretEid)) ||
+      (hasComponent(world, turretEid, StreamFirearms) && StreamFirearms.isReloading(turretEid)));
+  if (gunReloading) {
+    for (let dir = 0; dir < FIRE_DIR_COUNT; dir++) {
+      mask[FIRE_ACTION_OFFSET + dir] = MASK_NEG;
+    }
+    return mask;
+  }
+
   // The projectile travels along the whole direction line, so we walk the ray
   // from the firing cell outward and look at the FIRST blocker it hits:
   //   • friendly Unit first  → forbid (would hit an ally before any enemy);

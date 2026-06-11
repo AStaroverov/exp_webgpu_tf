@@ -17,7 +17,6 @@ import { createExplodableComponent } from "./Components/Explodable.ts";
 import { createHullAimedComponent } from "./Components/HullAimed.ts";
 import { createFirearmsComponent } from "./Components/Firearms.ts";
 import { createSpawnDeltaPositionComponent } from "./Components/SpawnDeltaPosition.ts";
-import { createHeuristicsDataComponent } from "./Components/HeuristicsData.ts";
 import { createHitableComponent } from "./Components/Hitable.ts";
 import {
   createImpulseComponent,
@@ -83,7 +82,6 @@ function createGameOnlyComponents(world: World) {
     Explodable: createExplodableComponent(world),
     Firearms: createFirearmsComponent(world),
     SpawnDeltaPosition: createSpawnDeltaPositionComponent(world),
-    HeuristicsData: createHeuristicsDataComponent(world),
     HullAimed: createHullAimedComponent(world),
     Hitable: createHitableComponent(world),
     Impulse: createImpulseComponent(world),

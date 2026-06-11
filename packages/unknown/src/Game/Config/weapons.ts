@@ -71,11 +71,17 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     height: 5,
     speed: 650,
     density: 5_000,
-    damage: 3 * 3,
-    reloadTime: 750, // Light tank - fast reload
+    damage: 15,
+    reloadTime: 1000, // Light tank - fast reload
     linearDamping: 0.4, // Light bullets lose speed quickly
     maxDistance: HexGridConfig.radius * 4.6,
-    health: (3 * 1.6) / 10,
+    health: 0.001, // dies (and detonates) on any contact
+    explosion: {
+      damage: 3,
+      radius: 5,
+      vfxSize: 0, // damage-only blast: no explosion VFX / light flash
+      lightRadius: 0,
+    },
   },
 
   [BulletCaliber.Medium]: {
@@ -83,11 +89,17 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     height: 6,
     speed: 800,
     density: 5_000,
-    damage: 4 * 3,
-    reloadTime: 1500, // Medium tank - balanced reload
+    damage: 25,
+    reloadTime: 1250, // Medium tank - balanced reload
     linearDamping: 0.3, // Medium bullets have moderate drag
     maxDistance: HexGridConfig.radius * 6.6,
-    health: (4 * 1.6) / 10,
+    health: 0.001, // dies (and detonates) on any contact
+    explosion: {
+      damage: 6,
+      radius: 5,
+      vfxSize: 0, // damage-only blast: no explosion VFX / light flash
+      lightRadius: 0,
+    },
   },
 
   [BulletCaliber.Heavy]: {
@@ -95,11 +107,17 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     height: 7,
     speed: 950,
     density: 5_000,
-    damage: 6 * 3,
-    reloadTime: 3000, // Heavy tank - slow reload
+    damage: 50,
+    reloadTime: 1500, // Heavy tank - slow reload
     linearDamping: 0.2, // Heavy bullets maintain speed longer
     maxDistance: HexGridConfig.radius * 8.6,
-    health: (5 * 1.6) / 10,
+    health: 0.001, // dies (and detonates) on any contact
+    explosion: {
+      damage: 9,
+      radius: 5,
+      vfxSize: 0, // damage-only blast: no explosion VFX / light flash
+      lightRadius: 0,
+    },
   },
 
   [BulletCaliber.Rocket]: {
@@ -153,6 +171,10 @@ export type StreamCaliberStats = {
   linearDamping: number;
   /** Min ms between emits while the held flag is up (framerate-independent rate) */
   emitIntervalMs: number;
+  /** Magazine: total ms of continuous emission before the gun must reload */
+  fireDurationMs: number;
+  /** Reload duration in ms once the magazine is spent */
+  reloadMs: number;
   /** FireStream held-window duration (~1000) */
   holdMs: number;
   /** Fraction of holdMs at which to scheduleRequestNext (~0.8) */
@@ -194,6 +216,8 @@ export const StreamCaliberConfig: StreamCaliberStats[] = [
     particleRadius: 4,
     linearDamping: 1.2,
     emitIntervalMs: 40,
+    fireDurationMs: 3000,
+    reloadMs: 2000,
     holdMs: 1000,
     requestNextFrac: 0.8,
     wander: { angularSpeed: 3.5, frequency: 2.5 },
@@ -211,6 +235,8 @@ export const StreamCaliberConfig: StreamCaliberStats[] = [
     particleRadius: 4,
     linearDamping: 1.2,
     emitIntervalMs: 40,
+    fireDurationMs: 3000,
+    reloadMs: 2000,
     holdMs: 1000,
     requestNextFrac: 0.8,
     wander: { angularSpeed: 2.5, frequency: 1.8 },
