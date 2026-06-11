@@ -36,12 +36,14 @@ import {
  */
 export function moveDestination(
   grid: HexGrid,
+  eid: number,
   q: number,
   r: number,
   moveDir: number,
 ): { q: number; r: number } | undefined {
   const dest = grid.neighborAt({ q, r }, moveDir);
-  if (!dest || !grid.isPassable(dest.q, dest.r)) return undefined;
+  // `isPassableFor`: the unit's own buffer-ring reservation must not block it.
+  if (!dest || !grid.isPassableFor(dest.q, dest.r, eid)) return undefined;
   return { q: dest.q, r: dest.r };
 }
 
@@ -63,7 +65,7 @@ export function applyActionToGame(eid: number, actions: Float32Array, { world } 
   }
 
   if (action < FIRE_ACTION_OFFSET) {
-    const dest = moveDestination(grid, here.q, here.r, action - MOVE_ACTION_OFFSET);
+    const dest = moveDestination(grid, eid, here.q, here.r, action - MOVE_ACTION_OFFSET);
     if (!dest) return; // invalid → no-op
     enqueueAction(eid, {
       kind: ActionKind.MoveStep,

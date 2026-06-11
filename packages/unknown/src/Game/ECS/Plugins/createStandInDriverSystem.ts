@@ -51,7 +51,7 @@ export function createStandInDriverSystem({ world } = GameDI) {
 
       const passable = grid
         .neighbors({ q: here.q, r: here.r })
-        .filter((n) => grid.isPassable(n.q, n.r));
+        .filter((n) => grid.isPassableFor(n.q, n.r, eid));
 
       if (passable.length === 0) {
         enqueueAction(eid, {

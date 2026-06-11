@@ -49,6 +49,18 @@ function prebuild(grid: HexGrid): ObstaclePlan[] {
     if (Math.random() >= ObstacleConfig.spawnChance) return;
 
     const anchor = { q: cell.q, r: cell.r };
+    // Obstacles either cluster densely (touching, distance 1) or keep at
+    // least 3 EMPTY cells between them (distance >= 4). Gaps of 1-2 cells
+    // are forbidden: with both buffer rings reserved they leave dead slots
+    // units can't use.
+    if (
+      plans.some((plan) => {
+        const d = grid.distance(plan.anchor, anchor);
+        return d === 2 || d === 3;
+      })
+    )
+      return;
+
     reserved.add(key);
     plans.push({ anchor, cells: [anchor] });
   });
@@ -58,12 +70,19 @@ function prebuild(grid: HexGrid): ObstaclePlan[] {
 
 /** The free cells (those not reserved by any plan) must stay one connected region. */
 function validate(grid: HexGrid, plans: ObstaclePlan[]): boolean {
-  const reserved = new Set<string>();
+  const blocked: Array<{ q: number; r: number }> = [];
   grid.forEachCell((c) => {
-    if (!grid.isPassable(c.q, c.r)) reserved.add(cellKey(c.q, c.r));
+    if (!grid.isPassable(c.q, c.r)) blocked.push({ q: c.q, r: c.r });
   });
   for (const plan of plans) {
-    for (const c of plan.cells) reserved.add(cellKey(c.q, c.r));
+    for (const c of plan.cells) blocked.push(c);
+  }
+
+  const reserved = new Set(blocked.map((c) => cellKey(c.q, c.r)));
+  // At runtime every obstacle reserves a buffer ring of neighbors, so
+  // connectivity must hold on the cells units can actually traverse.
+  for (const c of blocked) {
+    for (const n of grid.neighbors(c)) reserved.add(cellKey(n.q, n.r));
   }
 
   const free: Array<{ q: number; r: number }> = [];

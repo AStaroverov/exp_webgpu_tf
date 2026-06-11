@@ -46,8 +46,10 @@ export function computeActionMask(eid: number, { world } = GameDI): Float32Array
   const py = RigidBodyState.position.get(eid, 1);
   const here = grid.worldToHex(px, py)!;
 
+  if (!here) return mask;
+
   for (let dir = 0; dir < MOVE_DIR_COUNT; dir++) {
-    if (!moveDestination(grid, here.q, here.r, dir)) {
+    if (!moveDestination(grid, eid, here.q, here.r, dir)) {
       mask[MOVE_ACTION_OFFSET + dir] = MASK_NEG;
     }
   }

@@ -27,6 +27,7 @@ import { SystemGroup } from "../../../unknown/src/Game/ECS/Plugins/systems.ts";
 import { getGameComponents } from "../../../unknown/src/Game/ECS/createGameWorld.ts";
 import { createTank } from "../../../unknown/src/Game/ECS/Entities/Tank/createTank.ts";
 import { spawnObstacles } from "../../../unknown/src/Game/ECS/Entities/Obstacle/spawnObstacles.ts";
+import { pickSpawnCells } from "../../../unknown/src/Game/Map/pickSpawnCells.ts";
 import { VehicleType } from "../../../unknown/src/Game/Config/index.ts";
 import {
   getTankHealth,
@@ -190,7 +191,7 @@ export function createUnknownScenario(options: {
       if (grid.isPassable(cell.q, cell.r)) all.push({ q: cell.q, r: cell.r });
     });
     shuffle(all);
-    return all.slice(0, count);
+    return pickSpawnCells(grid, all, count);
   }
 
   function pickBorderCells(sizes: number[]): Array<Array<{ q: number; r: number }>> {
@@ -212,23 +213,23 @@ export function createUnknownScenario(options: {
     const band = (maxX - minX) * 0.25;
     const byX = [...passable].sort((a, b) => a.x - b.x); // left → right
 
-    const takeSide = (count: number, fromLeft: boolean) => {
-      const inBand = fromLeft
-        ? byX.filter((c) => c.x <= minX + band)
-        : byX.filter((c) => c.x >= maxX - band);
-      // Enough free cells in the band → spread along the border; otherwise take
-      // the N cells nearest this edge.
-      const pool =
-        inBand.length >= count
-          ? (shuffle(inBand), inBand)
-          : fromLeft
-            ? byX.slice(0, count)
-            : byX.slice(-count);
-      return pool.slice(0, count).map((c) => ({ q: c.q, r: c.r }));
+    const takeSide = (count: number, fromLeft: boolean, picked: Array<{ q: number; r: number }>) => {
+      // Spread randomly inside the border band; if the band can't fit the team
+      // (spawn rules reject some cells), spill over to the next-nearest cells.
+      const ordered = fromLeft ? byX : [...byX].reverse();
+      const inBand = ordered.filter((c) => (fromLeft ? c.x <= minX + band : c.x >= maxX - band));
+      const rest = ordered.filter((c) => (fromLeft ? c.x > minX + band : c.x < maxX - band));
+      return pickSpawnCells(grid, [...shuffle(inBand), ...rest], count, picked);
     };
 
-    // Team 0 → left, every other team → right.
-    return sizes.map((count, team) => takeSide(count, team === 0));
+    // Team 0 → left, every other team → right; `picked` accumulates across teams
+    // so no two spawn cells end up adjacent, even across the team split.
+    const picked: Array<{ q: number; r: number }> = [];
+    return sizes.map((count, team) => {
+      const cells = takeSide(count, team === 0, picked);
+      picked.push(...cells);
+      return cells;
+    });
   }
 }
 

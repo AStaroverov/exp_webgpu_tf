@@ -23,7 +23,7 @@ export enum OccupantKind {
   Unit = 0,
   /** A static obstacle (rock / building). */
   Obstacle = 1,
-  /** A cell a unit is *driving into* — not yet physically occupied, but no longer free. */
+  /** A buffer cell around a unit or obstacle — not physically occupied, but not free. */
   Reserved = 2,
 }
 
@@ -228,6 +228,16 @@ export class HexGrid {
   isPassable(q: number, r: number): boolean {
     const cell = this.cells.get(cellKey(q, r));
     return cell != null && cell.occupantEid === null;
+  }
+
+  /**
+   * Like `isPassable`, but cells held by `eid` itself count as enterable —
+   * every unit's neighbor ring is Reserved by that unit, so the unit must be
+   * able to step into its own ring (that's how it leaves its current cell).
+   */
+  isPassableFor(q: number, r: number, eid: EntityId): boolean {
+    const cell = this.cells.get(cellKey(q, r));
+    return cell != null && (cell.occupantEid === null || cell.occupantEid === eid);
   }
 
   occupy(q: number, r: number, eid: EntityId, kind: OccupantKind): void {

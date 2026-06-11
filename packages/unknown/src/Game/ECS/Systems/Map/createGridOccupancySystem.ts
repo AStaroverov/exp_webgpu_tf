@@ -9,34 +9,38 @@
  * Each tick:
  *   1. clear every Unit/Reserved cell (static Obstacles are left untouched);
  *   2. mark the cell each vehicle currently sits on as Unit (occupied);
- *   3. mark the cell each *moving* vehicle is heading into as Reserved — derived
- *      from its position + velocity (one cell ahead), skipping cells that are
- *      already taken.
+ *   3. mark every free neighbor of an Obstacle cell as Reserved (buffer ring);
+ *   4. mark every free neighbor of each vehicle's cell as Reserved (buffer ring).
+ *
+ * A buffer ring is reserved with its owner's eid, so a vehicle may still enter
+ * its *own* ring (that's how it leaves its cell) while everyone else treats the
+ * ring as blocked. A cell sitting in TWO rings (adjacent to both owners) is
+ * contested: it is re-reserved with no owner (eid 0), so neither vehicle may
+ * enter it — otherwise whoever reserved it first could drive right up to the
+ * other one.
  */
 
-import { query } from "bitecs";
+import { EntityId, query } from "bitecs";
 import { GameDI } from "../../../DI/GameDI.ts";
 import { MapDI } from "../../../DI/MapDI.ts";
 import { getGameComponents } from "../../createGameWorld.ts";
-import { OccupantKind } from "../../../Map/HexGrid.ts";
-import { HexGridConfig } from "../../../Map/HexConfig.ts";
-
-/** Speed (world units/tick) below which a vehicle is treated as not moving (no reservation). */
-const MIN_SPEED = 0.5;
-/** How far ahead (world units) along velocity we look for the cell being entered. */
-const LOOKAHEAD = HexGridConfig.radius;
+import { HexCell, HexGrid, OccupantKind } from "../../../Map/HexGrid.ts";
 
 export function createGridOccupancySystem({ world } = GameDI) {
   const { Vehicle, RigidBodyState } = getGameComponents(world);
+  const obstacleCells: HexCell[] = [];
 
   return function updateGridOccupancy() {
     const grid = MapDI.grid;
     if (!grid) return;
 
-    // 1) Clear the dynamic layer; keep static obstacles.
+    // 1) Clear the dynamic layer; collect static obstacles for their buffer ring.
+    obstacleCells.length = 0;
     grid.forEachCell((cell) => {
       if (cell.occupantKind === OccupantKind.Unit || cell.occupantKind === OccupantKind.Reserved) {
         grid.vacate(cell.q, cell.r);
+      } else if (cell.occupantKind === OccupantKind.Obstacle) {
+        obstacleCells.push(cell);
       }
     });
 
@@ -50,21 +54,36 @@ export function createGridOccupancySystem({ world } = GameDI) {
       if (here) grid.occupy(here.q, here.r, eid, OccupantKind.Unit);
     }
 
-    // 3) Reserved cells — the cell each moving vehicle is driving into.
-    for (const eid of vehicles) {
-      const vx = RigidBodyState.linvel.get(eid, 0);
-      const vy = RigidBodyState.linvel.get(eid, 1);
-      const speed = Math.hypot(vx, vy);
-      if (speed < MIN_SPEED) continue;
+    // 3) Buffer ring around every obstacle.
+    for (const cell of obstacleCells) {
+      reserveNeighbors(grid, cell.q, cell.r, cell.occupantEid!);
+    }
 
+    // 4) Buffer ring around every vehicle.
+    for (const eid of vehicles) {
       const px = RigidBodyState.position.get(eid, 0);
       const py = RigidBodyState.position.get(eid, 1);
-      const ahead = grid.worldToHex(px + (vx / speed) * LOOKAHEAD, py + (vy / speed) * LOOKAHEAD);
-      if (!ahead) continue;
-      // Don't overwrite a cell that's already taken (the vehicle's own current
-      // cell, another unit, an obstacle, or someone else's earlier reservation).
-      if (grid.getOccupant(ahead.q, ahead.r) !== null) continue;
-      grid.occupy(ahead.q, ahead.r, eid, OccupantKind.Reserved);
+      const here = grid.worldToHex(px, py);
+      if (here) reserveNeighbors(grid, here.q, here.r, eid);
     }
   };
+}
+
+/**
+ * No entity — a contested ring cell (adjacent to two different owners) is
+ * re-reserved with this sentinel so `isPassableFor` blocks it for EVERYONE:
+ * whoever reserved it first must not get to drive right up to the other owner.
+ */
+const NO_OWNER: EntityId = 0 as EntityId;
+
+/** Reserve every free neighbor of (q, r) on behalf of `eid`; contested cells lose their owner. */
+function reserveNeighbors(grid: HexGrid, q: number, r: number, eid: EntityId): void {
+  for (const n of grid.neighbors({ q, r })) {
+    const occ = grid.getOccupant(n.q, n.r);
+    if (occ === null) {
+      grid.occupy(n.q, n.r, eid, OccupantKind.Reserved);
+    } else if (occ.kind === OccupantKind.Reserved && occ.eid !== eid) {
+      grid.occupy(n.q, n.r, NO_OWNER, OccupantKind.Reserved);
+    }
+  }
 }

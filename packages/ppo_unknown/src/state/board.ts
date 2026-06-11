@@ -72,7 +72,7 @@ export const BoardChannel = {
    * cell beyond the view radius (the square window's corners).
    */
   Obstacle: C++,
-  /** A cell a unit is driving into (grid `OccupantKind.Reserved`); 0/1. */
+  /** A reserved buffer cell around a unit or obstacle (grid `OccupantKind.Reserved`); 0/1. */
   Reserved: C++,
   /**
    * Under fire (0/1): a cell lying on the remaining flight path of an enemy

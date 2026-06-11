@@ -89,10 +89,10 @@ export function createMoveStepActionSystem({ world } = GameDI) {
       }
 
       // Self-check: occupancy is owned by createGridOccupancySystem (rebuilt each
-      // tick from positions + velocity). If the target cell is held by ANOTHER
-      // unit, just stop — never drive into a cell that isn't ours. A null cell or
-      // our own mark is fine (while rotating we have no velocity, so the cell
-      // ahead may be unmarked yet).
+      // tick from positions; every unit/obstacle reserves its neighbor ring). If
+      // the target cell is held by ANOTHER entity, just stop — never drive into a
+      // cell that isn't ours. A null cell or our own mark (our own buffer ring)
+      // is fine.
       const occ = grid.getOccupant(targetQ, targetR);
       if (occ !== null && occ.eid !== ownerEid) {
         stop(ownerEid);

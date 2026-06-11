@@ -13,7 +13,7 @@
  *   - The observer's own cell       → `Self` plane (always the center) + hp + stats.
  *   - Same-team unit cells          → `Ally`  plane + hp + stats.
  *   - Other-team unit cells         → `Enemy` plane + hp + stats.
- *   - `Reserved` cells              → `Reserved` plane (a unit is driving into them).
+ *   - `Reserved` cells              → `Reserved` plane (buffer ring around units/obstacles).
  *   - Live enemy bullet paths       → `UnderFire` plane (see `markBulletThreat`);
  *     bullets in the air are always visible regardless of who fired them.
  *   - `CoordX/CoordY`               → normalized 0..1 cell-center window coords, written
@@ -231,7 +231,7 @@ function markObstacle(ctx: SnapshotCtx, dq: number, dr: number) {
   UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.Obstacle, 1);
 }
 
-/** Reserved cell (a unit is driving into it). */
+/** Reserved cell (buffer ring around a unit or obstacle). */
 function writeReserved(ctx: SnapshotCtx, dq: number, dr: number, _reserverEid: number) {
   UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.Reserved, 1);
 }

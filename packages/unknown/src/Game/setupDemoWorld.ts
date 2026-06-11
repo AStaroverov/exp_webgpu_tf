@@ -18,6 +18,7 @@ import { SystemGroup } from "./ECS/Plugins/systems.ts";
 import { createTank } from "./ECS/Entities/Tank/createTank.ts";
 import { VehicleType, teamBaseColor } from "./Config/index.ts";
 import { spawnObstacles } from "./ECS/Entities/Obstacle/spawnObstacles.ts";
+import { pickSpawnCells } from "./Map/pickSpawnCells.ts";
 import { createStandInDriverSystem } from "./ECS/Plugins/createStandInDriverSystem.ts";
 import { createShapeCountDiagnosticSystem } from "./ECS/Plugins/createShapeCountDiagnosticSystem.ts";
 
@@ -44,14 +45,15 @@ export function setupDemoWorld({ world } = GameDI) {
     ] as const;
     const TANK_COUNT = 5;
 
-    // Pick distinct random cells to place the tanks on.
+    // Pick distinct random cells to place the tanks on — passable, away from
+    // obstacles, and never adjacent to each other (see pickSpawnCells).
     const allCells: Array<{ q: number; r: number }> = [];
     grid.forEachCell((cell) => allCells.push({ q: cell.q, r: cell.r }));
     for (let i = allCells.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [allCells[i], allCells[j]] = [allCells[j], allCells[i]];
     }
-    const slots = allCells.slice(0, TANK_COUNT);
+    const slots = pickSpawnCells(grid, allCells, TANK_COUNT);
 
     for (let i = 0; i < slots.length; i++) {
       const { q, r } = slots[i];

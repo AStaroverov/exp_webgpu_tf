@@ -13,10 +13,10 @@ import { defineHex, Direction, Orientation } from "honeycomb-grid";
 
 export const HexGridConfig = {
   /** Hex "radius" in world pixels (xRadius === yRadius -> regular hex). */
-  radius: 96,
+  radius: 36,
   /** Grid size in hexes. */
-  cols: 12,
-  rows: 12,
+  cols: 16,
+  rows: 16,
   /** Orientation — pointy-top. */
   orientation: Orientation.POINTY,
 } as const;

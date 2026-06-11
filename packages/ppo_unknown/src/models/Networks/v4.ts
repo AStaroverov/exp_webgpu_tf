@@ -113,14 +113,16 @@ export function createNetwork(
     }).apply(encoded) as tf.SymbolicTensor; // [B, 36, dim] — all ring latents
 
     // Near-zero init on the scorers: logits start ≈ uniform (no random
-    // constant prior), state signal shows as crossings immediately.
+    // constant prior), state signal shows as crossings immediately. No bias —
+    // a per-scorer bias is one scalar shared by the whole group, letting each
+    // group drift to its own constant "level"; without it any action-type
+    // prior must be expressed through the tokens themselves.
     const logitInit = () => tf.initializers.orthogonal({ gain: 0.2 });
     const holdLogit = createDenseLayer({
       name: modelName + "_holdLogit",
       units: 1,
-      useBias: true,
+      useBias: false,
       activation: "linear",
-      biasInitializer: "zeros",
       kernelInitializer: logitInit(),
     }).apply(holdToken) as tf.SymbolicTensor; // [B, 1]
 
@@ -134,9 +136,8 @@ export function createNetwork(
           createDenseLayer({
             name: modelName + `_${kind}Scorer`,
             units: 1,
-            useBias: true,
+            useBias: false,
             activation: "linear",
-            biasInitializer: "zeros",
             kernelInitializer: logitInit(),
           }).apply(tokens) as tf.SymbolicTensor,
         ) as tf.SymbolicTensor; // [B, dims]
