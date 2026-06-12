@@ -11,7 +11,7 @@ export enum ShapeKind {
   Triangle = 5,
 }
 
-export const createShapeComponent = defineComponent((Shape, obs) => {
+export const createShapeComponent = defineComponent((Shape, { obs }) => {
   const kind = new Uint8Array(delegate.defaultSize);
   const values = NestedArray.f64(6, delegate.defaultSize);
 

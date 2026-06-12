@@ -3,7 +3,7 @@ import { NestedArray, TypedArray } from "../../utils.ts";
 import { addComponent, World } from "bitecs";
 import { defineComponent } from "../utils.ts";
 
-export const createThinnessComponent = defineComponent((Thinness, obs) => {
+export const createThinnessComponent = defineComponent((Thinness, { obs }) => {
   const value = TypedArray.f64(delegate.defaultSize);
   return {
     value,
@@ -17,7 +17,7 @@ export const createThinnessComponent = defineComponent((Thinness, obs) => {
   };
 });
 
-export const createRoundnessComponent = defineComponent((Roundness, obs) => {
+export const createRoundnessComponent = defineComponent((Roundness, { obs }) => {
   const value = new Float64Array(delegate.defaultSize);
   return {
     value,
@@ -33,7 +33,7 @@ export const createRoundnessComponent = defineComponent((Roundness, obs) => {
 
 // Edge feather width in local-space px (0 = hard SDF edge). The shape's color
 // and emission fade in over this distance inside the outline.
-export const createBlurnessComponent = defineComponent((Blurness, obs) => {
+export const createBlurnessComponent = defineComponent((Blurness, { obs }) => {
   const value = new Float64Array(delegate.defaultSize);
   return {
     value,
@@ -49,7 +49,7 @@ export const createBlurnessComponent = defineComponent((Blurness, obs) => {
 
 // Per-material light translucency for the RC lighting (0 = opaque occluder,
 // 1 = light passes through freely). Entities without the component use 0.
-export const createTranslucencyComponent = defineComponent((Translucency, obs) => {
+export const createTranslucencyComponent = defineComponent((Translucency, { obs }) => {
   const value = new Float64Array(delegate.defaultSize);
   return {
     value,
@@ -63,7 +63,7 @@ export const createTranslucencyComponent = defineComponent((Translucency, obs) =
   };
 });
 
-export const createLightEmitterComponent = defineComponent((LightEmitter, obs) => {
+export const createLightEmitterComponent = defineComponent((LightEmitter, { obs }) => {
   const radius = TypedArray.f64(delegate.defaultSize);
   const intensity = TypedArray.f64(delegate.defaultSize);
   return {
@@ -83,7 +83,7 @@ export const createLightEmitterComponent = defineComponent((LightEmitter, obs) =
 
 export type TColor = [number, number, number, number] | Float32Array;
 
-export const createColorComponent = defineComponent((Color, obs) => {
+export const createColorComponent = defineComponent((Color, { obs }) => {
   const rgba = NestedArray.f64(4, delegate.defaultSize);
 
   return {
