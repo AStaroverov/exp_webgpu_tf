@@ -18,9 +18,9 @@ export function typicalRemoveEntity(eid: number, disconnect = true, { world } = 
   if (
     disconnect &&
     hasComponent(world, eid, Parent) &&
-    hasComponent(world, Parent.id[eid], Children)
+    hasComponent(world, Parent.id.get(eid), Children)
   ) {
-    Children.removeChild(Parent.id[eid], eid);
+    Children.removeChild(Parent.id.get(eid), eid);
   }
 
   removeEntity(world, eid);
@@ -29,10 +29,10 @@ export function typicalRemoveEntity(eid: number, disconnect = true, { world } = 
 export function recursiveTypicalRemoveEntity(eid: number, isRoot = true, { world } = GameDI) {
   const { Children } = getGameComponents(world);
   if (hasComponent(world, eid, Children)) {
-    for (let i = 0; i < Children.entitiesCount[eid]; i++) {
+    for (let i = 0; i < Children.entitiesCount.get(eid); i++) {
       recursiveTypicalRemoveEntity(Children.entitiesIds.get(eid, i), false);
     }
-    Children.entitiesCount[eid] = 0;
+    Children.entitiesCount.set(eid, 0);
   }
 
   typicalRemoveEntity(eid, isRoot);

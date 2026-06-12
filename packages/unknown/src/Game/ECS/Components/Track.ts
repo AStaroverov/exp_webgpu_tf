@@ -1,6 +1,5 @@
-import { delegate } from "../../../../../renderer/src/delegate.ts";
-import { TypedArray } from "../../../../../renderer/src/utils.ts";
-import { addComponent, EntityId, World } from "bitecs";
+import { addComponent } from "bitecs";
+import type { EntityId, World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
 export enum TrackSide {
@@ -8,16 +7,16 @@ export enum TrackSide {
   Right = 1,
 }
 
-export const createTrackComponent = defineComponent((Track) => {
-  const side = TypedArray.i8(delegate.defaultSize);
-  const length = TypedArray.f64(delegate.defaultSize);
+export const createTrackComponent = defineComponent((Track, ctx) => {
+  const side = ctx.table.flat(Int8Array);
+  const length = ctx.table.flat(Float64Array);
   return {
     side,
     length,
     addComponent(world: World, eid: EntityId, s: TrackSide, len: number) {
       addComponent(world, eid, Track);
-      length[eid] = len;
-      side[eid] = s;
+      length.set(eid, len);
+      side.set(eid, s);
     },
   };
 });

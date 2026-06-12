@@ -1,6 +1,5 @@
-import { addComponent, EntityId, World } from "bitecs";
-import { delegate } from "../../../../../renderer/src/delegate.ts";
-import { TypedArray } from "../../../../../renderer/src/utils.ts";
+import { addComponent } from "bitecs";
+import type { EntityId, World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
 /**
@@ -8,19 +7,19 @@ import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
  * pre-tint live color. Presence = "this part is recolored"; the tint system
  * restores from here and removes the component when no status remains.
  */
-export const createOriginalColorComponent = defineComponent((OriginalColor) => {
-  const r = TypedArray.f64(delegate.defaultSize);
-  const g = TypedArray.f64(delegate.defaultSize);
-  const b = TypedArray.f64(delegate.defaultSize);
+export const createOriginalColorComponent = defineComponent((OriginalColor, ctx) => {
+  const r = ctx.table.flat(Float64Array);
+  const g = ctx.table.flat(Float64Array);
+  const b = ctx.table.flat(Float64Array);
   return {
     r,
     g,
     b,
     addComponent(world: World, eid: EntityId, cr: number, cg: number, cb: number) {
       addComponent(world, eid, OriginalColor);
-      r[eid] = cr;
-      g[eid] = cg;
-      b[eid] = cb;
+      r.set(eid, cr);
+      g.set(eid, cg);
+      b.set(eid, cb);
     },
   };
 });

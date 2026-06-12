@@ -1,6 +1,5 @@
-import { addComponent, removeComponent, EntityId, World, hasComponent } from "bitecs";
-import { delegate } from "../../../../../renderer/src/delegate.ts";
-import { TypedArray } from "../../../../../renderer/src/utils.ts";
+import { addComponent, removeComponent, hasComponent } from "bitecs";
+import type { EntityId, World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
 export enum SoundType {
@@ -17,12 +16,12 @@ export enum SoundState {
   Paused = 2,
 }
 
-export const createSoundComponent = defineComponent((Sound) => {
-  const type = TypedArray.i8(delegate.defaultSize);
-  const state = TypedArray.i8(delegate.defaultSize);
-  const loop = TypedArray.i8(delegate.defaultSize);
-  const volume = TypedArray.f32(delegate.defaultSize);
-  const _audioIndex = TypedArray.i16(delegate.defaultSize);
+export const createSoundComponent = defineComponent((Sound, ctx) => {
+  const type = ctx.table.flat(Int8Array);
+  const state = ctx.table.flat(Int8Array);
+  const loop = ctx.table.flat(Int8Array);
+  const volume = ctx.table.flat(Float32Array);
+  const _audioIndex = ctx.table.flat(Int16Array);
 
   return {
     type,
@@ -42,38 +41,33 @@ export const createSoundComponent = defineComponent((Sound) => {
       },
     ) {
       addComponent(world, eid, Sound);
-      type[eid] = t;
-      loop[eid] = options?.loop ? 1 : 0;
-      volume[eid] = options?.volume ?? 1;
-      state[eid] = options?.autoplay ? SoundState.Playing : SoundState.Stopped;
-      _audioIndex[eid] = -1;
+      type.set(eid, t);
+      loop.set(eid, options?.loop ? 1 : 0);
+      volume.set(eid, options?.volume ?? 1);
+      state.set(eid, options?.autoplay ? SoundState.Playing : SoundState.Stopped);
+      _audioIndex.set(eid, -1);
     },
 
     removeComponent(world: World, eid: EntityId) {
       removeComponent(world, eid, Sound);
-      type[eid] = SoundType.None;
-      state[eid] = SoundState.Stopped;
-      loop[eid] = 0;
-      volume[eid] = 0;
-      _audioIndex[eid] = -1;
     },
 
     play(eid: EntityId) {
-      state[eid] = SoundState.Playing;
+      state.set(eid, SoundState.Playing);
     },
     stop(eid: EntityId) {
-      state[eid] = SoundState.Stopped;
+      state.set(eid, SoundState.Stopped);
     },
     pause(eid: EntityId) {
-      state[eid] = SoundState.Paused;
+      state.set(eid, SoundState.Paused);
     },
 
     setVolume(eid: EntityId, v: number) {
-      volume[eid] = Math.max(0, Math.min(1, v));
+      volume.set(eid, Math.max(0, Math.min(1, v)));
     },
 
     isPlaying(eid: EntityId): boolean {
-      return state[eid] === SoundState.Playing;
+      return state.get(eid) === SoundState.Playing;
     },
     hasSound(world: World, eid: EntityId): boolean {
       return hasComponent(world, eid, Sound);

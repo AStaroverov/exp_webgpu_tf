@@ -1,6 +1,5 @@
-import { addComponent, World } from "bitecs";
-import { delegate } from "../../../../../renderer/src/delegate.ts";
-import { TypedArray } from "../../../../../renderer/src/utils.ts";
+import { addComponent } from "bitecs";
+import type { World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 import { DamageKind } from "./Damagable.ts";
 import { ExplosionVisual } from "../../Config/vfx.ts";
@@ -26,13 +25,13 @@ export type ExplodableSettings = {
  * component — regardless of what scheduled the destruction (collision, max range,
  * timeout, ...). The settings here drive both the VFX and the area damage.
  */
-export const createExplodableComponent = defineComponent((Explodable) => {
-  const kind = TypedArray.i8(delegate.defaultSize);
-  const visual = TypedArray.i8(delegate.defaultSize);
-  const damage = TypedArray.f64(delegate.defaultSize);
-  const radius = TypedArray.f64(delegate.defaultSize);
-  const vfxSize = TypedArray.f64(delegate.defaultSize);
-  const lightRadius = TypedArray.f64(delegate.defaultSize);
+export const createExplodableComponent = defineComponent((Explodable, ctx) => {
+  const kind = ctx.table.flat(Int8Array);
+  const visual = ctx.table.flat(Int8Array);
+  const damage = ctx.table.flat(Float64Array);
+  const radius = ctx.table.flat(Float64Array);
+  const vfxSize = ctx.table.flat(Float64Array);
+  const lightRadius = ctx.table.flat(Float64Array);
   return {
     kind,
     visual,
@@ -42,18 +41,18 @@ export const createExplodableComponent = defineComponent((Explodable) => {
     lightRadius,
     addComponent(world: World, eid: number, settings: ExplodableSettings) {
       addComponent(world, eid, Explodable);
-      kind[eid] = settings.kind;
-      visual[eid] = settings.visual;
-      damage[eid] = settings.damage;
-      radius[eid] = settings.radius;
-      vfxSize[eid] = settings.vfxSize;
-      lightRadius[eid] = settings.lightRadius;
+      kind.set(eid, settings.kind);
+      visual.set(eid, settings.visual);
+      damage.set(eid, settings.damage);
+      radius.set(eid, settings.radius);
+      vfxSize.set(eid, settings.vfxSize);
+      lightRadius.set(eid, settings.lightRadius);
     },
     getDamageKind(eid: number): DamageKind {
-      return kind[eid] as DamageKind;
+      return kind.get(eid) as DamageKind;
     },
     getVisual(eid: number): ExplosionVisual {
-      return visual[eid] as ExplosionVisual;
+      return visual.get(eid) as ExplosionVisual;
     },
   };
 });

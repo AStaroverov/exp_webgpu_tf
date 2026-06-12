@@ -14,7 +14,7 @@ export function createSpawnerBulletsSystem({ world } = GameDI) {
 
     for (let i = 0; i < turretEids.length; i++) {
       const turretEid = turretEids[i];
-      const vehicleEid = Parent.id[turretEid];
+      const vehicleEid = Parent.id.get(turretEid);
 
       Firearms.updateReloading(turretEid, delta);
 
@@ -27,7 +27,7 @@ export function createSpawnerBulletsSystem({ world } = GameDI) {
 
       Firearms.startReloading(
         turretEid,
-        BulletCaliberConfig[Firearms.caliber[turretEid] as BulletCaliber].reloadTime,
+        BulletCaliberConfig[Firearms.caliber.get(turretEid) as BulletCaliber].reloadTime,
       );
 
       spawnBullet(vehicleEid);

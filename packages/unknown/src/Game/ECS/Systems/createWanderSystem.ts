@@ -20,7 +20,7 @@ export function createWanderSystem({ world, physicalWorld } = GameDI) {
 
     for (let i = 0; i < eids.length; i++) {
       const eid = eids[i];
-      Wander.ageMs[eid] += delta;
+      Wander.ageMs.set(eid, Wander.ageMs.get(eid) + delta);
 
       const pid = RigidBodyRef.id[eid];
       if (pid === 0) continue;
@@ -28,8 +28,8 @@ export function createWanderSystem({ world, physicalWorld } = GameDI) {
       if (rb == null) continue;
 
       // Two detuned harmonics — a single sine reads as mechanical sway.
-      const arg = Wander.ageMs[eid] * Wander.frequency[eid] + Wander.phase[eid];
-      const omega = (sin(arg) + 0.5 * sin(arg * 2.3 + 1.7)) * Wander.angularSpeed[eid];
+      const arg = Wander.ageMs.get(eid) * Wander.frequency.get(eid) + Wander.phase.get(eid);
+      const omega = (sin(arg) + 0.5 * sin(arg * 2.3 + 1.7)) * Wander.angularSpeed.get(eid);
       const turn = omega * (delta / 1000);
 
       const v = rb.linvel();

@@ -181,7 +181,7 @@ export class ScoreTracker {
       let minDist = Infinity;
       for (let j = 0; j < vehicles.length; j++) {
         const other = vehicles[j];
-        if (TeamRef.id[other] === TeamRef.id[eid]) continue;
+        if (TeamRef.id.get(other) === TeamRef.id.get(eid)) continue;
         const otherHex = grid.worldToHex(
           RigidBodyState.position.get(other, 0),
           RigidBodyState.position.get(other, 1),
@@ -200,7 +200,7 @@ export class ScoreTracker {
 
       const prev = this.prevApproach.get(eid);
       if (prev && prev.enemy === nearest) {
-        this.add(PlayerRef.id[eid], APPROACH_REWARD * (prev.dist - minDist));
+        this.add(PlayerRef.id.get(eid), APPROACH_REWARD * (prev.dist - minDist));
       }
       this.prevApproach.set(eid, { enemy: nearest, dist: minDist });
     }

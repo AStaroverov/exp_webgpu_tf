@@ -18,14 +18,14 @@ export function createJointMotorSystem({ world, physicalWorld } = GameDI) {
 
       if (!motorChanges.has(eid)) continue;
 
-      const jointPid = Joint.pid[eid];
+      const jointPid = Joint.pid.get(eid);
       const joint = physicalWorld.getImpulseJoint(jointPid) as RevoluteImpulseJoint;
 
       if (joint) {
         joint.configureMotorPosition(
-          JointMotor.targetPosition[eid],
-          JointMotor.stiffness[eid],
-          JointMotor.damping[eid],
+          JointMotor.targetPosition.get(eid),
+          JointMotor.stiffness.get(eid),
+          JointMotor.damping.get(eid),
         );
       }
     }

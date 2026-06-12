@@ -1,6 +1,5 @@
-import { addComponent, World } from "bitecs";
-import { delegate } from "renderer/src/delegate.ts";
-import { TypedArray } from "renderer/src/utils.ts";
+import { addComponent } from "bitecs";
+import type { World } from "bitecs";
 import { defineComponent } from "renderer/src/ECS/utils.ts";
 
 /**
@@ -9,13 +8,13 @@ import { defineComponent } from "renderer/src/ECS/utils.ts";
  * eid is verified with `entityExists` before use (project rule). Lives only
  * while `createStunArcsSystem` keeps the overlay alive.
  */
-export const createStunOverlayComponent = defineComponent((StunArcs) => {
-  const overlayEid = TypedArray.u32(delegate.defaultSize);
+export const createStunOverlayComponent = defineComponent((StunArcs, ctx) => {
+  const overlayEid = ctx.table.flat(Uint32Array);
   return {
     overlayEid,
     addComponent(world: World, eid: number, overlay: number) {
       addComponent(world, eid, StunArcs);
-      overlayEid[eid] = overlay;
+      overlayEid.set(eid, overlay);
     },
   };
 });

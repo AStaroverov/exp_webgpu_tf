@@ -1,17 +1,16 @@
-import { addComponent, query, World } from "bitecs";
-import { delegate } from "../../../../../renderer/src/delegate.ts";
-import { TypedArray } from "../../../../../renderer/src/utils.ts";
+import { addComponent, query } from "bitecs";
+import type { World } from "bitecs";
 import { GameDI } from "../../DI/GameDI.ts";
 import { getGameComponents } from "../createGameWorld.ts";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
-export const createTeamRefComponent = defineComponent((TeamRef) => {
-  const id = TypedArray.u32(delegate.defaultSize);
+export const createTeamRefComponent = defineComponent((TeamRef, ctx) => {
+  const id = ctx.table.flat(Uint32Array);
   return {
     id,
     addComponent(world: World, eid: number, team: number) {
       addComponent(world, eid, TeamRef);
-      id[eid] = team;
+      id.set(eid, team);
     },
   };
 });
@@ -19,6 +18,6 @@ export const createTeamRefComponent = defineComponent((TeamRef) => {
 export function getTeamsCount({ world } = GameDI) {
   const { Tank, TeamRef } = getGameComponents(world);
   const tanks = query(world, [Tank]);
-  const teamsCount = new Set(tanks.map((tankId) => TeamRef.id[tankId]));
+  const teamsCount = new Set(tanks.map((tankId) => TeamRef.id.get(tankId)));
   return teamsCount.size;
 }

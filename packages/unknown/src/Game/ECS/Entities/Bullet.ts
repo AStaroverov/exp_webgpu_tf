@@ -122,15 +122,16 @@ const optionsSpawnBullet = {
 };
 const tmpMatrix = mat4.create();
 const tmpPosition = vec3.create() as Float32Array;
+const tmpSpawnDelta = new Float32Array(2);
 
 export function spawnBullet(vehicleEid: number, { world } = GameDI) {
   const { Tank, Firearms, SpawnDeltaPosition, TeamRef, PlayerRef, Color } =
     getGameComponents(world);
 
-  const turretEid = Tank.turretEId[vehicleEid];
+  const turretEid = Tank.turretEId.get(vehicleEid);
   const globalTransform = GlobalTransform.matrix.getBatch(turretEid);
-  const bulletPosition = SpawnDeltaPosition.position.getBatch(turretEid);
-  const bulletCaliber = mapBulletCaliber[Firearms.caliber[turretEid] as BulletCaliber];
+  const bulletPosition = SpawnDeltaPosition.position.getBatch(turretEid, tmpSpawnDelta);
+  const bulletCaliber = mapBulletCaliber[Firearms.caliber.get(turretEid) as BulletCaliber];
 
   tmpPosition.set(bulletPosition);
   mat4.identity(tmpMatrix);
@@ -147,9 +148,9 @@ export function spawnBullet(vehicleEid: number, { world } = GameDI) {
   optionsSpawnBullet.width = bulletCaliber.width;
   optionsSpawnBullet.height = bulletCaliber.height;
   optionsSpawnBullet.rotation = getMatrixRotationZ(tmpMatrix);
-  optionsSpawnBullet.calibre = Firearms.caliber[turretEid] as BulletCaliber;
-  optionsSpawnBullet.teamId = TeamRef.id[vehicleEid];
-  optionsSpawnBullet.playerId = PlayerRef.id[vehicleEid];
+  optionsSpawnBullet.calibre = Firearms.caliber.get(turretEid) as BulletCaliber;
+  optionsSpawnBullet.teamId = TeamRef.id.get(vehicleEid);
+  optionsSpawnBullet.playerId = PlayerRef.id.get(vehicleEid);
 
   createBullet(optionsSpawnBullet);
 

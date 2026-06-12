@@ -18,7 +18,7 @@ export { MAX_QUEUE };
 /** Number of live actions queued for `ownerEid` (0..MAX_QUEUE). */
 export function queueDepth(ownerEid: number, { world } = GameDI): number {
   const { ActionsQueue } = getGameComponents(world);
-  return ActionsQueue.count[ownerEid];
+  return ActionsQueue.count.get(ownerEid);
 }
 
 /** Whether `ownerEid` has no live actions queued. */
@@ -34,7 +34,7 @@ export function isIdle(ownerEid: number, di = GameDI): boolean {
  */
 export function needsDecision(ownerEid: number, { world } = GameDI): boolean {
   const { ActionsQueue } = getGameComponents(world);
-  const count = ActionsQueue.count[ownerEid];
+  const count = ActionsQueue.count.get(ownerEid);
   if (count >= MAX_QUEUE) return false;
   if (count === 0) return true;
   return ActionsQueue.shouldRequestNext(ownerEid, 0);
@@ -53,7 +53,7 @@ export function enqueueAction(
   { world } = GameDI,
 ): boolean {
   const { ActionsQueue } = getGameComponents(world);
-  const slot = ActionsQueue.count[ownerEid];
+  const slot = ActionsQueue.count.get(ownerEid);
   if (slot >= MAX_QUEUE) return false;
   // The registry slot for spec.kind is exactly that kind's descriptor, so its
   // encode accepts this spec; widen the lookup for the type system.
@@ -62,6 +62,6 @@ export function enqueueAction(
   ActionsQueue.setStatus(ownerEid, slot, ActionStatus.Idle);
   ActionsQueue.clearRequestNext(ownerEid, slot);
   ActionsQueue.resetElapsed(ownerEid, slot);
-  ActionsQueue.count[ownerEid] = slot + 1;
+  ActionsQueue.count.set(ownerEid, slot + 1);
   return true;
 }

@@ -6,7 +6,7 @@ import { createRectangleRR } from "../../Components/RigidRender.ts";
 import { defaultVehicleOptions, VehicleOptions } from "./Options.ts";
 import { randomRangeFloat } from "../../../../../../../lib/random.ts";
 import { clamp } from "lodash-es";
-import { addEntity, EntityId, hasComponent } from "bitecs";
+import { addEntity, type EntityId, hasComponent } from "bitecs";
 import { cos, min, sin } from "../../../../../../../lib/math.ts";
 import { VehicleType } from "../../Components/Vehicle.ts";
 import { getSlotPartConfig, SlotPartType } from "../../Components/SlotConfig.ts";
@@ -56,7 +56,7 @@ export function createHeadlightSet(
 
 export function updateSlotsBrightness(parentEId: EntityId, { world } = GameDI) {
   const { Children, Slot } = getGameComponents(world);
-  const childCount = Children.entitiesCount[parentEId];
+  const childCount = Children.entitiesCount.get(parentEId);
 
   for (let i = 0; i < childCount; i++) {
     const slotEid = Children.entitiesIds.get(parentEId, i);
@@ -99,7 +99,7 @@ export function fillAllSlots(
   { world } = GameDI,
 ): void {
   const { Children } = getGameComponents(world);
-  const childCount = Children.entitiesCount[parentEId];
+  const childCount = Children.entitiesCount.get(parentEId);
 
   for (let i = 0; i < childCount; i++) {
     const childEid = Children.entitiesIds.get(parentEId, i);
@@ -142,11 +142,11 @@ export function fillSlot(
   }
   Object.assign(fillSlotOptions, options);
 
-  const vehicleOrTurretEid = Parent.id[slotEid];
+  const vehicleOrTurretEid = Parent.id.get(slotEid);
   const vehicleEid = hasComponent(world, vehicleOrTurretEid, Vehicle)
     ? vehicleOrTurretEid
-    : Parent.id[vehicleOrTurretEid];
-  const vehicleType = Vehicle.type[vehicleEid] as VehicleType;
+    : Parent.id.get(vehicleOrTurretEid);
+  const vehicleType = Vehicle.type.get(vehicleEid) as VehicleType;
 
   const partType = Slot.partType[slotEid] as SlotPartType;
   const config = getSlotPartConfig(partType, vehicleType);
@@ -208,7 +208,7 @@ export function fillSlot(
 
 export function getEmptySlotsCount(parentEId: EntityId, { world } = GameDI): number {
   const { Children } = getGameComponents(world);
-  const childCount = Children.entitiesCount[parentEId];
+  const childCount = Children.entitiesCount.get(parentEId);
   let emptyCount = 0;
 
   for (let i = 0; i < childCount; i++) {
@@ -225,7 +225,7 @@ export function getEmptySlotsCount(parentEId: EntityId, { world } = GameDI): num
 
 export function findFirstEmptySlot(parentEId: EntityId, { world } = GameDI): EntityId | null {
   const { Children } = getGameComponents(world);
-  const childCount = Children.entitiesCount[parentEId];
+  const childCount = Children.entitiesCount.get(parentEId);
   for (let i = 0; i < childCount; i++) {
     const childEid = Children.entitiesIds.get(parentEId, i);
     if (isSlot(childEid) && isSlotEmpty(childEid)) {
@@ -237,7 +237,7 @@ export function findFirstEmptySlot(parentEId: EntityId, { world } = GameDI): Ent
 
 export function getSlotCount(parentEId: EntityId, { world } = GameDI): number {
   const { Children } = getGameComponents(world);
-  const childCount = Children.entitiesCount[parentEId];
+  const childCount = Children.entitiesCount.get(parentEId);
   let count = 0;
   for (let i = 0; i < childCount; i++) {
     const childEid = Children.entitiesIds.get(parentEId, i);
@@ -248,7 +248,7 @@ export function getSlotCount(parentEId: EntityId, { world } = GameDI): number {
 
 export function getFilledSlotCount(parentEId: EntityId, { world } = GameDI): number {
   const { Children } = getGameComponents(world);
-  const childCount = Children.entitiesCount[parentEId];
+  const childCount = Children.entitiesCount.get(parentEId);
   let filled = 0;
   for (let i = 0; i < childCount; i++) {
     const childEid = Children.entitiesIds.get(parentEId, i);
@@ -259,13 +259,13 @@ export function getFilledSlotCount(parentEId: EntityId, { world } = GameDI): num
 
 export function getVehicleTotalSlotCount(vehicleEid: EntityId, { world } = GameDI): number {
   const { Tank } = getGameComponents(world);
-  const turretEid = Tank.turretEId[vehicleEid];
+  const turretEid = Tank.turretEId.get(vehicleEid);
   return getSlotCount(vehicleEid) + getSlotCount(turretEid);
 }
 
 export function getVehicleFilledSlotCount(vehicleEid: EntityId, { world } = GameDI): number {
   const { Tank } = getGameComponents(world);
-  const turretEid = Tank.turretEId[vehicleEid];
+  const turretEid = Tank.turretEId.get(vehicleEid);
   return getFilledSlotCount(vehicleEid) + getFilledSlotCount(turretEid);
 }
 

@@ -252,7 +252,7 @@ function listVehicles(): Record<string, number> {
   const { Tank, Vehicle, Children } = getGameComponents(world);
   const options: Record<string, number> = {};
   for (const eid of query(world, [Tank, Vehicle, Children])) {
-    options[`#${eid} ${VehicleType[Vehicle.type[eid]]} team${getTankTeamId(eid)}`] = eid;
+    options[`#${eid} ${VehicleType[Vehicle.type.get(eid)]} team${getTankTeamId(eid)}`] = eid;
   }
   return options;
 }
@@ -493,7 +493,7 @@ function doFire(eid: number, dir: number) {
   const { Tank, Firearms } = getGameComponents(world);
   // Fire: unarmed turrets have no Firearms — their Fire action would hang
   // waiting for a reload that never starts.
-  if (!hasComponent(world, Tank.turretEId[eid], Firearms)) {
+  if (!hasComponent(world, Tank.turretEId.get(eid), Firearms)) {
     console.warn(`[debug] vehicle #${eid} is unarmed, Fire skipped`);
     return;
   }

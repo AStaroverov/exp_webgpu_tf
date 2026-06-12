@@ -9,7 +9,6 @@ import {
 import { spawnExplosion } from "../Entities/Explosion.ts";
 import { spawnLightFlash } from "../Entities/LightFlash.ts";
 import { ExplosionVisualConfig } from "../../Config/index.ts";
-import { DamageKind } from "../Components/Damagable.ts";
 
 /**
  * Detonates every entity that is both `Explodable` and scheduled for `Destroy`,
@@ -33,29 +32,31 @@ export function createExplodeSystem({ world } = GameDI) {
       const x = getMatrixTranslationX(matrix);
       const y = getMatrixTranslationY(matrix);
 
-      if (Explodable.vfxSize[eid] > 0) {
+      const vfxSize = Explodable.vfxSize.get(eid);
+      if (vfxSize > 0) {
         spawnExplosion({
           x,
           y,
           type: visuals.vfxType,
-          size: Explodable.vfxSize[eid],
+          size: vfxSize,
           duration: visuals.durationMs,
         });
       }
-      if (Explodable.lightRadius[eid] > 0) {
+      const lightRadius = Explodable.lightRadius.get(eid);
+      if (lightRadius > 0) {
         const flash = visuals.flash;
         spawnLightFlash({
           x,
           y,
-          radius: Explodable.lightRadius[eid],
+          radius: lightRadius,
           duration: flash.duration,
           color: flash.color,
           intensity: flash.intensity,
         });
       }
 
-      const damage = Explodable.damage[eid];
-      const radius = Explodable.radius[eid];
+      const damage = Explodable.damage.get(eid);
+      const radius = Explodable.radius.get(eid);
       const radiusSq = radius * radius;
 
       // Damage every hitable (tank parts, rocks, ...) in range, except bullets.
@@ -69,7 +70,7 @@ export function createExplodeSystem({ world } = GameDI) {
         if (distSq > radiusSq) continue;
 
         const proximity = 1 - Math.sqrt(distSq) / radius;
-        Hitable.hit$(targetEid, eid, damage * proximity, Explodable.kind[eid] as DamageKind);
+        Hitable.hit$(targetEid, eid, damage * proximity, Explodable.getDamageKind(eid));
       }
     }
   };

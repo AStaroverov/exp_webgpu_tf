@@ -1,4 +1,5 @@
-import { addComponent, World } from "bitecs";
+import { addComponent } from "bitecs";
+import type { World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
 /**

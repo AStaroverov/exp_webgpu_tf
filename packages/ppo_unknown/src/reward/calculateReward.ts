@@ -48,7 +48,7 @@ const TEAM_SPIRIT = 0.5;
 /** Cumulative combat score for the tank's player (delta'd by the agent). */
 export function calculateActionReward(eid: number, { world } = GameDI): number {
   const { PlayerRef } = getGameComponents(world);
-  return clamp(scoreTracker.getScore(PlayerRef.id[eid]), -REWARD_LIMIT, REWARD_LIMIT);
+  return clamp(scoreTracker.getScore(PlayerRef.id.get(eid)), -REWARD_LIMIT, REWARD_LIMIT);
 }
 
 /**
@@ -77,9 +77,9 @@ export function calculateFinalReward(
   const teammates = agents.filter((a) => getTankTeamId(a.tankEid) === myTeam);
   const teamSize = Math.max(1, teammates.length);
 
-  const myScore = scoreTracker.getScore(PlayerRef.id[eid]);
+  const myScore = scoreTracker.getScore(PlayerRef.id.get(eid));
   const totalTeamScore = teammates.reduce(
-    (sum, a) => sum + scoreTracker.getScore(PlayerRef.id[a.tankEid]),
+    (sum, a) => sum + scoreTracker.getScore(PlayerRef.id.get(a.tankEid)),
     0,
   );
   // Relative contribution: 1 = team average, teamSize = did everything alone.

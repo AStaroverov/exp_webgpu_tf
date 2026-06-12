@@ -47,13 +47,13 @@ export function createTrackControlSystem({ world } = GameDI) {
 
     for (let i = 0; i < vehicleEids.length; i++) {
       const vehicleEid = vehicleEids[i];
-      const moveDirection = VehicleController.move[vehicleEid];
-      const rotationDirection = VehicleController.rotation[vehicleEid];
+      const moveDirection = VehicleController.move.get(vehicleEid);
+      const rotationDirection = VehicleController.rotation.get(vehicleEid);
 
-      const engineType = Vehicle.engineType[vehicleEid] as EngineType;
+      const engineType = Vehicle.engineType.get(vehicleEid) as EngineType;
       const impulseFactor = mapTypeToTrackImpulse[engineType];
       const vehicleRotation = RigidBodyState.rotation[vehicleEid];
-      const slow = hasComponent(world, vehicleEid, Slowed) ? 1 - Slowed.slowMul[vehicleEid] : 1;
+      const slow = 1 - Slowed.slowMul.get(vehicleEid);
       const stun = hasComponent(world, vehicleEid, Stunned) ? 0 : 1;
 
       const turnFactor = -0.7;
@@ -70,7 +70,7 @@ export function createTrackControlSystem({ world } = GameDI) {
         rightPower /= maxPower;
       }
 
-      const childCount = Children.entitiesCount[vehicleEid];
+      const childCount = Children.entitiesCount.get(vehicleEid);
 
       for (let c = 0; c < childCount; c++) {
         const childEid = Children.entitiesIds.get(vehicleEid, c);
@@ -79,7 +79,7 @@ export function createTrackControlSystem({ world } = GameDI) {
           continue;
         }
 
-        const trackSide = Track.side[childEid];
+        const trackSide = Track.side.get(childEid);
         const power = trackSide === TrackSide.Left ? leftPower : rightPower;
         applyTrackImpulse(childEid, power * impulseFactor * slow * stun, vehicleRotation, delta);
       }

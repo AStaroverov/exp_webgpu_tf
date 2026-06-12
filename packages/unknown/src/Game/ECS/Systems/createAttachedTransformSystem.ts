@@ -21,7 +21,7 @@ export function createAttachedTransformSystem({ world } = GameDI) {
 
     for (let i = 0; i < entities.length; i++) {
       const eid = entities[i];
-      const parentGlobal = GlobalTransform.matrix.getBatch(Parent.id[eid]);
+      const parentGlobal = GlobalTransform.matrix.getBatch(Parent.id.get(eid));
       const local = LocalTransform.matrix.getBatch(eid);
       const global = GlobalTransform.matrix.getBatch(eid);
       mat4.multiply(global, parentGlobal, local);

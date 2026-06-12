@@ -60,9 +60,11 @@ export function defineComponent<T extends object>(
     const localObs: Obs = <F extends ReactiveSetter>(setter: F): F => {
       const setData = { component: ref, data: null };
       return ((eid: number, ...args: Parameters<F> extends [number, ...infer R] ? R : never) => {
-        const result = setter(eid, ...args);
+        // addComponent BEFORE the write: table-backed columns require the row
+        // to exist (set on an absent row throws); change detectors only collect
+        // eids, so the notify order within the call doesn't matter.
         addComponent(world, eid, setData);
-        return result;
+        return setter(eid, ...args);
       }) as F;
     };
     let tableHandle: TableHandle | null = null;

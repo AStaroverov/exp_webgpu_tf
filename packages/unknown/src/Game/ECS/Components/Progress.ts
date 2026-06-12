@@ -1,24 +1,22 @@
-import { TypedArray } from "../../../../../renderer/src/utils.ts";
-import { delegate } from "../../../../../renderer/src/delegate.ts";
-import { addComponent, World } from "bitecs";
+import { addComponent } from "bitecs";
+import type { World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
-export const createProgressComponent = defineComponent((Progress) => {
-  const age = TypedArray.f32(delegate.defaultSize);
-  const maxAge = TypedArray.f32(delegate.defaultSize);
+export const createProgressComponent = defineComponent((Progress, ctx) => {
+  const age = ctx.table.flat(Float32Array);
+  const maxAge = ctx.table.flat(Float32Array);
   return {
     age,
     maxAge,
     addComponent(world: World, eid: number, max: number) {
       addComponent(world, eid, Progress);
-      age[eid] = 0;
-      maxAge[eid] = max;
+      maxAge.set(eid, max);
     },
     updateAge(eid: number, delta: number) {
-      age[eid] += delta;
+      age.set(eid, age.get(eid) + delta);
     },
     getProgress(eid: number): number {
-      return age[eid] / maxAge[eid];
+      return age.get(eid) / maxAge.get(eid);
     },
   };
 });

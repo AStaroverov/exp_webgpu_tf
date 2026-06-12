@@ -100,12 +100,12 @@ export function createStunArcsSystem({ world } = GameDI) {
     const tracked = query(world, [StunArcs]);
     for (let i = tracked.length - 1; i >= 0; i--) {
       const vehicleEid = tracked[i];
-      const overlayEid = StunArcs.overlayEid[vehicleEid];
+      const overlayEid = StunArcs.overlayEid.get(vehicleEid);
       const overlayAlive = overlayEid !== 0 && entityExists(world, overlayEid);
 
       if (overlayAlive && hasComponent(world, vehicleEid, Stunned)) {
         const remainingMs = Stunned.remainingMs.get(vehicleEid);
-        Progress.age[overlayEid] = Progress.maxAge[overlayEid] - remainingMs;
+        Progress.age.set(overlayEid, Progress.maxAge.get(overlayEid) - remainingMs);
 
         const frac = Stunned.getRemainingFraction(vehicleEid);
         const slice = Math.floor(Progress.getProgress(overlayEid) * 24);

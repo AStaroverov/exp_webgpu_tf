@@ -1,6 +1,5 @@
-import { addComponent, EntityId, World } from "bitecs";
-import { delegate } from "../../../../../renderer/src/delegate.ts";
-import { NestedArray } from "../../../../../renderer/src/utils.ts";
+import { addComponent } from "bitecs";
+import type { EntityId, World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
 /**
@@ -8,8 +7,8 @@ import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
  * tip relative to the turret pivot). Shared by every weapon kind — bullets and
  * stream particles both spawn at owner transform × this delta.
  */
-export const createSpawnDeltaPositionComponent = defineComponent((SpawnDeltaPosition) => {
-  const position = NestedArray.f32(2, delegate.defaultSize);
+export const createSpawnDeltaPositionComponent = defineComponent((SpawnDeltaPosition, ctx) => {
+  const position = ctx.table.nested(Float32Array, 2);
   return {
     position,
     addComponent(world: World, eid: EntityId, x: number, y: number) {

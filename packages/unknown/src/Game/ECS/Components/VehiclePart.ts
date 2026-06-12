@@ -1,4 +1,5 @@
-import { addComponent, EntityId, removeComponent, World } from "bitecs";
+import { addComponent, removeComponent } from "bitecs";
+import type { EntityId, World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
 export const createVehiclePartComponent = defineComponent((VehiclePart) => ({

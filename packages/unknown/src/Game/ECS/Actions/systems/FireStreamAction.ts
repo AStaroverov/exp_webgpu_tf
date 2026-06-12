@@ -65,11 +65,11 @@ export function createFireStreamActionSystem({ world } = GameDI) {
     const eids = query(world, [ActionsQueue, Vehicle, RigidBodyState]);
 
     for (const ownerEid of eids) {
-      if (ActionsQueue.count[ownerEid] === 0) continue;
+      if (ActionsQueue.count.get(ownerEid) === 0) continue;
       if (ActionsQueue.getKind(ownerEid, 0) !== ActionKind.FireStream) continue;
       if (ActionsQueue.getStatus(ownerEid, 0) === ActionStatus.Finished) continue;
 
-      const turretEid = Tank.turretEId[ownerEid];
+      const turretEid = Tank.turretEId.get(ownerEid);
 
       // No stream turret to hold → nothing we can do; finish (lowering a
       // flag possibly inherited raised from a previous seamless stream).
@@ -125,7 +125,7 @@ export function createFireStreamActionSystem({ world } = GameDI) {
       }
 
       // phase === FIRE_STREAM_PHASE_HOLDING — hold the flag, count the window.
-      const cfg = StreamCaliberConfig[StreamFirearms.caliberRef[turretEid]];
+      const cfg = StreamCaliberConfig[StreamFirearms.caliberRef.get(turretEid)];
 
       // Magazine spent → pause the window until the reload finishes (the flag
       // is lowered so the held state stays honest; `elapsed` stops counting).
@@ -148,7 +148,7 @@ export function createFireStreamActionSystem({ world } = GameDI) {
       if (elapsed >= cfg.holdMs) {
         // Consecutive FireStream → keep the flag raised: seamless stream, no gap.
         const nextIsStream =
-          ActionsQueue.count[ownerEid] > 1 &&
+          ActionsQueue.count.get(ownerEid) > 1 &&
           ActionsQueue.getKind(ownerEid, 1) === ActionKind.FireStream;
         if (!nextIsStream) TurretController.setShooting$(turretEid, 0);
         ActionsQueue.setStatus(ownerEid, 0, ActionStatus.Finished);

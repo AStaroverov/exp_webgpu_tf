@@ -103,7 +103,7 @@ export function createManualControl(canvas: HTMLCanvasElement): ManualControl {
       VehicleController.setMove$(targetEid, 0);
       VehicleController.setRotate$(targetEid, 0);
     }
-    const turretEid = Tank.turretEId[targetEid];
+    const turretEid = Tank.turretEId.get(targetEid);
     if (turretEid && hasComponent(world, turretEid, TurretController)) {
       TurretController.setRotation$(turretEid, 0);
       TurretController.setShooting$(turretEid, 0);
@@ -141,7 +141,7 @@ export function createManualControl(canvas: HTMLCanvasElement): ManualControl {
       VehicleController.setRotate$(eid, rotate);
 
       // ── Turret (aim + fire) ───────────────────────────────────────
-      const turretEid = Tank.turretEId[eid];
+      const turretEid = Tank.turretEId.get(eid);
       if (!turretEid || !hasComponent(world, turretEid, TurretController)) return;
 
       const target = screenToWorld(mouse.x, mouse.y);

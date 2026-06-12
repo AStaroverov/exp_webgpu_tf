@@ -51,13 +51,13 @@ export function createWheelControlSystem({ world } = GameDI) {
 
     for (let i = 0; i < vehicleEids.length; i++) {
       const vehicleEid = vehicleEids[i];
-      const accelerate = VehicleController.move[vehicleEid];
-      const steering = VehicleController.rotation[vehicleEid];
+      const accelerate = VehicleController.move.get(vehicleEid);
+      const steering = VehicleController.rotation.get(vehicleEid);
 
-      const engineType = Vehicle.engineType[vehicleEid] as EngineType;
+      const engineType = Vehicle.engineType.get(vehicleEid) as EngineType;
       const impulseFactor = mapTypeToWheelImpulse[engineType];
 
-      const childCount = Children.entitiesCount[vehicleEid];
+      const childCount = Children.entitiesCount.get(vehicleEid);
 
       for (let c = 0; c < childCount; c++) {
         const childEid = Children.entitiesIds.get(vehicleEid, c);
@@ -67,7 +67,7 @@ export function createWheelControlSystem({ world } = GameDI) {
         }
 
         if (hasComponent(world, childEid, WheelSteerable)) {
-          const maxAngle = WheelSteerable.maxSteeringAngle[childEid];
+          const maxAngle = WheelSteerable.maxSteeringAngle.get(childEid);
           const targetAngle = clamp(steering * maxAngle, -maxAngle, maxAngle);
           JointMotor.setTargetPosition$(childEid, targetAngle);
         }

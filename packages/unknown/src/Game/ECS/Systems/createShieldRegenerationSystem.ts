@@ -16,7 +16,7 @@ export function createShieldRegenerationSystem({ world } = GameDI) {
   const regenTimers = new Map<number, number>();
 
   function findFirstEmptyShieldSlot(parentEid: number): number | null {
-    const childCount = Children.entitiesCount[parentEid];
+    const childCount = Children.entitiesCount.get(parentEid);
 
     for (let i = 0; i < childCount; i++) {
       const childEid = Children.entitiesIds.get(parentEid, i);
@@ -38,9 +38,9 @@ export function createShieldRegenerationSystem({ world } = GameDI) {
 
     for (let i = 0; i < turretEids.length; i++) {
       const turretEid = turretEids[i];
-      const vehicleEid = Parent.id[turretEid];
+      const vehicleEid = Parent.id.get(turretEid);
 
-      if (Vehicle.type[vehicleEid] !== VehicleType.Harvester) continue;
+      if (Vehicle.type.get(vehicleEid) !== VehicleType.Harvester) continue;
 
       const lastRegenTime = regenTimers.get(turretEid) ?? 0;
       if (currentTime - lastRegenTime < SHIELD_REGEN_INTERVAL) continue;
@@ -49,8 +49,8 @@ export function createShieldRegenerationSystem({ world } = GameDI) {
       if (emptyShieldSlotEid === null) continue;
 
       const options = resetOptions(mutatedVehicleOptions);
-      options.playerId = PlayerRef.id[vehicleEid];
-      options.teamId = TeamRef.id[vehicleEid];
+      options.playerId = PlayerRef.id.get(vehicleEid);
+      options.teamId = TeamRef.id.get(vehicleEid);
       options.x = RigidBodyState.position.get(vehicleEid, 0);
       options.y = RigidBodyState.position.get(vehicleEid, 1);
       options.rotation = RigidBodyState.rotation[vehicleEid];

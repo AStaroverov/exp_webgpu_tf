@@ -30,7 +30,8 @@
  * (the shot still flies there) but not marked (not visible).
  */
 
-import { query, World } from "bitecs";
+import { query } from "bitecs";
+import type { World } from "bitecs";
 import { GameDI } from "../../../unknown/src/Game/DI/GameDI.ts";
 import { getGameComponents } from "../../../unknown/src/Game/ECS/createGameWorld.ts";
 import { ActionKind } from "../../../unknown/src/Game/ECS/Actions/ActionTypes.ts";
@@ -73,7 +74,7 @@ export function markBulletThreat(
 
   for (let i = 0; i < bullets.length; i++) {
     const eid = bullets[i];
-    if (TeamRef.id[eid] === myTeam) continue; // only enemy fire is a threat
+    if (TeamRef.id.get(eid) === myTeam) continue; // only enemy fire is a threat
 
     const px = RigidBodyState.position.get(eid, 0);
     const py = RigidBodyState.position.get(eid, 1);
@@ -99,7 +100,7 @@ export function markBulletThreat(
       dirY = vy / speed;
     }
 
-    const maxDist = Math.sqrt(DestroyByDistance.maxDistanceSq[eid]);
+    const maxDist = Math.sqrt(DestroyByDistance.maxDistanceSq.get(eid));
     const remaining = maxDist - travelled;
     if (remaining <= 0) continue;
 
@@ -120,9 +121,9 @@ export function markBulletThreat(
 
   for (let i = 0; i < vehicles.length; i++) {
     const eid = vehicles[i];
-    if (TeamRef.id[eid] === myTeam) continue; // only enemy fire is a threat
+    if (TeamRef.id.get(eid) === myTeam) continue; // only enemy fire is a threat
 
-    const maxDist = bulletMaxDistance(Vehicle.type[eid] as VehicleType);
+    const maxDist = bulletMaxDistance(Vehicle.type.get(eid) as VehicleType);
     if (maxDist <= 0) continue; // gunless (non-tank) — never fires
 
     // The enemy's current hex (origin of the projected ray).
@@ -132,7 +133,7 @@ export function markBulletThreat(
     );
     if (!here) continue;
 
-    const count = ActionsQueue.count[eid];
+    const count = ActionsQueue.count.get(eid);
     // Scan the live queue slots (0 = front, 1 = pre-decided next) for a Fire.
     for (let slot = 0; slot < count; slot++) {
       if (ActionsQueue.getKind(eid, slot) !== ActionKind.Fire) continue;

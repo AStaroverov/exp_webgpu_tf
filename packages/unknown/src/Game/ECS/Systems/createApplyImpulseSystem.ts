@@ -22,8 +22,8 @@ export function createApplyImpulseSystem({ world, physicalWorld } = GameDI) {
       const rb = physicalWorld.getRigidBody(pid);
       if (rb == null) continue;
 
-      impulseVec.x = Impulse.x[eid];
-      impulseVec.y = Impulse.y[eid];
+      impulseVec.x = Impulse.x.get(eid);
+      impulseVec.y = Impulse.y.get(eid);
 
       rb.applyImpulse(impulseVec, true);
       Impulse.reset(eid);
@@ -42,7 +42,7 @@ export function createApplyImpulseSystem({ world, physicalWorld } = GameDI) {
       const rb = physicalWorld.getRigidBody(pid);
       if (rb == null) continue;
 
-      rb.applyTorqueImpulse(TorqueImpulse.value[eid], true);
+      rb.applyTorqueImpulse(TorqueImpulse.value.get(eid), true);
       TorqueImpulse.reset(eid);
     }
 
@@ -59,7 +59,7 @@ export function createApplyImpulseSystem({ world, physicalWorld } = GameDI) {
       const rb = physicalWorld.getRigidBody(pid);
       if (rb == null) continue;
 
-      const count = ImpulseAtPoint.count[eid];
+      const count = ImpulseAtPoint.count.get(eid);
       for (let j = 0; j < count; j++) {
         const [ix, iy, px, py] = ImpulseAtPoint.get(eid, j);
         impulseVec.x = ix;

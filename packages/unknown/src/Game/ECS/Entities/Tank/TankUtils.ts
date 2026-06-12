@@ -1,4 +1,5 @@
-import { EntityId, hasComponent, removeComponent } from "bitecs";
+import type { EntityId } from "bitecs";
+import { hasComponent, removeComponent } from "bitecs";
 import { min, smoothstep } from "../../../../../../../lib/math.ts";
 import { GameDI } from "../../../DI/GameDI.ts";
 import { CollisionGroup } from "../../../Physical/createRigid.ts";
@@ -37,8 +38,8 @@ export function destroyTank(vehicleEid: EntityId, { world } = GameDI) {
 
   const partsToExplode: EntityId[] = [];
 
-  const turretEid = Tank.turretEId[vehicleEid];
-  for (let i = 0; i < Children.entitiesCount[turretEid]; i++) {
+  const turretEid = Tank.turretEId.get(vehicleEid);
+  for (let i = 0; i < Children.entitiesCount.get(turretEid); i++) {
     const slotEid = Children.entitiesIds.get(turretEid, i);
     if (!isSlot(slotEid) || isSlotEmpty(slotEid)) continue;
     const partEid = getSlotFillerEid(slotEid);
@@ -47,7 +48,7 @@ export function destroyTank(vehicleEid: EntityId, { world } = GameDI) {
     tearOffTankPart(partEid);
   }
 
-  for (let i = 0; i < Children.entitiesCount[vehicleEid]; i++) {
+  for (let i = 0; i < Children.entitiesCount.get(vehicleEid); i++) {
     const slotEid = Children.entitiesIds.get(vehicleEid, i);
     if (!isSlot(slotEid) || isSlotEmpty(slotEid)) continue;
     const partEid = getSlotFillerEid(slotEid);
@@ -77,13 +78,13 @@ export function tearOffTankPart(
   removeComponent(world, vehiclePartEid, TeamRef);
   removeComponent(world, vehiclePartEid, PlayerRef);
 
-  const slotEid = Parent.id[vehiclePartEid];
+  const slotEid = Parent.id.get(vehiclePartEid);
 
   if (shouldBreakConnection && isSlot(slotEid)) {
     Children.removeChild(slotEid, vehiclePartEid);
   }
 
-  const jointPid = hasComponent(world, vehiclePartEid, Joint) ? Joint.pid[vehiclePartEid] : 0;
+  const jointPid = Joint.pid.get(vehiclePartEid);
   if (jointPid > 0) {
     Joint.removeComponent(world, vehiclePartEid);
     if (hasComponent(world, vehiclePartEid, VehiclePart)) {
@@ -110,13 +111,13 @@ export function resetVehiclePartJointComponent(vehiclePartEid: number, { world }
 
 export function getTankCurrentPartsCount(vehicleEid: number, { world } = GameDI) {
   const { Tank } = getGameComponents(world);
-  const turretEid = Tank.turretEId[vehicleEid];
+  const turretEid = Tank.turretEId.get(vehicleEid);
   return getFilledSlotCount(vehicleEid) + getFilledSlotCount(turretEid);
 }
 
 export function getTankTotalSlotCount(vehicleEid: number, { world } = GameDI) {
   const { Tank } = getGameComponents(world);
-  const turretEid = Tank.turretEId[vehicleEid];
+  const turretEid = Tank.turretEId.get(vehicleEid);
   return getSlotCount(vehicleEid) + getSlotCount(turretEid);
 }
 
@@ -140,11 +141,11 @@ export function getTankHealth(tankEid: number): number {
 
 export function getTankTeamId(tankEid: number, { world } = GameDI) {
   const { TeamRef } = getGameComponents(world);
-  return TeamRef.id[tankEid];
+  return TeamRef.id.get(tankEid);
 }
 
 export function getTankEngineLabel(vehicleEid: number, { world } = GameDI): string {
   const { Vehicle } = getGameComponents(world);
-  const engine = Vehicle.engineType[vehicleEid] as EngineType;
+  const engine = Vehicle.engineType.get(vehicleEid) as EngineType;
   return EngineLabels[engine];
 }

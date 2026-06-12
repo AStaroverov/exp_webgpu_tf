@@ -14,7 +14,7 @@ export function createDestroyByTimeoutSystem({ world } = GameDI) {
 
       DestroyByTimeout.updateTimeout(eid, delta);
 
-      if (DestroyByTimeout.timeout[eid] <= 0) {
+      if (DestroyByTimeout.timeout.get(eid) <= 0) {
         scheduleRemoveEntity(eid);
       }
     }

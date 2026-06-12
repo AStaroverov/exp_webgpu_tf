@@ -1,6 +1,5 @@
-import { addComponent, EntityId, World } from "bitecs";
-import { TypedArray } from "../../../../../renderer/src/utils.ts";
-import { delegate } from "../../../../../renderer/src/delegate.ts";
+import { addComponent } from "bitecs";
+import type { EntityId, World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 import { BulletSpeedConfig, BulletCaliber, BulletCaliberConfig } from "../../Config/index.ts";
 
@@ -11,13 +10,13 @@ export { BulletCaliber };
 
 export const mapBulletCaliber = BulletCaliberConfig;
 
-export const createBulletComponent = defineComponent((Bullet) => {
-  const caliber = TypedArray.i8(delegate.defaultSize);
+export const createBulletComponent = defineComponent((Bullet, ctx) => {
+  const caliber = ctx.table.flat(Int8Array);
   return {
     caliber,
     addComponent(world: World, eid: EntityId, calibre: BulletCaliber) {
       addComponent(world, eid, Bullet);
-      caliber[eid] = calibre;
+      caliber.set(eid, calibre);
     },
   };
 });

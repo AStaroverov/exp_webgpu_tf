@@ -23,8 +23,8 @@ export function createLightEmitterAnimationSystem({ world } = GameDI) {
       // set$ (not a raw write): the SDF pass uploads intensity only onSet.
       LightEmitter.set$(
         eid,
-        LightEmitterAnimation.intensity[eid] * k,
-        LightEmitterAnimation.radius[eid] * k,
+        LightEmitterAnimation.intensity.get(eid) * k,
+        LightEmitterAnimation.radius.get(eid) * k,
       );
     }
   };

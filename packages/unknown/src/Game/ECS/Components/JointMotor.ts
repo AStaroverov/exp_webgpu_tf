@@ -1,12 +1,11 @@
-import { addComponent, EntityId, World } from "bitecs";
-import { delegate } from "../../../../../renderer/src/delegate.ts";
-import { TypedArray } from "../../../../../renderer/src/utils.ts";
+import { addComponent } from "bitecs";
+import type { EntityId, World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
-export const createJointMotorComponent = defineComponent((JointMotor, { obs }) => {
-  const targetPosition = TypedArray.f64(delegate.defaultSize);
-  const stiffness = TypedArray.f64(delegate.defaultSize);
-  const damping = TypedArray.f64(delegate.defaultSize);
+export const createJointMotorComponent = defineComponent((JointMotor, ctx) => {
+  const targetPosition = ctx.table.flat(Float64Array);
+  const stiffness = ctx.table.flat(Float64Array);
+  const damping = ctx.table.flat(Float64Array);
 
   return {
     targetPosition,
@@ -14,12 +13,11 @@ export const createJointMotorComponent = defineComponent((JointMotor, { obs }) =
     damping,
     addComponent(world: World, eid: EntityId, stiff: number = 1e6, damp: number = 0.2) {
       addComponent(world, eid, JointMotor);
-      targetPosition[eid] = 0;
-      stiffness[eid] = stiff;
-      damping[eid] = damp;
+      stiffness.set(eid, stiff);
+      damping.set(eid, damp);
     },
-    setTargetPosition$: obs((eid: number, position: number) => {
-      targetPosition[eid] = position;
+    setTargetPosition$: ctx.obs((eid: number, position: number) => {
+      targetPosition.set(eid, position);
     }),
   };
 });

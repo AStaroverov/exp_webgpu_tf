@@ -77,7 +77,7 @@ export function createStreamFirearmsSystem({ world } = GameDI) {
   } = getGameComponents(world);
 
   const emitBurst = (turretEid: number) => {
-    const cfg = StreamCaliberConfig[StreamFirearms.caliberRef[turretEid]];
+    const cfg = StreamCaliberConfig[StreamFirearms.caliberRef.get(turretEid)];
     const matrix = GlobalTransform.matrix.getBatch(turretEid);
     const facing = getMatrixRotationZ(matrix);
     // Muzzle world position: turret transform × the local spawn delta (gun tip).
@@ -85,7 +85,7 @@ export function createStreamFirearmsSystem({ world } = GameDI) {
     const dy = SpawnDeltaPosition.position.get(turretEid, 1);
     const x = getMatrixTranslationX(matrix) + cos(facing) * dx - sin(facing) * dy;
     const y = getMatrixTranslationY(matrix) + sin(facing) * dx + cos(facing) * dy;
-    const vehicleEid = Parent.id[turretEid];
+    const vehicleEid = Parent.id.get(turretEid);
     const isFire = cfg.kind === DamageKind.Fire;
     const lifetimeMs = cfg.lifetimeMs;
 
@@ -122,8 +122,8 @@ export function createStreamFirearmsSystem({ world } = GameDI) {
         (cfg.wander.frequency * PI * 2) / 1000,
         cfg.wander.angularSpeed,
       );
-      TeamRef.addComponent(world, particleEid, TeamRef.id[vehicleEid]);
-      PlayerRef.addComponent(world, particleEid, PlayerRef.id[vehicleEid]);
+      TeamRef.addComponent(world, particleEid, TeamRef.id.get(vehicleEid));
+      PlayerRef.addComponent(world, particleEid, PlayerRef.id.get(vehicleEid));
 
       // Visual — the look comes from the VFXType shader, not Color.
       if (RenderDI.enabled) {
@@ -145,36 +145,36 @@ export function createStreamFirearmsSystem({ world } = GameDI) {
 
     for (let i = 0; i < turretEids.length; i++) {
       const turretEid = turretEids[i];
-      const cfg = StreamCaliberConfig[StreamFirearms.caliberRef[turretEid]];
+      const cfg = StreamCaliberConfig[StreamFirearms.caliberRef.get(turretEid)];
       const interval = cfg.emitIntervalMs;
 
       StreamFirearms.updateReloading(turretEid, delta);
 
       // Stun gate after updateReloading — reload keeps ticking through a stun.
       // Verify the parent is still a Vehicle: a stale/recycled eid must not gate the gun.
-      const vehicleEid = Parent.id[turretEid];
+      const vehicleEid = Parent.id.get(turretEid);
       if (hasComponent(world, vehicleEid, Vehicle) && hasComponent(world, vehicleEid, Stunned)) {
         continue;
       }
 
       if (StreamFirearms.isReloading(turretEid) || !TurretController.shouldShoot(turretEid)) {
         // Primed reset: a fresh (post-reload) hold emits on its very first tick.
-        StreamFirearms.emitAccMs[turretEid] = interval;
+        StreamFirearms.emitAccMs.set(turretEid, interval);
         continue;
       }
 
       // Magazine: `firedMs` of emission spent; releasing the trigger does NOT
       // refill it — only the reload does (see `startReloading`).
-      StreamFirearms.firedMs[turretEid] += delta;
-      if (StreamFirearms.firedMs[turretEid] >= cfg.fireDurationMs) {
+      StreamFirearms.firedMs.set(turretEid, StreamFirearms.firedMs.get(turretEid) + delta);
+      if (StreamFirearms.firedMs.get(turretEid) >= cfg.fireDurationMs) {
         StreamFirearms.startReloading(turretEid, cfg.reloadMs);
         continue;
       }
 
-      StreamFirearms.emitAccMs[turretEid] += delta;
+      StreamFirearms.emitAccMs.set(turretEid, StreamFirearms.emitAccMs.get(turretEid) + delta);
 
-      while (StreamFirearms.emitAccMs[turretEid] >= interval) {
-        StreamFirearms.emitAccMs[turretEid] -= interval;
+      while (StreamFirearms.emitAccMs.get(turretEid) >= interval) {
+        StreamFirearms.emitAccMs.set(turretEid, StreamFirearms.emitAccMs.get(turretEid) - interval);
         emitBurst(turretEid);
       }
     }

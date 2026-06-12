@@ -26,7 +26,7 @@ export function createActionSchedulerSystem({ world } = GameDI) {
     const eids = query(world, [ActionsQueue]);
     for (let i = 0; i < eids.length; i++) {
       const eid = eids[i];
-      if (ActionsQueue.count[eid] === 0) continue;
+      if (ActionsQueue.count.get(eid) === 0) continue;
 
       // Watchdog: time out a stuck front.
       if (ActionsQueue.getStatus(eid, 0) !== ActionStatus.Finished) {
@@ -37,7 +37,7 @@ export function createActionSchedulerSystem({ world } = GameDI) {
           // Lower a held shoot flag too (a FireStream force-finished
           // mid-HOLDING would otherwise spray forever).
           if (hasComponent(world, eid, Tank)) {
-            const turretEid = Tank.turretEId[eid];
+            const turretEid = Tank.turretEId.get(eid);
             if (turretEid) TurretController.setShooting$(turretEid, 0);
           }
           ActionsQueue.setStatus(eid, 0, ActionStatus.Finished);

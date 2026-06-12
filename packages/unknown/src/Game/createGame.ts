@@ -1,5 +1,6 @@
 import { EventQueue } from "@dimforge/rapier2d-simd";
-import { deleteWorld, EntityId, hasComponent, resetWorld } from "bitecs";
+import type { EntityId } from "bitecs";
+import { deleteWorld, hasComponent, resetWorld } from "bitecs";
 import { destroyChangeDetectorSystem } from "../../../renderer/src/ECS/Systems/ChangedDetectorSystem.ts";
 import { createDrawShapeSystem } from "../../../renderer/src/ECS/Systems/SDFSystem/createDrawShapeSystem.ts";
 import { createTransformSystem } from "../../../renderer/src/ECS/Systems/TransformSystem.ts";
@@ -164,7 +165,7 @@ export function createGame({
         Hitable.hit$(
           eid1,
           eid2,
-          hasComponent(world, eid2, Damagable) ? forceCoeff * Damagable.damage[eid2] : 0,
+          forceCoeff * Damagable.damage.get(eid2),
           DamageKind.Physical,
         );
       }
@@ -172,7 +173,7 @@ export function createGame({
         Hitable.hit$(
           eid2,
           eid1,
-          hasComponent(world, eid1, Damagable) ? forceCoeff * Damagable.damage[eid1] : 0,
+          forceCoeff * Damagable.damage.get(eid1),
           DamageKind.Physical,
         );
       }

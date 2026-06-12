@@ -78,7 +78,7 @@ export function createDrawVFXSystem({ device } = RenderDI, { world } = GameDI) {
 
     for (let i = 0; i < count; i++) {
       const eid = eids[i];
-      const effectType = VFX.type[eid] as VFXTypeValue;
+      const effectType = VFX.type.get(eid) as VFXTypeValue;
       const progress = Progress.getProgress(eid);
       const globalMatrix = GlobalTransform.matrix.getBatch(eid);
 

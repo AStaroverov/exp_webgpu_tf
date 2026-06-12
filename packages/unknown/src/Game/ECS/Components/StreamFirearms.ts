@@ -1,6 +1,5 @@
-import { addComponent, EntityId, World } from "bitecs";
-import { delegate } from "../../../../../renderer/src/delegate.ts";
-import { TypedArray } from "../../../../../renderer/src/utils.ts";
+import { addComponent } from "bitecs";
+import type { EntityId, World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
 /**
@@ -12,11 +11,11 @@ import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
  * reload; all tunables are read from the global `StreamCaliberConfig` at the
  * use sites. The reload trio mirrors `Firearms`.
  */
-export const createStreamFirearmsComponent = defineComponent((StreamFirearms) => {
-  const caliberRef = TypedArray.i8(delegate.defaultSize);
-  const emitAccMs = TypedArray.f64(delegate.defaultSize);
-  const firedMs = TypedArray.f64(delegate.defaultSize);
-  const reloading = TypedArray.f64(delegate.defaultSize);
+export const createStreamFirearmsComponent = defineComponent((StreamFirearms, ctx) => {
+  const caliberRef = ctx.table.flat(Int8Array);
+  const emitAccMs = ctx.table.flat(Float64Array);
+  const firedMs = ctx.table.flat(Float64Array);
+  const reloading = ctx.table.flat(Float64Array);
   return {
     caliberRef,
     emitAccMs,
@@ -24,20 +23,17 @@ export const createStreamFirearmsComponent = defineComponent((StreamFirearms) =>
     reloading,
     addComponent(world: World, eid: EntityId, caliber: number) {
       addComponent(world, eid, StreamFirearms);
-      caliberRef[eid] = caliber;
-      emitAccMs[eid] = 0;
-      firedMs[eid] = 0;
-      reloading[eid] = 0;
+      caliberRef.set(eid, caliber);
     },
     isReloading(eid: EntityId): boolean {
-      return reloading[eid] > 0;
+      return reloading.get(eid) > 0;
     },
     startReloading(eid: EntityId, durationMs: number) {
-      reloading[eid] = durationMs;
-      firedMs[eid] = 0; // the reload refills the magazine
+      reloading.set(eid, durationMs);
+      firedMs.set(eid, 0); // the reload refills the magazine
     },
     updateReloading(eid: EntityId, dt: number) {
-      reloading[eid] -= dt;
+      reloading.set(eid, reloading.get(eid) - dt);
     },
   };
 });

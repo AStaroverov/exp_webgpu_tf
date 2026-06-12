@@ -1,68 +1,64 @@
-import { addComponent, EntityId, World } from "bitecs";
-import { delegate } from "../../../../../renderer/src/delegate.ts";
-import { TypedArray } from "../../../../../renderer/src/utils.ts";
+import { addComponent } from "bitecs";
+import type { EntityId, World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
-export const createImpulseComponent = defineComponent((Impulse) => {
-  const x = TypedArray.f64(delegate.defaultSize);
-  const y = TypedArray.f64(delegate.defaultSize);
+export const createImpulseComponent = defineComponent((Impulse, ctx) => {
+  const x = ctx.table.flat(Float64Array);
+  const y = ctx.table.flat(Float64Array);
   return {
     x,
     y,
     addComponent(world: World, eid: EntityId) {
       addComponent(world, eid, Impulse);
-      x[eid] = 0;
-      y[eid] = 0;
     },
     add(eid: EntityId, ax: number, ay: number) {
-      x[eid] += ax;
-      y[eid] += ay;
+      x.set(eid, x.get(eid) + ax);
+      y.set(eid, y.get(eid) + ay);
     },
     set(eid: EntityId, sx: number, sy: number) {
-      x[eid] = sx;
-      y[eid] = sy;
+      x.set(eid, sx);
+      y.set(eid, sy);
     },
     reset(eid: EntityId) {
-      x[eid] = 0;
-      y[eid] = 0;
+      x.set(eid, 0);
+      y.set(eid, 0);
     },
     hasImpulse(eid: EntityId): boolean {
-      return x[eid] !== 0 || y[eid] !== 0;
+      return x.get(eid) !== 0 || y.get(eid) !== 0;
     },
   };
 });
 
-export const createTorqueImpulseComponent = defineComponent((TorqueImpulse) => {
-  const value = TypedArray.f64(delegate.defaultSize);
+export const createTorqueImpulseComponent = defineComponent((TorqueImpulse, ctx) => {
+  const value = ctx.table.flat(Float64Array);
   return {
     value,
     addComponent(world: World, eid: EntityId) {
       addComponent(world, eid, TorqueImpulse);
-      value[eid] = 0;
     },
     add(eid: EntityId, torque: number) {
-      value[eid] += torque;
+      value.set(eid, value.get(eid) + torque);
     },
     set(eid: EntityId, torque: number) {
-      value[eid] = torque;
+      value.set(eid, torque);
     },
     reset(eid: EntityId) {
-      value[eid] = 0;
+      value.set(eid, 0);
     },
     hasImpulse(eid: EntityId): boolean {
-      return value[eid] !== 0;
+      return value.get(eid) !== 0;
     },
   };
 });
 
 const MAX_IMPULSE_POINTS = 4;
 
-export const createImpulseAtPointComponent = defineComponent((ImpulseAtPoint) => {
-  const impulseX = TypedArray.f64(delegate.defaultSize * MAX_IMPULSE_POINTS);
-  const impulseY = TypedArray.f64(delegate.defaultSize * MAX_IMPULSE_POINTS);
-  const pointX = TypedArray.f64(delegate.defaultSize * MAX_IMPULSE_POINTS);
-  const pointY = TypedArray.f64(delegate.defaultSize * MAX_IMPULSE_POINTS);
-  const count = TypedArray.i8(delegate.defaultSize);
+export const createImpulseAtPointComponent = defineComponent((ImpulseAtPoint, ctx) => {
+  const impulseX = ctx.table.nested(Float64Array, MAX_IMPULSE_POINTS);
+  const impulseY = ctx.table.nested(Float64Array, MAX_IMPULSE_POINTS);
+  const pointX = ctx.table.nested(Float64Array, MAX_IMPULSE_POINTS);
+  const pointY = ctx.table.nested(Float64Array, MAX_IMPULSE_POINTS);
+  const count = ctx.table.flat(Int8Array);
   return {
     impulseX,
     impulseY,
@@ -71,27 +67,29 @@ export const createImpulseAtPointComponent = defineComponent((ImpulseAtPoint) =>
     count,
     addComponent(world: World, eid: EntityId) {
       addComponent(world, eid, ImpulseAtPoint);
-      count[eid] = 0;
     },
     add(eid: EntityId, ix: number, iy: number, wx: number, wy: number) {
-      const idx = count[eid];
+      const idx = count.get(eid);
       if (idx >= MAX_IMPULSE_POINTS) return;
-      const offset = eid * MAX_IMPULSE_POINTS + idx;
-      impulseX[offset] = ix;
-      impulseY[offset] = iy;
-      pointX[offset] = wx;
-      pointY[offset] = wy;
-      count[eid] = idx + 1;
+      impulseX.set(eid, idx, ix);
+      impulseY.set(eid, idx, iy);
+      pointX.set(eid, idx, wx);
+      pointY.set(eid, idx, wy);
+      count.set(eid, idx + 1);
     },
     get(eid: EntityId, index: number): [number, number, number, number] {
-      const offset = eid * MAX_IMPULSE_POINTS + index;
-      return [impulseX[offset], impulseY[offset], pointX[offset], pointY[offset]];
+      return [
+        impulseX.get(eid, index),
+        impulseY.get(eid, index),
+        pointX.get(eid, index),
+        pointY.get(eid, index),
+      ];
     },
     reset(eid: EntityId) {
-      count[eid] = 0;
+      count.set(eid, 0);
     },
     hasImpulse(eid: EntityId): boolean {
-      return count[eid] > 0;
+      return count.get(eid) > 0;
     },
   };
 });

@@ -1,4 +1,5 @@
-import { EntityId, hasComponent } from "bitecs";
+import type { EntityId } from "bitecs";
+import { hasComponent } from "bitecs";
 import { GameDI } from "../../DI/GameDI.ts";
 import { getGameComponents } from "../createGameWorld.ts";
 
@@ -14,9 +15,9 @@ export function findVehicleEidByPartEid(
   { world } = GameDI,
 ): EntityId | undefined {
   const { Parent, Vehicle } = getGameComponents(world);
-  const mid = Parent.id[Parent.id[partEid]] as EntityId; // slot's parent: vehicle (hull) OR turret
+  const mid = Parent.id.get(Parent.id.get(partEid)) as EntityId; // slot's parent: vehicle (hull) OR turret
   if (hasComponent(world, mid, Vehicle)) return mid;
 
-  const top = Parent.id[mid] as EntityId; // turret part → one hop higher
+  const top = Parent.id.get(mid) as EntityId; // turret part → one hop higher
   return hasComponent(world, top, Vehicle) ? top : undefined;
 }

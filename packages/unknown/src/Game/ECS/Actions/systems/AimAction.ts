@@ -56,11 +56,11 @@ export function createAimActionSystem({ world } = GameDI) {
   return function updateAim(_delta: number) {
     const eids = query(world, [ActionsQueue, Vehicle, RigidBodyState]);
     for (const ownerEid of eids) {
-      if (ActionsQueue.count[ownerEid] === 0) continue;
+      if (ActionsQueue.count.get(ownerEid) === 0) continue;
       if (ActionsQueue.getKind(ownerEid, 0) !== ActionKind.Aim) continue;
       if (ActionsQueue.getStatus(ownerEid, 0) === ActionStatus.Finished) continue;
 
-      const turretEid = Tank.turretEId[ownerEid];
+      const turretEid = Tank.turretEId.get(ownerEid);
 
       // No turret to aim → nothing we can do; finish.
       if (!turretEid) {

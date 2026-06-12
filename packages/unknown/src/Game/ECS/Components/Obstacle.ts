@@ -1,4 +1,5 @@
-import { World, EntityId, addComponent } from "bitecs";
+import { addComponent } from "bitecs";
+import type { World, EntityId } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
 export const createObstacleComponent = defineComponent((Obstacle) => ({

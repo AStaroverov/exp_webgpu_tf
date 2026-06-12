@@ -1,4 +1,5 @@
-import { EntityId, hasComponent, query, removeComponent } from "bitecs";
+import type { EntityId } from "bitecs";
+import { hasComponent, query, removeComponent } from "bitecs";
 import { GameDI } from "../../../DI/GameDI.ts";
 import { RenderDI } from "../../../DI/RenderDI.ts";
 import { getGameComponents } from "../../createGameWorld.ts";
@@ -41,9 +42,9 @@ export function createTintSystem({ world } = GameDI) {
     }
     Color.set$(
       partEid,
-      lerp(OriginalColor.r[partEid], tint[0], intensity),
-      lerp(OriginalColor.g[partEid], tint[1], intensity),
-      lerp(OriginalColor.b[partEid], tint[2], intensity),
+      lerp(OriginalColor.r.get(partEid), tint[0], intensity),
+      lerp(OriginalColor.g.get(partEid), tint[1], intensity),
+      lerp(OriginalColor.b.get(partEid), tint[2], intensity),
       Color.getA(partEid),
     );
   };
@@ -57,7 +58,7 @@ export function createTintSystem({ world } = GameDI) {
     tint: readonly [number, number, number],
     intensity: number,
   ) => {
-    const childCount = Children.entitiesCount[parentEid];
+    const childCount = Children.entitiesCount.get(parentEid);
 
     for (let i = 0; i < childCount; i++) {
       const childEid = Children.entitiesIds.get(parentEid, i);
@@ -96,7 +97,7 @@ export function createTintSystem({ world } = GameDI) {
       const vehicleEid = slowedEids[i];
       // Emp wins over Frost — the whole subtree belongs to this vehicle.
       if (hasComponent(world, vehicleEid, Stunned)) continue;
-      tintSlotParts(vehicleEid, FROST.tint, Slowed.slowMul[vehicleEid]);
+      tintSlotParts(vehicleEid, FROST.tint, Slowed.slowMul.get(vehicleEid));
     }
 
     // Revert: backwards — removeComponent swap-removes inside the query's dense array.
@@ -115,9 +116,9 @@ export function createTintSystem({ world } = GameDI) {
 
       Color.set$(
         partEid,
-        OriginalColor.r[partEid],
-        OriginalColor.g[partEid],
-        OriginalColor.b[partEid],
+        OriginalColor.r.get(partEid),
+        OriginalColor.g.get(partEid),
+        OriginalColor.b.get(partEid),
         Color.getA(partEid),
       );
       removeComponent(world, partEid, OriginalColor);

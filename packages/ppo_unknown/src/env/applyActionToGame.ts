@@ -79,7 +79,7 @@ export function applyActionToGame(eid: number, actions: Float32Array, { world } 
   if (!offset) return;
   const target = { q: here.q + offset[0], r: here.r + offset[1] };
   if (!grid.has(target)) return;
-  if (hasComponent(world, Tank.turretEId[eid], StreamFirearms)) {
+  if (hasComponent(world, Tank.turretEId.get(eid), StreamFirearms)) {
     enqueueAction(eid, {
       kind: ActionKind.FireStream,
       target: { kind: TargetKind.Hex, q: target.q, r: target.r },

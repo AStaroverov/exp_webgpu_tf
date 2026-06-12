@@ -1,6 +1,5 @@
-import { NestedArray, TypedArray } from "../../../../../renderer/src/utils.ts";
-import { delegate } from "../../../../../renderer/src/delegate.ts";
-import { addComponent, World } from "bitecs";
+import { addComponent } from "bitecs";
+import type { World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 import { MAX_QUEUE, PARAMS } from "../Actions/ActionSlot.ts";
 
@@ -9,27 +8,26 @@ import { MAX_QUEUE, PARAMS } from "../Actions/ActionSlot.ts";
  * controlled entity (a game-world component, added to every vehicle in the common
  * tank builder). Slot 0 is the front (the one that runs); FIFO order = slot order
  * (no `seq`). Split-buffer (SoA) layout: each common field gets its own typed,
- * named buffer; only the per-kind params share one generic `NestedArray`.
+ * named table column; only the per-kind params share one generic nested column.
  *
- * The raw SoA buffers are ENCAPSULATED (closure-local) — callers never touch them
+ * The raw SoA columns are ENCAPSULATED (closure-local) — callers never touch them
  * nor the slot index math. Access goes through the per-slot accessor methods, all
- * keyed by `(eid, slot)`; `count` (0..MAX_QUEUE) is the only raw field exposed (an
- * idiomatic scalar `count[eid]`), and a slot index >= count is stale.
+ * keyed by `(eid, slot)`; `count` (0..MAX_QUEUE) is the only raw column exposed
+ * (a scalar `count.get(eid)`), and a slot index >= count is stale.
  */
-export const createActionsQueueComponent = defineComponent((ActionsQueue) => {
-  const count = TypedArray.u8(delegate.defaultSize);
-  const kind = NestedArray.u32(MAX_QUEUE, delegate.defaultSize);
-  const status = NestedArray.u32(MAX_QUEUE, delegate.defaultSize);
-  const targetVals = NestedArray.f64(MAX_QUEUE * 2, delegate.defaultSize);
-  const targetKind = NestedArray.u32(MAX_QUEUE, delegate.defaultSize);
-  const requestNext = NestedArray.u32(MAX_QUEUE, delegate.defaultSize);
-  const elapsedMs = NestedArray.f64(MAX_QUEUE, delegate.defaultSize);
-  const params = NestedArray.f64(MAX_QUEUE * PARAMS, delegate.defaultSize);
+export const createActionsQueueComponent = defineComponent((ActionsQueue, ctx) => {
+  const count = ctx.table.flat(Uint8Array);
+  const kind = ctx.table.nested(Uint32Array, MAX_QUEUE);
+  const status = ctx.table.nested(Uint32Array, MAX_QUEUE);
+  const targetVals = ctx.table.nested(Float64Array, MAX_QUEUE * 2);
+  const targetKind = ctx.table.nested(Uint32Array, MAX_QUEUE);
+  const requestNext = ctx.table.nested(Uint32Array, MAX_QUEUE);
+  const elapsedMs = ctx.table.nested(Float64Array, MAX_QUEUE);
+  const params = ctx.table.nested(Float64Array, MAX_QUEUE * PARAMS);
   return {
     count,
     addComponent(world: World, eid: number) {
       addComponent(world, eid, ActionsQueue);
-      count[eid] = 0;
     },
 
     getKind(eid: number, slot: number): number {
@@ -86,7 +84,7 @@ export const createActionsQueueComponent = defineComponent((ActionsQueue) => {
     },
 
     /**
-     * Shift the queue down by one: copy slot 1 → slot 0 across EVERY buffer
+     * Shift the queue down by one: copy slot 1 → slot 0 across EVERY column
      * (so the pending next becomes the new front) and decrement `count`. Used
      * by the reaper once the front (slot 0) finishes. The source slot is left
      * stale but is gated out by `count`.
@@ -102,7 +100,7 @@ export const createActionsQueueComponent = defineComponent((ActionsQueue) => {
       for (let p = 0; p < PARAMS; p++) {
         params.set(eid, 0 * PARAMS + p, params.get(eid, 1 * PARAMS + p));
       }
-      count[eid]--;
+      count.set(eid, count.get(eid) - 1);
     },
   };
 });

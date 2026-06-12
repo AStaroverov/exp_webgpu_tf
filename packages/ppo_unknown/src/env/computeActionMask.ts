@@ -55,7 +55,7 @@ export function computeActionMask(eid: number, { world } = GameDI): Float32Array
   }
 
   // ── fire slice [7..42] ────────────────────────────────────────────────────
-  const turretEid = Tank.turretEId[eid];
+  const turretEid = Tank.turretEId.get(eid);
   const gunReloading =
     turretEid !== 0 &&
     ((hasComponent(world, turretEid, Firearms) && Firearms.isReloading(turretEid)) ||

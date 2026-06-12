@@ -1,4 +1,5 @@
-import { query, EntityId, hasComponent } from "bitecs";
+import { query, hasComponent } from "bitecs";
+import type { EntityId } from "bitecs";
 import { GameDI } from "../../../DI/GameDI.ts";
 import { SoundType, SoundState } from "../../Components/Sound.ts";
 import { CameraState } from "../Camera/CameraSystem.ts";
@@ -66,8 +67,8 @@ export async function loadGameSounds(): Promise<void> {
 
 function getEntityPosition(eid: EntityId, { world } = GameDI): { x: number; y: number } {
   const { Parent } = getGameComponents(world);
-  if (hasComponent(world, eid, Parent) && hasComponent(world, Parent.id[eid], GlobalTransform)) {
-    const matrix = GlobalTransform.matrix.getBatch(Parent.id[eid]);
+  if (hasComponent(world, eid, Parent) && hasComponent(world, Parent.id.get(eid), GlobalTransform)) {
+    const matrix = GlobalTransform.matrix.getBatch(Parent.id.get(eid));
     return {
       x: getMatrixTranslationX(matrix),
       y: getMatrixTranslationY(matrix),
@@ -131,11 +132,11 @@ export function createSoundSystem({ world } = GameDI) {
     }
 
     for (const eid of soundEids) {
-      const type = Sound.type[eid] as SoundType;
+      const type = Sound.type.get(eid) as SoundType;
       if (type === SoundType.None) continue;
 
       const distance = getDistanceToCamera(eid);
-      const wantsToPlay = Sound.state[eid] === SoundState.Playing;
+      const wantsToPlay = Sound.state.get(eid) === SoundState.Playing;
 
       entitiesByType.get(type)?.push({ eid, distance, wantsToPlay });
     }
@@ -169,7 +170,7 @@ export function createSoundSystem({ world } = GameDI) {
 
         if (!track) {
           const pos = getEntityPosition(eid);
-          const loop = Sound.loop[eid] === 1;
+          const loop = Sound.loop.get(eid) === 1;
 
           const newTrack = soundManager.play(soundId, { volume, loop, x: pos.x, y: pos.y });
           if (newTrack) {
@@ -178,20 +179,20 @@ export function createSoundSystem({ world } = GameDI) {
             newTrack.onEnded(() => handleStoppedSounds(eid));
           }
         } else {
-          track.setVolume(volume * Sound.volume[eid]);
+          track.setVolume(volume * Sound.volume.get(eid));
         }
       }
     }
 
     for (const eid of soundEids) {
-      const state = Sound.state[eid];
+      const state = Sound.state.get(eid);
       const track = activeAudios.get(eid);
 
       if (track) {
         if (state === SoundState.Stopped) {
           soundManager.stopInstance(track);
           activeAudios.delete(eid);
-          const type = Sound.type[eid] as SoundType;
+          const type = Sound.type.get(eid) as SoundType;
           soundsByType.get(type)?.delete(eid);
           handleStoppedSounds(eid);
         } else if (state === SoundState.Paused && track.state === "playing") {

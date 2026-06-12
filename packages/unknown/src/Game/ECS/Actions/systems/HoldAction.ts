@@ -46,7 +46,7 @@ export function createHoldActionSystem({ world } = GameDI) {
   return function updateHold(delta: number) {
     const eids = query(world, [ActionsQueue, Vehicle, RigidBodyState]);
     for (const ownerEid of eids) {
-      if (ActionsQueue.count[ownerEid] === 0) continue;
+      if (ActionsQueue.count.get(ownerEid) === 0) continue;
       if (ActionsQueue.getKind(ownerEid, 0) !== ActionKind.Hold) continue;
       if (ActionsQueue.getStatus(ownerEid, 0) === ActionStatus.Finished) continue;
 

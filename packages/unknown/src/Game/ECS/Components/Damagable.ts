@@ -1,7 +1,5 @@
 import { addComponent } from "bitecs";
 import type { World } from "bitecs";
-import { delegate } from "../../../../../renderer/src/delegate.ts";
-import { TypedArray } from "../../../../../renderer/src/utils.ts";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
 export enum DamageKind {
@@ -16,9 +14,9 @@ export enum DamageKind {
  * with every recorded hit through `Hitable` and triggers the kind's specialty
  * there (Frost → slow the vehicle).
  */
-export const createDamagableComponent = defineComponent((Damagable) => {
-  const kind = TypedArray.i8(delegate.defaultSize);
-  const damage = TypedArray.f64(delegate.defaultSize);
+export const createDamagableComponent = defineComponent((Damagable, ctx) => {
+  const kind = ctx.table.flat(Int8Array);
+  const damage = ctx.table.flat(Float64Array);
   return {
     kind,
     damage,
@@ -29,8 +27,8 @@ export const createDamagableComponent = defineComponent((Damagable) => {
       dmgKind: DamageKind = DamageKind.Physical,
     ) {
       addComponent(world, eid, Damagable);
-      kind[eid] = dmgKind;
-      damage[eid] = dmg;
+      kind.set(eid, dmgKind);
+      damage.set(eid, dmg);
     },
   };
 });

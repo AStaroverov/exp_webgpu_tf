@@ -1,4 +1,4 @@
-import { EntityId, hasComponent } from "bitecs";
+import { type EntityId, hasComponent } from "bitecs";
 import { GameDI } from "../../DI/GameDI.ts";
 import { getGameComponents } from "../createGameWorld.ts";
 
@@ -14,12 +14,12 @@ export function isSlot(eid: EntityId, { world } = GameDI): boolean {
 
 export function isSlotFilled(slotEid: EntityId, { world } = GameDI): boolean {
   const { Children } = getGameComponents(world);
-  return Children.entitiesCount[slotEid] > 0;
+  return Children.entitiesCount.get(slotEid) > 0;
 }
 
 export function isSlotEmpty(slotEid: EntityId, { world } = GameDI): boolean {
   const { Children } = getGameComponents(world);
-  return Children.entitiesCount[slotEid] === 0;
+  return Children.entitiesCount.get(slotEid) === 0;
 }
 
 export function getSlotFillerEid(slotEid: EntityId, { world } = GameDI): EntityId {

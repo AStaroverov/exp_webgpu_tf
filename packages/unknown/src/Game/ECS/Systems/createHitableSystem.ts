@@ -1,6 +1,7 @@
 import { GameDI } from "../../DI/GameDI.ts";
 import { scheduleRemoveEntity } from "../Utils/typicalRemoveEntity.ts";
-import { EntityId, hasComponent, Not, onSet, query } from "bitecs";
+import type { EntityId } from "bitecs";
+import { hasComponent, Not, onSet, query } from "bitecs";
 import { createChangeDetector } from "../../../../../renderer/src/ECS/Systems/ChangedDetectorSystem.ts";
 import { getTankHealth, tearOffTankPart } from "../Entities/Tank/TankUtils.ts";
 import { SoundType } from "../Components/Sound.ts";
@@ -27,7 +28,7 @@ export function createHitableSystem({ world } = GameDI) {
       const vehiclePartEid = vehiclePartEids[i];
       if (!hitableChanges.has(vehiclePartEid)) continue;
 
-      const vehicleEid = Parent.id[Parent.id[vehiclePartEid]];
+      const vehicleEid = Parent.id.get(Parent.id.get(vehiclePartEid));
 
       // Readers of the hit ring go first — applyDamage resets it.
       applyKindEffects(vehiclePartEid);
@@ -81,10 +82,10 @@ export function createHitableSystem({ world } = GameDI) {
 // contact drain, explode, DoT, …) — this is the single place they apply.
 function applyDamage(targetEid: number, { world } = GameDI) {
   const { Hitable } = getGameComponents(world);
-  const count = Hitable.hitIndex[targetEid];
+  const count = Hitable.hitIndex.get(targetEid);
 
   for (let i = 0; i < count; i++) {
-    Hitable.health[targetEid] -= Hitable.getDamage(targetEid, i);
+    Hitable.health.set(targetEid, Hitable.health.get(targetEid) - Hitable.getDamage(targetEid, i));
   }
   Hitable.resetHits(targetEid);
 }
@@ -94,7 +95,7 @@ function applyDamage(targetEid: number, { world } = GameDI) {
 // Emp → refresh the vehicle's `Stunned` countdown (binary, kind-triggered).
 function applyKindEffects(partEid: number, { world } = GameDI) {
   const { Hitable, Slowed, Stunned } = getGameComponents(world);
-  const count = Hitable.hitIndex[partEid];
+  const count = Hitable.hitIndex.get(partEid);
 
   for (let i = 0; i < count; i++) {
     switch (Hitable.getKind(partEid, i)) {
@@ -119,16 +120,16 @@ function saveHitters(hittableEid: EntityId, vehicleEid: EntityId, { world } = Ga
   if (!hasComponent(world, vehicleEid, LastHitters)) return;
   if (!hasComponent(world, hittableEid, TeamRef)) return;
 
-  const vehiclePartTeamId = TeamRef.id[hittableEid];
-  const count = Hitable.hitIndex[hittableEid];
+  const vehiclePartTeamId = TeamRef.id.get(hittableEid);
+  const count = Hitable.hitIndex.get(hittableEid);
 
   for (let i = 0; i < count; i++) {
     const hitEid = Hitable.getSecondEid(hittableEid, i);
     if (!hasComponent(world, hitEid, PlayerRef)) continue;
     if (!hasComponent(world, hitEid, TeamRef)) continue;
 
-    const attackerTeamId = TeamRef.id[hitEid];
-    const attackerPlayerId = PlayerRef.id[hitEid];
+    const attackerTeamId = TeamRef.id.get(hitEid);
+    const attackerPlayerId = PlayerRef.id.get(hitEid);
     if (attackerTeamId === vehiclePartTeamId) {
       FriendlyHitters.addDamage(vehicleEid, attackerPlayerId, Hitable.getDamage(hittableEid, i));
     } else {

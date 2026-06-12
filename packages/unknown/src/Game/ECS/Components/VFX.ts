@@ -1,6 +1,5 @@
-import { addComponent, World } from "bitecs";
-import { TypedArray } from "../../../../../renderer/src/utils.ts";
-import { delegate } from "../../../../../renderer/src/delegate.ts";
+import { addComponent } from "bitecs";
+import type { World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
 export const VFXType = {
@@ -16,13 +15,13 @@ export const VFXType = {
 
 export type VFXTypeValue = (typeof VFXType)[keyof typeof VFXType];
 
-export const createVFXComponent = defineComponent((VFX) => {
-  const type = TypedArray.u8(delegate.defaultSize);
+export const createVFXComponent = defineComponent((VFX, ctx) => {
+  const type = ctx.table.flat(Uint8Array);
   return {
     type,
     addComponent(world: World, eid: number, t: VFXTypeValue) {
       addComponent(world, eid, VFX);
-      type[eid] = t;
+      type.set(eid, t);
     },
   };
 });

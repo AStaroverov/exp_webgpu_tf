@@ -61,7 +61,7 @@ export function createStandInDriverSystem({ world } = GameDI) {
         continue;
       }
 
-      const isArmed = hasComponent(world, Tank.turretEId[eid], Firearms);
+      const isArmed = hasComponent(world, Tank.turretEId.get(eid), Firearms);
       if (isArmed && Math.random() < FIRE_CHANCE) {
         const target = nearestOtherTankHex(eid, px, py) ?? pickRandom(passable);
         enqueueAction(eid, {

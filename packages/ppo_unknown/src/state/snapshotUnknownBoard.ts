@@ -95,7 +95,7 @@ export function snapshotUnknownBoard({ world } = GameDI) {
     const selfEid = observers[i];
     if (!needsDecision(selfEid)) continue;
 
-    const myTeamId = TeamRef.id[selfEid];
+    const myTeamId = TeamRef.id.get(selfEid);
     const field = scanField(grid, selfEid, myTeamId, TeamRef);
     if (!field) continue; // not on the grid (mid-transition) — keep last snapshot
 
@@ -139,7 +139,7 @@ function scanField(
     if (unitEid === selfEid) {
       selfQ = hex.q;
       selfR = hex.r;
-    } else if (TeamRef.id[unitEid] !== myTeam) {
+    } else if (TeamRef.id.get(unitEid) !== myTeam) {
       enemies.q.push(hex.q);
       enemies.r.push(hex.r);
       enemies.w.push(1);
@@ -229,7 +229,7 @@ function writeUnit(ctx: SnapshotCtx, dq: number, dr: number, unitEid: number) {
   const plane =
     unitEid === ctx.selfEid
       ? BoardChannel.Self
-      : TeamRef.id[unitEid] === ctx.myTeamId
+      : TeamRef.id.get(unitEid) === ctx.myTeamId
         ? BoardChannel.Ally
         : BoardChannel.Enemy;
 
@@ -251,14 +251,14 @@ function writeDamageStatuses(ctx: SnapshotCtx, dq: number, dr: number, unitEid: 
   const { Tank, Slowed } = getGameComponents(world);
 
   // The same part set getTankHealth counts: hull slots + turret slots.
-  const dps = sumDotDps(ctx, unitEid) + sumDotDps(ctx, Tank.turretEId[unitEid]);
+  const dps = sumDotDps(ctx, unitEid) + sumDotDps(ctx, Tank.turretEId.get(unitEid));
 
   if (dps > 0) {
     UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.Dot, Math.log1p(dps));
   }
 
   if (hasComponent(world, unitEid, Slowed)) {
-    UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.Slow, Slowed.slowMul[unitEid]);
+    UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.Slow, Slowed.slowMul.get(unitEid));
   }
 }
 
@@ -266,7 +266,7 @@ function writeDamageStatuses(ctx: SnapshotCtx, dq: number, dr: number, unitEid: 
 function sumDotDps(ctx: SnapshotCtx, parentEid: number): number {
   const { world } = ctx;
   const { Children, Dot } = getGameComponents(world);
-  const childCount = Children.entitiesCount[parentEid];
+  const childCount = Children.entitiesCount.get(parentEid);
   let dps = 0;
   for (let i = 0; i < childCount; i++) {
     const slotEid = Children.entitiesIds.get(parentEid, i);
@@ -281,7 +281,7 @@ function sumDotDps(ctx: SnapshotCtx, parentEid: number): number {
 /** One-hot `VehicleType` plane of the unit on cell (dq, dr). */
 function writeTypeOneHot(ctx: SnapshotCtx, dq: number, dr: number, unitEid: number) {
   const { Vehicle } = getGameComponents(ctx.world);
-  const channel = TANK_TYPE_CHANNEL[Vehicle.type[unitEid] as VehicleType];
+  const channel = TANK_TYPE_CHANNEL[Vehicle.type.get(unitEid) as VehicleType];
   if (channel !== undefined) {
     ctx.UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, channel, 1);
   }
@@ -295,13 +295,13 @@ function writeTypeOneHot(ctx: SnapshotCtx, dq: number, dr: number, unitEid: numb
 function writeReload(ctx: SnapshotCtx, dq: number, dr: number, unitEid: number) {
   const { selfEid, world, UnknownInputBoard } = ctx;
   const { Tank, Firearms, StreamFirearms } = getGameComponents(world);
-  const turretEid = Tank.turretEId[unitEid];
+  const turretEid = Tank.turretEId.get(unitEid);
   if (turretEid === 0) return;
   let remainingMs = 0;
   if (hasComponent(world, turretEid, Firearms)) {
-    remainingMs = Firearms.reloading[turretEid];
+    remainingMs = Firearms.reloading.get(turretEid);
   } else if (hasComponent(world, turretEid, StreamFirearms)) {
-    remainingMs = StreamFirearms.reloading[turretEid];
+    remainingMs = StreamFirearms.reloading.get(turretEid);
   }
   if (remainingMs > 0) {
     UnknownInputBoard.setDelta(

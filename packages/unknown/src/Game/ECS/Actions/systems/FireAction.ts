@@ -72,11 +72,11 @@ export function createHexAimer({ world }: Pick<typeof GameDI, "world"> = GameDI)
     centerY: number,
   ): number {
     const grid = MapDI.grid;
-    const myTeam = TeamRef.id[ownerEid];
+    const myTeam = TeamRef.id.get(ownerEid);
 
     // An enemy in the target hex itself wins outright.
     const inHex = grid.getOccupant(targetQ, targetR);
-    if (inHex && inHex.kind === OccupantKind.Unit && TeamRef.id[inHex.eid] !== myTeam) {
+    if (inHex && inHex.kind === OccupantKind.Unit && TeamRef.id.get(inHex.eid) !== myTeam) {
       return inHex.eid;
     }
 
@@ -91,7 +91,7 @@ export function createHexAimer({ world }: Pick<typeof GameDI, "world"> = GameDI)
       if (!n) continue;
       const occupant = grid.getOccupant(n.q, n.r);
       if (!occupant || occupant.kind !== OccupantKind.Unit) continue;
-      if (TeamRef.id[occupant.eid] === myTeam) continue;
+      if (TeamRef.id.get(occupant.eid) === myTeam) continue;
       const dx = RigidBodyState.position.get(occupant.eid, 0) - centerX;
       const dy = RigidBodyState.position.get(occupant.eid, 1) - centerY;
       const distSq = dx * dx + dy * dy;
@@ -184,11 +184,11 @@ export function createFireActionSystem({ world } = GameDI) {
     const eids = query(world, [ActionsQueue, Vehicle, RigidBodyState]);
 
     for (const ownerEid of eids) {
-      if (ActionsQueue.count[ownerEid] === 0) continue;
+      if (ActionsQueue.count.get(ownerEid) === 0) continue;
       if (ActionsQueue.getKind(ownerEid, 0) !== ActionKind.Fire) continue;
       if (ActionsQueue.getStatus(ownerEid, 0) === ActionStatus.Finished) continue;
 
-      const turretEid = Tank.turretEId[ownerEid];
+      const turretEid = Tank.turretEId.get(ownerEid);
 
       // No turret to fire from → finish immediately.
       if (!turretEid) {

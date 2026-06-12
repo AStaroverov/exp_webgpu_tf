@@ -1,6 +1,5 @@
-import { addComponent, EntityId, hasComponent, World } from "bitecs";
-import { delegate } from "../../../../../renderer/src/delegate.ts";
-import { TypedArray } from "../../../../../renderer/src/utils.ts";
+import { addComponent, hasComponent } from "bitecs";
+import type { EntityId, World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
 /**
@@ -10,16 +9,15 @@ import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
  * Every Frost-kind damage event adds to it (cap 1); it thaws back each tick
  * in `createSlowedExpirySystem`, which removes the component at 0.
  */
-export const createSlowedComponent = defineComponent((Slowed) => {
-  const slowMul = TypedArray.f64(delegate.defaultSize);
+export const createSlowedComponent = defineComponent((Slowed, ctx) => {
+  const slowMul = ctx.table.flat(Float64Array);
   return {
     slowMul,
     addContribution(world: World, eid: EntityId, freeze: number) {
       if (!hasComponent(world, eid, Slowed)) {
-        addComponent(world, eid, Slowed);
-        slowMul[eid] = 0;
+        addComponent(world, eid, Slowed); // creates the row zeroed
       }
-      slowMul[eid] = Math.min(1, slowMul[eid] + freeze);
+      slowMul.set(eid, Math.min(1, slowMul.get(eid) + freeze));
     },
   };
 });

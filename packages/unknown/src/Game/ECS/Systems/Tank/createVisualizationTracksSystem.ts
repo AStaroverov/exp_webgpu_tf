@@ -17,8 +17,8 @@ export function createVisualizationTracksSystem({ world, physicalWorld } = GameD
     const trackEids = query(world, [Track]);
 
     for (const trackEid of trackEids) {
-      const trackLimit = Track.length[trackEid] / 2;
-      const trackSide = Track.side[trackEid];
+      const trackLimit = Track.length.get(trackEid) / 2;
+      const trackSide = Track.side.get(trackEid);
 
       const linvel = RigidBodyState.linvel.getBatch(trackEid);
       const angvel = RigidBodyState.angvel[trackEid];
@@ -39,7 +39,7 @@ export function createVisualizationTracksSystem({ world, physicalWorld } = GameD
 
       if (abs(delta) < 0.05) continue;
 
-      const childCount = Children.entitiesCount[trackEid];
+      const childCount = Children.entitiesCount.get(trackEid);
       for (let i = 0; i < childCount; i++) {
         const slotEid = Children.entitiesIds.get(trackEid, i);
 
@@ -61,7 +61,7 @@ export function createVisualizationTracksSystem({ world, physicalWorld } = GameD
         const fillerEid = getSlotFillerEid(slotEid);
         if (fillerEid === 0) continue;
 
-        const jointPid = Joint.pid[fillerEid];
+        const jointPid = Joint.pid.get(fillerEid);
         const joint = physicalWorld.getImpulseJoint(jointPid);
 
         if (jointPid === 0 || joint == null) continue;

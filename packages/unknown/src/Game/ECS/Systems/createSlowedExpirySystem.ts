@@ -19,8 +19,9 @@ export function createSlowedExpirySystem({ world } = GameDI) {
     for (let i = eids.length - 1; i >= 0; i--) {
       const eid = eids[i];
 
-      Slowed.slowMul[eid] -= FrostSlowConfig.thawPerTick;
-      if (Slowed.slowMul[eid] <= 0) {
+      const next = Slowed.slowMul.get(eid) - FrostSlowConfig.thawPerTick;
+      Slowed.slowMul.set(eid, next);
+      if (next <= 0) {
         removeComponent(world, eid, Slowed);
       }
     }

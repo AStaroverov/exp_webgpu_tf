@@ -1,6 +1,7 @@
-import { NestedArray, TypedArray } from "../../../../../renderer/src/utils.ts";
+import { TypedArray } from "../../../../../renderer/src/utils.ts";
 import { delegate } from "../../../../../renderer/src/delegate.ts";
-import { addComponent, World } from "bitecs";
+import { addComponent } from "bitecs";
+import type { World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
 export const createDestroyComponent = defineComponent((Destroy) => {
@@ -14,28 +15,28 @@ export const createDestroyComponent = defineComponent((Destroy) => {
   };
 });
 
-export const createDestroyByTimeoutComponent = defineComponent((DestroyByTimeout) => {
-  const timeout = TypedArray.f64(delegate.defaultSize);
+export const createDestroyByTimeoutComponent = defineComponent((DestroyByTimeout, ctx) => {
+  const timeout = ctx.table.flat(Float64Array);
   return {
     timeout,
     addComponent(world: World, eid: number, t: number) {
       addComponent(world, eid, DestroyByTimeout);
-      timeout[eid] = t;
+      timeout.set(eid, t);
     },
     updateTimeout(eid: number, delta: number) {
-      timeout[eid] -= delta;
+      timeout.set(eid, timeout.get(eid) - delta);
     },
     resetTimeout(eid: number, t: number) {
-      timeout[eid] = t;
+      timeout.set(eid, t);
     },
   };
 });
 
-export const createDestroyByDistanceComponent = defineComponent((DestroyByDistance) => {
+export const createDestroyByDistanceComponent = defineComponent((DestroyByDistance, ctx) => {
   // Origin point the distance is measured from.
-  const origin = NestedArray.f64(2, delegate.defaultSize);
+  const origin = ctx.table.nested(Float64Array, 2);
   // Squared max distance — avoids a sqrt per entity per tick.
-  const maxDistanceSq = TypedArray.f64(delegate.defaultSize);
+  const maxDistanceSq = ctx.table.flat(Float64Array);
   return {
     origin,
     maxDistanceSq,
@@ -43,7 +44,7 @@ export const createDestroyByDistanceComponent = defineComponent((DestroyByDistan
       addComponent(world, eid, DestroyByDistance);
       origin.set(eid, 0, x);
       origin.set(eid, 1, y);
-      maxDistanceSq[eid] = maxDistance * maxDistance;
+      maxDistanceSq.set(eid, maxDistance * maxDistance);
     },
   };
 });

@@ -1,17 +1,19 @@
-import { addComponent, World } from "bitecs";
-import { delegate } from "../../../../../renderer/src/delegate.ts";
-import { NestedArray } from "../../../../../renderer/src/utils.ts";
+import { addComponent } from "bitecs";
+import type { World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
 const MAX_CHILDREN = 1000;
 
-export const createChildrenComponent = defineComponent((Children) => {
-  const entitiesCount = new Float64Array(delegate.defaultSize);
-  const entitiesIds = NestedArray.f64(MAX_CHILDREN, delegate.defaultSize);
+export const createChildrenComponent = defineComponent((Children, ctx) => {
+  const entitiesCount = ctx.table.flat(Float64Array);
+  const entitiesIds = ctx.table.nested(Float64Array, MAX_CHILDREN);
 
   function removeAllChildren(entity: number) {
-    entitiesCount[entity] = 0;
-    entitiesIds.getBatch(entity).fill(0);
+    const len = entitiesCount.get(entity);
+    for (let i = 0; i < len; i++) {
+      entitiesIds.set(entity, i, 0);
+    }
+    entitiesCount.set(entity, 0);
   }
 
   return {
@@ -20,36 +22,43 @@ export const createChildrenComponent = defineComponent((Children) => {
 
     addComponent(world: World, eid: number, ids: number[] | Float64Array = []) {
       addComponent(world, eid, Children);
-      entitiesCount[eid] = ids.length;
-      entitiesIds.getBatch(eid).fill(0);
+      removeAllChildren(eid);
+      entitiesCount.set(eid, ids.length);
       entitiesIds.setBatch(eid, ids);
     },
 
     addChildren(entity: number, child: number) {
-      const len = entitiesCount[entity];
+      const len = entitiesCount.get(entity);
       if (len >= MAX_CHILDREN) {
         throw new Error("Max children reached");
       }
       entitiesIds.set(entity, len, child);
-      entitiesCount[entity] += 1;
+      entitiesCount.set(entity, len + 1);
     },
 
     removeAllChildren,
 
     removeChild(parentEid: number, childEid: number) {
-      const children = entitiesIds.getBatch(parentEid);
-      const len = entitiesCount[parentEid];
+      const len = entitiesCount.get(parentEid);
 
       if (len === 0) {
         return removeAllChildren(parentEid);
       }
 
-      const index = children.subarray(0, len).indexOf(childEid);
+      let index = -1;
+      for (let i = 0; i < len; i++) {
+        if (entitiesIds.get(parentEid, i) === childEid) {
+          index = i;
+          break;
+        }
+      }
       if (index === -1) return;
 
-      entitiesCount[parentEid] -= 1;
-      children.set(children.subarray(index + 1, len), index);
-      children[entitiesCount[parentEid]] = 0;
+      for (let i = index; i < len - 1; i++) {
+        entitiesIds.set(parentEid, i, entitiesIds.get(parentEid, i + 1));
+      }
+      entitiesIds.set(parentEid, len - 1, 0);
+      entitiesCount.set(parentEid, len - 1);
     },
   };
 });

@@ -20,7 +20,7 @@ export function createApplySensorHitsSystem({ world } = GameDI) {
 
     for (let i = 0; i < projectileEids.length; i++) {
       const projectileEid = projectileEids[i];
-      const hitCount = SensorHits.hitIndex[projectileEid];
+      const hitCount = SensorHits.hitIndex.get(projectileEid);
       if (hitCount === 0) continue;
 
       for (let j = 0; j < hitCount; j++) {
@@ -34,20 +34,20 @@ export function createApplySensorHitsSystem({ world } = GameDI) {
             Hitable.hit$(
               otherEid,
               projectileEid,
-              Damagable.damage[projectileEid],
-              Damagable.kind[projectileEid],
+              Damagable.damage.get(projectileEid),
+              Damagable.kind.get(projectileEid),
             );
           }
 
           // Stamp the damage-over-time: refresh duration, keep the strongest dps
           // (a part without a Dot reads 0).
           if (hasComponent(world, projectileEid, Dotable)) {
-            const dps = max(Dot.dps.get(otherEid), Dotable.dps[projectileEid]);
+            const dps = max(Dot.dps.get(otherEid), Dotable.dps.get(projectileEid));
             Dot.refresh(
               otherEid,
-              Dotable.kind[projectileEid],
+              Dotable.kind.get(projectileEid),
               dps,
-              Dotable.durationMs[projectileEid],
+              Dotable.durationMs.get(projectileEid),
             );
           }
 
@@ -56,7 +56,8 @@ export function createApplySensorHitsSystem({ world } = GameDI) {
             projectileEid,
             max(
               0,
-              DestroyByTimeout.timeout[projectileEid] - SensorHits.hitLifeCostMs[projectileEid],
+              DestroyByTimeout.timeout.get(projectileEid) -
+                SensorHits.hitLifeCostMs.get(projectileEid),
             ),
           );
         } else if (hasComponent(world, otherEid, Obstacle)) {

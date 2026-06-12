@@ -1,20 +1,21 @@
-import { addComponent, EntityId, World } from "bitecs";
-import { delegate } from "../../../../../renderer/src/delegate.ts";
-import { NestedArray, TypedArray } from "../../../../../renderer/src/utils.ts";
+import { addComponent } from "bitecs";
+import type { EntityId, World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 import { DamageKind } from "./Damagable.ts";
 
 const HITS_LIMIT = 30;
 const HIT_STRIDE = 3; // sourceEid, damage, kind
 
-export const createHitableComponent = defineComponent((Hitable, { obs }) => {
-  const health = TypedArray.f64(delegate.defaultSize);
-  const hitIndex = TypedArray.i8(delegate.defaultSize);
-  const hits = NestedArray.f64(HIT_STRIDE * HITS_LIMIT, delegate.defaultSize);
+const ZERO_HITS = new Float64Array(HIT_STRIDE * HITS_LIMIT);
+
+export const createHitableComponent = defineComponent((Hitable, { obs, table }) => {
+  const health = table.flat(Float64Array);
+  const hitIndex = table.flat(Int8Array);
+  const hits = table.nested(Float64Array, HIT_STRIDE * HITS_LIMIT);
 
   function resetHits(eid: number) {
-    hitIndex[eid] = 0;
-    hits.getBatch(eid).fill(0);
+    hitIndex.set(eid, 0);
+    hits.setBatch(eid, ZERO_HITS);
   }
 
   return {
@@ -24,19 +25,18 @@ export const createHitableComponent = defineComponent((Hitable, { obs }) => {
 
     addComponent(world: World, eid: number, hp: number) {
       addComponent(world, eid, Hitable);
-      resetHits(eid);
-      health[eid] = hp;
+      health.set(eid, hp);
     },
     hit$: obs((eid: number, secondEid: EntityId, damage: number, kind: DamageKind) => {
-      if (hitIndex[eid] === HITS_LIMIT) {
+      if (hitIndex.get(eid) === HITS_LIMIT) {
         console.warn(`[Hitable] Limit on hits`);
         return;
       }
-      const index = hitIndex[eid] * HIT_STRIDE;
+      const index = hitIndex.get(eid) * HIT_STRIDE;
       hits.set(eid, index, secondEid);
       hits.set(eid, index + 1, damage);
       hits.set(eid, index + 2, kind);
-      hitIndex[eid] = hitIndex[eid] + 1;
+      hitIndex.set(eid, hitIndex.get(eid) + 1);
     }),
     resetHits,
     getSecondEid(eid: number, hit: number): EntityId {
@@ -49,7 +49,7 @@ export const createHitableComponent = defineComponent((Hitable, { obs }) => {
       return hits.get(eid, hit * HIT_STRIDE + 2);
     },
     isDestroyed(eid: number): boolean {
-      return health[eid] <= 0;
+      return health.get(eid) <= 0;
     },
   };
 });

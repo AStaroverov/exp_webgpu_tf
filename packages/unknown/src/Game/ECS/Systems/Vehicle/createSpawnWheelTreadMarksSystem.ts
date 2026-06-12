@@ -28,8 +28,8 @@ export function createSpawnWheelTreadMarksSystem({ world } = GameDI) {
       const linvel = RigidBodyState.linvel.getBatch(eid);
       const rotation = RigidBodyState.rotation[eid];
 
-      const impulseX = Impulse.x[eid];
-      const impulseY = Impulse.y[eid];
+      const impulseX = Impulse.x.get(eid);
+      const impulseY = Impulse.y.get(eid);
 
       let chance = BASE_CHANCE;
 

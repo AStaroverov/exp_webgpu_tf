@@ -12,11 +12,12 @@ export function createDestroyByDistanceSystem({ world } = GameDI) {
     for (let i = 0; i < eids.length; i++) {
       const eid = eids[i];
       const position = RigidBodyState.position.getBatch(eid);
-      const origin = DestroyByDistance.origin.getBatch(eid);
-      const dx = position[0] - origin[0];
-      const dy = position[1] - origin[1];
+      const ox = DestroyByDistance.origin.get(eid, 0);
+      const oy = DestroyByDistance.origin.get(eid, 1);
+      const dx = position[0] - ox;
+      const dy = position[1] - oy;
 
-      if (dx * dx + dy * dy > DestroyByDistance.maxDistanceSq[eid]) {
+      if (dx * dx + dy * dy > DestroyByDistance.maxDistanceSq.get(eid)) {
         scheduleRemoveEntity(eid);
       }
     }

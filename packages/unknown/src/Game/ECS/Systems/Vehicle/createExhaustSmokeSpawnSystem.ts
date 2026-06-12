@@ -33,7 +33,7 @@ export function createExhaustSmokeSpawnSystem({ world } = GameDI) {
     const deltaSeconds = delta / 1000;
 
     for (const pipeEid of pipeEids) {
-      const vehicleEid = Parent.id[pipeEid];
+      const vehicleEid = Parent.id.get(pipeEid);
 
       if (!hasComponent(world, vehicleEid, Vehicle)) continue;
 
@@ -50,22 +50,22 @@ export function createExhaustSmokeSpawnSystem({ world } = GameDI) {
 
       const speedFactor = Math.min(speed / 50, 1);
       const emissionRate =
-        ExhaustPipe.emissionRate[pipeEid] * (1 + speedFactor * ACCELERATION_EMISSION_MULTI);
+        ExhaustPipe.emissionRate.get(pipeEid) * (1 + speedFactor * ACCELERATION_EMISSION_MULTI);
 
-      ExhaustPipe.emissionAccumulator[pipeEid] += deltaSeconds * emissionRate;
+      let acc = ExhaustPipe.emissionAccumulator.get(pipeEid) + deltaSeconds * emissionRate;
 
-      const relX = ExhaustPipe.relativeX[pipeEid];
-      const relY = ExhaustPipe.relativeY[pipeEid];
+      const relX = ExhaustPipe.relativeX.get(pipeEid);
+      const relY = ExhaustPipe.relativeY.get(pipeEid);
       const cos = Math.cos(vehicleRotation);
       const sin = Math.sin(vehicleRotation);
 
       const worldX = vehicleX + relX * cos - relY * sin;
       const worldY = vehicleY + relX * sin + relY * cos;
 
-      const exhaustDir = vehicleRotation + ExhaustPipe.direction[pipeEid];
+      const exhaustDir = vehicleRotation + ExhaustPipe.direction.get(pipeEid);
 
-      while (ExhaustPipe.emissionAccumulator[pipeEid] >= 1) {
-        ExhaustPipe.emissionAccumulator[pipeEid] -= 1;
+      while (acc >= 1) {
+        acc -= 1;
 
         const velocityMagnitude = SMOKE_VELOCITY_BASE + random() * SMOKE_VELOCITY_VARIANCE;
         const spread = (random() - 0.5) * 0.5;
@@ -83,6 +83,8 @@ export function createExhaustSmokeSpawnSystem({ world } = GameDI) {
         exhaustSmokeOptions.velocityY = velocityY;
         spawnExhaustSmoke(exhaustSmokeOptions);
       }
+
+      ExhaustPipe.emissionAccumulator.set(pipeEid, acc);
     }
   };
 }

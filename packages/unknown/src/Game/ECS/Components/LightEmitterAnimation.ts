@@ -1,6 +1,5 @@
-import { addComponent, EntityId, World } from "bitecs";
-import { delegate } from "../../../../../renderer/src/delegate.ts";
-import { TypedArray } from "../../../../../renderer/src/utils.ts";
+import { addComponent } from "bitecs";
+import type { EntityId, World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
 /**
@@ -9,16 +8,16 @@ import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
  * decays over its lifetime": the animation system rescales the live emitter
  * from these each frame, so the live value never accumulates error.
  */
-export const createLightEmitterAnimationComponent = defineComponent((LightEmitterAnimation) => {
-  const intensity = TypedArray.f64(delegate.defaultSize);
-  const radius = TypedArray.f64(delegate.defaultSize);
+export const createLightEmitterAnimationComponent = defineComponent((LightEmitterAnimation, ctx) => {
+  const intensity = ctx.table.flat(Float64Array);
+  const radius = ctx.table.flat(Float64Array);
   return {
     intensity,
     radius,
     addComponent(world: World, eid: EntityId, i: number, r = 0) {
       addComponent(world, eid, LightEmitterAnimation);
-      intensity[eid] = i;
-      radius[eid] = r;
+      intensity.set(eid, i);
+      radius.set(eid, r);
     },
   };
 });

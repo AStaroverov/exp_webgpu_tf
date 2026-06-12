@@ -10,8 +10,8 @@ export function createTankMoveSoundSystem({ world } = GameDI) {
     getGameComponents(world);
 
   function isVehicleMoving(vehicleEid: number): boolean {
-    const move = Math.abs(VehicleController.move[vehicleEid]);
-    const rotation = Math.abs(VehicleController.rotation[vehicleEid]);
+    const move = Math.abs(VehicleController.move.get(vehicleEid));
+    const rotation = Math.abs(VehicleController.rotation.get(vehicleEid));
     return move > MOVE_THRESHOLD || rotation > MOVE_THRESHOLD;
   }
 
@@ -19,16 +19,16 @@ export function createTankMoveSoundSystem({ world } = GameDI) {
     const soundEids = query(world, [Sound, Parent, SoundParentRelative]);
 
     for (const soundEid of soundEids) {
-      if (Sound.type[soundEid] !== SoundType.TankMove) continue;
+      if (Sound.type.get(soundEid) !== SoundType.TankMove) continue;
 
-      const parentEid = Parent.id[soundEid];
+      const parentEid = Parent.id.get(soundEid);
 
       if (!hasComponent(world, parentEid, Vehicle)) {
         continue;
       }
 
       const isMoving = isVehicleMoving(parentEid);
-      const isPlaying = Sound.state[soundEid] === SoundState.Playing;
+      const isPlaying = Sound.state.get(soundEid) === SoundState.Playing;
 
       if (isMoving && !isPlaying) {
         Sound.play(soundEid);
