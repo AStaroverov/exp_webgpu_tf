@@ -84,5 +84,5 @@ export function removeRigidShape(eid: number, { world, physicalWorld } = GameDI)
   const { RigidBodyRef } = getGameComponents(world);
   const pid = RigidBodyRef.id[eid];
   const body = physicalWorld.getRigidBody(pid);
-  body && physicalWorld.removeRigidBody(body);
+  if (body) physicalWorld.removeRigidBody(body);
 }
