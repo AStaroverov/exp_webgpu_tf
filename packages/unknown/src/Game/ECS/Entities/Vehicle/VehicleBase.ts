@@ -18,6 +18,7 @@ const volumeByType: Record<VehicleType, number> = {
   [VehicleType.MeleeCar]: 0.7,
   [VehicleType.FlameTank]: 0.8,
   [VehicleType.FrostTank]: 0.8,
+  [VehicleType.EmpTank]: 0.8,
 };
 
 export function createVehicleBase(options: VehicleOptions, { world } = GameDI): [number, number] {

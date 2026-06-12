@@ -20,6 +20,7 @@ export enum VehicleType {
   MeleeCar = 5, // Fast 4-wheeled car for ramming
   FlameTank = 6, // Medium chassis mounting the flamethrower stream gun
   FrostTank = 7, // Medium chassis mounting the freeze stream gun
+  EmpTank = 8, // Medium chassis lobbing the EMP stun grenade
 }
 
 /**
@@ -333,6 +334,13 @@ export const FrostTankConfig: TankStats = {
   stream: { caliber: StreamCaliber.FreezeGun },
 };
 
+/** EMP tank: the Medium chassis with the gun rechambered for the EMP grenade. */
+export const EmpTankConfig: TankStats = {
+  ...MediumTankConfig,
+  type: VehicleType.EmpTank,
+  gun: { ...MediumTankConfig.gun!, caliber: BulletCaliber.EmpGrenade },
+};
+
 /**
  * Get tank configuration by vehicle type.
  * Returns undefined for non-tank vehicles.
@@ -351,6 +359,8 @@ export function getTankConfig(type: VehicleType): TankStats {
       return FlameTankConfig;
     case VehicleType.FrostTank:
       return FrostTankConfig;
+    case VehicleType.EmpTank:
+      return EmpTankConfig;
     default:
       throw new Error(`Unknown vehicle type ${type}`);
   }

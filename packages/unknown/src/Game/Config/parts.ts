@@ -54,6 +54,7 @@ export const VehicleBaseDensity: Record<VehicleType, number> = {
   [VehicleType.MeleeCar]: 20 * 3,
   [VehicleType.FlameTank]: 30 * 3,
   [VehicleType.FrostTank]: 30 * 3,
+  [VehicleType.EmpTank]: 30 * 3,
 };
 
 /**

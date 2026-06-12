@@ -3,7 +3,7 @@ import { delegate } from "../../../../../renderer/src/delegate.ts";
 import { addComponent, World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
-export const createVehicleControllerComponent = defineComponent((VehicleController, obs) => {
+export const createVehicleControllerComponent = defineComponent((VehicleController, { obs }) => {
   const move = TypedArray.f64(delegate.defaultSize);
   const rotation = TypedArray.f64(delegate.defaultSize);
   return {

@@ -12,7 +12,7 @@
 
 import { max } from "../../../../lib/math.ts";
 import { random } from "../../../../lib/random.ts";
-import { EpisodeManager } from "../../../ppo/src/core/EpisodeManager.ts";
+import { AbstractEpisodeManager } from "../../../ppo/src/core/EpisodeManager.ts";
 import { agentSampleChannel, episodeSampleChannel } from "../../../ppo/src/core/channels.ts";
 import { CONFIG } from "../config.ts";
 import { TICK_TIME_SIMULATION } from "../consts.ts";
@@ -26,7 +26,7 @@ import { curriculumStateChannel } from "../curriculumChannel.ts";
 
 const MAX_FRAMES = CONFIG.episodeFrames;
 
-export class UnknownEpisodeManager extends EpisodeManager<Scenario> {
+export class EpisodeManager extends AbstractEpisodeManager<Scenario> {
   protected curriculumState: CurriculumState = DEFAULT_CURRICULUM_STATE;
 
   constructor() {

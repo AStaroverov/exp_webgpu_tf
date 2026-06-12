@@ -47,9 +47,10 @@ import {
   BOARD_COLS,
   BOARD_ROWS,
   BoardChannel,
+  ensureUnknownInputBoard,
   hexDeltaDistance,
-  UnknownInputBoard,
   VIEW_RADIUS,
+  type UnknownInputBoardComponent,
 } from "./board.ts";
 import { VehicleType } from "../../../unknown/src/Game/Config/vehicles.ts";
 import { markBulletThreat } from "./markBulletThreat.ts";
@@ -69,32 +70,25 @@ type SnapshotCtx = {
   myTeamId: number;
   enemies: KnownEnemies;
   world: (typeof GameDI)["world"];
-  Vehicle: GameComponents["Vehicle"];
-  TeamRef: GameComponents["TeamRef"];
-  Tank: GameComponents["Tank"];
-  Children: GameComponents["Children"];
-  Dot: GameComponents["Dot"];
-  Slowed: GameComponents["Slowed"];
-  Firearms: GameComponents["Firearms"];
-  StreamFirearms: GameComponents["StreamFirearms"];
+  UnknownInputBoard: UnknownInputBoardComponent;
 };
 
 /** `VehicleType` → its one-hot board plane (non-tank types have no plane). */
 const TANK_TYPE_CHANNEL: Partial<Record<VehicleType, number>> = {
   [VehicleType.LightTank]: BoardChannel.TypeLightTank,
   [VehicleType.MediumTank]: BoardChannel.TypeMediumTank,
-  [VehicleType.HeavyTank]: BoardChannel.TypeHeavyTank,
   [VehicleType.RocketTank]: BoardChannel.TypeRocketTank,
   [VehicleType.FlameTank]: BoardChannel.TypeFlameTank,
   [VehicleType.FrostTank]: BoardChannel.TypeFrostTank,
+  [VehicleType.EmpTank]: BoardChannel.TypeEmpTank,
 };
 
 export function snapshotUnknownBoard({ world } = GameDI) {
   const grid = MapDI.grid;
   if (!grid) return;
 
-  const { Tank, Vehicle, TeamRef, Children, Dot, Slowed, Firearms, StreamFirearms } =
-    getGameComponents(world);
+  const { Tank, Vehicle, TeamRef } = getGameComponents(world);
+  const UnknownInputBoard = ensureUnknownInputBoard(world);
   const observers = query(world, [Vehicle, Tank, UnknownInputBoard]);
 
   for (let i = 0; i < observers.length; i++) {
@@ -115,14 +109,7 @@ export function snapshotUnknownBoard({ world } = GameDI) {
       myTeamId,
       enemies: field.enemies,
       world,
-      Vehicle,
-      TeamRef,
-      Tank,
-      Children,
-      Dot,
-      Slowed,
-      Firearms,
-      StreamFirearms,
+      UnknownInputBoard,
     };
     fillWindow(ctx);
 
@@ -185,7 +172,7 @@ function fillCell(ctx: SnapshotCtx, dq: number, dr: number) {
 }
 
 function writeEnemyHeat(ctx: SnapshotCtx, dq: number, dr: number) {
-  const { enemies, selfQ, selfR } = ctx;
+  const { enemies, selfQ, selfR, UnknownInputBoard } = ctx;
   let heat = 0;
   for (let e = 0; e < enemies.q.length; e++) {
     const d = hexDeltaDistance(selfQ + dq - enemies.q[e], selfR + dr - enemies.r[e]);
@@ -201,8 +188,8 @@ function writeEnemyHeat(ctx: SnapshotCtx, dq: number, dr: number) {
 function writeWindowGeometry(ctx: SnapshotCtx, dq: number, dr: number) {
   const col = dq + VIEW_RADIUS;
   const row = dr + VIEW_RADIUS;
-  UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.CoordX, col / (BOARD_COLS - 1));
-  UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.CoordY, row / (BOARD_ROWS - 1));
+  ctx.UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.CoordX, col / (BOARD_COLS - 1));
+  ctx.UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.CoordY, row / (BOARD_ROWS - 1));
 }
 
 /** Dispatch an in-view cell's occupancy to the matching plane. */
@@ -228,25 +215,26 @@ function writeOccupant(ctx: SnapshotCtx, dq: number, dr: number) {
 }
 
 function markObstacle(ctx: SnapshotCtx, dq: number, dr: number) {
-  UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.Obstacle, 1);
+  ctx.UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.Obstacle, 1);
 }
 
 /** Reserved cell (buffer ring around a unit or obstacle). */
 function writeReserved(ctx: SnapshotCtx, dq: number, dr: number, _reserverEid: number) {
-  UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.Reserved, 1);
+  ctx.UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.Reserved, 1);
 }
 
 /** Unit cell → Self/Ally/Enemy plane + hp + stats. */
 function writeUnit(ctx: SnapshotCtx, dq: number, dr: number, unitEid: number) {
+  const { TeamRef } = getGameComponents(ctx.world);
   const plane =
     unitEid === ctx.selfEid
       ? BoardChannel.Self
-      : ctx.TeamRef.id[unitEid] === ctx.myTeamId
+      : TeamRef.id[unitEid] === ctx.myTeamId
         ? BoardChannel.Ally
         : BoardChannel.Enemy;
 
-  UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, plane, 1);
-  UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.Hp, getTankHealth(unitEid));
+  ctx.UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, plane, 1);
+  ctx.UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.Hp, getTankHealth(unitEid));
   writeReload(ctx, dq, dr, unitEid);
   writeDamageStatuses(ctx, dq, dr, unitEid);
   writeTypeOneHot(ctx, dq, dr, unitEid);
@@ -259,7 +247,8 @@ function writeUnit(ctx: SnapshotCtx, dq: number, dr: number, unitEid: number) {
  * multiplier (dense default `1` = not slowed, full speed).
  */
 function writeDamageStatuses(ctx: SnapshotCtx, dq: number, dr: number, unitEid: number) {
-  const { selfEid, world, Tank, Slowed } = ctx;
+  const { selfEid, world, UnknownInputBoard } = ctx;
+  const { Tank, Slowed } = getGameComponents(world);
 
   // The same part set getTankHealth counts: hull slots + turret slots.
   const dps = sumDotDps(ctx, unitEid) + sumDotDps(ctx, Tank.turretEId[unitEid]);
@@ -275,7 +264,8 @@ function writeDamageStatuses(ctx: SnapshotCtx, dq: number, dr: number, unitEid: 
 
 /** Summed dot dps over one parent's filled slots. */
 function sumDotDps(ctx: SnapshotCtx, parentEid: number): number {
-  const { world, Children, Dot } = ctx;
+  const { world } = ctx;
+  const { Children, Dot } = getGameComponents(world);
   const childCount = Children.entitiesCount[parentEid];
   let dps = 0;
   for (let i = 0; i < childCount; i++) {
@@ -292,9 +282,10 @@ function sumDotDps(ctx: SnapshotCtx, parentEid: number): number {
 
 /** One-hot `VehicleType` plane of the unit on cell (dq, dr). */
 function writeTypeOneHot(ctx: SnapshotCtx, dq: number, dr: number, unitEid: number) {
-  const channel = TANK_TYPE_CHANNEL[ctx.Vehicle.type[unitEid] as VehicleType];
+  const { Vehicle } = getGameComponents(ctx.world);
+  const channel = TANK_TYPE_CHANNEL[Vehicle.type[unitEid] as VehicleType];
   if (channel !== undefined) {
-    UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, channel, 1);
+    ctx.UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, channel, 1);
   }
 }
 
@@ -304,7 +295,8 @@ function writeTypeOneHot(ctx: SnapshotCtx, dq: number, dr: number, unitEid: numb
  * stream guns `StreamFirearms.reloading`; gunless vehicles stay 0.
  */
 function writeReload(ctx: SnapshotCtx, dq: number, dr: number, unitEid: number) {
-  const { selfEid, world, Tank, Firearms, StreamFirearms } = ctx;
+  const { selfEid, world, UnknownInputBoard } = ctx;
+  const { Tank, Firearms, StreamFirearms } = getGameComponents(world);
   const turretEid = Tank.turretEId[unitEid];
   if (turretEid === 0) return;
   let remainingMs = 0;

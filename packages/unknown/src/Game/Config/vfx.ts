@@ -4,6 +4,8 @@
  * Visual effects: explosions, muzzle flashes, particles.
  */
 
+import { VFXType, VFXTypeValue } from "../ECS/Components/VFX.ts";
+
 export const ExplosionConfig = {
   /** Default explosion duration (ms) */
   defaultDuration: 1050,
@@ -19,10 +21,8 @@ export type ExplosionType = typeof ExplosionConfig;
 
 /** Light emitted by VFX flashes (emit-only SDF circle, see Entities/LightFlash.ts). */
 export const FlashLightConfig = {
-  muzzle: { color: [1.0, 0.75, 0.4], intensity: 3.0, duration: 300 },
   hit: { color: [1.0, 0.55, 0.25], intensity: 3.0, duration: 300 },
-  // Duration tracks ExplosionConfig.defaultDuration so the light tail dies
-  // together with the fireball, not before it.
+  muzzle: { color: [1.0, 0.75, 0.4], intensity: 3.0, duration: 300 },
   explosion: { color: [1.0, 0.5, 0.2], intensity: 6.0, duration: 1050 },
 } as const;
 
@@ -35,3 +35,51 @@ export const StreamParticleLightConfig = {
   flame: { color: [1.0, 0.55, 0.15], intensity: 3.0 * 0.3, radius: 12 },
   frost: { color: [0.45, 0.78, 1.0], intensity: 3.0 * 0.1, radius: 12 },
 } as const;
+
+export const EmpVfxConfig = {
+  tint: [0.65, 0.8, 1.0] as [number, number, number],
+  flash: { color: [0.55, 0.8, 1.0], intensity: 4.0, duration: 450 }, // FlashLightConfig row shape
+  overlay: { color: [0.55, 0.8, 1.0], lightIntensity: 1.4, lightRadiusPx: 60, radiusPx: 60 },
+  // Burst world radius lives on the EmpGrenade caliber row (`explosion.vfxSize`).
+  explosion: { durationMs: 450 },
+} as const;
+
+/**
+ * Detonation visuals row key, stored on `Explodable`. A separate key (not
+ * `DamageKind`): bullets and rockets are both Physical but detonate with
+ * different visuals.
+ */
+export enum ExplosionVisual {
+  /** Small short impact flash (plain bullets). */
+  HitFlash = 0,
+  /** Full explosion sprite + bright flash (rockets). */
+  Explosion = 1,
+  /** EMP burst. */
+  Emp = 2,
+}
+
+/** Detonation visuals keyed by `ExplosionVisual`. Data lookup, not a type branch. */
+export const ExplosionVisualConfig: Record<
+  ExplosionVisual,
+  {
+    vfxType: VFXTypeValue;
+    durationMs: number;
+    flash: { color: readonly [number, number, number]; intensity: number; duration: number };
+  }
+> = {
+  [ExplosionVisual.HitFlash]: {
+    flash: FlashLightConfig.hit,
+    vfxType: VFXType.HitFlash,
+    durationMs: 400,
+  },
+  [ExplosionVisual.Explosion]: {
+    flash: FlashLightConfig.explosion,
+    vfxType: VFXType.Explosion,
+    durationMs: ExplosionConfig.defaultDuration,
+  },
+  [ExplosionVisual.Emp]: {
+    flash: EmpVfxConfig.flash,
+    vfxType: VFXType.EmpExplosion,
+    durationMs: EmpVfxConfig.explosion.durationMs,
+  },
+};

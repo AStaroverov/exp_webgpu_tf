@@ -4,7 +4,7 @@ import { queueSizeChannel } from "./channels.ts";
 
 const queueSize$ = queueSizeChannel.obs.pipe(startWith(0), shareReplay(1));
 
-export abstract class EpisodeManager<Scen> {
+export abstract class AbstractEpisodeManager<Scen> {
   private backpressure$;
 
   constructor(

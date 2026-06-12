@@ -1,4 +1,5 @@
 import { GameDI } from "../../DI/GameDI.ts";
+import { RenderDI } from "../../DI/RenderDI.ts";
 import { isNumber } from "lodash-es";
 import { applyRotationToVector } from "../../Physical/applyRotationToVector.ts";
 import { createRectangleRR } from "../Components/RigidRender.ts";
@@ -51,8 +52,17 @@ export function createBullet(
   },
   { world } = GameDI,
 ) {
-  const { Bullet, TeamRef, PlayerRef, Hitable, Damagable, DestroyByDistance, Explodable } =
-    getGameComponents(world);
+  const {
+    Bullet,
+    TeamRef,
+    PlayerRef,
+    Hitable,
+    Damagable,
+    DestroyByDistance,
+    Explodable,
+    Color,
+    LightEmitter,
+  } = getGameComponents(world);
 
   Object.assign(optionsBulletRR, defaultOptionsBulletRR);
   Object.assign(optionsBulletRR, options);
@@ -69,6 +79,7 @@ export function createBullet(
   }
   optionsBulletRR.density = bulletCaliber.density;
   optionsBulletRR.linearDamping = bulletCaliber.linearDamping;
+  optionsBulletRR.angularSpeed = bulletCaliber.angularSpeed ?? 0;
 
   const [bulletId] = createRectangleRR(optionsBulletRR);
   Bullet.addComponent(world, bulletId, options.calibre);
@@ -86,6 +97,13 @@ export function createBullet(
 
   if (bulletCaliber.explosion) {
     Explodable.addComponent(world, bulletId, bulletCaliber.explosion);
+  }
+
+  // Glowing projectile: override the dimmed vehicle color and feed the RC emission
+  // pass — the bullet's own SDF rect is the emitter silhouette.
+  if (bulletCaliber.light && RenderDI.enabled) {
+    Color.set$(bulletId, ...bulletCaliber.light.color, 1);
+    LightEmitter.addComponent(world, bulletId, bulletCaliber.light.intensity);
   }
 
   return bulletId;

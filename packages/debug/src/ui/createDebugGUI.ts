@@ -103,6 +103,7 @@ export function createDebugGUI(canvas: HTMLCanvasElement, manualControl?: Manual
     ["Rocket Tank", VehicleType.RocketTank],
     ["Frost Tank", VehicleType.FrostTank],
     ["Flame Tank", VehicleType.FlameTank],
+    ["EMP Tank", VehicleType.EmpTank],
   ];
   for (const [label, type] of SPAWN_TYPES) {
     spawnFolder

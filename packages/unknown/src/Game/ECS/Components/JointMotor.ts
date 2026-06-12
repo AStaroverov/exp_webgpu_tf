@@ -3,7 +3,7 @@ import { delegate } from "../../../../../renderer/src/delegate.ts";
 import { TypedArray } from "../../../../../renderer/src/utils.ts";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
-export const createJointMotorComponent = defineComponent((JointMotor, obs) => {
+export const createJointMotorComponent = defineComponent((JointMotor, { obs }) => {
   const targetPosition = TypedArray.f64(delegate.defaultSize);
   const stiffness = TypedArray.f64(delegate.defaultSize);
   const damping = TypedArray.f64(delegate.defaultSize);

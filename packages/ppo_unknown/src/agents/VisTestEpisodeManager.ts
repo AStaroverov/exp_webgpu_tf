@@ -15,9 +15,9 @@ import { Scenario } from "../env/createUnknownScenario.ts";
 import { UnknownAgent } from "../env/UnknownAgent.ts";
 import { createScenarioByCurriculumState } from "../curriculum/createScenarioByCurriculumState.ts";
 import { getDrawState, settingsReady } from "../ui/uiUtils.ts";
-import { UnknownEpisodeManager } from "./UnknownEpisodeManager.ts";
+import { EpisodeManager } from "./EpisodeManager.ts";
 
-export class UnknownVisTestEpisodeManager extends UnknownEpisodeManager {
+export class VisTestEpisodeManager extends EpisodeManager {
   private current?: Scenario;
 
   public getVersion(): number {

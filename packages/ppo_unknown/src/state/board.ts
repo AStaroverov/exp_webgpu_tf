@@ -26,7 +26,7 @@ import { addComponent } from "bitecs";
 import type { World } from "bitecs";
 import { NestedArray } from "renderer/src/utils.ts";
 import { delegate } from "renderer/src/delegate.ts";
-import { component } from "renderer/src/ECS/utils.ts";
+import { defineComponent } from "renderer/src/ECS/utils.ts";
 
 /** Visible distance in hex steps; the window spans [-R, R] in both axial axes. */
 export const VIEW_RADIUS = 5;
@@ -115,43 +115,62 @@ export const BoardChannel = {
    */
   TypeLightTank: C++,
   TypeMediumTank: C++,
-  TypeHeavyTank: C++,
   TypeRocketTank: C++,
   TypeFlameTank: C++,
   TypeFrostTank: C++,
+  TypeEmpTank: C++,
 } as const;
 
 export const BOARD_CHANNELS = C;
 export const BOARD_SIZE = BOARD_CELLS * BOARD_CHANNELS;
 
-export const UnknownInputBoard = component({
-  board: NestedArray.f64(BOARD_SIZE, delegate.defaultSize),
+export type UnknownInputBoardComponent = ReturnType<typeof createUnknownInputBoardComponent>;
 
-  addComponent(world: World, eid: number) {
-    addComponent(world, eid, UnknownInputBoard);
-    UnknownInputBoard.board.getBatch(eid).fill(0);
-  },
+const instances = new WeakMap<World, UnknownInputBoardComponent>();
 
-  reset(eid: number) {
-    UnknownInputBoard.board.getBatch(eid).fill(0);
-  },
+/** Per-world board store, lazily created on first touch (scenario setup runs first). */
+export function ensureUnknownInputBoard(world: World): UnknownInputBoardComponent {
+  let instance = instances.get(world);
+  if (instance === undefined) {
+    instance = createUnknownInputBoardComponent(world);
+    instances.set(world, instance);
+  }
+  return instance;
+}
 
-  set(eid: number, row: number, col: number, channel: number, v: number) {
+export const createUnknownInputBoardComponent = defineComponent((UnknownInputBoard) => {
+  const board = NestedArray.f64(BOARD_SIZE, delegate.defaultSize);
+  function set(eid: number, row: number, col: number, channel: number, v: number) {
     const offset = (row * BOARD_COLS + col) * BOARD_CHANNELS + channel;
-    UnknownInputBoard.board.set(eid, offset, v);
-  },
-
-  get(eid: number, row: number, col: number, channel: number): number {
+    board.set(eid, offset, v);
+  }
+  function get(eid: number, row: number, col: number, channel: number): number {
     const offset = (row * BOARD_COLS + col) * BOARD_CHANNELS + channel;
-    return UnknownInputBoard.board.get(eid, offset);
-  },
+    return board.get(eid, offset);
+  }
 
-  /** Egocentric set: axial delta relative to the observer instead of row/col. */
-  setDelta(eid: number, dq: number, dr: number, channel: number, v: number) {
-    UnknownInputBoard.set(eid, dr + VIEW_RADIUS, dq + VIEW_RADIUS, channel, v);
-  },
+  return {
+    board,
 
-  getDelta(eid: number, dq: number, dr: number, channel: number): number {
-    return UnknownInputBoard.get(eid, dr + VIEW_RADIUS, dq + VIEW_RADIUS, channel);
-  },
+    addComponent(world: World, eid: number) {
+      addComponent(world, eid, UnknownInputBoard);
+      board.getBatch(eid).fill(0);
+    },
+
+    reset(eid: number) {
+      board.getBatch(eid).fill(0);
+    },
+
+    set,
+    get,
+
+    /** Egocentric set: axial delta relative to the observer instead of row/col. */
+    setDelta(eid: number, dq: number, dr: number, channel: number, v: number) {
+      set(eid, dr + VIEW_RADIUS, dq + VIEW_RADIUS, channel, v);
+    },
+
+    getDelta(eid: number, dq: number, dr: number, channel: number): number {
+      return get(eid, dr + VIEW_RADIUS, dq + VIEW_RADIUS, channel);
+    },
+  };
 });

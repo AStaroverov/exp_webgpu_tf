@@ -5,6 +5,8 @@ import { createActionsQueueComponent } from "./Components/ActionsQueue.ts";
 import { createBulletComponent } from "./Components/Bullet.ts";
 
 import { createSlowedComponent } from "./Components/Slowed.ts";
+import { createStunnedComponent } from "./Components/Stunned.ts";
+import { createStunOverlayComponent } from "./Components/StunOverlay.ts";
 import { createChildrenComponent } from "./Components/Children.ts";
 import { createDamagableComponent } from "./Components/Damagable.ts";
 import {
@@ -73,6 +75,8 @@ function createGameOnlyComponents(world: World) {
     Bullet: createBulletComponent(world),
     Children: createChildrenComponent(world),
     Slowed: createSlowedComponent(world),
+    Stunned: createStunnedComponent(world),
+    StunArcs: createStunOverlayComponent(world),
     Damagable: createDamagableComponent(world),
     Destroy: createDestroyComponent(world),
     DestroyByDistance: createDestroyByDistanceComponent(world),

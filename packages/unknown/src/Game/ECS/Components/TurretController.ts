@@ -3,7 +3,7 @@ import { delegate } from "../../../../../renderer/src/delegate.ts";
 import { addComponent, World } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
-export const createTurretControllerComponent = defineComponent((TurretController, obs) => {
+export const createTurretControllerComponent = defineComponent((TurretController, { obs }) => {
   const shoot = TypedArray.f32(delegate.defaultSize);
   const rotation = TypedArray.f64(delegate.defaultSize);
   return {

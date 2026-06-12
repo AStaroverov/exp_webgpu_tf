@@ -1,20 +1,13 @@
 import { GameDI } from "../../DI/GameDI.ts";
 import { scheduleRemoveEntity } from "../Utils/typicalRemoveEntity.ts";
 import { EntityId, hasComponent, Not, onSet, query } from "bitecs";
-import { BulletCaliber, mapBulletCaliber } from "../Components/Bullet.ts";
 import { createChangeDetector } from "../../../../../renderer/src/ECS/Systems/ChangedDetectorSystem.ts";
 import { getTankHealth, tearOffTankPart } from "../Entities/Tank/TankUtils.ts";
-import { spawnHitFlash } from "../Entities/HitFlash.ts";
-import {
-  getMatrixTranslationX,
-  getMatrixTranslationY,
-  GlobalTransform,
-} from "../../../../../renderer/src/ECS/Components/Transform.ts";
 import { SoundType } from "../Components/Sound.ts";
 import { spawnSoundAtParent } from "../Entities/Sound.ts";
 import { getGameComponents } from "../createGameWorld.ts";
 import { DamageKind } from "../Components/Damagable.ts";
-import { FrostSlowConfig } from "../../Config/weapons.ts";
+import { EmpStunConfig, FrostSlowConfig } from "../../Config/weapons.ts";
 import { findVehicleEidByPartEid } from "../Utils/findPartVehicle.ts";
 
 export function createHitableSystem({ world } = GameDI) {
@@ -65,18 +58,6 @@ export function createHitableSystem({ world } = GameDI) {
 
       if (!Hitable.isDestroyed(bulletId)) continue;
 
-      const bulletMatrix = GlobalTransform.matrix.getBatch(bulletId);
-      const bulletCaliber = mapBulletCaliber[Bullet.caliber[bulletId] as BulletCaliber];
-      const hitX = getMatrixTranslationX(bulletMatrix);
-      const hitY = getMatrixTranslationY(bulletMatrix);
-
-      spawnHitFlash({
-        x: hitX,
-        y: hitY,
-        size: bulletCaliber.width * 2,
-        duration: 400,
-      });
-
       scheduleRemoveEntity(bulletId);
     }
 
@@ -109,16 +90,26 @@ function applyDamage(targetEid: number, { world } = GameDI) {
 }
 
 // Damage-kind specialties, triggered per recorded hit on a vehicle part:
-// Frost → one freeze contribution to the part's vehicle (`Slowed` accumulates them).
+// Frost → one freeze contribution to the part's vehicle (`Slowed` accumulates them);
+// Emp → refresh the vehicle's `Stunned` countdown (binary, kind-triggered).
 function applyKindEffects(partEid: number, { world } = GameDI) {
-  const { Hitable, Slowed } = getGameComponents(world);
+  const { Hitable, Slowed, Stunned } = getGameComponents(world);
   const count = Hitable.hitIndex[partEid];
 
   for (let i = 0; i < count; i++) {
-    if (Hitable.getKind(partEid, i) === DamageKind.Frost) {
-      const vehicleEid = findVehicleEidByPartEid(partEid);
-      if (vehicleEid === undefined) continue;
-      Slowed.addContribution(world, vehicleEid, FrostSlowConfig.freezePerHit);
+    switch (Hitable.getKind(partEid, i)) {
+      case DamageKind.Frost: {
+        const vehicleEid = findVehicleEidByPartEid(partEid);
+        if (vehicleEid === undefined) break; // torn-off debris: explicit absence
+        Slowed.addContribution(world, vehicleEid, FrostSlowConfig.freezePerHit);
+        break;
+      }
+      case DamageKind.Emp: {
+        const vehicleEid = findVehicleEidByPartEid(partEid);
+        if (vehicleEid === undefined) break; // torn-off debris: explicit absence
+        Stunned.refresh(vehicleEid, EmpStunConfig.durationMs);
+        break;
+      }
     }
   }
 }
@@ -129,7 +120,6 @@ function saveHitters(hittableEid: EntityId, vehicleEid: EntityId, { world } = Ga
   if (!hasComponent(world, hittableEid, TeamRef)) return;
 
   const vehiclePartTeamId = TeamRef.id[hittableEid];
-  const vehiclePlayerId = PlayerRef.id[vehicleEid];
   const count = Hitable.hitIndex[hittableEid];
 
   for (let i = 0; i < count; i++) {
@@ -140,9 +130,7 @@ function saveHitters(hittableEid: EntityId, vehicleEid: EntityId, { world } = Ga
     const attackerTeamId = TeamRef.id[hitEid];
     const attackerPlayerId = PlayerRef.id[hitEid];
     if (attackerTeamId === vehiclePartTeamId) {
-      if (attackerPlayerId !== vehiclePlayerId) {
-        FriendlyHitters.addDamage(vehicleEid, attackerPlayerId, Hitable.getDamage(hittableEid, i));
-      }
+      FriendlyHitters.addDamage(vehicleEid, attackerPlayerId, Hitable.getDamage(hittableEid, i));
     } else {
       LastHitters.addDamage(vehicleEid, attackerPlayerId, Hitable.getDamage(hittableEid, i));
     }

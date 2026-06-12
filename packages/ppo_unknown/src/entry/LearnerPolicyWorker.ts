@@ -59,7 +59,10 @@ const computeCurriculumState = (sample: EpisodeSample, prev?: CurriculumState): 
 
 function onPolicyReady(network: tf.LayersModel) {
   const lastCurriculumState = getNetworkCurriculumState(network);
-  lastCurriculumState && curriculumStateChannel.emit(lastCurriculumState);
+
+  if (lastCurriculumState) {
+    curriculumStateChannel.emit(lastCurriculumState);
+  }
 
   episodeSampleChannel.obs.subscribe((sample) => {
     metricsChannels.successRatio.postMessage([

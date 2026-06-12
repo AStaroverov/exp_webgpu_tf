@@ -12,7 +12,7 @@ import { GameDI } from "../../../unknown/src/Game/DI/GameDI.ts";
 import { getGameComponents } from "../../../unknown/src/Game/ECS/createGameWorld.ts";
 import { getTankTeamId } from "../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts";
 import { CONFIG } from "../config.ts";
-import { UnknownVisTestEpisodeManager } from "../agents/UnknownVisTestEpisodeManager.ts";
+import { VisTestEpisodeManager } from "../agents/VisTestEpisodeManager.ts";
 import { createLightingGUI } from "../../../unknown/src/ui/createLightingGUI.ts";
 import { toggleChartsPanel, updateCharts } from "./MetricsBrowser/index.ts";
 import {
@@ -25,10 +25,7 @@ import {
   settingsReady,
 } from "./uiUtils.ts";
 
-export function createDebugVisualization(
-  container: HTMLElement,
-  manager: UnknownVisTestEpisodeManager,
-) {
+export function createDebugVisualization(container: HTMLElement, manager: VisTestEpisodeManager) {
   const gui = new GUI({ title: "RL Dashboard", width: 300, autoPlace: false });
   Object.assign(gui.domElement.style, {
     position: "fixed",
@@ -94,7 +91,7 @@ function setupControls(gui: GUI) {
   folder.add(controls, "resetState").name("Reset State");
 }
 
-function setupInfo(gui: GUI, manager: UnknownVisTestEpisodeManager, syncLighting: () => void) {
+function setupInfo(gui: GUI, manager: VisTestEpisodeManager, syncLighting: () => void) {
   const folder = gui.addFolder("Info");
 
   const info = { workers: CONFIG.workerCount, version: 0, success: 0 };
@@ -120,7 +117,7 @@ function setupInfo(gui: GUI, manager: UnknownVisTestEpisodeManager, syncLighting
   update();
 }
 
-function getAgentsDebug(manager: UnknownVisTestEpisodeManager): string {
+function getAgentsDebug(manager: VisTestEpisodeManager): string {
   if (!GameDI.world) return "";
   const { Color } = getGameComponents(GameDI.world);
 

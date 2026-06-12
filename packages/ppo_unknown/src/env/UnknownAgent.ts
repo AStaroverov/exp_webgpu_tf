@@ -61,7 +61,6 @@ export class UnknownAgent {
   constructor(
     public readonly tankEid: number,
     public readonly train: boolean,
-    /** Dense-shaping anneal factor for this episode (see `getShapingWeight`). */
     public readonly shapingWeight: number,
   ) {}
 

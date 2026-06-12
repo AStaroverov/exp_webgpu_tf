@@ -1,6 +1,6 @@
 import { addEntity } from "bitecs";
 import { GameDI } from "../../DI/GameDI.ts";
-import { VFXType } from "../Components/VFX.ts";
+import { VFXTypeValue } from "../Components/VFX.ts";
 import { getGameComponents } from "../createGameWorld.ts";
 import {
   addTransformComponents,
@@ -14,6 +14,7 @@ import { RenderDI } from "../../DI/RenderDI.ts";
 export interface ExplosionOptions {
   x: number;
   y: number;
+  type: VFXTypeValue;
   size: number;
   duration: number;
 }
@@ -32,7 +33,7 @@ export function spawnExplosion(
   applyMatrixTranslate(LocalTransform.matrix.getBatch(eid), options.x, options.y, ZIndex.Explosion);
   applyMatrixScale(LocalTransform.matrix.getBatch(eid), options.size, options.size);
 
-  VFX.addComponent(world, eid, VFXType.Explosion);
+  VFX.addComponent(world, eid, options.type);
   Progress.addComponent(world, eid, options.duration);
   DestroyByTimeout.addComponent(world, eid, options.duration);
 }

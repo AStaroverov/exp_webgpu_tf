@@ -8,6 +8,7 @@ import { PI } from "../../../../../lib/math.ts";
 import { HexGridConfig } from "../Map/HexConfig.ts";
 import { ExplodableSettings } from "../ECS/Components/Explodable.ts";
 import { DamageKind } from "../ECS/Components/Damagable.ts";
+import { ExplosionVisual } from "./vfx.ts";
 
 // =============================================================================
 // BULLET SPEED LIMITS
@@ -33,9 +34,15 @@ export enum BulletCaliber {
   Medium = 1,
   Heavy = 2,
   Rocket = 3,
+  EmpGrenade = 4,
 }
 
 export type BulletCaliberStats = {
+  /**
+   * Hit-points of the projectile itself. A tiny value makes the projectile die
+   * (and, for rockets, detonate) on any contact.
+   */
+  health: number;
   /** Width of the bullet in pixels */
   width: number;
   /** Height of the bullet in pixels */
@@ -50,13 +57,12 @@ export type BulletCaliberStats = {
   reloadTime: number;
   /** Linear damping (speed loss over time) */
   linearDamping: number;
+  /** Initial spin, rad/s — presence-driven (set at spawn when defined). */
+  angularSpeed?: number;
   /** Maximum distance the bullet may travel from its spawn point before it is destroyed */
   maxDistance: number;
-  /**
-   * Hit-points of the projectile itself. A tiny value makes the projectile die
-   * (and, for rockets, detonate) on any contact.
-   */
-  health: number;
+  /** In-flight self-illumination — presence-driven. */
+  light?: { color: [number, number, number]; intensity: number };
   /** When set, the projectile detonates (VFX + area damage) on destruction. */
   explosion?: ExplodableSettings;
 };
@@ -77,10 +83,12 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     maxDistance: HexGridConfig.radius * 6.6,
     health: 0.001, // dies (and detonates) on any contact
     explosion: {
+      kind: DamageKind.Physical,
+      visual: ExplosionVisual.HitFlash,
       damage: 10,
       radius: 6,
-      vfxSize: 0, // damage-only blast: no explosion VFX / light flash
-      lightRadius: 0,
+      vfxSize: 20, // width * 2
+      lightRadius: 20,
     },
   },
 
@@ -95,10 +103,12 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     maxDistance: HexGridConfig.radius * 8.6,
     health: 0.001, // dies (and detonates) on any contact
     explosion: {
+      kind: DamageKind.Physical,
+      visual: ExplosionVisual.HitFlash,
       damage: 15,
       radius: 9,
-      vfxSize: 0, // damage-only blast: no explosion VFX / light flash
-      lightRadius: 0,
+      vfxSize: 28, // width * 2
+      lightRadius: 28,
     },
   },
 
@@ -113,10 +123,12 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     maxDistance: HexGridConfig.radius * 10.6,
     health: 0.001, // dies (and detonates) on any contact
     explosion: {
+      kind: DamageKind.Physical,
+      visual: ExplosionVisual.HitFlash,
       damage: 20,
       radius: 12,
-      vfxSize: 0, // damage-only blast: no explosion VFX / light flash
-      lightRadius: 0,
+      vfxSize: 24, // width * 2
+      lightRadius: 24,
     },
   },
 
@@ -131,10 +143,34 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     maxDistance: HexGridConfig.radius * 8,
     health: 0.001,
     explosion: {
+      kind: DamageKind.Physical,
+      visual: ExplosionVisual.Explosion,
       damage: 5,
       radius: 100,
       vfxSize: 30 * 6,
       lightRadius: 30 * 8,
+    },
+  },
+
+  [BulletCaliber.EmpGrenade]: {
+    health: 0.001, // rocket pattern: dies (→ detonates) on any contact
+    width: 12,
+    height: 7, // elongated → the tumble reads visually (a circle would hide it)
+    speed: 100, // SLOW, lobbed feel (rocket 450, bullets 650+)
+    density: 3_000,
+    damage: 1, // token contact damage — the stun IS the payload
+    reloadTime: 5_000, // single shot, rocket-class reload
+    linearDamping: 0.1,
+    angularSpeed: Math.PI * 4, // 2 rev/s; bullet angularDamping 0.1 barely decays it over flight
+    maxDistance: HexGridConfig.radius * 6,
+    light: { color: [0.5, 0.78, 1.0], intensity: 0.75 },
+    explosion: {
+      kind: DamageKind.Emp,
+      visual: ExplosionVisual.Emp,
+      damage: 2,
+      radius: 100,
+      vfxSize: 100, // shockwave reaches exactly the damage radius
+      lightRadius: 100,
     },
   },
 } as const;
@@ -152,6 +188,15 @@ export const FrostSlowConfig = {
   freezePerHit: 0.05,
   /** Freeze thawed per tick (`slowMul` shrinks by this each game tick) */
   thawPerTick: 0.25,
+} as const;
+
+/**
+ * Emp-kind damage specialty: every Emp-kind hit on a part fully disables the
+ * victim vehicle for `durationMs` (refresh = max, not stack).
+ */
+export const EmpStunConfig = {
+  /** Full vehicle-disable duration applied/refreshed per Emp-kind hit */
+  durationMs: 4_000,
 } as const;
 
 export type StreamCaliberStats = {

@@ -19,6 +19,7 @@ import { getFilledSlotCount, getSlotCount } from "../Vehicle/VehicleParts.ts";
 import { applyExplosionImpulse } from "../../../Physical/applyExplosionImpulse.ts";
 import { getSlotFillerEid, isSlot, isSlotEmpty } from "../../Utils/SlotUtils.ts";
 import { EngineLabels, EngineType } from "../../../Config/vehicles.ts";
+import { VFXType } from "../../Components/VFX.ts";
 
 export function destroyTank(vehicleEid: EntityId, { world } = GameDI) {
   const { Tank, Children } = getGameComponents(world);
@@ -29,6 +30,7 @@ export function destroyTank(vehicleEid: EntityId, { world } = GameDI) {
   spawnExplosion({
     x: explosionX,
     y: explosionY,
+    type: VFXType.Explosion,
     size: 60,
     duration: 1500,
   });

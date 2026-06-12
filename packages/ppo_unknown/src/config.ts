@@ -35,8 +35,8 @@ export const CONFIG: PpoConfig & {
     max: 1e-3,
   },
 
-  batchSize: (_iteration: number) => 256 * 16,
-  miniBatchSize: (_iteration: number) => 256,
+  batchSize: (_iteration: number) => 64 * 16,
+  miniBatchSize: (_iteration: number) => 64,
 
   // Decision-based episodes are short in STEPS but long in TICKS. Cap ticks at
   // a few simulated minutes; termination is owned by ppo_unknown (no win cond

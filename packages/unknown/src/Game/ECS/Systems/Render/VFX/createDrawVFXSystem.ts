@@ -8,6 +8,7 @@ import { GameDI } from "../../../../DI/GameDI.ts";
 import { VFXType, VFXTypeValue } from "../../../Components/VFX.ts";
 import { GlobalTransform } from "renderer/src/ECS/Components/Transform.ts";
 import { getGameComponents } from "../../../createGameWorld.ts";
+import { EmpVfxConfig } from "../../../../Config/vfx.ts";
 
 // Max radius calculation per effect type
 const getMaxRadius: Record<VFXTypeValue, (progress: number) => number> = {
@@ -31,16 +32,28 @@ const getMaxRadius: Record<VFXTypeValue, (progress: number) => number> = {
   // the world-pixel size lives entirely in maxRadius.
   [VFXType.Flame]: (progress) => 9.0 * (1.0 + progress * 1.4),
   [VFXType.Frost]: (progress) => 9.0 * (1.0 + progress * 1.4),
+  // The overlay rides the vehicle entity (transform scale 1), so its
+  // world-pixel radius lives here — sourced from the same EmpVfxConfig row
+  // as the shader.
+  [VFXType.EmpOverlay]: () => EmpVfxConfig.overlay.radiusPx,
+  // Normalized quad (world size = transform scale from Explodable.vfxSize):
+  // the shockwave front sweeps out to r = 1, and the ring's smoothstep
+  // half-width (0.07) overhangs it — 1.07 contains both.
+  [VFXType.EmpExplosion]: () => 1.07,
 };
 
-// Seed multiplier per effect type
-const seedMultiplier: Record<VFXTypeValue, number> = {
+// Seed multiplier per effect type. Exported so createStunArcsSystem can
+// reproduce an overlay's exact shader seed (`(eid * mult) % 1`) and strobe
+// the ground glow in sync with the bolts' 24-slice re-strike gate.
+export const seedMultiplier: Record<VFXTypeValue, number> = {
   [VFXType.ExhaustSmoke]: 0.137,
   [VFXType.Explosion]: 0.1,
   [VFXType.HitFlash]: 0.1,
   [VFXType.MuzzleFlash]: 0.1,
   [VFXType.Flame]: 0.173,
   [VFXType.Frost]: 0.211,
+  [VFXType.EmpOverlay]: 0.157,
+  [VFXType.EmpExplosion]: 0.191,
 };
 
 export function createDrawVFXSystem({ device } = RenderDI, { world } = GameDI) {

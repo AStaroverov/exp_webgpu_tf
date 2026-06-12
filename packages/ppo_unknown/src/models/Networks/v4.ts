@@ -42,8 +42,8 @@ import { createInputs } from "../Inputs.ts";
 
 type NetworkConfig = { dim: number; heads: number; depth: number };
 
-const policyConfig: NetworkConfig = { dim: 128, heads: 4, depth: 4 };
-const valueConfig: NetworkConfig = { dim: 64, heads: 2, depth: 2 };
+const policyConfig: NetworkConfig = { dim: 256, heads: 8, depth: 4 };
+const valueConfig: NetworkConfig = { dim: 128, heads: 4, depth: 2 };
 
 export function createNetwork(
   modelName: Model,
@@ -68,15 +68,11 @@ export function createNetwork(
     indexes: ACTION_CELL_INDEXES,
   }).apply(projected) as tf.SymbolicTensor; // [B, 37, dim]
 
-  const latentNorm = createNormalizationLayer({
-    name: modelName + "_latentInputNorm",
-  }).apply(latentSeed) as tf.SymbolicTensor;
-
   const perceived = applyPerceiverLayer({
     name: modelName + "_perceiver",
     depth: config.depth,
     heads: config.heads,
-    qTok: latentNorm,
+    qTok: latentSeed,
     kvTok: projected,
     kvMask: contentMask,
     preNorm: true,

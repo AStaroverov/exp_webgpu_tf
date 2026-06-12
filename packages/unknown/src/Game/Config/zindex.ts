@@ -42,9 +42,6 @@ export const ZIndexConfig = {
   /** Explosion effects */
   Explosion: 100,
 
-  /** Hit flash effects */
-  HitFlash: 100,
-
   /** Muzzle flash from firing */
   MuzzleFlash: 100,
 } as const;

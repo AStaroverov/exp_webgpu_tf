@@ -17,8 +17,17 @@ const mapTypeToTrackImpulse = {
 const impulseVector = new Vector2(0, 0);
 
 export function createTrackControlSystem({ world } = GameDI) {
-  const { Tank, Vehicle, VehicleController, Children, Track, RigidBodyState, Impulse, Slowed } =
-    getGameComponents(world);
+  const {
+    Tank,
+    Vehicle,
+    VehicleController,
+    Children,
+    Track,
+    RigidBodyState,
+    Impulse,
+    Slowed,
+    Stunned,
+  } = getGameComponents(world);
 
   function applyTrackImpulse(
     trackEid: number,
@@ -45,6 +54,7 @@ export function createTrackControlSystem({ world } = GameDI) {
       const impulseFactor = mapTypeToTrackImpulse[engineType];
       const vehicleRotation = RigidBodyState.rotation[vehicleEid];
       const slow = hasComponent(world, vehicleEid, Slowed) ? 1 - Slowed.slowMul[vehicleEid] : 1;
+      const stun = hasComponent(world, vehicleEid, Stunned) ? 0 : 1;
 
       const turnFactor = -0.7;
 
@@ -71,7 +81,7 @@ export function createTrackControlSystem({ world } = GameDI) {
 
         const trackSide = Track.side[childEid];
         const power = trackSide === TrackSide.Left ? leftPower : rightPower;
-        applyTrackImpulse(childEid, power * impulseFactor * slow, vehicleRotation, delta);
+        applyTrackImpulse(childEid, power * impulseFactor * slow * stun, vehicleRotation, delta);
       }
     }
   };

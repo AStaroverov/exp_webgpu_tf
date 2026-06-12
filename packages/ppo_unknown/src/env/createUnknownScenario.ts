@@ -34,7 +34,7 @@ import {
   getTankTeamId,
 } from "../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts";
 import { getTeamsCount } from "../../../unknown/src/Game/ECS/Components/TeamRef.ts";
-import { UnknownInputBoard } from "../state/board.ts";
+import { ensureUnknownInputBoard } from "../state/board.ts";
 import { scoreTracker } from "../reward/ScoreTracker.ts";
 import { getShapingWeight } from "../reward/calculateReward.ts";
 import { ScenarioConfig } from "../curriculum/types.ts";
@@ -53,6 +53,7 @@ const TANK_TYPES = [
   VehicleType.RocketTank,
   VehicleType.FlameTank,
   VehicleType.FrostTank,
+  VehicleType.EmpTank,
 ] as const;
 
 // RandomBot tuning per enemy behaviour. Both now return sporadic undirected fire
@@ -97,6 +98,7 @@ export function createUnknownScenario(options: {
   const game = createGame({ width: FIELD_SIZE, height: FIELD_SIZE });
   const world = game.world;
   const { Tank, Vehicle, VehicleController } = getGameComponents(world);
+  const UnknownInputBoard = ensureUnknownInputBoard(world);
 
   spawnObstacles();
 
@@ -122,8 +124,8 @@ export function createUnknownScenario(options: {
         teamId: team,
         x: pos.x,
         y: pos.y,
-        rotation: Math.random() * Math.PI * 2,
         color: new Float32Array(TEAM_COLORS[team % TEAM_COLORS.length]),
+        rotation: Math.random() * Math.PI * 2,
       };
       const tankEid = createTank({
         ...spawn,
@@ -212,7 +214,11 @@ export function createUnknownScenario(options: {
     const band = (maxX - minX) * 0.25;
     const byX = [...passable].sort((a, b) => a.x - b.x); // left → right
 
-    const takeSide = (count: number, fromLeft: boolean, picked: Array<{ q: number; r: number }>) => {
+    const takeSide = (
+      count: number,
+      fromLeft: boolean,
+      picked: Array<{ q: number; r: number }>,
+    ) => {
       // Spread randomly inside the border band; if the band can't fit the team
       // (spawn rules reject some cells), spill over to the next-nearest cells.
       const ordered = fromLeft ? byX : [...byX].reverse();

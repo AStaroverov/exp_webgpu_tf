@@ -138,7 +138,8 @@ export function createLearnerManager<S>({
                   diagnostics.returns.std > 0
                     ? diagnostics.values.std / diagnostics.returns.std
                     : 0;
-                waitTime !== undefined && metricsChannels.waitTime.postMessage([waitTime / 1000]);
+
+                if (waitTime !== undefined) metricsChannels.waitTime.postMessage([waitTime / 1000]);
                 metricsChannels.trainTime.postMessage([(lastEndTime - startTime) / 1000]);
                 metricsChannels.vTraceStdRatio.postMessage([stdRatio]);
                 metricsChannels.vTraceExplainedVariance.postMessage([

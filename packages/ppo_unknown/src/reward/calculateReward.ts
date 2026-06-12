@@ -39,6 +39,7 @@ export function getShapingWeight(iteration: number): number {
   return 1 + (SHAPING_FLOOR - 1) * t;
 }
 
+const REWARD_LIMIT = 10;
 /** Reward magnitude at a perfect outcome (success ratio = ±1). */
 const WIN_REWARD = 3;
 /** Team-spirit τ: 0 = selfish, 1 = fully cooperative. Fixed for the MVP scenario. */
@@ -47,7 +48,7 @@ const TEAM_SPIRIT = 0.5;
 /** Cumulative combat score for the tank's player (delta'd by the agent). */
 export function calculateActionReward(eid: number, { world } = GameDI): number {
   const { PlayerRef } = getGameComponents(world);
-  return scoreTracker.getScore(PlayerRef.id[eid]);
+  return clamp(scoreTracker.getScore(PlayerRef.id[eid]), -REWARD_LIMIT, REWARD_LIMIT);
 }
 
 /**
@@ -85,5 +86,5 @@ export function calculateFinalReward(
   const relativeShare = totalTeamScore > 0 ? (myScore / totalTeamScore) * teamSize : 1;
   const contribution = (1 - TEAM_SPIRIT) * relativeShare + TEAM_SPIRIT;
 
-  return teamReward * contribution;
+  return clamp(teamReward * contribution, -REWARD_LIMIT, REWARD_LIMIT);
 }

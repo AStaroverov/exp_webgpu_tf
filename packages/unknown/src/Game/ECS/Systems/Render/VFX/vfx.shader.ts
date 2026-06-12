@@ -1,6 +1,7 @@
 import { ShaderMeta } from "renderer/src/WGSL/ShaderMeta.ts";
 import { VariableKind, VariableMeta } from "renderer/src/Struct/VariableMeta.ts";
 import { wgsl } from "renderer/src/WGSL/wgsl.ts";
+import { EmpVfxConfig } from "../../../../Config/vfx.ts";
 
 // Maximum number of VFX instances (combined for all effect types)
 export const MAX_VFX_COUNT = 512;
@@ -16,6 +17,8 @@ const WGSL_CONSTANTS = /* wgsl */ `
     const VFX_MUZZLE_FLASH: u32 = 3u;
     const VFX_FLAME: u32 = 4u;
     const VFX_FROST: u32 = 5u;
+    const VFX_EMP_OVERLAY: u32 = 6u;
+    const VFX_EMP_EXPLOSION: u32 = 7u;
 `;
 
 const WGSL_VERTEX_OUTPUT = /* wgsl */ `
@@ -695,6 +698,132 @@ const WGSL_FROST = /* wgsl */ `
 `;
 
 // ============================================
+// EMP EFFECTS (stun arcs + detonation burst)
+// ============================================
+
+const WGSL_EMP = /* wgsl */ `
+    // Distance to a jagged lightning bolt between endpoints a and b: project
+    // onto the chord for the bolt-local parameter u, displace the chord with two
+    // noise octaves (low-freq writhe + high-freq jitter), pin the endpoints with
+    // a sin(pi*u) envelope.
+    fn empBolt(p: vec2f, a: vec2f, b: vec2f, t: f32, seed: f32, amp: f32) -> f32 {
+        let ab = b - a;
+        let len = max(length(ab), 0.001);
+        let dir = ab / len;
+        let perp = vec2f(-dir.y, dir.x);
+        let ap = p - a;
+        let u = clamp(dot(ap, dir) / len, 0.0, 1.0);
+
+        let env = sin(3.14159 * u);
+        let writhe = fbm(vec2f(u * 6.0 + seed * 17.0, t * 3.0), 2) - 0.5;
+        let jitter = noise2D(vec2f(u * 22.0 + seed * 31.0, t * 9.0)) - 0.5;
+        let offset = (writhe + jitter * 0.5) * amp * env;
+
+        // Distance to the displaced polyline point at the projected parameter.
+        let bolt = a + dir * (u * len) + perp * offset;
+        return length(p - bolt);
+    }
+
+    fn renderEmpOverlay(localPos: vec2f, progress: f32, seed: f32) -> vec4f {
+        // Single source: EmpVfxConfig.arc.radiusPx (also read by getMaxRadius).
+        let R = ${EmpVfxConfig.overlay.radiusPx}.0;
+        // Time-quantized re-strike: 12 re-strikes/s over a 2 s stun — the
+        // quantization is what makes it read as lightning, not a wavy line.
+        let slice = floor(progress * 24.0);
+        let haloColor = vec3f(0.35, 0.6, 1.0);
+
+        var finalColor = vec3f(0.0);
+        var totalAlpha = 0.0;
+
+        for (var i = 0u; i < 3u; i++) {
+            let fi = f32(i);
+            // ~35% of slices dark per bolt — independent strobe per bolt.
+            let strobe = step(0.35, hash21(vec2f(slice, seed + fi)));
+            if (strobe < 0.5) {
+                continue;
+            }
+
+            // Chord endpoints on a radius-0.8R circle, re-hashed per slice.
+            let h = hash22(vec2f(slice * 13.0 + fi * 7.0, seed * 41.0 + fi));
+            let angA = h.x * 6.28318;
+            let angB = angA + 2.0 + h.y * 2.28;
+            let a = vec2f(cos(angA), sin(angA)) * R * 0.8;
+            let b = vec2f(cos(angB), sin(angB)) * R * 0.8;
+
+            let d = empBolt(localPos, a, b, progress + slice * 0.37, seed + fi * 5.0, R * 0.22);
+
+            let core = 1.0 - smoothstep(0.0, 1.6, d);
+            let halo = exp(-d * 0.12) * 0.55;
+            let intensity = max(core, halo);
+
+            if (intensity > 0.0) {
+                let color = mix(haloColor, vec3f(1.0), core);
+                finalColor = mix(finalColor, color, intensity);
+                totalAlpha = max(totalAlpha, intensity);
+            }
+        }
+
+        // Tail fade over the last ~15% of the stun.
+        totalAlpha *= 1.0 - smoothstep(0.85, 1.0, progress);
+
+        return vec4f(finalColor, totalAlpha);
+    }
+
+    fn renderEmpExplosion(localPos: vec2f, progress: f32, seed: f32) -> vec4f {
+        // Normalized space: the quad spans ±1.07 (getMaxRadius), r = 1.0 is the
+        // burst edge. World size comes from the entity transform scale
+        // (Explodable.vfxSize), same as Explosion/HitFlash.
+        let r = length(localPos);
+        let boltColor = vec3f(0.35, 0.6, 1.0);
+
+        var finalColor = vec3f(0.0);
+        var totalAlpha = 0.0;
+
+        // (1) Expanding ring shockwave with an easeOutQuad front.
+        let ease = 1.0 - (1.0 - progress) * (1.0 - progress);
+        let ring = (1.0 - smoothstep(0.0, 0.07, abs(r - ease))) * (1.0 - progress);
+        if (ring > 0.0) {
+            finalColor = mix(finalColor, mix(boltColor, vec3f(1.0), 0.4), ring);
+            totalAlpha = max(totalAlpha, ring);
+        }
+
+        // (2) 5 radial lightning branches trailing the ring front,
+        // re-rolled per slice.
+        let slice = floor(progress * 10.0);
+        let angle = atan2(localPos.y, localPos.x);
+        for (var i = 0u; i < 5u; i++) {
+            let fi = f32(i);
+            let branchAngle = fi * 6.28318 / 5.0
+                + hash21(vec2f(slice * 3.0 + fi, seed * 19.0)) * 1.2;
+            let wobble = (fbm(vec2f(r * 8.0 + seed * 23.0, slice * 3.0 + fi * 11.0), 2) - 0.5) * 0.8;
+            let boltAngle = branchAngle + wobble * r;
+            // Wrapped angular distance × arc radius → constant width along the
+            // bolt (0.02 of the burst radius ≈ 2 px at a 100 px burst).
+            let angDist = abs(atan2(sin(angle - boltAngle), cos(angle - boltAngle)));
+            let arc = angDist * max(r, 0.01);
+            let branchCore = 1.0 - smoothstep(0.0, 0.02, arc);
+            // Trail the ring front: visible behind it, dark ahead of it.
+            let trail = 1.0 - smoothstep(ease - 0.3, ease + 0.1, r);
+            let branch = branchCore * trail * (1.0 - progress);
+
+            if (branch > 0.0) {
+                finalColor = mix(finalColor, mix(boltColor, vec3f(1.0), branchCore * 0.6), branch);
+                totalAlpha = max(totalAlpha, branch);
+            }
+        }
+
+        // (3) Central white-blue flash.
+        let flash = exp(-r * 6.0) * pow(1.0 - progress, 2.0);
+        if (flash > 0.0) {
+            finalColor = mix(finalColor, mix(vec3f(1.0), boltColor, 0.25), flash);
+            totalAlpha = max(totalAlpha, flash);
+        }
+
+        return vec4f(finalColor, totalAlpha);
+    }
+`;
+
+// ============================================
 // FRAGMENT MAIN
 // ============================================
 
@@ -729,6 +858,12 @@ const WGSL_FRAGMENT_MAIN = /* wgsl */ `
             }
             case VFX_FROST: {
                 result = renderFrost(local_position, progress, seed);
+            }
+            case VFX_EMP_OVERLAY: {
+                result = renderEmpOverlay(local_position, progress, seed);
+            }
+            case VFX_EMP_EXPLOSION: {
+                result = renderEmpExplosion(local_position, progress, seed);
             }
             default: {
                 result = vec4f(1.0, 0.0, 1.0, 1.0); // Debug: magenta for unknown type
@@ -773,6 +908,7 @@ export const shaderMeta = new ShaderMeta(
         ${WGSL_MUZZLE_FLASH}
         ${WGSL_FLAME}
         ${WGSL_FROST}
+        ${WGSL_EMP}
         ${WGSL_FRAGMENT_MAIN}
     `,
 );

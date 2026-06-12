@@ -1,4 +1,4 @@
-import { addEntity, query } from "bitecs";
+import { addEntity, hasComponent, query } from "bitecs";
 import { ActiveEvents } from "@dimforge/rapier2d-simd";
 import { GameDI } from "../../DI/GameDI.ts";
 import { RenderDI } from "../../DI/RenderDI.ts";
@@ -72,6 +72,8 @@ export function createStreamFirearmsSystem({ world } = GameDI) {
     Shape,
     Color,
     LightEmitter,
+    Stunned,
+    Vehicle,
   } = getGameComponents(world);
 
   const emitBurst = (turretEid: number) => {
@@ -147,6 +149,13 @@ export function createStreamFirearmsSystem({ world } = GameDI) {
       const interval = cfg.emitIntervalMs;
 
       StreamFirearms.updateReloading(turretEid, delta);
+
+      // Stun gate after updateReloading — reload keeps ticking through a stun.
+      // Verify the parent is still a Vehicle: a stale/recycled eid must not gate the gun.
+      const vehicleEid = Parent.id[turretEid];
+      if (hasComponent(world, vehicleEid, Vehicle) && hasComponent(world, vehicleEid, Stunned)) {
+        continue;
+      }
 
       if (StreamFirearms.isReloading(turretEid) || !TurretController.shouldShoot(turretEid)) {
         // Primed reset: a fresh (post-reload) hold emits on its very first tick.

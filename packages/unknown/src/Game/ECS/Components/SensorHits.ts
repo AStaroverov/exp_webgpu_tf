@@ -3,7 +3,7 @@ import { delegate } from "../../../../../renderer/src/delegate.ts";
 import { NestedArray, TypedArray } from "../../../../../renderer/src/utils.ts";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 
-const HITS_LIMIT = 10;
+const HITS_LIMIT = 30;
 
 /**
  * Per-entity ring of sensor overlaps (mirrors `Hitable.hit$`): the physics
@@ -12,9 +12,9 @@ const HITS_LIMIT = 10;
  * delivery mechanic: each recorded enemy-part hit eats that much of the
  * projectile's remaining lifetime (pass-through decay).
  */
-export const createSensorHitsComponent = defineComponent((SensorHits, obs) => {
-  const hitIndex = TypedArray.i8(delegate.defaultSize);
+export const createSensorHitsComponent = defineComponent((SensorHits, { obs }) => {
   const hits = NestedArray.f64(HITS_LIMIT, delegate.defaultSize);
+  const hitIndex = TypedArray.i8(delegate.defaultSize);
   //@todo: separate component for the hitLifeCostMs
   const hitLifeCostMs = TypedArray.f64(delegate.defaultSize);
 
@@ -23,8 +23,8 @@ export const createSensorHitsComponent = defineComponent((SensorHits, obs) => {
   }
 
   return {
-    hitIndex,
     hits,
+    hitIndex,
     hitLifeCostMs,
 
     addComponent(world: World, eid: EntityId, hitLifeCost: number) {

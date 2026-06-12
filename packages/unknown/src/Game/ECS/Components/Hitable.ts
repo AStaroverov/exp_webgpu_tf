@@ -7,7 +7,7 @@ import { DamageKind } from "./Damagable.ts";
 const HITS_LIMIT = 30;
 const HIT_STRIDE = 3; // sourceEid, damage, kind
 
-export const createHitableComponent = defineComponent((Hitable, obs) => {
+export const createHitableComponent = defineComponent((Hitable, { obs }) => {
   const health = TypedArray.f64(delegate.defaultSize);
   const hitIndex = TypedArray.i8(delegate.defaultSize);
   const hits = NestedArray.f64(HIT_STRIDE * HITS_LIMIT, delegate.defaultSize);
@@ -27,12 +27,6 @@ export const createHitableComponent = defineComponent((Hitable, obs) => {
       resetHits(eid);
       health[eid] = hp;
     },
-    /**
-     * Record a hit: `damage` is the FINAL damage value, fully computed by the
-     * caller (contact force × `Damagable`, blast × proximity, DoT tick, …).
-     * `createHitableSystem` is the single pipeline that applies it and triggers
-     * the `kind` specialty; `secondEid` is kept for attribution (`LastHitters`).
-     */
     hit$: obs((eid: number, secondEid: EntityId, damage: number, kind: DamageKind) => {
       if (hitIndex[eid] === HITS_LIMIT) {
         console.warn(`[Hitable] Limit on hits`);

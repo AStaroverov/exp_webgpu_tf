@@ -6,7 +6,8 @@
  * typed array, cheap to clone into `AgentMemory` and to ship across the learner channel.
  */
 
-import { BOARD_SIZE, UnknownInputBoard } from "./board.ts";
+import { GameDI } from "../../../unknown/src/Game/DI/GameDI.ts";
+import { BOARD_SIZE, ensureUnknownInputBoard } from "./board.ts";
 
 export type InputArrays = {
   /** Flat board buffer, cell-major [ROWS, COLS, CHANNELS]; length BOARD_SIZE. */
@@ -17,8 +18,8 @@ export type InputArrays = {
  * Snapshot one observer's board out of the SoA store into a standalone `S`.
  * Prereq: `snapshotUnknownBoard` must have run this tick so the SoA row is fresh.
  */
-export function prepareInputArrays(eid: number): InputArrays {
-  const boardView = UnknownInputBoard.board.getBatch(eid); // f64 view, length BOARD_SIZE
+export function prepareInputArrays(eid: number, { world } = GameDI): InputArrays {
+  const boardView = ensureUnknownInputBoard(world).board.getBatch(eid); // f64 view, length BOARD_SIZE
   const board = new Float32Array(BOARD_SIZE);
   board.set(boardView);
 

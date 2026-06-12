@@ -43,7 +43,7 @@ export function setupDemoWorld({ world } = GameDI) {
       VehicleType.MediumTank,
       VehicleType.HeavyTank,
     ] as const;
-    const TANK_COUNT = 5;
+    const TANK_COUNT = 6;
 
     // Pick distinct random cells to place the tanks on — passable, away from
     // obstacles, and never adjacent to each other (see pickSpawnCells).
@@ -60,13 +60,17 @@ export function setupDemoWorld({ world } = GameDI) {
       const pos = grid.hexToWorld(q, r);
       if (!pos) continue;
 
-      // Last slot is always the Rocket tank so it is guaranteed visible in the demo.
+      // Last slot is always the Rocket tank, second-to-last the EMP tank — both
+      // guaranteed visible in the demo.
       const isRocketSlot = i === slots.length - 1;
+      const isEmpSlot = i === slots.length - 2;
       const teamId = (i % 2) + 1;
       const tankEid = createTank({
         type: isRocketSlot
           ? VehicleType.RocketTank
-          : tankTypes[Math.floor(Math.random() * tankTypes.length)],
+          : isEmpSlot
+            ? VehicleType.EmpTank
+            : tankTypes[Math.floor(Math.random() * tankTypes.length)],
         playerId: i + 1,
         teamId,
         x: pos.x,

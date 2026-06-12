@@ -25,6 +25,7 @@
     "@types/react": "^19.1.4",
     "@types/react-dom": "^19.1.5",
     "@vitejs/plugin-react": "^4.4.1",
+    "chart.js": "^4.5.1",
     "devtools-detect": "^4.0.2",
     "dexie": "^4.0.11",
     "downsample-lttb-ts": "^0.0.6",

@@ -3,6 +3,7 @@ import { GameDI } from "../../../DI/GameDI.ts";
 import { RenderDI } from "../../../DI/RenderDI.ts";
 import { getGameComponents } from "../../createGameWorld.ts";
 import { StreamCaliberConfig } from "../../../Config/weapons.ts";
+import { EmpVfxConfig } from "../../../Config/vfx.ts";
 import { DamageKind } from "../../Components/Damagable.ts";
 import { findVehicleEidByPartEid } from "../../Utils/findPartVehicle.ts";
 import { getSlotFillerEid, isSlot } from "../../Utils/SlotUtils.ts";
@@ -15,15 +16,20 @@ const FROST = StreamCaliberConfig.find((c) => c.kind === DamageKind.Frost)!;
  * Single owner of all damage-status recoloring (render-only, skipped headless).
  * Each frame a part's color is blended from its `OriginalColor` snapshot toward
  * the effect tint, proportional to the effect magnitude: a Fire-`Dot` part by
- * `dps / fire dps`, every part of a `Slowed` vehicle by `slowMul`
- * (Fire wins per part). The snapshot — the slot color after brightness
+ * `dps / fire dps`, every part of a `Stunned` vehicle by `remainingMs /
+ * durationMs`, every part of a `Slowed` vehicle by `slowMul`
+ * (Fire > Emp > Frost per part). The snapshot — the slot color after brightness
  * jitter — is taken lazily on the first tint and restored once neither applies.
  */
 export function createTintSystem({ world } = GameDI) {
-  const { Dot, Slowed, Color, OriginalColor, Children } = getGameComponents(world);
+  const { Dot, Slowed, Stunned, Color, OriginalColor, Children } = getGameComponents(world);
 
   // Blend the part's color = lerp(original, tint, intensity ∈ [0,1]).
-  const applyTint = (partEid: EntityId, tint: [number, number, number], intensity: number) => {
+  const applyTint = (
+    partEid: EntityId,
+    tint: readonly [number, number, number],
+    intensity: number,
+  ) => {
     if (!hasComponent(world, partEid, OriginalColor)) {
       OriginalColor.addComponent(
         world,
@@ -45,8 +51,12 @@ export function createTintSystem({ world } = GameDI) {
   const isFireDot = (partEid: EntityId) =>
     hasComponent(world, partEid, Dot) && Dot.kind[partEid] === DamageKind.Fire;
 
-  // Walks the slots under a vehicle/turret and frost-tints their filler parts.
-  const frostTintSlotParts = (parentEid: EntityId, intensity: number) => {
+  // Walks the slots under a vehicle/turret and tints their filler parts.
+  const tintSlotParts = (
+    parentEid: EntityId,
+    tint: readonly [number, number, number],
+    intensity: number,
+  ) => {
     const childCount = Children.entitiesCount[parentEid];
 
     for (let i = 0; i < childCount; i++) {
@@ -54,14 +64,14 @@ export function createTintSystem({ world } = GameDI) {
 
       if (!isSlot(childEid)) {
         // Non-slot child with its own slots (the turret/gun) — descend.
-        if (hasComponent(world, childEid, Children)) frostTintSlotParts(childEid, intensity);
+        if (hasComponent(world, childEid, Children)) tintSlotParts(childEid, tint, intensity);
         continue;
       }
 
       const partEid = getSlotFillerEid(childEid);
       if (partEid === 0) continue;
       if (isFireDot(partEid)) continue; // Fire wins
-      applyTint(partEid, FROST.tint, intensity);
+      applyTint(partEid, tint, intensity);
     }
   };
 
@@ -75,10 +85,18 @@ export function createTintSystem({ world } = GameDI) {
       applyTint(partEid, FIRE.tint, min(1, Dot.dps[partEid] / FIRE.dot.dps));
     }
 
+    const stunnedEids = query(world, [Stunned, Children]);
+    for (let i = 0; i < stunnedEids.length; i++) {
+      const vehicleEid = stunnedEids[i];
+      tintSlotParts(vehicleEid, EmpVfxConfig.tint, Stunned.getRemainingFraction(vehicleEid));
+    }
+
     const slowedEids = query(world, [Slowed, Children]);
     for (let i = 0; i < slowedEids.length; i++) {
       const vehicleEid = slowedEids[i];
-      frostTintSlotParts(vehicleEid, Slowed.slowMul[vehicleEid]);
+      // Emp wins over Frost — the whole subtree belongs to this vehicle.
+      if (hasComponent(world, vehicleEid, Stunned)) continue;
+      tintSlotParts(vehicleEid, FROST.tint, Slowed.slowMul[vehicleEid]);
     }
 
     // Revert: backwards — removeComponent swap-removes inside the query's dense array.
@@ -87,9 +105,13 @@ export function createTintSystem({ world } = GameDI) {
       const partEid = recoloredEids[i];
 
       if (isFireDot(partEid)) continue;
-      // Torn-off debris resolves to no vehicle → not slowed → revert.
+      // Torn-off debris resolves to no vehicle → not slowed/stunned → revert.
       const vehicleEid = findVehicleEidByPartEid(partEid);
-      if (vehicleEid !== undefined && hasComponent(world, vehicleEid, Slowed)) continue;
+      if (
+        vehicleEid !== undefined &&
+        (hasComponent(world, vehicleEid, Slowed) || hasComponent(world, vehicleEid, Stunned))
+      )
+        continue;
 
       Color.set$(
         partEid,

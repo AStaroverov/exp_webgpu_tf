@@ -12,17 +12,8 @@ import { max } from "../../../../../../lib/math.ts";
  * obstacle overlap kills the projectile. No damage-kind logic lives here.
  */
 export function createApplySensorHitsSystem({ world } = GameDI) {
-  const {
-    SensorHits,
-    Damagable,
-    Dotable,
-    Dot,
-    VehiclePart,
-    Obstacle,
-    DestroyByTimeout,
-    PlayerRef,
-    Hitable,
-  } = getGameComponents(world);
+  const { SensorHits, Damagable, Dotable, Dot, VehiclePart, Obstacle, DestroyByTimeout, Hitable } =
+    getGameComponents(world);
 
   return () => {
     const projectileEids = query(world, [SensorHits]);
@@ -36,14 +27,6 @@ export function createApplySensorHitsSystem({ world } = GameDI) {
         const otherEid = SensorHits.hits.get(projectileEid, j);
 
         if (hasComponent(world, otherEid, VehiclePart)) {
-          // Friendly fire is on — only the firer's OWN parts are skipped (the
-          // stream spawns at the gun tip and would torch its own turret).
-          if (
-            hasComponent(world, otherEid, PlayerRef) &&
-            PlayerRef.id[otherEid] === PlayerRef.id[projectileEid]
-          )
-            continue;
-
           // Instant damage FROM the projectile: final value + kind; the source
           // carries the firer's PlayerRef/TeamRef, so LastHitters credits the
           // attacker even at 0 damage.
@@ -61,12 +44,11 @@ export function createApplySensorHitsSystem({ world } = GameDI) {
             const dps = hasComponent(world, otherEid, Dot)
               ? max(Dot.dps[otherEid], Dotable.dps[projectileEid])
               : Dotable.dps[projectileEid];
-            Dot.addComponent(
-              world,
+            Dot.refresh(
               otherEid,
+              Dotable.kind[projectileEid],
               dps,
               Dotable.durationMs[projectileEid],
-              Dotable.kind[projectileEid],
             );
           }
 

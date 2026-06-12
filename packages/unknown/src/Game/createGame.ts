@@ -18,7 +18,9 @@ import { createSpawnerBulletsSystem } from "./ECS/Systems/createBulletSystem.ts"
 import { createStreamFirearmsSystem } from "./ECS/Systems/createStreamFirearmsSystem.ts";
 import { createApplySensorHitsSystem } from "./ECS/Systems/createApplySensorHitsSystem.ts";
 import { createDotSystem } from "./ECS/Systems/createDotSystem.ts";
+import { createExpirySystem } from "./ECS/Systems/createExpirySystem.ts";
 import { createSlowedExpirySystem } from "./ECS/Systems/createSlowedExpirySystem.ts";
+import { createStunArcsSystem } from "./ECS/Systems/Render/createStunArcsSystem.ts";
 import { createDestroyByTimeoutSystem } from "./ECS/Systems/createDestroyByTimeoutSystem.ts";
 import { createDestroyByDistanceSystem } from "./ECS/Systems/createDestroyByDistanceSystem.ts";
 import { createDestroyOutOfZoneSystem } from "./ECS/Systems/createDestroyOutOfZoneSystem.ts";
@@ -200,12 +202,14 @@ export function createGame({
   const spawnTreadMarks = createSpawnTreadMarksSystem();
   const spawnWheelTreadMarks = createSpawnWheelTreadMarksSystem();
   const spawnExhaustSmoke = createExhaustSmokeSpawnSystem();
+  const spawnStunArcs = createStunArcsSystem();
   const spawnFrame = (delta: number) => {
     spawnBullets(delta);
     streamEmit(delta);
     spawnTreadMarks(delta);
     spawnWheelTreadMarks(delta);
     spawnExhaustSmoke(delta);
+    spawnStunArcs(delta);
   };
 
   const destroy = createDestroySystem();
@@ -231,6 +235,7 @@ export function createGame({
   const applySensorHits = createApplySensorHitsSystem();
   const dotTick = createDotSystem();
   const slowedExpiry = createSlowedExpirySystem();
+  const expiry = createExpirySystem();
   const statusTint = createTintSystem();
   const animateLightEmitters = createLightEmitterAnimationSystem();
 
@@ -273,6 +278,7 @@ export function createGame({
     regenerateShields(delta);
     dotTick(delta);
     slowedExpiry(delta);
+    expiry(delta);
 
     visTracksUpdate(delta);
     statusTint(delta); // render-only: status recolor after the statuses settle

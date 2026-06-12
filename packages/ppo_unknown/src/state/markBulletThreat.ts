@@ -37,7 +37,13 @@ import { ActionKind } from "../../../unknown/src/Game/ECS/Actions/ActionTypes.ts
 import { OccupantKind, type HexCell, type HexGrid } from "../../../unknown/src/Game/Map/HexGrid.ts";
 import { getTankConfig, type VehicleType } from "../../../unknown/src/Game/Config/vehicles.ts";
 import { BulletCaliberConfig } from "../../../unknown/src/Game/Config/weapons.ts";
-import { BoardChannel, hexDeltaDistance, UnknownInputBoard, VIEW_RADIUS } from "./board.ts";
+import {
+  BoardChannel,
+  ensureUnknownInputBoard,
+  hexDeltaDistance,
+  VIEW_RADIUS,
+  type UnknownInputBoardComponent,
+} from "./board.ts";
 
 /** Below this travelled distance the direction comes from velocity, not (pos − origin). */
 const ORIGIN_EPS = 1e-3;
@@ -62,6 +68,7 @@ export function markBulletThreat(
 ): void {
   const { Bullet, RigidBodyState, DestroyByDistance, TeamRef, Vehicle, ActionsQueue } =
     getGameComponents(world);
+  const UnknownInputBoard = ensureUnknownInputBoard(world);
   const bullets = query(world, [Bullet, RigidBodyState, DestroyByDistance, TeamRef]);
 
   for (let i = 0; i < bullets.length; i++) {
@@ -98,7 +105,14 @@ export function markBulletThreat(
 
     // Walk the remaining path, marking each distinct hex it crosses. The current
     // cell (isFirst) is marked too — the bullet sits in it — but never blocks.
-    grid.raycast(px, py, dirX, dirY, remaining, threatRayVisit(selfEid, selfQ, selfR, true));
+    grid.raycast(
+      px,
+      py,
+      dirX,
+      dirY,
+      remaining,
+      threatRayVisit(UnknownInputBoard, selfEid, selfQ, selfR, true),
+    );
   }
 
   // ── Pass 2: predicted fire from enemies with a queued Fire action ──
@@ -134,7 +148,18 @@ export function markBulletThreat(
       // (skip `Reserved`, stop at the first `Unit`/`Obstacle` or the grid edge).
       // Bounded by the bullet's world flight distance (centre-to-centre from the
       // firing hex).
-      markPredictedFireRay(selfEid, here.q, here.r, dq, dr, maxDist, selfQ, selfR, grid);
+      markPredictedFireRay(
+        UnknownInputBoard,
+        selfEid,
+        here.q,
+        here.r,
+        dq,
+        dr,
+        maxDist,
+        selfQ,
+        selfR,
+        grid,
+      );
     }
   }
 }
@@ -150,7 +175,13 @@ export function markBulletThreat(
  * the shooter's own cell and is left unmarked (false). The starting cell never blocks
  * either way — `Reserved` cells are transparent, `Unit`/`Obstacle` stop the shot.
  */
-function threatRayVisit(selfEid: number, selfQ: number, selfR: number, markFirst: boolean) {
+function threatRayVisit(
+  UnknownInputBoard: UnknownInputBoardComponent,
+  selfEid: number,
+  selfQ: number,
+  selfR: number,
+  markFirst: boolean,
+) {
   return (cell: HexCell, hex: { q: number; r: number }, isFirst: boolean): boolean => {
     if (markFirst || !isFirst) {
       const dq = hex.q - selfQ;
@@ -174,6 +205,7 @@ function threatRayVisit(selfEid: number, selfQ: number, selfR: number, markFirst
  * centre-to-centre from the firing hex (the raycast starts at that centre).
  */
 function markPredictedFireRay(
+  UnknownInputBoard: UnknownInputBoardComponent,
   selfEid: number,
   fromQ: number,
   fromR: number,
@@ -199,6 +231,6 @@ function markPredictedFireRay(
     dirX / len,
     dirY / len,
     maxDist,
-    threatRayVisit(selfEid, selfQ, selfR, false),
+    threatRayVisit(UnknownInputBoard, selfEid, selfQ, selfR, false),
   );
 }

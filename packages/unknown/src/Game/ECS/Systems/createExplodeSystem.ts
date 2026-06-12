@@ -8,7 +8,7 @@ import {
 } from "../../../../../renderer/src/ECS/Components/Transform.ts";
 import { spawnExplosion } from "../Entities/Explosion.ts";
 import { spawnLightFlash } from "../Entities/LightFlash.ts";
-import { ExplosionConfig, FlashLightConfig } from "../../Config/index.ts";
+import { ExplosionVisualConfig } from "../../Config/index.ts";
 import { DamageKind } from "../Components/Damagable.ts";
 
 /**
@@ -29,26 +29,28 @@ export function createExplodeSystem({ world } = GameDI) {
     for (let i = 0; i < eids.length; i++) {
       const eid = eids[i];
       const matrix = GlobalTransform.matrix.getBatch(eid);
+      const visuals = ExplosionVisualConfig[Explodable.getVisual(eid)];
       const x = getMatrixTranslationX(matrix);
       const y = getMatrixTranslationY(matrix);
 
-      // Damage-only blasts (plain bullets) carry zero VFX/light sizes — skip the visuals.
       if (Explodable.vfxSize[eid] > 0) {
         spawnExplosion({
           x,
           y,
+          type: visuals.vfxType,
           size: Explodable.vfxSize[eid],
-          duration: ExplosionConfig.defaultDuration,
+          duration: visuals.durationMs,
         });
       }
       if (Explodable.lightRadius[eid] > 0) {
+        const flash = visuals.flash;
         spawnLightFlash({
           x,
           y,
           radius: Explodable.lightRadius[eid],
-          duration: FlashLightConfig.explosion.duration,
-          color: FlashLightConfig.explosion.color,
-          intensity: FlashLightConfig.explosion.intensity,
+          duration: flash.duration,
+          color: flash.color,
+          intensity: flash.intensity,
         });
       }
 
@@ -67,7 +69,7 @@ export function createExplodeSystem({ world } = GameDI) {
         if (distSq > radiusSq) continue;
 
         const proximity = 1 - Math.sqrt(distSq) / radius;
-        Hitable.hit$(targetEid, eid, damage * proximity, DamageKind.Physical);
+        Hitable.hit$(targetEid, eid, damage * proximity, Explodable.kind[eid] as DamageKind);
       }
     }
   };
