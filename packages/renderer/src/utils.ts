@@ -52,7 +52,7 @@ export class NestedArray<T extends ArrayLikeConstructor> {
     this.buffer = new kind(batchLength * batchCount);
     this.bufferLength = this.buffer.length;
 
-    seed && this.buffer.set(seed);
+    if (seed) this.buffer.set(seed);
   }
 
   public static f64 = (batchLength: number, batchCount: number, seed?: ArrayLike<number>) =>
@@ -76,12 +76,20 @@ export class NestedArray<T extends ArrayLikeConstructor> {
     this.bufferLength = 0;
   }
 
+  public getStartOffset(batchIndex: number) {
+    return batchIndex * this.batchLength;
+  }
+
+  public getEndOffset(batchIndex: number) {
+    return (batchIndex + 1) * this.batchLength;
+  }
+
   public get(batchIndex: number, index: number): number {
-    return this.buffer[batchIndex * this.batchLength + index];
+    return this.buffer[this.getStartOffset(batchIndex) + index];
   }
 
   public set(batchIndex: number, index: number, value: number) {
-    this.buffer[batchIndex * this.batchLength + index] = value;
+    this.buffer[this.getStartOffset(batchIndex) + index] = value;
     return this;
   }
 
@@ -91,11 +99,11 @@ export class NestedArray<T extends ArrayLikeConstructor> {
   }
 
   public setBatch(batchIndex: number, values: ArrayLike<number>) {
-    this.buffer.set(values, batchIndex * this.batchLength);
+    this.buffer.set(values, this.getStartOffset(batchIndex));
     return this;
   }
 
   public getBatch(batchStart: number): T["prototype"] {
-    return this.buffer.subarray(batchStart * this.batchLength, (batchStart + 1) * this.batchLength);
+    return this.buffer.subarray(this.getStartOffset(batchStart), this.getEndOffset(batchStart));
   }
 }
