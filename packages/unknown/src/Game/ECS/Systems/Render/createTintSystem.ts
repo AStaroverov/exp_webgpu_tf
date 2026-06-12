@@ -49,7 +49,7 @@ export function createTintSystem({ world } = GameDI) {
   };
 
   const isFireDot = (partEid: EntityId) =>
-    hasComponent(world, partEid, Dot) && Dot.kind[partEid] === DamageKind.Fire;
+    hasComponent(world, partEid, Dot) && Dot.kind.get(partEid) === DamageKind.Fire;
 
   // Walks the slots under a vehicle/turret and tints their filler parts.
   const tintSlotParts = (
@@ -81,8 +81,8 @@ export function createTintSystem({ world } = GameDI) {
     const dotEids = query(world, [Dot, Color]);
     for (let i = 0; i < dotEids.length; i++) {
       const partEid = dotEids[i];
-      if (Dot.kind[partEid] !== DamageKind.Fire) continue;
-      applyTint(partEid, FIRE.tint, min(1, Dot.dps[partEid] / FIRE.dot.dps));
+      if (Dot.kind.get(partEid) !== DamageKind.Fire) continue;
+      applyTint(partEid, FIRE.tint, min(1, Dot.dps.get(partEid) / FIRE.dot.dps));
     }
 
     const stunnedEids = query(world, [Stunned, Children]);

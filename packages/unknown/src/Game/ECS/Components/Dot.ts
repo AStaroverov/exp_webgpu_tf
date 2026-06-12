@@ -1,6 +1,4 @@
-import { EntityId } from "bitecs";
-import { delegate } from "../../../../../renderer/src/delegate.ts";
-import { TypedArray } from "../../../../../renderer/src/utils.ts";
+import type { EntityId } from "bitecs";
 import { defineComponent } from "../../../../../renderer/src/ECS/utils.ts";
 import { createExpirySubComponent } from "./lib/createExpirySubComponent.ts";
 import { DamageKind } from "./Damagable.ts";
@@ -13,17 +11,17 @@ import { DamageKind } from "./Damagable.ts";
  * stack), ticked down and removed by `createExpirySystem`.
  */
 export const createDotComponent = defineComponent((Dot, ctx) => {
-  const dps = TypedArray.f64(delegate.defaultSize);
-  const kind = TypedArray.i8(delegate.defaultSize);
+  const dps = ctx.table.flat(Float64Array);
+  const kind = ctx.table.flat(Int8Array);
   const expiry = createExpirySubComponent(Dot, ctx);
   return {
     dps,
     kind,
     ...expiry,
     refresh(eid: EntityId, dmgKind: DamageKind, damage: number, durationMs: number) {
-      expiry.refresh(eid, durationMs);
-      dps[eid] = damage;
-      kind[eid] = dmgKind;
+      expiry.refresh(eid, durationMs); // adds the component → the row exists below
+      dps.set(eid, damage);
+      kind.set(eid, dmgKind);
     },
   };
 });

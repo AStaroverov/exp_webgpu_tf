@@ -273,9 +273,7 @@ function sumDotDps(ctx: SnapshotCtx, parentEid: number): number {
     if (!isSlot(slotEid) || isSlotEmpty(slotEid)) continue;
     const partEid = getSlotFillerEid(slotEid);
     if (partEid === 0) continue;
-    if (hasComponent(world, partEid, Dot)) {
-      dps += Dot.dps[partEid];
-    }
+    dps += Dot.dps.get(partEid); // a part without a Dot reads 0
   }
   return dps;
 }

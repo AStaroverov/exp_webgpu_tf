@@ -1,6 +1,5 @@
-import { addComponent, EntityId, hasComponent } from "bitecs";
-import { delegate } from "../../../../../../renderer/src/delegate.ts";
-import { TypedArray } from "../../../../../../renderer/src/utils.ts";
+import { addComponent, hasComponent } from "bitecs";
+import type { EntityId } from "bitecs";
 import { defineSubComponent } from "../../../../../../renderer/src/ECS/utils.ts";
 
 export type Expiry = ReturnType<typeof createExpirySubComponent>;
@@ -15,28 +14,27 @@ export type Expiry = ReturnType<typeof createExpirySubComponent>;
  * - `createExpirySystem` ticks it down and removes the component at 0;
  * - `getRemainingFraction(eid)` ∈ [0, 1] — for visuals fading with time left.
  */
-export const createExpirySubComponent = defineSubComponent((Component, { world }) => {
-  const durationMs = TypedArray.f64(delegate.defaultSize);
-  const remainingMs = TypedArray.f64(delegate.defaultSize);
+export const createExpirySubComponent = defineSubComponent((Component, { world, table }) => {
+  const durationMs = table.flat(Float64Array);
+  const remainingMs = table.flat(Float64Array);
 
   return {
     durationMs,
     remainingMs,
     tick(eid: EntityId, delta: number): boolean {
-      remainingMs[eid] -= delta;
-      return remainingMs[eid] <= 0;
+      const left = remainingMs.get(eid) - delta;
+      remainingMs.set(eid, left);
+      return left <= 0;
     },
     refresh(eid: EntityId, ms: number) {
       if (!hasComponent(world, eid, Component)) {
-        addComponent(world, eid, Component);
-        remainingMs[eid] = 0;
-        durationMs[eid] = 0;
+        addComponent(world, eid, Component); // creates the row zeroed
       }
-      remainingMs[eid] = Math.max(remainingMs[eid], ms);
-      durationMs[eid] = Math.max(durationMs[eid], ms);
+      remainingMs.set(eid, Math.max(remainingMs.get(eid), ms));
+      durationMs.set(eid, Math.max(durationMs.get(eid), ms));
     },
     getRemainingFraction(eid: EntityId): number {
-      return remainingMs[eid] / durationMs[eid];
+      return remainingMs.get(eid) / durationMs.get(eid);
     },
   };
 });

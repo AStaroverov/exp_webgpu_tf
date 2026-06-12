@@ -104,7 +104,7 @@ export function createStunArcsSystem({ world } = GameDI) {
       const overlayAlive = overlayEid !== 0 && entityExists(world, overlayEid);
 
       if (overlayAlive && hasComponent(world, vehicleEid, Stunned)) {
-        const remainingMs = Stunned.remainingMs[vehicleEid];
+        const remainingMs = Stunned.remainingMs.get(vehicleEid);
         Progress.age[overlayEid] = Progress.maxAge[overlayEid] - remainingMs;
 
         const frac = Stunned.getRemainingFraction(vehicleEid);

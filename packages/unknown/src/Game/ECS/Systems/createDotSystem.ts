@@ -18,7 +18,7 @@ export function createDotSystem({ world } = GameDI) {
 
     for (let i = 0; i < eids.length; i++) {
       const eid = eids[i];
-      Hitable.hit$(eid, eid, (Dot.dps[eid] * delta) / 1000, Dot.kind[eid]);
+      Hitable.hit$(eid, eid, (Dot.dps.get(eid) * delta) / 1000, Dot.kind.get(eid));
     }
   };
 }

@@ -1,5 +1,7 @@
-import { addComponent } from "bitecs";
+import { addComponent, observe, onAdd, onRemove } from "bitecs";
 import type { World } from "bitecs";
+import { createTable } from "./Table.ts";
+import type { Table, TableHandle } from "./Table.ts";
 
 const $CompRef = Symbol("CompRef");
 let indexCompRef = 0;
@@ -9,7 +11,17 @@ type ReactiveSetter = (eid: number, ...args: any[]) => any;
 
 export type Obs = <F extends ReactiveSetter>(setter: F) => F;
 
-export type ComponentContext = { obs: Obs; world: World };
+export type ComponentContext = {
+  readonly obs: Obs;
+  readonly world: World;
+  /**
+   * Lazy sparse-set table of THIS component (created and wired to the entity
+   * lifecycle on first access): `addComponent` creates a zeroed row,
+   * `removeComponent`/`removeEntity` drop it. Sub-components share the parent's
+   * ctx, so their columns land in the parent's table automatically.
+   */
+  readonly table: Table;
+};
 
 export type SubComponent<T extends object, A extends unknown[] = []> = (
   component: object,
@@ -53,7 +65,20 @@ export function defineComponent<T extends object>(
         return result;
       }) as F;
     };
-    const comp = Object.assign(ref, create(ref, { obs: localObs, world })) as T;
+    let tableHandle: TableHandle | null = null;
+    const ctx: ComponentContext = {
+      obs: localObs,
+      world,
+      get table(): Table {
+        if (tableHandle === null) {
+          tableHandle = createTable();
+          observe(world, onAdd(ref), tableHandle.ensureRow);
+          observe(world, onRemove(ref), tableHandle.removeRow);
+        }
+        return tableHandle.table;
+      },
+    };
+    const comp = Object.assign(ref, create(ref, ctx)) as T;
     nextCompRef = { [$CompRef]: indexCompRef++ };
     return comp;
   };

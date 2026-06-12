@@ -39,11 +39,10 @@ export function createApplySensorHitsSystem({ world } = GameDI) {
             );
           }
 
-          // Stamp the damage-over-time: refresh duration, keep the strongest dps.
+          // Stamp the damage-over-time: refresh duration, keep the strongest dps
+          // (a part without a Dot reads 0).
           if (hasComponent(world, projectileEid, Dotable)) {
-            const dps = hasComponent(world, otherEid, Dot)
-              ? max(Dot.dps[otherEid], Dotable.dps[projectileEid])
-              : Dotable.dps[projectileEid];
+            const dps = max(Dot.dps.get(otherEid), Dotable.dps[projectileEid]);
             Dot.refresh(
               otherEid,
               Dotable.kind[projectileEid],
