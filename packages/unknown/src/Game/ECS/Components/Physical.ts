@@ -50,18 +50,12 @@ export const createRigidBodyStateComponent = defineComponent((RigidBodyState) =>
       angvel[eid] = 0;
       rotation[eid] = 0;
     },
-    update(
-      eid: number,
-      translation: { x: number; y: number },
-      rot: number,
-      lv: { x: number; y: number },
-      av: number,
-    ) {
-      position.set(eid, 0, translation.x);
-      position.set(eid, 1, translation.y);
+    update(eid: number, x: number, y: number, rot: number, lvx: number, lvy: number, av: number) {
+      position.set(eid, 0, x);
+      position.set(eid, 1, y);
       rotation[eid] = rot;
-      linvel.set(eid, 0, lv.x);
-      linvel.set(eid, 1, lv.y);
+      linvel.set(eid, 0, lvx);
+      linvel.set(eid, 1, lvy);
       angvel[eid] = av;
     },
   };

@@ -4,6 +4,7 @@ import { getGameComponents } from "../createGameWorld.ts";
 
 export function createRigidBodyStateSystem({ world, physicalWorld } = GameDI) {
   const { RigidBodyRef, RigidBodyState } = getGameComponents(world);
+  const rawBodies = physicalWorld.bodies.raw;
 
   return () => {
     const entities = query(world, [RigidBodyRef, RigidBodyState]);
@@ -11,13 +12,27 @@ export function createRigidBodyStateSystem({ world, physicalWorld } = GameDI) {
     for (let i = 0; i < entities.length; i++) {
       const eid = entities[i];
       const pid = RigidBodyRef.id[eid];
-      const rb = physicalWorld.getRigidBody(pid);
-      const translation = rb.translation();
-      const rotation = rb.rotation();
-      const linvel = rb.linvel();
-      const angvel = rb.angvel();
+      // A sleeping body hasn't moved since the last sync. Bodies are created
+      // awake and fixed bodies never sleep, so every body gets a first sync.
+      if (rawBodies.rbIsSleeping(pid)) continue;
 
-      RigidBodyState.update(eid, translation, rotation, linvel, angvel);
+      const translation = rawBodies.rbTranslation(pid);
+      const rotation = rawBodies.rbRotation(pid);
+      const linvel = rawBodies.rbLinvel(pid);
+
+      RigidBodyState.update(
+        eid,
+        translation.x,
+        translation.y,
+        rotation.angle,
+        linvel.x,
+        linvel.y,
+        rawBodies.rbAngvel(pid),
+      );
+
+      translation.free();
+      rotation.free();
+      linvel.free();
     }
   };
 }
