@@ -13,8 +13,8 @@
     "honeycomb-grid": "^4.1.5"
   },
   "devDependencies": {
-    "@dimforge/rapier2d": "^0.14.0",
-    "@dimforge/rapier2d-simd": "^0.15.0",
+    "@dimforge/rapier2d": "^0.19.3",
+    "@dimforge/rapier2d-simd": "^0.19.3",
     "@types/lodash": "^4.17.15",
     "@types/lodash-es": "^4.17.12",
     "events": "^3.3.0",
