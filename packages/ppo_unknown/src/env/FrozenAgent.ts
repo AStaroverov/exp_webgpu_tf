@@ -13,7 +13,7 @@
  */
 
 import * as tf from "@tensorflow/tfjs";
-import { batchAct } from "../../../ppo/src/core/train.ts";
+import { batchActAsync } from "../../../ppo/src/core/train.ts";
 import { Model } from "../../../ppo/src/models/def.ts";
 import { getRandomHistoricalNetwork, disposeNetwork } from "../../../ppo/src/models/storage.ts";
 import { getNetworkExpIteration } from "../../../ppo/src/models/networkMeta.ts";
@@ -56,14 +56,21 @@ export class FrozenAgent {
    * One decision step. `snapshotUnknownBoard` must already have filled this
    * tank's board row this tick (the driver does it once for all observers).
    */
-  decide(): void {
-    if (frozenNetwork == null) return;
+  async decide(): Promise<void> {
+    const network = frozenNetwork;
+    if (network == null) return;
 
+    // Capture the observation synchronously, sample asynchronously (only the
+    // GPU readback is awaited — see UnknownAgent.decide).
     const state = prepareInputArrays(this.tankEid);
     const mask = computeActionMask(this.tankEid);
     const input = createInputTensors([state]);
-    const [result] = batchAct(frozenNetwork, input, [mask], { greedy: true });
-    input.forEach((t) => t.dispose());
+    let result;
+    try {
+      [result] = await batchActAsync(network, input, [mask], { greedy: true });
+    } finally {
+      input.forEach((t) => t.dispose());
+    }
 
     applyActionToGame(this.tankEid, result.actions);
   }

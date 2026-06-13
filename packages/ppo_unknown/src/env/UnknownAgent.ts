@@ -16,7 +16,7 @@
 
 import * as tf from "@tensorflow/tfjs";
 import { AgentMemory, AgentMemoryBatch } from "../../../ppo/src/memory/Memory.ts";
-import { batchAct } from "../../../ppo/src/core/train.ts";
+import { batchActAsync } from "../../../ppo/src/core/train.ts";
 import { Model } from "../../../ppo/src/models/def.ts";
 import { getNetwork, disposeNetwork } from "../../../ppo/src/models/storage.ts";
 import { getNetworkExpIteration } from "../../../ppo/src/models/networkMeta.ts";
@@ -102,8 +102,9 @@ export class UnknownAgent {
    * One decision step. `snapshotUnknownBoard` must already have filled this
    * tank's board row this tick (the driver does it once for all observers).
    */
-  decide(): void {
-    if (sharedNetwork == null) return;
+  async decide(): Promise<void> {
+    const network = sharedNetwork;
+    if (network == null) return;
 
     // 1. Close the previous macro-action with its accumulated reward.
     if (this.opened && this.train) {
@@ -116,13 +117,28 @@ export class UnknownAgent {
       }
     }
 
-    // 2. Sample an action for the current state.
+    // 2. Capture the state AND the opening potential synchronously, then sample
+    // asynchronously. The potential is read here (not after the await) so its
+    // timing matches the old sync driver — before this tick's `updateHitableSystem`
+    // applies damage — keeping the reward baseline consistent with the closing read.
     const state = prepareInputArrays(this.tankEid);
     const mask = computeActionMask(this.tankEid);
+    const nextPotential = calculateActionReward(this.tankEid);
     const options = { greedy: greedyOverride ?? !this.train };
     const input = createInputTensors([state]);
-    const [result] = batchAct(sharedNetwork, input, [mask], options);
-    input.forEach((t) => t.dispose());
+    let result;
+    try {
+      [result] = await batchActAsync(network, input, [mask], options);
+    } finally {
+      input.forEach((t) => t.dispose());
+    }
+
+    // The tank may have died while inference was in flight (vis fire-and-forget;
+    // the actor drains same-tick so this never trips there).
+    if (getTankHealth(this.tankEid) <= 0) {
+      this.opened = false;
+      return;
+    }
 
     // 3. Enqueue it into the game.
     applyActionToGame(this.tankEid, result.actions);
@@ -130,7 +146,7 @@ export class UnknownAgent {
     // 4. Open the new step.
     if (this.train) {
       this.memory.addFirstPart(state, result.actions, result.logits, result.logProb, mask);
-      this.prevPotential = calculateActionReward(this.tankEid);
+      this.prevPotential = nextPotential;
       this.opened = true;
     }
   }

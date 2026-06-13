@@ -1,4 +1,4 @@
-import "@tensorflow/tfjs-backend-wasm";
+import "@tensorflow/tfjs-backend-webgpu";
 import { macroTasks } from "../../../../lib/TasksScheduler/macroTasks.ts";
 import { setConsolePrefix } from "../../../ppo/src/infra/console.ts";
 import { initTensorFlow } from "../../../ppo/src/infra/initTensorFlow.ts";
@@ -11,9 +11,9 @@ import { createDebugVisualization } from "../ui/debug.ts";
 
 setConsolePrefix(`[TAB]`);
 
-await initTensorFlow("wasm");
+await initTensorFlow("webgpu");
 
-// Actors run the simulation + policy inference (WASM backend).
+// Actors run the simulation + policy inference (WebGPU backend).
 Array.from(
   { length: CONFIG.workerCount },
   () => new Worker(new URL("./ActorWorker.ts", import.meta.url), { type: "module" }),

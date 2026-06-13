@@ -76,6 +76,7 @@ export type Scenario = {
   height: number;
   agents: UnknownAgent[];
   gameTick: (delta: number) => void;
+  drainDecisions: () => Promise<void>;
   destroy: () => void;
   setRenderTarget: (canvas: HTMLCanvasElement | null | undefined) => void;
   getVehicleEids: () => QueryResult;
@@ -157,7 +158,8 @@ export function createUnknownScenario(options: {
     }
   }
 
-  PluginDI.addSystem(SystemGroup.Before, createPolicyDriverSystem(driverMap));
+  const policyDriver = createPolicyDriverSystem(driverMap);
+  PluginDI.addSystem(SystemGroup.Before, policyDriver.system);
 
   // Capture initial per-team health on the first tick to base the success ratio on.
   let initialTeamHealth: Record<number, number> | undefined;
@@ -175,6 +177,7 @@ export function createUnknownScenario(options: {
     height: FIELD_SIZE,
     agents,
     gameTick,
+    drainDecisions: policyDriver.drain,
     destroy: () => game.destroy(),
     setRenderTarget: (canvas) => game.setRenderTarget(canvas),
     getVehicleEids: () => query(world, [Vehicle, Tank]),

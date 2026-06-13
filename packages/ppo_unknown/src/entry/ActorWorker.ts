@@ -4,7 +4,7 @@ import "../../../ppo/src/infra/unhandledErrors.ts";
 // LOADS the saved policy model — without these registrations, deserializing it
 // (incl. its training config) throws "Unknown layer: AdamW".
 import "../models/createUnknownNetworks.ts";
-import "@tensorflow/tfjs-backend-wasm";
+import "@tensorflow/tfjs-backend-webgpu";
 import { randomShortId } from "../../../../lib/random.ts";
 import { setConsolePrefix } from "../../../ppo/src/infra/console.ts";
 import { initTensorFlow } from "../../../ppo/src/infra/initTensorFlow.ts";
@@ -13,7 +13,7 @@ import { EpisodeManager } from "../agents/EpisodeManager.ts";
 setConsolePrefix(`[ACTOR|${randomShortId()}]`);
 
 async function initSystem() {
-  const tfInitialized = await initTensorFlow("wasm");
+  const tfInitialized = await initTensorFlow("webgpu");
   if (!tfInitialized) {
     console.error("Failed to initialize TensorFlow.js, aborting");
     return null;

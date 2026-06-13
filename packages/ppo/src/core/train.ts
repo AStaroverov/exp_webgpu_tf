@@ -155,22 +155,32 @@ export function computeKullbackLeiblerAprox(
   });
 }
 
-export function batchAct(
+export type BatchActResult = { actions: Float32Array; logits: Float32Array; logProb: number };
+
+/**
+ * Sample one action per batch row from the policy. WebGPU/async path: build the
+ * whole sampling graph synchronously (`apply` → mask → sample → logProb) inside a
+ * `tf.tidy` that KEEPS only the three small per-sample output tensors, then read
+ * them back with the async `.data()` so the caller's thread is never blocked on
+ * the GPU→CPU readback (a `.dataSync()` here would stall the queue — the opposite
+ * of what we want). `tf.tidy` cannot wrap an `await`, hence the keep-then-read
+ * split with a manual dispose. The passed-in `inputTensors` are owned by the
+ * caller (created outside this tidy) and disposed there.
+ */
+export async function batchActAsync(
   policyNetwork: tf.LayersModel,
   inputTensors: tf.Tensor[],
   outputMasks?: Float32Array[], // one flat [sum(dims)] mask per state, optional
   options?: { greedy?: boolean },
-): {
-  actions: Float32Array;
-  logits: Float32Array;
-  logProb: number;
-}[] {
-  return tf.tidy(() => {
-    const batchSize = inputTensors[0].shape[0] as number;
+): Promise<BatchActResult[]> {
+  const batchSize = inputTensors[0].shape[0] as number;
+
+  // 3 tensors per sample, flattened: [logitsFlat_0, actions_0, logProb_0, …].
+  const kept = tf.tidy(() => {
     const predicted = policyNetwork.apply(inputTensors) as tf.Tensor | tf.Tensor[];
     const logitsHeads = parsePolicyOutput(predicted);
     const headDims = logitsHeads.map((h) => h.shape[h.rank - 1] as number);
-    const results: { actions: Float32Array; logits: Float32Array; logProb: number }[] = [];
+    const out: tf.Tensor[] = [];
 
     for (let i = 0; i < batchSize; i++) {
       const stateLogitsHeads = logitsHeads.map((logits) => logits.slice([i], [1]));
@@ -190,16 +200,26 @@ export function batchAct(
         stateLogitsHeads,
         maskHeads,
       );
-
-      results.push({
-        logits: syncUnwrapTensor(sample.logitsFlat) as Float32Array,
-        actions: syncUnwrapTensor(sample.actions) as Float32Array,
-        logProb: syncUnwrapTensor(logProb)[0],
-      });
+      out.push(sample.logitsFlat, sample.actions, logProb);
     }
 
-    return results;
+    return out;
   });
+
+  const datas = (await Promise.all(kept.map((t) => t.data()))) as Float32Array[];
+  kept.forEach((t) => t.dispose());
+
+  const results: BatchActResult[] = [];
+  for (let i = 0; i < batchSize; i++) {
+    const logits = datas[i * 3] as Float32Array;
+    const actions = datas[i * 3 + 1] as Float32Array;
+    const logProb = datas[i * 3 + 2][0];
+    if (!arrayHealthCheck(logits) || !arrayHealthCheck(actions)) {
+      throw new Error("Invalid tensor value");
+    }
+    results.push({ logits, actions, logProb });
+  }
+  return results;
 }
 
 export function sampleActionsFromLogits(

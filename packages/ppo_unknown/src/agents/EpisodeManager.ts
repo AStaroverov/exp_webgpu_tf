@@ -76,6 +76,10 @@ export class EpisodeManager extends AbstractEpisodeManager<Scenario> {
     scenario.destroy();
   }
 
+  protected drainDecisions(scenario: Scenario): Promise<void> {
+    return scenario.drainDecisions();
+  }
+
   protected awaitAgentsSync(): Promise<unknown> {
     // FrozenAgent.sync() also re-rolls which historical version the frozen
     // opponents play this episode.
