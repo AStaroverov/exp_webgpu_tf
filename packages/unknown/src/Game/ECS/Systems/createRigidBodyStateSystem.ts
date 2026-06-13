@@ -19,6 +19,7 @@ export function createRigidBodyStateSystem({ world, physicalWorld } = GameDI) {
       const translation = rawBodies.rbTranslation(pid);
       const rotation = rawBodies.rbRotation(pid);
       const linvel = rawBodies.rbLinvel(pid);
+      const angvel = rawBodies.rbAngvel(pid);
 
       RigidBodyState.update(
         eid,
@@ -27,7 +28,7 @@ export function createRigidBodyStateSystem({ world, physicalWorld } = GameDI) {
         rotation.angle,
         linvel.x,
         linvel.y,
-        rawBodies.rbAngvel(pid),
+        angvel,
       );
 
       translation.free();
