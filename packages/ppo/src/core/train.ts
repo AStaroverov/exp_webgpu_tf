@@ -157,64 +157,46 @@ export function computeKullbackLeiblerAprox(
 
 export type BatchActResult = { actions: Float32Array; logits: Float32Array; logProb: number };
 
-/**
- * Sample one action per batch row from the policy. WebGPU/async path: build the
- * whole sampling graph synchronously (`apply` → mask → sample → logProb) inside a
- * `tf.tidy` that KEEPS only the three small per-sample output tensors, then read
- * them back with the async `.data()` so the caller's thread is never blocked on
- * the GPU→CPU readback (a `.dataSync()` here would stall the queue — the opposite
- * of what we want). `tf.tidy` cannot wrap an `await`, hence the keep-then-read
- * split with a manual dispose. The passed-in `inputTensors` are owned by the
- * caller (created outside this tidy) and disposed there.
- */
 export async function batchActAsync(
   policyNetwork: tf.LayersModel,
   inputTensors: tf.Tensor[],
   outputMasks?: Float32Array[], // one flat [sum(dims)] mask per state, optional
   options?: { greedy?: boolean },
 ): Promise<BatchActResult[]> {
+  const greedy = options?.greedy ?? false;
   const batchSize = inputTensors[0].shape[0] as number;
 
-  // 3 tensors per sample, flattened: [logitsFlat_0, actions_0, logProb_0, …].
-  const kept = tf.tidy(() => {
-    const predicted = policyNetwork.apply(inputTensors) as tf.Tensor | tf.Tensor[];
-    const logitsHeads = parsePolicyOutput(predicted);
-    const headDims = logitsHeads.map((h) => h.shape[h.rank - 1] as number);
-    const out: tf.Tensor[] = [];
+  // Forward only; keep the per-head logits tensors and read them back async.
+  const heads = tf.tidy(() =>
+    parsePolicyOutput(policyNetwork.apply(inputTensors) as tf.Tensor | tf.Tensor[]),
+  );
+  const headDims = heads.map((h) => h.shape[h.rank - 1] as number);
+  const headDatas = (await Promise.all(heads.map((h) => h.data()))) as Float32Array[];
+  heads.forEach((h) => h.dispose());
 
-    for (let i = 0; i < batchSize; i++) {
-      const stateLogitsHeads = logitsHeads.map((logits) => logits.slice([i], [1]));
-      const flatMask = outputMasks?.[i];
-      const maskHeads =
-        flatMask != null
-          ? splitMaskFlat(tf.tensor2d(flatMask, [1, flatMask.length]), headDims)
-          : undefined;
-      const squeezedMaskHeads = maskHeads?.map((h) => h.squeeze() as tf.Tensor);
-      const sample = sampleActionsFromLogits(
-        stateLogitsHeads.map((h) => h.squeeze()),
-        squeezedMaskHeads,
-        options,
-      );
-      const logProb = computeLogProbCategorical(
-        sample.actions.expandDims(0),
-        stateLogitsHeads,
-        maskHeads,
-      );
-      out.push(sample.logitsFlat, sample.actions, logProb);
-    }
-
-    return out;
-  });
-
-  const datas = (await Promise.all(kept.map((t) => t.data()))) as Float32Array[];
-  kept.forEach((t) => t.dispose());
+  const totalDim = headDims.reduce((a, b) => a + b, 0);
 
   const results: BatchActResult[] = [];
   for (let i = 0; i < batchSize; i++) {
-    const logits = datas[i * 3] as Float32Array;
-    const actions = datas[i * 3 + 1] as Float32Array;
-    const logProb = datas[i * 3 + 2][0];
-    if (!arrayHealthCheck(logits) || !arrayHealthCheck(actions)) {
+    const flatMask = outputMasks?.[i];
+    const logits = new Float32Array(totalDim); // raw, concatenated across heads
+    const actions = new Float32Array(headDims.length);
+    let logProb = 0;
+    let offset = 0; // shared layout for the concatenated logits and the flat mask
+
+    for (let h = 0; h < headDims.length; h++) {
+      const dim = headDims[h];
+      const rawHead = headDatas[h].subarray(i * dim, i * dim + dim);
+      logits.set(rawHead, offset); // store the RAW logits (mask re-applied at train time)
+
+      const maskHead = flatMask?.subarray(offset, offset + dim);
+      const { action, logProb: headLogProb } = sampleCategorical(rawHead, maskHead, greedy);
+      actions[h] = action;
+      logProb += headLogProb;
+      offset += dim;
+    }
+
+    if (!arrayHealthCheck(logits) || !Number.isFinite(logProb)) {
       throw new Error("Invalid tensor value");
     }
     results.push({ logits, actions, logProb });
@@ -455,6 +437,67 @@ function computeEntropyCategorical(logitsHeads: tf.Tensor[], maskHeads?: tf.Tens
     });
     return tf.addN(entropies).div(logitsHeads.length).mean() as tf.Scalar; // Mean entropy across batch and heads
   });
+}
+
+/**
+ * Draw one action from a single categorical head, in plain JS.
+ *
+ * `rawLogits` are the unmasked head logits; `mask` is the additive invalid-action
+ * mask (0 = allowed, MASK_NEG = forbidden), same length as `rawLogits` or omitted.
+ * Returns the chosen index and its log-probability under the MASKED softmax. Greedy
+ * picks the argmax; otherwise it samples proportional to the softmax. MASK_NEG (not
+ * −∞) keeps an all-forbidden head from producing NaN — it degrades to uniform.
+ *
+ * This lives in JS on purpose: tfjs's WebGPU `multinomial` kernel zeroes its RNG
+ * seed for a [1,1] output and would always return the first allowed action (the
+ * policy collapses to a constant), so we never sample on the GPU.
+ */
+function sampleCategorical(
+  logits: Float32Array,
+  mask: Float32Array | undefined,
+  greedy: boolean,
+): { action: number; logProb: number } {
+  const dim = logits.length;
+
+  // Stable softmax over masked logits: subtract the max, exponentiate, normalize.
+  let maxMasked = -Infinity;
+  const probs = new Float32Array(dim);
+  for (let k = 0; k < dim; k++) {
+    const m = logits[k] + (mask != null ? mask[k] : 0);
+    probs[k] = m;
+    if (m > maxMasked) maxMasked = m;
+  }
+  let sumExp = 0;
+  for (let k = 0; k < dim; k++) {
+    const e = Math.exp(probs[k] - maxMasked);
+    probs[k] = e;
+    sumExp += e;
+  }
+
+  let action: number;
+  if (greedy) {
+    action = 0;
+    let best = -Infinity;
+    for (let k = 0; k < dim; k++) {
+      if (probs[k] > best) {
+        best = probs[k];
+        action = k;
+      }
+    }
+  } else {
+    const r = Math.random() * sumExp;
+    let cdf = 0;
+    action = dim - 1; // fallback: numerical slack lands on the last outcome
+    for (let k = 0; k < dim; k++) {
+      cdf += probs[k];
+      if (r < cdf) {
+        action = k;
+        break;
+      }
+    }
+  }
+
+  return { action, logProb: Math.log(probs[action] / sumExp) };
 }
 
 export function networkHealthCheck<S>(
