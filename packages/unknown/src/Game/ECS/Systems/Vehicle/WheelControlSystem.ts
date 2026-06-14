@@ -69,7 +69,9 @@ export function createWheelControlSystem({ world } = GameDI) {
         if (hasComponent(world, childEid, WheelSteerable)) {
           const maxAngle = WheelSteerable.maxSteeringAngle.get(childEid);
           const targetAngle = clamp(steering * maxAngle, -maxAngle, maxAngle);
-          JointMotor.setTargetPosition$(childEid, targetAngle);
+          if (targetAngle !== JointMotor.targetPosition.get(childEid)) {
+            JointMotor.setTargetPosition$(childEid, targetAngle);
+          }
         }
 
         if (hasComponent(world, childEid, WheelDrive)) {

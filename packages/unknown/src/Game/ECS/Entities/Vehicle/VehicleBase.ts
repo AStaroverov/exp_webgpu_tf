@@ -1,4 +1,4 @@
-import { JointData, Vector2 } from "@dimforge/rapier2d-simd";
+import { JointData, RevoluteImpulseJoint, Vector2 } from "@dimforge/rapier2d-simd";
 import { getGameComponents } from "../../createGameWorld.ts";
 import { addTransformComponents } from "../../../../../../renderer/src/ECS/Components/Transform.ts";
 import { GameDI } from "../../../DI/GameDI.ts";
@@ -103,6 +103,14 @@ export function createVehicleTurret(
   );
   Joint.addComponent(world, turretEid, joint.handle);
   JointMotor.addComponent(world, turretEid);
+  // Configure the position motor once at spawn so the turret is held at relative
+  // angle 0 even before any aim input. The rotation system then only re-commands
+  // it while actually turning, so an idle tank's jointed island can sleep.
+  (joint as RevoluteImpulseJoint).configureMotorPosition(
+    0,
+    JointMotor.stiffness.get(turretEid),
+    JointMotor.damping.get(turretEid),
+  );
 
   addTransformComponents(world, turretEid);
   Parent.addComponent(world, turretEid, vehicleEid);

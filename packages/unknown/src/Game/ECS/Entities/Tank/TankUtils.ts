@@ -2,7 +2,7 @@ import type { EntityId } from "bitecs";
 import { hasComponent, removeComponent } from "bitecs";
 import { min, smoothstep } from "../../../../../../../lib/math.ts";
 import { GameDI } from "../../../DI/GameDI.ts";
-import { CollisionGroup } from "../../../Physical/createRigid.ts";
+import { CollisionGroup, createRigidRectangle } from "../../../Physical/createRigid.ts";
 import { removePhysicalJoint } from "../../../Physical/removePhysicalJoint.ts";
 import { setPhysicalCollisionGroup } from "../../../Physical/setPhysicalCollisionGroup.ts";
 import { getGameComponents } from "../../createGameWorld.ts";
@@ -69,12 +69,77 @@ export function syncRemoveTank(tankEid: EntityId) {
   recursiveTypicalRemoveEntity(tankEid);
 }
 
+// Debris collision group: a torn-off part stops colliding with its former team
+// (hull, bullets, turret parts) and just tumbles around as wreckage.
+const DEBRIS_GROUP =
+  CollisionGroup.ALL &
+  ~CollisionGroup.VEHICALE_BASE &
+  ~CollisionGroup.BULLET &
+  ~CollisionGroup.TANK_TURRET_HEAD_PARTS &
+  ~CollisionGroup.TANK_TURRET_GUN_PARTS;
+
+/**
+ * Promotes a compound armor part (a collider on the owner body) into its own
+ * free-flying rigid body, preserving size, density, world pose and inherited
+ * velocity. After this the part owns a body, so it leaves the compound-part
+ * transform path and is driven by physics like the legacy torn-off parts.
+ */
+function promoteCompoundPartToBody(vehiclePartEid: number, { world, physicalWorld } = GameDI) {
+  const { CompoundPart, RigidBodyRef, RigidBodyState, Impulse, TorqueImpulse } =
+    getGameComponents(world);
+
+  // Idempotent: once promoted the component is gone — a second call would read a
+  // zeroed colliderHandle and detach the wrong (or no) collider.
+  if (!hasComponent(world, vehiclePartEid, CompoundPart)) return;
+
+  const ownerEid = CompoundPart.ownerEid.get(vehiclePartEid);
+  const colliderHandle = CompoundPart.colliderHandle.get(vehiclePartEid);
+
+  const matrix = GlobalTransform.matrix.getBatch(vehiclePartEid);
+  const x = getMatrixTranslationX(matrix);
+  const y = getMatrixTranslationY(matrix);
+  const rotation = Math.atan2(matrix[1], matrix[0]);
+
+  // Inherit the owner body's velocity so the part keeps moving with the tank.
+  const speedX = RigidBodyState.linvel.get(ownerEid, 0);
+  const speedY = RigidBodyState.linvel.get(ownerEid, 1);
+  const angularSpeed = RigidBodyState.angvel[ownerEid];
+
+  const collider = physicalWorld.getCollider(colliderHandle);
+  const half = collider.halfExtents();
+  const width = half.x * 2;
+  const height = half.y * 2;
+  const density = collider.density();
+
+  physicalWorld.removeCollider(collider, true);
+  CompoundPart.removeComponent(world, vehiclePartEid);
+
+  const pid = createRigidRectangle({
+    x,
+    y,
+    rotation,
+    width,
+    height,
+    density,
+    speedX,
+    speedY,
+    angularSpeed,
+    belongsCollisionGroup: DEBRIS_GROUP,
+    interactsCollisionGroup: DEBRIS_GROUP,
+  });
+  RigidBodyRef.addComponent(world, vehiclePartEid, pid);
+  RigidBodyState.addComponent(world, vehiclePartEid);
+  Impulse.addComponent(world, vehiclePartEid);
+  TorqueImpulse.addComponent(world, vehiclePartEid);
+}
+
 export function tearOffTankPart(
   vehiclePartEid: number,
   shouldBreakConnection: boolean = true,
   { world } = GameDI,
 ) {
-  const { TeamRef, PlayerRef, Parent, Children, Joint, VehiclePart } = getGameComponents(world);
+  const { TeamRef, PlayerRef, Parent, Children, Joint, VehiclePart, CompoundPart } =
+    getGameComponents(world);
   removeComponent(world, vehiclePartEid, TeamRef);
   removeComponent(world, vehiclePartEid, PlayerRef);
 
@@ -82,6 +147,16 @@ export function tearOffTankPart(
 
   if (shouldBreakConnection && isSlot(slotEid)) {
     Children.removeChild(slotEid, vehiclePartEid);
+  }
+
+  // Compound parts have no joint — detach the collider from the owner body and
+  // turn the part into standalone debris. Collision group is already DEBRIS.
+  if (hasComponent(world, vehiclePartEid, CompoundPart)) {
+    promoteCompoundPartToBody(vehiclePartEid);
+    if (hasComponent(world, vehiclePartEid, VehiclePart)) {
+      VehiclePart.removeComponent(world, vehiclePartEid);
+    }
+    return;
   }
 
   const jointPid = Joint.pid.get(vehiclePartEid);

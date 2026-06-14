@@ -1,8 +1,13 @@
 import { TColor } from "../../../../../../renderer/src/ECS/Components/Common.ts";
 import { getGameComponents } from "../../createGameWorld.ts";
-import { JointData, Vector2 } from "@dimforge/rapier2d-simd";
 import { GameDI } from "../../../DI/GameDI.ts";
-import { createRectangleRR } from "../../Components/RigidRender.ts";
+import { createRectangle } from "../../../../../../renderer/src/ECS/Entities/Shapes.ts";
+import {
+  getMatrixTranslationX,
+  getMatrixTranslationY,
+  LocalTransform,
+} from "../../../../../../renderer/src/ECS/Components/Transform.ts";
+import { attachRigidRectangleCollider } from "../../../Physical/createRigid.ts";
 import { defaultVehicleOptions, VehicleOptions } from "./Options.ts";
 import { randomRangeFloat } from "../../../../../../../lib/random.ts";
 import { clamp } from "lodash-es";
@@ -109,14 +114,8 @@ export function fillAllSlots(
   }
 }
 
-const jointParentAnchor = new Vector2(0, 0);
-const jointChildAnchor = new Vector2(0, 0);
 const fillSlotOptions: VehicleOptions = structuredClone(defaultVehicleOptions);
-export function fillSlot(
-  slotEid: EntityId,
-  options: VehicleOptions,
-  { world, physicalWorld } = GameDI,
-) {
+export function fillSlot(slotEid: EntityId, options: VehicleOptions, { world } = GameDI) {
   const {
     Slot,
     Parent,
@@ -125,13 +124,13 @@ export function fillSlot(
     RigidBodyRef,
     Color,
     VehiclePart,
-    Joint,
     PlayerRef,
     TeamRef,
     Hitable,
     Damagable,
     VehiclePartCaterpillar,
     LightEmitter,
+    CompoundPart,
   } = getGameComponents(world);
 
   if (isNaN(options.x) || isNaN(options.y) || isNaN(options.rotation)) {
@@ -169,21 +168,34 @@ export function fillSlot(
   fillSlotOptions.interactsCollisionGroup = config.interactsCollisionGroup;
   fillSlotOptions.color = Color.applyColorToArray(slotEid, new Float32Array(4));
 
-  const rbId = RigidBodyRef.id[vehicleOrTurretEid];
-  const [eid, pid] = createRectangleRR(fillSlotOptions);
+  // Resolve the body this collider attaches to. Usually the slot's parent
+  // (hull/turret/track) owns the body. For a bodiless structural frame (the gun,
+  // rigidly fixed to the turret with no relative rotation) walk up to the nearest
+  // body-owning ancestor and fold the frame's local offset into the anchor.
+  let ownerEid = vehicleOrTurretEid;
+  let ownerAnchorX = anchorX;
+  let ownerAnchorY = anchorY;
+  while (!hasComponent(world, ownerEid, RigidBodyRef)) {
+    const frameLocal = LocalTransform.matrix.getBatch(ownerEid);
+    ownerAnchorX += getMatrixTranslationX(frameLocal);
+    ownerAnchorY += getMatrixTranslationY(frameLocal);
+    ownerEid = Parent.id.get(ownerEid);
+  }
+  const rbId = RigidBodyRef.id[ownerEid];
 
-  jointParentAnchor.x = anchorX;
-  jointParentAnchor.y = anchorY;
-
-  const joint = physicalWorld.createImpulseJoint(
-    JointData.fixed(jointParentAnchor, 0, jointChildAnchor, 0),
-    physicalWorld.getRigidBody(rbId),
-    physicalWorld.getRigidBody(pid),
-    false,
-  );
-
+  // Render-only entity + a collider on the owner body at the (composed) anchor.
+  // No body, no joint. CompoundPart carries the owner+anchor (so the transform
+  // system can place it) and the collider handle (so contact drains attribute
+  // hits to this part). The owner frame already rotates, so the offset is the
+  // unrotated anchor.
+  const eid = createRectangle(world, fillSlotOptions);
+  const colliderHandle = attachRigidRectangleCollider(rbId, {
+    ...fillSlotOptions,
+    offsetX: ownerAnchorX,
+    offsetY: ownerAnchorY,
+  });
   VehiclePart.addComponent(world, eid);
-  Joint.addComponent(world, eid, joint.handle);
+  CompoundPart.addComponent(world, eid, ownerEid, colliderHandle, ownerAnchorX, ownerAnchorY);
 
   PlayerRef.addComponent(world, eid, fillSlotOptions.playerId);
   TeamRef.addComponent(world, eid, fillSlotOptions.teamId);

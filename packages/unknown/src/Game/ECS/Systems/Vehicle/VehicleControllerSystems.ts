@@ -20,9 +20,10 @@ export function createVehicleTurretRotationSystem({ world } = GameDI) {
       const slow = 1 - Slowed.slowMul.get(vehicleEid);
       const stun = hasComponent(world, vehicleEid, Stunned) ? 0 : 1;
 
-      const relTurretRot = normalizeAngle(turretRot - vehicleRot);
       const deltaRot = turretRotDir * maxRotationSpeed * slow * stun * (delta / 1000);
+      if (deltaRot === 0) continue;
 
+      const relTurretRot = normalizeAngle(turretRot - vehicleRot);
       JointMotor.setTargetPosition$(turretEid, relTurretRot + deltaRot);
     }
   };

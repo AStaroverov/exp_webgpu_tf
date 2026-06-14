@@ -115,11 +115,13 @@ export function createDrawShapeSystem({
   ]);
   const intensityChanges = createChangeDetector(world, [onAdd(LightEmitter), onSet(LightEmitter)]);
   let prevEntityCount = 0;
+  let preparedEntityCount = 0;
 
-  function updateBuffers() {
+  function prepare() {
     const entities = query(world, [GlobalTransform, Shape, Color]); // Roundness, Shadow is optional
 
-    if (entities.length === 0) return 0;
+    preparedEntityCount = entities.length;
+    if (entities.length === 0) return;
 
     const countChanged = entities.length !== prevEntityCount;
     prevEntityCount = entities.length;
@@ -218,27 +220,6 @@ export function createDrawShapeSystem({
       );
     }
 
-    return entities.length;
-  }
-
-  // Main render pass - renders shapes with shadow map sampling
-  function drawShapes(renderPass: GPURenderPassEncoder) {
-    const entityCount = updateBuffers();
-    if (entityCount === 0) return;
-
-    renderPass.setBindGroup(0, bindGroup0);
-    renderPass.setBindGroup(1, bindGroup1);
-    // Set shadow map bind group (group 2) - only needed for main shapes pass
-    if (bindGroup2) {
-      renderPass.setBindGroup(2, bindGroup2);
-      renderPass.setPipeline(pipelineShadow);
-      renderPass.draw(6, entityCount, 0, 0);
-    }
-
-    // Main shapes (samples shadow map for object-to-object shadows)
-    renderPass.setPipeline(pipelineSdf);
-    renderPass.draw(6, entityCount, 0, 0);
-
     shapeChanges.clear();
     colorChanges.clear();
     roundnessChanges.clear();
@@ -247,28 +228,49 @@ export function createDrawShapeSystem({
     translucencyChanges.clear();
   }
 
+  // Main render pass - renders shapes with shadow map sampling
+  function drawShapes(renderPass: GPURenderPassEncoder) {
+    if (preparedEntityCount === 0) return;
+
+    renderPass.setBindGroup(0, bindGroup0);
+    renderPass.setBindGroup(1, bindGroup1);
+    // Set shadow map bind group (group 2) - only needed for main shapes pass
+    if (bindGroup2) {
+      renderPass.setBindGroup(2, bindGroup2);
+      renderPass.setPipeline(pipelineShadow);
+      renderPass.draw(6, preparedEntityCount, 0, 0);
+    }
+
+    // Main shapes (samples shadow map for object-to-object shadows)
+    renderPass.setPipeline(pipelineSdf);
+    renderPass.draw(6, preparedEntityCount, 0, 0);
+  }
+
   // Shadow map pass - renders shadow silhouettes with Z height
   function drawShadowMap(shadowMapPass: GPURenderPassEncoder) {
-    const entityCount = updateBuffers();
-    if (entityCount === 0 || !pipelineShadowMap || !shadowMapBindGroup0 || !shadowMapBindGroup1)
+    if (
+      preparedEntityCount === 0 ||
+      !pipelineShadowMap ||
+      !shadowMapBindGroup0 ||
+      !shadowMapBindGroup1
+    )
       return;
 
     shadowMapPass.setPipeline(pipelineShadowMap);
     shadowMapPass.setBindGroup(0, shadowMapBindGroup0);
     shadowMapPass.setBindGroup(1, shadowMapBindGroup1);
-    shadowMapPass.draw(6, entityCount, 0, 0);
+    shadowMapPass.draw(6, preparedEntityCount, 0, 0);
   }
 
   // Emission pass - renders emitters as premultiplied HDR color (occluders write coverage only)
   function drawEmitters(passEncoder: GPURenderPassEncoder) {
-    const entityCount = updateBuffers();
-    if (entityCount === 0) return;
+    if (preparedEntityCount === 0) return;
 
     passEncoder.setPipeline(pipelineEmit);
     passEncoder.setBindGroup(0, emitBindGroup0);
     passEncoder.setBindGroup(1, emitBindGroup1);
-    passEncoder.draw(6, entityCount, 0, 0);
+    passEncoder.draw(6, preparedEntityCount, 0, 0);
   }
 
-  return { drawShapes, drawShadowMap, drawEmitters };
+  return { prepare, drawShapes, drawShadowMap, drawEmitters };
 }

@@ -44,8 +44,9 @@ export function createExhaustSmokeSpawnSystem({ world } = GameDI) {
 
       let speed = 0;
       if (hasComponent(world, vehicleEid, RigidBodyState)) {
-        const linvel = RigidBodyState.linvel.getBatch(vehicleEid);
-        speed = hypot(linvel[0], linvel[1]);
+        const linvelX = RigidBodyState.linvel.get(vehicleEid, 0);
+        const linvelY = RigidBodyState.linvel.get(vehicleEid, 1);
+        speed = hypot(linvelX, linvelY);
       }
 
       const speedFactor = Math.min(speed / 50, 1);

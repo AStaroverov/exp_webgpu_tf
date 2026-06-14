@@ -80,6 +80,20 @@ export function createRigidCircle(
   return body.handle;
 }
 
+export function attachRigidRectangleCollider(
+  ownerPid: number,
+  o: CommonRigidOptions & { width: number; height: number; offsetX: number; offsetY: number },
+  { physicalWorld }: { physicalWorld: PhysicalWorld } = GameDI,
+): number {
+  const ownerBody = physicalWorld.getRigidBody(ownerPid);
+  const colliderDesc = prepareColliderDesc(
+    ColliderDesc.cuboid(o.width / 2, o.height / 2),
+    o,
+  ).setTranslation(o.offsetX, o.offsetY);
+  const collider = physicalWorld.createCollider(colliderDesc, ownerBody);
+  return collider.handle;
+}
+
 export function removeRigidShape(eid: number, { world, physicalWorld } = GameDI) {
   const { RigidBodyRef } = getGameComponents(world);
   const pid = RigidBodyRef.id[eid];

@@ -14,10 +14,19 @@ import { getGameComponents } from "../createGameWorld.ts";
  * no RigidBodyRef] entities — one hierarchy level, like the Children graph itself.
  */
 export function createAttachedTransformSystem({ world } = GameDI) {
-  const { Parent, LocalTransform, GlobalTransform, RigidBodyRef } = getGameComponents(world);
+  const { Parent, LocalTransform, GlobalTransform, RigidBodyRef, CompoundPart } =
+    getGameComponents(world);
 
   return function updateAttachedTransforms() {
-    const entities = query(world, [Parent, LocalTransform, GlobalTransform, Not(RigidBodyRef)]);
+    // Compound parts are positioned by createCompoundPartTransformSystem
+    // (owner body + anchor offset), not by parent * local — exclude them.
+    const entities = query(world, [
+      Parent,
+      LocalTransform,
+      GlobalTransform,
+      Not(RigidBodyRef),
+      Not(CompoundPart),
+    ]);
 
     for (let i = 0; i < entities.length; i++) {
       const eid = entities[i];

@@ -9,12 +9,14 @@ import { createFrameTextures, createFrameTick } from "../../../renderer/src/WGSL
 import { GameDI } from "./DI/GameDI.ts";
 import { RenderDI } from "./DI/RenderDI.ts";
 import { getEntityIdByPhysicalId } from "./ECS/Components/Physical.ts";
+import { getEntityIdByColliderId } from "./ECS/Components/CompoundPart.ts";
 import { getGameComponents } from "./ECS/createGameWorld.ts";
 import { GameSession } from "./ECS/Entities/GameSession.ts";
 import { GameMap } from "./ECS/Entities/GameMap.ts";
 import { SystemGroup } from "./ECS/Plugins/systems.ts";
 import { createApplyRigidBodyToTransformSystem } from "./ECS/Systems/createApplyRigidBodyToTransformSystem.ts";
 import { createAttachedTransformSystem } from "./ECS/Systems/createAttachedTransformSystem.ts";
+import { createCompoundPartTransformSystem } from "./ECS/Systems/createCompoundPartTransformSystem.ts";
 import { createSpawnerBulletsSystem } from "./ECS/Systems/createBulletSystem.ts";
 import { createStreamFirearmsSystem } from "./ECS/Systems/createStreamFirearmsSystem.ts";
 import { createApplySensorHitsSystem } from "./ECS/Systems/createApplySensorHitsSystem.ts";
@@ -95,7 +97,8 @@ export function createGame({
 }) {
   const world = createGameWorld();
   const physicalWorld = initPhysicalWorld();
-  const { Children, Hitable, Damagable, RigidBodyRef, SensorHits } = getGameComponents(world);
+  const { Children, Hitable, Damagable, RigidBodyRef, SensorHits, CompoundPart } =
+    getGameComponents(world);
 
   GameDI.width = width;
   GameDI.height = height;
@@ -128,11 +131,19 @@ export function createGame({
   const syncRigidBodyState = createRigidBodyStateSystem();
   const applyRigidBodyDeltaToLocalTransform = createApplyRigidBodyToTransformSystem();
   const updateAttachedTransforms = createAttachedTransformSystem();
+  const updateCompoundPartTransforms = createCompoundPartTransformSystem();
   const applyImpulses = createApplyImpulseSystem();
   const applyJointMotors = createJointMotorSystem();
   const applyWander = createWanderSystem();
 
   const eventQueue = new EventQueue(true);
+
+  const resolveEid = (colliderHandle: number): EntityId | null => {
+    const part = getEntityIdByColliderId(colliderHandle);
+    if (part !== undefined) return part;
+    const rb = physicalWorld.getCollider(colliderHandle)?.parent();
+    return rb ? getEntityIdByPhysicalId(rb.handle) : null;
+  };
 
   const physicalFrame = (delta: number) => {
     updateTrackControl(delta);
@@ -147,14 +158,11 @@ export function createGame({
     syncRigidBodyState();
     applyRigidBodyDeltaToLocalTransform();
     updateAttachedTransforms();
+    updateCompoundPartTransforms();
 
     eventQueue.drainContactForceEvents((event) => {
-      const handle1 = event.collider1();
-      const handle2 = event.collider2();
-      const rb1 = physicalWorld.getCollider(handle1).parent();
-      const rb2 = physicalWorld.getCollider(handle2).parent();
-      const eid1 = rb1 && getEntityIdByPhysicalId(rb1.handle);
-      const eid2 = rb2 && getEntityIdByPhysicalId(rb2.handle);
+      const eid1 = resolveEid(event.collider1());
+      const eid2 = resolveEid(event.collider2());
 
       if (eid1 == null || eid2 == null) return;
 
@@ -162,30 +170,18 @@ export function createGame({
       const forceCoeff = min(1, event.totalForceMagnitude() / CONTACT_FORCE_TARGET);
 
       if (hasComponent(world, eid1, Hitable)) {
-        Hitable.hit$(
-          eid1,
-          eid2,
-          forceCoeff * Damagable.damage.get(eid2),
-          DamageKind.Physical,
-        );
+        Hitable.hit$(eid1, eid2, forceCoeff * Damagable.damage.get(eid2), DamageKind.Physical);
       }
       if (hasComponent(world, eid2, Hitable)) {
-        Hitable.hit$(
-          eid2,
-          eid1,
-          forceCoeff * Damagable.damage.get(eid1),
-          DamageKind.Physical,
-        );
+        Hitable.hit$(eid2, eid1, forceCoeff * Damagable.damage.get(eid1), DamageKind.Physical);
       }
     });
 
     eventQueue.drainCollisionEvents((handle1, handle2, started) => {
       if (!started) return; // only entry overlaps
 
-      const rb1 = physicalWorld.getCollider(handle1).parent();
-      const rb2 = physicalWorld.getCollider(handle2).parent();
-      const eid1 = rb1 && getEntityIdByPhysicalId(rb1.handle);
-      const eid2 = rb2 && getEntityIdByPhysicalId(rb2.handle);
+      const eid1 = resolveEid(handle1);
+      const eid2 = resolveEid(handle2);
 
       if (eid1 == null || eid2 == null) return;
 
@@ -303,6 +299,7 @@ export function createGame({
 
     physicalWorld.free();
     RigidBodyRef.dispose();
+    CompoundPart.dispose();
 
     resetWorld(world);
     deleteWorld(world);
@@ -405,6 +402,7 @@ export function createGame({
         drawSandstorm(passEncoder, delta);
       },
       ({ passEncoder: shadowMapPassEncoder }) => {
+        shapeSystem.prepare();
         shapeSystem.drawShadowMap(shadowMapPassEncoder);
       },
     );

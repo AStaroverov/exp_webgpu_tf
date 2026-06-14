@@ -35,6 +35,7 @@ import {
   createRigidBodyRefComponent,
   createRigidBodyStateComponent,
 } from "./Components/Physical.ts";
+import { createCompoundPartComponent } from "./Components/CompoundPart.ts";
 import { createPlayerRefComponent } from "./Components/PlayerRef.ts";
 import { createProgressComponent } from "./Components/Progress.ts";
 import { createSlotComponent } from "./Components/Slot.ts";
@@ -101,6 +102,7 @@ function createGameOnlyComponents(world: World) {
     Progress: createProgressComponent(world),
     RigidBodyRef: createRigidBodyRefComponent(world),
     RigidBodyState: createRigidBodyStateComponent(world),
+    CompoundPart: createCompoundPartComponent(world),
     Slot: createSlotComponent(world),
     Sound: createSoundComponent(world),
     SoundParentRelative: createSoundParentRelativeComponent(world),

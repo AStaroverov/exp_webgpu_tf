@@ -2,12 +2,12 @@ import { GameDI } from "../DI/GameDI.ts";
 import { getGameComponents } from "../ECS/createGameWorld.ts";
 
 export function changePhysicalDensity(
-  pid: number,
+  eid: number,
   density: number,
   { world, physicalWorld } = GameDI,
 ) {
   const { RigidBodyRef } = getGameComponents(world);
-  const physicalId = RigidBodyRef.id[pid];
+  const physicalId = RigidBodyRef.id[eid];
   const rigidBody = physicalWorld.getRigidBody(physicalId);
 
   if (rigidBody == null) return;

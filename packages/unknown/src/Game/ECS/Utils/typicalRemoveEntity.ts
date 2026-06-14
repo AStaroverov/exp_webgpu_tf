@@ -8,11 +8,21 @@ export function scheduleRemoveEntity(eid: number, recursive = true, { world } = 
   Destroy.addComponent(world, eid, recursive);
 }
 
-export function typicalRemoveEntity(eid: number, disconnect = true, { world } = GameDI) {
-  const { RigidBodyRef, Parent, Children } = getGameComponents(world);
+export function typicalRemoveEntity(
+  eid: number,
+  disconnect = true,
+  { world, physicalWorld } = GameDI,
+) {
+  const { RigidBodyRef, Parent, Children, CompoundPart } = getGameComponents(world);
+
   if (hasComponent(world, eid, RigidBodyRef)) {
     removeRigidShape(eid);
     RigidBodyRef.clear(eid);
+  }
+
+  if (hasComponent(world, eid, CompoundPart)) {
+    const collider = physicalWorld.getCollider(CompoundPart.colliderHandle.get(eid));
+    if (collider?.parent()) physicalWorld.removeCollider(collider, true);
   }
 
   if (

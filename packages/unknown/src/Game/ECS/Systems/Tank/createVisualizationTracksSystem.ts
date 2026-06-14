@@ -10,7 +10,7 @@ const TURN_FACTOR = 0.7;
 const ANGULAR_SCALE = 50;
 
 export function createVisualizationTracksSystem({ world, physicalWorld } = GameDI) {
-  const { Track, Joint, RigidBodyState, Slot, Children } = getGameComponents(world);
+  const { Track, Joint, RigidBodyState, Slot, Children, CompoundPart } = getGameComponents(world);
   const vect2 = new Vector2(0, 0);
 
   return (_delta: number) => {
@@ -61,14 +61,15 @@ export function createVisualizationTracksSystem({ world, physicalWorld } = GameD
         const fillerEid = getSlotFillerEid(slotEid);
         if (fillerEid === 0) continue;
 
-        const jointPid = Joint.pid.get(fillerEid);
-        const joint = physicalWorld.getImpulseJoint(jointPid);
-
-        if (jointPid === 0 || joint == null) continue;
-
         vect2.x = anchorX;
         vect2.y = anchorY;
-        joint.setAnchor1(vect2);
+
+        CompoundPart.anchorX.set(fillerEid, anchorX);
+        CompoundPart.anchorY.set(fillerEid, anchorY);
+
+        physicalWorld
+          .getCollider(CompoundPart.colliderHandle.get(fillerEid))
+          ?.setTranslationWrtParent(vect2);
       }
     }
   };

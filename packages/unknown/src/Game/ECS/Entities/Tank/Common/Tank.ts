@@ -1,11 +1,14 @@
-import { JointData, Vector2 } from "@dimforge/rapier2d-simd";
+import { addEntity } from "bitecs";
 import { GameDI } from "../../../../DI/GameDI.ts";
-import { addTransformComponents } from "../../../../../../../renderer/src/ECS/Components/Transform.ts";
+import {
+  addTransformComponents,
+  LocalTransform,
+  setMatrixTranslate,
+} from "../../../../../../../renderer/src/ECS/Components/Transform.ts";
 import { TrackSide } from "../../../Components/Track.ts";
 import { createVehicleBase, createVehicleTurret } from "../../Vehicle/VehicleBase.ts";
 import { createTrack, TrackOptions } from "../../Track/createTrack.ts";
 import { type TankOptions } from "./Options.ts";
-import { createRectangleRigidGroup } from "../../../Components/RigidGroup.ts";
 import { getGameComponents } from "../../../createGameWorld.ts";
 
 export type TankTracksConfig = {
@@ -103,7 +106,7 @@ function createTankTurretBase(
 
   const [turretEid, turretPid] = createVehicleTurret(options, options.turret, tankEid, tankPid);
 
-  const [gunEid] = createTankGun(options, turretEid, turretPid);
+  const gunEid = createTankGun(options, turretEid, turretPid);
 
   Tank.setTurretEid(tankEid, turretEid);
   SpawnDeltaPosition.addComponent(
@@ -119,36 +122,22 @@ function createTankTurretBase(
 export function createTankGun(
   options: TankOptions,
   turretEid: number,
-  turretPid: number,
-  { world, physicalWorld } = GameDI,
-): [number, number] {
-  const { Joint, Parent, Children } = getGameComponents(world);
+  _turretPid: number,
+  { world } = GameDI,
+): number {
+  const { Parent, Children } = getGameComponents(world);
 
-  const [gunEid, gunPid] = createRectangleRigidGroup({
-    ...options,
-    width: options.turret.gunWidth,
-    height: options.turret.gunHeight,
-    belongsCollisionGroup: 0,
-    interactsCollisionGroup: 0,
-  });
-
-  const joint = physicalWorld.createImpulseJoint(
-    JointData.fixed(
-      new Vector2(options.width / 2, 0),
-      0,
-      new Vector2(-options.turret.gunWidth / 2, 0),
-      0,
-    ),
-    physicalWorld.getRigidBody(turretPid),
-    physicalWorld.getRigidBody(gunPid),
-    false,
-  );
-  Joint.addComponent(world, gunEid, joint.handle);
-
+  const gunEid = addEntity(world);
   addTransformComponents(world, gunEid);
+  setMatrixTranslate(
+    LocalTransform.matrix.getBatch(gunEid),
+    options.width / 2 + options.turret.gunWidth / 2,
+    0,
+  );
+
   Parent.addComponent(world, gunEid, turretEid);
   Children.addComponent(world, gunEid);
   Children.addChildren(turretEid, gunEid);
 
-  return [gunEid, gunPid];
+  return gunEid;
 }

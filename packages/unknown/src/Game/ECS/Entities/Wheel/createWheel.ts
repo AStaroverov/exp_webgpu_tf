@@ -1,4 +1,4 @@
-import { JointData, Vector2 } from "@dimforge/rapier2d-simd";
+import { JointData, RevoluteImpulseJoint, Vector2 } from "@dimforge/rapier2d-simd";
 import { addTransformComponents } from "../../../../../../renderer/src/ECS/Components/Transform.ts";
 import { GameDI } from "../../../DI/GameDI.ts";
 import { CollisionGroup } from "../../../Physical/createRigid.ts";
@@ -65,6 +65,14 @@ export function createWheel(
       options.steeringSpeed ?? PI * 2,
     );
     JointMotor.addComponent(world, wheelEid);
+    // Configure the steering motor once at spawn so the wheel is held straight
+    // before any input. WheelControlSystem then only re-commands it when the
+    // target steering angle changes, letting an idle car's island sleep.
+    (joint as RevoluteImpulseJoint).configureMotorPosition(
+      0,
+      JointMotor.stiffness.get(wheelEid),
+      JointMotor.damping.get(wheelEid),
+    );
   }
 
   if (options.isDrive) {

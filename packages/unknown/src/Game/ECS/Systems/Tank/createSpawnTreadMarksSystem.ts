@@ -25,14 +25,15 @@ const treadMarkOptions: TreadMarkOptions = {
 };
 
 export function createSpawnTreadMarksSystem({ world } = GameDI) {
-  const { VehiclePartCaterpillar, RigidBodyState } = getGameComponents(world);
+  const { VehiclePartCaterpillar, RigidBodyState, CompoundPart } = getGameComponents(world);
 
   return (_delta: number) => {
-    const caterpillarEids = query(world, [VehiclePartCaterpillar, RigidBodyState]);
+    const caterpillarEids = query(world, [VehiclePartCaterpillar]);
 
     for (const eid of caterpillarEids) {
-      const linvel = RigidBodyState.linvel.getBatch(eid);
-      const angvel = RigidBodyState.angvel[eid];
+      const velEid = CompoundPart.ownerEid.get(eid);
+      const linvel = RigidBodyState.linvel.getBatch(velEid);
+      const angvel = RigidBodyState.angvel[velEid];
 
       const speed = Math.sqrt(linvel[0] * linvel[0] + linvel[1] * linvel[1]);
 
