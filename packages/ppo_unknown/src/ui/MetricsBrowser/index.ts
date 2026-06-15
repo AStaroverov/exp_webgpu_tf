@@ -182,7 +182,7 @@ function buildPanel(): HTMLElement {
     position: "fixed",
     left: "0",
     top: "0",
-    right: "460px",
+    right: "0",
     bottom: "0",
     background: "rgba(10, 10, 20, 0.95)",
     overflowY: "auto",

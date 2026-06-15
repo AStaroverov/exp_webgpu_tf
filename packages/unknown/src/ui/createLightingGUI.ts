@@ -11,16 +11,23 @@ import { DEFAULT_RC_PARAMS } from "../Game/ECS/Systems/Render/Lighting/createRad
  */
 export function createLightingGUI({
   container,
+  parent,
   side = "right",
+  open = true,
 }: {
   container?: HTMLElement;
+  parent?: HTMLElement;
   side?: "left" | "right";
+  open?: boolean;
 } = {}) {
   const params = structuredClone(DEFAULT_RC_PARAMS);
   const apply = () => RenderDI.lighting?.setParams(params);
 
-  const gui = new GUI({ title: "Lighting", autoPlace: !container });
-  if (container) {
+  const gui = new GUI({ title: "Lighting", width: 300, autoPlace: !container && !parent });
+  if (parent) {
+    // Stacked into a shared side panel — no own positioning, the panel handles layout.
+    parent.appendChild(gui.domElement);
+  } else if (container) {
     Object.assign(gui.domElement.style, {
       position: "fixed",
       [side]: "0",
@@ -31,6 +38,8 @@ export function createLightingGUI({
     });
     container.appendChild(gui.domElement);
   }
+
+  if (!open) gui.close();
 
   // The directional source: moon, sun, burning city — whatever the scene calls for.
   // Direction/on-off live in the shared SunLight singleton — RC and the baked

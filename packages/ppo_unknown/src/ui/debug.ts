@@ -26,18 +26,25 @@ import {
 } from "./uiUtils.ts";
 
 export function createDebugVisualization(container: HTMLElement, manager: VisTestEpisodeManager) {
-  const gui = new GUI({ title: "RL Dashboard", width: 300, autoPlace: false });
-  Object.assign(gui.domElement.style, {
+  // Single right-side panel that stacks every lil-gui vertically.
+  const panel = document.createElement("div");
+  Object.assign(panel.style, {
     position: "fixed",
     right: "0",
     top: "0",
     maxHeight: "100vh",
     overflowY: "auto",
     zIndex: "1000",
+    display: "flex",
+    flexDirection: "column",
   });
-  container.appendChild(gui.domElement);
+  container.appendChild(panel);
 
-  const lighting = createLightingGUI({ container, side: "left" });
+  const gui = new GUI({ title: "RL Dashboard", width: 300, autoPlace: false });
+  panel.appendChild(gui.domElement);
+
+  // Lighting shares the panel but stays collapsed — only the RL Dashboard is open by default.
+  const lighting = createLightingGUI({ parent: panel, open: false });
 
   setupControls(gui);
   setupInfo(gui, manager, lighting.sync);

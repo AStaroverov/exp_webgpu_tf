@@ -79,16 +79,6 @@ export function trainPolicyNetwork(
         const rawEntropy = computeEntropyCategorical(logitsHeads, maskHeads);
         entropyValue = rawEntropy.dataSync()[0];
 
-        // L2 anchor on raw (pre-mask) logits: softmax is shift-invariant and
-        // saturated actions get ~zero entropy gradient, so without an anchor
-        // the logits drift unboundedly. See PpoConfig.policyLogitsL2.
-        // const logitsPenalty = logitsL2Coeff > 0
-        //     ? logitsHeads
-        //         .map(h => h.square().mean() as tf.Scalar)
-        //         .reduce((acc, p) => acc.add(p) as tf.Scalar)
-        //         .mul(logitsL2Coeff)
-        //     : tf.scalar(0);
-
         // Total loss = *PO - α * H(π) + c * mean(logits²)
         const totalLoss = policyLoss.sub(rawEntropy.mul(entropyCoeff));
         return totalLoss as tf.Scalar;
