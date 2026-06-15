@@ -10,7 +10,8 @@
     "packages/unknown",
     "packages/debug",
     "packages/ppo",
-    "packages/ppo_unknown"
+    "packages/ppo_unknown",
+    "packages/burn_rl"
   ],
   "type": "module",
   "scripts": {

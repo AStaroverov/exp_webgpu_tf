@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>burn_rl — PPO on WebGPU (wasm)</title>
+    <style>
+      body,
+      html {
+        margin: 0;
+        padding: 16px;
+        font-family: monospace;
+        background: #111;
+        color: #ddd;
+      }
+      button {
+        font-family: monospace;
+        font-size: 14px;
+        padding: 6px 12px;
+        margin-right: 8px;
+        cursor: pointer;
+      }
+      #log {
+        white-space: pre;
+        margin-top: 12px;
+        font-size: 12px;
+        line-height: 1.4;
+        max-height: 30vh;
+        overflow: auto;
+        border: 1px solid #333;
+        padding: 8px;
+      }
+      #grid {
+        margin-top: 16px;
+        border-collapse: collapse;
+      }
+      #grid td {
+        width: 48px;
+        height: 48px;
+        text-align: center;
+        border: 1px solid #333;
+        font-size: 18px;
+      }
+      h1 {
+        font-size: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>burn_rl — PPO in Burn, WebGPU backend, compiled to wasm</h1>
+    <div>
+      <button id="train1">Train 1 iteration</button>
+      <button id="train20">Train 20 iterations</button>
+      <span id="status">loading wasm…</span>
+    </div>
+    <table id="grid"></table>
+    <div id="log"></div>
+    <script src="index.ts" type="module"></script>
+  </body>
+</html>
