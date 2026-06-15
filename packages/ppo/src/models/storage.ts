@@ -1,6 +1,5 @@
 import * as tf from "@tensorflow/tfjs";
 import { LayersModel } from "@tensorflow/tfjs";
-import { isFunction } from "lodash-es";
 import { isBrowser } from "../../../../lib/detect.ts";
 import { random, randomRangeInt } from "../../../../lib/random.ts";
 import { patientAction } from "../utils/patientAction.ts";
@@ -34,10 +33,10 @@ export async function getNetwork(
   let network: undefined | tf.LayersModel;
 
   try {
-    network = await patientAction(
-      () => loadLastNetworkFromDB(modelName, savePath),
-      isFunction(getInitial) ? 1 : 10,
-    );
+    // Always retry the DB load before falling back to a fresh network. A transient
+    // IndexedDB failure (e.g. right after a page reload, mid-write) must not cause
+    // getInitial() to overwrite a good saved model with random weights.
+    network = await patientAction(() => loadLastNetworkFromDB(modelName, savePath), 10);
   } catch (error) {
     console.warn(`[getNetwork] Could not load model ${modelName} from DB:`, error);
     network = getInitial?.();
