@@ -41,6 +41,7 @@ import { createPresent } from "../../../renderer/src/WGSL/createPresent.ts";
 import { createRadianceCascadesSystem } from "./ECS/Systems/Render/Lighting/createRadianceCascadesSystem.ts";
 import { createVisualizationTracksSystem } from "./ECS/Systems/Tank/createVisualizationTracksSystem.ts";
 import { createSpawnTreadMarksSystem } from "./ECS/Systems/Tank/createSpawnTreadMarksSystem.ts";
+import { createLimitTreadMarksSystem } from "./ECS/Systems/Tank/createLimitTreadMarksSystem.ts";
 import { createUpdateTreadMarksSystem } from "./ECS/Systems/Tank/createUpdateTreadMarksSystem.ts";
 import { createSpawnWheelTreadMarksSystem } from "./ECS/Systems/Vehicle/createSpawnWheelTreadMarksSystem.ts";
 import { createExhaustSmokeSpawnSystem } from "./ECS/Systems/Vehicle/createExhaustSmokeSpawnSystem.ts";
@@ -213,11 +214,13 @@ export function createGame({
   const destroyOutOfZone = createDestroyOutOfZoneSystem();
   const destroyByTimeout = createDestroyByTimeoutSystem();
   const destroyByDistance = createDestroyByDistanceSystem();
+  const limitTreadMarks = createLimitTreadMarksSystem();
   const explode = createExplodeSystem();
   const destroyFrame = (delta: number) => {
     destroyByTimeout(delta);
     destroyByDistance();
     destroyOutOfZone();
+    limitTreadMarks(); // cap the tread-mark population before destroy() reaps the marked
     explode(); // Explodable + Destroy → detonate, before the entities are removed.
     destroy();
   };

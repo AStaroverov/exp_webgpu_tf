@@ -1,5 +1,5 @@
 import { hasComponent, onAdd, onSet, query } from "bitecs";
-import { shaderMeta } from "./sdf.shader.ts";
+import { MAX_INSTANCE_COUNT, shaderMeta } from "./sdf.shader.ts";
 import { GPUShader } from "../../../WGSL/GPUShader.ts";
 import { getTypeTypedArray } from "../../../Shader";
 import { projectionMatrix } from "../ResizeSystem.ts";
@@ -116,17 +116,30 @@ export function createDrawShapeSystem({
   const intensityChanges = createChangeDetector(world, [onAdd(LightEmitter), onSet(LightEmitter)]);
   let prevEntityCount = 0;
   let preparedEntityCount = 0;
+  let overflowReported = false;
 
   function prepare() {
     const entities = query(world, [GlobalTransform, Shape, Color]); // Roundness, Shadow is optional
 
-    preparedEntityCount = entities.length;
-    if (entities.length === 0) return;
+    // The instance buffers are fixed at MAX_INSTANCE_COUNT; writing past it
+    // throws "offset is out of bounds" and kills the frame. Clamp instead —
+    // render what fits and warn once so the overflow is visible, not fatal.
+    const count = Math.min(entities.length, MAX_INSTANCE_COUNT);
+    if (entities.length > MAX_INSTANCE_COUNT && !overflowReported) {
+      overflowReported = true;
+      console.warn(
+        `[draw-shape] ${entities.length} renderable shapes exceeds the ` +
+          `${MAX_INSTANCE_COUNT} instance cap; rendering the first ${MAX_INSTANCE_COUNT}.`,
+      );
+    }
 
-    const countChanged = entities.length !== prevEntityCount;
-    prevEntityCount = entities.length;
+    preparedEntityCount = count;
+    if (count === 0) return;
 
-    for (let i = 0; i < entities.length; i++) {
+    const countChanged = count !== prevEntityCount;
+    prevEntityCount = count;
+
+    for (let i = 0; i < count; i++) {
       const id = entities[i];
 
       transformCollect.set(GlobalTransform.matrix.getBatch(id), i * 16);

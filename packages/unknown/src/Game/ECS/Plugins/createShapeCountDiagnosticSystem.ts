@@ -10,9 +10,20 @@ import { GameDI } from "../../DI/GameDI.ts";
 import { getGameComponents } from "../createGameWorld.ts";
 
 export function createShapeCountDiagnosticSystem({ world } = GameDI) {
-  const { Shape, Color, GlobalTransform, Bullet, TreadMark, DestroyByTimeout } =
-    getGameComponents(world);
+  const {
+    Shape,
+    Color,
+    GlobalTransform,
+    Bullet,
+    TreadMark,
+    DestroyByTimeout,
+    VehiclePart,
+    VFX,
+    Wander,
+    Destroy,
+  } = getGameComponents(world);
   let acc = 0;
+  let prevSdf = 0;
 
   return function diagnostic(delta: number) {
     acc += delta;
@@ -23,12 +34,22 @@ export function createShapeCountDiagnosticSystem({ world } = GameDI) {
     const bullets = query(world, [Bullet]).length;
     const tread = query(world, [TreadMark]).length;
     const timed = query(world, [DestroyByTimeout]).length;
-    const allShapes = query(world, [Shape]).length;
+    const parts = query(world, [VehiclePart]).length;
+    const particles = query(world, [Wander]).length; // stream (flame/frost) particles
+    const vfx = query(world, [VFX]).length;
+    const pending = query(world, [Destroy]).length;
+    const accountedFor = parts + tread + bullets + particles;
+    const other = sdf - accountedFor;
+    const growth = sdf - prevSdf;
+    prevSdf = sdf;
 
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[shape-count] SDF(GT+Shape+Color)=${sdf} | allShape=${allShapes} | ` +
-        `bullets=${bullets} treadMarks=${tread} destroyByTimeout=${timed} | cap=10000`,
-    );
+    if (sdf > 8000) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[shape-count] SDF=${sdf} (${growth >= 0 ? "+" : ""}${growth}/s) cap=10000 | ` +
+          `parts=${parts} treadMarks=${tread} particles=${particles} bullets=${bullets} ` +
+          `vfx=${vfx} other≈${other} | destroyByTimeout=${timed} pendingDestroy=${pending}`,
+      );
+    }
   };
 }

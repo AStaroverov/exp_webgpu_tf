@@ -63,6 +63,14 @@ export class EpisodeManager extends AbstractEpisodeManager<Scenario> {
       const memoryBatch = agent.getMemoryBatch(finalReward);
       if (memoryBatch == null) return;
 
+      const maskZeroSeq = memoryBatch.rewards.reduce((acc, r) => (r === 0 ? acc + 1 : 0), 0);
+      if (maskZeroSeq > 20) {
+        console.warn(
+          `Skipping sample with long zero sequence rewards ${maskZeroSeq} (scenario=${scenario.index}, version=${networkVersion}, size=${memoryBatch.size})`,
+        );
+        return;
+      }
+
       agentSampleChannel.emit({
         networkVersion,
         scenarioIndex: scenario.index,

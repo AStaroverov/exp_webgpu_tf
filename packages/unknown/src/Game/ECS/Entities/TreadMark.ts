@@ -8,7 +8,9 @@ import {
 import { ZIndex } from "../../consts.ts";
 import { RenderDI } from "../../DI/RenderDI.ts";
 
-export const TREAD_MARK_DURATION = 10_000;
+export const TREAD_MARK_DURATION = 7_000;
+
+export const MAX_TREAD_MARKS = 2_000;
 
 const TREAD_MARK_COLOR: [number, number, number, number] = [0.35, 0.28, 0.2, 0.4];
 

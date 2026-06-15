@@ -10,7 +10,7 @@ const TURN_FACTOR = 0.7;
 const ANGULAR_SCALE = 50;
 
 export function createVisualizationTracksSystem({ world, physicalWorld } = GameDI) {
-  const { Track, Joint, RigidBodyState, Slot, Children, CompoundPart } = getGameComponents(world);
+  const { Track, RigidBodyState, Slot, Children, CompoundPart } = getGameComponents(world);
   const vect2 = new Vector2(0, 0);
 
   return (_delta: number) => {
