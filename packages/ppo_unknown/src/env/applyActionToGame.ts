@@ -51,7 +51,12 @@ export function applyActionToGame(eid: number, actions: Float32Array, { world } 
   const grid = MapDI.grid;
   if (!grid) return;
 
-  const { RigidBodyState, Tank, StreamFirearms } = getGameComponents(world);
+  const { RigidBodyState, Tank, StreamFirearms, ActionsQueue } = getGameComponents(world);
+  // `decide()` is async (GPU readback is awaited); the tank may have been destroyed
+  // between capturing the observation and applying its action. A stale action on a
+  // dead entity has no queue to land in — drop it.
+  if (!hasComponent(world, eid, ActionsQueue)) return;
+
   const px = RigidBodyState.position.get(eid, 0);
   const py = RigidBodyState.position.get(eid, 1);
   const here = grid.worldToHex(px, py);
