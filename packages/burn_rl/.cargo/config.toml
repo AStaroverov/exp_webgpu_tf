@@ -1,4 +1,0 @@
-# getrandom 0.3 requires an explicit backend on wasm32. Without this, the crate
-# fails to link (no entropy source) when burn initialises layer parameters.
-[target.wasm32-unknown-unknown]
-rustflags = ['--cfg', 'getrandom_backend="wasm_js"']
