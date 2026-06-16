@@ -168,7 +168,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
       kind: DamageKind.Emp,
       visual: ExplosionVisual.Emp,
       damage: 2,
-      radius: 100,
+      radius: 50,
       vfxSize: 100, // shockwave reaches exactly the damage radius
       lightRadius: 100,
     },
