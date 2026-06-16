@@ -131,6 +131,7 @@ export function createFireStreamActionSystem({ world } = GameDI) {
       // is lowered so the held state stays honest; `elapsed` stops counting).
       if (StreamFirearms.isReloading(turretEid)) {
         TurretController.setShooting$(turretEid, 0);
+        ActionsQueue.scheduleRequestNext(ownerEid, 0);
         continue;
       }
 
