@@ -7,7 +7,7 @@
  * defensive fallbacks stay.
  *
  * actions = [index] (Float32Array from batchAct) — an index into the flat action
- * list `Hold | move dir 0..5 | fire target 0..35` (see consts.ts layout).
+ * list `Hold | move dir 0..5 | fire window-cell 0..CELLS-1` (see consts.ts layout).
  */
 
 import { hasComponent } from "bitecs";
@@ -21,7 +21,7 @@ import {
   HOLD_ACTION,
   HOLD_DURATION_MS,
   FIRE_ACTION_OFFSET,
-  FIRE_TARGET_OFFSETS,
+  FIRE_CELL_OFFSETS,
   MOVE_ACTION_OFFSET,
   MOVE_SPEED,
 } from "../consts.ts";
@@ -80,8 +80,9 @@ export function applyActionToGame(eid: number, actions: Float32Array, { world } 
     return;
   }
 
-  const offset = FIRE_TARGET_OFFSETS[action - FIRE_ACTION_OFFSET];
+  const offset = FIRE_CELL_OFFSETS[action - FIRE_ACTION_OFFSET];
   if (!offset) return;
+  if (offset[0] === 0 && offset[1] === 0) return; // self cell is never a fire target
   const target = { q: here.q + offset[0], r: here.r + offset[1] };
   if (!grid.has(target)) return;
   if (hasComponent(world, Tank.turretEId.get(eid), StreamFirearms)) {

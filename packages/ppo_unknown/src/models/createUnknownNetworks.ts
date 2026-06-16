@@ -9,7 +9,7 @@ import { CONFIG } from "../config.ts";
 import { createDenseLayer } from "../../../ppo/src/models/ApplyLayers.ts";
 import { Model } from "../../../ppo/src/models/def.ts";
 import { AdamW } from "../../../ppo/src/models/Optimizer/AdamW.ts";
-import { createNetwork } from "./Networks/v4.ts";
+import { createNetwork } from "./Networks/v5.ts";
 
 export { ACTION_HEAD_DIMS } from "./dims.ts";
 export { shouldNoiseLayer } from "../../../ppo/src/models/noiseGate.ts";

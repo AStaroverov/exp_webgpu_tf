@@ -45,6 +45,8 @@ export class RandomBot {
     const roll = Math.random();
 
     if (roll < this.opts.fireProb) {
+      // FIRE_TARGET_COUNT is now the full window-cell count; the mask zeroes out
+      // the unreachable cells so collectAllowed only returns real fire targets.
       const fire = collectAllowed(mask, FIRE_ACTION_OFFSET, FIRE_TARGET_COUNT);
       if (fire.length > 0) return fire[Math.floor(Math.random() * fire.length)];
     }

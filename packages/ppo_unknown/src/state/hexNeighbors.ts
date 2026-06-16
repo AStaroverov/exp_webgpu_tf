@@ -86,6 +86,25 @@ export const ACTION_CELL_INDEXES: readonly number[] = (() => {
   return indexes;
 })();
 
+/**
+ * Axial (dq, dr) offset of EVERY board-window cell, indexed by its flat cell
+ * index (`row * BOARD_COLS + col`) — the inverse of the egocentric window
+ * mapping (col = dq + R, row = dr + R). This is the fire-target table for the
+ * full-board aim head (v5): the policy may fire at ANY reachable window cell,
+ * so a fire action index IS a cell index, resolved to a hex through this table.
+ * The window center (cell `VIEW_RADIUS*BOARD_COLS + VIEW_RADIUS`) maps to
+ * (0, 0) — self, never a valid fire target.
+ */
+export const FIRE_CELL_OFFSETS: ReadonlyArray<readonly [number, number]> = (() => {
+  const offsets: Array<readonly [number, number]> = [];
+  for (let row = 0; row < BOARD_ROWS; row++) {
+    for (let col = 0; col < BOARD_COLS; col++) {
+      offsets.push([col - VIEW_RADIUS, row - VIEW_RADIUS] as const);
+    }
+  }
+  return offsets;
+})();
+
 /** [cell * NEIGHBOR_DIRS + d] → neighbor cell index, or -1 off-window. */
 export const NEIGHBOR_INDEX: Int32Array = (() => {
   const table = new Int32Array(BOARD_CELLS * NEIGHBOR_DIRS).fill(-1);

@@ -35,7 +35,7 @@ import type { UnknownAgent } from "../env/UnknownAgent.ts";
  * `ScoreTracker`'s raw score (used here for win-contribution weighting) stays intact.
  *   weight = 1 until SHAPING_FULL_UNTIL, then linear to SHAPING_FLOOR at SHAPING_ZERO_AT.
  */
-const SHAPING_FLOOR = 0.1;
+const SHAPING_FLOOR = 1;
 const SHAPING_FULL_UNTIL = 200_000;
 const SHAPING_ZERO_AT = SHAPING_FULL_UNTIL * 5;
 

@@ -40,7 +40,7 @@ export async function getNetwork(
   } catch (error) {
     console.warn(`[getNetwork] Could not load model ${modelName} from DB:`, error);
     throw error;
-    // network = getInitial?.();
+    // network = _getInitial?.();
   }
 
   if (!network) {

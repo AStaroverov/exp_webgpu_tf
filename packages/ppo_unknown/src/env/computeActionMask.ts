@@ -1,32 +1,33 @@
 /**
  * computeActionMask — build the per-decision invalid-action mask for one agent.
  *
- * The mask is a flat `Float32Array` of length `ACTION_DIM_TOTAL` (43), laid out
+ * The mask is a flat `Float32Array` of length `ACTION_DIM_TOTAL` (128), laid out
  * identically to the single flat policy head (Hold | move | fire) and additive:
  *   `0`        → action allowed,
  *   `MASK_NEG` → action forbidden (added to the logit before softmax/argmax).
  *
  * Slices (see consts.ts action layout):
- *   Hold [0]      — never masked, so the distribution always has a valid action.
- *   move [1..6]   — `0` for each passable hex neighbour (shared predicate with
- *                   `applyActionToGame.moveDestination`), `MASK_NEG` otherwise.
- *   fire [7..42]  — `MASK_NEG` for the WHOLE slice while the agent's gun is reloading
- *                   (`Firearms` or `StreamFirearms` — a shot is impossible anyway);
- *                   otherwise per TARGET HEX (rings 1..FIRE_RING_RADIUS,
- *                   `FIRE_TARGET_OFFSETS` — same table as `applyActionToGame`):
- *                   `MASK_NEG` when the hex is off-grid (not a real target), or when
- *                   the line of fire toward it hits a friendly Unit before any enemy
- *                   (no friendly fire); `0` otherwise. Firing at an empty hex just
- *                   wastes the shot — the reward, not the mask, discourages that.
+ *   Hold [0]            — never masked, so the distribution always has a valid action.
+ *   move [1..6]         — `0` for each passable hex neighbour (shared predicate with
+ *                         `applyActionToGame.moveDestination`), `MASK_NEG` otherwise.
+ *   fire [7..7+CELLS)   — `MASK_NEG` for the WHOLE slice while the agent's gun is
+ *                         reloading (`Firearms` or `StreamFirearms` — a shot is
+ *                         impossible anyway); otherwise per WINDOW CELL
+ *                         (`FIRE_CELL_OFFSETS`): `MASK_NEG` for the self cell, a cell
+ *                         beyond the view radius (the window corners), or an off-grid
+ *                         hex; `0` for any reachable on-grid cell. Firing at an empty
+ *                         hex just wastes the shot — the reward, not the mask, discourages that.
  */
 
 import { hasComponent } from "bitecs";
 import { GameDI } from "../../../unknown/src/Game/DI/GameDI.ts";
 import { MapDI } from "../../../unknown/src/Game/DI/MapDI.ts";
 import { getGameComponents } from "../../../unknown/src/Game/ECS/createGameWorld.ts";
+import { VIEW_RADIUS, hexDeltaDistance } from "../state/board.ts";
 import {
   ACTION_DIM_TOTAL,
   FIRE_ACTION_OFFSET,
+  FIRE_CELL_OFFSETS,
   FIRE_TARGET_COUNT,
   MASK_NEG,
   MOVE_ACTION_OFFSET,
@@ -60,8 +61,15 @@ export function computeActionMask(eid: number, { world } = GameDI): Float32Array
     turretEid !== 0 &&
     ((hasComponent(world, turretEid, Firearms) && Firearms.isReloading(turretEid)) ||
       (hasComponent(world, turretEid, StreamFirearms) && StreamFirearms.isReloading(turretEid)));
-  if (gunReloading) {
-    for (let i = 0; i < FIRE_TARGET_COUNT; i++) {
+  for (let i = 0; i < FIRE_TARGET_COUNT; i++) {
+    // While reloading the whole slice is dead (a shot is impossible anyway).
+    // Otherwise a cell is a valid target iff it is a real on-grid hex other
+    // than self — the policy may fire at ANY reachable window cell.
+    const [dq, dr] = FIRE_CELL_OFFSETS[i];
+    const isSelf = dq === 0 && dr === 0;
+    const inView = hexDeltaDistance(dq, dr) <= VIEW_RADIUS; // exclude the window corners
+    const onGrid = inView && grid.has({ q: here.q + dq, r: here.r + dr });
+    if (gunReloading || isSelf || !onGrid) {
       mask[FIRE_ACTION_OFFSET + i] = MASK_NEG;
     }
   }
