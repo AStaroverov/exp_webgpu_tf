@@ -26,6 +26,31 @@ import { curriculumStateChannel } from "../curriculumChannel.ts";
 
 const MAX_FRAMES = CONFIG.episodeFrames;
 
+/**
+ * Share (0..1) of the single most frequent value in `values`.
+ *
+ * Used to flag a degenerate ("stuck") episode where one reward repeats. Since
+ * the caller's threshold is above 0.5, the most frequent value is by definition
+ * the majority element, so Boyer–Moore finds the candidate in O(1) space (no
+ * Map / float-key hashing) and a second pass counts its true share.
+ */
+function majorityShare(values: ArrayLike<number>): number {
+  if (values.length === 0) return 0;
+
+  let candidate = 0;
+  let votes = 0;
+  for (let i = 0; i < values.length; i++) {
+    if (votes === 0) candidate = values[i];
+    votes += values[i] === candidate ? 1 : -1;
+  }
+
+  let count = 0;
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] === candidate) count++;
+  }
+  return count / values.length;
+}
+
 export class EpisodeManager extends AbstractEpisodeManager<Scenario> {
   protected curriculumState: CurriculumState = DEFAULT_CURRICULUM_STATE;
 
@@ -63,12 +88,12 @@ export class EpisodeManager extends AbstractEpisodeManager<Scenario> {
       const memoryBatch = agent.getMemoryBatch(finalReward);
       if (memoryBatch == null) return;
 
-      const zeroRewardsProcent =
-        memoryBatch.rewards.reduce((acc, r) => (r === 0 ? acc + 1 : acc), 0) /
-        memoryBatch.rewards.length;
-      if (zeroRewardsProcent > 0.95) {
+      // Detect a "stuck" episode: when the same reward value repeats for almost
+      // the whole batch the simulation likely froze.
+      const sameRewardsProcent = majorityShare(memoryBatch.rewards);
+      if (sameRewardsProcent > 0.9) {
         console.warn(
-          `Skipping sample with zero rewards ${Math.round(zeroRewardsProcent * 100)}% (scenario=${scenario.index}, version=${networkVersion}, size=${memoryBatch.size})`,
+          `Skipping sample with identical rewards ${Math.round(sameRewardsProcent * 100)}% (scenario=${scenario.index}, version=${networkVersion}, size=${memoryBatch.size})`,
         );
         return;
       }

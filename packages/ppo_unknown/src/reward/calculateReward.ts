@@ -21,7 +21,10 @@
 import { clamp } from "lodash";
 import { GameDI } from "../../../unknown/src/Game/DI/GameDI.ts";
 import { getGameComponents } from "../../../unknown/src/Game/ECS/createGameWorld.ts";
-import { getTankTeamId } from "../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts";
+import {
+  getTankHealth,
+  getTankTeamId,
+} from "../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts";
 import { scoreTracker } from "./ScoreTracker.ts";
 import type { UnknownAgent } from "../env/UnknownAgent.ts";
 
@@ -43,9 +46,8 @@ export function getShapingWeight(iteration: number): number {
 }
 
 const REWARD_LIMIT = 10;
-/** Reward magnitude at a perfect outcome (success ratio = ±1). */
+const DEAD_PENALTY = -2;
 const WIN_REWARD = 3;
-/** Team-spirit τ: 0 = selfish, 1 = fully cooperative. Fixed for the MVP scenario. */
 const TEAM_SPIRIT = 0.5;
 
 /** Cumulative COMBAT score for the tank's player (delta'd by the agent as a real reward). */
@@ -99,5 +101,9 @@ export function calculateFinalReward(
   const relativeShare = totalTeamScore > 0 ? (myScore / totalTeamScore) * teamSize : 1;
   const contribution = (1 - TEAM_SPIRIT) * relativeShare + TEAM_SPIRIT;
 
-  return clamp(teamReward * contribution, -REWARD_LIMIT, REWARD_LIMIT);
+  const isDead = getTankHealth(eid) <= 0;
+
+  return (
+    clamp(teamReward * contribution, -REWARD_LIMIT, REWARD_LIMIT) + (isDead ? DEAD_PENALTY : 0)
+  );
 }
