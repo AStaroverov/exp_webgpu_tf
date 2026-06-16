@@ -1,2 +1,0 @@
-- add heals for tanks from parts
-- add new types of tanks
