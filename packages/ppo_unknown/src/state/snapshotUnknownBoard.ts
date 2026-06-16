@@ -288,28 +288,23 @@ function writeTypeOneHot(ctx: SnapshotCtx, dq: number, dr: number, unitEid: numb
 }
 
 /**
- * Remaining reload of the unit's gun, log-squashed: `log1p(remaining_ms / 1000)`.
- * 0 (the dense default) = ready to fire; bullet guns read `Firearms.reloading`,
- * stream guns `StreamFirearms.reloading`; gunless vehicles stay 0.
+ * How "unready to fire" the unit's gun is. 0 (the dense default) = ready.
+ * Bullet guns: remaining reload, log-squashed `log1p(remaining_ms / 1000)`.
+ * Stream guns: the charge deficit `1 - charge` (0 = full, ~1 = empty) — already
+ * a dense 0..1 signal of comparable scale, no squashing needed. Gunless vehicles stay 0.
  */
 function writeReload(ctx: SnapshotCtx, dq: number, dr: number, unitEid: number) {
   const { selfEid, world, UnknownInputBoard } = ctx;
   const { Tank, Firearms, StreamFirearms } = getGameComponents(world);
   const turretEid = Tank.turretEId.get(unitEid);
   if (turretEid === 0) return;
-  let remainingMs = 0;
+  let value = 0;
   if (hasComponent(world, turretEid, Firearms)) {
-    remainingMs = Firearms.reloading.get(turretEid);
+    value = Math.log1p(Firearms.reloading.get(turretEid) / 1000);
   } else if (hasComponent(world, turretEid, StreamFirearms)) {
-    remainingMs = StreamFirearms.reloading.get(turretEid);
+    value = 1 - StreamFirearms.getCharge(turretEid);
   }
-  if (remainingMs > 0) {
-    UnknownInputBoard.setDelta(
-      selfEid,
-      dq,
-      dr,
-      BoardChannel.Reload,
-      Math.log1p(remainingMs / 1000),
-    );
+  if (value > 0) {
+    UnknownInputBoard.setDelta(selfEid, dq, dr, BoardChannel.Reload, value);
   }
 }

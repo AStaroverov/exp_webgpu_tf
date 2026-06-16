@@ -10,9 +10,9 @@
  *   Hold [0]            — never masked, so the distribution always has a valid action.
  *   move [1..6]         — `0` for each passable hex neighbour (shared predicate with
  *                         `applyActionToGame.moveDestination`), `MASK_NEG` otherwise.
- *   fire [7..7+CELLS)   — `MASK_NEG` for the WHOLE slice while the agent's gun is
- *                         reloading (`Firearms` or `StreamFirearms` — a shot is
- *                         impossible anyway); otherwise per WINDOW CELL
+ *   fire [7..7+CELLS)   — `MASK_NEG` for the WHOLE slice while the agent can't shoot
+ *                         (`Firearms` reloading, or `StreamFirearms` charge below the
+ *                         firing threshold — a shot is impossible anyway); otherwise per WINDOW CELL
  *                         (`FIRE_CELL_OFFSETS`): `MASK_NEG` for the self cell, a cell
  *                         beyond the view radius (the window corners), or an off-grid
  *                         hex; `0` for any reachable on-grid cell. Firing at an empty
@@ -57,10 +57,12 @@ export function computeActionMask(eid: number, { world } = GameDI): Float32Array
 
   // ── fire slice [7..42] ────────────────────────────────────────────────────
   const turretEid = Tank.turretEId.get(eid);
-  const gunReloading =
+  // Bullet guns: reloading. Stream guns: charge below the firing threshold.
+  // Either way a shot is impossible, so the whole fire slice is dead.
+  const gunBlocked =
     turretEid !== 0 &&
     ((hasComponent(world, turretEid, Firearms) && Firearms.isReloading(turretEid)) ||
-      (hasComponent(world, turretEid, StreamFirearms) && StreamFirearms.isReloading(turretEid)));
+      (hasComponent(world, turretEid, StreamFirearms) && !StreamFirearms.canFire(turretEid)));
   for (let i = 0; i < FIRE_TARGET_COUNT; i++) {
     // While reloading the whole slice is dead (a shot is impossible anyway).
     // Otherwise a cell is a valid target iff it is a real on-grid hex other
@@ -69,7 +71,7 @@ export function computeActionMask(eid: number, { world } = GameDI): Float32Array
     const isSelf = dq === 0 && dr === 0;
     const inView = hexDeltaDistance(dq, dr) <= VIEW_RADIUS; // exclude the window corners
     const onGrid = inView && grid.has({ q: here.q + dq, r: here.r + dr });
-    if (gunReloading || isSelf || !onGrid) {
+    if (gunBlocked || isSelf || !onGrid) {
       mask[FIRE_ACTION_OFFSET + i] = MASK_NEG;
     }
   }

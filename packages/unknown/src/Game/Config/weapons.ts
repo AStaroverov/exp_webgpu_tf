@@ -216,9 +216,9 @@ export type StreamCaliberStats = {
   linearDamping: number;
   /** Min ms between emits while the held flag is up (framerate-independent rate) */
   emitIntervalMs: number;
-  /** Magazine: total ms of continuous emission before the gun must reload */
+  /** Charge drain: ms of continuous fire to empty a full charge */
   fireDurationMs: number;
-  /** Reload duration in ms once the magazine is spent */
+  /** Charge regen: ms of rest to refill an empty charge */
   reloadMs: number;
   /** FireStream held-window duration (~1000) */
   holdMs: number;

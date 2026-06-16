@@ -45,8 +45,9 @@ const optionsParticleRigid: RigidOptions = {
 
 /**
  * Sprays sensor particles from every `StreamFirearms` turret while its shoot
- * flag is held and the magazine isn't spent (`fireDurationMs` of emission →
- * `reloadMs` pause). Disjoint from the bullet spawner by component (`StreamFirearms`
+ * flag is held and it has enough charge. Firing drains the charge (`fireDurationMs`
+ * empties it); while idle it regenerates (`reloadMs` refills it). Below
+ * `STREAM_MIN_FIRE_CHARGE` the gun can't fire. Disjoint from the bullet spawner by component (`StreamFirearms`
  * vs `Firearms`). Each particle is composed inline: the gameplay pieces
  * (sensor body + `Damagable`/`Dotable`/`SensorHits` + `DestroyByTimeout`) are added unconditionally
  * so the weapon works headless; the visual pieces only when rendering is on.
@@ -148,28 +149,26 @@ export function createStreamFirearmsSystem({ world } = GameDI) {
       const cfg = StreamCaliberConfig[StreamFirearms.caliberRef.get(turretEid)];
       const interval = cfg.emitIntervalMs;
 
-      StreamFirearms.updateReloading(turretEid, delta);
-
-      // Stun gate after updateReloading — reload keeps ticking through a stun.
-      // Verify the parent is still a Vehicle: a stale/recycled eid must not gate the gun.
+      // Stunned turrets can't fire but still recover charge (a stun is downtime,
+      // not firing). Verify the parent is still a Vehicle: a stale/recycled eid
+      // must not gate the gun.
       const vehicleEid = Parent.id.get(turretEid);
-      if (hasComponent(world, vehicleEid, Vehicle) && hasComponent(world, vehicleEid, Stunned)) {
-        continue;
-      }
+      const stunned =
+        hasComponent(world, vehicleEid, Vehicle) && hasComponent(world, vehicleEid, Stunned);
 
-      if (StreamFirearms.isReloading(turretEid) || !TurretController.shouldShoot(turretEid)) {
-        // Primed reset: a fresh (post-reload) hold emits on its very first tick.
+      const firing =
+        !stunned && TurretController.shouldShoot(turretEid) && StreamFirearms.canFire(turretEid);
+
+      if (!firing) {
+        // Not firing → the charge regenerates smoothly. Prime the emit
+        // accumulator so a fresh hold emits on its very first tick.
+        StreamFirearms.recharge(turretEid, delta, cfg.reloadMs);
         StreamFirearms.emitAccMs.set(turretEid, interval);
         continue;
       }
 
-      // Magazine: `firedMs` of emission spent; releasing the trigger does NOT
-      // refill it — only the reload does (see `startReloading`).
-      StreamFirearms.firedMs.set(turretEid, StreamFirearms.firedMs.get(turretEid) + delta);
-      if (StreamFirearms.firedMs.get(turretEid) >= cfg.fireDurationMs) {
-        StreamFirearms.startReloading(turretEid, cfg.reloadMs);
-        continue;
-      }
+      // Firing → drain the charge as we spray.
+      StreamFirearms.deplete(turretEid, delta, cfg.fireDurationMs);
 
       StreamFirearms.emitAccMs.set(turretEid, StreamFirearms.emitAccMs.get(turretEid) + delta);
 
