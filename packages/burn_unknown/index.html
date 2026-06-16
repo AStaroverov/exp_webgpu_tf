@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>burn_unknown — V4 PPO on the real ppo_unknown game (single-thread)</title>
+    <style>
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        font-family: monospace;
+        background: #111;
+        color: #ddd;
+      }
+      #hud {
+        position: fixed;
+        left: 8px;
+        top: 8px;
+        z-index: 10;
+        max-width: 50vw;
+        pointer-events: none;
+      }
+      #status {
+        font-size: 12px;
+        color: #9cf;
+      }
+      #log {
+        white-space: pre;
+        margin-top: 8px;
+        font-size: 11px;
+        line-height: 1.4;
+        max-height: 40vh;
+        overflow: auto;
+        background: rgba(0, 0, 0, 0.5);
+        padding: 6px;
+      }
+      #game {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- The real `unknown` game renders here once an episode's setRenderTarget runs
+         (press P). Headless training needs no canvas; it just stays blank. -->
+    <canvas id="game" width="1000" height="1000"></canvas>
+
+    <div id="hud">
+      <div id="status">loading wasm…</div>
+      <div id="log"></div>
+    </div>
+
+    <script src="index.ts" type="module"></script>
+  </body>
+</html>

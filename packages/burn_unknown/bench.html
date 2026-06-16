@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>tfjs vs Burn — v4 inference (WebGPU)</title>
+    <style>
+      body { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #111; color: #ddd; padding: 24px; }
+      h1 { font-size: 16px; color: #fff; }
+      .bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+      button { font: inherit; padding: 8px 14px; background: #2a6; color: #fff; border: 0; border-radius: 4px; cursor: pointer; }
+      button.sec { background: #357; }
+      button.clear { background: #633; }
+      button:disabled { background: #444; cursor: default; }
+      pre { white-space: pre-wrap; line-height: 1.45; margin-top: 16px; }
+    </style>
+  </head>
+  <body>
+    <h1>v4 inference benchmark — TensorFlow.js vs Burn (wasm), both on WebGPU<span id="gpu"></span></h1>
+    <div class="bar">
+      <button id="b-single" class="sec">1 · Single (tfjs vs burn)</button>
+      <button id="b-batch" class="sec">2 · Batched sweep</button>
+      <button id="b-parallel" class="sec">3 · Seq vs Parallel</button>
+      <button id="b-worker" class="sec">4 · Worker (no rAF)</button>
+      <button id="b-clear" class="clear">Clear</button>
+    </div>
+    <pre id="out">Pick a test. Requires a WebGPU-capable browser (Chrome/Edge).</pre>
+    <script type="module" src="/src/bench.ts"></script>
+  </body>
+</html>
