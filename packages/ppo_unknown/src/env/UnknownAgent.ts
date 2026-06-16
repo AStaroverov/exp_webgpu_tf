@@ -29,7 +29,7 @@ import { createInputTensors } from "../state/InputTensors.ts";
 import { InputArrays, prepareInputArrays } from "../state/InputArrays.ts";
 import { calculateActionReward, calculateShapingPotential } from "../reward/calculateReward.ts";
 import { applyActionToGame } from "./applyActionToGame.ts";
-import { computeActionMask } from "./computeActionMask.ts";
+import { computeActionMaskWithPrior } from "./computeActionMask.ts";
 
 // ── Worker-shared policy network updater ─────────────────────────────────────
 let sharedNetwork: tf.LayersModel | undefined;
@@ -143,7 +143,7 @@ export class UnknownAgent {
     // timing matches the old sync driver — before this tick's `updateHitableSystem`
     // applies damage — keeping the reward baseline consistent with the closing read.
     const state = prepareInputArrays(this.tankEid);
-    const mask = computeActionMask(this.tankEid);
+    const mask = computeActionMaskWithPrior(this.tankEid);
     const nextCombat = calculateActionReward(this.tankEid);
     const nextShaping = calculateShapingPotential(this.tankEid);
     const options = { greedy: greedyOverride ?? !this.train };

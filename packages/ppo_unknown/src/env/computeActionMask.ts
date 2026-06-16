@@ -26,6 +26,7 @@ import { getGameComponents } from "../../../unknown/src/Game/ECS/createGameWorld
 import { VIEW_RADIUS, hexDeltaDistance } from "../state/board.ts";
 import {
   ACTION_DIM_TOTAL,
+  ACTION_GROUP_PRIOR,
   FIRE_ACTION_OFFSET,
   FIRE_CELL_OFFSETS,
   FIRE_TARGET_COUNT,
@@ -80,6 +81,24 @@ export function computeActionMask(eid: number, { world } = GameDI): Float32Array
     mask[0] = 0;
   } else {
     mask[0] = MASK_NEG;
+  }
+  return mask;
+}
+
+/**
+ * The additive logit vector for the TRAINED policy: the validity mask PLUS the
+ * constant per-group exploration prior (`ACTION_GROUP_PRIOR`). Forbidden entries
+ * stay ≈ `MASK_NEG` (the small prior is dwarfed by -1e9); allowed entries carry
+ * their group's prior instead of 0. This is the vector both sampled-with AND
+ * stored for the loss, so old/new logprob include the same prior and the PPO
+ * ratio stays consistent. Use this for the learned agents (UnknownAgent /
+ * FrozenAgent) — NOT for `RandomBot`, which reads the raw 0/MASK_NEG validity
+ * mask as a boolean ("allowed iff === 0").
+ */
+export function computeActionMaskWithPrior(eid: number, di = GameDI): Float32Array {
+  const mask = computeActionMask(eid, di);
+  for (let i = 0; i < mask.length; i++) {
+    mask[i] += ACTION_GROUP_PRIOR[i];
   }
   return mask;
 }

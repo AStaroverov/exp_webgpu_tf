@@ -28,7 +28,7 @@ export function getIndexedDBModelPath(name: string, version: number, savePath: s
 export async function getNetwork(
   modelName: Model,
   savePath: string,
-  _getInitial?: () => tf.LayersModel,
+  getInitial?: () => tf.LayersModel,
 ) {
   let network: undefined | tf.LayersModel;
 
@@ -39,8 +39,7 @@ export async function getNetwork(
     network = await patientAction(() => loadLastNetworkFromDB(modelName, savePath), 10);
   } catch (error) {
     console.warn(`[getNetwork] Could not load model ${modelName} from DB:`, error);
-    throw error;
-    // network = _getInitial?.();
+    network = getInitial?.();
   }
 
   if (!network) {

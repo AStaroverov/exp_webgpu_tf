@@ -22,7 +22,7 @@ import { CONFIG } from "../config.ts";
 import { createInputTensors } from "../state/InputTensors.ts";
 import { prepareInputArrays } from "../state/InputArrays.ts";
 import { applyActionToGame } from "./applyActionToGame.ts";
-import { computeActionMask } from "./computeActionMask.ts";
+import { computeActionMaskWithPrior } from "./computeActionMask.ts";
 
 // ── Worker-shared frozen network updater ─────────────────────────────────────
 let frozenNetwork: tf.LayersModel | undefined;
@@ -63,7 +63,7 @@ export class FrozenAgent {
     // Capture the observation synchronously, sample asynchronously (only the
     // GPU readback is awaited — see UnknownAgent.decide).
     const state = prepareInputArrays(this.tankEid);
-    const mask = computeActionMask(this.tankEid);
+    const mask = computeActionMaskWithPrior(this.tankEid);
     const input = createInputTensors([state]);
     let result;
     try {
