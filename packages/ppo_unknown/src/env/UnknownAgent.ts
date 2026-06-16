@@ -8,7 +8,9 @@
  *       2. sample an action         → batchAct on the shared policy network
  *       3. enqueue it               → applyActionToGame
  *       4. open the new step        → addFirstPart(state, action, logits, logProb)
- *   - reward of a macro-action = Δ(action potential) over its duration + time cost.
+ *   - reward of a macro-action = real combat delta Φ_combat(s') − Φ_combat(s)
+ *     (objective, never annealed) + potential-based approach shaping
+ *     γ·Φ_appr(s') − Φ_appr(s) scaled by `shapingWeight` (annealable to zero).
  *
  * Network weights are pulled from IndexedDB storage by a worker-shared updater
  * (the learner writes them there); `sync()` refreshes them between episodes.
@@ -25,7 +27,7 @@ import { getTankHealth } from "../../../unknown/src/Game/ECS/Entities/Tank/TankU
 import { CONFIG } from "../config.ts";
 import { createInputTensors } from "../state/InputTensors.ts";
 import { InputArrays, prepareInputArrays } from "../state/InputArrays.ts";
-import { calculateActionReward } from "../reward/calculateReward.ts";
+import { calculateActionReward, calculateShapingPotential } from "../reward/calculateReward.ts";
 import { applyActionToGame } from "./applyActionToGame.ts";
 import { computeActionMask } from "./computeActionMask.ts";
 
@@ -56,7 +58,10 @@ export function setGreedyInference(value: boolean | undefined): void {
 export class UnknownAgent {
   private memory = new AgentMemory<InputArrays>();
   private opened = false;
-  private prevPotential = 0;
+  /** Combat potential at the open step (real reward = its per-action delta). */
+  private prevCombat = 0;
+  /** Approach-shaping potential at the open step (annealed γ-potential). */
+  private prevShaping = 0;
 
   constructor(
     public readonly tankEid: number,
@@ -73,10 +78,26 @@ export class UnknownAgent {
     return sharedNetwork != null ? getNetworkExpIteration(sharedNetwork) : 0;
   }
 
+  /**
+   * Reward for the macro-action being closed, evaluated at the current state:
+   *   - combat: a REAL reward = Φ_combat(s') − Φ_combat(s) (objective, never annealed);
+   *   - approach: potential-based shaping γ·Φ_appr(s') − Φ_appr(s), scaled by `shapingWeight`
+   *     (policy-invariant, so annealing it to zero cannot change the optimum).
+   * We do NOT force the strict Ng terminal Φ(terminal)=0 — that would inject a −Φ_last
+   * spike on the step that already carries the terminal win/loss reward; treating the last
+   * observed potential as terminal keeps the shaping bounded (≈ (γ−1)·Φ).
+   */
+  private closingReward(): number {
+    const gamma = CONFIG.gamma(this.getVersion());
+    const combatDelta = calculateActionReward(this.tankEid) - this.prevCombat;
+    const shapingDelta =
+      (gamma * calculateShapingPotential(this.tankEid) - this.prevShaping) * this.shapingWeight;
+    return combatDelta + shapingDelta;
+  }
+
   closeFinalStep(): void {
     if (!this.train || !this.opened) return;
-    const delta = (calculateActionReward(this.tankEid) - this.prevPotential) * this.shapingWeight;
-    this.memory.updateSecondPart(delta, true);
+    this.memory.updateSecondPart(this.closingReward(), true);
     this.opened = false;
   }
 
@@ -106,24 +127,25 @@ export class UnknownAgent {
     const network = sharedNetwork;
     if (network == null) return;
 
-    // 1. Close the previous macro-action with its accumulated reward.
+    // 1. Close the previous macro-action with its accumulated reward (real combat
+    // delta + annealed approach potential — see `closingReward`).
     if (this.opened && this.train) {
-      const delta = (calculateActionReward(this.tankEid) - this.prevPotential) * this.shapingWeight;
       const done = getTankHealth(this.tankEid) <= 0;
-      this.memory.updateSecondPart(delta, done);
+      this.memory.updateSecondPart(this.closingReward(), done);
       if (done) {
         this.opened = false;
         return;
       }
     }
 
-    // 2. Capture the state AND the opening potential synchronously, then sample
-    // asynchronously. The potential is read here (not after the await) so its
+    // 2. Capture the state AND both opening potentials synchronously, then sample
+    // asynchronously. The potentials are read here (not after the await) so their
     // timing matches the old sync driver — before this tick's `updateHitableSystem`
     // applies damage — keeping the reward baseline consistent with the closing read.
     const state = prepareInputArrays(this.tankEid);
     const mask = computeActionMask(this.tankEid);
-    const nextPotential = calculateActionReward(this.tankEid);
+    const nextCombat = calculateActionReward(this.tankEid);
+    const nextShaping = calculateShapingPotential(this.tankEid);
     const options = { greedy: greedyOverride ?? !this.train };
     const input = createInputTensors([state]);
     let result;
@@ -146,7 +168,8 @@ export class UnknownAgent {
     // 4. Open the new step.
     if (this.train) {
       this.memory.addFirstPart(state, result.actions, result.logits, result.logProb, mask);
-      this.prevPotential = nextPotential;
+      this.prevCombat = nextCombat;
+      this.prevShaping = nextShaping;
       this.opened = true;
     }
   }

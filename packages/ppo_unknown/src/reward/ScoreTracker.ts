@@ -1,9 +1,13 @@
 /**
  * ScoreTracker — the ppo_unknown analogue of tanks' `Score` game component, but
- * kept on the training side so the game stays untouched. It maintains a cumulative
- * score per player (combat events are monotonic; approach shaping can subtract),
- * exactly the quantity tanks' `calculateActionReward` reads (`Score.getTotalScore`):
- * the agent takes the per-decision DELTA of it.
+ * kept on the training side so the game stays untouched. It maintains TWO cumulative
+ * per-player channels, deliberately kept apart because they play different roles:
+ *   - COMBAT score (`getScore`) — damage / kills / friendly-fire. The real objective
+ *     (a dense proxy of the terminal surviving-health ratio); the agent deltas it as a
+ *     real reward that is NEVER annealed.
+ *   - APPROACH-SHAPING score (`getShapingScore`) — a heuristic "engage" hint; the agent
+ *     deltas it as a potential-based, `shapingWeight`-annealed term.
+ * Lumping them would let annealing erase the combat objective, not just the hint.
  *
  * Scored events — combat plus one movement shaping term:
  *   - damage: +DAMAGE_REWARD per point of cross-team damage dealt (the game
@@ -62,8 +66,12 @@ export const KILL_ASSIST_MIN_REWARD = 0.2;
 export const APPROACH_REWARD = 0.15;
 
 export class ScoreTracker {
-  /** playerId → cumulative weighted score. */
+  /** playerId → cumulative COMBAT score (damage / kills / friendly-fire). The real
+   *  objective signal — read by `calculateActionReward`, never annealed. */
   private score = new Map<number, number>();
+  /** playerId → cumulative APPROACH-SHAPING score. A heuristic hint — read by
+   *  `calculateShapingPotential` as a potential and faded out by `shapingWeight`. */
+  private shapingScore = new Map<number, number>();
   /** victimEid → (attackerPlayerId → last-seen accumulated damage), to diff per tick. */
   private prevDamage = new Map<number, Map<number, number>>();
   /** Same, for friendly-fire damage (`FriendlyHitters`). */
@@ -73,17 +81,28 @@ export class ScoreTracker {
 
   reset(): void {
     this.score.clear();
+    this.shapingScore.clear();
     this.prevDamage.clear();
     this.prevFriendlyDamage.clear();
     this.prevApproach.clear();
   }
 
+  /** Cumulative combat score (the objective). */
   getScore(playerId: number): number {
     return this.score.get(playerId) ?? 0;
   }
 
-  private add(playerId: number, amount: number): void {
+  /** Cumulative approach-shaping score (heuristic, consumed as an annealed potential). */
+  getShapingScore(playerId: number): number {
+    return this.shapingScore.get(playerId) ?? 0;
+  }
+
+  private addScore(playerId: number, amount: number): void {
     this.score.set(playerId, (this.score.get(playerId) ?? 0) + amount);
+  }
+
+  private addShaping(playerId: number, amount: number): void {
+    this.shapingScore.set(playerId, (this.shapingScore.get(playerId) ?? 0) + amount);
   }
 
   update({ world } = GameDI): void {
@@ -111,7 +130,7 @@ export class ScoreTracker {
       LastHitters.forEachHitters(victim, (playerId: number, damage: number) => {
         curr.set(playerId, damage);
         const inc = damage - (prev?.get(playerId) ?? 0);
-        if (inc > 0) this.add(playerId, DAMAGE_REWARD * inc);
+        if (inc > 0) this.addScore(playerId, DAMAGE_REWARD * inc);
       });
       this.prevDamage.set(victim, curr);
 
@@ -121,7 +140,7 @@ export class ScoreTracker {
       FriendlyHitters.forEachHitters(victim, (playerId: number, damage: number) => {
         currFriendly.set(playerId, damage);
         const inc = damage - (prevFriendly?.get(playerId) ?? 0);
-        if (inc > 0) this.add(playerId, -FRIENDLY_FIRE_PENALTY * inc);
+        if (inc > 0) this.addScore(playerId, -FRIENDLY_FIRE_PENALTY * inc);
       });
       this.prevFriendlyDamage.set(victim, currFriendly);
     }
@@ -136,7 +155,7 @@ export class ScoreTracker {
       });
       if (totalDamage > 0) {
         prev.forEach((damage, playerId) => {
-          this.add(
+          this.addScore(
             playerId,
             Math.max(KILL_ASSIST_MIN_REWARD, KILL_REWARD * (damage / totalDamage)),
           );
@@ -200,7 +219,7 @@ export class ScoreTracker {
 
       const prev = this.prevApproach.get(eid);
       if (prev && prev.enemy === nearest) {
-        this.add(PlayerRef.id.get(eid), APPROACH_REWARD * (prev.dist - minDist));
+        this.addShaping(PlayerRef.id.get(eid), APPROACH_REWARD * (prev.dist - minDist));
       }
       this.prevApproach.set(eid, { enemy: nearest, dist: minDist });
     }

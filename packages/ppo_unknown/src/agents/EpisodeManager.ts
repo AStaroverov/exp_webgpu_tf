@@ -63,13 +63,12 @@ export class EpisodeManager extends AbstractEpisodeManager<Scenario> {
       const memoryBatch = agent.getMemoryBatch(finalReward);
       if (memoryBatch == null) return;
 
-      const maxZeroSeq = memoryBatch.rewards.reduce(
-        ([seq, max], r) => (r === 0 ? [seq + 1, Math.max(seq + 1, max)] : [0, max]),
-        [0, 0],
-      )[1];
-      if (maxZeroSeq > 20) {
+      const zeroRewardsProcent =
+        memoryBatch.rewards.reduce((acc, r) => (r === 0 ? acc + 1 : acc), 0) /
+        memoryBatch.rewards.length;
+      if (zeroRewardsProcent > 0.95) {
         console.warn(
-          `Skipping sample with long zero sequence rewards ${maxZeroSeq} (scenario=${scenario.index}, version=${networkVersion}, size=${memoryBatch.size})`,
+          `Skipping sample with zero rewards ${Math.round(zeroRewardsProcent * 100)}% (scenario=${scenario.index}, version=${networkVersion}, size=${memoryBatch.size})`,
         );
         return;
       }

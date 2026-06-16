@@ -13,7 +13,11 @@ export const CONFIG: PpoConfig & {
 } = {
   clipNorm: 5,
 
-  gamma: (_iteration: number) => 0.97,
+  // Effective horizon 1/(1-γ): 0.97 ≈ 33 decisions — too short for a 60–240-decision
+  // episode, so the terminal win/loss reward never reaches the early/mid trajectory.
+  // 0.99 ≈ 100 decisions lets the sparse terminal signal carry the bulk of the episode
+  // (required once the dense shaping is annealed away). Tunable: 0.98 if returns get noisy.
+  gamma: (_iteration: number) => 0.99,
 
   entropyCoeff: 0.01,
 
@@ -35,8 +39,8 @@ export const CONFIG: PpoConfig & {
     max: 1e-3,
   },
 
-  batchSize: (_iteration: number) => 64 * 16,
-  miniBatchSize: (_iteration: number) => 64,
+  batchSize: (_iteration: number) => 256 * 16,
+  miniBatchSize: (_iteration: number) => 256,
 
   // Decision-based episodes are short in STEPS but long in TICKS. Cap ticks at
   // a few simulated minutes; termination is owned by ppo_unknown (no win cond
