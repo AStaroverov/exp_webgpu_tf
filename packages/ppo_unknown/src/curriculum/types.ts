@@ -38,22 +38,19 @@ export type { Scenario } from "../env/createUnknownScenario.ts";
 export type EnemyBehavior = "standing" | "moving" | "frozen" | "self-play";
 
 export type ScenarioConfig = {
-  /** Team 0 size — the learning policy. */
-  allies: number;
-  /** Team 1 size. */
-  enemies: number;
+  maxCount: number;
   enemy: EnemyBehavior;
 };
 
 export const scenarioCompositions: readonly ScenarioConfig[] = [
   // 1: 4 vs 4 near-static targets — same skill with a full team (friendly-fire mask matters)
-  { allies: 4, enemies: 4, enemy: "standing" },
+  { maxCount: 4, enemy: "standing" },
   // 2: 4 vs 4, enemies occasionally move and fire
-  { allies: 4, enemies: 4, enemy: "moving" },
+  { maxCount: 4, enemy: "moving" },
   // 3: 4 vs 4 against a frozen historical snapshot of the policy
-  { allies: 4, enemies: 4, enemy: "frozen" },
+  { maxCount: 4, enemy: "frozen" },
   // 4: 4 vs 4 self-play
-  { allies: 4, enemies: 4, enemy: "self-play" },
+  { maxCount: 4, enemy: "self-play" },
 ] as const;
 
 export type CurriculumState = {

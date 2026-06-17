@@ -94,7 +94,7 @@ export function createUnknownScenario(options: {
 }): Scenario {
   const train = options.train ?? true;
   const shapingWeight = getShapingWeight(options.iteration ?? 0);
-  const { allies, enemies, enemy } = options.config;
+  const { maxCount, enemy } = options.config;
   scoreTracker.reset(); // fresh combat score per episode
   const game = createGame({ width: FIELD_SIZE, height: FIELD_SIZE });
   const world = game.world;
@@ -103,11 +103,12 @@ export function createUnknownScenario(options: {
 
   spawnObstacles();
 
-  const teamSizes = [allies, enemies];
+  const count = randomRangeInt(1, maxCount);
+  const teamSizes = [count, count];
   const borderSpawn = enemy === "frozen" || enemy === "self-play";
   const teamCells = borderSpawn
     ? pickBorderCells(teamSizes)
-    : splitCells(pickDistinctCells(allies + enemies), teamSizes);
+    : splitCells(pickDistinctCells(count + count), teamSizes);
   const agents: UnknownAgent[] = [];
   const driverMap = new Map<number, TankDriver>();
 
