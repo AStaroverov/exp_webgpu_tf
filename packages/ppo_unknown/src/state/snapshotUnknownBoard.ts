@@ -35,7 +35,6 @@ import { hasComponent, query } from "bitecs";
 import { GameDI } from "../../../unknown/src/Game/DI/GameDI.ts";
 import { MapDI } from "../../../unknown/src/Game/DI/MapDI.ts";
 import { getGameComponents } from "../../../unknown/src/Game/ECS/createGameWorld.ts";
-import { HexGridConfig } from "../../../unknown/src/Game/Map/HexConfig.ts";
 import { OccupantKind, type HexGrid } from "../../../unknown/src/Game/Map/HexGrid.ts";
 import { getTankHealth } from "../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts";
 import {
@@ -69,9 +68,41 @@ type SnapshotCtx = {
   selfR: number;
   myTeamId: number;
   enemies: KnownEnemies;
+  /** Max hex-step distance between any two cells — the normalizer for `EnemyHeat`. */
+  maxMapDist: number;
   world: (typeof GameDI)["world"];
   UnknownInputBoard: UnknownInputBoardComponent;
 };
+
+/**
+ * Diameter of the grid in HEX STEPS (max distance between any two cells), memoized per
+ * grid. This is the honest normalizer for `EnemyHeat`: it shares the numerator's metric
+ * (`hexDeltaDistance`), so `1 − d/maxMapDist` stays in `[0, 1]` and reaches 0 exactly at
+ * the far corner. The grid is static, so the O(cells²) sweep runs once.
+ */
+const gridDiameterCache = new WeakMap<HexGrid, number>();
+function gridHexDiameter(grid: HexGrid): number {
+  const cached = gridDiameterCache.get(grid);
+  if (cached !== undefined) return cached;
+
+  const qs: number[] = [];
+  const rs: number[] = [];
+  grid.forEachCell((_cell, hex) => {
+    qs.push(hex.q);
+    rs.push(hex.r);
+  });
+
+  let max = 1; // guard against a degenerate single-cell grid (avoid /0)
+  for (let i = 0; i < qs.length; i++) {
+    for (let j = i + 1; j < qs.length; j++) {
+      const d = hexDeltaDistance(qs[i] - qs[j], rs[i] - rs[j]);
+      if (d > max) max = d;
+    }
+  }
+
+  gridDiameterCache.set(grid, max);
+  return max;
+}
 
 /** `VehicleType` → its one-hot board plane (non-tank types have no plane). */
 const TANK_TYPE_CHANNEL: Partial<Record<VehicleType, number>> = {
@@ -108,6 +139,7 @@ export function snapshotUnknownBoard({ world } = GameDI) {
       selfR: field.selfR,
       myTeamId,
       enemies: field.enemies,
+      maxMapDist: gridHexDiameter(grid),
       world,
       UnknownInputBoard,
     };
@@ -172,14 +204,11 @@ function fillCell(ctx: SnapshotCtx, dq: number, dr: number) {
 }
 
 function writeEnemyHeat(ctx: SnapshotCtx, dq: number, dr: number) {
-  const { enemies, selfQ, selfR, UnknownInputBoard } = ctx;
+  const { enemies, selfQ, selfR, maxMapDist, UnknownInputBoard } = ctx;
   let heat = 0;
   for (let e = 0; e < enemies.q.length; e++) {
     const d = hexDeltaDistance(selfQ + dq - enemies.q[e], selfR + dr - enemies.r[e]);
-    heat = Math.max(
-      heat,
-      enemies.w[e] * (1 - d / Math.hypot(HexGridConfig.cols, HexGridConfig.rows)),
-    );
+    heat = Math.max(heat, enemies.w[e] * (1 - d / maxMapDist));
   }
   if (heat > 0) UnknownInputBoard.setDelta(ctx.selfEid, dq, dr, BoardChannel.EnemyHeat, heat);
 }

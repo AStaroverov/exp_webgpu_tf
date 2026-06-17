@@ -27,5 +27,8 @@ export const createFirearmsComponent = defineComponent((Firearms, ctx) => {
     updateReloading(eid: EntityId, dt: number) {
       reloading.set(eid, reloading.get(eid) - dt);
     },
+    getCaliber(eid: EntityId): BulletCaliber {
+      return caliber.get(eid) as BulletCaliber;
+    },
   };
 });
