@@ -42,6 +42,7 @@ import { UnknownAgent } from "./UnknownAgent.ts";
 import { FrozenAgent } from "./FrozenAgent.ts";
 import { RandomBot } from "./RandomBot.ts";
 import { createPolicyDriverSystem, TankDriver } from "./createPolicyDriverSystem.ts";
+import { HunterBot } from "./HunterBot.ts";
 
 const FIELD_SIZE = 1000;
 
@@ -105,10 +106,10 @@ export function createUnknownScenario(options: {
 
   const count = randomRangeInt(1, maxCount);
   const teamSizes = [count, count];
-  const borderSpawn = enemy === "frozen" || enemy === "self-play";
-  const teamCells = borderSpawn
-    ? pickBorderCells(teamSizes)
-    : splitCells(pickDistinctCells(count + count), teamSizes);
+  const teamCells =
+    Math.random() > 0.5
+      ? pickBorderCells(teamSizes)
+      : splitCells(pickDistinctCells(count + count), teamSizes);
   const agents: UnknownAgent[] = [];
   const driverMap = new Map<number, TankDriver>();
 
@@ -137,13 +138,17 @@ export function createUnknownScenario(options: {
       VehicleController.setRotate$(tankEid, 0);
 
       const isEnemy = team !== 0;
-      if (isEnemy && enemy === "standing") {
+      if (isEnemy && enemy === "bot-standing") {
         // Holds position but occasionally fires.
         driverMap.set(tankEid, new RandomBot(tankEid, STANDING_BOT));
         continue;
       }
-      if (isEnemy && enemy === "moving") {
+      if (isEnemy && enemy === "bot-moving") {
         driverMap.set(tankEid, new RandomBot(tankEid, MOVING_BOT));
+        continue;
+      }
+      if (isEnemy && enemy === "bot-hunter") {
+        driverMap.set(tankEid, new HunterBot(tankEid));
         continue;
       }
       if (isEnemy && enemy === "frozen") {

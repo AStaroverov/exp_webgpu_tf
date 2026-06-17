@@ -35,7 +35,7 @@ export type { Scenario } from "../env/createUnknownScenario.ts";
  * observation change already forces a retrain.)
  */
 
-export type EnemyBehavior = "standing" | "moving" | "frozen" | "self-play";
+export type EnemyBehavior = "bot-standing" | "bot-moving" | "bot-hunter" | "frozen" | "self-play";
 
 export type ScenarioConfig = {
   maxCount: number;
@@ -44,9 +44,11 @@ export type ScenarioConfig = {
 
 export const scenarioCompositions: readonly ScenarioConfig[] = [
   // 1: 4 vs 4 near-static targets — same skill with a full team (friendly-fire mask matters)
-  { maxCount: 4, enemy: "standing" },
+  { maxCount: 4, enemy: "bot-standing" },
   // 2: 4 vs 4, enemies occasionally move and fire
-  { maxCount: 4, enemy: "moving" },
+  { maxCount: 4, enemy: "bot-moving" },
+  // 3: 4 vs 4 against a frozen historical snapshot of the policy
+  { maxCount: 4, enemy: "bot-hunter" },
   // 3: 4 vs 4 against a frozen historical snapshot of the policy
   { maxCount: 4, enemy: "frozen" },
   // 4: 4 vs 4 self-play

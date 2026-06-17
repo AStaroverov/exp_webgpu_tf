@@ -125,11 +125,6 @@ export function computeActionMask(eid: number, { world } = GameDI): Float32Array
     }
   }
 
-  if (mask.subarray(1).every((v) => v === MASK_NEG)) {
-    mask[0] = 0;
-  } else {
-    mask[0] = MASK_NEG;
-  }
   return mask;
 }
 

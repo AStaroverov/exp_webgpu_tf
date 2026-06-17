@@ -46,7 +46,7 @@ export const CONFIG: PpoConfig & {
   // a few simulated minutes; termination is owned by ppo_unknown (no win cond
   // baked into the game).
   episodeFrames: Math.round((2 * 60 * 1000) / TICK_TIME_SIMULATION),
-  workerCount: 4,
+  workerCount: 5,
   backpressureQueueSize: 2,
   savePath: "PPO_UNKNOWN_V3",
 };
