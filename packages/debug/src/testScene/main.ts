@@ -245,10 +245,7 @@ async function main() {
   // --- lil-gui: live RC tuning. params mutate in place, applied next frame. ---
   const gui = new GUI({ title: "Radiance Cascades" });
   const p = rcParams;
-  gui
-    .add(RC_CFG, "downscale", 0.25, 1.0, 0.05)
-    .name("RC resolution")
-    .onFinishChange(rebuildRC); // realloc on release, not mid-drag
+  gui.add(RC_CFG, "downscale", 0.25, 1.0, 0.05).name("RC resolution").onFinishChange(rebuildRC); // realloc on release, not mid-drag
   // Geometry: rounded-box sphere-trace budget (dominant zoom-in cost).
   gui.add(shapeSystem.params, "roundSteps", 4, 96, 1).name("rounded-box steps");
   gui.add(p, "marchSteps", 4, 96, 1).name("march steps");
@@ -258,7 +255,7 @@ async function main() {
   gui.add(p, "ambientFill", 0, 1, 0.01).name("hit albedo fill");
   gui.addColor(p, "sky", 1).name("sky / miss color");
   // Edge-aware denoise of the irradiance (0 radius = off).
-  gui.add(p, "denoiseRadius", 0, 3, 1).name("denoise radius");
+  gui.add(p, "denoiseIterations", 0, 6, 1).name("denoise iterations");
   gui.add(p, "denoiseWorldSigma", 1, 60, 1).name("denoise world σ");
   gui.add(p, "denoiseNormalPow", 1, 128, 1).name("denoise normal pow");
 

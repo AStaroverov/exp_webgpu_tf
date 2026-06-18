@@ -37,19 +37,27 @@ import {
 // CASCADE STRUCTURE (see docs/3D_MIGRATION.md Phase 2 + the RC spec)
 // ============================================================================
 export const CASCADE_COUNT = 6; // fixed; static loop/uniform, plenty for a ~400px RC buffer
-const BASE_RAYS = 4; // rays per probe at c0; quadruples per cascade (RC angular invariant)
+const BASE_RAYS = 16; // rays per probe at c0; quadruples per cascade (RC angular invariant).
+// 16 (vs 4) kills the angular banding/faceting in the lit irradiance. FREE in
+// fragment cost (same texture, 1 texel = 1 ray); only trades spatial probe density.
+// INVARIANT: PROBE0_SPACING_TX must equal raysPerSide(0) = sqrt(BASE_RAYS) so probe
+// cells tile the cascade texture exactly (probeCenterTexel assumes spacing == rps).
 const BASE_INTERVAL_PX = 8.0; // c0 ray length in full-res screen px; doubles per cascade
-const PROBE0_SPACING_TX = 2.0; // c0 probe every 2 RC-texels; doubles per cascade
+const PROBE0_SPACING_TX = 4.0; // = sqrt(BASE_RAYS); c0 probe every 4 RC-texels; doubles per cascade
 const MARCH_STEPS = 8; // per-ray screen-space march budget (default; tune in GUI)
 const ZBIAS_WORLD = 2.0; // occlusion dead-zone in WORLD units (kills self-occlusion acne)
 const AMBIENT = 0.18; // diffuse ambient floor (final gather)
 const AMBIENT_FILL = 0.25; // cheap albedo contribution added at a hit
 // Sky / ambient color a missed ray carries — warm fill matching the bg.
 const SKY = [0.18, 0.15, 0.11] as const;
-// Edge-aware denoise of the (noisy, few-ray) irradiance. Weights neighbours by
-// world-position + normal similarity so light doesn't bleed across silhouettes.
-const DENOISE_RADIUS = 1; // bilateral kernel radius in px (0 = denoise off)
-const DENOISE_WORLD_SIGMA = 14; // world-distance edge stop (units); larger = blurrier
+// Edge-aware À-TROUS denoise of the (noisy, few-ray) irradiance. Each iteration is
+// a 5x5 cross-bilateral (B3-spline weights) whose tap STRIDE doubles (1,2,4,8,...),
+// so N iterations cover an effective radius ~2^N px at N*25 taps instead of (2^N)^2.
+// Edge-stop weights (world-position + normal) keep light from bleeding across
+// silhouettes — the wide reach is what reconstructs the coarse RC probe grid.
+const MAX_ATROUS = 6; // hard cap (per-iteration uniform buffers are preallocated)
+const DENOISE_ITERS = 5; // à-trous iterations (0 = off); effective radius ~2^ITERS px
+const DENOISE_WORLD_SIGMA = 14; // base world-distance edge stop (units), scaled by stride/pass
 const DENOISE_NORMAL_POW = 32; // normal edge-stop sharpness (higher = stricter)
 
 // Per-cascade derived constants, precomputed on CPU (uploaded each pass).
@@ -367,23 +375,22 @@ fn fs_main(in: VOut) -> @location(0) vec4f {
 );
 
 // ============================================================================
-// DENOISE + COMPOSITE PASS — edge-aware bilateral blur of the irradiance
-// (guided by world position + normal from the G-buffer), then the diffuse
-// bounce: lit = emission + albedo * (ambient + irradiance). Full-res, bgra8unorm.
+// À-TROUS PASS — one edge-aware wavelet iteration of the irradiance. 5x5 cross-
+// bilateral with B3-spline weights, tap STRIDE = uAT.x (doubles each iteration).
+// Guided by world position + normal (G-buffer) so it never blurs across edges.
+// Reads srcTex (irradiance), writes irradiance (ping-pong); rgba16float.
 // ============================================================================
-const denoiseMeta = new ShaderMeta(
+const atrousMeta = new ShaderMeta(
   {
     samp: new VariableMeta("samp", VariableKind.Sampler, `sampler`),
-    irradianceTex: new VariableMeta("irradianceTex", VariableKind.Texture, `texture_2d<f32>`),
-    gAlbedo: new VariableMeta("gAlbedo", VariableKind.Texture, `texture_2d<f32>`),
+    srcTex: new VariableMeta("srcTex", VariableKind.Texture, `texture_2d<f32>`),
     gNormal: new VariableMeta("gNormal", VariableKind.Texture, `texture_2d<f32>`),
-    gEmission: new VariableMeta("gEmission", VariableKind.Texture, `texture_2d<f32>`),
     depthTex: new VariableMeta("depthTex", VariableKind.Texture, `texture_2d<f32>`, {
       textureSampleType: "unfilterable-float",
     }),
     uInvViewProj: new VariableMeta("uInvViewProj", VariableKind.Uniform, `mat4x4<f32>`),
     uScreen: new VariableMeta("uScreen", VariableKind.Uniform, `vec4<f32>`),
-    uDN: new VariableMeta("uDN", VariableKind.Uniform, `vec4<f32>`),
+    uAT: new VariableMeta("uAT", VariableKind.Uniform, `vec4<f32>`),
   },
   {},
   // language=WGSL
@@ -395,6 +402,8 @@ const POSITION = array<vec2f, 6>(
 const TEX = array<vec2f, 6>(
   vec2f(0., 1.), vec2f(1., 1.), vec2f(1., 0.),
   vec2f(0., 1.), vec2f(1., 0.), vec2f(0., 0.));
+// B3-spline à-trous kernel (1,4,6,4,1)/16, applied as a separable outer product.
+const KW = array<f32, 5>(0.0625, 0.25, 0.375, 0.25, 0.0625);
 
 struct VOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f };
 
@@ -416,45 +425,83 @@ fn worldFromDepth(uv: vec2f, ndcZ: f32) -> vec3f {
   return w.xyz / w.w;
 }
 
-// uDN: .x = radius (px, 0=off), .y = worldSigma, .z = normalPow, .w = ambient
+// uAT: .x = stride (px), .y = worldSigma (already stride-scaled), .z = normalPow
+@fragment
+fn fs_main(in: VOut) -> @location(0) vec4f {
+  let center = textureSampleLevel(srcTex, samp, in.uv, 0.).rgb;
+  let dC = loadDepthUV(in.uv);
+  if (dC <= SKY_DEPTH_EPS) { return vec4f(center, 1.0); } // background: pass through
+
+  let stride = uAT.x;
+  let ws = max(uAT.y, 1e-3);
+  let npow = uAT.z;
+  let nC = normalize(textureSampleLevel(gNormal, samp, in.uv, 0.).xyz);
+  let pC = worldFromDepth(in.uv, dC);
+  let texel = uScreen.zw;
+
+  var sum = vec3f(0.0);
+  var wsum = 0.0;
+  for (var j = 0; j < 5; j = j + 1) {
+    for (var i = 0; i < 5; i = i + 1) {
+      let suv = in.uv + vec2f(f32(i - 2), f32(j - 2)) * stride * texel;
+      let dS = loadDepthUV(suv);
+      if (dS <= SKY_DEPTH_EPS) { continue; } // skip background neighbours
+      let nS = normalize(textureSampleLevel(gNormal, samp, suv, 0.).xyz);
+      let pS = worldFromDepth(suv, dS);
+      let wn = pow(max(dot(nC, nS), 0.0), npow); // normal edge-stop
+      let dd = pC - pS;
+      let wd = exp(-dot(dd, dd) / (ws * ws));     // world-distance edge-stop
+      let w = KW[i] * KW[j] * wn * wd;
+      sum = sum + textureSampleLevel(srcTex, samp, suv, 0.).rgb * w;
+      wsum = wsum + w;
+    }
+  }
+  if (wsum > 0.0) { return vec4f(sum / wsum, 1.0); }
+  return vec4f(center, 1.0);
+}
+  `,
+);
+
+// ============================================================================
+// COMPOSITE PASS — the diffuse bounce: lit = emission + albedo*(ambient + irr).
+// Reads the (denoised) irradiance + G-buffer albedo/emission. Full-res bgra8unorm.
+// ============================================================================
+const compositeMeta = new ShaderMeta(
+  {
+    samp: new VariableMeta("samp", VariableKind.Sampler, `sampler`),
+    irradianceTex: new VariableMeta("irradianceTex", VariableKind.Texture, `texture_2d<f32>`),
+    gAlbedo: new VariableMeta("gAlbedo", VariableKind.Texture, `texture_2d<f32>`),
+    gEmission: new VariableMeta("gEmission", VariableKind.Texture, `texture_2d<f32>`),
+    uComp: new VariableMeta("uComp", VariableKind.Uniform, `vec4<f32>`),
+  },
+  {},
+  // language=WGSL
+  wgsl /* wgsl */ `
+const POSITION = array<vec2f, 6>(
+  vec2f(-1., -1.), vec2f(1., -1.), vec2f(1., 1.),
+  vec2f(-1., -1.), vec2f(1., 1.), vec2f(-1., 1.));
+const TEX = array<vec2f, 6>(
+  vec2f(0., 1.), vec2f(1., 1.), vec2f(1., 0.),
+  vec2f(0., 1.), vec2f(1., 0.), vec2f(0., 0.));
+
+struct VOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f };
+
+@vertex
+fn vs_main(@builtin(vertex_index) i: u32) -> VOut {
+  var o: VOut;
+  o.pos = vec4f(POSITION[i], 0., 1.);
+  o.uv = TEX[i];
+  return o;
+}
+
+// uComp: .x = ambient floor
 @fragment
 fn fs_main(in: VOut) -> @location(0) vec4f {
   let a = textureSample(gAlbedo, samp, in.uv);
   if (a.a == 0.0) { discard; } // background -> leave swapchain clear
-
-  let R = i32(uDN.x);
-  let ws = max(uDN.y, 1e-3);
-  let npow = uDN.z;
-  let ambient = uDN.w;
-
-  var irr = textureSampleLevel(irradianceTex, samp, in.uv, 0.).rgb;
-  if (R > 0) {
-    let dC = loadDepthUV(in.uv);
-    let nC = normalize(textureSampleLevel(gNormal, samp, in.uv, 0.).xyz);
-    let pC = worldFromDepth(in.uv, dC);
-    let texel = uScreen.zw;
-    var sum = vec3f(0.0);
-    var wsum = 0.0;
-    for (var dy = -R; dy <= R; dy = dy + 1) {
-      for (var dx = -R; dx <= R; dx = dx + 1) {
-        let suv = in.uv + vec2f(f32(dx), f32(dy)) * texel;
-        let dS = loadDepthUV(suv);
-        if (dS <= SKY_DEPTH_EPS) { continue; } // skip background neighbours
-        let nS = normalize(textureSampleLevel(gNormal, samp, suv, 0.).xyz);
-        let pS = worldFromDepth(suv, dS);
-        let wn = pow(max(dot(nC, nS), 0.0), npow);  // normal edge-stop
-        let dd = pC - pS;
-        let wd = exp(-dot(dd, dd) / (ws * ws));      // world-distance edge-stop
-        let w = wn * wd;
-        sum = sum + textureSampleLevel(irradianceTex, samp, suv, 0.).rgb * w;
-        wsum = wsum + w;
-      }
-    }
-    if (wsum > 0.0) { irr = sum / wsum; }
-  }
-
+  let irr = textureSampleLevel(irradianceTex, samp, in.uv, 0.).rgb;
   let emis = textureSample(gEmission, samp, in.uv).rgb;
-  let lit = emis + a.rgb * (ambient + irr);
+  let lit = emis + a.rgb * (uComp.x + irr);
   return vec4f(lit, 1.0);
 }
   `,
@@ -474,7 +521,7 @@ export interface RCParams {
   ambientFill: number;
   baseIntervalPx: number;
   sky: [number, number, number];
-  denoiseRadius: number; // 0 = off
+  denoiseIterations: number; // à-trous passes; 0 = off
   denoiseWorldSigma: number;
   denoiseNormalPow: number;
 }
@@ -487,7 +534,7 @@ export function defaultRCParams(): RCParams {
     ambientFill: AMBIENT_FILL,
     baseIntervalPx: BASE_INTERVAL_PX,
     sky: [SKY[0], SKY[1], SKY[2]],
-    denoiseRadius: DENOISE_RADIUS,
+    denoiseIterations: DENOISE_ITERS,
     denoiseWorldSigma: DENOISE_WORLD_SIGMA,
     denoiseNormalPow: DENOISE_NORMAL_POW,
   };
@@ -520,19 +567,32 @@ export function createRadianceCascades(
   const gatherShader = new GPUShader(gatherMeta);
   gatherMeta.uniforms.samp.setSampler(linSamp);
 
-  // ---- denoise + composite shader (irradiance -> bilateral blur -> lit) ----
-  const denoiseShader = new GPUShader(denoiseMeta);
-  denoiseMeta.uniforms.samp.setSampler(linSamp);
+  // ---- à-trous denoise shader (irradiance ping-pong) ----
+  const atrousShader = new GPUShader(atrousMeta);
+  atrousMeta.uniforms.samp.setSampler(linSamp);
+
+  // ---- composite shader (denoised irradiance + G-buffer -> lit) ----
+  const compositeShader = new GPUShader(compositeMeta);
+  compositeMeta.uniforms.samp.setSampler(linSamp);
 
   // CPU-side uniform scratch.
   const rcData = new Float32Array(20); // array<vec4f,5>
   const screenData = new Float32Array(4);
   const gatherData = new Float32Array(4);
-  const dnData = new Float32Array(4);
-  const dnBuf = device.createBuffer({
+  const atData = new Float32Array(4);
+  const compData = new Float32Array(4);
+  const compBuf = device.createBuffer({
     size: 16,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
+  // PER-ITERATION à-trous uniform buffers (same single-command-buffer aliasing rule
+  // as rcBufs: each pass needs its own stride, written once).
+  const atBufs: GPUBuffer[] = [];
+  for (let i = 0; i < MAX_ATROUS; i++) {
+    atBufs.push(
+      device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
+    );
+  }
 
   // Shared (per-frame) camera UBOs — same value across all cascade passes.
   const camBuf = device.createBuffer({
@@ -566,12 +626,20 @@ export function createRadianceCascades(
 
   let cascPipeline: GPURenderPipeline | undefined;
   let gatherPipeline: GPURenderPipeline | undefined;
-  let denoisePipeline: GPURenderPipeline | undefined;
+  let atrousPipeline: GPURenderPipeline | undefined;
+  let compositePipeline: GPURenderPipeline | undefined;
   let bg0Layout: GPUBindGroupLayout | undefined;
   let gatherBindGroup: GPUBindGroup | undefined;
-  let denoiseBindGroup: GPUBindGroup | undefined;
-  // Full-res HDR irradiance written by the gather pass, read by the denoise pass.
-  let irradianceTex: GPUTexture | undefined;
+  // à-trous bind group per iteration: src alternates irA/irB, output is the other.
+  // bind group i reads (i even? irA : irB) + atBufs[i]; we draw into the other.
+  const atrousBindGroups: (GPUBindGroup | undefined)[] = new Array(MAX_ATROUS);
+  // composite reads whichever irradiance buffer holds the final result — parity
+  // depends on the live iteration count, so build one bind group per source.
+  let compositeBGfromA: GPUBindGroup | undefined;
+  let compositeBGfromB: GPUBindGroup | undefined;
+  // Full-res HDR irradiance ping-pong: gather writes irA, à-trous bounces irA<->irB.
+  let irA: GPUTexture | undefined;
+  let irB: GPUTexture | undefined;
   // Per-cascade bind group (source texture + that cascade's own uRC). Built once.
   const cascBindGroups: (GPUBindGroup | undefined)[] = new Array(CASCADE_COUNT);
   // The texture cascade 0 writes into (parity is fixed at build time).
@@ -596,23 +664,31 @@ export function createRadianceCascades(
     cascadeMeta.uniforms.gAlbedo.setTexture(gAlbedo);
     cascadeMeta.uniforms.gEmission.setTexture(gEmission);
 
-    // Full-res HDR irradiance buffer (gather writes, denoise reads).
-    irradianceTex = device.createTexture({
-      size: [gAlbedo.width, gAlbedo.height, 1],
-      format: "rgba16float",
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
+    // Full-res HDR irradiance ping-pong buffers (gather writes irA; à-trous bounces).
+    const mkIrr = () =>
+      device.createTexture({
+        size: [gAlbedo.width, gAlbedo.height, 1],
+        format: "rgba16float",
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+      });
+    irA = mkIrr();
+    irB = mkIrr();
 
     // gather pass: rgba16float irradiance target (HDR, no albedo/emission combine).
     gatherPipeline = gatherShader.getRenderPipeline(device, "vs_main", "fs_main", {
       targetFormat: "rgba16float",
     });
 
-    // denoise + composite pass: bgra8unorm full-size target.
-    denoisePipeline = denoiseShader.getRenderPipeline(device, "vs_main", "fs_main", {
+    // à-trous pass: rgba16float irradiance target (ping-pong).
+    atrousPipeline = atrousShader.getRenderPipeline(device, "vs_main", "fs_main", {
+      targetFormat: "rgba16float",
+    });
+    atrousMeta.uniforms.depthTex.setTexture(depth);
+
+    // composite pass: bgra8unorm full-size target.
+    compositePipeline = compositeShader.getRenderPipeline(device, "vs_main", "fs_main", {
       targetFormat: "bgra8unorm",
     });
-    denoiseMeta.uniforms.depthTex.setTexture(depth);
 
     // Precompute ping-pong parity + build a bind group per cascade. Walk top->down
     // (n = CASCADE_COUNT-1 .. 0): cascade n writes `dst` and reads `src` (= n+1's
@@ -659,21 +735,43 @@ export function createRadianceCascades(
       ],
     });
 
-    // denoise + composite bind group (reuses camBuf=invViewProj + screenBuf).
-    denoiseBindGroup = device.createBindGroup({
-      layout: denoiseShader.createBindGroupLayout(device, 0),
-      entries: [
-        { binding: denoiseMeta.uniforms.samp.binding, resource: linSamp },
-        { binding: denoiseMeta.uniforms.irradianceTex.binding, resource: irradianceTex.createView() },
-        { binding: denoiseMeta.uniforms.gAlbedo.binding, resource: albedoView },
-        { binding: denoiseMeta.uniforms.gNormal.binding, resource: gNormal.createView() },
-        { binding: denoiseMeta.uniforms.gEmission.binding, resource: emissionView },
-        { binding: denoiseMeta.uniforms.depthTex.binding, resource: depthView },
-        { binding: denoiseMeta.uniforms.uInvViewProj.binding, resource: { buffer: camBuf } },
-        { binding: denoiseMeta.uniforms.uScreen.binding, resource: { buffer: screenBuf } },
-        { binding: denoiseMeta.uniforms.uDN.binding, resource: { buffer: dnBuf } },
-      ],
-    });
+    // à-trous bind groups (reuse camBuf=invViewProj + screenBuf). Iteration i reads
+    // (i even? irA : irB) and writes the other; each has its own stride uniform.
+    const normalView = gNormal.createView();
+    const atLayout = atrousShader.createBindGroupLayout(device, 0);
+    const irAView = irA.createView();
+    const irBView = irB.createView();
+    for (let i = 0; i < MAX_ATROUS; i++) {
+      atrousBindGroups[i] = device.createBindGroup({
+        layout: atLayout,
+        entries: [
+          { binding: atrousMeta.uniforms.samp.binding, resource: linSamp },
+          { binding: atrousMeta.uniforms.srcTex.binding, resource: i % 2 === 0 ? irAView : irBView },
+          { binding: atrousMeta.uniforms.gNormal.binding, resource: normalView },
+          { binding: atrousMeta.uniforms.depthTex.binding, resource: depthView },
+          { binding: atrousMeta.uniforms.uInvViewProj.binding, resource: { buffer: camBuf } },
+          { binding: atrousMeta.uniforms.uScreen.binding, resource: { buffer: screenBuf } },
+          { binding: atrousMeta.uniforms.uAT.binding, resource: { buffer: atBufs[i] } },
+        ],
+      });
+    }
+
+    // composite bind groups — one per possible final-irradiance source (parity of
+    // the live iteration count decides which at run time).
+    const compLayout = compositeShader.createBindGroupLayout(device, 0);
+    const mkComp = (irView: GPUTextureView) =>
+      device.createBindGroup({
+        layout: compLayout,
+        entries: [
+          { binding: compositeMeta.uniforms.samp.binding, resource: linSamp },
+          { binding: compositeMeta.uniforms.irradianceTex.binding, resource: irView },
+          { binding: compositeMeta.uniforms.gAlbedo.binding, resource: albedoView },
+          { binding: compositeMeta.uniforms.gEmission.binding, resource: emissionView },
+          { binding: compositeMeta.uniforms.uComp.binding, resource: { buffer: compBuf } },
+        ],
+      });
+    compositeBGfromA = mkComp(irAView);
+    compositeBGfromB = mkComp(irBView);
   }
 
   // Each cascade's output target follows the SAME parity as the bind-group build.
@@ -774,7 +872,7 @@ export function createRadianceCascades(
     const gpass = encoder.beginRenderPass({
       colorAttachments: [
         {
-          view: irradianceTex!.createView(),
+          view: irA!.createView(),
           clearValue: [0, 0, 0, 0],
           loadOp: "clear",
           storeOp: "store",
@@ -786,22 +884,49 @@ export function createRadianceCascades(
     gpass.draw(6, 1, 0, 0);
     gpass.end();
 
-    // ---- denoise + composite: irradiance -> bilateral blur -> lit (bgra8unorm) ----
-    dnData[0] = params.denoiseRadius;
-    dnData[1] = params.denoiseWorldSigma;
-    dnData[2] = params.denoiseNormalPow;
-    dnData[3] = params.ambient;
-    device.queue.writeBuffer(dnBuf, 0, dnData);
+    // ---- à-trous denoise: N edge-aware passes, stride doubling, ping-pong irA<->irB.
+    // Iteration i reads (i even? irA : irB), writes the other. worldSigma is scaled by
+    // stride so the world-space reach stays consistent as the kernel widens.
+    const iters = Math.min(MAX_ATROUS, Math.max(0, Math.floor(params.denoiseIterations)));
+    for (let i = 0; i < iters; i++) {
+      const stride = 1 << i; // 1,2,4,8,...
+      atData[0] = stride;
+      atData[1] = params.denoiseWorldSigma * stride;
+      atData[2] = params.denoiseNormalPow;
+      atData[3] = 0;
+      device.queue.writeBuffer(atBufs[i], 0, atData);
 
-    const dpass = encoder.beginRenderPass({
+      const apass = encoder.beginRenderPass({
+        colorAttachments: [
+          {
+            view: (i % 2 === 0 ? irB! : irA!).createView(),
+            clearValue: [0, 0, 0, 0],
+            loadOp: "clear",
+            storeOp: "store",
+          },
+        ],
+      });
+      apass.setPipeline(atrousPipeline!);
+      apass.setBindGroup(0, atrousBindGroups[i]!);
+      apass.draw(6, 1, 0, 0);
+      apass.end();
+    }
+    // Final irradiance lives in irA when iters is even (incl. 0), irB when odd.
+    const finalFromA = iters % 2 === 0;
+
+    // ---- composite: lit = emission + albedo*(ambient + irradiance) (bgra8unorm) ----
+    compData[0] = params.ambient;
+    device.queue.writeBuffer(compBuf, 0, compData);
+
+    const cpass = encoder.beginRenderPass({
       colorAttachments: [
         { view: out.createView(), clearValue: [0, 0, 0, 0], loadOp: "clear", storeOp: "store" },
       ],
     });
-    dpass.setPipeline(denoisePipeline!);
-    dpass.setBindGroup(0, denoiseBindGroup!);
-    dpass.draw(6, 1, 0, 0);
-    dpass.end();
+    cpass.setPipeline(compositePipeline!);
+    cpass.setBindGroup(0, finalFromA ? compositeBGfromA! : compositeBGfromB!);
+    cpass.draw(6, 1, 0, 0);
+    cpass.end();
   };
 
   // Expose the live params so a debug GUI can mutate them (applied next frame).
