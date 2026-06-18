@@ -15,8 +15,8 @@
  */
 
 import { hasComponent } from "bitecs";
-import { GameDI } from "../../../unknown/src/Game/DI/GameDI.ts";
-import { getGameComponents } from "../../../unknown/src/Game/ECS/createGameWorld.ts";
+import { GameDI } from "../../../engine/src/Game/DI/GameDI.ts";
+import { getGameComponents } from "../../../engine/src/Game/ECS/createGameWorld.ts";
 import { normalizeAngle } from "../../../../lib/math.ts";
 import { cameraPosition, cameraZoom } from "../../../renderer/src/ECS/Systems/ResizeSystem.ts";
 

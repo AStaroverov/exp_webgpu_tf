@@ -1,4 +1,4 @@
-import { GameDI } from "../unknown/src/Game/DI/GameDI.ts";
+import { GameDI } from "../engine/src/Game/DI/GameDI.ts";
 import { createDebugGame } from "./src/createDebugGame.ts";
 import { createDebugGUI } from "./src/ui/createDebugGUI.ts";
 import { createManualControl } from "./src/input/createManualControl.ts";

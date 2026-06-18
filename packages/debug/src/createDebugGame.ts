@@ -4,8 +4,8 @@
  * debug GUI spawns/enqueues. Obstacles are added on demand via `spawnObstacles`.
  */
 
-import { createGame, type Game } from "../../unknown/src/Game/createGame.ts";
-import { GameDI } from "../../unknown/src/Game/DI/GameDI.ts";
+import { createGame, type Game } from "../../engine/src/Game/createGame.ts";
+import { GameDI } from "../../engine/src/Game/DI/GameDI.ts";
 
 /** Default debug field: a small, empty 6x6 grid. */
 export const DEFAULT_FIELD_SIZE = { cols: 6, rows: 6 };

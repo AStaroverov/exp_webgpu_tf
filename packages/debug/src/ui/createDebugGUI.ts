@@ -11,24 +11,24 @@
 
 import GUI, { Controller } from "lil-gui";
 import { hasComponent, query } from "bitecs";
-import { GameDI } from "../../../unknown/src/Game/DI/GameDI.ts";
-import { MapDI } from "../../../unknown/src/Game/DI/MapDI.ts";
-import { getGameComponents } from "../../../unknown/src/Game/ECS/createGameWorld.ts";
+import { GameDI } from "../../../engine/src/Game/DI/GameDI.ts";
+import { MapDI } from "../../../engine/src/Game/DI/MapDI.ts";
+import { getGameComponents } from "../../../engine/src/Game/ECS/createGameWorld.ts";
 import {
   createTank,
   type TankVehicleType,
-} from "../../../unknown/src/Game/ECS/Entities/Tank/createTank.ts";
+} from "../../../engine/src/Game/ECS/Entities/Tank/createTank.ts";
 import {
   destroyTank,
   getTankTeamId,
-} from "../../../unknown/src/Game/ECS/Entities/Tank/TankUtils.ts";
-import { enqueueAction } from "../../../unknown/src/Game/ECS/Actions/ActionSchedule.ts";
-import { ActionKind, TargetKind } from "../../../unknown/src/Game/ECS/Actions/ActionTypes.ts";
-import { VehicleType, TEAM_BASE_COLORS } from "../../../unknown/src/Game/Config/index.ts";
+} from "../../../engine/src/Game/ECS/Entities/Tank/TankUtils.ts";
+import { enqueueAction } from "../../../engine/src/Game/ECS/Actions/ActionSchedule.ts";
+import { ActionKind, TargetKind } from "../../../engine/src/Game/ECS/Actions/ActionTypes.ts";
+import { VehicleType, TEAM_BASE_COLORS } from "../../../engine/src/Game/Config/index.ts";
 import { setCameraZoom } from "../../../renderer/src/ECS/Systems/ResizeSystem.ts";
 import { DEFAULT_FIELD_SIZE, recreateDebugGame } from "../createDebugGame.ts";
-import { spawnObstacles } from "../../../unknown/src/Game/ECS/Entities/Obstacle/spawnObstacles.ts";
-import { createLightingGUI } from "../../../unknown/src/ui/createLightingGUI.ts";
+import { spawnObstacles } from "../../../engine/src/Game/ECS/Entities/Obstacle/spawnObstacles.ts";
+import { createLightingGUI } from "../../../engine/src/ui/createLightingGUI.ts";
 import type { ManualControl } from "../input/createManualControl.ts";
 
 // Team identity colors — sourced from the shared vehicle palette so the debug
