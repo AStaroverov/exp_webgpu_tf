@@ -21,9 +21,9 @@ export function createDrawFaunaSystem({ canvas, device } = RenderDI) {
     screenSizeBuffer[0] = canvas.offsetWidth;
     screenSizeBuffer[1] = canvas.offsetHeight;
 
-    // Camera position in world coordinates
-    cameraPosBuffer[0] = cameraPosition.x;
-    cameraPosBuffer[1] = cameraPosition.y;
+    // Camera position in world coordinates (eye, world space)
+    cameraPosBuffer[0] = cameraPosition[0];
+    cameraPosBuffer[1] = cameraPosition[1];
 
     device.queue.writeBuffer(gpuShader.uniforms.time.getGPUBuffer(device), 0, timeBuffer);
     device.queue.writeBuffer(gpuShader.uniforms.cameraPos.getGPUBuffer(device), 0, cameraPosBuffer);

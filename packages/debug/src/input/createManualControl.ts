@@ -18,7 +18,11 @@ import { hasComponent } from "bitecs";
 import { GameDI } from "../../../engine/src/Game/DI/GameDI.ts";
 import { getGameComponents } from "../../../engine/src/Game/ECS/createGameWorld.ts";
 import { normalizeAngle } from "../../../../lib/math.ts";
-import { cameraPosition, cameraZoom } from "../../../renderer/src/ECS/Systems/ResizeSystem.ts";
+import { vec3, vec4 } from "gl-matrix";
+import {
+  cameraPosition,
+  invViewProjection,
+} from "../../../renderer/src/ECS/Systems/ResizeSystem.ts";
 
 /** Heading-error band (rad) below which the turret steers proportionally — mirrors AimAction. */
 const SLOW_BAND = 0.3;
@@ -83,15 +87,43 @@ export function createManualControl(canvas: HTMLCanvasElement): ManualControl {
   window.addEventListener("mousedown", onMouseDown);
   window.addEventListener("mouseup", onMouseUp);
 
-  /** Convert a canvas-relative CSS-pixel point to world coordinates (ortho camera). */
+  // scratch (no per-call alloc)
+  const _clip = vec4.create();
+  const _far = vec4.create();
+  const _rayDir = vec3.create();
+
+  /**
+   * Convert a canvas-relative CSS-pixel point to world coordinates by casting a
+   * ray through the pixel (perspective camera) and intersecting the gameplay
+   * ground plane z=0. Gameplay is still XY-planar, so we solve for the t where
+   * the ray hits z=0.
+   */
   function screenToWorld(sx: number, sy: number): { x: number; y: number } {
     const rect = canvas.getBoundingClientRect();
-    const zoom = cameraZoom.value;
-    // Camera is centered on `cameraPosition`; the visible world width is rect.width/zoom.
-    // The world's Y axis points down (screen-style), same as screen Y — no Y flip.
-    const x = cameraPosition.x + (sx - rect.width / 2) / zoom;
-    const y = cameraPosition.y + (sy - rect.height / 2) / zoom;
-    return { x, y };
+    // CSS pixel -> NDC. WebGPU NDC: x in [-1,1] right, y in [-1,1] up (screen Y
+    // is down, so flip). Reverse-Z: the far plane (z=0 NDC) reconstructs the ray
+    // direction together with the camera eye.
+    const ndcX = (sx / rect.width) * 2 - 1;
+    const ndcY = 1 - (sy / rect.height) * 2;
+
+    vec4.set(_clip, ndcX, ndcY, 0, 1); // far plane in reverse-Z is NDC z=0
+    vec4.transformMat4(_far, _clip, invViewProjection);
+    if (_far[3] !== 0) {
+      _far[0] /= _far[3];
+      _far[1] /= _far[3];
+      _far[2] /= _far[3];
+    }
+
+    _rayDir[0] = _far[0] - cameraPosition[0];
+    _rayDir[1] = _far[1] - cameraPosition[1];
+    _rayDir[2] = _far[2] - cameraPosition[2];
+
+    // Intersect with z=0: eye.z + t * dir.z = 0.
+    const t = _rayDir[2] !== 0 ? -cameraPosition[2] / _rayDir[2] : 0;
+    return {
+      x: cameraPosition[0] + t * _rayDir[0],
+      y: cameraPosition[1] + t * _rayDir[1],
+    };
   }
 
   /** Zero the controllers of the currently held tank (e.g. on disable / switch). */

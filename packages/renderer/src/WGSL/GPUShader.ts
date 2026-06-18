@@ -44,6 +44,10 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
       autoLayout?: boolean;
       /** For autoLayout pipelines: specify which uniforms to include in each bind group */
       bindGroups?: Record<number, (keyof M["uniforms"])[]>;
+      /** Face culling (default: none, matching createRenderPipeline's default). */
+      cullMode?: GPUCullMode;
+      /** Triangle winding considered front-facing (default: 'ccw'). */
+      frontFace?: GPUFrontFace;
     },
   ): GPURenderPipeline {
     const withDepth = options?.withDepth ?? false;
@@ -87,9 +91,12 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
       };
     };
 
+    const cullMode = options?.cullMode ?? "none";
+    const frontFace = options?.frontFace ?? "ccw";
+
     const pipelineKey = `${vertexName}-${fragmentName}`;
     const targetsKey = targets.map((t) => `${t.format}:${t.blend}`).join(",");
-    const key = `${pipelineKey}-${withDepth}-${targetsKey}-${autoLayout}`;
+    const key = `${pipelineKey}-${withDepth}-${targetsKey}-${autoLayout}-${cullMode}-${frontFace}`;
     const shaderModule = options?.shaderModule ?? this.getShaderModule(device);
 
     if (!this.mapRenderPipeline.has(key)) {
@@ -97,6 +104,8 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
         layout: autoLayout ? "auto" : this.getGPUPipelineLayout(device),
         primitive: {
           topology: "triangle-list",
+          cullMode,
+          frontFace,
         },
         vertex: {
           module: shaderModule,

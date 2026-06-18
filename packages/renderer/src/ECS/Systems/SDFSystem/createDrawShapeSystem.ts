@@ -1,125 +1,65 @@
 import { hasComponent, onAdd, onSet, query } from "bitecs";
+import { mat4 } from "gl-matrix";
 import { MAX_INSTANCE_COUNT, shaderMeta } from "./sdf.shader.ts";
 import { GPUShader } from "../../../WGSL/GPUShader.ts";
 import { getTypeTypedArray } from "../../../Shader";
-import { projectionMatrix } from "../ResizeSystem.ts";
+import { cameraPosition, projectionMatrix } from "../ResizeSystem.ts";
 import { createChangeDetector } from "../ChangedDetectorSystem.ts";
-import { SunLight } from "../SunLight.ts";
 import { getRenderComponents, type RenderWorldLike } from "../../world.ts";
 
 export function createDrawShapeSystem({
   device,
   world,
-  shadowMapTexture,
 }: {
   world: RenderWorldLike;
   device: GPUDevice;
-  shadowMapTexture: GPUTexture;
 }) {
-  const { Blurness, Color, GlobalTransform, LightEmitter, Roundness, Shape, Translucency } =
-    getRenderComponents(world);
+  const { Color, GlobalTransform, LightEmitter, Roundness, Shape } = getRenderComponents(world);
   const gpuShader = new GPUShader(shaderMeta);
 
-  // Set shadow map texture on shader meta before creating bind groups
-  if (shadowMapTexture) {
-    shaderMeta.uniforms.shadowMap.setTexture(shadowMapTexture);
-  }
-
-  // Pipeline for shadow map pass (r32float, no depth, no blending)
-  // Uses autoLayout with explicit bindGroups since it doesn't use all uniforms
-  const pipelineShadowMap = shadowMapTexture
-    ? gpuShader.getRenderPipeline(device, "vs_shadow_map", "fs_shadow_map", {
-        targetFormat: "r32float",
-        autoLayout: true,
-        withBlending: false,
-        withDepth: false,
-        bindGroups: {
-          0: ["projection", "sunShadow"],
-          1: ["transform", "kind", "values", "roundness", "intensity"],
-        },
-      })
-    : null;
-
-  // Pipeline for visual shadow effect
-  const pipelineShadow = gpuShader.getRenderPipeline(device, "vs_shadow", "fs_shadow", {
-    withDepth: true,
-  });
-
-  // Main shape pipeline
+  // Main G-buffer pipeline: cube-impostor SDF -> MRT (albedo + world normal +
+  // emission), reverse-Z depth. Front-face cull so fragments survive when the
+  // camera is inside the impostor cube.
   const pipelineSdf = gpuShader.getRenderPipeline(device, "vs_main", "fs_main", {
-    withDepth: true,
-  });
-
-  // Emission pipeline: color (rgba16float, additive) + facing dir (rg16float, replace), no depth
-  const pipelineEmit = gpuShader.getRenderPipeline(device, "vs_emit", "fs_emit", {
     targets: [
-      { format: "rgba16float", blend: "additive" },
-      { format: "rg16float", blend: "none" },
+      { format: "rgba8unorm", blend: "none" }, // @location(0) albedo
+      { format: "rgba16float", blend: "none" }, // @location(1) world normal
+      { format: "rgba16float", blend: "none" }, // @location(2) emission HDR
     ],
-    autoLayout: true,
-    withDepth: false,
-    bindGroups: {
-      0: ["projection"],
-      1: [
-        "transform",
-        "kind",
-        "color",
-        "values",
-        "roundness",
-        "blurness",
-        "intensity",
-        "translucency",
-      ],
-    },
+    withDepth: true,
+    cullMode: "front",
+    frontFace: "ccw",
   });
 
-  // Main pass bind groups (includes shadow map in group 2)
   const bindGroup0 = gpuShader.getBindGroup(device, 0);
   const bindGroup1 = gpuShader.getBindGroup(device, 1);
-  const bindGroup2 = shadowMapTexture ? gpuShader.getBindGroup(device, 2) : null;
-
-  // Shadow map pass bind groups (cached during pipeline creation)
-  const shadowMapBindGroup0 = pipelineShadowMap
-    ? gpuShader.getBindGroup(device, 0, "vs_shadow_map", "fs_shadow_map")
-    : null;
-  const shadowMapBindGroup1 = pipelineShadowMap
-    ? gpuShader.getBindGroup(device, 1, "vs_shadow_map", "fs_shadow_map")
-    : null;
-
-  // Emission pass bind groups (cached during pipeline creation)
-  const emitBindGroup0 = gpuShader.getBindGroup(device, 0, "vs_emit", "fs_emit");
-  const emitBindGroup1 = gpuShader.getBindGroup(device, 1, "vs_emit", "fs_emit");
-
-  // Baked z-shadows follow the shared SunLight (read each frame, no wiring):
-  // xy = direction toward the sun, scaled by SQRT1_2 to keep the legacy
-  // LIGHT_DIR=(-0.5,-0.5) offset magnitude; z = darkness, w = reserved.
-  const SHADOW_DARKNESS = 0.4;
-  const sunShadowCollect = getTypeTypedArray(shaderMeta.uniforms.sunShadow.type);
 
   const transformCollect = getTypeTypedArray(shaderMeta.uniforms.transform.type);
+  const invTransformCollect = getTypeTypedArray(shaderMeta.uniforms.invTransform.type);
+  const cameraPosCollect = new Float32Array(4); // xyz = camera world pos, w = roundSteps
+  // Live-tunable render params (debug GUI). roundSteps = rounded-box sphere-trace
+  // budget — the dominant per-fragment cost when zoomed in.
+  const params = { roundSteps: 36 };
   const kindCollect = getTypeTypedArray(shaderMeta.uniforms.kind.type);
   const colorCollect = getTypeTypedArray(shaderMeta.uniforms.color.type);
   const valuesCollect = getTypeTypedArray(shaderMeta.uniforms.values.type);
   const roundnessCollect = getTypeTypedArray(shaderMeta.uniforms.roundness.type);
-  const blurnessCollect = getTypeTypedArray(shaderMeta.uniforms.blurness.type);
   const intensityCollect = getTypeTypedArray(shaderMeta.uniforms.intensity.type);
-  const translucencyCollect = getTypeTypedArray(shaderMeta.uniforms.translucency.type);
+
+  // scratch for per-instance matrix inverse (gl-matrix writes into _inv, never
+  // in place over the shared GlobalTransform view).
+  const _inv = mat4.create();
 
   const shapeChanges = createChangeDetector(world, [onAdd(Shape), onSet(Shape)]);
   const colorChanges = createChangeDetector(world, [onAdd(Color), onSet(Color)]);
   const roundnessChanges = createChangeDetector(world, [onAdd(Roundness), onSet(Roundness)]);
-  const blurnessChanges = createChangeDetector(world, [onAdd(Blurness), onSet(Blurness)]);
-  const translucencyChanges = createChangeDetector(world, [
-    onAdd(Translucency),
-    onSet(Translucency),
-  ]);
   const intensityChanges = createChangeDetector(world, [onAdd(LightEmitter), onSet(LightEmitter)]);
   let prevEntityCount = 0;
   let preparedEntityCount = 0;
   let overflowReported = false;
 
   function prepare() {
-    const entities = query(world, [GlobalTransform, Shape, Color]); // Roundness, Shadow is optional
+    const entities = query(world, [GlobalTransform, Shape, Color]); // Roundness optional
 
     // The instance buffers are fixed at MAX_INSTANCE_COUNT; writing past it
     // throws "offset is out of bounds" and kills the frame. Clamp instead —
@@ -142,7 +82,16 @@ export function createDrawShapeSystem({
     for (let i = 0; i < count; i++) {
       const id = entities[i];
 
-      transformCollect.set(GlobalTransform.matrix.getBatch(id), i * 16);
+      const model = GlobalTransform.matrix.getBatch(id);
+      transformCollect.set(model, i * 16);
+
+      // Inverse model (for the local-space ray + world-normal matrix). Uploaded
+      // every frame because the model is. Degenerate matrices return null —
+      // fall back to identity to avoid NaNs in the shader ray transform.
+      if (mat4.invert(_inv, model) === null) {
+        mat4.identity(_inv);
+      }
+      invTransformCollect.set(_inv, i * 16);
 
       if (countChanged || shapeChanges.hasChanges()) {
         kindCollect[i] = Shape.kind[id];
@@ -157,24 +106,17 @@ export function createDrawShapeSystem({
         roundnessCollect[i] = Roundness.value[id];
       }
 
-      if (countChanged || blurnessChanges.hasChanges()) {
-        blurnessCollect[i] = hasComponent(world, id, Blurness) ? Blurness.value[id] : 0;
-      }
-
       if (countChanged || intensityChanges.hasChanges()) {
         intensityCollect[i] = hasComponent(world, id, LightEmitter)
           ? LightEmitter.intensity[id]
           : 0;
       }
-
-      if (countChanged || translucencyChanges.hasChanges()) {
-        translucencyCollect[i] = hasComponent(world, id, Translucency) ? Translucency.value[id] : 0;
-      }
     }
 
-    sunShadowCollect[0] = Math.cos(SunLight.angle) * Math.SQRT1_2;
-    sunShadowCollect[1] = -Math.sin(SunLight.angle) * Math.SQRT1_2;
-    sunShadowCollect[2] = SunLight.enabled ? SHADOW_DARKNESS : 0;
+    cameraPosCollect[0] = cameraPosition[0];
+    cameraPosCollect[1] = cameraPosition[1];
+    cameraPosCollect[2] = cameraPosition[2];
+    cameraPosCollect[3] = params.roundSteps;
 
     device.queue.writeBuffer(
       gpuShader.uniforms.projection.getGPUBuffer(device),
@@ -182,14 +124,19 @@ export function createDrawShapeSystem({
       projectionMatrix as BufferSource,
     );
     device.queue.writeBuffer(
-      gpuShader.uniforms.sunShadow.getGPUBuffer(device),
+      gpuShader.uniforms.cameraPos.getGPUBuffer(device),
       0,
-      sunShadowCollect,
+      cameraPosCollect,
     );
     device.queue.writeBuffer(
       gpuShader.uniforms.transform.getGPUBuffer(device),
       0,
       transformCollect,
+    );
+    device.queue.writeBuffer(
+      gpuShader.uniforms.invTransform.getGPUBuffer(device),
+      0,
+      invTransformCollect,
     );
 
     if (countChanged || shapeChanges.hasChanges()) {
@@ -209,14 +156,6 @@ export function createDrawShapeSystem({
       );
     }
 
-    if (countChanged || blurnessChanges.hasChanges()) {
-      device.queue.writeBuffer(
-        gpuShader.uniforms.blurness.getGPUBuffer(device),
-        0,
-        blurnessCollect,
-      );
-    }
-
     if (countChanged || intensityChanges.hasChanges()) {
       device.queue.writeBuffer(
         gpuShader.uniforms.intensity.getGPUBuffer(device),
@@ -225,65 +164,22 @@ export function createDrawShapeSystem({
       );
     }
 
-    if (countChanged || translucencyChanges.hasChanges()) {
-      device.queue.writeBuffer(
-        gpuShader.uniforms.translucency.getGPUBuffer(device),
-        0,
-        translucencyCollect,
-      );
-    }
-
     shapeChanges.clear();
     colorChanges.clear();
     roundnessChanges.clear();
-    blurnessChanges.clear();
     intensityChanges.clear();
-    translucencyChanges.clear();
   }
 
-  // Main render pass - renders shapes with shadow map sampling
+  // Main pass: cube-impostor SDF instances -> G-buffer. 36 verts = procedural
+  // unit cube (not 6: the old quad).
   function drawShapes(renderPass: GPURenderPassEncoder) {
     if (preparedEntityCount === 0) return;
 
     renderPass.setBindGroup(0, bindGroup0);
     renderPass.setBindGroup(1, bindGroup1);
-    // Set shadow map bind group (group 2) - only needed for main shapes pass
-    if (bindGroup2) {
-      renderPass.setBindGroup(2, bindGroup2);
-      renderPass.setPipeline(pipelineShadow);
-      renderPass.draw(6, preparedEntityCount, 0, 0);
-    }
-
-    // Main shapes (samples shadow map for object-to-object shadows)
     renderPass.setPipeline(pipelineSdf);
-    renderPass.draw(6, preparedEntityCount, 0, 0);
+    renderPass.draw(36, preparedEntityCount, 0, 0);
   }
 
-  // Shadow map pass - renders shadow silhouettes with Z height
-  function drawShadowMap(shadowMapPass: GPURenderPassEncoder) {
-    if (
-      preparedEntityCount === 0 ||
-      !pipelineShadowMap ||
-      !shadowMapBindGroup0 ||
-      !shadowMapBindGroup1
-    )
-      return;
-
-    shadowMapPass.setPipeline(pipelineShadowMap);
-    shadowMapPass.setBindGroup(0, shadowMapBindGroup0);
-    shadowMapPass.setBindGroup(1, shadowMapBindGroup1);
-    shadowMapPass.draw(6, preparedEntityCount, 0, 0);
-  }
-
-  // Emission pass - renders emitters as premultiplied HDR color (occluders write coverage only)
-  function drawEmitters(passEncoder: GPURenderPassEncoder) {
-    if (preparedEntityCount === 0) return;
-
-    passEncoder.setPipeline(pipelineEmit);
-    passEncoder.setBindGroup(0, emitBindGroup0);
-    passEncoder.setBindGroup(1, emitBindGroup1);
-    passEncoder.draw(6, preparedEntityCount, 0, 0);
-  }
-
-  return { prepare, drawShapes, drawShadowMap, drawEmitters };
+  return { prepare, drawShapes, params };
 }

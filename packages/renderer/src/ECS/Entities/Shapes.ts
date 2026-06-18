@@ -4,6 +4,9 @@ import { TColor } from "../Components/Common.ts";
 import { ShapeKind } from "../Components/Shape.ts";
 import { getRenderComponents, type RenderWorldLike } from "../world.ts";
 
+// z half-thickness for flat 2D shapes promoted to 3D boxes.
+const FLAT_HALF_THICKNESS = 1;
+
 export function createCircle(
   world: RenderWorldLike,
   {
@@ -26,7 +29,7 @@ export function createCircle(
   addTransformComponents(world, id);
   applyMatrixTranslate(LocalTransform.matrix.getBatch(id), x, y, z);
 
-  Shape.addComponent(world, id, ShapeKind.Circle, radius);
+  Shape.addComponent(world, id, ShapeKind.Sphere3D, radius);
   Color.addComponent(world, id, color[0], color[1], color[2], color[3]);
 
   return id;
@@ -58,7 +61,9 @@ export function createRectangle(
   addTransformComponents(world, id);
   applyMatrixTranslate(LocalTransform.matrix.getBatch(id), x, y, z);
 
-  Shape.addComponent(world, id, ShapeKind.Rectangle, width, height);
+  // Box3D stores half-extents; a flat rectangle gets a small z half-thickness
+  // so it has volume for the impostor to trace.
+  Shape.addComponent(world, id, ShapeKind.Box3D, width / 2, height / 2, FLAT_HALF_THICKNESS);
   Color.addComponent(world, id, color[0], color[1], color[2], color[3]);
   Roundness.addComponent(world, id, roundness ?? 0);
 
@@ -93,17 +98,11 @@ export function createTriangle(
   addTransformComponents(world, id);
   applyMatrixTranslate(LocalTransform.matrix.getBatch(id), x, y, z);
 
-  Shape.addComponent(
-    world,
-    id,
-    ShapeKind.Triangle,
-    point1[0],
-    point1[1],
-    point2[0],
-    point2[1],
-    point3[0],
-    point3[1],
-  );
+  // No 3D triangle primitive yet — approximate with its bounding box (Box3D
+  // half-extents), centered on the local origin, with a small z thickness.
+  const hx = Math.max(Math.abs(point1[0]), Math.abs(point2[0]), Math.abs(point3[0]));
+  const hy = Math.max(Math.abs(point1[1]), Math.abs(point2[1]), Math.abs(point3[1]));
+  Shape.addComponent(world, id, ShapeKind.Box3D, hx, hy, FLAT_HALF_THICKNESS);
   Color.addComponent(world, id, color[0], color[1], color[2], color[3]);
   Roundness.addComponent(world, id, roundness ?? 0);
 

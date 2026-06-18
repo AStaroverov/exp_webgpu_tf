@@ -32,13 +32,10 @@ import { createExplodeSystem } from "./ECS/Systems/createExplodeSystem.ts";
 import { createRigidBodyStateSystem } from "./ECS/Systems/createRigidBodyStateSystem.ts";
 import { createWanderSystem } from "./ECS/Systems/createWanderSystem.ts";
 import { createApplyImpulseSystem } from "./ECS/Systems/createApplyImpulseSystem.ts";
-import { createDrawFaunaSystem } from "./ECS/Systems/Render/Fauna/createDrawFaunaSystem.ts";
-import { createSandstormSystem } from "./ECS/Systems/Render/PostEffect/Sandstorm/createSandstormSystem.ts";
-import { createDrawVFXSystem } from "./ECS/Systems/Render/VFX/createDrawVFXSystem.ts";
 import { createTintSystem } from "./ECS/Systems/Render/createTintSystem.ts";
 import { createLightEmitterAnimationSystem } from "./ECS/Systems/Render/createLightEmitterAnimationSystem.ts";
 import { createPresent } from "renderer/src/WGSL/createPresent.ts";
-import { createRadianceCascadesSystem } from "./ECS/Systems/Render/Lighting/createRadianceCascadesSystem.ts";
+import { createCompositeStopgap } from "renderer/src/WGSL/createCompositeStopgap.ts";
 import { createVisualizationTracksSystem } from "./ECS/Systems/Tank/createVisualizationTracksSystem.ts";
 import { createSpawnTreadMarksSystem } from "./ECS/Systems/Tank/createSpawnTreadMarksSystem.ts";
 import { createLimitTreadMarksSystem } from "./ECS/Systems/Tank/createLimitTreadMarksSystem.ts";
@@ -72,7 +69,6 @@ import { createVehicleTurretRotationSystem as createTurretRotationSystem } from 
 import { createGameWorld } from "./ECS/createGameWorld.ts";
 import { MapDI } from "./DI/MapDI.ts";
 import { HexGrid } from "./Map/HexGrid.ts";
-import { createDrawGridSystem } from "./ECS/Systems/Render/Grid/createDrawGridSystem.ts";
 import { createRunExecutors } from "./ECS/Actions/registry.ts";
 import { createActionSchedulerSystem } from "./ECS/Actions/systems/ActionScheduler.ts";
 import { createGridOccupancySystem } from "./ECS/Systems/Map/createGridOccupancySystem.ts";
@@ -372,20 +368,13 @@ export function createGame({
     const shapeSystem = createDrawShapeSystem({
       world,
       device,
-      shadowMapTexture: textures.shadowMapTexture,
     });
-    // const pixelatePass = createPixelatePass(device, textures.renderTexture);
-    const lighting = (RenderDI.lighting = createRadianceCascadesSystem({
-      device,
-      frameTextures: textures,
-      // sceneTexture: pixelatePass.outputTexture,
-      drawEmitters: shapeSystem.drawEmitters,
-    }));
-    const drawFauna = createDrawFaunaSystem();
-    const drawGrid = createDrawGridSystem();
-    const drawSandstorm = createSandstormSystem();
-    const drawVFX = createDrawVFXSystem();
 
+    // Phase 1: the main pass is the cube-impostor SDF G-buffer. The old 2D
+    // effect passes (fauna / grid / VFX / sandstorm) and the Radiance Cascades
+    // lighting are bypassed here; they re-enter once they target the G-buffer
+    // (RC returns in Phase 2). Stopgap composite shades the G-buffer so the 3D
+    // shapes are visible.
     const frameTick = createFrameTick(
       {
         ...textures,
@@ -394,32 +383,30 @@ export function createGame({
         background: [226, 192, 146, 255].map((v) => v / 255),
         getPixelRatio: () => window.devicePixelRatio,
       },
-      ({ passEncoder, delta }) => {
-        drawFauna(passEncoder, delta);
-        drawGrid(passEncoder);
+      ({ passEncoder }) => {
+        shapeSystem.prepare(); // moved out of the deleted shadow-map callback
         shapeSystem.drawShapes(passEncoder);
-        drawVFX(passEncoder);
-        drawSandstorm(passEncoder, delta);
-      },
-      ({ passEncoder: shadowMapPassEncoder }) => {
-        shapeSystem.prepare();
-        shapeSystem.drawShadowMap(shadowMapPassEncoder);
       },
     );
 
+    const composite = createCompositeStopgap(device);
     const present = createPresent(device, context);
 
     RenderDI.renderFrame = (delta: number) => {
       const commandEncoder = device.createCommandEncoder();
-      frameTick(commandEncoder, delta); // scene -> renderTexture
-      // pixelatePass.run(commandEncoder);      // renderTexture -> pixelated scene
-      lighting.run(commandEncoder, delta); // pixelated scene * light -> litTexture
-      present(commandEncoder, lighting.outputTexture); // final -> swapchain
+      frameTick(commandEncoder, delta); // scene -> G-buffer
+      composite(
+        commandEncoder,
+        textures.gAlbedo,
+        textures.gNormal,
+        textures.gEmission,
+        textures.compositeTexture,
+      ); // G-buffer -> stopgap-lit
+      present(commandEncoder, textures.compositeTexture); // -> swapchain
       device.queue.submit([commandEncoder.finish()]);
     };
 
     RenderDI.destroy = () => {
-      lighting.destroy();
       RenderDI.enabled = false;
       RenderDI.canvas = null!;
       RenderDI.device = null!;

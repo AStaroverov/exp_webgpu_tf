@@ -10,60 +10,88 @@ export function createFrameTextures(device: GPUDevice, canvas: HTMLCanvasElement
   const depthTexture = device.createTexture({
     size: [canvas.width, canvas.height, 1],
     format: "depth32float",
-    usage: GPUTextureUsage.RENDER_ATTACHMENT,
-  });
-
-  // Shadow map texture - stores Z height of shadow casters (r32float for max Z value)
-  const shadowMapTexture = device.createTexture({
-    size: [canvas.width, canvas.height, 1],
-    format: "r32float",
+    // TEXTURE_BINDING so the Radiance Cascades pass can march it (textureLoad).
     usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
   });
 
-  return { renderTexture, depthTexture, shadowMapTexture, ...createRCTextures(device, canvas) };
+  // --- G-buffer (MRT) written by the SDF-impostor main pass ---
+  const gAlbedo = device.createTexture({
+    size: [canvas.width, canvas.height, 1],
+    format: "rgba8unorm",
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+  });
+  const gNormal = device.createTexture({
+    size: [canvas.width, canvas.height, 1],
+    format: "rgba16float",
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+  });
+  const gEmission = device.createTexture({
+    size: [canvas.width, canvas.height, 1],
+    format: "rgba16float",
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+  });
+  // Stopgap composite output (present()-able). Named distinctly from
+  // createRCTextures' own litTexture to avoid a clash.
+  const compositeTexture = device.createTexture({
+    size: [canvas.width, canvas.height, 1],
+    format: "bgra8unorm",
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+  });
+
+  return {
+    renderTexture,
+    depthTexture,
+    gAlbedo,
+    gNormal,
+    gEmission,
+    compositeTexture,
+    ...createRCTextures(device, canvas),
+  };
 }
 
 // Radiance Cascades textures, sized rcW x rcH.
-// litTexture is canvas-sized (composite output fed to Pixelate).
-// 0.4: RC runs at 0.16x the canvas pixels (and one cascade fewer than 1.0); composite upsamples linearly.
-export const rcDownscale = 0.4;
+// Phase 2 (screen-space RC) marches the depth buffer directly (no JFA/distance-field):
+// it consumes ONLY { cascA, cascB } (ping-pong cascades) + litTexture (the
+// present()-able final image). The seed/df/emission textures below belong to the
+// retired 2D-planar RC design and are kept ONLY so the off-limits engine's old
+// createRadianceCascadesSystem still type-resolves; the test-scene RC ignores them.
+// 0.5: depth-marching wants a bit more screen resolution than the old 2D DF path
+// (RC runs at 0.25x the canvas pixels); the gather pass upsamples linearly.
+export const rcDownscale = 0.5;
 
 export function createRCTextures(device: GPUDevice, canvas: HTMLCanvasElement) {
   const rcW = Math.floor(canvas.width * rcDownscale);
   const rcH = Math.floor(canvas.height * rcDownscale);
 
+  // --- retired 2D-planar-RC textures (engine-only; not used by screen-space RC) ---
   const emissionTexture = device.createTexture({
     size: [rcW, rcH, 1],
     format: "rgba16float",
     usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
   });
-
-  // Per-emitter facing direction (normalized, Y-flipped) for directional cones.
-  // (0,0) means omni; written by the emit pass as a second color attachment.
   const emitDirTexture = device.createTexture({
     size: [rcW, rcH, 1],
     format: "rg16float",
     usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
   });
-
   const seedA = device.createTexture({
     size: [rcW, rcH, 1],
     format: "rg16float",
     usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
   });
-
   const seedB = device.createTexture({
     size: [rcW, rcH, 1],
     format: "rg16float",
     usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
   });
-
   const dfTexture = device.createTexture({
     size: [rcW, rcH, 1],
     format: "r16float",
     usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
   });
 
+  // --- screen-space RC ping-pong cascades (RGB = radiance, A = resolved flag).
+  // The merge walks cascade n+1 -> n reading one and writing the other, so two suffice.
   const cascA = device.createTexture({
     size: [rcW, rcH, 1],
     format: "rgba16float",
@@ -87,9 +115,10 @@ export function createRCTextures(device: GPUDevice, canvas: HTMLCanvasElement) {
 
 export function createFrameTick(
   {
-    renderTexture,
     depthTexture,
-    shadowMapTexture,
+    gAlbedo,
+    gNormal,
+    gEmission,
     canvas,
     device,
     background,
@@ -105,19 +134,13 @@ export function createFrameTick(
     device: GPUDevice;
     passEncoder: GPURenderPassEncoder;
   }) => void,
-  shadowMapCallback: (options: {
-    delta: number;
-    device: GPUDevice;
-    passEncoder: GPURenderPassEncoder;
-  }) => void,
 ) {
   const resizeSystem = createResizeSystem(canvas, getPixelRatio);
 
-  const shadowMapArg = {
-    delta: 0,
-    device,
-    passEncoder: null as unknown as GPURenderPassEncoder,
-  };
+  // Background color for the albedo G-buffer, forced to alpha 0 so the stopgap
+  // composite discards uncovered background pixels (albedo.a == 0).
+  const bg = background as number[];
+  const albedoClear: GPUColor = [bg[0], bg[1], bg[2], 0];
 
   const mainArg = {
     delta: 0,
@@ -128,43 +151,31 @@ export function createFrameTick(
   const renderFrame = (commandEncoder: GPUCommandEncoder, delta: number) => {
     resizeSystem();
 
-    // === Shadow Map Pass (separate command buffer for synchronization) ===
-    const shadowMapEncoder = device.createCommandEncoder();
-    const shadowMapView = shadowMapTexture.createView();
-    const shadowMapPassEncoder = shadowMapEncoder.beginRenderPass({
-      colorAttachments: [
-        {
-          view: shadowMapView,
-          clearValue: [0, 0, 0, 0], // Z = 0 means no shadow
-          loadOp: "clear",
-          storeOp: "store",
-        },
-      ],
-    });
-
-    shadowMapArg.delta = delta;
-    shadowMapArg.passEncoder = shadowMapPassEncoder;
-    shadowMapCallback(shadowMapArg);
-    shadowMapPassEncoder.end();
-    // Submit shadow map pass first (creates synchronization barrier)
-    device.queue.submit([shadowMapEncoder.finish()]);
-
-    // === Main Render Pass ===
-    const depthView = depthTexture.createView();
-    const textureView = renderTexture.createView();
-
+    // === Main Render Pass (MRT G-buffer: albedo + world normal + emission) ===
     const passEncoder = commandEncoder.beginRenderPass({
       colorAttachments: [
         {
-          view: textureView,
-          clearValue: background,
+          view: gAlbedo.createView(),
+          clearValue: albedoClear,
+          loadOp: "clear",
+          storeOp: "store",
+        },
+        {
+          view: gNormal.createView(),
+          clearValue: [0, 0, 0, 0],
+          loadOp: "clear",
+          storeOp: "store",
+        },
+        {
+          view: gEmission.createView(),
+          clearValue: [0, 0, 0, 0],
           loadOp: "clear",
           storeOp: "store",
         },
       ],
       depthStencilAttachment: {
-        view: depthView,
-        depthClearValue: 0,
+        view: depthTexture.createView(),
+        depthClearValue: 0, // reverse-Z, keep
         depthLoadOp: "clear",
         depthStoreOp: "store",
       },
@@ -175,7 +186,7 @@ export function createFrameTick(
     mainCallback(mainArg);
     passEncoder.end();
 
-    return { renderTexture, depthTexture };
+    return { gAlbedo, gNormal, gEmission, depthTexture };
   };
 
   return renderFrame;
