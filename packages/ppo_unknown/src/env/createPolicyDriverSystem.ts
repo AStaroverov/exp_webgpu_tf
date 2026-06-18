@@ -30,7 +30,7 @@ import { scoreTracker } from "../reward/ScoreTracker.ts";
  * `FrozenAgent` (both async), or a scripted `RandomBot` (sync). Keeping it structural
  * lets one driver loop serve all three — `decide()` may return void or a promise.
  */
-export type TankDriver = { decide(): void | Promise<void> };
+export type TankDriver = { decide(nowMs?: number): void | Promise<void> };
 
 export function createPolicyDriverSystem(agents: Map<number, TankDriver>, { world } = GameDI) {
   const { Tank, Vehicle, VehicleController, Children } = getGameComponents(world);
@@ -41,7 +41,12 @@ export function createPolicyDriverSystem(agents: Map<number, TankDriver>, { worl
   // itself on settle, and `drain()` awaits whatever is currently outstanding.
   const pending = new Set<Promise<void>>();
 
-  const system = function updatePolicyDriver(_delta: number) {
+  // Per-scenario simulated clock (ms), handed to decide() so time-gated drivers (a
+  // reaction-lagged HunterBot) can pace themselves. Resets with the driver per episode.
+  let simNowMs = 0;
+
+  const system = function updatePolicyDriver(delta: number) {
+    simNowMs += delta;
     // Accumulate combat score every tick (hits/kills happen between decisions),
     // so calculateActionReward sees the right cumulative value at decision points.
     scoreTracker.update();
@@ -70,7 +75,7 @@ export function createPolicyDriverSystem(agents: Map<number, TankDriver>, { worl
 
       inFlight.add(eid);
       let promise: Promise<void>;
-      promise = Promise.resolve(agent.decide())
+      promise = Promise.resolve(agent.decide(simNowMs))
         .catch((err) => {
           console.error("Policy decide failed:", err);
         })

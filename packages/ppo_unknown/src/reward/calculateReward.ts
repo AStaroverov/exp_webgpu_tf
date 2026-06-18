@@ -46,7 +46,7 @@ export function getShapingWeight(iteration: number): number {
 }
 
 const REWARD_LIMIT = 10;
-const DEAD_PENALTY = -2;
+const DEAD_PENALTY = 0;
 const WIN_REWARD = 3;
 const TEAM_SPIRIT = 0.5;
 

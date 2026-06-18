@@ -65,7 +65,7 @@ export class EpisodeManager extends AbstractEpisodeManager<Scenario> {
   }
 
   protected beforeEpisode(): Scenario {
-    return createScenarioByCurriculumState(this.curriculumState, { train: random() < 0.9 });
+    return createScenarioByCurriculumState(this.curriculumState, { train: random() < 0.95 });
   }
 
   protected afterEpisode(scenario: Scenario): void {

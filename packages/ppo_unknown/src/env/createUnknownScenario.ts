@@ -148,7 +148,7 @@ export function createUnknownScenario(options: {
         continue;
       }
       if (isEnemy && enemy === "bot-hunter") {
-        driverMap.set(tankEid, new HunterBot(tankEid));
+        driverMap.set(tankEid, new HunterBot(tankEid, options.config.hunterReactionMs ?? 0));
         continue;
       }
       if (isEnemy && enemy === "frozen") {

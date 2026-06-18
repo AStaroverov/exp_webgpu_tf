@@ -16,6 +16,11 @@
  * legal actions (mask `0` = allowed) and hands a plain action vector to
  * `applyActionToGame` — the exact shape `batchAct` would have produced. It is a step
  * up from `RandomBot`'s undirected fire: a deterministic opponent that aims and closes.
+ *
+ * Optional REACTION LAG (`reactionDelayMs`): a fresh plan is recomputed only once that
+ * much simulated time has passed since the last one; in between the bot re-commits its
+ * last action, so it acts on stale perception. A handicapped, more exploitable hunter —
+ * a difficulty knob between the instant hunter and a fully passive target.
  */
 
 import { query } from "bitecs";
@@ -36,16 +41,22 @@ import { applyActionToGame, moveDestination } from "./applyActionToGame.ts";
 import { computeActionMask } from "./computeActionMask.ts";
 
 export class HunterBot {
+  // -Infinity so the very first decision is always computed fresh (even at nowMs 0).
+  private lastDecisionMs = -Infinity;
+
   constructor(
     public readonly tankEid: number,
+    private readonly reactionDelayMs = 0,
     private readonly di = GameDI,
   ) {}
 
-  decide(): void {
-    const mask = computeActionMask(this.tankEid, this.di);
-
+  decide(nowMs = 0): void {
     const actions = new Float32Array(1);
-    actions[0] = this.pickAction(mask);
+
+    if (nowMs - this.lastDecisionMs >= this.reactionDelayMs) {
+      this.lastDecisionMs = nowMs;
+      actions[0] = this.pickAction(computeActionMask(this.tankEid, this.di));
+    }
 
     applyActionToGame(this.tankEid, actions, this.di);
   }
@@ -127,9 +138,10 @@ export class HunterBot {
   }
 
   /** Closest enemy-team unit by hex distance — its cell and eid — or undefined. */
-  private nearestEnemy(
-    here: { q: number; r: number },
-  ): { q: number; r: number; eid: number } | undefined {
+  private nearestEnemy(here: {
+    q: number;
+    r: number;
+  }): { q: number; r: number; eid: number } | undefined {
     const grid = MapDI.grid;
     const { RigidBodyState, Tank, TeamRef, Vehicle } = getGameComponents(this.di.world);
     const myTeamId = TeamRef.id.get(this.tankEid);

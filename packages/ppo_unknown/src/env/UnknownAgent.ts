@@ -62,6 +62,8 @@ export class UnknownAgent {
   private prevCombat = 0;
   /** Approach-shaping potential at the open step (annealed γ-potential). */
   private prevShaping = 0;
+  /** Per-action closing rewards for the vis display — tracked even in eval (no memory). */
+  private recentRewards: number[] = [];
 
   constructor(
     public readonly tankEid: number,
@@ -96,8 +98,10 @@ export class UnknownAgent {
   }
 
   closeFinalStep(): void {
-    if (!this.train || !this.opened) return;
-    this.memory.updateSecondPart(this.closingReward(), true);
+    if (!this.opened) return;
+    const reward = this.closingReward();
+    this.recentRewards.push(reward);
+    if (this.train) this.memory.updateSecondPart(reward, true);
     this.opened = false;
   }
 
@@ -107,7 +111,7 @@ export class UnknownAgent {
 
   /** Sum of the last `n` recorded macro-action rewards (debug/visualizer only). */
   getRecentReward(n = 10): number {
-    const rewards = this.memory.rewards;
+    const rewards = this.recentRewards;
     let sum = 0;
     for (let i = Math.max(0, rewards.length - n); i < rewards.length; i++) {
       sum += rewards[i];
@@ -128,10 +132,13 @@ export class UnknownAgent {
     if (network == null) return;
 
     // 1. Close the previous macro-action with its accumulated reward (real combat
-    // delta + annealed approach potential — see `closingReward`).
-    if (this.opened && this.train) {
+    // delta + annealed approach potential — see `closingReward`). The reward is tracked
+    // for the vis display even in eval (train:false); only the memory write is gated.
+    if (this.opened) {
       const done = getTankHealth(this.tankEid) <= 0;
-      this.memory.updateSecondPart(this.closingReward(), done);
+      const reward = this.closingReward();
+      this.recentRewards.push(reward);
+      if (this.train) this.memory.updateSecondPart(reward, done);
       if (done) {
         this.opened = false;
         return;
@@ -165,12 +172,13 @@ export class UnknownAgent {
     // 3. Enqueue it into the game.
     applyActionToGame(this.tankEid, result.actions);
 
-    // 4. Open the new step.
+    // 4. Open the new step. The memory record is train-only, but the potential
+    // baselines + `opened` are tracked in eval too so step 1 can close the reward.
     if (this.train) {
       this.memory.addFirstPart(state, result.actions, result.logits, result.logProb, mask);
-      this.prevCombat = nextCombat;
-      this.prevShaping = nextShaping;
-      this.opened = true;
     }
+    this.prevCombat = nextCombat;
+    this.prevShaping = nextShaping;
+    this.opened = true;
   }
 }

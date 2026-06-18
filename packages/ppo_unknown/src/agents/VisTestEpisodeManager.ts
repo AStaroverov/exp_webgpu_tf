@@ -55,7 +55,7 @@ export class VisTestEpisodeManager extends EpisodeManager {
   }
 
   protected beforeEpisode(): Scenario {
-    const scenario = createScenarioByCurriculumState(this.curriculumState, { train: true });
+    const scenario = createScenarioByCurriculumState(this.curriculumState, { train: false });
 
     const canvas = document.querySelector("canvas");
     if (canvas) {

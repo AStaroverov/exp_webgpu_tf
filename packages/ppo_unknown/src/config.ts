@@ -19,7 +19,7 @@ export const CONFIG: PpoConfig & {
   // (required once the dense shaping is annealed away). Tunable: 0.98 if returns get noisy.
   gamma: (_iteration: number) => 0.99,
 
-  entropyCoeff: 0.01,
+  entropyCoeff: 0.03,
 
   policyEpochs: (_iter: number) => 4,
   policyClipRatio: 0.2,
