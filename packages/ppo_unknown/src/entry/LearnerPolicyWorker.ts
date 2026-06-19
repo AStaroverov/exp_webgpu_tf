@@ -41,7 +41,7 @@ const computeCurriculumState = (sample: EpisodeSample, prev?: CurriculumState): 
     const length = successRatioHistory.getBufferLength();
     const size = successRatioHistory.getSize();
     const ratio =
-      length > size / 2
+      length > size / 3
         ? successRatioHistory.toArray().reduce((acc, v) => acc + v, 0) / length
         : (prev?.mapScenarioIndexToSuccessRatio[scenarioIndex] ?? 0);
 

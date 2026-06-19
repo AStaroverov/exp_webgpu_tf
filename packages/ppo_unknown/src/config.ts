@@ -17,15 +17,15 @@ export const CONFIG: PpoConfig & {
   // episode, so the terminal win/loss reward never reaches the early/mid trajectory.
   // 0.99 ≈ 100 decisions lets the sparse terminal signal carry the bulk of the episode
   // (required once the dense shaping is annealed away). Tunable: 0.98 if returns get noisy.
-  gamma: (_iteration: number) => 0.99,
+  gamma: (_iteration: number) => 0.98,
 
   entropyCoeff: 0.03,
 
-  policyEpochs: (_iter: number) => 4,
+  policyEpochs: (_iter: number) => 10,
   policyClipRatio: 0.2,
   policyLogitsL2: 1e-3,
 
-  valueEpochs: (_iter: number) => 4,
+  valueEpochs: (_iter: number) => 10,
   valueClipRatio: 0.2,
   valueLossCoeff: 0.5,
   valueLRCoeff: 1,
@@ -39,8 +39,8 @@ export const CONFIG: PpoConfig & {
     max: 1e-3,
   },
 
-  batchSize: (_iteration: number) => 128 * 16,
-  miniBatchSize: (_iteration: number) => 128,
+  batchSize: (_iteration: number) => 2048,
+  miniBatchSize: (_iteration: number) => 512,
 
   // Decision-based episodes are short in STEPS but long in TICKS. Cap ticks at
   // a few simulated minutes; termination is owned by ppo_unknown (no win cond

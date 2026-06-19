@@ -92,6 +92,7 @@ export function createLearnerManager<S>({
             metricsChannels.versionDelta.postMessage(
               samples.map((b) => expIteration - b.networkVersion),
             );
+            metricsChannels.version.postMessage([expIteration]);
 
             disposeNetwork(policyNetwork);
             disposeNetwork(valueNetwork);

@@ -30,12 +30,7 @@ import { CurriculumState, EnemyBehavior, scenarioCompositions } from "./types.ts
 
 export const scenariosCount = scenarioCompositions.length;
 
-// ── Frontier ladder tuning (restored from the pre-self-play curriculum) ──────────
-const THRESHOLD_STEP_ITERATIONS = 500;
-const THRESHOLD_MIN = 0.55;
-const THRESHOLD_MAX = 0.75;
-const THRESHOLD_STEP = 0.02;
-
+const THRESHOLD = 0.6;
 const SOFTMAX_BETA = 3;
 const EPSILON_FLOOR = 0.05;
 const REGRESSION_DROP = 0.1;
@@ -83,17 +78,9 @@ export function createScenarioByCurriculumState(
 
 /** Sample a storage index from the unlocked, frontier-weighted ladder. */
 function pickFrontierIndex(state: CurriculumState): number {
-  const threshold = getCurrentThreshold(state.iteration);
-  const unlockedCount = getUnlockedCount(state, threshold);
-  const weights = computeSamplingWeights(state, unlockedCount, threshold);
+  const unlockedCount = getUnlockedCount(state, THRESHOLD);
+  const weights = computeSamplingWeights(state, unlockedCount, THRESHOLD);
   return LADDER_ORDER[sampleLadderPosition(weights)];
-}
-
-function getCurrentThreshold(iteration: number): number {
-  return Math.min(
-    THRESHOLD_MIN + THRESHOLD_STEP * Math.floor(iteration / THRESHOLD_STEP_ITERATIONS),
-    THRESHOLD_MAX,
-  );
 }
 
 function getSuccessRatio(state: CurriculumState, storageIndex: number): number {

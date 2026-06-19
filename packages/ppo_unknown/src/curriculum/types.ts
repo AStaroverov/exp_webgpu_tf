@@ -59,13 +59,13 @@ export type ScenarioConfig = {
 };
 
 export const scenarioCompositions: readonly ScenarioConfig[] = [
-  { maxCount: 4, enemy: "self-play" },
   { maxCount: 4, enemy: "bot-standing" },
   { maxCount: 4, enemy: "bot-moving" },
-  { maxCount: 4, enemy: "bot-hunter", hunterReactionMs: 1000 },
   { maxCount: 4, enemy: "bot-hunter", hunterReactionMs: 2000 },
+  { maxCount: 4, enemy: "bot-hunter", hunterReactionMs: 1000 },
   { maxCount: 4, enemy: "bot-hunter" },
   { maxCount: 4, enemy: "frozen" },
+  { maxCount: 4, enemy: "self-play" },
 ] as const;
 
 export type CurriculumState = {

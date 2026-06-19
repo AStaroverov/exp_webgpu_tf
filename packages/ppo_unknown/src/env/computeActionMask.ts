@@ -34,10 +34,11 @@ import {
 import { VIEW_RADIUS, hexDeltaDistance } from "../state/board.ts";
 import {
   ACTION_DIM_TOTAL,
-  ACTION_GROUP_PRIOR,
+  ACTION_GROUP_TARGET_SHARE,
   FIRE_ACTION_OFFSET,
   FIRE_CELL_OFFSETS,
   FIRE_TARGET_COUNT,
+  HOLD_ACTION,
   MASK_NEG,
   MOVE_ACTION_OFFSET,
   MOVE_DIR_COUNT,
@@ -128,20 +129,45 @@ export function computeActionMask(eid: number, { world } = GameDI): Float32Array
   return mask;
 }
 
+// The three action groups, as [start, count] spans into the flat mask, paired with
+// their init target share. Hold is a single never-masked slot; move and fire are the
+// maskable slices. Used by the exploration prior below.
+const PRIOR_GROUPS: ReadonlyArray<{ start: number; count: number; share: number }> = [
+  { start: HOLD_ACTION, count: 1, share: ACTION_GROUP_TARGET_SHARE.hold },
+  { start: MOVE_ACTION_OFFSET, count: MOVE_DIR_COUNT, share: ACTION_GROUP_TARGET_SHARE.move },
+  { start: FIRE_ACTION_OFFSET, count: FIRE_TARGET_COUNT, share: ACTION_GROUP_TARGET_SHARE.fire },
+];
+
 /**
- * The additive logit vector for the TRAINED policy: the validity mask PLUS the
- * constant per-group exploration prior (`ACTION_GROUP_PRIOR`). Forbidden entries
- * stay ≈ `MASK_NEG` (the small prior is dwarfed by -1e9); allowed entries carry
- * their group's prior instead of 0. This is the vector both sampled-with AND
- * stored for the loss, so old/new logprob include the same prior and the PPO
- * ratio stays consistent. Use this for the learned agents (UnknownAgent /
- * FrozenAgent) — NOT for `RandomBot`, which reads the raw 0/MASK_NEG validity
- * mask as a boolean ("allowed iff === 0").
+ * The additive logit vector for the TRAINED policy: the validity mask PLUS a per-group
+ * exploration prior. The prior spreads each group's `ACTION_GROUP_TARGET_SHARE` over
+ * the actions that are VALID this tick (`log(share / validCountInGroup)`), so with the
+ * network's raw logits ≈0 at init the masked softmax realizes the target shares
+ * (hold .10 / move .45 / fire .45) EXACTLY, in every state — not only when a group is
+ * fully unmasked. A group with no valid action this tick (e.g. fire while reloading)
+ * is left alone; its entries stay ≈`MASK_NEG` and its share flows to the live groups.
+ *
+ * This is the vector both sampled-with AND stored for the loss, so old/new logprob
+ * include the same prior and the PPO ratio stays consistent (the prior is part of the
+ * policy parameterization, recomputed deterministically from the same valid set). Use
+ * this for the learned agents (UnknownAgent / FrozenAgent) — NOT for `RandomBot`, which
+ * reads the raw 0/MASK_NEG validity mask as a boolean ("allowed iff === 0").
  */
 export function computeActionMaskWithPrior(eid: number, di = GameDI): Float32Array {
   const mask = computeActionMask(eid, di);
-  for (let i = 0; i < mask.length; i++) {
-    mask[i] += ACTION_GROUP_PRIOR[i];
+
+  for (const group of PRIOR_GROUPS) {
+    let validCount = 0;
+    for (let i = group.start; i < group.start + group.count; i++) {
+      if (mask[i] === 0) validCount++;
+    }
+    if (validCount === 0) continue; // whole group forbidden — leave it at MASK_NEG
+
+    const prior = Math.log(group.share / validCount);
+    for (let i = group.start; i < group.start + group.count; i++) {
+      if (mask[i] === 0) mask[i] = prior;
+    }
   }
+
   return mask;
 }

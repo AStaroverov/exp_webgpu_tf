@@ -117,6 +117,13 @@ export function subscribeOnMetrics() {
           }
         }
       });
+    } else if (key === "version") {
+      // Latest network version — shown as a plain number in the panel header, not
+      // a series (monotonic, only the current value matters), so it is not stored.
+      channel.onmessage = w((event) => {
+        latestVersion = (event.data as number[])[0] ?? latestVersion;
+        renderVersion();
+      });
     } else if (key === "successRatio") {
       channel.onmessage = w((event) => {
         (
@@ -143,6 +150,14 @@ export function subscribeOnMetrics() {
 
 let panelEl: HTMLElement | null = null;
 let visible = false;
+
+// Latest network version, mirrored into the header (built lazily, may be null).
+let latestVersion = 0;
+let versionEl: HTMLElement | null = null;
+
+function renderVersion() {
+  if (versionEl) versionEl.textContent = `v${latestVersion.toLocaleString()}`;
+}
 
 interface ChartEntry {
   chart: Chart;
@@ -204,6 +219,12 @@ function buildPanel(): HTMLElement {
   const title = document.createElement("span");
   title.textContent = "Metrics";
   title.style.fontSize = "15px";
+
+  versionEl = document.createElement("span");
+  Object.assign(versionEl.style, { fontSize: "13px", color: "#4a9eff", marginLeft: "12px" });
+  title.appendChild(versionEl);
+  renderVersion();
+
   const closeBtn = document.createElement("button");
   closeBtn.textContent = "Close (M)";
   Object.assign(closeBtn.style, {

@@ -59,30 +59,17 @@ export const MASK_NEG = PPO_MASK_NEG; // -1e9
  * softmax over 128 logits hands the 121-wide fire group ~94% of the mass just
  * by count — so early exploration is almost all shooting. These shares rebalance
  * the three groups (hold / move / fire) to deliberate fractions instead.
+ *
+ * They are turned into an additive exploration prior in `computeActionMaskWithPrior`,
+ * MASK-DEPENDENTLY: each group's share is spread over its VALID actions this tick
+ * (`log(share / validCountInGroup)`), not over the full group size. A constant prior
+ * (share / fullGroupSize) only realizes these shares when the whole group is
+ * unmasked; under masking the surviving entries carry too little mass and the share
+ * leaks to less-masked groups (above all the never-masked Hold), so e.g. firing gets
+ * starved exactly when an enemy is in range. Normalizing by the live valid count
+ * keeps the shares exact in every state.
  */
 export const ACTION_GROUP_TARGET_SHARE = { hold: 0.1, move: 0.45, fire: 0.45 } as const;
-
-/**
- * Constant per-action exploration prior (additive logits). With the network's
- * raw logits ≈0 at init, `softmax(ACTION_GROUP_PRIOR)` equals the target shares
- * above, because `prior[i] = log(groupShare / groupSize)`. It is added on top of
- * the validity mask wherever the TRAINED policy turns logits into actions
- * (`computeActionMaskWithPrior`), in BOTH the sample and the train-time
- * logprob/entropy — the same additive constant in old & new logprob keeps the
- * PPO importance ratio consistent. It only shapes the starting point; the
- * network is free to learn logits that move away from it.
- */
-export const ACTION_GROUP_PRIOR: Float32Array = (() => {
-  const prior = new Float32Array(ACTION_DIM_TOTAL);
-  prior[HOLD_ACTION] = Math.log(ACTION_GROUP_TARGET_SHARE.hold / 1);
-  for (let d = 0; d < MOVE_DIR_COUNT; d++) {
-    prior[MOVE_ACTION_OFFSET + d] = Math.log(ACTION_GROUP_TARGET_SHARE.move / MOVE_DIR_COUNT);
-  }
-  for (let c = 0; c < FIRE_TARGET_COUNT; c++) {
-    prior[FIRE_ACTION_OFFSET + c] = Math.log(ACTION_GROUP_TARGET_SHARE.fire / FIRE_TARGET_COUNT);
-  }
-  return prior;
-})();
 
 // ── Action params ────────────────────────────────────────────────────────────
 export const MOVE_SPEED = 1;
