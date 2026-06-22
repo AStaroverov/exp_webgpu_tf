@@ -4,8 +4,11 @@ import { createManualControl } from "./src/Game/input/createManualControl.ts";
 import { setTankWeapon } from "./src/Game/ECS/Entities/Tank/setTankWeapon.ts";
 import { createWeaponBar } from "./src/ui/createWeaponBar.ts";
 import { createHpBar } from "./src/ui/createHpBar.ts";
+import { createScoreCounter } from "./src/ui/createScoreCounter.ts";
 import { createDeathOverlay } from "./src/ui/createDeathOverlay.ts";
 import { getTankHealth } from "./src/Game/ECS/Entities/Tank/TankUtils.ts";
+import { GameDI } from "./src/Game/DI/GameDI.ts";
+import { getGameComponents } from "./src/Game/ECS/createGameWorld.ts";
 import { createPolicyOpponentController } from "../ppo_unknown/src/env/EvalPolicyAgent.ts";
 import { MapDI } from "./src/Game/DI/MapDI.ts";
 import { SoundManager } from "./src/Game/ECS/Systems/Sound/index.ts";
@@ -98,6 +101,10 @@ createWeaponBar(canvas, {
 // Player HP readout, bottom-left of the canvas; fed each frame from the loop.
 const hpBar = createHpBar(canvas);
 
+// Player score readout, top-left of the canvas; fed each frame from the loop.
+const scoreCounter = createScoreCounter(canvas);
+const { Score } = getGameComponents(GameDI.world);
+
 // Shown when the player dies; Restart fully rebuilds the game via a page reload.
 const deathOverlay = createDeathOverlay(canvas, { onRestart: () => location.reload() });
 let playerDead = false;
@@ -136,6 +143,7 @@ const loop = (now: number) => {
 
   const health = getTankHealth(playerEid);
   hpBar.setHealth(health);
+  scoreCounter.setScore(Score.get(playerEid));
   if (!playerDead && health <= 0) {
     playerDead = true;
     deathOverlay.show();

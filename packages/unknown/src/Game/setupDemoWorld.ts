@@ -14,6 +14,7 @@
  * Must be called AFTER `createGame()` (it relies on the live `GameDI`/`MapDI`).
  */
 
+import { query } from "bitecs";
 import { GameDI } from "./DI/GameDI.ts";
 import { MapDI } from "./DI/MapDI.ts";
 import { PluginDI } from "./DI/PluginDI.ts";
@@ -35,6 +36,8 @@ const ENEMY_TYPES: readonly TankVehicleType[] = [
   VehicleType.EmpTank,
 ];
 
+/** Most enemies (team 2) alive at once; the wave spawner skips while at the cap. */
+const MAX_ENEMIES = 5;
 /** Cells in from the left/right border the two starting tanks spawn at. */
 const SPAWN_INSET_CELLS = 3;
 /** World distance between adjacent pointy-hex columns (√3 · radius). */
@@ -50,7 +53,8 @@ export type DemoWorld = {
 };
 
 export function setupDemoWorld({ world } = GameDI): DemoWorld {
-  const { VehicleController, PlayerControlled, Repairer } = getGameComponents(world);
+  const { VehicleController, PlayerControlled, Repairer, Score, Tank, TeamRef } =
+    getGameComponents(world);
   let nextEnemyPlayerId = 3; // 1 = player, 2 = the starting enemy
 
   // TEMP diagnostic (DELETE once the 10k shape-buffer overflow is diagnosed).
@@ -89,6 +93,7 @@ export function setupDemoWorld({ world } = GameDI): DemoWorld {
   });
   PlayerControlled.addComponent(world, playerEid);
   Repairer.addComponent(world, playerEid); // can heal by salvaging ground scrap
+  Score.addComponent(world, playerEid); // running score, credited by enemy damage dealt
 
   // Team 2 — the opponent; its driver is attached by the caller.
   const enemyEid = createTank({
@@ -108,8 +113,15 @@ export function setupDemoWorld({ world } = GameDI): DemoWorld {
 
   return { playerEid, enemyEid, spawnEnemy };
 
-  /** Spawn one more team-2 enemy on a random passable cell (null if none free). */
+  /** Spawn one more team-2 enemy on a random passable cell (null if none free or at the cap). */
   function spawnEnemy(): number | null {
+    const tanks = query(world, [Tank, TeamRef]);
+    let enemyCount = 0;
+    for (let i = 0; i < tanks.length; i++) {
+      if (TeamRef.id.get(tanks[i]) === 2) enemyCount++;
+    }
+    if (enemyCount >= MAX_ENEMIES) return null;
+
     const cell = pickRandomPassableCell();
     if (!cell) return null;
     const pos = grid.hexToWorld(cell.q, cell.r);

@@ -41,6 +41,7 @@ import {
 import { createCompoundPartComponent } from "./Components/CompoundPart.ts";
 import { createPlayerRefComponent } from "./Components/PlayerRef.ts";
 import { createProgressComponent } from "./Components/Progress.ts";
+import { createScoreComponent } from "./Components/Score.ts";
 import { createSlotComponent } from "./Components/Slot.ts";
 import {
   createSoundComponent,
@@ -106,6 +107,7 @@ function createGameOnlyComponents(world: World) {
     Repairer: createRepairerComponent(world),
     Salvage: createSalvageComponent(world),
     Progress: createProgressComponent(world),
+    Score: createScoreComponent(world),
     RigidBodyRef: createRigidBodyRefComponent(world),
     RigidBodyState: createRigidBodyStateComponent(world),
     CompoundPart: createCompoundPartComponent(world),

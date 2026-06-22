@@ -135,10 +135,25 @@ function saveHitters(hittableEid: EntityId, vehicleEid: EntityId, { world } = Ga
 
     const attackerTeamId = TeamRef.id.get(hitEid);
     const attackerPlayerId = PlayerRef.id.get(hitEid);
+    const damage = Hitable.getDamage(hittableEid, i);
     if (attackerTeamId === vehiclePartTeamId) {
-      FriendlyHitters.addDamage(vehicleEid, attackerPlayerId, Hitable.getDamage(hittableEid, i));
+      FriendlyHitters.addDamage(vehicleEid, attackerPlayerId, damage);
     } else {
-      LastHitters.addDamage(vehicleEid, attackerPlayerId, Hitable.getDamage(hittableEid, i));
+      LastHitters.addDamage(vehicleEid, attackerPlayerId, damage);
+      creditScore(attackerPlayerId, damage);
+    }
+  }
+}
+
+// A score-keeping vehicle (only the human's tank in the demo) is credited the
+// enemy damage its player dealt. Keyed by playerId — the [Score, PlayerRef]
+// query is the set of score owners (tiny), never a per-entity type-check.
+function creditScore(attackerPlayerId: number, damage: number, { world } = GameDI) {
+  const { Score, PlayerRef } = getGameComponents(world);
+  const scorers = query(world, [Score, PlayerRef]);
+  for (let i = 0; i < scorers.length; i++) {
+    if (PlayerRef.id.get(scorers[i]) === attackerPlayerId) {
+      Score.add(scorers[i], damage);
     }
   }
 }
