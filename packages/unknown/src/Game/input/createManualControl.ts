@@ -47,29 +47,27 @@ export function createManualControl(canvas: HTMLCanvasElement): ManualControl {
   const mouse = { x: 0, y: 0, inside: false, down: false };
 
   // Arrows and WASD both drive — whichever the player reaches for.
+  // Keyed by `event.code` (physical key position), so it is layout/language
+  // independent: the W-position key works the same on QWERTY, ЙЦУКЕН, AZERTY, …
   const KEY_MAP: Record<string, keyof typeof keys> = {
     ArrowUp: "up",
     ArrowDown: "down",
     ArrowLeft: "left",
     ArrowRight: "right",
-    w: "up",
-    s: "down",
-    a: "left",
-    d: "right",
-    W: "up",
-    S: "down",
-    A: "left",
-    D: "right",
+    KeyW: "up",
+    KeyS: "down",
+    KeyA: "left",
+    KeyD: "right",
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
-    const k = KEY_MAP[e.key];
+    const k = KEY_MAP[e.code];
     if (k === undefined) return;
     keys[k] = true;
     e.preventDefault(); // arrows would otherwise scroll the page
   };
   const onKeyUp = (e: KeyboardEvent) => {
-    const k = KEY_MAP[e.key];
+    const k = KEY_MAP[e.code];
     if (k === undefined) return;
     keys[k] = false;
     e.preventDefault();
