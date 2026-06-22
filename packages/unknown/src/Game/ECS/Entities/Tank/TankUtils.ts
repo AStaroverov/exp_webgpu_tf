@@ -11,6 +11,8 @@ import {
   scheduleRemoveEntity,
 } from "../../Utils/typicalRemoveEntity.ts";
 import { spawnExplosion } from "../Explosion.ts";
+import { spawnLightFlash } from "../LightFlash.ts";
+import { FlashLightConfig } from "../../../Config/vfx.ts";
 import {
   getMatrixTranslationX,
   getMatrixTranslationY,
@@ -24,6 +26,8 @@ import { VFXType } from "../../Components/VFX.ts";
 
 /** How long torn-off debris lingers on the ground before self-destructing (ms). */
 const DEBRIS_LIFETIME_MS = 10_000;
+/** Radius (world px) of the light flash a destroyed tank throws (like a rocket blast). */
+const DEATH_LIGHT_RADIUS = 120;
 
 export function destroyTank(vehicleEid: EntityId, { world } = GameDI) {
   const { Tank, Children } = getGameComponents(world);
@@ -37,6 +41,16 @@ export function destroyTank(vehicleEid: EntityId, { world } = GameDI) {
     type: VFXType.Explosion,
     size: 60,
     duration: 1500,
+  });
+
+  // Bright light flash on death, same as a rocket blast (feeds the radiance cascades).
+  spawnLightFlash({
+    x: explosionX,
+    y: explosionY,
+    radius: DEATH_LIGHT_RADIUS,
+    color: FlashLightConfig.explosion.color,
+    intensity: FlashLightConfig.explosion.intensity,
+    duration: FlashLightConfig.explosion.duration,
   });
 
   const partsToExplode: EntityId[] = [];

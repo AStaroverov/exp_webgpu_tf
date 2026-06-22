@@ -4,6 +4,7 @@ import { createManualControl } from "./src/Game/input/createManualControl.ts";
 import { setTankWeapon } from "./src/Game/ECS/Entities/Tank/setTankWeapon.ts";
 import { createWeaponBar } from "./src/ui/createWeaponBar.ts";
 import { createHpBar } from "./src/ui/createHpBar.ts";
+import { createDeathOverlay } from "./src/ui/createDeathOverlay.ts";
 import { getTankHealth } from "./src/Game/ECS/Entities/Tank/TankUtils.ts";
 import { createPolicyOpponentController } from "../ppo_unknown/src/env/EvalPolicyAgent.ts";
 import { MapDI } from "./src/Game/DI/MapDI.ts";
@@ -96,6 +97,10 @@ createWeaponBar(canvas, {
 // Player HP readout, bottom-left of the canvas; fed each frame from the loop.
 const hpBar = createHpBar(canvas);
 
+// Shown when the player dies; Restart fully rebuilds the game via a page reload.
+const deathOverlay = createDeathOverlay(canvas, { onRestart: () => location.reload() });
+let playerDead = false;
+
 sndBtn.addEventListener("click", () => {
   game.enableSound();
   sndBtn.remove();
@@ -107,7 +112,13 @@ const loop = (now: number) => {
   prev = now;
   manual.update(delta);
   game.gameTick(delta);
-  hpBar.setHealth(getTankHealth(playerEid));
+
+  const health = getTankHealth(playerEid);
+  hpBar.setHealth(health);
+  if (!playerDead && health <= 0) {
+    playerDead = true;
+    deathOverlay.show();
+  }
   requestAnimationFrame(loop);
 };
 requestAnimationFrame(loop);

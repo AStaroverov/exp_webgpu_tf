@@ -18,7 +18,7 @@ const HEX_INRADIUS = HexGridConfig.radius * (Math.sqrt(3) / 2);
  * stone never pokes past the cell edges; passed to the generator, which sizes
  * the rock to it directly.
  */
-const ROCK_RADIUS = HEX_INRADIUS * 0.85;
+const ROCK_RADIUS = HEX_INRADIUS * 1.3;
 
 /**
  * Create a rock obstacle: one boulder per footprint hex, generated to fit the
