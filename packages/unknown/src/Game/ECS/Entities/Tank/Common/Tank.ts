@@ -10,6 +10,7 @@ import { createVehicleBase, createVehicleTurret } from "../../Vehicle/VehicleBas
 import { createTrack, TrackOptions } from "../../Track/createTrack.ts";
 import { type TankOptions } from "./Options.ts";
 import { getGameComponents } from "../../../createGameWorld.ts";
+import { StreamCaliberConfig } from "../../../../Config/weapons.ts";
 
 export type TankTracksConfig = {
   anchorX: number;
@@ -87,11 +88,18 @@ export function createStreamTankTurret(
   caliber: number,
   { world } = GameDI,
 ) {
-  const { StreamFirearms } = getGameComponents(world);
+  const { StreamFirearms, Sound } = getGameComponents(world);
 
   const [turretEid, gunEid] = createTankTurretBase(options, tankEid, tankPid);
 
   StreamFirearms.addComponent(world, turretEid, caliber);
+  // Sustained firing-loop, mounted on the turret itself (its GlobalTransform
+  // positions the sound). Toggled by createStreamFirearmsSystem; loaded silent.
+  Sound.addComponent(world, turretEid, StreamCaliberConfig[caliber].soundType, {
+    loop: true,
+    autoplay: false,
+    volume: 1,
+  });
 
   return [turretEid, gunEid] as const;
 }

@@ -12,6 +12,11 @@ import { EmpStunConfig, FrostSlowConfig } from "../../Config/weapons.ts";
 import { findVehicleEidByPartEid } from "../Utils/findPartVehicle.ts";
 
 export function createHitableSystem({ world } = GameDI) {
+  // The hit-sound throttle map is keyed by parentEid and lives module-level; eids
+  // are reused across worlds, so a stale lastSpawnTime would wrongly suppress the
+  // first hit sound after a restart. Clear it on (re)creation of this system.
+  resetHitSoundThrottle();
+
   const { Hitable, Bullet, VehiclePart, Parent, Vehicle } = getGameComponents(world);
   const hitableChanges = createChangeDetector(world, [onSet(Hitable)]);
   let time = 0;
@@ -139,6 +144,16 @@ function saveHitters(hittableEid: EntityId, vehicleEid: EntityId, { world } = Ga
 }
 
 const mapParentToLastSoundTime = new Map<EntityId, number>();
+
+/**
+ * Clear the hit-sound throttle state. Exported so the game destroy/recreate path
+ * can wipe stale per-eid timestamps (eids are reused across worlds); also invoked
+ * at the top of createHitableSystem() so world recreation resets it automatically.
+ */
+export function resetHitSoundThrottle(): void {
+  mapParentToLastSoundTime.clear();
+}
+
 function throttledSpawnSoundAtParent(parentEid: EntityId, now: number, delay: number) {
   const lastSpawnTime = mapParentToLastSoundTime.get(parentEid);
   if (lastSpawnTime && now - lastSpawnTime < delay) return;
@@ -150,5 +165,6 @@ function throttledSpawnSoundAtParent(parentEid: EntityId, now: number, delay: nu
     loop: false,
     volume: 1,
     autoplay: true,
+    destroyOnFinish: true,
   });
 }

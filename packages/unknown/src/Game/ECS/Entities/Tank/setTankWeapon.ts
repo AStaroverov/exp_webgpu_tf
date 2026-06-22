@@ -18,6 +18,7 @@ import { GameDI } from "../../../DI/GameDI.ts";
 import { getGameComponents } from "../../createGameWorld.ts";
 import { VehicleType } from "../../Components/Vehicle.ts";
 import { getTankConfig } from "../../../Config/vehicles.ts";
+import { StreamCaliberConfig } from "../../../Config/weapons.ts";
 
 export type PlayerWeapon = "normal" | "flame" | "frost" | "emp";
 
@@ -30,22 +31,31 @@ const WEAPON_SOURCE: Record<PlayerWeapon, VehicleType> = {
 };
 
 export function setTankWeapon(tankEid: number, weapon: PlayerWeapon, { world } = GameDI): void {
-  const { Tank, Firearms, StreamFirearms, TurretController } = getGameComponents(world);
+  const { Tank, Firearms, StreamFirearms, TurretController, Sound } = getGameComponents(world);
   const turretEid = Tank.turretEId.get(tankEid);
   if (!turretEid) return;
 
-  // Drop whatever gun is currently mounted and stop any held shot.
+  // Drop whatever gun is currently mounted and stop any held shot. The stream
+  // firing-loop sound rides on the turret, so it goes with the stream gun (the
+  // SoundSystem fades out the orphaned loop track).
   if (hasComponent(world, turretEid, Firearms)) removeComponent(world, turretEid, Firearms);
   if (hasComponent(world, turretEid, StreamFirearms)) {
     removeComponent(world, turretEid, StreamFirearms);
   }
+  if (hasComponent(world, turretEid, Sound)) Sound.removeComponent(world, turretEid);
   TurretController.setShooting$(turretEid, 0);
 
   const config = getTankConfig(WEAPON_SOURCE[weapon]);
 
   if (weapon === "flame" || weapon === "frost") {
-    StreamFirearms.addComponent(world, turretEid, config.stream!.caliber);
+    const caliber = config.stream!.caliber;
+    StreamFirearms.addComponent(world, turretEid, caliber);
     StreamFirearms.emitAccMs.set(turretEid, 0);
+    Sound.addComponent(world, turretEid, StreamCaliberConfig[caliber].soundType, {
+      loop: true,
+      autoplay: false,
+      volume: 1,
+    });
     return;
   }
 

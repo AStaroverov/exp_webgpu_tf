@@ -19,6 +19,7 @@ export class WebAudioTrack {
 
   private _volume = 1;
   private _loop = false;
+  private _playbackRate = 1;
   private _state: WebAudioTrackState = "stopped";
 
   // For pause/resume tracking
@@ -35,7 +36,7 @@ export class WebAudioTrack {
 
     this.gainNode = ctx.createGain();
     this.gainNode.gain.value = this._volume;
-    this.gainNode.connect(ctx.destination);
+    // gainNode is left UNCONNECTED here; connect() is the single wiring path.
   }
 
   /**
@@ -83,7 +84,53 @@ export class WebAudioTrack {
     }
 
     this.createAndStartSource(0);
+
+    // 5ms attack: ramp 0 → target so a transient-heavy buffer cannot click on
+    // start. linearRampToValueAtTime actually reaches the target (unlike
+    // setTargetAtTime). Per-frame volume updates must start on the SECOND frame
+    // of the voice so they never schedule on the same currentTime as this ramp.
+    const now = this.ctx.currentTime;
+    const gain = this.gainNode.gain;
+    gain.cancelScheduledValues(now);
+    gain.setValueAtTime(0, now);
+    gain.linearRampToValueAtTime(this._volume, now + 0.005);
+
     this._state = "playing";
+    this.pausedAt = 0;
+
+    return this;
+  }
+
+  /**
+   * Fade the gain to 0 over `fadeSec` then stop the source — for LOOPS, whose
+   * hard stop at a non-zero gain clicks (the most frequent stop scenario: a tank
+   * halting). NOT setTargetAtTime (asymptotic, never reaches 0 → residual gain
+   * at stop → click); linearRampToValueAtTime reaches 0 deterministically.
+   * One-shots may hard-stop; they decay to their natural end anyway.
+   */
+  fadeOutAndStop(fadeSec = 0.03): this {
+    if (this._state !== "playing" || !this.source) {
+      return this.stop();
+    }
+
+    const now = this.ctx.currentTime;
+    const gain = this.gainNode.gain;
+    gain.cancelScheduledValues(now);
+    gain.setValueAtTime(gain.value, now); // anchor on the real current value
+    gain.linearRampToValueAtTime(0, now + fadeSec);
+
+    const src = this.source;
+    // We own teardown; suppress the natural-end callback and disconnect only
+    // after the fade has fully played out.
+    src.onended = () => src.disconnect();
+    try {
+      src.stop(now + fadeSec + 0.005);
+    } catch {
+      // Already stopped
+    }
+
+    this.source = null;
+    this._state = "stopped";
     this.pausedAt = 0;
 
     return this;
@@ -135,11 +182,31 @@ export class WebAudioTrack {
   }
 
   /**
-   * Set volume (0 to 1)
+   * Set volume (0 to 1) immediately — use only for the initial set at start.
    */
   setVolume(volume: number): this {
     this._volume = Math.max(0, Math.min(1, volume));
     this.gainNode.gain.value = this._volume;
+    return this;
+  }
+
+  /**
+   * Ramp volume on the hot path (per-frame tracking) — smooth, click-free.
+   * Exponential approach via setTargetAtTime (tau = 0.02s); asymptotic, not
+   * a fixed-duration arrival. Use for continuous per-frame volume updates only.
+   */
+  rampVolume(volume: number): this {
+    this._volume = Math.max(0, Math.min(1, volume));
+    this.gainNode.gain.setTargetAtTime(this._volume, this.ctx.currentTime, 0.02);
+    return this;
+  }
+
+  /**
+   * Set playback rate (pitch). Takes effect on the NEXT source start — call
+   * before play()/resume(). Used for one-shot pitch jitter; left at 1 for loops.
+   */
+  setPlaybackRate(rate: number): this {
+    this._playbackRate = rate;
     return this;
   }
 
@@ -247,6 +314,7 @@ export class WebAudioTrack {
     this.source = this.ctx.createBufferSource();
     this.source.buffer = this.buffer;
     this.source.loop = this._loop;
+    this.source.playbackRate.value = this._playbackRate;
     this.source.connect(this.gainNode);
 
     this.source.onended = () => {
@@ -273,26 +341,4 @@ export class WebAudioTrack {
       this.source = null;
     }
   }
-}
-
-/**
- * Factory function - creates track with shared AudioContext
- */
-let sharedContext: AudioContext | null = null;
-
-export function createWebAudioTrack(options?: WebAudioTrackOptions): WebAudioTrack {
-  if (!sharedContext) {
-    sharedContext = new AudioContext();
-  }
-  return new WebAudioTrack(sharedContext, options);
-}
-
-/**
- * Get or create shared AudioContext
- */
-export function getSharedAudioContext(): AudioContext {
-  if (!sharedContext) {
-    sharedContext = new AudioContext();
-  }
-  return sharedContext;
 }

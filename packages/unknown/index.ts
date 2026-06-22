@@ -8,6 +8,7 @@ import { createDeathOverlay } from "./src/ui/createDeathOverlay.ts";
 import { getTankHealth } from "./src/Game/ECS/Entities/Tank/TankUtils.ts";
 import { createPolicyOpponentController } from "../ppo_unknown/src/env/EvalPolicyAgent.ts";
 import { MapDI } from "./src/Game/DI/MapDI.ts";
+import { SoundManager } from "./src/Game/ECS/Systems/Sound/index.ts";
 import { setCameraZoom } from "../renderer/src/ECS/Systems/ResizeSystem.ts";
 
 /** Spawn a fresh policy-driven enemy every this many ms. */
@@ -101,10 +102,30 @@ const hpBar = createHpBar(canvas);
 const deathOverlay = createDeathOverlay(canvas, { onRestart: () => location.reload() });
 let playerDead = false;
 
-sndBtn.addEventListener("click", () => {
+// Sound on/off preference survives the restart (Restart = full page reload).
+// Without this every reload drops back to muted until the button is clicked.
+const SOUND_PREF_KEY = "sound-enabled";
+
+if (localStorage.getItem(SOUND_PREF_KEY) === "1") {
+  // Was on before the reload — re-enable straight away. A freshly reloaded page
+  // has no prior user gesture, so the AudioContext may come up suspended; resume
+  // it on the first interaction (the buffers decode fine while suspended).
   game.enableSound();
   sndBtn.remove();
-});
+  const resumeOnce = () => {
+    SoundManager.resume();
+    window.removeEventListener("pointerdown", resumeOnce);
+    window.removeEventListener("keydown", resumeOnce);
+  };
+  window.addEventListener("pointerdown", resumeOnce);
+  window.addEventListener("keydown", resumeOnce);
+} else {
+  sndBtn.addEventListener("click", () => {
+    game.enableSound();
+    localStorage.setItem(SOUND_PREF_KEY, "1");
+    sndBtn.remove();
+  });
+}
 
 let prev = performance.now();
 const loop = (now: number) => {

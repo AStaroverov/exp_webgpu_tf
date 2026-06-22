@@ -8,6 +8,8 @@ import {
 } from "../../../../../renderer/src/ECS/Components/Transform.ts";
 import { spawnExplosion } from "../Entities/Explosion.ts";
 import { spawnLightFlash } from "../Entities/LightFlash.ts";
+import { spawnSoundAtPosition } from "../Entities/Sound.ts";
+import { SoundType } from "../Components/Sound.ts";
 import { ExplosionVisualConfig } from "../../Config/index.ts";
 
 /**
@@ -42,6 +44,13 @@ export function createExplodeSystem({ world } = GameDI) {
           duration: visuals.durationMs,
         });
       }
+      // Detonation sound — render-independent (sibling of spawnExplosion, which
+      // is render-gated), so the blast is heard headless too. Silent visuals
+      // (HitFlash) carry SoundType.None and the hit sound covers them instead.
+      if (visuals.soundType !== SoundType.None) {
+        spawnSoundAtPosition({ type: visuals.soundType, x, y, destroyOnFinish: true });
+      }
+
       const lightRadius = Explodable.lightRadius.get(eid);
       if (lightRadius > 0) {
         const flash = visuals.flash;

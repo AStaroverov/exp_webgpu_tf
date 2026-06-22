@@ -7,7 +7,12 @@ export enum SoundType {
   TankMove = 1,
   TankShoot = 2,
   TankHit = 3,
-  DebrisCollect = 4,
+  Explosion = 5,
+  // Stream-weapon hose — one sustained loop shared by every stream caliber
+  // (flame / frost), toggled by the firing state (see createStreamFirearmsSystem).
+  Stream = 6,
+  // EMP burst detonation (createExplodeSystem, driven by ExplosionVisualConfig).
+  Emp = 7,
 }
 
 export enum SoundState {
@@ -21,14 +26,12 @@ export const createSoundComponent = defineComponent((Sound, ctx) => {
   const state = ctx.table.flat(Int8Array);
   const loop = ctx.table.flat(Int8Array);
   const volume = ctx.table.flat(Float32Array);
-  const _audioIndex = ctx.table.flat(Int16Array);
 
   return {
     type,
     state,
     loop,
     volume,
-    _audioIndex,
 
     addComponent(
       world: World,
@@ -45,7 +48,6 @@ export const createSoundComponent = defineComponent((Sound, ctx) => {
       loop.set(eid, options?.loop ? 1 : 0);
       volume.set(eid, options?.volume ?? 1);
       state.set(eid, options?.autoplay ? SoundState.Playing : SoundState.Stopped);
-      _audioIndex.set(eid, -1);
     },
 
     removeComponent(world: World, eid: EntityId) {

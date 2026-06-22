@@ -8,6 +8,7 @@ import { PI } from "../../../../../lib/math.ts";
 import { HexGridConfig } from "../Map/HexConfig.ts";
 import { ExplodableSettings } from "../ECS/Components/Explodable.ts";
 import { DamageKind } from "../ECS/Components/Damagable.ts";
+import { SoundType } from "../ECS/Components/Sound.ts";
 import { ExplosionVisual } from "./vfx.ts";
 
 // =============================================================================
@@ -243,6 +244,8 @@ export type StreamCaliberStats = {
   };
   /** THE divergence field: the damage kind particles deal (Fire / Frost) */
   kind: DamageKind;
+  /** The sustained-loop sound type this hose plays while firing */
+  soundType: SoundType;
   /** Instant damage to the struck part per overlap */
   damage: number;
   /** Damage-over-time stamped on the struck part; duration refreshed per overlap */
@@ -277,6 +280,7 @@ export const StreamCaliberConfig: StreamCaliberStats[] = [
     requestNextFrac: 0.8,
     wander: { angularSpeed: 3.5, frequency: 2.5 },
     kind: DamageKind.Fire,
+    soundType: SoundType.Stream,
     damage: 0.05,
     dot: { dps: 0.05, durationMs: 3000 },
     tint: [1.0, 0.45, 0.1],
@@ -296,6 +300,7 @@ export const StreamCaliberConfig: StreamCaliberStats[] = [
     requestNextFrac: 0.8,
     wander: { angularSpeed: 2.5, frequency: 1.8 },
     kind: DamageKind.Frost,
+    soundType: SoundType.Stream,
     damage: 0.02,
     dot: { dps: 0.02, durationMs: 5000 },
     tint: [0.3, 0.7, 1.0],

@@ -75,6 +75,7 @@ export function createStreamFirearmsSystem({ world } = GameDI) {
     LightEmitter,
     Stunned,
     Vehicle,
+    Sound,
   } = getGameComponents(world);
 
   const emitBurst = (turretEid: number) => {
@@ -158,6 +159,16 @@ export function createStreamFirearmsSystem({ world } = GameDI) {
 
       const firing =
         !stunned && TurretController.shouldShoot(turretEid) && StreamFirearms.canFire(turretEid);
+
+      // The hose's sustained loop rides on the turret; toggle it here where the
+      // firing state is already known (no second derivation of the condition).
+      if (hasComponent(world, turretEid, Sound)) {
+        if (firing && !Sound.isPlaying(turretEid)) {
+          Sound.play(turretEid);
+        } else if (!firing && Sound.isPlaying(turretEid)) {
+          Sound.stop(turretEid);
+        }
+      }
 
       if (!firing) {
         // Not firing → the charge regenerates smoothly. Prime the emit

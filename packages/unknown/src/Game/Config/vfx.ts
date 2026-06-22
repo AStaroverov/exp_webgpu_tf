@@ -5,6 +5,7 @@
  */
 
 import { VFXType, VFXTypeValue } from "../ECS/Components/VFX.ts";
+import { SoundType } from "../ECS/Components/Sound.ts";
 
 export const ExplosionConfig = {
   /** Default explosion duration (ms) */
@@ -65,21 +66,26 @@ export const ExplosionVisualConfig: Record<
     vfxType: VFXTypeValue;
     durationMs: number;
     flash: { color: readonly [number, number, number]; intensity: number; duration: number };
+    /** Detonation sound; `SoundType.None` = silent (the hit sound covers HitFlash). */
+    soundType: SoundType;
   }
 > = {
   [ExplosionVisual.HitFlash]: {
     flash: FlashLightConfig.hit,
     vfxType: VFXType.HitFlash,
     durationMs: 400,
+    soundType: SoundType.None,
   },
   [ExplosionVisual.Explosion]: {
     flash: FlashLightConfig.explosion,
     vfxType: VFXType.Explosion,
     durationMs: ExplosionConfig.defaultDuration,
+    soundType: SoundType.Explosion,
   },
   [ExplosionVisual.Emp]: {
     flash: EmpVfxConfig.flash,
     vfxType: VFXType.EmpExplosion,
     durationMs: EmpVfxConfig.explosion.durationMs,
+    soundType: SoundType.Emp,
   },
 };

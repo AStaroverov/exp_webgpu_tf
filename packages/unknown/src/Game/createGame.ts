@@ -334,6 +334,9 @@ export function createGame({
     const updateSounds = createSoundSystem();
     const updateTankMoveSounds = createTankMoveSoundSystem();
 
+    // Await the context resume (browser autoplay policy) before loading sounds,
+    // so playback runs on a running context. enableSound is already async.
+    await SoundManager.resume();
     loadGameSounds().catch(console.error);
 
     SoundDI.soundFrame = (delta: number) => {

@@ -12,6 +12,8 @@ import {
 } from "../../Utils/typicalRemoveEntity.ts";
 import { spawnExplosion } from "../Explosion.ts";
 import { spawnLightFlash } from "../LightFlash.ts";
+import { spawnSoundAtPosition } from "../Sound.ts";
+import { SoundType } from "../../Components/Sound.ts";
 import { FlashLightConfig } from "../../../Config/vfx.ts";
 import {
   getMatrixTranslationX,
@@ -41,6 +43,15 @@ export function destroyTank(vehicleEid: EntityId, { world } = GameDI) {
     type: VFXType.Explosion,
     size: 60,
     duration: 1500,
+  });
+
+  // Sibling (NOT nested) to spawnExplosion: spawnExplosion is render-gated and
+  // no-ops headless, but the explosion sound must be render-independent.
+  spawnSoundAtPosition({
+    type: SoundType.Explosion,
+    x: explosionX,
+    y: explosionY,
+    destroyOnFinish: true,
   });
 
   // Bright light flash on death, same as a rocket blast (feeds the radiance cascades).
