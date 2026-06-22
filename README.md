@@ -3,6 +3,8 @@
 **▶ Live demo: https://astaroverov.github.io/exp_webgpu_tf/**
 _(needs a WebGPU browser — Chrome/Edge desktop. Click once to enable sound.)_
 
+![gameplay demo](game.gif)
+
 A from-scratch browser game where you drive a tank against an opponent that was
 **trained with reinforcement learning** — and everything (physics, GPU
 rendering, and the neural-net training itself) runs **client-side in a single
