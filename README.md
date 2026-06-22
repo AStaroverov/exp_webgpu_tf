@@ -1,57 +1,52 @@
 # exp_webgpu_tf
 
-A personal hobby project — my after-hours playground for the intersection of
-**three things I find fun**: building a game engine from scratch, doing real-time
-graphics on the GPU, and training agents to play the game with reinforcement
-learning. Everything runs **in the browser**, with no backend: the simulation,
-the renderer, and the neural-network training all live in the same TypeScript
-monorepo and execute across Web Workers.
+**▶ Live demo: https://astaroverov.github.io/exp_webgpu_tf/**
+_(needs a WebGPU browser — Chrome/Edge desktop. Click once to enable sound.)_
 
-The real goal is to **push the browser to its absolute limit** — to see how much
-a single tab can actually do. Run a physics sim, render it on the GPU, and train
-neural networks on it _at the same time_, all client-side, and find where it
-breaks. It's a stress test for the platform as much as anything else; not a
-product.
+A from-scratch browser game where you drive a tank against an opponent that was
+**trained with reinforcement learning** — and everything (physics, GPU
+rendering, and the neural-net training itself) runs **client-side in a single
+tab, with no backend**. A personal hobby project to see how far the browser can
+actually be pushed.
 
-## What I'm trying to do
+Three things built by hand, no engines or game frameworks:
 
-1. **Write my own ECS game engine** — an entity-component-system simulation
-   with a 2D physics backend (Rapier), running deterministically and headless
-   so it can be stepped as fast as possible for training.
-2. **Render it on the GPU directly** — a hand-rolled **WebGPU** renderer with my
-   own WGSL shader/struct abstractions, instead of using Three.js or pixi.
-3. **Train agents to play it with PPO** — a from-scratch **Proximal Policy
-   Optimization** implementation on top of TensorFlow.js, with a distributed
-   actor/learner setup and curriculum learning, all inside the browser tab.
+- **My own ECS game engine** — ~50 components / ~40 systems on `bitecs`, with a
+  2D Rapier physics backend. Strictly data-oriented: behavior is a _query over
+  components_, never a branch inside a system. Runs headless and deterministic
+  so it can be stepped as fast as possible for training.
+- **My own WebGPU renderer** — hand-written WGSL + SDF shape passes and a
+  screen-space **Radiance Cascades** global-illumination lighting pass. No
+  Three.js/pixi.
+- **From-scratch PPO** (Proximal Policy Optimization) on TensorFlow.js that
+  actually trains the agent you fight.
 
-The recurring theme: cram all of it — engine, GPU rendering, and RL training —
-into one browser tab at once and squeeze every last drop of performance out of
-WebGPU, WASM, and Web Workers.
+## The game
 
-## How a training run is wired
+A top-down desert combat prototype. Vehicles are composed from parts
+bolted onto a compound Rapier body (hull, turret, wheels, tracks), so they take
+**localized damage and shed debris** instead of being one rigid blob. Multiple
+weapon families share a single damage pipeline: ballistic guns, rockets, an EMP
+gun, and continuous **flame / frost streams** with damage-over-time and slow
+effects — plus shields, repair, scoring, and destructible terrain.
 
-Everything runs client-side, fanned out across Web Workers from a single page
+## The training
 
-- **Actors** (multiple workers) run the headless game simulation + run policy
-  inference to collect experience, on the **WASM** TF backend.
-- **Learners** (policy + value workers) train the networks on the **WebGPU** TF
-  backend.
-- The **main tab** runs a live debug visualizer that renders an episode driven
-  by the latest saved policy, plus a realtime metrics dashboard (React +
-  HeroUI), reading channels published by the learners.
-
-The RL setup treats a step as a _decision point_ rather than a single game tick
-(a semi-MDP / options framing), with action masking for invalid moves and a
-curriculum that grows scenario difficulty over the run.
+A **distributed actor/learner RL pipeline running entirely across Web Workers**:
+actors run the headless sim + inference on the WASM TF backend, learners train
+on the WebGPU backend, and the main tab shows a live visualizer + metrics
+dashboard. It uses action masking, an opponent population (self-play + frozen
+past selves + scripted baselines), and a curriculum. **The same headless engine
+serves both** the trainer and the playable game — the opponent in the demo is
+one of these trained networks, run through the exact training inference path.
 
 ## Tech stack
 
-TypeScript · Web Workers · WebGPU (custom renderer) · WGSL ·
-`bitecs` (ECS) · `@dimforge/rapier2d` (physics) ·
-TensorFlow.js (`webgpu` + `wasm` backends).
+TypeScript · Web Workers · WebGPU + WGSL (custom renderer) · `bitecs` (ECS) ·
+`@dimforge/rapier2d` (physics) · TensorFlow.js (`webgpu` + `wasm`) · Web Audio.
 
 ## Status
 
 Active personal experiment — APIs, package names, and the game itself change
-freely as I explore. Not intended for outside use; shared mostly as a record of
-what I'm tinkering with.
+freely as I explore. Shared as a record of what I'm tinkering with, not as a
+product.
