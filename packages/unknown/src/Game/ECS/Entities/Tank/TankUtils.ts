@@ -22,6 +22,9 @@ import { getSlotFillerEid, isSlot, isSlotEmpty } from "../../Utils/SlotUtils.ts"
 import { EngineLabels, EngineType } from "../../../Config/vehicles.ts";
 import { VFXType } from "../../Components/VFX.ts";
 
+/** How long torn-off debris lingers on the ground before self-destructing (ms). */
+const DEBRIS_LIFETIME_MS = 10_000;
+
 export function destroyTank(vehicleEid: EntityId, { world } = GameDI) {
   const { Tank, Children } = getGameComponents(world);
   const vehicleMatrix = GlobalTransform.matrix.getBatch(vehicleEid);
@@ -138,10 +141,24 @@ export function tearOffTankPart(
   shouldBreakConnection: boolean = true,
   { world } = GameDI,
 ) {
-  const { TeamRef, PlayerRef, Parent, Children, Joint, VehiclePart, CompoundPart } =
-    getGameComponents(world);
+  const {
+    TeamRef,
+    PlayerRef,
+    Parent,
+    Children,
+    Joint,
+    VehiclePart,
+    CompoundPart,
+    Salvage,
+    DestroyByTimeout,
+  } = getGameComponents(world);
   removeComponent(world, vehiclePartEid, TeamRef);
   removeComponent(world, vehiclePartEid, PlayerRef);
+
+  // The piece is now ownerless debris — collectable scrap for a Repairer tank,
+  // but only for a while: it self-destructs after DEBRIS_LIFETIME_MS.
+  Salvage.addComponent(world, vehiclePartEid);
+  DestroyByTimeout.addComponent(world, vehiclePartEid, DEBRIS_LIFETIME_MS);
 
   const slotEid = Parent.id.get(vehiclePartEid);
 

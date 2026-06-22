@@ -29,7 +29,7 @@ import { setCameraZoom } from "../../../renderer/src/ECS/Systems/ResizeSystem.ts
 import { DEFAULT_FIELD_SIZE, recreateDebugGame } from "../createDebugGame.ts";
 import { spawnObstacles } from "../../../unknown/src/Game/ECS/Entities/Obstacle/spawnObstacles.ts";
 import { createLightingGUI } from "../../../unknown/src/ui/createLightingGUI.ts";
-import type { ManualControl } from "../input/createManualControl.ts";
+import type { ManualControl } from "../../../unknown/src/Game/input/createManualControl.ts";
 
 // Team identity colors — sourced from the shared vehicle palette so the debug
 // swatches and spawned tanks match.

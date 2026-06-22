@@ -31,6 +31,9 @@ import { createLastHittersComponent } from "./Components/LastHitters.ts";
 import { createObstacleComponent } from "./Components/Obstacle.ts";
 import { createObstacleFootprintComponent } from "./Components/ObstacleFootprint.ts";
 import { createParentComponent } from "./Components/Parent.ts";
+import { createPlayerControlledComponent } from "./Components/PlayerControlled.ts";
+import { createRepairerComponent } from "./Components/Repairer.ts";
+import { createSalvageComponent } from "./Components/Salvage.ts";
 import {
   createRigidBodyRefComponent,
   createRigidBodyStateComponent,
@@ -98,7 +101,10 @@ function createGameOnlyComponents(world: World) {
     Obstacle: createObstacleComponent(world),
     ObstacleFootprint: createObstacleFootprintComponent(world),
     Parent: createParentComponent(world),
+    PlayerControlled: createPlayerControlledComponent(world),
     PlayerRef: createPlayerRefComponent(world),
+    Repairer: createRepairerComponent(world),
+    Salvage: createSalvageComponent(world),
     Progress: createProgressComponent(world),
     RigidBodyRef: createRigidBodyRefComponent(world),
     RigidBodyState: createRigidBodyStateComponent(world),

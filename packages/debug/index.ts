@@ -1,7 +1,7 @@
 import { GameDI } from "../unknown/src/Game/DI/GameDI.ts";
 import { createDebugGame } from "./src/createDebugGame.ts";
 import { createDebugGUI } from "./src/ui/createDebugGUI.ts";
-import { createManualControl } from "./src/input/createManualControl.ts";
+import { createManualControl } from "../unknown/src/Game/input/createManualControl.ts";
 
 const canvas = document.getElementById("c") as HTMLCanvasElement;
 

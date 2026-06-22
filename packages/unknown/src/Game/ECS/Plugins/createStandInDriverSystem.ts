@@ -32,7 +32,7 @@ const FIRE_CHANCE = 0.25;
 const HOLD_DURATION_MS = 1000;
 
 export function createStandInDriverSystem({ world } = GameDI) {
-  const { Tank, Vehicle, VehicleController, Children, RigidBodyState, Firearms } =
+  const { Tank, Vehicle, VehicleController, Children, RigidBodyState, Firearms, PlayerControlled } =
     getGameComponents(world);
 
   return function updateStandInDriver(_delta: number) {
@@ -42,6 +42,9 @@ export function createStandInDriverSystem({ world } = GameDI) {
     const tanks = query(world, [Tank, Vehicle, VehicleController, Children]);
 
     for (const eid of tanks) {
+      // The human-driven tank steers its controllers directly every frame;
+      // enqueuing AI actions onto it would fight those writes.
+      if (hasComponent(world, eid, PlayerControlled)) continue;
       if (!needsDecision(eid)) continue;
 
       const px = RigidBodyState.position.get(eid, 0);

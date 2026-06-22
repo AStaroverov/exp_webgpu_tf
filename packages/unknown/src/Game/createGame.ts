@@ -82,6 +82,7 @@ import { createGridOccupancySystem } from "./ECS/Systems/Map/createGridOccupancy
 import { CONTACT_FORCE_TARGET } from "./Config/index.ts";
 import { min } from "../../../../lib/math.ts";
 import { DamageKind } from "./ECS/Components/Damagable.ts";
+import { createPixelatePass } from "./ECS/Systems/Render/PostEffect/Pixelate/createPostEffect.ts";
 
 export type Game = ReturnType<typeof createGame>;
 
@@ -377,11 +378,11 @@ export function createGame({
       device,
       shadowMapTexture: textures.shadowMapTexture,
     });
-    // const pixelatePass = createPixelatePass(device, textures.renderTexture);
+    const pixelatePass = createPixelatePass(device, textures.renderTexture);
     const lighting = (RenderDI.lighting = createRadianceCascadesSystem({
       device,
       frameTextures: textures,
-      // sceneTexture: pixelatePass.outputTexture,
+      sceneTexture: pixelatePass.outputTexture,
       drawEmitters: shapeSystem.drawEmitters,
     }));
     const drawFauna = createDrawFaunaSystem();
@@ -415,7 +416,7 @@ export function createGame({
     RenderDI.renderFrame = (delta: number) => {
       const commandEncoder = device.createCommandEncoder();
       frameTick(commandEncoder, delta); // scene -> renderTexture
-      // pixelatePass.run(commandEncoder);      // renderTexture -> pixelated scene
+      pixelatePass.run(commandEncoder); // renderTexture -> pixelated scene
       lighting.run(commandEncoder, delta); // pixelated scene * light -> litTexture
       present(commandEncoder, lighting.outputTexture); // final -> swapchain
       device.queue.submit([commandEncoder.finish()]);

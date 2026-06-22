@@ -49,7 +49,7 @@ export const DEFAULT_RC_PARAMS: RCParams = {
   sunDistance: 0.65,
   firstCascadeIndex: 0,
   emitCone: 18,
-  ambient: 0.1,
+  ambient: 0.2,
   // Boundary-light dilation for object pixels, in radiance texels.
   objectLightRadius: 6,
   objectTranslucency: 1,

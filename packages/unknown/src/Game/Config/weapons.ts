@@ -104,7 +104,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     speed: 800,
     density: 5_000,
     damage: 25,
-    reloadTime: 1250, // Medium tank - balanced reload
+    reloadTime: 600, // Medium tank - balanced reload
     delay: 0,
     linearDamping: 0.3, // Medium bullets have moderate drag
     maxDistance: HexGridConfig.radius * 8.6,

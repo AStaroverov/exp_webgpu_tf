@@ -4,17 +4,64 @@
     <meta charset="UTF-8" />
     <title>Unknown</title>
     <style>
+      /*
+       * Tweakables — all positioning lives here so the exact fit can be dialed
+       * in without touching markup:
+       *   --deck-width : on-screen width of the Steam Deck backdrop image.
+       *   --screen-*   : center offset of the canvas relative to the deck center
+       *                  (px; positive --screen-x = right, --screen-y = down).
+       */
+      :root {
+        --deck-width: 1400px;
+        --deck-height: 787px;
+        --screen-x: 0px;
+        --screen-y: -10px;
+      }
+
       html,
       body {
         margin: 0;
         height: 100%;
         background: #000;
         overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* The deck image sits UNDER the canvas; the canvas is overlaid on top,
+         centered on the deck's screen area. */
+      #frame {
+        position: relative;
+        display: inline-block;
+        flex-shrink: 0; /* never let the flex layout scale the backdrop */
+        line-height: 0;
+      }
+      #deck {
+        display: block;
+        /* Fixed pixel size — the backdrop must not resize with the viewport. */
+        width: var(--deck-width);
+        height: var(--deck-height);
+        flex-shrink: 0;
+        user-select: none;
+        -webkit-user-drag: none;
+      }
+      /* The screen overlay: centered on the deck and shrink-wrapped to the
+         canvas, so it IS the canvas box — the weapon bar pins to its bottom
+         edge with plain `position: absolute; bottom`, no JS measuring. */
+      #screen {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(
+          calc(-50% + var(--screen-x)),
+          calc(-50% + var(--screen-y))
+        );
       }
       canvas {
         display: block;
-        width: 100vw;
-        height: 100vh;
+        width: 760px;
+        height: 440px;
       }
       #snd {
         position: fixed;
@@ -25,7 +72,12 @@
     </style>
   </head>
   <body>
-    <canvas id="c"></canvas>
+    <div id="frame">
+      <img id="deck" src="./assets/steamdeck.png" alt="" />
+      <div id="screen">
+        <canvas id="c"></canvas>
+      </div>
+    </div>
     <button id="snd">Enable sound</button>
     <script src="./index.ts" type="module"></script>
   </body>
