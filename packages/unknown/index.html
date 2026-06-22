@@ -69,6 +69,20 @@
         left: 8px;
         z-index: 10;
       }
+      /* Shown instead of the game when the browser has no WebGPU. */
+      #no-webgpu {
+        display: none;
+        max-width: 32em;
+        padding: 0 1.5em;
+        color: #d8d8d8;
+        font-family: system-ui, sans-serif;
+        font-size: 18px;
+        line-height: 1.5;
+        text-align: center;
+      }
+      #no-webgpu a {
+        color: #6db0ff;
+      }
     </style>
   </head>
   <body>
@@ -79,6 +93,11 @@
       </div>
     </div>
     <button id="snd">Enable sound</button>
+    <div id="no-webgpu">
+      This demo needs <strong>WebGPU</strong> to run.<br />
+      Open it in a desktop Chrome or Edge browser
+      (<a href="https://caniuse.com/webgpu" target="_blank" rel="noreferrer">browser support</a>).
+    </div>
     <script src="./index.ts" type="module"></script>
   </body>
 </html>

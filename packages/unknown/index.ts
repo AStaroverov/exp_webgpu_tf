@@ -33,6 +33,26 @@ const GRID_ROWS = 13;
 // off the screen edges instead of sitting fully inside with padding.
 const OVERSCAN = 1.12;
 
+// WebGPU gate: the renderer can't start without it, so detect it up front and
+// show a message in place of the game instead of failing deep in GPU init.
+async function hasWebGPU(): Promise<boolean> {
+  if (!navigator.gpu) return false;
+  try {
+    return (await navigator.gpu.requestAdapter()) !== null;
+  } catch {
+    return false;
+  }
+}
+
+if (!(await hasWebGPU())) {
+  document.getElementById("frame")?.remove();
+  document.getElementById("snd")?.remove();
+  const msg = document.getElementById("no-webgpu");
+  if (msg) msg.style.display = "block";
+  // Stop module evaluation; the game never starts.
+  throw new Error("WebGPU unavailable");
+}
+
 const canvas = document.getElementById("c") as HTMLCanvasElement;
 const sndBtn = document.getElementById("snd") as HTMLButtonElement;
 
