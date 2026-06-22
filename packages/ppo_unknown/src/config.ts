@@ -21,11 +21,11 @@ export const CONFIG: PpoConfig & {
 
   entropyCoeff: 0.03,
 
-  policyEpochs: (_iter: number) => 10,
+  policyEpochs: (_iter: number) => 4,
   policyClipRatio: 0.2,
   policyLogitsL2: 1e-3,
 
-  valueEpochs: (_iter: number) => 10,
+  valueEpochs: (_iter: number) => 4,
   valueClipRatio: 0.2,
   valueLossCoeff: 0.5,
   valueLRCoeff: 1,

@@ -21,14 +21,25 @@ export function createSpawnerBulletsSystem({ world } = GameDI) {
       if (hasComponent(world, vehicleEid, Vehicle) && hasComponent(world, vehicleEid, Stunned)) {
         continue;
       }
-      if (!TurretController.shouldShoot(turretEid) || Firearms.isReloading(turretEid)) {
-        continue;
+
+      const stats = BulletCaliberConfig[Firearms.caliber.get(turretEid) as BulletCaliber];
+
+      // Charging a shot: count the windup down; only fire once it elapses.
+      if (Firearms.isWindingUp(turretEid)) {
+        Firearms.updateWindup(turretEid, delta);
+        if (Firearms.isWindingUp(turretEid)) continue;
+      } else {
+        if (!TurretController.shouldShoot(turretEid) || Firearms.isReloading(turretEid)) {
+          continue;
+        }
+        // Aimed and ready: start the pre-fire windup instead of firing instantly.
+        if (stats.delay > 0) {
+          Firearms.startWindup(turretEid, stats.delay);
+          continue;
+        }
       }
 
-      Firearms.startReloading(
-        turretEid,
-        BulletCaliberConfig[Firearms.caliber.get(turretEid) as BulletCaliber].reloadTime,
-      );
+      Firearms.startReloading(turretEid, stats.reloadTime);
 
       spawnBullet(vehicleEid);
     }

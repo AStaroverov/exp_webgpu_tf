@@ -55,6 +55,11 @@ export type BulletCaliberStats = {
   damage: number;
   /** Reload duration in ms for a gun firing this caliber */
   reloadTime: number;
+  /**
+   * Pre-fire windup in ms: once aimed and ready, the gun charges this long
+   * before the round leaves the barrel (0 = fire instantly).
+   */
+  delay: number;
   /** Linear damping (speed loss over time) */
   linearDamping: number;
   /** Initial spin, rad/s — presence-driven (set at spawn when defined). */
@@ -79,6 +84,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     density: 5_000,
     damage: 15,
     reloadTime: 1000, // Light tank - fast reload
+    delay: 0,
     linearDamping: 0.4, // Light bullets lose speed quickly
     maxDistance: HexGridConfig.radius * 6.6,
     health: 0.001, // dies (and detonates) on any contact
@@ -99,6 +105,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     density: 5_000,
     damage: 25,
     reloadTime: 1250, // Medium tank - balanced reload
+    delay: 0,
     linearDamping: 0.3, // Medium bullets have moderate drag
     maxDistance: HexGridConfig.radius * 8.6,
     health: 0.001, // dies (and detonates) on any contact
@@ -119,6 +126,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     density: 5_000,
     damage: 50,
     reloadTime: 1500, // Heavy tank - slow reload
+    delay: 0,
     linearDamping: 0.2, // Heavy bullets maintain speed longer
     maxDistance: HexGridConfig.radius * 10.6,
     health: 0.001, // dies (and detonates) on any contact
@@ -139,6 +147,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     density: 5_000,
     damage: 10,
     reloadTime: 6000, // Rocket launcher - very long reload
+    delay: 2000, // 1s windup before the rocket launches
     linearDamping: 0.1,
     maxDistance: HexGridConfig.radius * 8,
     health: 0.001,
@@ -146,8 +155,8 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
       kind: DamageKind.Physical,
       visual: ExplosionVisual.Explosion,
       damage: 5,
-      radius: 100,
-      vfxSize: 30 * 6,
+      radius: 50,
+      vfxSize: 100,
       lightRadius: 30 * 8,
     },
   },
@@ -160,6 +169,7 @@ export const BulletCaliberConfig: Record<BulletCaliber, BulletCaliberStats> = {
     density: 3_000,
     damage: 1, // token contact damage — the stun IS the payload
     reloadTime: 5_000, // single shot, rocket-class reload
+    delay: 0,
     linearDamping: 0.1,
     angularSpeed: Math.PI * 4, // 2 rev/s; bullet angularDamping 0.1 barely decays it over flight
     maxDistance: HexGridConfig.radius * 6,
