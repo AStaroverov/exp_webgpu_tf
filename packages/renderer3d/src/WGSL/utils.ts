@@ -88,7 +88,11 @@ export function buildShader<
         ? `var<${u.kind}>`
         : u.kind === VariableKind.StorageRead
           ? `var<${u.kind}>`
-          : "var";
+          : u.kind === VariableKind.StorageWrite
+            ? // WGSL writable storage is `read_write` (there is no write-only mode);
+              // the kind string "storage, write" is for the bind-group layout, not WGSL.
+              `var<storage, read_write>`
+            : "var";
     return `
             ${acc}
 

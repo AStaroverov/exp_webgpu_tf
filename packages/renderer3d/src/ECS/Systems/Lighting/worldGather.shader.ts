@@ -23,7 +23,7 @@ import { sceneSDF } from "../SDFSystem/sceneSDF.wgsl.ts";
 //         sky/sun on a miss (single cascade => the top cascade => always blends sky).
 //   a   = visibility — 1.0 if the ray passed the whole interval unobstructed, else 0.
 //
-// COORDINATES: world is Z-up, footprints in XY, probe plane at uProbePlaneZ. The
+// COORDINATES: world is Z-up, footprints in XY, this layer's probe sheet at uLayerZ. The
 // gather works purely in world space (no viewProj) — it needs only the grid origin.
 // The atlas is fixed-size (zoom-independent BY CONSTRUCTION); GRID_DIM/DIR0_W are
 // baked as overridable WGSL constants so the (probe,dir) decode matches the texture.
@@ -34,34 +34,39 @@ import { sceneSDF } from "../SDFSystem/sceneSDF.wgsl.ts";
 export const WORLD_GRID_DIM = 128;
 export const WORLD_DIR0_W = 4;
 
+// This is a fullscreen-quad pass: the vertex shader (vs_main) uses NO group-0
+// resources, so every uniform is FRAGMENT-only. Without this the 13 uniform buffers
+// would all be visible to the (unused) vertex stage and exceed the 12-per-stage limit.
+const uF = (name: string, type: string) =>
+  new VariableMeta(name, VariableKind.Uniform, type, { visibility: GPUShaderStage.FRAGMENT });
+
 export const shaderMeta = new ShaderMeta(
   {
-    // ---- group 0 : per-frame uniforms ----
+    // ---- group 0 : per-frame uniforms (FRAGMENT-only) ----
     // Camera-snapped grid origin (world XY); .zw unused.
-    gridOrigin: new VariableMeta("uGridOrigin", VariableKind.Uniform, `vec4<f32>`),
-    // World height of the (single, ground) probe plane.
-    probePlaneZ: new VariableMeta("uProbePlaneZ", VariableKind.Uniform, `f32`),
-    // This cascade's probes-per-side and octahedral tile side (gridDim*dirW = atlas
-    // side, constant across cascades). Decode + probe placement read these so one
-    // shader serves any cascade.
-    gridDim: new VariableMeta("uGridDim", VariableKind.Uniform, `u32`),
-    dirW: new VariableMeta("uDirW", VariableKind.Uniform, `u32`),
-    // World units per probe at THIS cascade (cell0 * 2^c).
-    cell: new VariableMeta("uCell", VariableKind.Uniform, `f32`),
-    // This cascade's interval [start, end] in world units.
-    intervalStart: new VariableMeta("uIntervalStart", VariableKind.Uniform, `f32`),
-    intervalEnd: new VariableMeta("uIntervalEnd", VariableKind.Uniform, `f32`),
-    // Sphere-trace step budget (~32..48).
-    gatherSteps: new VariableMeta("uGatherSteps", VariableKind.Uniform, `f32`),
+    gridOrigin: uF("uGridOrigin", `vec4<f32>`),
+    // World height of THIS layer's probe sheet (z_k = baseZ + k*cellZ). Probes in
+    // this gather pass all sit at this absolute world height.
+    layerZ: uF("uLayerZ", `f32`),
+    // This cascade's probes-per-side in X / Y and octahedral tile side
+    // (gridX*dirW = atlas width, gridY*dirW = atlas height). Decode + probe
+    // placement read these so one shader serves any cascade.
+    gridX: uF("uGridX", `u32`),
+    gridY: uF("uGridY", `u32`),
+    dirW: uF("uDirW", `u32`),
+    // Packed cascade scalars (one buffer to stay under the 12-uniform-per-stage
+    // limit): .x = cell (world units per probe, cell0*2^c), .y = interval start,
+    // .z = interval end, .w = sphere-trace step budget.
+    params: uF("uParams", `vec4<f32>`),
     // Live scene instance count (<= MAX_INSTANCE_COUNT).
-    instanceCount: new VariableMeta("uInstanceCount", VariableKind.Uniform, `u32`),
+    instanceCount: uF("uInstanceCount", `u32`),
     // Sun direction toward the sun (radians, screen frame +X right +Y down) and
     // enabled flag, mirrored from SunLight each frame; .y = enabled (0/1).
-    sun: new VariableMeta("uSun", VariableKind.Uniform, `vec4<f32>`),
+    sun: uF("uSun", `vec4<f32>`),
     // Directional light color, .w = softness (matches radianceCascades uSunColor).
-    sunColor: new VariableMeta("uSunColor", VariableKind.Uniform, `vec4<f32>`),
+    sunColor: uF("uSunColor", `vec4<f32>`),
     // Sky fill color, .w = skyMix (matches radianceCascades uSkyColor).
-    skyColor: new VariableMeta("uSkyColor", VariableKind.Uniform, `vec4<f32>`),
+    skyColor: uF("uSkyColor", `vec4<f32>`),
 
     // ---- group 1 : per-instance storage (SAME types/names as sdf.shader.ts) ----
     // Bound to the SAME GPUBuffers the draw system fills — declare identical layout
@@ -142,11 +147,13 @@ fn oct_decode(e_in: vec2<f32>) -> vec3<f32> {
   return normalize(v);
 }
 
-// Probe (i,j) world XY for the single cascade (c = 0): camera-snapped origin plus
-// the cell-centered offset from the grid center (doc §3.2).
+// Probe (i,j) world XY for this cascade: camera-snapped origin plus the
+// cell-centered offset from the grid center, centered independently in X (uGridX)
+// and Y (uGridY) (doc §3.2).
 fn probe_world_xy(ij: vec2<u32>) -> vec2<f32> {
-  return uGridOrigin.xy
-       + (vec2<f32>(ij) + 0.5 - f32(uGridDim) * 0.5) * uCell;
+  let cx = uGridOrigin.x + (f32(ij.x) + 0.5 - f32(uGridX) * 0.5) * uParams.x;
+  let cy = uGridOrigin.y + (f32(ij.y) + 0.5 - f32(uGridY) * 0.5) * uParams.x;
+  return vec2<f32>(cx, cy);
 }
 
 // Directional source + faint sky fill, parameterized by the ray's screen-frame
@@ -203,22 +210,22 @@ fn emission_of(instance: u32) -> vec3<f32> {
 fn fs_main(@builtin(position) frag_coord: vec4f) -> @location(0) vec4f {
   // 1. Decode the (probe, direction) cell from the integer atlas pixel.
   let px = vec2<u32>(floor(frag_coord.xy));
-  let ij = px / uDirW;          // probe index
+  let ij = px / uDirW;          // probe index (ij.x in [0,gx), ij.y in [0,gy))
   let uv = px % uDirW;          // direction cell within the tile
 
-  let ro0 = vec3<f32>(probe_world_xy(ij), uProbePlaneZ);
+  let ro0 = vec3<f32>(probe_world_xy(ij), uLayerZ);
   let oct = (( vec2<f32>(uv) + 0.5) / f32(uDirW)) * 2.0 - 1.0;
   let dir = oct_decode(oct);
 
-  // 2. World-space interval along the ray (single cascade c0).
-  let ro = ro0 + dir * uIntervalStart;
-  let tmax = uIntervalEnd - uIntervalStart;
+  // 2. World-space interval along the ray (this cascade's ring).
+  let ro = ro0 + dir * uParams.y;
+  let tmax = uParams.z - uParams.y;
 
   // 3. Sphere-trace scene_sdf, tracking the nearest hit instance.
   var t = 0.0;
   var hit = false;
   var hitInstance: u32 = 0u;
-  let steps = i32(uGatherSteps);
+  let steps = i32(uParams.w);
   for (var s = 0; s < steps; s = s + 1) {
     let h = scene_sdf(ro + dir * t);
     if (h.dist < 0.001) {

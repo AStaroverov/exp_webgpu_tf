@@ -13,6 +13,7 @@ export class VariableMeta {
   public binding: number;
   public visibility: GPUFlagsConstant;
   public textureSampleType?: GPUTextureSampleType;
+  public viewDimension?: GPUTextureViewDimension;
 
   private size?: number;
   private bufferSize?: number;
@@ -31,12 +32,14 @@ export class VariableMeta {
       size?: number;
       bufferSize?: number;
       textureSampleType?: GPUTextureSampleType;
+      viewDimension?: GPUTextureViewDimension;
     },
   ) {
     this.group = optional?.group ?? 0;
     this.binding = optional?.binding ?? 0;
     this.visibility = optional?.visibility ?? GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT;
     this.textureSampleType = optional?.textureSampleType;
+    this.viewDimension = optional?.viewDimension;
   }
 
   public getSize(): number {

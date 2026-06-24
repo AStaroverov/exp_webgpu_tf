@@ -1,7 +1,7 @@
 import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
 import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
 import { wgsl } from "../../../WGSL/wgsl.ts";
-import { WORLD_DIR0_W, WORLD_GRID_DIM } from "./worldGather.shader.ts";
+import { WORLD_DIR0_W } from "./worldGather.shader.ts";
 
 // Stage-1 world-space Radiance Cascades — DIRECT COMPOSITE pass (doc §7).
 //
@@ -12,19 +12,23 @@ import { WORLD_DIR0_W, WORLD_GRID_DIM } from "./worldGather.shader.ts";
 //      overlay.shader.ts projects with the forward matrix — here we go the other way).
 //   2. Read the G-buffer normal (packed *0.5+0.5, a = surface mask). a < 0.5 means
 //      no surface (background) -> passthrough the scene * ambient (no probe light).
-//   3. Bilinearly pick the 4 probes of cascade-0 around world.xy in the SINGLE probe
-//      atlas (probeRad). Each probe owns a DIR0_W x DIR0_W octahedral tile.
+//   3. Bilinearly pick the 4 probes of cascade-0 around world.xy in the merged probe
+//      atlas (probeMerge, a 2D-ARRAY of uGridZ height layers). Each probe owns a
+//      DIR0_W x DIR0_W octahedral tile. This is done per height layer.
 //   4. Integrate the tile directions weighted by max(0, dot(N, dir)) (Lambert), with
 //      solid-angle normalization 4*PI / (DIR0_W*DIR0_W), blend the 4 probes bilinearly.
+//      Then blend the two layers bracketing the receiver's world height trilinearly-in-z.
 //   5. lit = albedo * (ambient + radiance). The directional bonus stays consistent
 //      with overlay.shader.ts (an additive, never-darkening dirGain term).
 //
-// COORDINATES: world is Z-up, footprints in XY. probeRad probe (i,j) lives at world
-// XY probe_world_xy(ij) = uGridOrigin.xy + (ij + 0.5 - GRID_DIM/2) * uCell0 on plane
-// uProbePlaneZ — IDENTICAL to the gather pass, so both agree on the same grid.
+// COORDINATES: world is Z-up, footprints in XY. probeMerge probe (i,j,k) lives at world
+// XY probe_world_xy(ij) = uGridOrigin.xy + (ij + 0.5 - (uGridX,uGridY)/2) * uCell0 on
+// layer k at height baseZ + k*cellZ — IDENTICAL to the gather pass, so both agree on
+// the same grid. The receiver's height is resolved by trilinear-z over k0/k1.
 
-// Atlas/grid constants — MUST match worldGather.shader.ts and the probeRad texture.
-const GRID_DIM = WORLD_GRID_DIM;
+// Octahedral tile side — MUST match worldGather.shader.ts and the probeRad texture.
+// gridX/gridY/gridZ are now passed as uniforms (height-layers Model A): the xy probe
+// counts come from uGridX/uGridY and the number of z layers from uGridZ.
 const DIR0_W = WORLD_DIR0_W;
 
 export const shaderMeta = new ShaderMeta(
@@ -42,15 +46,25 @@ export const shaderMeta = new ShaderMeta(
       textureSampleType: "depth",
     }),
     // The finest cascade (c0) AFTER merge (probeMerge[0]): rgb = merged radiance
-    // carrying the full cascade hierarchy's far light, a = visibility.
-    probeMerge: new VariableMeta("probeMerge", VariableKind.Texture, `texture_2d<f32>`),
+    // carrying the full cascade hierarchy's far light, a = visibility. Now a 2D-ARRAY
+    // texture with one array layer per height layer (uGridZ layers); the composite
+    // trilinearly blends the two layers bracketing the receiver's world height.
+    probeMerge: new VariableMeta("probeMerge", VariableKind.Texture, `texture_2d_array<f32>`, {
+      viewDimension: "2d-array",
+    }),
 
     // ---- group 0 : uniforms ----
     // Camera-snapped grid origin (world XY); .zw unused. Must match the gather pass.
     gridOrigin: new VariableMeta("uGridOrigin", VariableKind.Uniform, `vec4<f32>`),
-    // World height of the (single, ground) probe plane.
-    probePlaneZ: new VariableMeta("uProbePlaneZ", VariableKind.Uniform, `f32`),
-    // World units per probe at cascade 0.
+    // Probe count per side at cascade 0 (x and y can now differ).
+    gridX: new VariableMeta("uGridX", VariableKind.Uniform, `u32`),
+    gridY: new VariableMeta("uGridY", VariableKind.Uniform, `u32`),
+    // Number of stacked horizontal probe layers (array-layer count of probeMerge).
+    gridZ: new VariableMeta("uGridZ", VariableKind.Uniform, `u32`),
+    // World height of layer 0, and the world-units gap between successive layers.
+    baseZ: new VariableMeta("uBaseZ", VariableKind.Uniform, `f32`),
+    cellZ: new VariableMeta("uCellZ", VariableKind.Uniform, `f32`),
+    // World units per probe at cascade 0 (xy).
     cell0: new VariableMeta("uCell0", VariableKind.Uniform, `f32`),
     // Stock omni light floor (matches overlay.shader.ts uAmbient).
     ambient: new VariableMeta("uAmbient", VariableKind.Uniform, `f32`),
@@ -92,8 +106,8 @@ fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
   return output;
 }
 
-// Atlas/grid constants — MUST match worldGather.shader.ts and the probeRad atlas.
-const GRID_DIM: u32 = ${GRID_DIM}u;
+// Octahedral tile side — MUST match worldGather.shader.ts and the probeRad atlas.
+// xy probe counts are uniforms (uGridX/uGridY); z layer count is uGridZ.
 const DIR0_W:   u32 = ${DIR0_W}u;
 
 const PI: f32 = 3.14159265;
@@ -109,10 +123,11 @@ fn oct_decode(e_in: vec2<f32>) -> vec3<f32> {
 }
 
 // Inverse of probe_world_xy: continuous probe-grid coordinate of a world XY.
-// probe_world_xy(ij) = uGridOrigin.xy + (ij + 0.5 - GRID_DIM/2) * uCell0
-//   => ij = (wxy - uGridOrigin.xy) / uCell0 + GRID_DIM/2 - 0.5
+// probe_world_xy(ij) = uGridOrigin.xy + (ij + 0.5 - (uGridX,uGridY)/2) * uCell0
+//   => ij = (wxy - uGridOrigin.xy) / uCell0 + (uGridX,uGridY)/2 - 0.5
 fn probe_coord(wxy: vec2<f32>) -> vec2<f32> {
-  return (wxy - uGridOrigin.xy) / uCell0 + f32(GRID_DIM) * 0.5 - 0.5;
+  let half = vec2<f32>(f32(uGridX), f32(uGridY)) * 0.5;
+  return (wxy - uGridOrigin.xy) / uCell0 + half - 0.5;
 }
 
 // Integrate one probe's octahedral tile against the surface normal: sum the tile's
@@ -120,7 +135,8 @@ fn probe_coord(wxy: vec2<f32>) -> vec2<f32> {
 // angle (4*PI / dir_count). This IS the physically-correct diffuse irradiance for
 // normal N — no extra "directional" hack on top (that double-counts directionality
 // and shaded emitters like a ball). The probe (i,j) tile origin is (i*DIR0_W, j*DIR0_W).
-fn integrate_probe(ij: vec2<i32>, N: vec3<f32>) -> vec3<f32> {
+// k selects the height-layer array slice of probeMerge.
+fn integrate_probe(ij: vec2<i32>, N: vec3<f32>, k: i32) -> vec3<f32> {
   let base = ij * i32(DIR0_W);
   var acc = vec3<f32>(0.0);
   for (var v: u32 = 0u; v < DIR0_W; v = v + 1u) {
@@ -129,11 +145,37 @@ fn integrate_probe(ij: vec2<i32>, N: vec3<f32>) -> vec3<f32> {
       let dir = oct_decode(oct);
       let cosw = max(0.0, dot(N, dir));
       let cell = vec2<i32>(base.x + i32(u), base.y + i32(v));
-      acc = acc + textureLoad(probeMerge, cell, 0).rgb * cosw;
+      acc = acc + textureLoad(probeMerge, cell, k, 0).rgb * cosw;
     }
   }
   // Solid-angle normalization over the full sphere (doc §7).
   return acc * (4.0 * PI / f32(DIR0_W * DIR0_W));
+}
+
+// One height layer's irradiance at world XY: bilinearly blend the 4 probes of layer k
+// around world.xy. Factored out of fs_main so the trilinear-z blend can call it twice.
+fn layerRadiance(wxy: vec2<f32>, N: vec3<f32>, k: i32) -> vec3<f32> {
+  let gc = probe_coord(wxy);
+  let g0 = floor(gc);
+  let f = gc - g0;                         // fractional position in the probe cell
+  let i0 = vec2<i32>(g0);
+  let maxIdx = vec2<i32>(i32(uGridX) - 1, i32(uGridY) - 1);
+
+  // Bilinear weights (00, 10, 01, 11).
+  let w00 = (1.0 - f.x) * (1.0 - f.y);
+  let w10 = f.x * (1.0 - f.y);
+  let w01 = (1.0 - f.x) * f.y;
+  let w11 = f.x * f.y;
+
+  let ij00 = clamp(i0 + vec2<i32>(0, 0), vec2<i32>(0), maxIdx);
+  let ij10 = clamp(i0 + vec2<i32>(1, 0), vec2<i32>(0), maxIdx);
+  let ij01 = clamp(i0 + vec2<i32>(0, 1), vec2<i32>(0), maxIdx);
+  let ij11 = clamp(i0 + vec2<i32>(1, 1), vec2<i32>(0), maxIdx);
+
+  return integrate_probe(ij00, N, k) * w00
+       + integrate_probe(ij10, N, k) * w10
+       + integrate_probe(ij01, N, k) * w01
+       + integrate_probe(ij11, N, k) * w11;
 }
 
 @fragment
@@ -157,29 +199,18 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
 
   let N = normalize(n.rgb * 2.0 - 1.0);
 
-  // --- Bilinearly pick the 4 probes around world.xy in the single atlas ---
-  let gc = probe_coord(world.xy);
-  let g0 = floor(gc);
-  let f = gc - g0;                         // fractional position in the probe cell
-  let i0 = vec2<i32>(g0);
-  let maxIdx = i32(GRID_DIM) - 1;
+  // --- Trilinear-in-z over the two height layers bracketing the receiver ---
+  // Layer k sits at world height baseZ + k*cellZ. lz maps the receiver's world.z
+  // into continuous layer space; k0/k1 are the bracketing layers (clamped to the
+  // stack), fz the blend factor. Each layer's xy irradiance is a 4-probe bilinear.
+  // gridZ == 1 -> k1 == k0 and fz is harmless (mix collapses to one layer).
+  let lz = (world.z - uBaseZ) / uCellZ;
+  let kMax = i32(uGridZ) - 1;
+  let k0 = clamp(i32(floor(lz)), 0, kMax);
+  let k1 = clamp(k0 + 1, 0, kMax);
+  let fz = clamp(lz - f32(k0), 0.0, 1.0);
 
-  // Bilinear weights (00, 10, 01, 11).
-  let w00 = (1.0 - f.x) * (1.0 - f.y);
-  let w10 = f.x * (1.0 - f.y);
-  let w01 = (1.0 - f.x) * f.y;
-  let w11 = f.x * f.y;
-
-  let ij00 = clamp(i0 + vec2<i32>(0, 0), vec2<i32>(0), vec2<i32>(maxIdx));
-  let ij10 = clamp(i0 + vec2<i32>(1, 0), vec2<i32>(0), vec2<i32>(maxIdx));
-  let ij01 = clamp(i0 + vec2<i32>(0, 1), vec2<i32>(0), vec2<i32>(maxIdx));
-  let ij11 = clamp(i0 + vec2<i32>(1, 1), vec2<i32>(0), vec2<i32>(maxIdx));
-
-  let radiance = integrate_probe(ij00, N) * w00
-               + integrate_probe(ij10, N) * w10
-               + integrate_probe(ij01, N) * w01
-               + integrate_probe(ij11, N) * w11;
-  // (weights already sum to 1; no extra normalization needed.)
+  let radiance = mix(layerRadiance(world.xy, N, k0), layerRadiance(world.xy, N, k1), fz);
 
   // Diffuse GI: albedo * (ambient floor + cosine-integrated incoming radiance).
   let lit = scene.rgb * (uAmbient + radiance);

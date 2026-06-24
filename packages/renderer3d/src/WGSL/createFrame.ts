@@ -28,38 +28,65 @@ export function createFrameTextures(device: GPUDevice, canvas: HTMLCanvasElement
   return { renderTexture, depthTexture, normalTexture };
 }
 
-// World-space RC probe-grid constants. Atlas side = WORLD_GRID_DIM *
-// WORLD_DIR0_W, fixed (canvas-independent). Mirror these in the system params.
-export const WORLD_GRID_DIM = 128; // probes per side, cascade 0
+// World-space RC probe-grid constants (Stage 3 — height layers, Model A). Per
+// cascade c the atlas is [(gridX>>c)*(dir0W<<c), (gridY>>c)*(dir0W<<c)] with gridZ
+// array layers (one horizontal probe sheet per layer). Mirror these in the system
+// params. With gridX=gridY=128, dir0W=4 the >>c / <<c cancel so each cascade atlas is
+// 512x512 — but x and y can now differ if gridX!=gridY.
+export const WORLD_GRID_X = 128; // probes along x, cascade 0
+export const WORLD_GRID_Y = 128; // probes along y, cascade 0
+export const WORLD_GRID_Z = 6; // number of horizontal probe sheets (array layers)
 export const WORLD_DIR0_W = 4; // octahedral tile side -> 16 directions per probe
 // Number of cascades (Stage 2). Per cascade c: probes/side /= 2, dir-tile side *= 2,
-// so the atlas side (GRID_DIM_c * DIR_W_c) stays CONSTANT = WORLD_GRID_DIM*WORLD_DIR0_W
-// for every cascade -> all cascade atlases are the same size. cell_c = cell0*2^c,
-// interval reach ~ baseInterval*4^(N-1). GRID_DIM must be divisible by 2^(N-1):
-// 128 / 2^4 = 8 ok.
+// so the atlas side (GRID_*_c * DIR_W_c) stays CONSTANT for every cascade. cell_c =
+// cell0*2^c, interval reach ~ baseInterval*4^(N-1). gridX/gridY must be divisible by
+// 2^(N-1): 128 / 2^4 = 8 ok. gridZ/cellZ are CONSTANT across cascades (Model A).
 export const WORLD_CASCADE_COUNT = 5;
 
-export function createRCTextures(device: GPUDevice, canvas: HTMLCanvasElement) {
-  // === World-space RC (Stage 2) — cascade hierarchy. ===
-  // Every cascade's atlas is the SAME square size: probe (i,j) of cascade c owns a
-  // DIR_W_c x DIR_W_c octahedral tile, atlas side = GRID_DIM_c * DIR_W_c which is
-  // constant across cascades. rgb = interval radiance, a = visibility (1 = ray
-  // passed the whole interval unobstructed). COPY_SRC so diagnostics can read back.
-  const worldAtlas = WORLD_GRID_DIM * WORLD_DIR0_W; // 128 * 4 = 512, all cascades
-  const mkAtlas = () =>
-    device.createTexture({
-      size: [worldAtlas, worldAtlas, 1],
+export type RCTextureDims = {
+  gridX: number;
+  gridY: number;
+  gridZ: number;
+  dir0W: number;
+};
+
+export const DEFAULT_RC_TEXTURE_DIMS: RCTextureDims = {
+  gridX: WORLD_GRID_X,
+  gridY: WORLD_GRID_Y,
+  gridZ: WORLD_GRID_Z,
+  dir0W: WORLD_DIR0_W,
+};
+
+export function createRCTextures(
+  device: GPUDevice,
+  canvas: HTMLCanvasElement,
+  dims: RCTextureDims = DEFAULT_RC_TEXTURE_DIMS,
+) {
+  // === World-space RC (Stage 3) — cascade hierarchy + height layers. ===
+  // probe (i,j) of cascade c owns a DIR_W_c x DIR_W_c octahedral tile; the atlas is a
+  // 2D-ARRAY texture with gridZ layers, layer k = the horizontal probe sheet at world
+  // height z_k. rgb = interval radiance, a = visibility (1 = ray passed the whole
+  // interval unobstructed). COPY_SRC so diagnostics can read back a chosen layer.
+  const { gridX, gridY, gridZ, dir0W } = dims;
+  const mkAtlas = (c: number) => {
+    const w = Math.max(1, gridX >> c) * (dir0W << c);
+    const h = Math.max(1, gridY >> c) * (dir0W << c);
+    return device.createTexture({
+      // 2D-array: [w, h, gridZ]. dimension "2d" is correct for a 2D-array texture.
+      size: [w, h, gridZ],
+      dimension: "2d",
       format: "rgba16float",
       usage:
         GPUTextureUsage.RENDER_ATTACHMENT |
         GPUTextureUsage.TEXTURE_BINDING |
         GPUTextureUsage.COPY_SRC,
     });
+  };
   // probeRad[c] = raw gather for cascade c (c in 0..N-1).
-  const probeRad = Array.from({ length: WORLD_CASCADE_COUNT }, mkAtlas);
+  const probeRad = Array.from({ length: WORLD_CASCADE_COUNT }, (_, c) => mkAtlas(c));
   // probeMerge[c] = cascade c after merging c+1 into it (c in 0..N-2). The top
   // cascade needs no merge target (its merged value IS probeRad[N-1]).
-  const probeMerge = Array.from({ length: WORLD_CASCADE_COUNT - 1 }, mkAtlas);
+  const probeMerge = Array.from({ length: WORLD_CASCADE_COUNT - 1 }, (_, c) => mkAtlas(c));
 
   // Canvas-sized composite output — the presented texture.
   const worldLitTexture = device.createTexture({

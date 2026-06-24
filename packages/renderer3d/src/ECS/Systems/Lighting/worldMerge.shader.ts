@@ -27,20 +27,28 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 export const shaderMeta = new ShaderMeta(
   {
     // ---- group 0 : textures ----
-    // THIS cascade's raw gather (the "near" interval).
-    nearTexture: new VariableMeta("nearTexture", VariableKind.Texture, `texture_2d<f32>`),
+    // THIS cascade's raw gather (the "near" interval). 2D-array: one slice per z layer.
+    nearTexture: new VariableMeta("nearTexture", VariableKind.Texture, `texture_2d_array<f32>`, {
+      viewDimension: "2d-array",
+    }),
     // The coarser cascade's already-merged radiance (the "far" interval source).
-    srcTexture: new VariableMeta("srcTexture", VariableKind.Texture, `texture_2d<f32>`),
+    srcTexture: new VariableMeta("srcTexture", VariableKind.Texture, `texture_2d_array<f32>`, {
+      viewDimension: "2d-array",
+    }),
 
     // ---- group 0 : uniforms (dst = this cascade, src = c+1) ----
     gridOrigin: new VariableMeta("uGridOrigin", VariableKind.Uniform, `vec4<f32>`),
     gridOriginSrc: new VariableMeta("uGridOriginSrc", VariableKind.Uniform, `vec4<f32>`),
-    gridDim: new VariableMeta("uGridDim", VariableKind.Uniform, `u32`),
+    gridX: new VariableMeta("uGridX", VariableKind.Uniform, `u32`),
+    gridY: new VariableMeta("uGridY", VariableKind.Uniform, `u32`),
     dirW: new VariableMeta("uDirW", VariableKind.Uniform, `u32`),
     cell: new VariableMeta("uCell", VariableKind.Uniform, `f32`),
-    gridDimSrc: new VariableMeta("uGridDimSrc", VariableKind.Uniform, `u32`),
+    gridXSrc: new VariableMeta("uGridXSrc", VariableKind.Uniform, `u32`),
+    gridYSrc: new VariableMeta("uGridYSrc", VariableKind.Uniform, `u32`),
     dirWSrc: new VariableMeta("uDirWSrc", VariableKind.Uniform, `u32`),
     cellSrc: new VariableMeta("uCellSrc", VariableKind.Uniform, `f32`),
+    // Array layer (z slice) this pass renders / reads. Layers are independent.
+    layer: new VariableMeta("uLayer", VariableKind.Uniform, `u32`),
   },
   {},
   // language=WGSL
@@ -69,12 +77,14 @@ fn merge_intervals(near: vec4<f32>, far: vec4<f32>) -> vec4<f32> {
 
 // World XY of dst probe (i,j) — must match worldGather.probe_world_xy for cascade c.
 fn dst_probe_world_xy(ij: vec2<u32>) -> vec2<f32> {
-  return uGridOrigin.xy + (vec2<f32>(ij) + 0.5 - f32(uGridDim) * 0.5) * uCell;
+  let center = vec2<f32>(f32(uGridX), f32(uGridY)) * 0.5;
+  return uGridOrigin.xy + (vec2<f32>(ij) + 0.5 - center) * uCell;
 }
 
 // Continuous probe-grid coordinate of a world XY in the SRC (c+1) grid.
 fn src_coord(wxy: vec2<f32>) -> vec2<f32> {
-  return (wxy - uGridOriginSrc.xy) / uCellSrc + f32(uGridDimSrc) * 0.5 - 0.5;
+  let center = vec2<f32>(f32(uGridXSrc), f32(uGridYSrc)) * 0.5;
+  return (wxy - uGridOriginSrc.xy) / uCellSrc + center - 0.5;
 }
 
 const OFFSETS = array<vec2<i32>, 4>(
@@ -88,7 +98,7 @@ fn merge_neighbor(near: vec4<f32>, ij_n: vec2<i32>, uv: vec2<u32>) -> vec4<f32> 
   let srcDirBase = vec2<i32>(uv) * 2;
   var far = vec4<f32>(0.0);
   for (var k = 0; k < 4; k = k + 1) {
-    far = far + textureLoad(srcTexture, tileOrigin + srcDirBase + OFFSETS[k], 0) * 0.25;
+    far = far + textureLoad(srcTexture, tileOrigin + srcDirBase + OFFSETS[k], i32(uLayer), 0) * 0.25;
   }
   return merge_intervals(near, far);
 }
@@ -99,7 +109,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let ij = px / uDirW;          // dst probe index
   let uv = px % uDirW;          // dst direction cell
 
-  let near = textureLoad(nearTexture, vec2<i32>(px), 0);
+  let near = textureLoad(nearTexture, vec2<i32>(px), i32(uLayer), 0);
   let P = dst_probe_world_xy(ij);
 
   // 4 bilinear neighbors in the coarse (c+1) grid.
@@ -107,11 +117,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let g0 = floor(gc);
   let f = gc - g0;
   let i0 = vec2<i32>(g0);
-  let maxIdx = i32(uGridDimSrc) - 1;
-  let n00 = clamp(i0 + vec2<i32>(0, 0), vec2<i32>(0), vec2<i32>(maxIdx));
-  let n10 = clamp(i0 + vec2<i32>(1, 0), vec2<i32>(0), vec2<i32>(maxIdx));
-  let n01 = clamp(i0 + vec2<i32>(0, 1), vec2<i32>(0), vec2<i32>(maxIdx));
-  let n11 = clamp(i0 + vec2<i32>(1, 1), vec2<i32>(0), vec2<i32>(maxIdx));
+  let maxIdx = vec2<i32>(i32(uGridXSrc) - 1, i32(uGridYSrc) - 1);
+  let n00 = clamp(i0 + vec2<i32>(0, 0), vec2<i32>(0), maxIdx);
+  let n10 = clamp(i0 + vec2<i32>(1, 0), vec2<i32>(0), maxIdx);
+  let n01 = clamp(i0 + vec2<i32>(0, 1), vec2<i32>(0), maxIdx);
+  let n11 = clamp(i0 + vec2<i32>(1, 1), vec2<i32>(0), maxIdx);
   let w00 = (1.0 - f.x) * (1.0 - f.y);
   let w10 = f.x * (1.0 - f.y);
   let w01 = (1.0 - f.x) * f.y;

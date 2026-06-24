@@ -22,7 +22,11 @@ export class GPUVariable {
 
   getGPUResource(device: GPUDevice): GPUBindingResource {
     if (this.variable.type.startsWith("texture")) {
-      return this.variable.getTexture().createView();
+      // viewDimension defaults to "2d"; for a 2D-array binding the declared
+      // dimension MUST be passed so the view spans all array layers.
+      return this.variable.viewDimension
+        ? this.variable.getTexture().createView({ dimension: this.variable.viewDimension })
+        : this.variable.getTexture().createView();
     }
     if (this.variable.type === "sampler") {
       return this.variable.getSampler();
@@ -45,11 +49,10 @@ export class GPUVariable {
     "buffer" | "texture" | "sampler"
   > {
     if (this.variable.kind === VariableKind.Texture) {
-      return {
-        texture: this.variable.textureSampleType
-          ? { sampleType: this.variable.textureSampleType }
-          : {},
-      };
+      const texture: GPUTextureBindingLayout = {};
+      if (this.variable.textureSampleType) texture.sampleType = this.variable.textureSampleType;
+      if (this.variable.viewDimension) texture.viewDimension = this.variable.viewDimension;
+      return { texture };
     }
     if (this.variable.kind === VariableKind.Sampler) {
       return { sampler: {} };
@@ -78,7 +81,9 @@ export class GPUVariable {
 
 const TEXTURE_USAGE = GPUTextureUsage.TEXTURE_BINDING;
 const UNIFORM_USAGE = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
-const STORAGE_USAGE = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
+// COPY_SRC so compute outputs (surfel buffers, etc.) can be read back to the CPU
+// for diagnostics; harmless for read-only storage too.
+const STORAGE_USAGE = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
 
 function getUsageByKind(kind: VariableKind) {
   switch (kind) {

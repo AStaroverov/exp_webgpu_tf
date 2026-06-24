@@ -8,6 +8,7 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
   private shaderModule?: GPUShaderModule;
   private pipelineLayout?: GPUPipelineLayout;
   private mapRenderPipeline: Map<string, GPURenderPipeline> = new Map();
+  private mapComputePipeline: Map<string, GPUComputePipeline> = new Map();
   private mapBindGroup: Map<string, GPUBindGroup> = new Map();
   private mapGPUBindGroupLayout: Map<number, GPUBindGroupLayout> = new Map();
 
@@ -140,6 +141,50 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
   }
 
   /**
+   * Build (and cache) a compute pipeline for `entryPoint`. Mirrors getRenderPipeline:
+   * by default uses the reflected explicit pipeline layout (group-0 uniforms/textures,
+   * group-1+ storage). Compute-stage bindings require the shader's VariableMeta to
+   * declare `visibility: GPUShaderStage.COMPUTE` (else the layout excludes the compute
+   * stage). With autoLayout + bindGroups, caches bind groups keyed `${entryPoint}-${group}`.
+   */
+  getComputePipeline(
+    device: GPUDevice,
+    entryPoint: string,
+    options?: {
+      autoLayout?: boolean;
+      bindGroups?: Record<number, (keyof M["uniforms"])[]>;
+      shaderModule?: GPUShaderModule;
+    },
+  ): GPUComputePipeline {
+    const autoLayout = options?.autoLayout ?? false;
+    const key = `${entryPoint}-${autoLayout}`;
+    const shaderModule = options?.shaderModule ?? this.getShaderModule(device);
+
+    if (!this.mapComputePipeline.has(key)) {
+      const pipeline = device.createComputePipeline({
+        layout: autoLayout ? "auto" : this.getGPUPipelineLayout(device),
+        compute: { module: shaderModule, entryPoint },
+      });
+      this.mapComputePipeline.set(key, pipeline);
+
+      if (autoLayout && options?.bindGroups) {
+        for (const [groupStr, uniformKeys] of Object.entries(options.bindGroups)) {
+          const group = Number(groupStr);
+          const bindGroup = device.createBindGroup({
+            layout: pipeline.getBindGroupLayout(group),
+            entries: uniformKeys.map((uniformKey) =>
+              this.uniforms[uniformKey].getBindGroupEntry(device),
+            ),
+          });
+          this.mapBindGroup.set(`${entryPoint}-${group}`, bindGroup);
+        }
+      }
+    }
+
+    return this.mapComputePipeline.get(key)!;
+  }
+
+  /**
    * Gets a cached bind group.
    * @param group - bind group index
    * @param vertexName - for autoLayout pipelines, specify entry point names to get the correct bind group
@@ -214,6 +259,7 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
 
     this.mapBindGroup.clear();
     this.mapRenderPipeline.clear();
+    this.mapComputePipeline.clear();
     this.mapGPUBindGroupLayout.clear();
 
     this.uniforms = null!;
