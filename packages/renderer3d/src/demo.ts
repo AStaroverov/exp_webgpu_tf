@@ -294,19 +294,28 @@ async function main() {
     sceneInstances: shapeSystem.sceneInstances,
   });
 
-  // Surfel Radiance Cascades — Stage A: spawn surfels on visible G-buffer surfaces
-  // (a compute pass) and debug-draw them as billboard dots over the presented frame.
+  // Surfel Radiance Cascades — Stage C: spawn surfels on visible G-buffer surfaces,
+  // GATHER per-surfel radiance by sphere-tracing the SDF scene, then COMPOSITE the
+  // surfels' cached radiance over the albedo G-buffer -> surfel.outputTexture.
   const surfel = createSurfelSystem({
     device,
     depthTexture: frame.depthTexture,
     normalTexture: frame.normalTexture,
+    sceneTexture: frame.renderTexture,
+    sceneInstances: shapeSystem.sceneInstances,
   });
 
-  // Enable/disable the world RC. When off, the raw unlit scene is presented.
-  // (Key R also toggles it.)
-  const view = { enableWorldRc: true };
+  // Present-source selector: which texture reaches the screen.
+  //   "worldRc" — the world-RC lit composite (worldRc.outputTexture).
+  //   "surfel"  — the surfel lit composite (surfel.outputTexture).
+  //   "raw"     — the unlit albedo G-buffer (frame.renderTexture).
+  // World RC only runs (gather/merge/composite) when "worldRc" is selected.
+  // Keys: 1 = worldRc, 2 = surfel, 3 = raw (also a GUI dropdown below).
+  const view = { presentSource: "worldRc" as "worldRc" | "surfel" | "raw" };
   window.addEventListener("keydown", (e) => {
-    if (e.key === "r" || e.key === "R") view.enableWorldRc = !view.enableWorldRc;
+    if (e.key === "1") view.presentSource = "worldRc";
+    else if (e.key === "2") view.presentSource = "surfel";
+    else if (e.key === "3") view.presentSource = "raw";
   });
 
   // --- lil-gui: all world-RC properties, live-tunable via setParams. ---
@@ -316,7 +325,10 @@ async function main() {
   // so passing the whole params object back applies whatever the GUI just mutated.
   const apply = () => worldRc.setParams(wp);
 
-  gui.add(view, "enableWorldRc").name("enable world RC (R)").listen();
+  gui
+    .add(view, "presentSource", ["worldRc", "surfel", "raw"])
+    .name("present (1/2/3)")
+    .listen();
 
   // gridX/gridY/gridZ resize the probe atlases → full rebuild on release
   // (.onFinishChange, not .onChange, so we rebuild once when the slider settles).
@@ -401,6 +413,23 @@ async function main() {
     .onChange(() => surfel.setParams(surfel.params));
   sf.add(surfel.params, "quadPx", 1, 20, 1)
     .name("dot size (px)")
+    .onChange(() => surfel.setParams(surfel.params));
+  // Stage C gather/composite knobs.
+  sf.add(surfel.params, "gatherDistance", 1, 60, 0.5)
+    .name("gather distance")
+    .onChange(() => surfel.setParams(surfel.params));
+  sf.add(surfel.params, "gatherSteps", 4, 96, 1)
+    .name("gather steps")
+    .onChange(() => surfel.setParams(surfel.params));
+  sf.add(surfel.params, "normalBias", 0, 0.5, 0.005)
+    .name("normal bias")
+    .onChange(() => surfel.setParams(surfel.params));
+  // surfelSearchRadius: 0 => derive = cellSize (composite default).
+  sf.add(surfel.params, "surfelSearchRadius", 0, 10, 0.1)
+    .name("search radius (0=cell)")
+    .onChange(() => surfel.setParams(surfel.params));
+  sf.add(surfel.params, "ambient", 0, 1, 0.01)
+    .name("ambient")
     .onChange(() => surfel.setParams(surfel.params));
   sf.add({ clear: () => surfel.clear() }, "clear").name("clear surfels");
   sf.add(
@@ -492,8 +521,9 @@ async function main() {
       );
       // World RC: recreate textures/pipelines (sceneInstances ref is stable).
       worldRc.recreate(canvas, frame.renderTexture, frame.depthTexture, frame.normalTexture);
-      // Surfels: rebind the spawn compute to the new G-buffer textures.
-      surfel.recreate(frame.depthTexture, frame.normalTexture);
+      // Surfels: rebind spawn/gather/composite to the new G-buffer + albedo
+      // textures and recreate the canvas-sized surfel lit output.
+      surfel.recreate(frame.depthTexture, frame.normalTexture, frame.renderTexture);
     }
 
     execTransformSystem();
@@ -502,14 +532,22 @@ async function main() {
     const encoder = device.createCommandEncoder();
     // Main pass -> renderTexture (raw albedo G-buffer).
     frameTick(encoder, delta);
-    // World RC gather + merge + composite -> worldLitTexture (only when enabled).
-    if (view.enableWorldRc) worldRc.run(encoder, delta);
-    // Surfels (Stage B): clearGrid -> insert (rebuild hash grid from live set) ->
-    // spawn (coverage-gated) -> recycle (age + push back over-covered/stale). Runs
-    // regardless of RC state; converges the live count well below CAP.
+    // World RC gather + merge + composite -> worldLitTexture (only when presented).
+    if (view.presentSource === "worldRc") worldRc.run(encoder, delta);
+    // Surfels (Stage C): clearGrid -> insert (rebuild hash grid from live set) ->
+    // spawn (coverage-gated) -> recycle -> GATHER (per-surfel SDF sphere-trace into
+    // surfel_rad). Runs every frame; converges the live count well below CAP.
     surfel.run(encoder, frameIndex);
-    // Present the lit composite, or the raw unlit scene when RC is off.
-    const presented = view.enableWorldRc ? worldRc.outputTexture : frame.renderTexture;
+    // Surfel composite: integrate nearby surfels' cached radiance per pixel over the
+    // albedo G-buffer -> surfel.outputTexture (its own fullscreen render pass).
+    surfel.composite(encoder);
+    // Present the chosen source.
+    const presented =
+      view.presentSource === "worldRc"
+        ? worldRc.outputTexture
+        : view.presentSource === "surfel"
+          ? surfel.outputTexture
+          : frame.renderTexture;
     // Debug overlay: draw the surfel dots ON TOP of the presented texture (loadOp
     // "load" keeps the lit scene; no depth, so they're not occluded — debug only).
     if (surfelGui.showSurfels) {

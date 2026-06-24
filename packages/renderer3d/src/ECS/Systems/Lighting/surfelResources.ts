@@ -9,6 +9,12 @@
 
 export const SURFEL_CAP = 1 << 16; // 65536
 
+// --- Stage C: per-surfel radiance cache directions ------------------------
+// Octahedral direction tile per surfel (cascade 0). DIR0_W=4 ⇒ 16 dirs over the
+// FULL sphere; the composite cosine integral selects the receiving hemisphere.
+export const SURFEL_DIR0_W = 4;
+export const SURFEL_DIR_COUNT = SURFEL_DIR0_W * SURFEL_DIR0_W; // 16
+
 // --- Stage B: spatial hash grid -------------------------------------------
 // DEVIATION FROM src-dgi: src-dgi builds the accel grid with count →
 // prefix-sum → accelerate (a segmented GPU scan, fragile). We REPLACE that
@@ -35,6 +41,12 @@ const POSR_BYTES = SURFEL_CAP * 16; // CAP * 16 = 1048576
 
 // surfel_norw: vec4<f32>[CAP] — xyz normal, w = recycle marker.
 const NORW_BYTES = SURFEL_CAP * 16; // CAP * 16 = 1048576
+
+// surfel_rad: vec4<f32>[CAP * DIR_COUNT] — per-surfel radiance cache (Stage C).
+// rgb = incoming radiance for that octahedral direction interval, a = visibility
+// (1 = ray passed unobstructed). Index: rad[surfelId * DIR_COUNT + (v*DIR0_W + u)].
+const RAD_LEN = SURFEL_CAP * SURFEL_DIR_COUNT; // 1,048,576 vec4
+const RAD_BYTES = RAD_LEN * 16; // 16,777,216 bytes (16 MB)
 
 // STORAGE: compute write + debug-draw read. COPY_DST: init + clear writes.
 // COPY_SRC: read-back of stack[0] for diagnostics (kept on all three for symmetry
@@ -93,6 +105,16 @@ export function createSurfelResources(device: GPUDevice) {
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
   });
 
+  // surfel_rad: vec4<f32>[CAP * DIR_COUNT] — the Stage-C per-surfel radiance cache.
+  // STANDALONE (sized array, no atomics ⇒ ordinary read/read_write storage; never a
+  // GPUVariable). STORAGE: gather writes / composite reads. COPY_DST: clear() zero.
+  // COPY_SRC: kept for diagnostics read-back (STORAGE_USAGE convention).
+  const rad = device.createBuffer({
+    label: "surfel_rad",
+    size: RAD_BYTES,
+    usage: STORAGE_USAGE,
+  });
+
   // (Re)initialize the stack to count 0 + identity free-id pool.
   function initStack(): void {
     device.queue.writeBuffer(stack, 0, makeInitialStack());
@@ -104,6 +126,8 @@ export function createSurfelResources(device: GPUDevice) {
   function clear(): void {
     initStack();
     device.queue.writeBuffer(posr, 0, new Float32Array(SURFEL_CAP * 4));
+    // Zero the radiance cache too, so a cleared scene composites no stale light.
+    device.queue.writeBuffer(rad, 0, new Float32Array(RAD_LEN * 4));
   }
 
   // WebGPU zero-initializes new buffers, so posr/norw start all-dead. Only the
@@ -125,6 +149,7 @@ export function createSurfelResources(device: GPUDevice) {
     norw,
     grid,
     claim,
+    rad,
     cap: SURFEL_CAP,
     initStack,
     clear,
@@ -135,6 +160,7 @@ export function createSurfelResources(device: GPUDevice) {
       norw.destroy();
       grid.destroy();
       claim.destroy();
+      rad.destroy();
     },
   };
 }
