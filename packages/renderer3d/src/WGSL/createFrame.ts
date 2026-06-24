@@ -10,16 +10,76 @@ export function createFrameTextures(device: GPUDevice, canvas: HTMLCanvasElement
   const depthTexture = device.createTexture({
     size: [canvas.width, canvas.height, 1],
     format: "depth32float",
-    usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    // TEXTURE_BINDING so the world-RC composite can sample reverse-Z depth
+    // (textureLoad on a texture_depth_2d) to reconstruct world position. The
+    // main pass still uses it as a render attachment; behavior is unchanged.
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
   });
 
-  return { renderTexture, depthTexture };
+  // Stage-3b G-buffer: world-space normals written by fs_main as a 2nd color
+  // attachment (packed *0.5+0.5; a = surface mask). Sampled by the RC composite
+  // for the normal-aware directional term.
+  const normalTexture = device.createTexture({
+    size: [canvas.width, canvas.height, 1],
+    format: "rgba16float",
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+  });
+
+  return { renderTexture, depthTexture, normalTexture };
+}
+
+// World-space RC probe-grid constants. Atlas side = WORLD_GRID_DIM *
+// WORLD_DIR0_W, fixed (canvas-independent). Mirror these in the system params.
+export const WORLD_GRID_DIM = 128; // probes per side, cascade 0
+export const WORLD_DIR0_W = 4; // octahedral tile side -> 16 directions per probe
+// Number of cascades (Stage 2). Per cascade c: probes/side /= 2, dir-tile side *= 2,
+// so the atlas side (GRID_DIM_c * DIR_W_c) stays CONSTANT = WORLD_GRID_DIM*WORLD_DIR0_W
+// for every cascade -> all cascade atlases are the same size. cell_c = cell0*2^c,
+// interval reach ~ baseInterval*4^(N-1). GRID_DIM must be divisible by 2^(N-1):
+// 128 / 2^4 = 8 ok.
+export const WORLD_CASCADE_COUNT = 5;
+
+export function createRCTextures(device: GPUDevice, canvas: HTMLCanvasElement) {
+  // === World-space RC (Stage 2) — cascade hierarchy. ===
+  // Every cascade's atlas is the SAME square size: probe (i,j) of cascade c owns a
+  // DIR_W_c x DIR_W_c octahedral tile, atlas side = GRID_DIM_c * DIR_W_c which is
+  // constant across cascades. rgb = interval radiance, a = visibility (1 = ray
+  // passed the whole interval unobstructed). COPY_SRC so diagnostics can read back.
+  const worldAtlas = WORLD_GRID_DIM * WORLD_DIR0_W; // 128 * 4 = 512, all cascades
+  const mkAtlas = () =>
+    device.createTexture({
+      size: [worldAtlas, worldAtlas, 1],
+      format: "rgba16float",
+      usage:
+        GPUTextureUsage.RENDER_ATTACHMENT |
+        GPUTextureUsage.TEXTURE_BINDING |
+        GPUTextureUsage.COPY_SRC,
+    });
+  // probeRad[c] = raw gather for cascade c (c in 0..N-1).
+  const probeRad = Array.from({ length: WORLD_CASCADE_COUNT }, mkAtlas);
+  // probeMerge[c] = cascade c after merging c+1 into it (c in 0..N-2). The top
+  // cascade needs no merge target (its merged value IS probeRad[N-1]).
+  const probeMerge = Array.from({ length: WORLD_CASCADE_COUNT - 1 }, mkAtlas);
+
+  // Canvas-sized composite output — the presented texture.
+  const worldLitTexture = device.createTexture({
+    size: [canvas.width, canvas.height, 1],
+    format: "bgra8unorm",
+    // COPY_SRC so the diagnostics can read the final composite back to the CPU.
+    usage:
+      GPUTextureUsage.RENDER_ATTACHMENT |
+      GPUTextureUsage.TEXTURE_BINDING |
+      GPUTextureUsage.COPY_SRC,
+  });
+
+  return { probeRad, probeMerge, worldLitTexture };
 }
 
 export function createFrameTick(
   {
     renderTexture,
     depthTexture,
+    normalTexture,
     canvas,
     device,
     background,
@@ -52,12 +112,20 @@ export function createFrameTick(
     // "greater-equal" with depthClearValue 0 (NEAR maps to 1, FAR to 0).
     const depthView = depthTexture.createView();
     const textureView = renderTexture.createView();
+    const normalView = normalTexture.createView();
 
     const passEncoder = commandEncoder.beginRenderPass({
       colorAttachments: [
         {
           view: textureView,
           clearValue: background,
+          loadOp: "clear",
+          storeOp: "store",
+        },
+        {
+          // G-buffer world normals. Cleared to 0 → a = 0 = "no surface".
+          view: normalView,
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
           loadOp: "clear",
           storeOp: "store",
         },
@@ -75,7 +143,7 @@ export function createFrameTick(
     mainCallback(mainArg);
     passEncoder.end();
 
-    return { renderTexture, depthTexture };
+    return { renderTexture, depthTexture, normalTexture };
   };
 
   return renderFrame;
