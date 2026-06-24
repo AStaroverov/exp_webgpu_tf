@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --config config.vite.ts",
+    "dev": "vite --config config.vite.ts --port 3333",
     "build": "tsc && vite build --config config.vite.ts",
     "preview": "vite preview --config config.vite.ts"
   },
