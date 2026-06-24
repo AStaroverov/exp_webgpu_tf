@@ -1,7 +1,10 @@
 import { shaderMeta } from "./rope.shader.ts";
 import { GPUShader } from "../../../WGSL/GPUShader.ts";
 import { getTypeTypedArray } from "../../../Shader/index.ts";
-import { projectionMatrix } from "../ResizeSystem.ts";
+// The 2D `projectionMatrix` was replaced by the 2.5D `viewProjMatrix` (tilted
+// ortho, reverse-Z). The rope's `projection` uniform is a world→clip mat4, so the
+// new viewProj is a drop-in replacement.
+import { viewProjMatrix } from "../ResizeSystem.ts";
 import { ROPE_BUFFER_LENGTH, ROPE_POINTS_COUNT } from "../../Components/Rope.ts";
 import { query } from "bitecs";
 import { getRenderComponents, type RenderWorldLike } from "../../world.ts";
@@ -38,7 +41,7 @@ export function createDrawRopeSystem(world: RenderWorldLike, device: GPUDevice) 
     device.queue.writeBuffer(
       gpuShader.uniforms.projection.getGPUBuffer(device),
       0,
-      projectionMatrix as BufferSource,
+      viewProjMatrix as BufferSource,
     );
     device.queue.writeBuffer(gpuShader.uniforms.color.getGPUBuffer(device), 0, colorCollect);
     device.queue.writeBuffer(gpuShader.uniforms.points.getGPUBuffer(device), 0, pointsCollect);

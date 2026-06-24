@@ -47,6 +47,24 @@ export const createBlurnessComponent = defineComponent((Blurness, { obs }) => {
   };
 });
 
+// Honest vertical extent of a shape (world units). The object's bottom sits at
+// the transform's translation z (baseZ); the SDF extrudes/centers it upward by
+// this much (center.z = baseZ + height/2, half-height hz = height/2). Entities
+// without the component are treated as height 0 (flat) by the draw system.
+export const createHeightComponent = defineComponent((Height, { obs }) => {
+  const value = new Float64Array(delegate.defaultSize);
+  return {
+    value,
+    addComponent(world: World, eid: number, v = 0) {
+      addComponent(world, eid, Height);
+      value[eid] = v;
+    },
+    set$: obs((eid: number, v: number) => {
+      value[eid] = v;
+    }),
+  };
+});
+
 // Per-material light translucency for the RC lighting (0 = opaque occluder,
 // 1 = light passes through freely). Entities without the component use 0.
 export const createTranslucencyComponent = defineComponent((Translucency, { obs }) => {

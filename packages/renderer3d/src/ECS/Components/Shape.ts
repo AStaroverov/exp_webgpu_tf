@@ -9,6 +9,10 @@ export enum ShapeKind {
   Parallelogram = 3,
   Trapezoid = 4,
   Triangle = 5,
+  // The only non-extruded primitive: a true 3D sphere (length(p) - r in the
+  // shader). values[0] = radius. Every other kind is a 2D footprint extruded by
+  // the entity's Height; Circle extrudes to a cylinder.
+  Sphere = 6,
 }
 
 export const createShapeComponent = defineComponent((Shape, { obs }) => {
@@ -41,6 +45,10 @@ export const createShapeComponent = defineComponent((Shape, { obs }) => {
     },
     setCircle$: obs((id: number, radius: number) => {
       kind[id] = ShapeKind.Circle;
+      values.set(id, 0, radius);
+    }),
+    setSphere$: obs((id: number, radius: number) => {
+      kind[id] = ShapeKind.Sphere;
       values.set(id, 0, radius);
     }),
     setRectangle$: obs((id: number, width: number, height: number) => {

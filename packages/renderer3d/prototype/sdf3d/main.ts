@@ -15,14 +15,21 @@ import { shaderCode } from "./shader.ts";
 
 const KIND_SPHERE = 0;
 const KIND_BOX = 1;
+const KIND_CYLINDER = 2;
+const KIND_RHOMBUS = 3;
+const KIND_PARALLELOGRAM = 4;
+const KIND_TRAPEZOID = 5;
+const KIND_TRIANGLE = 6;
 
 type Instance = {
   x: number;
   y: number;
   baseZ: number; // bottom of the object ("положение Z")
   height: number; // honest vertical extent
-  hx: number; // half-extent X (radius for spheres)
-  hy: number; // half-extent Y
+  hx: number; // footprint XY bounding-box half-extent X (radius for spheres)
+  hy: number; // footprint XY bounding-box half-extent Y
+  values: [number, number, number, number, number, number]; // shape-specific params
+  roundness: number;
   yaw: number;
   kind: number;
   color: [number, number, number];
@@ -37,8 +44,21 @@ function box(
   height: number,
   color: [number, number, number],
   yaw = 0,
+  roundness = 0,
 ): Instance {
-  return { x, y, baseZ, height, hx, hy, yaw, kind: KIND_BOX, color };
+  return {
+    x,
+    y,
+    baseZ,
+    height,
+    hx,
+    hy,
+    yaw,
+    kind: KIND_BOX,
+    color,
+    values: [hx, hy, 0, 0, 0, 0],
+    roundness,
+  };
 }
 
 function sphere(
@@ -48,25 +68,175 @@ function sphere(
   r: number,
   color: [number, number, number],
 ): Instance {
-  return { x, y, baseZ, height: r * 2, hx: r, hy: r, yaw: 0, kind: KIND_SPHERE, color };
+  return {
+    x,
+    y,
+    baseZ,
+    height: r * 2,
+    hx: r,
+    hy: r,
+    yaw: 0,
+    kind: KIND_SPHERE,
+    color,
+    values: [0, 0, 0, 0, 0, 0],
+    roundness: 0,
+  };
 }
 
-// --- Scene: a ground slab + a mix of boxes/spheres, including one box raised on
-// a platform so "положение Z" (base elevation) is visually distinct from height.
+function cylinder(
+  x: number,
+  y: number,
+  baseZ: number,
+  r: number,
+  height: number,
+  color: [number, number, number],
+  yaw = 0,
+  roundness = 0,
+): Instance {
+  return {
+    x,
+    y,
+    baseZ,
+    height,
+    hx: r,
+    hy: r,
+    yaw,
+    kind: KIND_CYLINDER,
+    color,
+    values: [r, 0, 0, 0, 0, 0],
+    roundness,
+  };
+}
+
+function rhombus(
+  x: number,
+  y: number,
+  baseZ: number,
+  hx: number,
+  hy: number,
+  height: number,
+  color: [number, number, number],
+  yaw = 0,
+  roundness = 0,
+): Instance {
+  return {
+    x,
+    y,
+    baseZ,
+    height,
+    hx,
+    hy,
+    yaw,
+    kind: KIND_RHOMBUS,
+    color,
+    values: [hx, hy, 0, 0, 0, 0],
+    roundness,
+  };
+}
+
+function parallelogram(
+  x: number,
+  y: number,
+  baseZ: number,
+  hx: number,
+  hy: number,
+  height: number,
+  color: [number, number, number],
+  yaw = 0,
+  skewParam = 0,
+  roundness = 0,
+): Instance {
+  // Footprint bounding box widens by the skew amount on each side.
+  return {
+    x,
+    y,
+    baseZ,
+    height,
+    hx: hx + Math.abs(skewParam),
+    hy,
+    yaw,
+    kind: KIND_PARALLELOGRAM,
+    color,
+    values: [hx, hy, skewParam, 0, 0, 0],
+    roundness,
+  };
+}
+
+function trapezoid(
+  x: number,
+  y: number,
+  baseZ: number,
+  r1: number,
+  r2: number,
+  he: number,
+  height: number,
+  color: [number, number, number],
+  yaw = 0,
+  roundness = 0,
+): Instance {
+  return {
+    x,
+    y,
+    baseZ,
+    height,
+    hx: Math.max(r1, r2),
+    hy: he,
+    yaw,
+    kind: KIND_TRAPEZOID,
+    color,
+    values: [r1, r2, he, 0, 0, 0],
+    roundness,
+  };
+}
+
+function triangle(
+  x: number,
+  y: number,
+  baseZ: number,
+  hx: number,
+  hy: number,
+  height: number,
+  color: [number, number, number],
+  yaw = 0,
+  roundness = 0,
+): Instance {
+  return {
+    x,
+    y,
+    baseZ,
+    height,
+    hx,
+    hy,
+    yaw,
+    kind: KIND_TRIANGLE,
+    color,
+    values: [hx, hy, 0, 0, 0, 0],
+    roundness,
+  };
+}
+
+// --- Scene: a ground slab + at least one of every kind, including a platform
+// with a box standing ON it so "положение Z" (base elevation) stays visually
+// distinct from honest object height. A couple of shapes vary yaw/roundness.
 const scene: Instance[] = [
-  box(0, 0, -0.4, 26, 26, 0.4, [0.16, 0.18, 0.22]), // ground
+  box(0, 0, -0.4, 26, 26, 0.4, [0.16, 0.18, 0.22]), // ground (extruded box)
 
-  box(-9, -6, 0, 2, 2, 6, [0.85, 0.45, 0.3]), // tall tower
-  box(-3, -7, 0, 2.5, 2.5, 2, [0.4, 0.7, 0.9]), // low wide block
-  box(4, -6, 0, 1.5, 4, 3, [0.6, 0.8, 0.4], 0.5), // rotated block
-
+  // Spheres (true 3D)
   sphere(-6, 2, 0, 2.2, [0.9, 0.8, 0.35]),
   sphere(0, 3, 0, 1.4, [0.8, 0.4, 0.6]),
   sphere(6, 1, 0, 1.8, [0.5, 0.85, 0.8]),
 
-  // platform + a box standing ON the platform (baseZ = platform top)
+  // Extruded 2D footprints — one of every remaining kind.
+  box(-9, -6, 0, 2, 2, 6, [0.85, 0.45, 0.3]), // kind 1: tall tower
+  cylinder(-3, -7, 0, 2.5, 2.5, [0.4, 0.7, 0.9]), // kind 2: cylinder
+  rhombus(4, -6, 0, 1.8, 2.5, 3, [0.6, 0.8, 0.4], 0.5), // kind 3: rotated rhombus
+  parallelogram(-9, 6, 0, 1.5, 2.5, 2.5, [0.7, 0.5, 0.85], 0.0, 1.2), // kind 4
+  trapezoid(-3, 7, 0, 2.5, 1.0, 2.0, 2.5, [0.85, 0.6, 0.3], 0.0, 0.3), // kind 5 (rounded)
+  triangle(3, 7, 0, 2.2, 2.2, 2.5, [0.55, 0.85, 0.9], 0.6), // kind 6: rotated triangle
+
+  // Platform + a box standing ON the platform (baseZ = platform top) + sphere on top.
   box(9, 7, 0, 4, 4, 1.5, [0.3, 0.32, 0.4]),
-  box(9, 7, 1.5, 1.4, 1.4, 3, [0.95, 0.55, 0.55]),
+  box(9, 7, 1.5, 1.4, 1.4, 3, [0.95, 0.55, 0.55], 0, 0.4), // rounded box
   sphere(9, 7, 4.5, 1, [0.95, 0.95, 0.95]),
 ];
 
@@ -96,24 +266,38 @@ function unitCube(): Float32Array {
 }
 
 function packInstances(list: Instance[]): Float32Array {
-  // Inst = vec4 centerYaw, vec4 halfKind, vec4 color = 12 floats.
-  const data = new Float32Array(list.length * 12);
+  // Inst = 5 x vec4 = 20 floats / 80 bytes (std140 storage):
+  //   centerYaw, halfKindR, values01h, values234, color.
+  const data = new Float32Array(list.length * 20);
   for (let i = 0; i < list.length; i++) {
     const o = list[i];
     const hz = o.height / 2;
-    const base = i * 12;
+    const base = i * 20;
+    // centerYaw
     data[base + 0] = o.x;
     data[base + 1] = o.y;
     data[base + 2] = o.baseZ + hz; // store center Z
     data[base + 3] = o.yaw;
+    // halfKindR: hx, hy, roundness, kind
     data[base + 4] = o.hx;
     data[base + 5] = o.hy;
-    data[base + 6] = hz;
+    data[base + 6] = o.roundness;
     data[base + 7] = o.kind;
-    data[base + 8] = o.color[0];
-    data[base + 9] = o.color[1];
-    data[base + 10] = o.color[2];
+    // values01h: values[0], values[1], height, pad
+    data[base + 8] = o.values[0];
+    data[base + 9] = o.values[1];
+    data[base + 10] = o.height;
     data[base + 11] = 0;
+    // values234: values[2], values[3], values[4], values[5]
+    data[base + 12] = o.values[2];
+    data[base + 13] = o.values[3];
+    data[base + 14] = o.values[4];
+    data[base + 15] = o.values[5];
+    // color
+    data[base + 16] = o.color[0];
+    data[base + 17] = o.color[1];
+    data[base + 18] = o.color[2];
+    data[base + 19] = 0;
   }
   return data;
 }
@@ -147,8 +331,16 @@ async function main() {
   const module = device.createShaderModule({ code: shaderCode });
   const bindGroupLayout = device.createBindGroupLayout({
     entries: [
-      { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: "uniform" } },
-      { binding: 1, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
+      {
+        binding: 0,
+        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+        buffer: { type: "uniform" },
+      },
+      {
+        binding: 1,
+        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+        buffer: { type: "read-only-storage" },
+      },
     ],
   });
   const pipeline = device.createRenderPipeline({
@@ -156,7 +348,9 @@ async function main() {
     vertex: {
       module,
       entryPoint: "vs",
-      buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }] }],
+      buffers: [
+        { arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }] },
+      ],
     },
     fragment: { module, entryPoint: "fs", targets: [{ format }] },
     primitive: { topology: "triangle-list", cullMode: "none" },
@@ -185,7 +379,7 @@ async function main() {
 
   // Camera controls.
   let azimuth = Math.PI * 0.25; // orbit angle around Z
-  const elevation = (52 * Math.PI) / 180; // angle above the ground plane (90 = straight down)
+  const elevation = (70 * Math.PI) / 180; // angle above the ground plane (90 = straight down)
   let zoom = 26; // world half-height visible
   let orbit = true;
   const target = vec3.fromValues(0, 0, 1.5);

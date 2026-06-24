@@ -2,27 +2,48 @@ import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
 import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
 import { wgsl } from "../../../WGSL/wgsl.ts";
 
+// 2.5D true-3D-SDF draw pass (ported from prototype/sdf3d/shader.ts).
+//
+// One instanced draw call. Per instance we rasterize a world-space bounding box
+// (the "impostor": per-kind XY footprint half-extents + half-height hz), and in
+// the fragment shader sphere-trace the instance's local 3D SDF along the (constant,
+// orthographic) camera ray. The ray hit gives a real world point → we write its
+// clip depth to frag_depth so the depth buffer sorts/occludes correctly with zero
+// CPU sorting. One directional light shades the surface normal.
+//
+// SHAPE KINDS (src/ECS/Components/Shape.ts ShapeKind): Circle=0 (extrudes to a
+// CYLINDER), Rectangle=1, Parallelogram=3, Trapezoid=4, Triangle=5, Sphere=6
+// (the ONLY non-extruded primitive: length(p) - r). Everything else is the exact
+// 2D footprint SDF extruded by the entity's Height.
+//
+// HEIGHT MODEL: transform col3.z = baseZ (bottom). center.z = baseZ + height*0.5,
+// half-height hz = height*0.5.
+//
+// DEPTH CONVENTION — REVERSE-Z. The pipeline uses depthCompare "greater-equal"
+// with depthClearValue 0 (GPUShader.ts withDepth + createFrame.ts), so nearer =
+// LARGER depth. viewProj (built in ResizeSystem.ts with an ndc-fix) already maps
+// NEAR→1, FAR→0; we just write frag_depth = (viewProj * hitWorld).z / .w and the
+// reverse-Z range falls out. This MUST match ResizeSystem.viewProjMatrix.
+
 export const MAX_INSTANCE_COUNT = 10_000;
 
 export const shaderMeta = new ShaderMeta(
   {
-    projection: new VariableMeta("uProjection", VariableKind.Uniform, `mat4x4<f32>`),
-    // xy = light direction (pointing from light source, same convention as old LIGHT_DIR),
-    // z = shadow darkness (0 = shadows disabled), w = reserved.
-    sunShadow: new VariableMeta("uSunShadow", VariableKind.Uniform, `vec4<f32>`),
+    // ---- group 0 : uniforms ----
+    viewProj: new VariableMeta("uViewProj", VariableKind.Uniform, `mat4x4<f32>`),
+    // xyz = world-space camera forward (normalized); w unused.
+    rayDir: new VariableMeta("uRayDir", VariableKind.Uniform, `vec4<f32>`),
+    // xyz = world-space light direction (points along travel); w unused.
+    lightDir: new VariableMeta("uLightDir", VariableKind.Uniform, `vec4<f32>`),
+
+    // ---- group 1 : per-instance storage ----
+    // Full per-instance transform: center = col3.xyz, yaw from upper-left 2x2.
     transform: new VariableMeta(
       "uTransform",
       VariableKind.StorageRead,
       `array<mat4x4<f32>, ${MAX_INSTANCE_COUNT}>`,
     ),
-
-    // 0: circle, 1: rectangle, 2: rhombus
     kind: new VariableMeta("uKind", VariableKind.StorageRead, `array<u32, ${MAX_INSTANCE_COUNT}>`),
-    color: new VariableMeta(
-      "uColor",
-      VariableKind.StorageRead,
-      `array<vec4<f32>, ${MAX_INSTANCE_COUNT}>`,
-    ),
     values: new VariableMeta(
       "uValues",
       VariableKind.StorageRead,
@@ -33,402 +54,63 @@ export const shaderMeta = new ShaderMeta(
       VariableKind.StorageRead,
       `array<f32, ${MAX_INSTANCE_COUNT}>`,
     ),
-    blurness: new VariableMeta(
-      "uBlurness",
+    // Honest vertical extent per instance (world units).
+    heights: new VariableMeta(
+      "uHeights",
       VariableKind.StorageRead,
       `array<f32, ${MAX_INSTANCE_COUNT}>`,
     ),
-    intensity: new VariableMeta(
-      "uIntensity",
+    color: new VariableMeta(
+      "uColor",
       VariableKind.StorageRead,
-      `array<f32, ${MAX_INSTANCE_COUNT}>`,
+      `array<vec4<f32>, ${MAX_INSTANCE_COUNT}>`,
     ),
-    translucency: new VariableMeta(
-      "uTranslucency",
-      VariableKind.StorageRead,
-      `array<f32, ${MAX_INSTANCE_COUNT}>`,
-    ),
-
-    // Note: r32float is unfilterable, so we use textureLoad instead of textureSample
-    // Put in separate group (2) so it can be excluded from shadow map pass
-    shadowMap: new VariableMeta("uShadowMap", VariableKind.Texture, "texture_2d<f32>", {
-      group: 2,
-      visibility: GPUShaderStage.FRAGMENT,
-      textureSampleType: "unfilterable-float",
-    }),
   },
   {},
   wgsl /* WGSL */ `
         // ============= Structures =============
-        
+
         struct VertexOutput {
             @builtin(position) position: vec4<f32>,
             @location(0) @interpolate(flat) instance_index: u32,
-            @location(1) local_position: vec2<f32>,
+            @location(1) world: vec3<f32>,
         };
-        
+
         struct FragmentOutput {
             @location(0) color : vec4<f32>,
             @builtin(frag_depth) depth : f32,
         };
-        
-        // ============= Shadow Constants =============
-        
-        // Light direction + darkness come from uSunShadow (driven by the RC sun):
-        // uSunShadow.xy = light direction (pointing from light source), .z = darkness.
-        // Minimum Z difference to apply shadow
-        const SHADOW_Z_THRESHOLD: f32 = 0.01;
-        // Visual shadow glow size relative to Z (0.5 = half of shadow offset)
-        const SHADOW_GLOW_RATIO: f32 = 1;
-        // Ray marching constants for soft shadows
-        const SHADOW_MAX_STEPS: i32 = 16;
-        const SHADOW_SOFTNESS: f32 = 8.0;
-        
-        // ============= Common Shadow Helpers =============
-        
-        // Computes shadow offset in world space based on object height
-        fn compute_shadow_offset(z_height: f32) -> vec2<f32> {
-            return -uSunShadow.xy * z_height;
-        }
-        
-        // Projects world position to clip space with Y-flip
-        fn project_to_clip(world_pos: vec2<f32>) -> vec4<f32> {
-            let projected = (uProjection * vec4<f32>(world_pos, 0.0, 1.0)).xy;
-            return vec4<f32>(projected.x, -projected.y, 0.0, 1.0);
-        }
-        
-        // Transforms local vertex to world position with shadow offset
-        fn transform_shadow_vertex(rect_vertex: vec2<f32>, instance_index: u32, z_height: f32) -> vec4<f32> {
-            let transform = uTransform[instance_index];
-            let world_pos = (transform * vec4<f32>(rect_vertex, 0.0, 1.0)).xy + compute_shadow_offset(z_height);
-            return project_to_clip(world_pos);
-        }
-        
-        // ============= Main Shape Pass =============
-        // Renders shapes with shadow map sampling for object-to-object shadows
-        
-        @vertex
-        fn vs_main(
-            @builtin(vertex_index) vertex_index: u32,
-            @builtin(instance_index) instance_index: u32
-        ) -> VertexOutput {
-            let rect_vertex = compute_rect_vertex(vertex_index, instance_index);
-        
-            let position = vec4<f32>(
-                to_final_position(uTransform[instance_index], rect_vertex),
-                0.0,
-                1.0
-            );
-            
-            return VertexOutput(position, instance_index, rect_vertex);
-        }
-        
-        @fragment
-        fn fs_main(
-            @builtin(position) frag_coord: vec4<f32>,
-            @location(0) @interpolate(flat) instance_index: u32,
-            @location(1) local_position: vec2<f32>,
-        ) -> FragmentOutput {
-            let dist = sd_shape(local_position, instance_index);
-            let color = uColor[instance_index];
 
-            if (dist > 0.0 || color.a == 0.0) {
-                discard;
-            }
+        // ============= Helpers =============
 
-            // Blurness feathers the edge: alpha ramps in over uBlurness px inside the outline.
-            let edge = edge_softness(dist, instance_index);
-
-            let object_z = uTransform[instance_index][3].z;
-
-            // Load shadow map at current screen position (r32float is unfilterable, use textureLoad)
-            let shadow_z = textureLoad(uShadowMap, vec2<i32>(frag_coord.xy), 0).r;
-
-            // Apply shadow if shadow caster is above this object.
-            // Light emitters (intensity != 0) never receive baked darkening.
-            var final_color = vec4<f32>(color.rgb, color.a * edge);
-            let darkness = uSunShadow.z;
-            if (uIntensity[instance_index] == 0.0 && shadow_z > object_z + SHADOW_Z_THRESHOLD) {
-                final_color = vec4<f32>(final_color.rgb * (1.0 - darkness), final_color.a);
-            }
-
-            return FragmentOutput(final_color, object_z);
+        fn rotZ(p: vec2<f32>, c: f32, s: f32) -> vec2<f32> {
+            return vec2<f32>(p.x * c - p.y * s, p.x * s + p.y * c);
         }
 
-        // ============= Shadow Map Pass =============
-        // Renders shadow silhouettes to texture, outputs Z height of shadow caster
-
-        @vertex
-        fn vs_shadow_map(
-            @builtin(vertex_index) vertex_index: u32,
-            @builtin(instance_index) instance_index: u32
-        ) -> VertexOutput {
-            let z_height = uTransform[instance_index][3].z;
-
-            // Skip objects at ground level and light emitters (they don't cast baked shadows)
-            if (z_height <= SHADOW_Z_THRESHOLD || uIntensity[instance_index] != 0.0) {
-                return VertexOutput(vec4<f32>(0.0), instance_index, vec2<f32>(0.0));
-            }
-
-            let rect_vertex = compute_rect_vertex(vertex_index, instance_index);
-            let position = transform_shadow_vertex(rect_vertex, instance_index, z_height);
-
-            return VertexOutput(position, instance_index, rect_vertex);
-        }
-
-        @fragment
-        fn fs_shadow_map(
-            @location(0) @interpolate(flat) instance_index: u32,
-            @location(1) local_position: vec2<f32>,
-        ) -> @location(0) f32 {
-            let z_height = uTransform[instance_index][3].z;
-
-            if (z_height <= SHADOW_Z_THRESHOLD || uIntensity[instance_index] != 0.0) {
-                discard;
-            }
-            
-            let dist = sd_shape(local_position, instance_index);
-        
-            if (dist > 0.0) {
-                discard;
-            }
-            
-            return z_height;
-        }
-
-        // ============= Emission Pass =============
-        // Renders emitters as premultiplied HDR color into the emission texture.
-        // Occluders (intensity == 0) output RGB = 0, A = 1 (coverage only).
-        // Second attachment carries the emitter facing direction (M2: always (0,0)).
-
-        struct EmitOutput {
-            @location(0) color: vec4<f32>,
-            @location(1) dir:   vec2<f32>,
-        };
-
-        @vertex
-        fn vs_emit(
-            @builtin(vertex_index) vertex_index: u32,
-            @builtin(instance_index) instance_index: u32
-        ) -> VertexOutput {
-            let rect_vertex = compute_rect_vertex(vertex_index, instance_index);
-
-            let position = vec4<f32>(
-                to_final_position(uTransform[instance_index], rect_vertex),
-                0.0,
-                1.0
-            );
-
-            return VertexOutput(position, instance_index, rect_vertex);
-        }
-
-        @fragment
-        fn fs_emit(
-            @location(0) @interpolate(flat) instance_index: u32,
-            @location(1) local_position: vec2<f32>,
-        ) -> EmitOutput {
-            let dist = sd_shape(local_position, instance_index);
-
-            if (dist > 0.0) {
-                discard;
-            }
-
-            let intensity = uIntensity[instance_index];
-
-            // Ground-level decals (tread marks etc., z below the shadow threshold)
-            // neither emit nor occlude light. Emitters keep working at any z.
-            let z_height = uTransform[instance_index][3].z;
-            if (intensity == 0.0 && z_height <= SHADOW_Z_THRESHOLD) {
-                discard;
-            }
-
-            // Sign of intensity encodes the directional flag: negative = directional,
-            // non-negative = omni (write (0,0)).
-            // Color always uses abs() so the flag never darkens the emitter.
-            // Facing = world +X axis of the instance, taken AS IS: the vertex Y-flip
-            // ((x, -y) after projection) cancels against the NDC->texture V flip, so
-            // world +Y maps to texture +V and directions need no sign change.
-            // Trapezoid emitters are beams: they face along their long axis instead —
-            // local +Y, from the near (values[0]) edge out of the far (values[2]) edge.
-            var dir = vec2<f32>(0.0);
-            if (intensity < 0.0) {
-                let t = uTransform[instance_index];
-                if (uKind[instance_index] == 4u) {
-                    dir = normalize(vec2<f32>(t[1].x, t[1].y));
-                } else {
-                    dir = normalize(vec2<f32>(t[0].x, t[0].y));
-                }
-            }
-
-            // Alpha = per-material opacity (1 - translucency); the RC raymarch uses
-            // it to let a share of farther light through translucent surfaces.
-            let opacity = 1.0 - clamp(uTranslucency[instance_index], 0.0, 1.0);
-
-            // Blurness feathers the emission the same way fs_main feathers color.
-            let edge = edge_softness(dist, instance_index);
-
-            return EmitOutput(
-                vec4<f32>(uColor[instance_index].rgb * abs(intensity) * edge, opacity * edge),
-                dir,
-            );
-        }
-
-        // ============= Visual Shadow Pass =============
-        // Renders soft shadow glow effect on the ground plane
-        
-        @vertex
-        fn vs_shadow(
-            @builtin(vertex_index) vertex_index: u32,
-            @builtin(instance_index) instance_index: u32
-        ) -> VertexOutput {
-            let z_height = uTransform[instance_index][3].z;
-
-            // Light emitters don't cast baked shadows: collapse the quad.
-            if (uIntensity[instance_index] != 0.0) {
-                return VertexOutput(vec4<f32>(0.0), instance_index, vec2<f32>(0.0));
-            }
-
-            // Compute glow size from Z - higher objects have larger glow
-            let glow_size = z_height * SHADOW_GLOW_RATIO;
-
-            let original_vertex = compute_rect_vertex(vertex_index, instance_index);
-            let rect_vertex = original_vertex + normalize(original_vertex) * glow_size;
-            let position = transform_shadow_vertex(rect_vertex, instance_index, z_height);
-            
-            return VertexOutput(position, instance_index, rect_vertex);
-        }    
-
-        @fragment
-        fn fs_shadow(
-            @location(0) @interpolate(flat) instance_index: u32,
-            @location(1) local_position: vec2<f32>,
-        ) -> FragmentOutput {
-            let z_height = uTransform[instance_index][3].z;
-
-            if (z_height <= SHADOW_Z_THRESHOLD || uIntensity[instance_index] != 0.0) {
-                discard;
-            }
-
-            let glow_size = z_height * SHADOW_GLOW_RATIO;
-            let dist = sd_shape(local_position, instance_index);
-
-            // Compute light direction in local space.
-            // The drop-shadow body lands along -uSunShadow.xy (see transform_shadow_vertex),
-            // so the soft glow must march the same way: along -uSunShadow.xy.
-            let transform = uTransform[instance_index];
-            let rotation = mat2x2<f32>(transform[0].xy, transform[1].xy);
-            let local_light_dir = normalize(-uSunShadow.xy * rotation);
-
-            let shadow_intensity = compute_shadow_intensity(local_position, local_light_dir, instance_index);
-            let edge_fade = select(1.0, 1.0 - smoothstep(0.0, glow_size, abs(dist)), dist > 0.0);
-        
-            // Shadow is rendered at ground level (depth = 0)
-            return FragmentOutput(
-                vec4<f32>(uColor[instance_index].rgb * 0.2, shadow_intensity * edge_fade),
-                0.0
-            );
-        }
-        
-        // ============= Geometry Helpers =============
-        
-        fn compute_rect_vertex(vertex_index: u32, instance_index: u32) -> vec2<f32> {
-            let kind = uKind[instance_index];
-            var width = uValues[instance_index*6+0];
-            var height = uValues[instance_index*6+1];
-            
-            // Adjust bounds based on shape type
-            if (kind == 0u) {
-                // Circle: use width for both dimensions
-                height = width;
-            } else if (kind == 3u) {
-                // Parallelogram: extend width by skew amount
-                width += abs(uValues[instance_index*6+2]) * 2.0;
-            } else if (kind == 4u) {
-                // Trapezoid: the quad must cover the wider of the two ends
-                width = max(width, uValues[instance_index*6+2]);
-            } else if (kind == 5u) {
-                // Triangle: compute bounding box from vertices
-                width = max(width, max(uValues[instance_index*6+2], uValues[instance_index*6+4])) * 2.0;
-                height = max(height, max(uValues[instance_index*6+3], uValues[instance_index*6+5])) * 2.0;
-            }
-
-            let half_size = vec2<f32>(width / 2.0, height / 2.0);
-            
-            return vec2<f32>(
-                select(-half_size.x, half_size.x, vertex_index > 0u && vertex_index < 4u),
-                select(-half_size.y, half_size.y, vertex_index > 1u && vertex_index < 5u),
-            );
-        }
-
-        fn to_final_position(transform: mat4x4<f32>, pos: vec2<f32>) -> vec2<f32> {
-            let res = (uProjection * transform * vec4<f32>(pos, 0.0, 1.0)).xy; 
-            return vec2<f32>(res.x, -res.y);
-        }
-        
-        // ============= SDF Shape Functions =============
-            
         fn op_round(d: f32, r: f32) -> f32 {
             return d - r;
         }
 
-        // Edge feather factor: 1 deep inside the shape, ramping to 0 at the
-        // outline over uBlurness px. Blurness 0 keeps the hard SDF edge.
-        fn edge_softness(dist: f32, instance_index: u32) -> f32 {
-            let blur = uBlurness[instance_index];
-            if (blur <= 0.0) {
-                return 1.0;
-            }
-            return clamp(-dist / blur, 0.0, 1.0);
+        fn ndot(a: vec2<f32>, b: vec2<f32>) -> f32 {
+            return a.x * b.x - a.y * b.y;
         }
-        
-        fn sd_shape(pos: vec2<f32>, instance_index: u32) -> f32 {
-            let kind = uKind[instance_index];
-            let width = uValues[instance_index*6+0];
-            let height = uValues[instance_index*6+1];
-            let roundness = uRoundness[instance_index];
-            var dist = 1.0;
- 
-            if (kind == 0u) {
-                dist = sd_circle(pos, width / 2.0);
-            } else if (kind == 1u) {
-                dist = sd_rectangle(pos, width / 2.0 - roundness, height / 2.0 - roundness);
-            } else if (kind == 2u) {
-                dist = sd_rhombus(pos, width / 2.0 - roundness, height / 2.0 - roundness);
-            } else if (kind == 3u) {
-                dist = sd_parallelogram(pos, width / 2.0 - roundness, height / 2.0 - roundness, uValues[instance_index*6+2]);
-            } else if (kind == 4u) {
-                dist = sd_trapezoid(pos, width / 2.0 - roundness, uValues[instance_index*6+2] / 2.0 - roundness, height / 2.0 - roundness);
-            } else if (kind == 5u) {
-                let ax = uValues[instance_index*6+0] - sign(uValues[instance_index*6+0]) * roundness;
-                let ay = uValues[instance_index*6+1] - sign(uValues[instance_index*6+1]) * roundness;
-                let bx = uValues[instance_index*6+2] - sign(uValues[instance_index*6+2]) * roundness;
-                let by = uValues[instance_index*6+3] - sign(uValues[instance_index*6+3]) * roundness;
-                let cx = uValues[instance_index*6+4] - sign(uValues[instance_index*6+4]) * roundness;
-                let cy = uValues[instance_index*6+5] - sign(uValues[instance_index*6+5]) * roundness;
-                dist = sd_triangle(pos, vec2f(ax, ay), vec2f(bx, by), vec2f(cx, cy));
-            }
-            
-            if (kind != 0u) {
-                dist = op_round(dist, roundness);
-            }
-            
-            return dist;
+
+        fn dot2(v: vec2<f32>) -> f32 {
+            return dot(v, v);
         }
-        
+
+        // ============= 2D SDF footprints (verbatim from the 2D shader) =============
+
         fn sd_circle(p: vec2<f32>, r: f32) -> f32 {
             return length(p) - r;
         }
-        
+
         fn sd_rectangle(p: vec2<f32>, w: f32, h: f32) -> f32 {
             let b = vec2(w, h);
             let d = abs(p) - b;
             return length(max(d, vec2(0.0))) + min(max(d.x, d.y), 0.0);
         }
-        
-        fn ndot(a: vec2<f32>, b: vec2<f32>) -> f32 {
-            return a.x * b.x - a.y * b.y;
-        } 
-        
+
         fn sd_rhombus(_p: vec2<f32>, wi: f32, he: f32) -> f32 {
             let p = abs(_p);
             let b = vec2<f32>(wi, he);
@@ -436,11 +118,7 @@ export const shaderMeta = new ShaderMeta(
             let d = length(p - 0.5 * b * vec2(1.0 - h, 1.0 + h));
             return d * sign(p.x * b.y + p.y * b.x - b.x * b.y);
         }
-        
-        fn dot2(v: vec2<f32>) -> f32 {
-            return dot(v, v);
-        }
-        
+
         fn sd_trapezoid(p: vec2<f32>, r1: f32, r2: f32, he: f32) -> f32 {
             let k1 = vec2<f32>(r2, he);
             let k2 = vec2<f32>(r2 - r1, 2.0 * he);
@@ -452,7 +130,7 @@ export const shaderMeta = new ShaderMeta(
             let s = select(1.0, -1.0, cb.x < 0.0 && ca.y < 0.0);
             return s * sqrt(min(dot2(ca), dot2(cb)));
         }
-        
+
         fn sd_parallelogram(p: vec2<f32>, wi: f32, he: f32, sk: f32) -> f32 {
             let e = vec2<f32>(sk, he);
             let e2 = sk * sk + he * he;
@@ -469,45 +147,272 @@ export const shaderMeta = new ShaderMeta(
             d = min(d, vec2<f32>(dot(v, v), wi * he - abs(s)));
             return sqrt(d.x) * sign(-d.y);
         }
-        
+
         fn sd_triangle(p: vec2<f32>, p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>) -> f32 {
             let e0 = p1 - p0;
             let e1 = p2 - p1;
             let e2 = p0 - p2;
-           
+
             let v0 = p - p0;
             let v1 = p - p1;
             let v2 = p - p2;
-            
+
             let pq0 = v0 - e0 * clamp(dot(v0, e0) / dot(e0, e0), 0.0, 1.0);
             let pq1 = v1 - e1 * clamp(dot(v1, e1) / dot(e1, e1), 0.0, 1.0);
             let pq2 = v2 - e2 * clamp(dot(v2, e2) / dot(e2, e2), 0.0, 1.0);
-            
+
             let s = sign(e0.x * e2.y - e0.y * e2.x);
-            
+
             let d0 = vec2<f32>(dot(pq0, pq0), s * (v0.x * e0.y - v0.y * e0.x));
             let d1 = vec2<f32>(dot(pq1, pq1), s * (v1.x * e1.y - v1.y * e1.x));
             let d2 = vec2<f32>(dot(pq2, pq2), s * (v2.x * e2.y - v2.y * e2.x));
-            
+
             let d = min(min(d0, d1), d2);
-            
+
             return -sqrt(d.x) * sign(d.y);
         }
-        
-        // ============= Soft Shadow Ray Marching =============
-        
-        fn compute_shadow_intensity(origin: vec2<f32>, light_dir: vec2<f32>, instance_index: u32) -> f32 {
-            var t = 0.02;
-            var light = 1.0;
-            
-            for (var i = 0; i < SHADOW_MAX_STEPS; i++) {
-                let pos = origin + light_dir * t;
-                let dist = sd_shape(pos, instance_index);
-                light = min(light, SHADOW_SOFTNESS * dist / t);
-                t += dist;
+
+        // Dispatch the 2D footprint SDF by ShapeKind, reusing the EXACT 2D values
+        // layout + roundness convention from the original 2D shader. (Sphere=6 is
+        // handled separately in sd_shape3d — never reaches here.)
+        fn sd_2d_for_kind(p: vec2<f32>, instance_index: u32) -> f32 {
+            let kind = uKind[instance_index];
+            let width = uValues[instance_index * 6u + 0u];
+            let height = uValues[instance_index * 6u + 1u];
+            let roundness = uRoundness[instance_index];
+            var dist = 1.0;
+
+            if (kind == 0u) {
+                // Circle -> cylinder footprint.
+                dist = sd_circle(p, width / 2.0);
+            } else if (kind == 1u) {
+                dist = sd_rectangle(p, width / 2.0 - roundness, height / 2.0 - roundness);
+            } else if (kind == 3u) {
+                dist = sd_parallelogram(p, width / 2.0 - roundness, height / 2.0 - roundness, uValues[instance_index * 6u + 2u]);
+            } else if (kind == 4u) {
+                // Trapezoid: values = [topWidth, bottomWidth, height].
+                // sd_trapezoid(p, r1=bottom half-width, r2=top half-width, he=half-height).
+                dist = sd_trapezoid(
+                    p,
+                    uValues[instance_index * 6u + 1u] / 2.0 - roundness,
+                    uValues[instance_index * 6u + 0u] / 2.0 - roundness,
+                    uValues[instance_index * 6u + 2u] / 2.0 - roundness,
+                );
+            } else if (kind == 5u) {
+                let ax = uValues[instance_index * 6u + 0u] - sign(uValues[instance_index * 6u + 0u]) * roundness;
+                let ay = uValues[instance_index * 6u + 1u] - sign(uValues[instance_index * 6u + 1u]) * roundness;
+                let bx = uValues[instance_index * 6u + 2u] - sign(uValues[instance_index * 6u + 2u]) * roundness;
+                let by = uValues[instance_index * 6u + 3u] - sign(uValues[instance_index * 6u + 3u]) * roundness;
+                let cx = uValues[instance_index * 6u + 4u] - sign(uValues[instance_index * 6u + 4u]) * roundness;
+                let cy = uValues[instance_index * 6u + 5u] - sign(uValues[instance_index * 6u + 5u]) * roundness;
+                dist = sd_triangle(p, vec2f(ax, ay), vec2f(bx, by), vec2f(cx, cy));
             }
 
-            return 1.0 - clamp(light, 0.0, 1.0);
+            // Circle has no roundness offset (matches the original 2D path).
+            if (kind != 0u) {
+                dist = op_round(dist, roundness);
+            }
+
+            return dist;
+        }
+
+        // ============= 3D SDF: sphere (kind 6) or extruded footprint =============
+
+        fn extrude(d2: f32, pz: f32, half_h: f32) -> f32 {
+            let w = vec2<f32>(d2, abs(pz) - half_h);
+            return min(max(w.x, w.y), 0.0) + length(max(w, vec2<f32>(0.0)));
+        }
+
+        fn sd_shape3d(p: vec3<f32>, instance_index: u32, hz: f32) -> f32 {
+            if (uKind[instance_index] == 6u) {
+                // True 3D sphere; values[0] = radius.
+                return length(p) - uValues[instance_index * 6u + 0u];
+            }
+            let d2 = sd_2d_for_kind(p.xy, instance_index);
+            return extrude(d2, p.z, hz);
+        }
+
+        fn sd_normal3d(p: vec3<f32>, instance_index: u32, hz: f32) -> vec3<f32> {
+            let e = vec2<f32>(0.0015, -0.0015);
+            return normalize(
+                e.xyy * sd_shape3d(p + e.xyy, instance_index, hz) +
+                e.yyx * sd_shape3d(p + e.yyx, instance_index, hz) +
+                e.yxy * sd_shape3d(p + e.yxy, instance_index, hz) +
+                e.xxx * sd_shape3d(p + e.xxx, instance_index, hz)
+            );
+        }
+
+        // Per-kind XY footprint half-extents (ported from the 2D compute_rect_vertex
+        // bounding-box logic), so the impostor box silhouette never clips the SDF.
+        fn footprint_half_xy(instance_index: u32) -> vec2<f32> {
+            let kind = uKind[instance_index];
+            var width = uValues[instance_index * 6u + 0u];
+            var height = uValues[instance_index * 6u + 1u];
+
+            if (kind == 0u) {
+                // Circle / cylinder: square footprint from the radius (values[0] = radius).
+                height = width;
+            } else if (kind == 6u) {
+                // Sphere: values[0] = radius → full extent 2r in both axes.
+                width = uValues[instance_index * 6u + 0u] * 2.0;
+                height = width;
+            } else if (kind == 3u) {
+                // Parallelogram: footprint widens by the skew amount on each side.
+                width += abs(uValues[instance_index * 6u + 2u]) * 2.0;
+            } else if (kind == 4u) {
+                // Trapezoid: values = [topWidth, bottomWidth, height]. Footprint bound =
+                // wider of the two ends in X, the height value in Y.
+                width = max(uValues[instance_index * 6u + 0u], uValues[instance_index * 6u + 1u]);
+                height = uValues[instance_index * 6u + 2u];
+            } else if (kind == 5u) {
+                // Triangle: bounding box from the three vertices.
+                width = max(width, max(uValues[instance_index * 6u + 2u], uValues[instance_index * 6u + 4u])) * 2.0;
+                height = max(height, max(uValues[instance_index * 6u + 3u], uValues[instance_index * 6u + 5u])) * 2.0;
+            }
+
+            return vec2<f32>(width / 2.0, height / 2.0);
+        }
+
+        // ============= Vertex: rasterize the per-instance impostor box =============
+
+        // 36-vertex unit cube ([-1,1]^3), 12 triangles. Indexed by vertex_index.
+        const CUBE = array<vec3<f32>, 36>(
+            // -z
+            vec3<f32>(-1,-1,-1), vec3<f32>( 1,-1,-1), vec3<f32>( 1, 1,-1),
+            vec3<f32>(-1,-1,-1), vec3<f32>( 1, 1,-1), vec3<f32>(-1, 1,-1),
+            // +z
+            vec3<f32>(-1,-1, 1), vec3<f32>( 1, 1, 1), vec3<f32>( 1,-1, 1),
+            vec3<f32>(-1,-1, 1), vec3<f32>(-1, 1, 1), vec3<f32>( 1, 1, 1),
+            // -y
+            vec3<f32>(-1,-1,-1), vec3<f32>(-1,-1, 1), vec3<f32>( 1,-1, 1),
+            vec3<f32>(-1,-1,-1), vec3<f32>( 1,-1, 1), vec3<f32>( 1,-1,-1),
+            // +y
+            vec3<f32>(-1, 1,-1), vec3<f32>( 1, 1,-1), vec3<f32>( 1, 1, 1),
+            vec3<f32>(-1, 1,-1), vec3<f32>( 1, 1, 1), vec3<f32>(-1, 1, 1),
+            // -x
+            vec3<f32>(-1,-1,-1), vec3<f32>(-1, 1,-1), vec3<f32>(-1, 1, 1),
+            vec3<f32>(-1,-1,-1), vec3<f32>(-1, 1, 1), vec3<f32>(-1,-1, 1),
+            // +x
+            vec3<f32>( 1,-1,-1), vec3<f32>( 1,-1, 1), vec3<f32>( 1, 1, 1),
+            vec3<f32>( 1,-1,-1), vec3<f32>( 1, 1, 1), vec3<f32>( 1, 1,-1),
+        );
+
+        @vertex
+        fn vs_main(
+            @builtin(vertex_index) vertex_index: u32,
+            @builtin(instance_index) instance_index: u32
+        ) -> VertexOutput {
+            let transform = uTransform[instance_index];
+            let baseZ = transform[3].z;
+            let height = uHeights[instance_index];
+            let hz = height * 0.5;
+            // Object center sits half a height above the base.
+            let center = vec3<f32>(transform[3].x, transform[3].y, baseZ + hz);
+
+            // Yaw from the upper-left 2x2 of the transform.
+            let yaw = atan2(transform[0].y, transform[0].x);
+
+            let halfXY = footprint_half_xy(instance_index);
+            let corner = CUBE[vertex_index];
+
+            // Unit-cube corner scaled by footprint half-extents + half-height,
+            // rotated by yaw into world.
+            let scaled = corner * vec3<f32>(halfXY.x, halfXY.y, hz);
+            let xy = rotZ(scaled.xy, cos(yaw), sin(yaw));
+            let world = center + vec3<f32>(xy, scaled.z);
+
+            var out: VertexOutput;
+            out.position = uViewProj * vec4<f32>(world, 1.0);
+            out.instance_index = instance_index;
+            out.world = world;
+            return out;
+        }
+
+        // ============= Fragment: sphere-trace the local 3D SDF =============
+
+        @fragment
+        fn fs_main(
+            @builtin(position) frag_coord: vec4<f32>,
+            @location(0) @interpolate(flat) instance_index: u32,
+            @location(1) world: vec3<f32>,
+        ) -> FragmentOutput {
+            let color = uColor[instance_index];
+            if (color.a == 0.0) {
+                discard;
+            }
+
+            let transform = uTransform[instance_index];
+            let height = uHeights[instance_index];
+            let hz = height * 0.5;
+            let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z + hz);
+            let yaw = atan2(transform[0].y, transform[0].x);
+
+            // World ray (origin = this fragment's box-surface point) → instance-local
+            // space (remove yaw; rigid transform preserves distances).
+            let ic = cos(-yaw);
+            let is = sin(-yaw);
+            let relW = world - center;
+            let lo = vec3<f32>(rotZ(relW.xy, ic, is), relW.z);
+            let ld = normalize(vec3<f32>(rotZ(uRayDir.xy, ic, is), uRayDir.z));
+
+            // Slab test against the local AABB (footprint half-extents + half-height).
+            let halfXY = footprint_half_xy(instance_index);
+            let half = vec3<f32>(halfXY.x, halfXY.y, hz);
+            // Guard the reciprocal: lo lies on an AABB face, so for a near-axis-aligned
+            // ray (ld component ~0 as the camera orbits) (half - lo) * (1/ld) would be
+            // 0 * Inf = NaN and corrupt the slab reduction.
+            let safeLd = select(ld, vec3<f32>(1e-6), abs(ld) < vec3<f32>(1e-6));
+            let inv = 1.0 / safeLd;
+            let tA = (-half - lo) * inv;
+            let tB = (half - lo) * inv;
+            let tmin = min(tA, tB);
+            let tmax = max(tA, tB);
+            let t0 = max(max(tmin.x, tmin.y), tmin.z);
+            let t1 = min(min(tmax.x, tmax.y), tmax.z);
+            if (t1 < max(t0, 0.0)) {
+                discard;
+            }
+
+            // Sphere-trace between entry and exit.
+            var t = max(t0, 0.0);
+            var hit = false;
+            for (var i = 0; i < 96; i = i + 1) {
+                let d = sd_shape3d(lo + ld * t, instance_index, hz);
+                if (d < 0.001) {
+                    hit = true;
+                    break;
+                }
+                t = t + d;
+                if (t > t1) {
+                    break;
+                }
+            }
+            if (!hit) {
+                discard;
+            }
+
+            let pLocal = lo + ld * t;
+            let nLocal = sd_normal3d(pLocal, instance_index, hz);
+
+            // Back to world (forward yaw).
+            let fc = cos(yaw);
+            let fs_ = sin(yaw);
+            let nWorld = normalize(vec3<f32>(rotZ(nLocal.xy, fc, fs_), nLocal.z));
+            let pWorld = center + vec3<f32>(rotZ(pLocal.xy, fc, fs_), pLocal.z);
+
+            let clip = uViewProj * vec4<f32>(pWorld, 1.0);
+
+            // Ambient + clamped diffuse against one directional light.
+            let diff = max(dot(nWorld, -uLightDir.xyz), 0.0);
+            let ambient = 0.28;
+            let shade = ambient + (1.0 - ambient) * diff;
+
+            var out: FragmentOutput;
+            out.color = vec4<f32>(color.rgb * shade, 1.0);
+            // Reverse-Z: viewProj already maps NEAR→1, FAR→0 to match the pipeline's
+            // greater-equal/clear-0 depth compare. See ResizeSystem.viewProjMatrix.
+            out.depth = clip.z / clip.w;
+            return out;
         }
     `,
 );

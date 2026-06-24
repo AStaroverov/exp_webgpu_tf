@@ -2,6 +2,7 @@ import { createWorld as createBitecsWorld, World } from "bitecs";
 import {
   createBlurnessComponent,
   createColorComponent,
+  createHeightComponent,
   createLightEmitterComponent,
   createRoundnessComponent,
   createThinnessComponent,
@@ -21,6 +22,7 @@ export function createRenderComponents(world: World) {
     Thinness: createThinnessComponent(world),
     Roundness: createRoundnessComponent(world),
     Blurness: createBlurnessComponent(world),
+    Height: createHeightComponent(world),
     LightEmitter: createLightEmitterComponent(world),
     Translucency: createTranslucencyComponent(world),
   };
