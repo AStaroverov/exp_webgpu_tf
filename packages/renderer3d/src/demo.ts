@@ -67,7 +67,7 @@ async function main() {
   //   "emitter"  — ground + box occluder + a GUI-movable/resizable emitter sphere.
   //   "simple"   — fixed minimal scene (first-bug diagnosis).
   //   "showcase" — one of every shape kind + several lights.
-  const SCENE = "emitter" as "emitter" | "simple" | "showcase";
+  const SCENE = "showcase" as "emitter" | "simple" | "showcase";
 
   // The configurable emitter (only used by the "emitter" scene). Live-edited from
   // the GUI: position via the transform (re-uploaded every frame), radius via the
@@ -384,11 +384,20 @@ async function main() {
   const surfelGui = { showSurfels: true };
   const sf = gui.addFolder("Surfels (debug)");
   sf.add(surfelGui, "showSurfels").name("show surfels");
-  sf.add(surfel.params, "spawnChance", 0, 0.2, 0.005)
+  sf.add(surfel.params, "spawnChance", 0, 0.2, 0.0001)
     .name("spawn chance")
     .onChange(() => surfel.setParams(surfel.params));
   sf.add(surfel.params, "surfelRadius", 0.1, 3, 0.05)
     .name("surfel radius")
+    .onChange(() => surfel.setParams(surfel.params));
+  // Single DENSITY-shape knob: spawn-coverage distance as a multiple of radius.
+  // cellSize, the spawn threshold and the (hysteresis) recycle threshold are all
+  // derived from radius + this, so they can't be desynced. <1 = denser, >1 = sparser.
+  sf.add(surfel.params, "coverage", 0.4, 2.0, 0.05)
+    .name("coverage (×r)")
+    .onChange(() => surfel.setParams(surfel.params));
+  sf.add(surfel.params, "markerDecay", 0, 0.5, 0.005)
+    .name("marker decay")
     .onChange(() => surfel.setParams(surfel.params));
   sf.add(surfel.params, "quadPx", 1, 20, 1)
     .name("dot size (px)")
@@ -495,17 +504,17 @@ async function main() {
     frameTick(encoder, delta);
     // World RC gather + merge + composite -> worldLitTexture (only when enabled).
     if (view.enableWorldRc) worldRc.run(encoder, delta);
-    // Surfels: spawn on visible G-buffer surfaces (compute), regardless of RC state.
-    surfel.spawn(encoder, frameIndex);
+    // Surfels (Stage B): clearGrid -> insert (rebuild hash grid from live set) ->
+    // spawn (coverage-gated) -> recycle (age + push back over-covered/stale). Runs
+    // regardless of RC state; converges the live count well below CAP.
+    surfel.run(encoder, frameIndex);
     // Present the lit composite, or the raw unlit scene when RC is off.
     const presented = view.enableWorldRc ? worldRc.outputTexture : frame.renderTexture;
     // Debug overlay: draw the surfel dots ON TOP of the presented texture (loadOp
     // "load" keeps the lit scene; no depth, so they're not occluded — debug only).
     if (surfelGui.showSurfels) {
       const overlay = encoder.beginRenderPass({
-        colorAttachments: [
-          { view: presented.createView(), loadOp: "load", storeOp: "store" },
-        ],
+        colorAttachments: [{ view: presented.createView(), loadOp: "load", storeOp: "store" }],
       });
       surfel.drawDebug(overlay);
       overlay.end();
