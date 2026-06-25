@@ -287,12 +287,15 @@ async function main() {
   //                LOD (voxel.outputTexture, debug mode 2); LOD 0 sharp, higher = blurred.
   //   "cone"     — VCT cone GI: 6-cone diffuse hemisphere gather through the radiance
   //                pyramid (voxel.coneOutputTexture); indirect only (no albedo/direct yet).
+  //   "final"    — the composited VCT image (voxel.compositeOutputTexture): the real lit
+  //                picture = albedo·(ambient·AO + directSun + indirect) + selfEmission.
   //   "gi"       — brute-force voxel GI reference (voxel.giOutputTexture).
   //   "raw"      — the unlit albedo G-buffer (frame.renderTexture).
-  // Keys: 1 = voxel, 5 = radiance, 6 = lod, 7 = cone, 3 = gi, 2 = raw (also a GUI dropdown).
-  // Default to "voxel" (cheap) so the page never opens straight into a heavy GI pass.
+  // Keys: 1 = voxel, 5 = radiance, 6 = lod, 7 = cone, 8 = final, 3 = gi, 2 = raw (also a
+  // GUI dropdown). Default to "voxel" (cheap) so the page never opens straight into a heavy
+  // GI pass.
   const view = {
-    presentSource: "voxel" as "voxel" | "raw" | "gi" | "radiance" | "lod" | "cone",
+    presentSource: "final" as "voxel" | "raw" | "gi" | "radiance" | "lod" | "cone" | "final",
   };
   window.addEventListener("keydown", (e) => {
     if (e.key === "1") view.presentSource = "voxel";
@@ -301,12 +304,13 @@ async function main() {
     else if (e.key === "5") view.presentSource = "radiance";
     else if (e.key === "6") view.presentSource = "lod";
     else if (e.key === "7") view.presentSource = "cone";
+    else if (e.key === "8") view.presentSource = "final";
   });
 
   const gui = new GUI({ title: "Voxel" });
   gui
-    .add(view, "presentSource", ["voxel", "radiance", "lod", "cone", "gi", "raw"])
-    .name("present (1/5/6/7/3/2)")
+    .add(view, "presentSource", ["raw", "voxel", "gi", "radiance", "lod", "cone", "final"])
+    .name("present")
     .listen();
 
   // Debug LOD for the "lod" present source: which mip of the radiance pyramid to sample.
@@ -361,6 +365,11 @@ async function main() {
   coneFolder.add(voxel.coneParams, "maxDist", 1, 64, 0.5).name("cone reach");
   coneFolder.add(voxel.coneParams, "normalBias", 0, 2, 0.01).name("normal bias");
   coneFolder.add(voxel.coneParams, "giStrength", 0, 4, 0.05).name("GI strength");
+
+  // Composite (Layer 4): the final lit image. Sun controls above feed it via SunLight;
+  // cone giStrength bakes into the indirect term. Only the ambient floor lives here.
+  const compositeFolder = gui.addFolder("Composite");
+  compositeFolder.add(voxel.compositeParams, "ambient", 0, 0.5, 0.01).name("composite ambient");
 
   // Live emitter controls (only the "emitter" scene). Position writes the transform
   // (re-uploaded every frame); radius drives BOTH the sphere SDF (Shape.setSphere$)
@@ -457,9 +466,13 @@ async function main() {
     // sphere-trace (up to 96 steps) is fill-bound: cost scales with on-screen coverage,
     // so it spikes on zoom-in. "voxel"/"gi" don't read the G-buffer (only the voxel 3D
     // textures + scene buffers, which prepare() already uploaded) — they use the voxel
-    // DDA instead. "raw" and "cone" both NEED the SDF pass: raw presents it, cone reads
-    // its depth + normal G-buffer to reconstruct P + N for the trace.
-    if (view.presentSource === "raw" || view.presentSource === "cone") {
+    // DDA instead. "raw", "cone" and "final" all NEED the SDF pass: raw presents it; cone +
+    // final read its depth + normal G-buffer to reconstruct P + N (final also reads albedo).
+    if (
+      view.presentSource === "raw" ||
+      view.presentSource === "cone" ||
+      view.presentSource === "final"
+    ) {
       frameTick(encoder, delta);
     }
     // Voxelize the SDF scene into the 3D textures, then run the selected voxel pass.
@@ -474,6 +487,11 @@ async function main() {
       // Build the radiance pyramid (must follow voxelize), then trace the diffuse cones.
       voxel.mips(encoder);
       voxel.cone(encoder);
+    } else if (view.presentSource === "final") {
+      // Pyramid → cone gather → composite into the final lit image (composite reads cone).
+      voxel.mips(encoder);
+      voxel.cone(encoder);
+      voxel.composite(encoder);
     } else if (view.presentSource === "gi") voxel.gi(encoder, frameIndex);
     // Present the chosen source.
     const presented =
@@ -483,9 +501,11 @@ async function main() {
         ? voxel.outputTexture
         : view.presentSource === "cone"
           ? voxel.coneOutputTexture
-          : view.presentSource === "gi"
-            ? voxel.giOutputTexture
-            : frame.renderTexture;
+          : view.presentSource === "final"
+            ? voxel.compositeOutputTexture
+            : view.presentSource === "gi"
+              ? voxel.giOutputTexture
+              : frame.renderTexture;
     present(encoder, presented);
     device.queue.submit([encoder.finish()]);
 

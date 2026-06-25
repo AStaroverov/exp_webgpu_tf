@@ -15,7 +15,7 @@ export const SunLight = {
   /** Angle above the XY plane, radians. */
   elevation: 0.9,
   /** Scalar light intensity. */
-  intensity: 1.5,
+  intensity: 0.2,
   /** Linear RGB color, components in 0..1. */
   color: [1.0, 0.95, 0.85] as [number, number, number],
 };

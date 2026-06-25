@@ -143,8 +143,13 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let aperture = uParams.z;
 
   var acc = vec3<f32>(0.0);
+  // occAcc accumulates the SAME cosine-weighted average over each cone's opacity (.a) — the
+  // hemisphere "how blocked am I" measure that becomes ambient occlusion in the composite.
+  var occAcc = 0.0;
   // Center cone along the normal, weight π/4.
-  acc = acc + (PI / 4.0) * trace_cone(origin, N, aperture).rgb;
+  let rCenter = trace_cone(origin, N, aperture);
+  acc = acc + (PI / 4.0) * rCenter.rgb;
+  occAcc = occAcc + (PI / 4.0) * rCenter.a;
 
   // Ring of 5 side cones tilted 60° off the normal (local z = cos60 = 0.5, local xy
   // magnitude = sin60 ≈ 0.86602540), azimuth φ_i = i·(2π/5), weight 3π/20 each.
@@ -152,12 +157,19 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let phi = f32(i) * (2.0 * PI / 5.0);
     let local = vec3<f32>(0.86602540 * cos(phi), 0.86602540 * sin(phi), 0.5);
     let dir = normalize(basis * local);
-    acc = acc + (3.0 * PI / 20.0) * trace_cone(origin, dir, aperture).rgb;
+    let rSide = trace_cone(origin, dir, aperture);
+    acc = acc + (3.0 * PI / 20.0) * rSide.rgb;
+    occAcc = occAcc + (3.0 * PI / 20.0) * rSide.a;
   }
 
   // Σweights = π/4 + 5·3π/20 = π → dividing gives the cosine-weighted average radiance.
   let irradiance = acc / PI;
-  return vec4f(irradiance * uParams.w, 1.0);
+  // Weighted-average opacity the cones hit → visibility = 1 - occlusion (the AO term).
+  let occlusion = occAcc / PI;
+  let visibility = clamp(1.0 - occlusion, 0.0, 1.0);
+  // rgb = indirect radiance·giStrength (the "cone" present mode shows this unchanged);
+  // a = hemisphere visibility, read as AO by the composite.
+  return vec4f(irradiance * uParams.w, visibility);
 }
 `,
 );

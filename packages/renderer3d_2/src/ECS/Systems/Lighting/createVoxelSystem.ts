@@ -6,6 +6,7 @@ import { shaderMeta as voxelizeMeta, WORKGROUP } from "./voxelize.shader.ts";
 import { shaderMeta as debugMeta } from "./voxelDebug.shader.ts";
 import { shaderMeta as giMeta } from "./voxelGi.shader.ts";
 import { shaderMeta as coneMeta } from "./voxelCone.shader.ts";
+import { shaderMeta as compositeMeta } from "./voxelComposite.shader.ts";
 import { shaderMeta as mipMeta, WORKGROUP as MIP_WG } from "./voxelMip.shader.ts";
 import {
   createVoxelTextures,
@@ -37,6 +38,10 @@ export type VoxelConeParams = {
   maxDist: number; // cone reach (world units)
   aperture: number; // tan(halfAngle) — cone half-angle (~0.577 = 60° full angle)
   giStrength: number; // multiplier on the gathered diffuse-cone radiance
+};
+
+export type VoxelCompositeParams = {
+  ambient: number; // ambient floor (scaled by the cone's AO term)
 };
 
 // Voxel scene system (Phase 1): voxelize() fills the 3D albedo/emission textures from the
@@ -83,6 +88,9 @@ export function createVoxelSystem({
     aperture: 0.577,
     giStrength: 1,
   };
+  // giStrength stays in coneParams (baked into the cone's rgb); the composite only adds the
+  // ambient floor.
+  const compositeParams: VoxelCompositeParams = { ambient: 0.25 };
   // GI renders at 1/giScale resolution then upscales on present — brute force at full
   // res is billions of textureLoads/frame and hangs the GPU. Reduce rays/res to taste.
   let giScale = 4;
@@ -118,6 +126,12 @@ export function createVoxelSystem({
   // VCT cone GI — 6-cone diffuse hemisphere gather over the G-buffer → full-res HDR target.
   const coneShader = new GPUShader(coneMeta);
   const conePipeline = coneShader.getRenderPipeline(device, "vs_main", "fs_main", {
+    targetFormat: "rgba16float",
+    withBlending: false,
+  });
+  // VCT composite (Layer 4): final = albedo·(ambient·AO + directSun + indirect) + emission.
+  const compositeShader = new GPUShader(compositeMeta);
+  const compositePipeline = compositeShader.getRenderPipeline(device, "vs_main", "fs_main", {
     targetFormat: "rgba16float",
     withBlending: false,
   });
@@ -157,13 +171,34 @@ export function createVoxelSystem({
   const voxGroup1 = device.createBindGroup({
     layout: voxPipeline.getBindGroupLayout(1),
     entries: [
-      { binding: voxelizeMeta.uniforms.transform.binding, resource: { buffer: sceneInstances.transform.getGPUBuffer(device) } },
-      { binding: voxelizeMeta.uniforms.kind.binding, resource: { buffer: sceneInstances.kind.getGPUBuffer(device) } },
-      { binding: voxelizeMeta.uniforms.values.binding, resource: { buffer: sceneInstances.values.getGPUBuffer(device) } },
-      { binding: voxelizeMeta.uniforms.roundness.binding, resource: { buffer: sceneInstances.roundness.getGPUBuffer(device) } },
-      { binding: voxelizeMeta.uniforms.heights.binding, resource: { buffer: sceneInstances.heights.getGPUBuffer(device) } },
-      { binding: voxelizeMeta.uniforms.color.binding, resource: { buffer: sceneInstances.color.getGPUBuffer(device) } },
-      { binding: voxelizeMeta.uniforms.material.binding, resource: { buffer: sceneInstances.material.getGPUBuffer(device) } },
+      {
+        binding: voxelizeMeta.uniforms.transform.binding,
+        resource: { buffer: sceneInstances.transform.getGPUBuffer(device) },
+      },
+      {
+        binding: voxelizeMeta.uniforms.kind.binding,
+        resource: { buffer: sceneInstances.kind.getGPUBuffer(device) },
+      },
+      {
+        binding: voxelizeMeta.uniforms.values.binding,
+        resource: { buffer: sceneInstances.values.getGPUBuffer(device) },
+      },
+      {
+        binding: voxelizeMeta.uniforms.roundness.binding,
+        resource: { buffer: sceneInstances.roundness.getGPUBuffer(device) },
+      },
+      {
+        binding: voxelizeMeta.uniforms.heights.binding,
+        resource: { buffer: sceneInstances.heights.getGPUBuffer(device) },
+      },
+      {
+        binding: voxelizeMeta.uniforms.color.binding,
+        resource: { buffer: sceneInstances.color.getGPUBuffer(device) },
+      },
+      {
+        binding: voxelizeMeta.uniforms.material.binding,
+        resource: { buffer: sceneInstances.material.getGPUBuffer(device) },
+      },
     ],
   });
 
@@ -184,6 +219,12 @@ export function createVoxelSystem({
   const coneParamsArr = getTypeTypedArray(coneMeta.uniforms.params.type); // Float32Array(4)
   const coneParams2Arr = getTypeTypedArray(coneMeta.uniforms.params2.type); // Float32Array(4)
   const coneInvArr = getTypeTypedArray(coneMeta.uniforms.invViewProj.type); // Float32Array(16)
+  // Composite scratch.
+  const compParamsArr = getTypeTypedArray(compositeMeta.uniforms.params.type); // Float32Array(4)
+  const compParams2Arr = getTypeTypedArray(compositeMeta.uniforms.params2.type); // Float32Array(4)
+  const compSunArr = getTypeTypedArray(compositeMeta.uniforms.sun.type); // Float32Array(4)
+  const compSunColorArr = getTypeTypedArray(compositeMeta.uniforms.sunColor.type); // Float32Array(4)
+  const compInvArr = getTypeTypedArray(compositeMeta.uniforms.invViewProj.type); // Float32Array(16)
   // Mip scratch: .xyz = destination mip dims (re-uploaded per level).
   const mipArr = getTypeTypedArray(mipMeta.uniforms.mip.type); // Int32Array(4)
 
@@ -196,6 +237,7 @@ export function createVoxelSystem({
   let voxGroup2: GPUBindGroup;
   let debugGroup0: GPUBindGroup;
   let coneGroup0: GPUBindGroup;
+  let compositeGroup0: GPUBindGroup;
   let dispatchX = 0;
   let dispatchY = 0;
   let dispatchZ = 0;
@@ -238,8 +280,14 @@ export function createVoxelSystem({
           giShader.uniforms.invViewProj.getBindGroupEntry(device),
           giShader.uniforms.gridOrigin.getBindGroupEntry(device),
           giShader.uniforms.gridDims.getBindGroupEntry(device),
-          { binding: giMeta.uniforms.voxelAlbedo.binding, resource: textures.voxelAlbedo.createView({ dimension: "3d" }) },
-          { binding: giMeta.uniforms.voxelEmission.binding, resource: textures.voxelEmission.createView({ dimension: "3d" }) },
+          {
+            binding: giMeta.uniforms.voxelAlbedo.binding,
+            resource: textures.voxelAlbedo.createView({ dimension: "3d" }),
+          },
+          {
+            binding: giMeta.uniforms.voxelEmission.binding,
+            resource: textures.voxelEmission.createView({ dimension: "3d" }),
+          },
           { binding: giMeta.uniforms.historyTex.binding, resource: giAccum[i].createView() },
         ],
       });
@@ -261,8 +309,37 @@ export function createVoxelSystem({
         { binding: coneMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
         { binding: coneMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
         // ALL-mips sampled view so textureSampleLevel can pick any lod.
-        { binding: coneMeta.uniforms.voxelRadiance.binding, resource: textures.voxelRadiance.createView({ dimension: "3d" }) },
+        {
+          binding: coneMeta.uniforms.voxelRadiance.binding,
+          resource: textures.voxelRadiance.createView({ dimension: "3d" }),
+        },
         { binding: coneMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
+      ],
+    });
+  }
+
+  // (Re)build the Layer-4 composite bind group: uniforms + the G-buffer (albedo/normal/depth)
+  // + the cone output (indirect+AO) + the voxelEmission 3D view (self-emission). Rebuilt when
+  // the voxelEmission view changes (grid rebuild) or the G-buffer / coneOutput change (resize).
+  function buildCompositeGroup() {
+    compositeGroup0 = device.createBindGroup({
+      layout: compositePipeline.getBindGroupLayout(0),
+      entries: [
+        compositeShader.uniforms.params.getBindGroupEntry(device),
+        compositeShader.uniforms.params2.getBindGroupEntry(device),
+        compositeShader.uniforms.sun.getBindGroupEntry(device),
+        compositeShader.uniforms.sunColor.getBindGroupEntry(device),
+        compositeShader.uniforms.invViewProj.getBindGroupEntry(device),
+        compositeShader.uniforms.gridOrigin.getBindGroupEntry(device),
+        compositeShader.uniforms.gridDims.getBindGroupEntry(device),
+        { binding: compositeMeta.uniforms.albedoTex.binding, resource: gAlbedo.createView() },
+        { binding: compositeMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
+        { binding: compositeMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
+        { binding: compositeMeta.uniforms.coneTex.binding, resource: coneOutput.createView() },
+        {
+          binding: compositeMeta.uniforms.voxelEmission.binding,
+          resource: textures.voxelEmission.createView({ dimension: "3d" }),
+        },
       ],
     });
   }
@@ -291,9 +368,22 @@ export function createVoxelSystem({
     voxGroup2 = device.createBindGroup({
       layout: voxPipeline.getBindGroupLayout(2),
       entries: [
-        { binding: voxelizeMeta.uniforms.voxelAlbedo.binding, resource: textures.voxelAlbedo.createView({ dimension: "3d" }) },
-        { binding: voxelizeMeta.uniforms.voxelEmission.binding, resource: textures.voxelEmission.createView({ dimension: "3d" }) },
-        { binding: voxelizeMeta.uniforms.voxelRadiance.binding, resource: textures.voxelRadiance.createView({ dimension: "3d", baseMipLevel: 0, mipLevelCount: 1 }) },
+        {
+          binding: voxelizeMeta.uniforms.voxelAlbedo.binding,
+          resource: textures.voxelAlbedo.createView({ dimension: "3d" }),
+        },
+        {
+          binding: voxelizeMeta.uniforms.voxelEmission.binding,
+          resource: textures.voxelEmission.createView({ dimension: "3d" }),
+        },
+        {
+          binding: voxelizeMeta.uniforms.voxelRadiance.binding,
+          resource: textures.voxelRadiance.createView({
+            dimension: "3d",
+            baseMipLevel: 0,
+            mipLevelCount: 1,
+          }),
+        },
       ],
     });
 
@@ -306,10 +396,19 @@ export function createVoxelSystem({
         debugShader.uniforms.gridOrigin.getBindGroupEntry(device),
         debugShader.uniforms.gridDims.getBindGroupEntry(device),
         { binding: debugMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
-        { binding: debugMeta.uniforms.voxelAlbedo.binding, resource: textures.voxelAlbedo.createView({ dimension: "3d" }) },
-        { binding: debugMeta.uniforms.voxelEmission.binding, resource: textures.voxelEmission.createView({ dimension: "3d" }) },
+        {
+          binding: debugMeta.uniforms.voxelAlbedo.binding,
+          resource: textures.voxelAlbedo.createView({ dimension: "3d" }),
+        },
+        {
+          binding: debugMeta.uniforms.voxelEmission.binding,
+          resource: textures.voxelEmission.createView({ dimension: "3d" }),
+        },
         // ALL-mips sampled view so textureSampleLevel can pick any lod.
-        { binding: debugMeta.uniforms.voxelRadiance.binding, resource: textures.voxelRadiance.createView({ dimension: "3d" }) },
+        {
+          binding: debugMeta.uniforms.voxelRadiance.binding,
+          resource: textures.voxelRadiance.createView({ dimension: "3d" }),
+        },
       ],
     });
 
@@ -328,8 +427,16 @@ export function createVoxelSystem({
       });
       mipBuf.push(buf);
 
-      const srcView = textures.voxelRadiance.createView({ dimension: "3d", baseMipLevel: L, mipLevelCount: 1 });
-      const dstView = textures.voxelRadiance.createView({ dimension: "3d", baseMipLevel: L + 1, mipLevelCount: 1 });
+      const srcView = textures.voxelRadiance.createView({
+        dimension: "3d",
+        baseMipLevel: L,
+        mipLevelCount: 1,
+      });
+      const dstView = textures.voxelRadiance.createView({
+        dimension: "3d",
+        baseMipLevel: L + 1,
+        mipLevelCount: 1,
+      });
 
       mipGroup0.push(
         device.createBindGroup({
@@ -359,6 +466,8 @@ export function createVoxelSystem({
     buildGiReadGroups();
     // Cone bind group references the rebuilt voxelRadiance view + the (stable) G-buffer.
     buildConeGroup();
+    // Composite bind group references the rebuilt voxelEmission view + G-buffer + coneOutput.
+    buildCompositeGroup();
 
     // Grid uniforms (shared by all shaders).
     originArr[0] = originX;
@@ -377,13 +486,17 @@ export function createVoxelSystem({
     device.queue.writeBuffer(giShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
     device.queue.writeBuffer(coneShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
     device.queue.writeBuffer(coneShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
+    device.queue.writeBuffer(
+      compositeShader.uniforms.gridOrigin.getGPUBuffer(device),
+      0,
+      originArr,
+    );
+    device.queue.writeBuffer(compositeShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
 
     dispatchX = Math.ceil(dimX / WORKGROUP);
     dispatchY = Math.ceil(dimY / WORKGROUP);
     dispatchZ = Math.ceil(dimZ / WORKGROUP);
   }
-  buildGrid(cellSize);
-
   // Canvas-sized debug output (presented). Independent of the voxel grid.
   const createOutput = () =>
     device.createTexture({
@@ -401,6 +514,19 @@ export function createVoxelSystem({
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
   let coneOutput = createConeOutput();
+
+  // Full-res HDR target for the Layer-4 composite (the final lit image — "final" source).
+  const createCompositeOutput = () =>
+    device.createTexture({
+      size: [canvas.width, canvas.height, 1],
+      format: "rgba16float",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+  let compositeOutput = createCompositeOutput();
+
+  // Built last: buildGrid() (and recreate()) call buildCompositeGroup(), which references
+  // coneOutput + compositeOutput, so those textures must exist first.
+  buildGrid(cellSize);
 
   // Re-voxelize the scene into the 3D textures (run before debug()/the GI gather).
   function voxelize(encoder: GPUCommandEncoder) {
@@ -574,6 +700,73 @@ export function createVoxelSystem({
     pass.end();
   }
 
+  // VCT composite (Layer 4): combine albedo + cone indirect/AO + direct sun + self-emission
+  // into the final lit image → compositeOutput (full-res HDR). MUST run AFTER cone() (it reads
+  // coneOutput). Reads the G-buffer (albedo/normal/depth) + voxelEmission.
+  function composite(encoder: GPUCommandEncoder) {
+    compParamsArr[0] = compositeParams.ambient;
+    compParamsArr[1] = 0;
+    compParamsArr[2] = 0;
+    compParamsArr[3] = 0;
+    device.queue.writeBuffer(
+      compositeShader.uniforms.params.getGPUBuffer(device),
+      0,
+      compParamsArr,
+    );
+
+    compParams2Arr[0] = canvas.width;
+    compParams2Arr[1] = canvas.height;
+    compParams2Arr[2] = 0;
+    compParams2Arr[3] = 0;
+    device.queue.writeBuffer(
+      compositeShader.uniforms.params2.getGPUBuffer(device),
+      0,
+      compParams2Arr,
+    );
+
+    // Directional sun, computed EXACTLY like voxelize(): .xyz = world dir TOWARD the sun
+    // (azimuth + elevation), .w = effective intensity (0 = disabled), color in uSunColor.
+    const a = SunLight.angle;
+    const e = SunLight.elevation;
+    const ce = Math.cos(e);
+    compSunArr[0] = Math.cos(a) * ce;
+    compSunArr[1] = Math.sin(a) * ce;
+    compSunArr[2] = Math.sin(e);
+    compSunArr[3] = SunLight.enabled ? SunLight.intensity : 0;
+    device.queue.writeBuffer(compositeShader.uniforms.sun.getGPUBuffer(device), 0, compSunArr);
+    compSunColorArr[0] = SunLight.color[0];
+    compSunColorArr[1] = SunLight.color[1];
+    compSunColorArr[2] = SunLight.color[2];
+    device.queue.writeBuffer(
+      compositeShader.uniforms.sunColor.getGPUBuffer(device),
+      0,
+      compSunColorArr,
+    );
+
+    mat4.invert(invViewProj, viewProjMatrix);
+    compInvArr.set(invViewProj as Float32Array);
+    device.queue.writeBuffer(
+      compositeShader.uniforms.invViewProj.getGPUBuffer(device),
+      0,
+      compInvArr,
+    );
+
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: compositeOutput.createView(),
+          clearValue: [0, 0, 0, 1],
+          loadOp: "clear",
+          storeOp: "store",
+        },
+      ],
+    });
+    pass.setPipeline(compositePipeline);
+    pass.setBindGroup(0, compositeGroup0);
+    pass.draw(6, 1, 0, 0);
+    pass.end();
+  }
+
   // Change the voxel size (graininess). Destroys the old textures, rebuilds the grid.
   function setCellSize(newCellSize: number) {
     textures.voxelAlbedo.destroy();
@@ -602,8 +795,12 @@ export function createVoxelSystem({
     outputTexture = createOutput();
     coneOutput.destroy();
     coneOutput = createConeOutput();
+    compositeOutput.destroy();
+    compositeOutput = createCompositeOutput();
     rebuildGiAccum();
     buildConeGroup();
+    // Rebuild the composite group: G-buffer + coneOutput changed.
+    buildCompositeGroup();
   }
 
   // Change the GI resolution divisor (1 = full res, 4 = quarter, …). Bigger = cheaper.
@@ -616,11 +813,13 @@ export function createVoxelSystem({
     params,
     giParams,
     coneParams,
+    compositeParams,
     voxelize,
     mips,
     debug,
     gi,
     cone,
+    composite,
     recreate,
     setCellSize,
     setGiScale,
@@ -647,6 +846,9 @@ export function createVoxelSystem({
     },
     get coneOutputTexture() {
       return coneOutput;
+    },
+    get compositeOutputTexture() {
+      return compositeOutput;
     },
     // Held for a future layer (Layer 4 reads albedo); exposed so the closure ref is live.
     get albedoTexture() {
