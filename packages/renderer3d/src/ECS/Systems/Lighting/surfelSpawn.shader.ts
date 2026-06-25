@@ -1,7 +1,7 @@
 import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
 import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
 import { wgsl } from "../../../WGSL/wgsl.ts";
-import { GRID_CAP, SURFEL_CAP } from "./surfelResources.ts";
+import { GRID_CAP, SURFEL_CAP, SURFEL_DIR_COUNT } from "./surfelResources.ts";
 
 // Surfel Radiance Cascades — Stage B SPAWN compute pass (coverage-gated).
 //
@@ -107,6 +107,15 @@ export const shaderMeta = new ShaderMeta(
       VariableKind.StorageWrite,
       `array<atomic<u32>, ${GRID_CAP}>`,
       { group: 2, binding: 4, visibility: GPUShaderStage.COMPUTE },
+    ),
+    // Per-surfel radiance cache. Spawn ZEROES a fresh surfel's tile so temporal
+    // accumulation (gather EMA) starts from 0 instead of ghosting the recycled slot's
+    // previous occupant. Index: surfel_rad[id*DIR_COUNT + dir].
+    surfelRad: new VariableMeta(
+      "surfel_rad",
+      VariableKind.StorageWrite,
+      `array<vec4<f32>, ${SURFEL_CAP * SURFEL_DIR_COUNT}>`,
+      { group: 2, binding: 5, visibility: GPUShaderStage.COMPUTE },
     ),
   },
   {},
@@ -245,6 +254,11 @@ fn main(
   let radius = uPackB.x;
   surfel_posr[id] = vec4<f32>(world, radius * radius);
   surfel_norw[id] = vec4<f32>(normal, 2.0);
+  // Zero the fresh surfel's radiance tile so the gather's temporal EMA starts clean
+  // (no ghosting of the recycled slot's previous occupant).
+  for (var d: u32 = 0u; d < ${SURFEL_DIR_COUNT}u; d = d + 1u) {
+    surfel_rad[id * ${SURFEL_DIR_COUNT}u + d] = vec4<f32>(0.0);
+  }
 }
     `,
 );

@@ -75,6 +75,10 @@ export type SurfelParams = {
   // (2*radius) at upload time, so it tracks the grid cell unless the GUI overrides it.
   surfelSearchRadius: number;
   ambient: number; // omni light floor (matches worldComposite uAmbient)
+  // Temporal accumulation: EMA blend factor for the gather (surfel_rad = mix(prev,
+  // new, accumAlpha)). With per-frame jitter this denoises + raises effective angular
+  // resolution. ~1/8 ≈ averages 8 frames; 1.0 = no accumulation (overwrite).
+  accumAlpha: number;
 
   // Sun/sky for the gather miss term (mirrors worldGather). sunIntensity multiplies BOTH.
   sunColor: [number, number, number];
@@ -98,6 +102,7 @@ export const DEFAULT_SURFEL_PARAMS: SurfelParams = {
 
   surfelSearchRadius: 0, // 0 => derive = cellSize
   ambient: 0.2,
+  accumAlpha: 0.125, // ~8-frame temporal average (jittered gather → denoise)
 
   sunColor: [1.0, 0.859, 0.161], // #ffdb29 warm sun (matches worldRc default)
   sunIntensity: 0.1,
@@ -197,6 +202,7 @@ export function createSurfelSystem({
       { binding: spawnMeta.uniforms.surfelNorw.binding, resource: { buffer: resources.norw } },
       { binding: spawnMeta.uniforms.surfelGrid.binding, resource: { buffer: resources.grid } },
       { binding: spawnMeta.uniforms.surfelClaim.binding, resource: { buffer: resources.claim } },
+      { binding: spawnMeta.uniforms.surfelRad.binding, resource: { buffer: resources.rad } },
     ],
   });
 
@@ -290,6 +296,7 @@ export function createSurfelSystem({
     layout: gatherPipeline.getBindGroupLayout(0),
     entries: [
       gatherShader.uniforms.params.getBindGroupEntry(device),
+      gatherShader.uniforms.params2.getBindGroupEntry(device),
       gatherShader.uniforms.instanceCount.getBindGroupEntry(device),
       gatherShader.uniforms.sun.getBindGroupEntry(device),
       gatherShader.uniforms.sunColor.getBindGroupEntry(device),
@@ -417,7 +424,7 @@ export function createSurfelSystem({
   // gatherSteps, normalBias); uInstanceCount scalar; uSun/uSunColor/uSkyColor packed
   // exactly like worldGather (sunColor.rgb * sunIntensity, .w = sunDistance softness;
   // skyColor.rgb * sunIntensity, .w = skyMix). instanceCount read AFTER prepare().
-  function uploadGatherUniforms() {
+  function uploadGatherUniforms(frameIndex: number) {
     writeVec4Raw(
       gatherShader,
       "params",
@@ -426,6 +433,8 @@ export function createSurfelSystem({
       p.gatherSteps,
       p.normalBias,
     );
+    // params2 = (frameIndex for jitter, accumAlpha EMA factor, 0, 0).
+    writeVec4Raw(gatherShader, "params2", frameIndex, p.accumAlpha, 0, 0);
     writeScalar(gatherShader, "instanceCount", sceneInstances.instanceCount);
     writeSun(gatherShader);
     writeVec4Mult(gatherShader, "sunColor", p.sunColor, p.sunIntensity, p.sunDistance);
@@ -436,7 +445,11 @@ export function createSurfelSystem({
   // surfelSearchRadius (derived = cellSize when param is 0), invViewProj (inverse VP).
   function uploadCompositeUniforms() {
     const { cellSize } = deriveCoverage(p.surfelRadius, p.coverage);
-    const searchRadius = p.surfelSearchRadius > 0 ? p.surfelSearchRadius : cellSize;
+    // Default search radius must EXCEED the surfel spacing (~cellSize) so the
+    // composite's nearest-4 blend actually has several surfels to interpolate; at
+    // R == cellSize only ~1 is found and the blend degenerates to nearest-1 (no
+    // smoothing). 2·cellSize ⇒ a handful of neighbours ⇒ smooth GI.
+    const searchRadius = p.surfelSearchRadius > 0 ? p.surfelSearchRadius : 2 * cellSize;
     writeScalar(compositeShader, "cellSize", cellSize);
     writeScalar(compositeShader, "dir0W", SURFEL_DIR0_W);
     writeScalar(compositeShader, "ambient", p.ambient);
@@ -540,8 +553,8 @@ export function createSurfelSystem({
   // in SURFEL_DIR_COUNT octahedral directions and writes radiance+visibility into
   // surfel_rad. Uses the grid built by insert (one-frame lag vs this frame's spawn/
   // recycle is acceptable; gather skips dead slots).
-  function gather(encoder: GPUCommandEncoder) {
-    uploadGatherUniforms();
+  function gather(encoder: GPUCommandEncoder, frameIndex: number) {
+    uploadGatherUniforms(frameIndex);
     const pass = encoder.beginComputePass();
     pass.setPipeline(gatherPipeline);
     pass.setBindGroup(0, gatherGroup0);
@@ -584,7 +597,7 @@ export function createSurfelSystem({
     insert(encoder);
     spawn(encoder, frameIndex);
     recycle(encoder, frameIndex);
-    gather(encoder);
+    gather(encoder, frameIndex);
   }
 
   // Draw into the CURRENT (caller-opened) render pass — overlay onto the presented texture.

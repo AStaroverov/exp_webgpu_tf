@@ -220,29 +220,61 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
 
   let N = normalize(n.rgb * 2.0 - 1.0);
 
-  // --- Find nearby surfels via the SAME hash bucket Stage B insert filled ---
-  let cell = vec3<i32>(floor(world / uCellSize));
-  let bucket = hash3(cell) % GRID_CAP;
-  let gbase = bucket * GRID_STRIDE;
-  let cnt = min(atomicLoad(&surfel_grid[gbase]), CELL_K);
+  // --- Gather the 4 NEAREST surfels over a 3x3x3 cell neighborhood ---
+  // Single-bucket + 1/d² weighting was grainy: few surfels per cell, the weight
+  // spikes on the nearest (≈ pick-nearest, hard), and the set jumps at cell borders.
+  // Instead scan the neighborhood of cells covering [world ± R], keep the 4 nearest
+  // surfels (deduped — a surfel sits in several cells), and blend them with a SMOOTH
+  // falloff (0 at R). This smooths both the spatial discontinuities and the weights.
+  let R = uSurfelSearchRadius;
+  // Scan a FIXED 3³ neighbourhood (±1 cell) around the point's cell — cheap, bounded
+  // cost (27 buckets · CELL_K). NOTE: the scan range and the falloff radius R are
+  // DECOUPLED. The ±1 cells already hold several surfels (spacing ≈ cellSize); R only
+  // controls the blend FALLOFF, and must exceed the spacing (default 2·cellSize) so
+  // those neighbours get nonzero weight — otherwise the nearest-4 blend collapses to
+  // nearest-1. (Scanning ±2 to "reach further" is what made the composite crawl.)
+  let cc = vec3<i32>(floor(world / uCellSize));
+  let span = 1;
 
-  // Accumulate cosine-integrated radiance, proximity-weighted across the bucket.
+  var bestSid = array<u32, 4>(0u, 0u, 0u, 0u);
+  var bestD = array<f32, 4>(1e30, 1e30, 1e30, 1e30);
+
+  for (var cz = cc.z - span; cz <= cc.z + span; cz = cz + 1) {
+    for (var cy = cc.y - span; cy <= cc.y + span; cy = cy + 1) {
+      for (var cx = cc.x - span; cx <= cc.x + span; cx = cx + 1) {
+        let gbase = (hash3(vec3<i32>(cx, cy, cz)) % GRID_CAP) * GRID_STRIDE;
+        let cnt = min(atomicLoad(&surfel_grid[gbase]), CELL_K);
+        for (var k: u32 = 0u; k < cnt; k = k + 1u) {
+          let sid = atomicLoad(&surfel_grid[gbase + 1u + k]);
+          let sp = surfel_posr[sid];
+          if (sp.w <= 0.0) { continue; } // dead slot (recycled since insert)
+          var d = distance(sp.xyz, world);
+          if (d >= R || d >= bestD[3]) { continue; } // too far / not in the top 4
+          // Skip if this surfel is already one of the kept nearest (it's in many cells).
+          if (sid == bestSid[0] || sid == bestSid[1] || sid == bestSid[2] || sid == bestSid[3]) {
+            continue;
+          }
+          // Insertion-sort into the 4 nearest (ascending distance).
+          var cand = sid;
+          for (var i = 0; i < 4; i = i + 1) {
+            if (d < bestD[i]) {
+              let td = bestD[i]; bestD[i] = d; d = td;
+              let ts = bestSid[i]; bestSid[i] = cand; cand = ts;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Blend the kept nearest surfels with a smooth falloff weight (0 at R).
   var radiance = vec3<f32>(0.0);
   var wsum: f32 = 0.0;
-  for (var k: u32 = 0u; k < cnt; k = k + 1u) {
-    let sid = atomicLoad(&surfel_grid[gbase + 1u + k]);
-    let sp = surfel_posr[sid];
-    if (sp.w <= 0.0) {
-      continue; // dead slot (recycled since insert)
-    }
-    let d = distance(sp.xyz, world);
-    if (d > uSurfelSearchRadius) {
-      continue;
-    }
-    // Proximity weight (smooth, bounded). Optionally one could also fold in
-    // max(0, dot(surfelNormal, N)); kept as pure proximity for a stable blend.
-    let w = 1.0 / (d * d + 1e-3);
-    radiance = radiance + integrate_surfel(sid, N) * w;
+  for (var i = 0; i < 4; i = i + 1) {
+    if (bestD[i] >= R) { continue; }
+    let t = 1.0 - bestD[i] / R;
+    let w = t * t; // smooth, → 0 at the search radius
+    radiance = radiance + integrate_surfel(bestSid[i], N) * w;
     wsum = wsum + w;
   }
   if (wsum > 0.0) {

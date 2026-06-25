@@ -311,7 +311,7 @@ async function main() {
   //   "raw"     — the unlit albedo G-buffer (frame.renderTexture).
   // World RC only runs (gather/merge/composite) when "worldRc" is selected.
   // Keys: 1 = worldRc, 2 = surfel, 3 = raw (also a GUI dropdown below).
-  const view = { presentSource: "worldRc" as "worldRc" | "surfel" | "raw" };
+  const view = { presentSource: "surfel" as "worldRc" | "surfel" | "raw" };
   window.addEventListener("keydown", (e) => {
     if (e.key === "1") view.presentSource = "worldRc";
     else if (e.key === "2") view.presentSource = "surfel";
@@ -393,7 +393,7 @@ async function main() {
   gui.add({ dump: () => diag.dump() }, "dump").name("dump diag (L)");
 
   // Surfels (debug): spawn on visible surfaces + overlay billboard dots.
-  const surfelGui = { showSurfels: true };
+  const surfelGui = { showSurfels: false };
   const sf = gui.addFolder("Surfels (debug)");
   sf.add(surfelGui, "showSurfels").name("show surfels");
   sf.add(surfel.params, "spawnChance", 0, 0.2, 0.0001)
@@ -430,6 +430,11 @@ async function main() {
     .onChange(() => surfel.setParams(surfel.params));
   sf.add(surfel.params, "ambient", 0, 1, 0.01)
     .name("ambient")
+    .onChange(() => surfel.setParams(surfel.params));
+  // Temporal accumulation: lower = smoother/more denoise (but laggier on change),
+  // 1.0 = off (per-frame overwrite, noisy).
+  sf.add(surfel.params, "accumAlpha", 0.02, 1.0, 0.01)
+    .name("accum α (denoise)")
     .onChange(() => surfel.setParams(surfel.params));
   sf.add({ clear: () => surfel.clear() }, "clear").name("clear surfels");
   sf.add(

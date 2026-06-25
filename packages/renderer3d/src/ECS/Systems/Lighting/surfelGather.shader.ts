@@ -46,6 +46,10 @@ export const shaderMeta = new ShaderMeta(
     // limit): .x = interval start, .y = gather distance, .z = sphere-trace step
     // budget, .w = normal bias (ray-origin lift along the surfel normal).
     params: uC("uParams", `vec4<f32>`),
+    // Temporal accumulation: .x = frameIndex (as f32, for per-frame jitter), .y =
+    // accumAlpha (EMA blend factor: surfel_rad = mix(prev, new, alpha); ~1/8 averages
+    // ~8 jittered frames). .z/.w unused.
+    params2: uC("uParams2", `vec4<f32>`),
     // Live scene instance count (<= MAX_INSTANCE_COUNT).
     instanceCount: uC("uInstanceCount", `u32`),
     // Sun direction toward the sun (radians, screen frame +X right +Y down) and
@@ -164,6 +168,9 @@ fn wang_hash(s: u32) -> u32 {
   x = x ^ (x >> 15u);
   return x;
 }
+fn random01(s: u32) -> f32 {
+  return f32(wang_hash(s)) / 4294967295.0;
+}
 
 // Directional source + faint sky fill, parameterized by the ray's screen-frame
 // angle (verbatim from worldGather sun_and_sky). On a single cascade this
@@ -239,11 +246,23 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // 3. Lift the ray origin off the surface so rays don't self-hit at t == 0.
   let ro0 = pos + N * normalBias;
 
-  // 4. One sphere-trace per octahedral direction (full sphere).
+  // Temporal accumulation params.
+  let frameIndex = u32(uParams2.x);
+  let accumAlpha = uParams2.y;
+
+  // 4. One sphere-trace per octahedral direction (full sphere). Each frame JITTERS
+  //    the sample inside the cell's solid angle (so the trace varies per frame) and
+  //    blends into the cache (EMA) — together this denoises AND raises the effective
+  //    angular resolution over time (src-dgi JITTER + TEMPORAL). Surfels are stable,
+  //    so the cache converges; fresh surfels start from 0 (zeroed at spawn) → fade in.
   let tmax = gatherDistance - intervalStart;
   for (var v: u32 = 0u; v < DIR0_W; v = v + 1u) {
     for (var u: u32 = 0u; u < DIR0_W; u = u + 1u) {
-      let oct = ((vec2<f32>(f32(u), f32(v)) + 0.5) / f32(DIR0_W)) * 2.0 - 1.0;
+      let dirIdx = v * DIR0_W + u;
+      // Per-(surfel,dir,frame) jitter in [0,1)² inside the cell.
+      let seed = (id * DIR_COUNT + dirIdx) * 2654435761u + frameIndex * 40503u;
+      let jit = vec2<f32>(random01(seed), random01(seed ^ 0x9e3779b9u));
+      let oct = ((vec2<f32>(f32(u), f32(v)) + jit) / f32(DIR0_W)) * 2.0 - 1.0;
       let dir = oct_decode(oct);
       let ro = ro0 + dir * intervalStart;
 
@@ -274,7 +293,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         radiance = sun_and_sky(rayAngle);
       }
 
-      surfel_rad[id * DIR_COUNT + (v * DIR0_W + u)] = vec4<f32>(radiance, visibility);
+      // Temporal blend (EMA) into the cache instead of overwriting → averages the
+      // jittered samples over frames. (read_write storage; mix with the previous value.)
+      let idx = id * DIR_COUNT + dirIdx;
+      surfel_rad[idx] = mix(surfel_rad[idx], vec4<f32>(radiance, visibility), accumAlpha);
     }
   }
 }
