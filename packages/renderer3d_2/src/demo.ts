@@ -28,7 +28,11 @@ import {
   setCameraPosition,
 } from "./ECS/Systems/ResizeSystem.ts";
 import { computeSmokeTest } from "./WGSL/computeSmokeTest.ts";
-import { applyMatrixRotateZ, setMatrixTranslate } from "./ECS/Components/Transform.ts";
+import {
+  applyMatrixRotateZ,
+  setMatrixRotateZ,
+  setMatrixTranslate,
+} from "./ECS/Components/Transform.ts";
 import {
   createCircle,
   createParallelogram,
@@ -61,13 +65,21 @@ async function main() {
   //   "emitter"  — ground + box occluder + a GUI-movable/resizable emitter sphere.
   //   "simple"   — fixed minimal scene (first-bug diagnosis).
   //   "showcase" — one of every shape kind + several lights.
-  const SCENE = "showcase" as "emitter" | "simple" | "showcase";
+  const SCENE = "emitter" as "emitter" | "simple" | "showcase" | "final";
 
   // The configurable emitter (only used by the "emitter" scene). Live-edited from
   // the GUI: position via the transform (re-uploaded every frame), radius via the
   // Shape + Height setters (onSet → re-collected), intensity via LightEmitter.set$.
   const emitterCfg = { x: -6, y: 0, z: 2.5, radius: 2.5, intensity: 2.0 };
   let emitterId = -1;
+
+  // Dynamic objects of the "final" scene, animated every frame (so the change re-voxelizes
+  // and the GI updates live). -1 = not in this scene. Each demonstrates ONE animated axis.
+  const finalDyn = { animate: true, speed: 1.0 };
+  let dynOrbitEmitter = -1; // position — orbits the scene
+  let dynRotBox = -1; // angle — spins about Z (moving occluder)
+  let dynSizeSphere = -1; // size — radius pulses
+  let dynPulseEmitter = -1; // intensity — emission pulses
 
   if (SCENE === "emitter") {
     SunLight.enabled = false; // isolate the single emitter
@@ -252,6 +264,85 @@ async function main() {
     LightEmitter.addComponent(world, beam, -2.5);
   } // end showcase
 
+  // --- Final scene: static set + 4 dynamic objects (one per animated axis). ---
+  if (SCENE === "final") {
+    // Soft warm sun from above: lifts surfaces the emitters don't reach. The GI (indirect
+    // bounce + AO) does most of the shaping; the sun is a gentle key.
+    SunLight.enabled = true;
+    SunLight.angle = 2.4;
+    SunLight.elevation = 0.95;
+    SunLight.intensity = 0.9;
+    SunLight.color = [1.0, 0.93, 0.82];
+
+    // Static set — ground + a small cluster of structures (witnesses for color bleed/AO).
+    createRectangle(world, {
+      x: 0,
+      y: 0,
+      z: -0.4,
+      width: 60,
+      height: 60,
+      depth: 0.4,
+      color: [0.22, 0.21, 0.18, 1],
+    });
+    createRectangle(world, {
+      x: -10,
+      y: 9,
+      z: 0,
+      width: 10,
+      height: 2,
+      depth: 7,
+      color: [0.7, 0.7, 0.72, 1],
+    }); // back wall
+    createRectangle(world, {
+      x: 9,
+      y: 9,
+      z: 0,
+      width: 3,
+      height: 3,
+      depth: 5,
+      color: [0.75, 0.55, 0.4, 1],
+    }); // warm pillar
+    createCircle(world, { x: 10, y: -2, z: 0, radius: 1.8, height: 4, color: [0.5, 0.7, 0.6, 1] }); // column
+    createSphere(world, { x: 2, y: -9, z: 0, radius: 1.6, color: [0.9, 0.9, 0.92, 1] }); // white witness sphere
+
+    // (1) POSITION — a warm emitter orbiting the scene at mid height.
+    dynOrbitEmitter = createSphere(world, {
+      x: 9,
+      y: 0,
+      z: 3,
+      radius: 0.8,
+      color: [1.0, 0.55, 0.2, 1],
+    });
+    LightEmitter.addComponent(world, dynOrbitEmitter, 3.0);
+    // (2) ANGLE — a tall slab rotating about Z: a moving occluder → shifting AO/bounce.
+    dynRotBox = createRectangle(world, {
+      x: 0,
+      y: 3,
+      z: 0,
+      width: 5,
+      height: 1.4,
+      depth: 6,
+      color: [0.8, 0.45, 0.5, 1],
+    });
+    // (3) SIZE — a solid sphere whose radius pulses (re-voxelized each frame).
+    dynSizeSphere = createSphere(world, {
+      x: -9,
+      y: -6,
+      z: 0,
+      radius: 2.0,
+      color: [0.45, 0.6, 0.85, 1],
+    });
+    // (4) INTENSITY — a cool emitter pulsing its emission.
+    dynPulseEmitter = createSphere(world, {
+      x: -9,
+      y: 2,
+      z: 2.2,
+      radius: 0.9,
+      color: [0.35, 0.6, 1.0, 1],
+    });
+    LightEmitter.addComponent(world, dynPulseEmitter, 2.5);
+  }
+
   // --- Systems ---
   const execTransformSystem = createTransformSystem(world, stubChildren);
   const shapeSystem = createDrawShapeSystem({ world, device });
@@ -396,6 +487,37 @@ async function main() {
     );
   }
 
+  // Final-scene animation controls.
+  if (dynOrbitEmitter >= 0) {
+    const f = gui.addFolder("Final scene");
+    f.add(finalDyn, "animate").name("animate");
+    f.add(finalDyn, "speed", 0, 3, 0.05).name("speed");
+  }
+
+  // Animate the "final" scene: position (orbit), angle (spin), size (pulse radius),
+  // intensity (pulse emission). Mutates ECS state BEFORE prepare()/voxelize so the change
+  // re-voxelizes this frame and the GI follows it live.
+  function animateFinal(now: number) {
+    if (dynOrbitEmitter < 0 || !finalDyn.animate) return;
+    const t = now * 0.001 * finalDyn.speed;
+    // (1) position — orbit on a circle of radius 9 at height 3.
+    setMatrixTranslate(
+      LocalTransform.matrix.getBatch(dynOrbitEmitter),
+      Math.cos(t * 0.6) * 9,
+      Math.sin(t * 0.6) * 9,
+      3,
+    );
+    // (2) angle — spin the slab about Z (its translation persists from creation).
+    setMatrixRotateZ(LocalTransform.matrix.getBatch(dynRotBox), t * 0.8);
+    // (3) size — radius 1..3, re-voxelized via the Shape + Height setters (Height = 2·r keeps
+    // the bottom on the ground, since the SDF center.z = baseZ + Height/2).
+    const r = 2.0 + 1.0 * Math.sin(t * 1.2);
+    Shape.setSphere$(dynSizeSphere, r);
+    Height.set$(dynSizeSphere, r * 2);
+    // (4) intensity — emission 0.2..3.8 (kept positive; negative would mean "directional").
+    LightEmitter.set$(dynPulseEmitter, 2.0 + 1.8 * Math.sin(t * 1.6), 0);
+  }
+
   // Standalone resize/camera update, run BEFORE prepare() so the camera uniforms
   // uploaded each frame are current. (createFrameTick has its own internal resize
   // system, but it runs inside the main pass — i.e. after prepare — which would
@@ -458,6 +580,8 @@ async function main() {
       voxel.recreate(frame.depthTexture, frame.normalTexture, frame.renderTexture);
     }
 
+    // Drive the dynamic "final"-scene objects, then push transforms → instance buffers.
+    animateFinal(now);
     execTransformSystem();
     shapeSystem.prepare();
 
