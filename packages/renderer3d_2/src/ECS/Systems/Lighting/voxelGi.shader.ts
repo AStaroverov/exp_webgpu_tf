@@ -22,7 +22,8 @@ export const shaderMeta = new ShaderMeta(
   {
     // .x = ambient, .y = numRays, .z = maxDist (world), .w = normalBias.
     params: new VariableMeta("uParams", VariableKind.Uniform, `vec4<f32>`),
-    // .x = frameIndex (jitter seed), .y = skyIntensity (miss radiance), .z = giStrength.
+    // .x = frameIndex (jitter seed), .y = skyIntensity (miss radiance), .z = giStrength,
+    // .w = accumAlpha (EMA blend: out = mix(history, current, alpha); 1 = no history).
     params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
     invViewProj: new VariableMeta("uInvViewProj", VariableKind.Uniform, `mat4x4<f32>`),
     // .xyz = world min corner, .w = cellSize.
@@ -31,6 +32,10 @@ export const shaderMeta = new ShaderMeta(
     gridDims: new VariableMeta("uGridDims", VariableKind.Uniform, `vec4<i32>`),
     voxelAlbedo: sampled3d("voxelAlbedo"),
     voxelEmission: sampled3d("voxelEmission"),
+    // Previous-frame accumulation (co-located textureLoad; same reduced resolution).
+    historyTex: new VariableMeta("historyTex", VariableKind.Texture, `texture_2d<f32>`, {
+      textureSampleType: "float",
+    }),
   },
   {},
   // language=WGSL
@@ -217,7 +222,13 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   gi = gi / f32(numRays);
 
   let lit = albedo * (uParams.x + gi * uParams2.z) + selfEmission;
-  return vec4f(lit, 1.0);
+
+  // Temporal EMA: blend with the co-located previous-frame value. alpha=1 disables it
+  // (e.g. the frame the camera moved, where the history is stale).
+  let alpha = uParams2.w;
+  let prev = textureLoad(historyTex, vec2<i32>(floor(input.position.xy)), 0).rgb;
+  let outc = mix(prev, lit, alpha);
+  return vec4f(outc, 1.0);
 }
 `,
 );

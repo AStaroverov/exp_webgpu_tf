@@ -25,6 +25,7 @@ export type VoxelGiParams = {
   normalBias: number; // extra lift of the secondary origin off the surface
   skyIntensity: number; // radiance returned on a secondary-ray miss
   giStrength: number; // multiplier on the gathered GI term
+  accumAlpha: number; // temporal EMA blend (lower = smoother/more denoise; 1 = off)
 };
 
 // Voxel scene system (Phase 1): voxelize() fills the 3D albedo/emission textures from the
@@ -54,6 +55,7 @@ export function createVoxelSystem({
     normalBias: 0,
     skyIntensity: 0,
     giStrength: 1,
+    accumAlpha: 0.1,
   };
   // GI renders at 1/giScale resolution then upscales on present — brute force at full
   // res is billions of textureLoads/frame and hangs the GPU. Reduce rays/res to taste.
@@ -77,8 +79,9 @@ export function createVoxelSystem({
     withBlending: false,
   });
   const giShader = new GPUShader(giMeta);
+  // HDR accumulation target (temporal EMA needs >8-bit precision); present upscales it.
   const giPipeline = giShader.getRenderPipeline(device, "vs_main", "fs_main", {
-    targetFormat: "bgra8unorm",
+    targetFormat: "rgba16float",
     withBlending: false,
   });
 
@@ -127,10 +130,47 @@ export function createVoxelSystem({
   let textures: VoxelTextures;
   let voxGroup2: GPUBindGroup;
   let debugGroup0: GPUBindGroup;
-  let giGroup0: GPUBindGroup;
   let dispatchX = 0;
   let dispatchY = 0;
   let dispatchZ = 0;
+
+  // GI temporal accumulation (ping-pong, reduced resolution, HDR). giRead[i] is the GI
+  // bind group whose history binding = giAccum[i]; each frame we write giAccum[w] while
+  // reading giAccum[1-w] via giRead[1-w], then swap.
+  const createGiOutput = () =>
+    device.createTexture({
+      size: [
+        Math.max(1, Math.ceil(canvas.width / giScale)),
+        Math.max(1, Math.ceil(canvas.height / giScale)),
+        1,
+      ],
+      format: "rgba16float",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+  let giAccum: [GPUTexture, GPUTexture] = [createGiOutput(), createGiOutput()];
+  let giRead: [GPUBindGroup, GPUBindGroup];
+  let giWrite = 0; // accum index written THIS frame
+  let giLast = 0; // accum index written LAST frame (the presented one)
+  const prevVP = new Float32Array(16); // last frame's viewProj, for camera-move reset
+
+  // (Re)build both GI bind groups from the current voxel textures + giAccum history.
+  function buildGiReadGroups() {
+    const mk = (i: number) =>
+      device.createBindGroup({
+        layout: giPipeline.getBindGroupLayout(0),
+        entries: [
+          giShader.uniforms.params.getBindGroupEntry(device),
+          giShader.uniforms.params2.getBindGroupEntry(device),
+          giShader.uniforms.invViewProj.getBindGroupEntry(device),
+          giShader.uniforms.gridOrigin.getBindGroupEntry(device),
+          giShader.uniforms.gridDims.getBindGroupEntry(device),
+          { binding: giMeta.uniforms.voxelAlbedo.binding, resource: textures.voxelAlbedo.createView({ dimension: "3d" }) },
+          { binding: giMeta.uniforms.voxelEmission.binding, resource: textures.voxelEmission.createView({ dimension: "3d" }) },
+          { binding: giMeta.uniforms.historyTex.binding, resource: giAccum[i].createView() },
+        ],
+      });
+    giRead = [mk(0), mk(1)];
+  }
 
   // (Re)build the voxel textures + the two texture-referencing bind groups for the
   // current cellSize, and upload the grid uniforms to both shaders.
@@ -172,19 +212,8 @@ export function createVoxelSystem({
       ],
     });
 
-    // Group 0 (GI) = its own uniforms + the SAME voxel textures.
-    giGroup0 = device.createBindGroup({
-      layout: giPipeline.getBindGroupLayout(0),
-      entries: [
-        giShader.uniforms.params.getBindGroupEntry(device),
-        giShader.uniforms.params2.getBindGroupEntry(device),
-        giShader.uniforms.invViewProj.getBindGroupEntry(device),
-        giShader.uniforms.gridOrigin.getBindGroupEntry(device),
-        giShader.uniforms.gridDims.getBindGroupEntry(device),
-        { binding: giMeta.uniforms.voxelAlbedo.binding, resource: textures.voxelAlbedo.createView({ dimension: "3d" }) },
-        { binding: giMeta.uniforms.voxelEmission.binding, resource: textures.voxelEmission.createView({ dimension: "3d" }) },
-      ],
-    });
+    // GI bind groups reference the same voxel textures + the (already-created) giAccum.
+    buildGiReadGroups();
 
     // Grid uniforms (shared by both shaders).
     originArr[0] = originX;
@@ -216,19 +245,6 @@ export function createVoxelSystem({
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
   let outputTexture = createOutput();
-
-  // GI output at reduced resolution (1/giScale). Upscaled by present().
-  const createGiOutput = () =>
-    device.createTexture({
-      size: [
-        Math.max(1, Math.ceil(canvas.width / giScale)),
-        Math.max(1, Math.ceil(canvas.height / giScale)),
-        1,
-      ],
-      format: "bgra8unorm",
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-  let giOutputTexture = createGiOutput();
 
   // Re-voxelize the scene into the 3D textures (run before debug()/the GI gather).
   function voxelize(encoder: GPUCommandEncoder) {
@@ -273,9 +289,25 @@ export function createVoxelSystem({
     pass.end();
   }
 
-  // Brute-force voxel GI (Stage 2.1a) -> giOutputTexture. frameIndex feeds the per-pixel
-  // jitter seed.
+  // Brute-force voxel GI (Stage 2.1a + 2.1b temporal). Ping-pong: write giAccum[giWrite]
+  // while reading giAccum[1-giWrite] as history. frameIndex feeds the per-pixel jitter so
+  // successive frames average different rays. The EMA is reset (alpha=1) the frame the
+  // camera moved, since the co-located history is then stale (no reprojection yet).
   function gi(encoder: GPUCommandEncoder, frameIndex: number) {
+    mat4.invert(invViewProj, viewProjMatrix);
+    giInvArr.set(invViewProj as Float32Array);
+    device.queue.writeBuffer(giShader.uniforms.invViewProj.getGPUBuffer(device), 0, giInvArr);
+
+    // Camera-move detection against the previous frame's viewProj.
+    let moved = false;
+    for (let i = 0; i < 16; i++) {
+      if (prevVP[i] !== viewProjMatrix[i]) {
+        moved = true;
+        break;
+      }
+    }
+    prevVP.set(viewProjMatrix as Float32Array);
+
     giParamsArr[0] = giParams.ambient;
     giParamsArr[1] = giParams.numRays;
     giParamsArr[2] = giParams.maxDist;
@@ -285,17 +317,15 @@ export function createVoxelSystem({
     giParams2Arr[0] = frameIndex;
     giParams2Arr[1] = giParams.skyIntensity;
     giParams2Arr[2] = giParams.giStrength;
-    giParams2Arr[3] = 0;
+    giParams2Arr[3] = moved ? 1 : giParams.accumAlpha;
     device.queue.writeBuffer(giShader.uniforms.params2.getGPUBuffer(device), 0, giParams2Arr);
 
-    mat4.invert(invViewProj, viewProjMatrix);
-    giInvArr.set(invViewProj as Float32Array);
-    device.queue.writeBuffer(giShader.uniforms.invViewProj.getGPUBuffer(device), 0, giInvArr);
-
+    const write = giWrite;
+    const read = 1 - write;
     const pass = encoder.beginRenderPass({
       colorAttachments: [
         {
-          view: giOutputTexture.createView(),
+          view: giAccum[write].createView(),
           clearValue: [0, 0, 0, 1],
           loadOp: "clear",
           storeOp: "store",
@@ -303,9 +333,12 @@ export function createVoxelSystem({
       ],
     });
     pass.setPipeline(giPipeline);
-    pass.setBindGroup(0, giGroup0);
+    pass.setBindGroup(0, giRead[read]); // history = giAccum[read]
     pass.draw(6, 1, 0, 0);
     pass.end();
+
+    giLast = write;
+    giWrite = read;
   }
 
   // Change the voxel size (graininess). Destroys the old textures, rebuilds the grid.
@@ -315,19 +348,27 @@ export function createVoxelSystem({
     buildGrid(newCellSize);
   }
 
-  // Canvas resized: recreate the (canvas-sized) debug output + the (scaled) GI output.
+  // Rebuild the ping-pong GI accumulation textures + their bind groups.
+  function rebuildGiAccum() {
+    giAccum[0].destroy();
+    giAccum[1].destroy();
+    giAccum = [createGiOutput(), createGiOutput()];
+    giWrite = 0;
+    giLast = 0;
+    buildGiReadGroups();
+  }
+
+  // Canvas resized: recreate the (canvas-sized) debug output + the (scaled) GI accum.
   function recreate() {
     outputTexture.destroy();
     outputTexture = createOutput();
-    giOutputTexture.destroy();
-    giOutputTexture = createGiOutput();
+    rebuildGiAccum();
   }
 
   // Change the GI resolution divisor (1 = full res, 4 = quarter, …). Bigger = cheaper.
   function setGiScale(scale: number) {
     giScale = Math.max(1, Math.round(scale));
-    giOutputTexture.destroy();
-    giOutputTexture = createGiOutput();
+    rebuildGiAccum();
   }
 
   return {
@@ -355,7 +396,7 @@ export function createVoxelSystem({
       return outputTexture;
     },
     get giOutputTexture() {
-      return giOutputTexture;
+      return giAccum[giLast];
     },
   };
 }

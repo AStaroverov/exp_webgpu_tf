@@ -327,6 +327,9 @@ async function main() {
   giFolder.add(voxel.giParams, "ambient", 0, 1, 0.01).name("ambient");
   giFolder.add(voxel.giParams, "skyIntensity", 0, 2, 0.01).name("sky on miss");
   giFolder.add(voxel.giParams, "normalBias", 0, 2, 0.01).name("normal bias");
+  // Temporal denoise: lower = smoother (averages more frames), 1 = off. Auto-resets the
+  // frame the camera moves (no reprojection yet → history would smear).
+  giFolder.add(voxel.giParams, "accumAlpha", 0.02, 1, 0.01).name("temporal α");
 
   // Live emitter controls (only the "emitter" scene). Position writes the transform
   // (re-uploaded every frame); radius drives BOTH the sphere SDF (Shape.setSphere$)
