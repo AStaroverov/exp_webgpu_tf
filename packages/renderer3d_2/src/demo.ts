@@ -348,11 +348,21 @@ async function main() {
     .add(voxel.rcParams, "cascadeCount", 1, 6, 1)
     .name("cascades")
     .onChange((n: number) => voxel.setCascadeCount(n));
+  // Cascade-0 angular resolution (dirs/side). Low (4) → "ray star" on floors; 8–16 smooth.
+  const dir0Cfg = { dir0: voxel.cascadeDir0 };
+  rcFolder
+    .add(dir0Cfg, "dir0", [4, 6, 8, 12, 16])
+    .name("c0 directions")
+    .onChange((n: number) => voxel.setCascadeDir0(n));
   rcFolder.add(voxel.rcParams, "baseInterval", 0.5, 8, 0.25).name("base interval");
   rcFolder.add(voxel.rcParams, "giStrength", 0, 4, 0.05).name("GI strength");
   rcFolder.add(voxel.rcParams, "ambient", 0, 1, 0.01).name("ambient");
   rcFolder.add(voxel.rcParams, "skyIntensity", 0, 2, 0.01).name("sky on miss");
   rcFolder.add(voxel.rcParams, "normalBias", 0, 2, 0.01).name("normal bias");
+  // Bilateral upsample / merge weights (edge-aware): reject probes across edges.
+  rcFolder.add(voxel.rcParams, "weightNormal", 1, 32, 1).name("edge: normal");
+  rcFolder.add(voxel.rcParams, "weightPlane", 0.05, 4, 0.05).name("edge: depth σ");
+  rcFolder.add(voxel.rcParams, "blurSigma", 0, 4, 0.1).name("blur (probes)");
 
   // Live emitter controls (only the "emitter" scene). Position writes the transform
   // (re-uploaded every frame); radius drives BOTH the sphere SDF (Shape.setSphere$)

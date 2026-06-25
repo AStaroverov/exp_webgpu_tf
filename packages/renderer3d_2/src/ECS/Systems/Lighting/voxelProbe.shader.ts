@@ -3,11 +3,12 @@ import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
 import { wgsl } from "../../../WGSL/wgsl.ts";
 import { voxelTrace } from "./voxelTrace.wgsl.ts";
 
-// Base directions per side for cascade 0 (octahedral DIR_W0×DIR_W0 over the sphere).
-// Cascade c has DIR_W0*2^c directions per side and probes/2^c per side, so every cascade
-// atlas is the SAME size: (probesX0*DIR_W0) × (probesY0*DIR_W0). Small base = cheap near
-// field; the merge brings far-field angular detail.
-export const CASCADE_DIR_W = 4;
+// Default base directions per side for cascade 0 (octahedral DIR_W0×DIR_W0 over the
+// sphere). Cascade c has DIR_W0*2^c dirs/side and probes/2^c per side, so every cascade
+// atlas is the SAME size. The actual value is runtime-tunable (see createVoxelSystem);
+// too low (e.g. 4) leaves only ~4 upper-hemisphere directions → visible "ray star" on
+// floors. The probe shader reads dirs/side from the per-cascade uniform, not this const.
+export const CASCADE_DIR_W = 8;
 
 // Stage 2.3b — directional probe gather, per cascade. Renders ONE cascade's atlas: one
 // texel per (probe, direction). The cascade's spacing / dirs-per-side / interval come from

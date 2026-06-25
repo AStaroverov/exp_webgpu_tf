@@ -1,7 +1,6 @@
 import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
 import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
 import { wgsl } from "../../../WGSL/wgsl.ts";
-import { CASCADE_DIR_W } from "./voxelProbe.shader.ts";
 
 // Stage 2.3a — integrate. Reads the (merged) probe atlas and collapses each probe's
 // DIR_W×DIR_W directional tile to a single irradiance value, cosine-weighted by the
@@ -10,7 +9,7 @@ import { CASCADE_DIR_W } from "./voxelProbe.shader.ts";
 
 export const shaderMeta = new ShaderMeta(
   {
-    // .x = probe spacing (px).
+    // .x = probe spacing (px), .y = cascade-0 dirs/side (DIR_W).
     params: new VariableMeta("uParams", VariableKind.Uniform, `vec4<f32>`),
     // .x = screen width, .y = screen height.
     params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
@@ -24,8 +23,6 @@ export const shaderMeta = new ShaderMeta(
   {},
   // language=WGSL
   wgsl /* wgsl */ `
-const DIR_W: i32 = ${CASCADE_DIR_W};
-
 const POSITION = array<vec2f, 6>(
   vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0),
   vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(-1.0, 1.0)
@@ -53,6 +50,7 @@ fn oct_decode(e: vec2<f32>) -> vec3<f32> {
 fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let probeCoord = vec2<i32>(floor(input.position.xy));
   let spacing = uParams.x;
+  let DIR_W = i32(uParams.y);
   let screen = uParams2.xy;
   let anchorPx = min((vec2<f32>(probeCoord) + vec2<f32>(0.5)) * spacing, screen - vec2<f32>(1.0));
 

@@ -8,6 +8,7 @@ import { shaderMeta as giMeta } from "./voxelGi.shader.ts";
 import { shaderMeta as probeMeta, CASCADE_DIR_W } from "./voxelProbe.shader.ts";
 import { shaderMeta as integrateMeta } from "./voxelIntegrate.shader.ts";
 import { shaderMeta as mergeMeta } from "./voxelMerge.shader.ts";
+import { shaderMeta as blurMeta } from "./voxelBlur.shader.ts";
 import { shaderMeta as resolveMeta } from "./voxelResolve.shader.ts";
 import {
   createVoxelTextures,
@@ -42,6 +43,9 @@ export type VoxelRcParams = {
   normalBias: number;
   skyIntensity: number;
   giStrength: number;
+  weightNormal: number; // bilateral normal-similarity sharpness (merge + resolve + blur)
+  weightPlane: number; // bilateral planar-depth sigma (world units)
+  blurSigma: number; // edge-aware probe-grid blur radius (probes); ~0 = off
 };
 
 const MAX_CASCADES = 6;
@@ -97,8 +101,12 @@ export function createVoxelSystem({
     normalBias: 0,
     skyIntensity: 0,
     giStrength: 1,
+    weightNormal: 8,
+    weightPlane: 0.5,
+    blurSigma: 1.2,
   };
   let probeSpacing = 8; // screen px between cascade-0 probes
+  let cascadeDir0 = CASCADE_DIR_W; // cascade-0 octahedral dirs per side (tunable)
 
   // Fixed world box (min corner + extent), derived from the initial config. cellSize is
   // the only thing that varies; dims follow from it.
@@ -140,17 +148,15 @@ export function createVoxelSystem({
     targetFormat: "rgba16float",
     withBlending: false,
   });
+  const blurShader = new GPUShader(blurMeta);
+  const blurPipeline = blurShader.getRenderPipeline(device, "vs_main", "fs_main", {
+    targetFormat: "rgba16float",
+    withBlending: false,
+  });
   const resolveShader = new GPUShader(resolveMeta);
   const resolvePipeline = resolveShader.getRenderPipeline(device, "vs_main", "fs_main", {
     targetFormat: "rgba16float",
     withBlending: false,
-  });
-  // Linear sampler for the bilinear probe upscale in the resolve pass.
-  const probeSampler = device.createSampler({
-    magFilter: "linear",
-    minFilter: "linear",
-    addressModeU: "clamp-to-edge",
-    addressModeV: "clamp-to-edge",
   });
 
   // Group 0 (voxelize) = grid uniforms; Group 1 = the 7 scene-instance buffers. Both
@@ -201,6 +207,10 @@ export function createVoxelSystem({
   // Per-cascade / per-merge uniform contents (array<vec4<f32>,2> = 8 floats each).
   const cascadeUniformArr = new Float32Array(8);
   const mergeUniformArr = new Float32Array(8);
+  const mergeParamsArr = getTypeTypedArray(mergeMeta.uniforms.params.type); // Float32Array(4)
+  const blurParamsArr = getTypeTypedArray(blurMeta.uniforms.params.type); // Float32Array(4)
+  const blurParams2Arr = getTypeTypedArray(blurMeta.uniforms.params2.type); // Float32Array(4)
+  const blurInvArr = getTypeTypedArray(blurMeta.uniforms.invViewProj.type); // Float32Array(16)
 
   // --- Grid state (rebuilt by buildGrid). ---
   let cellSize = grid.cellSize;
@@ -277,7 +287,7 @@ export function createVoxelSystem({
   const createAtlas = () => {
     const d = probeDims();
     return device.createTexture({
-      size: [d.x * CASCADE_DIR_W, d.y * CASCADE_DIR_W, 1],
+      size: [d.x * cascadeDir0, d.y * cascadeDir0, 1],
       format: "rgba16float",
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
@@ -289,13 +299,14 @@ export function createVoxelSystem({
     const f = 1 << c;
     return {
       spacing: probeSpacing * f,
-      dirsSide: CASCADE_DIR_W * f,
+      dirsSide: cascadeDir0 * f,
       probesX: Math.max(1, Math.floor(d.x / f)),
       probesY: Math.max(1, Math.floor(d.y / f)),
     };
   };
 
   let probeIrr = createProbeTex();
+  let probeBlur = createProbeTex(); // edge-aware-blurred probe irradiance (resolve reads this)
   let rcOutput = createRcOutput();
   let rawAtlas: GPUTexture[] = []; // per cascade
   let mergedAtlas: GPUTexture[] = []; // index 0..N-2 (top needs no merge target)
@@ -304,6 +315,7 @@ export function createVoxelSystem({
   let probeGroup: GPUBindGroup[] = [];
   let mergeGroup: GPUBindGroup[] = []; // index 0..N-2
   let integrateGroup0: GPUBindGroup;
+  let blurGroup0: GPUBindGroup;
   let resolveGroup0: GPUBindGroup;
 
   // (Re)allocate cascade atlases + per-cascade uniform buffers for the current N / size.
@@ -355,8 +367,10 @@ export function createVoxelSystem({
         layout: mergePipeline.getBindGroupLayout(0),
         entries: [
           { binding: mergeMeta.uniforms.merge.binding, resource: { buffer: mergeBuf[c] } },
+          mergeShader.uniforms.params.getBindGroupEntry(device),
           { binding: mergeMeta.uniforms.rawTex.binding, resource: rawAtlas[c].createView() },
           { binding: mergeMeta.uniforms.upperTex.binding, resource: upper.createView() },
+          { binding: mergeMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
         ],
       });
     });
@@ -372,6 +386,19 @@ export function createVoxelSystem({
         { binding: integrateMeta.uniforms.cascadeAtlas.binding, resource: cascade0.createView() },
       ],
     });
+
+    // Blur reads probeIrr + G-buffer → probeBlur.
+    blurGroup0 = device.createBindGroup({
+      layout: blurPipeline.getBindGroupLayout(0),
+      entries: [
+        blurShader.uniforms.params.getBindGroupEntry(device),
+        blurShader.uniforms.params2.getBindGroupEntry(device),
+        blurShader.uniforms.invViewProj.getBindGroupEntry(device),
+        { binding: blurMeta.uniforms.probeIn.binding, resource: probeIrr.createView() },
+        { binding: blurMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
+        { binding: blurMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
+      ],
+    });
     resolveGroup0 = device.createBindGroup({
       layout: resolvePipeline.getBindGroupLayout(0),
       entries: [
@@ -384,8 +411,7 @@ export function createVoxelSystem({
         { binding: resolveMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
         { binding: resolveMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
         { binding: resolveMeta.uniforms.voxelEmission.binding, resource: textures.voxelEmission.createView({ dimension: "3d" }) },
-        { binding: resolveMeta.uniforms.probeIrr.binding, resource: probeIrr.createView() },
-        { binding: resolveMeta.uniforms.probeSampler.binding, resource: probeSampler },
+        { binding: resolveMeta.uniforms.probeIrr.binding, resource: probeBlur.createView() },
       ],
     });
   }
@@ -611,16 +637,35 @@ export function createVoxelSystem({
       device.queue.writeBuffer(mergeBuf[c], 0, mergeUniformArr);
     }
 
-    // Integrate + resolve uniforms.
+    // Merge shared params (normal-similarity sharpness).
+    mergeParamsArr[0] = rcParams.weightNormal;
+    device.queue.writeBuffer(mergeShader.uniforms.params.getGPUBuffer(device), 0, mergeParamsArr);
+
+    // Integrate + blur + resolve uniforms.
     integrateParamsArr[0] = probeSpacing;
+    integrateParamsArr[1] = cascadeDir0;
     device.queue.writeBuffer(integrateShader.uniforms.params.getGPUBuffer(device), 0, integrateParamsArr);
     integrateParams2Arr[0] = canvas.width;
     integrateParams2Arr[1] = canvas.height;
     device.queue.writeBuffer(integrateShader.uniforms.params2.getGPUBuffer(device), 0, integrateParams2Arr);
+    blurParamsArr[0] = probeSpacing;
+    blurParamsArr[1] = rcParams.weightNormal;
+    blurParamsArr[2] = rcParams.weightPlane;
+    blurParamsArr[3] = rcParams.blurSigma;
+    device.queue.writeBuffer(blurShader.uniforms.params.getGPUBuffer(device), 0, blurParamsArr);
+    blurParams2Arr[0] = canvas.width;
+    blurParams2Arr[1] = canvas.height;
+    device.queue.writeBuffer(blurShader.uniforms.params2.getGPUBuffer(device), 0, blurParams2Arr);
+    blurInvArr.set(invViewProj as Float32Array);
+    device.queue.writeBuffer(blurShader.uniforms.invViewProj.getGPUBuffer(device), 0, blurInvArr);
     resolveParamsArr[0] = rcParams.ambient;
     resolveParamsArr[1] = rcParams.giStrength;
+    resolveParamsArr[2] = rcParams.weightNormal;
+    resolveParamsArr[3] = rcParams.weightPlane;
     device.queue.writeBuffer(resolveShader.uniforms.params.getGPUBuffer(device), 0, resolveParamsArr);
     resolveParams2Arr[0] = probeSpacing;
+    resolveParams2Arr[1] = canvas.width;
+    resolveParams2Arr[2] = canvas.height;
     device.queue.writeBuffer(resolveShader.uniforms.params2.getGPUBuffer(device), 0, resolveParams2Arr);
     resolveInvArr.set(invViewProj as Float32Array);
     device.queue.writeBuffer(resolveShader.uniforms.invViewProj.getGPUBuffer(device), 0, resolveInvArr);
@@ -645,7 +690,9 @@ export function createVoxelSystem({
     }
     // 3. Integrate cascade-0 tiles -> probeIrr.
     fullPass(probeIrr.createView(), integratePipeline, integrateGroup0);
-    // 4. Full-res resolve -> rcOutput.
+    // 4. Edge-aware blur of the probe grid -> probeBlur.
+    fullPass(probeBlur.createView(), blurPipeline, blurGroup0);
+    // 5. Full-res resolve (bilateral upsample of probeBlur) -> rcOutput.
     fullPass(rcOutput.createView(), resolvePipeline, resolveGroup0);
   }
 
@@ -677,6 +724,8 @@ export function createVoxelSystem({
     rebuildGiAccum();
     probeIrr.destroy();
     probeIrr = createProbeTex();
+    probeBlur.destroy();
+    probeBlur = createProbeTex();
     rcOutput.destroy();
     rcOutput = createRcOutput();
     allocCascades();
@@ -688,6 +737,8 @@ export function createVoxelSystem({
     probeSpacing = Math.max(1, Math.round(spacing));
     probeIrr.destroy();
     probeIrr = createProbeTex();
+    probeBlur.destroy();
+    probeBlur = createProbeTex();
     allocCascades();
     buildRcGroups();
   }
@@ -695,6 +746,13 @@ export function createVoxelSystem({
   // Change the number of cascades. Reallocates atlases/buffers and rebinds.
   function setCascadeCount(n: number) {
     rcParams.cascadeCount = Math.max(1, Math.min(MAX_CASCADES, Math.round(n)));
+    allocCascades();
+    buildRcGroups();
+  }
+
+  // Change cascade-0 dirs/side (angular resolution). Resizes the atlases.
+  function setCascadeDir0(n: number) {
+    cascadeDir0 = Math.max(2, Math.round(n));
     allocCascades();
     buildRcGroups();
   }
@@ -718,6 +776,10 @@ export function createVoxelSystem({
     setGiScale,
     setProbeSpacing,
     setCascadeCount,
+    setCascadeDir0,
+    get cascadeDir0() {
+      return cascadeDir0;
+    },
     get giScale() {
       return giScale;
     },
