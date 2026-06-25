@@ -73,7 +73,7 @@ export function createVoxelSystem({
   };
   // giStrength stays in coneParams (baked into the cone's rgb); the composite only adds the
   // ambient floor.
-  const compositeParams: VoxelCompositeParams = { ambient: 0.25 };
+  const compositeParams: VoxelCompositeParams = { ambient: 0.05 };
 
   // G-buffer textures (reassigned by recreate() on canvas resize).
   let gDepth = depthTexture;

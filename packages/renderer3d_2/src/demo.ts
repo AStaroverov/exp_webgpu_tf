@@ -65,7 +65,7 @@ async function main() {
   //   "emitter"  — ground + box occluder + a GUI-movable/resizable emitter sphere.
   //   "simple"   — fixed minimal scene (first-bug diagnosis).
   //   "showcase" — one of every shape kind + several lights.
-  const SCENE = "final" as "emitter" | "simple" | "showcase" | "final";
+  const SCENE = "final" as "emitter" | "showcase" | "final";
 
   // The configurable emitter (only used by the "emitter" scene). Live-edited from
   // the GUI: position via the transform (re-uploaded every frame), radius via the
@@ -109,33 +109,6 @@ async function main() {
       color: [1, 1, 1, 1],
     });
     LightEmitter.addComponent(world, emitterId, emitterCfg.intensity);
-  }
-
-  if (SCENE === "simple") {
-    SunLight.enabled = false; // isolate the single emitter
-    // Ground: 40x40 slab, top surface at z = 0.
-    createRectangle(world, {
-      x: 0,
-      y: 0,
-      z: -0.5,
-      width: 40,
-      height: 40,
-      depth: 0.5,
-      color: [0.5, 0.5, 0.5, 1],
-    });
-    // One box occluder at +X (world (4,0), 3x3 footprint, 4 tall).
-    createRectangle(world, {
-      x: 4,
-      y: 0,
-      z: 0,
-      width: 3,
-      height: 3,
-      depth: 4,
-      color: [0.8, 0.8, 0.8, 1],
-    });
-    // One LARGE white emissive sphere at -X (world (-6,0,2.5), radius 2.5).
-    const lamp = createSphere(world, { x: -6, y: 0, z: 2.5, radius: 2.5, color: [1, 1, 1, 1] });
-    LightEmitter.addComponent(world, lamp, 2.0);
   }
 
   // --- Scene: at least one of every kind, plus a stacked platform. ---
@@ -310,10 +283,10 @@ async function main() {
       x: 9,
       y: 0,
       z: 3,
-      radius: 0.8,
+      radius: 3,
       color: [1.0, 0.55, 0.2, 1],
     });
-    LightEmitter.addComponent(world, dynOrbitEmitter, 3.0);
+    LightEmitter.addComponent(world, dynOrbitEmitter, 30.0);
     // (2) ANGLE — a tall slab rotating about Z: a moving occluder → shifting AO/bounce.
     dynRotBox = createRectangle(world, {
       x: 0,
