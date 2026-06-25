@@ -13,26 +13,20 @@
 import GUI from "lil-gui";
 import { initWebGPU } from "./gpu.ts";
 import { createWorld, getRenderComponents } from "./ECS/world.ts";
-import { createFrameTextures, createFrameTick, createRCTextures } from "./WGSL/createFrame.ts";
+import { createFrameTextures, createFrameTick } from "./WGSL/createFrame.ts";
 import { createPresent } from "./WGSL/createPresent.ts";
 import { createDrawShapeSystem } from "./ECS/Systems/SDFSystem/createDrawShapeSystem.ts";
-import {
-  createWorldRadianceCascadesSystem,
-  DEFAULT_WORLD_RC_PARAMS,
-} from "./ECS/Systems/Lighting/createWorldRadianceCascadesSystem.ts";
-import { createSurfelSystem } from "./ECS/Systems/Lighting/createSurfelSystem.ts";
+import { createVoxelSystem } from "./ECS/Systems/Lighting/createVoxelSystem.ts";
 import { SunLight } from "./ECS/Systems/SunLight.ts";
 import { createTransformSystem } from "./ECS/Systems/TransformSystem.ts";
 import {
   cameraAzimuth,
   cameraElevation,
-  cameraPosition,
   cameraZoom,
   createResizeSystem,
   setCameraElevation,
   setCameraPosition,
 } from "./ECS/Systems/ResizeSystem.ts";
-import { createWorldRCDiagnostics } from "./diagnostics.ts";
 import { computeSmokeTest } from "./WGSL/computeSmokeTest.ts";
 import { applyMatrixRotateZ, setMatrixTranslate } from "./ECS/Components/Transform.ts";
 import {
@@ -274,173 +268,46 @@ async function main() {
     ({ passEncoder }) => shapeSystem.drawShapes(passEncoder),
   );
 
-  // World-space RC: gather sphere-traces the SDF scene into the cascade probe
-  // atlases, merge top-down, then composite over the G-buffer -> worldLitTexture
-  // (the presented texture). Toggled on/off in the GUI; when off, the raw unlit
-  // scene (renderTexture) is presented.
-  const rcTextures = createRCTextures(device, canvas, {
-    gridX: DEFAULT_WORLD_RC_PARAMS.gridX,
-    gridY: DEFAULT_WORLD_RC_PARAMS.gridY,
-    gridZ: DEFAULT_WORLD_RC_PARAMS.gridZ,
-    dir0W: DEFAULT_WORLD_RC_PARAMS.dir0W,
-  });
-  const worldRc = createWorldRadianceCascadesSystem({
+  // Phase 1: voxelize the SDF scene into 3D albedo/emission textures, then raymarch
+  // them (DDA) into voxel.outputTexture for debug inspection.
+  const voxel = createVoxelSystem({
     device,
     canvas,
-    frameTextures: rcTextures,
-    sceneTexture: frame.renderTexture,
-    depthTexture: frame.depthTexture,
-    normalTexture: frame.normalTexture,
-    sceneInstances: shapeSystem.sceneInstances,
-  });
-
-  // Surfel Radiance Cascades — Stage C: spawn surfels on visible G-buffer surfaces,
-  // GATHER per-surfel radiance by sphere-tracing the SDF scene, then COMPOSITE the
-  // surfels' cached radiance over the albedo G-buffer -> surfel.outputTexture.
-  const surfel = createSurfelSystem({
-    device,
-    depthTexture: frame.depthTexture,
-    normalTexture: frame.normalTexture,
-    sceneTexture: frame.renderTexture,
     sceneInstances: shapeSystem.sceneInstances,
   });
 
   // Present-source selector: which texture reaches the screen.
-  //   "worldRc" — the world-RC lit composite (worldRc.outputTexture).
-  //   "surfel"  — the surfel lit composite (surfel.outputTexture).
-  //   "raw"     — the unlit albedo G-buffer (frame.renderTexture).
-  // World RC only runs (gather/merge/composite) when "worldRc" is selected.
-  // Keys: 1 = worldRc, 2 = surfel, 3 = raw (also a GUI dropdown below).
-  const view = { presentSource: "surfel" as "worldRc" | "surfel" | "raw" };
+  //   "voxel" — the voxel debug raymarch (voxel.outputTexture).
+  //   "raw"   — the unlit albedo G-buffer (frame.renderTexture).
+  // Keys: 1 = voxel, 2 = raw (also a GUI dropdown below).
+  const view = { presentSource: "voxel" as "voxel" | "raw" };
   window.addEventListener("keydown", (e) => {
-    if (e.key === "1") view.presentSource = "worldRc";
-    else if (e.key === "2") view.presentSource = "surfel";
-    else if (e.key === "3") view.presentSource = "raw";
+    if (e.key === "1") view.presentSource = "voxel";
+    else if (e.key === "2") view.presentSource = "raw";
   });
 
-  // --- lil-gui: all world-RC properties, live-tunable via setParams. ---
-  const gui = new GUI({ title: "World RC" });
-  const wp = worldRc.params;
-  // setParams(Object.assign(p, partial)) re-uploads every scalar + sun/sky vec4,
-  // so passing the whole params object back applies whatever the GUI just mutated.
-  const apply = () => worldRc.setParams(wp);
+  const gui = new GUI({ title: "Voxel" });
+  gui.add(view, "presentSource", ["voxel", "raw"]).name("present (1/2)").listen();
 
+  // Graininess: voxel size in world units. Smaller = finer = more voxels. Rebuilds the
+  // 3D textures on release (.onFinishChange, so it rebuilds once when the slider settles).
+  // The displayed dims controller reflects the resulting per-axis voxel counts.
+  const voxCfg = { cellSize: voxel.cellSize };
+  const dimsLabel = { dims: `${voxel.dims.x}×${voxel.dims.y}×${voxel.dims.z}` };
+  const dimsCtl = gui.add(dimsLabel, "dims").name("voxel dims").disable();
   gui
-    .add(view, "presentSource", ["worldRc", "surfel", "raw"])
-    .name("present (1/2/3)")
-    .listen();
+    .add(voxCfg, "cellSize", 0.25, 2, 0.05)
+    .name("voxel size (graininess)")
+    .onFinishChange((cs: number) => {
+      voxel.setCellSize(cs);
+      dimsLabel.dims = `${voxel.dims.x}×${voxel.dims.y}×${voxel.dims.z}`;
+      dimsCtl.updateDisplay();
+    });
 
-  // gridX/gridY/gridZ resize the probe atlases → full rebuild on release
-  // (.onFinishChange, not .onChange, so we rebuild once when the slider settles).
-  const rebuildDims = () => worldRc.rebuild({ gridX: wp.gridX, gridY: wp.gridY, gridZ: wp.gridZ });
-
-  const grid = gui.addFolder("Probe grid");
-  grid.add(wp, "cell0", 0.25, 6, 0.05).name("cell0 (world/probe)").onChange(apply);
-  grid.add(wp, "cellZ", 0.25, 6, 0.05).name("cellZ (world/layer)").onChange(apply);
-  grid.add(wp, "baseZ", -2, 12, 0.1).name("base Z (layer 0)").onChange(apply);
-  grid.add(wp, "intervalStart", 0, 6, 0.05).name("interval start").onChange(apply);
-  grid.add(wp, "intervalEnd", 0.25, 8, 0.05).name("base interval c0").onChange(apply);
-  grid.add(wp, "gatherSteps", 4, 96, 1).name("gather steps").onChange(apply);
-  // Atlas-size-defining dims → rebuild on release (destroy + recreate textures/shaders).
-  grid.add(wp, "gridX", 16, 256, 16).name("grid X").onFinishChange(rebuildDims);
-  grid.add(wp, "gridY", 16, 256, 16).name("grid Y").onFinishChange(rebuildDims);
-  grid.add(wp, "gridZ", 1, 16, 1).name("grid Z (layers)").onFinishChange(rebuildDims);
-  // dir tile side also defines atlas size; not part of this task's rebuild set.
-  grid.add(wp, "dir0W").name("dir tile (fixed)").disable();
-
-  const comp = gui.addFolder("Composite");
-  comp.add(wp, "ambient", 0, 1, 0.01).onChange(apply);
-
-  // Sun/sky drive the top-cascade miss term. SunLight (angle/enabled) is read live
-  // every frame by the gather pass, so it needs no onChange; the colors do.
-  const sun = gui.addFolder("Sun / Sky");
-  sun.add(SunLight, "enabled").name("sun enabled");
-  sun.add(SunLight, "angle", 0, Math.PI * 2, 0.01).name("sun angle");
-  sun.addColor(wp, "sunColor").name("sun color").onChange(apply);
-  sun.add(wp, "sunIntensity", 0, 5, 0.05).name("sun intensity").onChange(apply);
-  sun.add(wp, "sunDistance", 0, 2, 0.01).name("sun softness").onChange(apply);
-  sun.addColor(wp, "skyColor").name("sky color").onChange(apply);
-  sun.add(wp, "skyMix", 0, 1, 0.01).name("sky mix").onChange(apply);
-
-  // Numeric diagnostics: reads the probe atlas + final composite back to the CPU
-  // and prints one paste-able report. Trigger with key L or the GUI button.
-  const diag = createWorldRCDiagnostics({
-    device,
-    getProbeRad: () => rcTextures.probeRad,
-    getProbeMerge: () => rcTextures.probeMerge,
-    getWorldLit: () => worldRc.outputTexture,
-    getRuntime: () => ({
-      cell0: wp.cell0,
-      baseZ: wp.baseZ,
-      cellZ: wp.cellZ,
-      gridX: wp.gridX,
-      gridY: wp.gridY,
-      gridZ: wp.gridZ,
-      intervalEnd: wp.intervalEnd,
-      gatherSteps: wp.gatherSteps,
-      ambient: wp.ambient,
-      sunEnabled: SunLight.enabled,
-      sunAngle: SunLight.angle,
-      sunIntensity: wp.sunIntensity,
-      cameraX: cameraPosition.x,
-      cameraY: cameraPosition.y,
-      instanceCount: shapeSystem.sceneInstances.instanceCount,
-    }),
-  });
-  window.addEventListener("keydown", (e) => {
-    if (e.key === "l" || e.key === "L") diag.dump();
-  });
-  gui.add({ dump: () => diag.dump() }, "dump").name("dump diag (L)");
-
-  // Surfels (debug): spawn on visible surfaces + overlay billboard dots.
-  const surfelGui = { showSurfels: false };
-  const sf = gui.addFolder("Surfels (debug)");
-  sf.add(surfelGui, "showSurfels").name("show surfels");
-  sf.add(surfel.params, "spawnChance", 0, 0.2, 0.0001)
-    .name("spawn chance")
-    .onChange(() => surfel.setParams(surfel.params));
-  sf.add(surfel.params, "surfelRadius", 0.1, 3, 0.05)
-    .name("surfel radius")
-    .onChange(() => surfel.setParams(surfel.params));
-  // Single DENSITY-shape knob: spawn-coverage distance as a multiple of radius.
-  // cellSize, the spawn threshold and the (hysteresis) recycle threshold are all
-  // derived from radius + this, so they can't be desynced. <1 = denser, >1 = sparser.
-  sf.add(surfel.params, "coverage", 0.4, 2.0, 0.05)
-    .name("coverage (×r)")
-    .onChange(() => surfel.setParams(surfel.params));
-  sf.add(surfel.params, "markerDecay", 0, 0.5, 0.005)
-    .name("marker decay")
-    .onChange(() => surfel.setParams(surfel.params));
-  sf.add(surfel.params, "quadPx", 1, 20, 1)
-    .name("dot size (px)")
-    .onChange(() => surfel.setParams(surfel.params));
-  // Stage C gather/composite knobs.
-  sf.add(surfel.params, "gatherDistance", 1, 60, 0.5)
-    .name("gather distance")
-    .onChange(() => surfel.setParams(surfel.params));
-  sf.add(surfel.params, "gatherSteps", 4, 96, 1)
-    .name("gather steps")
-    .onChange(() => surfel.setParams(surfel.params));
-  sf.add(surfel.params, "normalBias", 0, 0.5, 0.005)
-    .name("normal bias")
-    .onChange(() => surfel.setParams(surfel.params));
-  // surfelSearchRadius: 0 => derive = cellSize (composite default).
-  sf.add(surfel.params, "surfelSearchRadius", 0, 10, 0.1)
-    .name("search radius (0=cell)")
-    .onChange(() => surfel.setParams(surfel.params));
-  sf.add(surfel.params, "ambient", 0, 1, 0.01)
-    .name("ambient")
-    .onChange(() => surfel.setParams(surfel.params));
-  // Temporal accumulation: lower = smoother/more denoise (but laggier on change),
-  // 1.0 = off (per-frame overwrite, noisy).
-  sf.add(surfel.params, "accumAlpha", 0.02, 1.0, 0.01)
-    .name("accum α (denoise)")
-    .onChange(() => surfel.setParams(surfel.params));
-  sf.add({ clear: () => surfel.clear() }, "clear").name("clear surfels");
-  sf.add(
-    { log: () => surfel.readCount().then((n) => console.log("[surfels] count", n)) },
-    "log",
-  ).name("log count");
+  gui.add(voxel.params, "ambient", 0, 1, 0.01).name("ambient");
+  // Sun toggle is read live by the draw pass; keep it exposed for the raw view.
+  gui.add(SunLight, "enabled").name("sun enabled");
+  gui.add(SunLight, "angle", 0, Math.PI * 2, 0.01).name("sun angle");
 
   // Live emitter controls (only the "emitter" scene). Position writes the transform
   // (re-uploaded every frame); radius drives BOTH the sphere SDF (Shape.setSphere$)
@@ -505,17 +372,15 @@ async function main() {
   );
 
   let last = performance.now();
-  let frameIndex = 0;
   function loop(now: number) {
     const delta = Math.min(now - last, 16.6667);
     last = now;
-    frameIndex++;
 
     // Update camera + canvas size first, so prepare() uploads current uniforms
     // and the resize check below sees this frame's dimensions.
     resizeSystem();
 
-    // Recreate frame + RC textures + tick if the canvas was resized.
+    // Recreate frame textures + tick if the canvas was resized.
     if (canvas.width !== frameW || canvas.height !== frameH) {
       frame = createFrameTextures(device, canvas);
       frameW = canvas.width;
@@ -524,44 +389,26 @@ async function main() {
         { ...frame, canvas, device, background: [0.043, 0.051, 0.07, 1], getPixelRatio },
         ({ passEncoder }) => shapeSystem.drawShapes(passEncoder),
       );
-      // World RC: recreate textures/pipelines (sceneInstances ref is stable).
-      worldRc.recreate(canvas, frame.renderTexture, frame.depthTexture, frame.normalTexture);
-      // Surfels: rebind spawn/gather/composite to the new G-buffer + albedo
-      // textures and recreate the canvas-sized surfel lit output.
-      surfel.recreate(frame.depthTexture, frame.normalTexture, frame.renderTexture);
+      // Voxel: recreate the canvas-sized debug output (voxel textures persist).
+      voxel.recreate();
     }
 
     execTransformSystem();
     shapeSystem.prepare();
 
     const encoder = device.createCommandEncoder();
-    // Main pass -> renderTexture (raw albedo G-buffer).
-    frameTick(encoder, delta);
-    // World RC gather + merge + composite -> worldLitTexture (only when presented).
-    if (view.presentSource === "worldRc") worldRc.run(encoder, delta);
-    // Surfels (Stage C): clearGrid -> insert (rebuild hash grid from live set) ->
-    // spawn (coverage-gated) -> recycle -> GATHER (per-surfel SDF sphere-trace into
-    // surfel_rad). Runs every frame; converges the live count well below CAP.
-    surfel.run(encoder, frameIndex);
-    // Surfel composite: integrate nearby surfels' cached radiance per pixel over the
-    // albedo G-buffer -> surfel.outputTexture (its own fullscreen render pass).
-    surfel.composite(encoder);
+    // Main SDF draw pass -> renderTexture (raw albedo G-buffer). Its per-fragment
+    // sphere-trace (up to 96 steps) is fill-bound: cost scales with on-screen coverage,
+    // so it spikes on zoom-in. The voxel debug view doesn't read the G-buffer (only the
+    // voxel 3D textures + scene buffers, which prepare() already uploaded), so run the
+    // SDF pass ONLY when the raw view is presented.
+    if (view.presentSource === "raw") frameTick(encoder, delta);
+    // Voxelize the SDF scene into the 3D textures, then raymarch them for the debug view.
+    voxel.voxelize(encoder);
+    if (view.presentSource === "voxel") voxel.debug(encoder);
     // Present the chosen source.
     const presented =
-      view.presentSource === "worldRc"
-        ? worldRc.outputTexture
-        : view.presentSource === "surfel"
-          ? surfel.outputTexture
-          : frame.renderTexture;
-    // Debug overlay: draw the surfel dots ON TOP of the presented texture (loadOp
-    // "load" keeps the lit scene; no depth, so they're not occluded — debug only).
-    if (surfelGui.showSurfels) {
-      const overlay = encoder.beginRenderPass({
-        colorAttachments: [{ view: presented.createView(), loadOp: "load", storeOp: "store" }],
-      });
-      surfel.drawDebug(overlay);
-      overlay.end();
-    }
+      view.presentSource === "voxel" ? voxel.outputTexture : frame.renderTexture;
     present(encoder, presented);
     device.queue.submit([encoder.finish()]);
 

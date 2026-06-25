@@ -49,6 +49,10 @@ export const mapKindToGroup = {
   [VariableKind.Uniform]: 0,
   [VariableKind.StorageRead]: 1,
   [VariableKind.StorageWrite]: 2,
+  // Shares group 2 with StorageWrite: no shader uses both, and even if one did,
+  // setupVariable hands out bindings sequentially within a group, so they wouldn't
+  // collide.
+  [VariableKind.StorageTexture]: 2,
 };
 
 export function setupVariable<M extends Record<string, VariableMeta>>(

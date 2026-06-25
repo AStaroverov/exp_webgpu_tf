@@ -46,13 +46,21 @@ export class GPUVariable {
 
   getBindGroupLayoutEntrySpecific(): Pick<
     GPUBindGroupLayoutEntry,
-    "buffer" | "texture" | "sampler"
+    "buffer" | "texture" | "sampler" | "storageTexture"
   > {
     if (this.variable.kind === VariableKind.Texture) {
       const texture: GPUTextureBindingLayout = {};
       if (this.variable.textureSampleType) texture.sampleType = this.variable.textureSampleType;
       if (this.variable.viewDimension) texture.viewDimension = this.variable.viewDimension;
       return { texture };
+    }
+    if (this.variable.kind === VariableKind.StorageTexture) {
+      const storageTexture: GPUStorageTextureBindingLayout = {
+        access: this.variable.storageTextureAccess,
+        format: this.variable.storageTextureFormat!,
+      };
+      if (this.variable.viewDimension) storageTexture.viewDimension = this.variable.viewDimension;
+      return { storageTexture };
     }
     if (this.variable.kind === VariableKind.Sampler) {
       return { sampler: {} };
@@ -89,6 +97,10 @@ function getUsageByKind(kind: VariableKind) {
   switch (kind) {
     case VariableKind.Sampler:
     case VariableKind.Texture:
+    // StorageTexture has no GPUBuffer; the GPUTexture is created externally with its
+    // own usage (STORAGE_BINDING|TEXTURE_BINDING) and set via setTexture. This value
+    // is unused, but the switch must stay exhaustive.
+    case VariableKind.StorageTexture:
       return TEXTURE_USAGE;
     case VariableKind.Uniform:
       return UNIFORM_USAGE;
