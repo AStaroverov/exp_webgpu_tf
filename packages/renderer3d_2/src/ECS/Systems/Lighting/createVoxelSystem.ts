@@ -5,7 +5,8 @@ import { viewProjMatrix } from "../ResizeSystem.ts";
 import { shaderMeta as voxelizeMeta, WORKGROUP } from "./voxelize.shader.ts";
 import { shaderMeta as debugMeta } from "./voxelDebug.shader.ts";
 import { shaderMeta as giMeta } from "./voxelGi.shader.ts";
-import { shaderMeta as probeMeta } from "./voxelProbe.shader.ts";
+import { shaderMeta as probeMeta, CASCADE_DIR_W } from "./voxelProbe.shader.ts";
+import { shaderMeta as integrateMeta } from "./voxelIntegrate.shader.ts";
 import { shaderMeta as resolveMeta } from "./voxelResolve.shader.ts";
 import {
   createVoxelTextures,
@@ -34,8 +35,7 @@ export type VoxelGiParams = {
 // the resolve composites them at full resolution.
 export type VoxelRcParams = {
   ambient: number;
-  numRays: number; // hemisphere rays per PROBE
-  maxDist: number; // probe ray reach
+  maxDist: number; // probe ray reach (cascade-0 interval length)
   normalBias: number;
   skyIntensity: number;
   giStrength: number;
@@ -87,7 +87,6 @@ export function createVoxelSystem({
 
   const rcParams: VoxelRcParams = {
     ambient: 0.08,
-    numRays: 64, // ≈ D² deterministic octahedral directions (D≈8)
     maxDist: 24,
     normalBias: 0,
     skyIntensity: 0,
@@ -122,6 +121,11 @@ export function createVoxelSystem({
   // RC cascade-0: probe gather (-> probeIrr) + full-res resolve (-> rcOutput).
   const probeShader = new GPUShader(probeMeta);
   const probePipeline = probeShader.getRenderPipeline(device, "vs_main", "fs_main", {
+    targetFormat: "rgba16float",
+    withBlending: false,
+  });
+  const integrateShader = new GPUShader(integrateMeta);
+  const integratePipeline = integrateShader.getRenderPipeline(device, "vs_main", "fs_main", {
     targetFormat: "rgba16float",
     withBlending: false,
   });
@@ -178,6 +182,8 @@ export function createVoxelSystem({
   const probeParamsArr = getTypeTypedArray(probeMeta.uniforms.params.type); // Float32Array(4)
   const probeParams2Arr = getTypeTypedArray(probeMeta.uniforms.params2.type); // Float32Array(4)
   const probeInvArr = getTypeTypedArray(probeMeta.uniforms.invViewProj.type); // Float32Array(16)
+  const integrateParamsArr = getTypeTypedArray(integrateMeta.uniforms.params.type); // Float32Array(4)
+  const integrateParams2Arr = getTypeTypedArray(integrateMeta.uniforms.params2.type); // Float32Array(4)
   const resolveParamsArr = getTypeTypedArray(resolveMeta.uniforms.params.type); // Float32Array(4)
   const resolveParams2Arr = getTypeTypedArray(resolveMeta.uniforms.params2.type); // Float32Array(4)
   const resolveInvArr = getTypeTypedArray(resolveMeta.uniforms.invViewProj.type); // Float32Array(16)
@@ -252,9 +258,20 @@ export function createVoxelSystem({
       format: "rgba16float",
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
+  // Directional probe atlas: (probesX*DIR_W) × (probesY*DIR_W), one texel per (probe,dir).
+  const createCascadeAtlas = () => {
+    const d = probeDims();
+    return device.createTexture({
+      size: [d.x * CASCADE_DIR_W, d.y * CASCADE_DIR_W, 1],
+      format: "rgba16float",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+  };
   let probeIrr = createProbeTex();
   let rcOutput = createRcOutput();
+  let cascadeAtlas = createCascadeAtlas();
   let probeGroup0: GPUBindGroup;
+  let integrateGroup0: GPUBindGroup;
   let resolveGroup0: GPUBindGroup;
 
   // (Re)build the probe + resolve bind groups from the current voxel textures + probeIrr.
@@ -271,6 +288,15 @@ export function createVoxelSystem({
         { binding: probeMeta.uniforms.voxelEmission.binding, resource: textures.voxelEmission.createView({ dimension: "3d" }) },
         { binding: probeMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
         { binding: probeMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
+      ],
+    });
+    integrateGroup0 = device.createBindGroup({
+      layout: integratePipeline.getBindGroupLayout(0),
+      entries: [
+        integrateShader.uniforms.params.getBindGroupEntry(device),
+        integrateShader.uniforms.params2.getBindGroupEntry(device),
+        { binding: integrateMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
+        { binding: integrateMeta.uniforms.cascadeAtlas.binding, resource: cascadeAtlas.createView() },
       ],
     });
     resolveGroup0 = device.createBindGroup({
@@ -466,25 +492,30 @@ export function createVoxelSystem({
     giWrite = read;
   }
 
-  // RC cascade-0 (Stage 2.2a): probe gather -> probeIrr, then full-res resolve -> rcOutput.
-  // Static seed (no per-frame jitter) → fixed-pattern probe noise, not shimmer; temporal
-  // accumulation comes in a later stage.
+  // RC (Stage 2.3a — directional, single cascade): probe gather -> directional atlas,
+  // integrate (cosine-weighted) -> probeIrr, full-res resolve -> rcOutput.
   function rc(encoder: GPUCommandEncoder) {
     mat4.invert(invViewProj, viewProjMatrix);
 
-    // Probe pass uniforms.
-    probeParamsArr[0] = rcParams.numRays;
+    // Probe pass uniforms: params = (spacing, maxDist, normalBias, sky).
+    probeParamsArr[0] = probeSpacing;
     probeParamsArr[1] = rcParams.maxDist;
     probeParamsArr[2] = rcParams.normalBias;
     probeParamsArr[3] = rcParams.skyIntensity;
     device.queue.writeBuffer(probeShader.uniforms.params.getGPUBuffer(device), 0, probeParamsArr);
-    probeParams2Arr[0] = probeSpacing;
-    probeParams2Arr[1] = canvas.width;
-    probeParams2Arr[2] = canvas.height;
-    probeParams2Arr[3] = 0; // static seed (Stage 2.2a)
+    probeParams2Arr[0] = canvas.width;
+    probeParams2Arr[1] = canvas.height;
+    probeParams2Arr[2] = 0; // interval start (cascade 0)
     device.queue.writeBuffer(probeShader.uniforms.params2.getGPUBuffer(device), 0, probeParams2Arr);
     probeInvArr.set(invViewProj as Float32Array);
     device.queue.writeBuffer(probeShader.uniforms.invViewProj.getGPUBuffer(device), 0, probeInvArr);
+
+    // Integrate pass uniforms.
+    integrateParamsArr[0] = probeSpacing;
+    device.queue.writeBuffer(integrateShader.uniforms.params.getGPUBuffer(device), 0, integrateParamsArr);
+    integrateParams2Arr[0] = canvas.width;
+    integrateParams2Arr[1] = canvas.height;
+    device.queue.writeBuffer(integrateShader.uniforms.params2.getGPUBuffer(device), 0, integrateParams2Arr);
 
     // Resolve pass uniforms.
     resolveParamsArr[0] = rcParams.ambient;
@@ -495,10 +526,10 @@ export function createVoxelSystem({
     resolveInvArr.set(invViewProj as Float32Array);
     device.queue.writeBuffer(resolveShader.uniforms.invViewProj.getGPUBuffer(device), 0, resolveInvArr);
 
-    // Probe gather -> probeIrr.
+    // 1. Probe gather -> directional atlas.
     const probePass = encoder.beginRenderPass({
       colorAttachments: [
-        { view: probeIrr.createView(), clearValue: [0, 0, 0, 0], loadOp: "clear", storeOp: "store" },
+        { view: cascadeAtlas.createView(), clearValue: [0, 0, 0, 0], loadOp: "clear", storeOp: "store" },
       ],
     });
     probePass.setPipeline(probePipeline);
@@ -506,7 +537,18 @@ export function createVoxelSystem({
     probePass.draw(6, 1, 0, 0);
     probePass.end();
 
-    // Full-res resolve -> rcOutput.
+    // 2. Integrate atlas tiles -> probeIrr.
+    const integratePass = encoder.beginRenderPass({
+      colorAttachments: [
+        { view: probeIrr.createView(), clearValue: [0, 0, 0, 0], loadOp: "clear", storeOp: "store" },
+      ],
+    });
+    integratePass.setPipeline(integratePipeline);
+    integratePass.setBindGroup(0, integrateGroup0);
+    integratePass.draw(6, 1, 0, 0);
+    integratePass.end();
+
+    // 3. Full-res resolve -> rcOutput.
     const resolvePass = encoder.beginRenderPass({
       colorAttachments: [
         { view: rcOutput.createView(), clearValue: [0, 0, 0, 1], loadOp: "clear", storeOp: "store" },
@@ -548,14 +590,18 @@ export function createVoxelSystem({
     probeIrr = createProbeTex();
     rcOutput.destroy();
     rcOutput = createRcOutput();
+    cascadeAtlas.destroy();
+    cascadeAtlas = createCascadeAtlas();
     buildRcGroups();
   }
 
-  // Change the probe spacing (px between probes). Rebuilds probeIrr + RC bind groups.
+  // Change the probe spacing (px between probes). Rebuilds probeIrr + atlas + RC groups.
   function setProbeSpacing(spacing: number) {
     probeSpacing = Math.max(1, Math.round(spacing));
     probeIrr.destroy();
     probeIrr = createProbeTex();
+    cascadeAtlas.destroy();
+    cascadeAtlas = createCascadeAtlas();
     buildRcGroups();
   }
 

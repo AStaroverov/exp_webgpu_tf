@@ -344,7 +344,6 @@ async function main() {
     .add(rcSpacingCfg, "spacing", [4, 8, 16, 32])
     .name("probe spacing px")
     .onChange((s: number) => voxel.setProbeSpacing(s));
-  rcFolder.add(voxel.rcParams, "numRays", 4, 256, 1).name("directions (≈D²)");
   rcFolder.add(voxel.rcParams, "maxDist", 1, 64, 0.5).name("ray reach");
   rcFolder.add(voxel.rcParams, "giStrength", 0, 4, 0.05).name("GI strength");
   rcFolder.add(voxel.rcParams, "ambient", 0, 1, 0.01).name("ambient");
