@@ -381,18 +381,14 @@ async function main() {
   //                pyramid (voxel.coneOutputTexture); indirect only (no albedo/direct yet).
   //   "final"    — the composited VCT image (voxel.compositeOutputTexture): the real lit
   //                picture = albedo·(ambient·AO + directSun + indirect) + selfEmission.
-  //   "gi"       — brute-force voxel GI reference (voxel.giOutputTexture).
   //   "raw"      — the unlit albedo G-buffer (frame.renderTexture).
-  // Keys: 1 = voxel, 5 = radiance, 6 = lod, 7 = cone, 8 = final, 3 = gi, 2 = raw (also a
-  // GUI dropdown). Default to "voxel" (cheap) so the page never opens straight into a heavy
-  // GI pass.
+  // Keys: 1 = voxel, 5 = radiance, 6 = lod, 7 = cone, 8 = final, 2 = raw (also a GUI dropdown).
   const view = {
-    presentSource: "final" as "voxel" | "raw" | "gi" | "radiance" | "lod" | "cone" | "final",
+    presentSource: "final" as "voxel" | "raw" | "radiance" | "lod" | "cone" | "final",
   };
   window.addEventListener("keydown", (e) => {
     if (e.key === "1") view.presentSource = "voxel";
     else if (e.key === "2") view.presentSource = "raw";
-    else if (e.key === "3") view.presentSource = "gi";
     else if (e.key === "5") view.presentSource = "radiance";
     else if (e.key === "6") view.presentSource = "lod";
     else if (e.key === "7") view.presentSource = "cone";
@@ -401,7 +397,7 @@ async function main() {
 
   const gui = new GUI({ title: "Voxel" });
   gui
-    .add(view, "presentSource", ["raw", "voxel", "gi", "radiance", "lod", "cone", "final"])
+    .add(view, "presentSource", ["raw", "voxel", "radiance", "lod", "cone", "final"])
     .name("present")
     .listen();
 
@@ -431,25 +427,6 @@ async function main() {
   gui.add(SunLight, "elevation", 0, Math.PI / 2, 0.01).name("sun elevation");
   gui.add(SunLight, "intensity", 0, 5, 0.05).name("sun intensity");
   gui.addColor(SunLight, "color", 1).name("sun color"); // rgbScale=1 → array is 0..1 floats
-
-  // GI (Stage 2.1a brute-force reference). All read live each frame by voxel.gi().
-  const giFolder = gui.addFolder("GI (reference)");
-  // Resolution divisor: GI renders at 1/scale then upscales. Higher = much cheaper.
-  // Rebuilds the GI target on release. THE primary knob if the GI pass is too heavy.
-  const giScaleCfg = { scale: voxel.giScale };
-  giFolder
-    .add(giScaleCfg, "scale", [1, 2, 4, 8])
-    .name("resolution 1/N")
-    .onChange((s: number) => voxel.setGiScale(s));
-  giFolder.add(voxel.giParams, "numRays", 1, 256, 1).name("rays/pixel");
-  giFolder.add(voxel.giParams, "maxDist", 1, 64, 0.5).name("ray reach");
-  giFolder.add(voxel.giParams, "giStrength", 0, 4, 0.05).name("GI strength");
-  giFolder.add(voxel.giParams, "ambient", 0, 1, 0.01).name("ambient");
-  giFolder.add(voxel.giParams, "skyIntensity", 0, 2, 0.01).name("sky on miss");
-  giFolder.add(voxel.giParams, "normalBias", 0, 2, 0.01).name("normal bias");
-  // Temporal denoise: lower = smoother (averages more frames), 1 = off. Auto-resets the
-  // frame the camera moves (no reprojection yet → history would smear).
-  giFolder.add(voxel.giParams, "accumAlpha", 0.02, 1, 0.01).name("temporal α");
 
   // Cone GI: the 6-cone diffuse hemisphere trace. Read live each frame by cone().
   const coneFolder = gui.addFolder("Cone GI");
@@ -557,11 +534,9 @@ async function main() {
   );
 
   let last = performance.now();
-  let frameIndex = 0;
   function loop(now: number) {
     const delta = Math.min(now - last, 16.6667);
     last = now;
-    frameIndex++;
 
     // Update camera + canvas size first, so prepare() uploads current uniforms
     // and the resize check below sees this frame's dimensions.
@@ -594,8 +569,8 @@ async function main() {
     const encoder = device.createCommandEncoder();
     // Main SDF draw pass -> renderTexture (raw albedo G-buffer). Its per-fragment
     // sphere-trace (up to 96 steps) is fill-bound: cost scales with on-screen coverage,
-    // so it spikes on zoom-in. "voxel"/"gi" don't read the G-buffer (only the voxel 3D
-    // textures + scene buffers, which prepare() already uploaded) — they use the voxel
+    // so it spikes on zoom-in. "voxel" doesn't read the G-buffer (only the voxel 3D
+    // textures + scene buffers, which prepare() already uploaded) — it uses the voxel
     // DDA instead. "raw", "cone" and "final" all NEED the SDF pass: raw presents it; cone +
     // final read its depth + normal G-buffer to reconstruct P + N (final also reads albedo).
     if (
@@ -622,7 +597,7 @@ async function main() {
       voxel.mips(encoder);
       voxel.cone(encoder);
       voxel.composite(encoder);
-    } else if (view.presentSource === "gi") voxel.gi(encoder, frameIndex);
+    }
     // Present the chosen source.
     const presented =
       view.presentSource === "voxel" ||
@@ -633,9 +608,7 @@ async function main() {
           ? voxel.coneOutputTexture
           : view.presentSource === "final"
             ? voxel.compositeOutputTexture
-            : view.presentSource === "gi"
-              ? voxel.giOutputTexture
-              : frame.renderTexture;
+            : frame.renderTexture;
     present(encoder, presented);
     device.queue.submit([encoder.finish()]);
 

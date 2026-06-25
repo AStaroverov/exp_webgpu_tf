@@ -13,16 +13,20 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 //      Front-to-back "over" compositing accumulates radiance + opacity per cone. The cone
 //      results are combined with cosine weights {π/4 (normal), 3π/20 ×5 (ring)} summing to
 //      π, then normalized by π → the cosine-weighted AVERAGE incoming radiance.
-//   3. Write the gathered radiance (scaled by giStrength) to a full-res HDR texture.
+//   3. Write the gathered radiance (scaled by giStrength) to an HDR texture.
+//
+// PERF: this pass runs at HALF resolution (¼ the pixels → ~4× less cone work). The full-res
+// G-buffer is still sampled (at the half-res pixel ·2, clamped); the composite bilinear-
+// upsamples this output back to full res — indirect light is low-frequency, so that is fine.
 //
 // This is what produces real color bleeding. The earlier single-cone-along-the-normal form
 // was the Layer-2 INTERMEDIATE (a bent-normal / AO preview); the hemisphere gather here is
 // directly comparable to the brute-force gi reference, which is also a cosine-weighted
 // hemisphere average.
 //
-// Mirrors voxelDebug.shader.ts for the fullscreen setup + `unproject`, and voxelGi's
-// reverse-Z NDC reconstruction. textureSampleLevel (explicit LOD) is used in the trace loop
-// — legal in non-uniform control flow (unlike textureSample).
+// Mirrors voxelDebug.shader.ts for the fullscreen setup + `unproject` + reverse-Z NDC
+// reconstruction. textureSampleLevel (explicit LOD) is used in the trace loop — legal in
+// non-uniform control flow (unlike textureSample).
 
 export const shaderMeta = new ShaderMeta(
   {
@@ -119,18 +123,21 @@ fn trace_cone(origin: vec3<f32>, dir: vec3<f32>, aperture: f32) -> vec4<f32> {
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-  let pixel = vec2<i32>(floor(input.position.xy));
+  // This pass renders at HALF res; map the half-res framebuffer coord to a representative
+  // full-res G-buffer texel (clamped). uParams2.xy carries the FULL canvas dims.
+  let half = vec2<i32>(floor(input.position.xy));
+  let full = min(half * 2, vec2<i32>(uParams2.xy) - vec2<i32>(1));
 
   // World normal from the G-buffer; a<0.5 = no surface at this pixel.
-  let n = textureLoad(normalTex, pixel, 0);
+  let n = textureLoad(normalTex, full, 0);
   if (n.a < 0.5) {
     return vec4f(0.0, 0.0, 0.0, 1.0);
   }
   let N = normalize(n.rgb * 2.0 - 1.0);
 
   // Reconstruct world position from reverse-Z depth.
-  let depth = textureLoad(depthTex, pixel, 0);
-  let uv = (vec2<f32>(pixel) + vec2<f32>(0.5)) / uParams2.xy;
+  let depth = textureLoad(depthTex, full, 0);
+  let uv = (vec2<f32>(full) + vec2<f32>(0.5)) / uParams2.xy;
   let ndc = vec3<f32>(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0, depth);
   let P = unproject(ndc);
 

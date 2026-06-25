@@ -4,11 +4,11 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 
 // VCT Layer 4 — the COMPOSITE: turn the indirect cone gather into the FINAL lit image.
 //   final = albedo·(ambient·AO + directSun + indirect) + selfEmission.
-// A fullscreen pass over the G-buffer (full-res, so NO bilateral upsample is needed — that
-// is a later perf option). Per pixel:
+// A fullscreen FULL-res pass over the G-buffer. Per pixel:
 //   - albedo  = G-buffer albedo (the SDF renderTexture).
 //   - indirect already carries giStrength (baked into the cone's rgb); AO = the cone's
-//     hemisphere visibility (cone.a).
+//     hemisphere visibility (cone.a). The cone output is HALF-res, so it is bilinear-
+//     upsampled here (linear sampler) — indirect light is low-frequency, so that is fine.
 //   - direct sun is UNSHADOWED in v1 (ndl·sunColor·intensity); contact occlusion comes from
 //     the indirect/AO terms, not a shadow ray.
 //   - self-emission makes emitters glow: read the per-pixel G-buffer emission target written
@@ -37,10 +37,13 @@ export const shaderMeta = new ShaderMeta(
     normalTex: new VariableMeta("normalTex", VariableKind.Texture, `texture_2d<f32>`, {
       textureSampleType: "float",
     }),
-    // Cone output: rgb = indirect (×giStrength), a = AO visibility.
+    // Cone output: rgb = indirect (×giStrength), a = AO visibility. HALF-res → sampled with
+    // a linear sampler to bilinear-upsample to full res.
     coneTex: new VariableMeta("coneTex", VariableKind.Texture, `texture_2d<f32>`, {
       textureSampleType: "float",
     }),
+    // Linear/clamp sampler for the bilinear upsample of the half-res cone output.
+    coneSampler: new VariableMeta("coneSampler", VariableKind.Sampler, `sampler`),
     // G-buffer per-pixel self-emission (rgba16float, rgb = uColor·abs(material.x)).
     // A surface property — replaces the old voxelEmission nearest-instance read.
     emissionTex: new VariableMeta("emissionTex", VariableKind.Texture, `texture_2d<f32>`, {
@@ -85,8 +88,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
 
   let albedo = textureLoad(albedoTex, pixel, 0).rgb;
 
-  // Indirect radiance (already ×giStrength) + hemisphere visibility (AO).
-  let cone = textureLoad(coneTex, pixel, 0);
+  // Indirect radiance (already ×giStrength) + hemisphere visibility (AO). coneTex is half-res;
+  // the linear sampler bilinearly upsamples it. uParams2.xy = full dims.
+  let cone = textureSampleLevel(coneTex, coneSampler, (vec2<f32>(pixel) + vec2<f32>(0.5)) / uParams2.xy, 0.0);
   let indirect = cone.rgb;
   let ao = cone.a;
 
