@@ -65,7 +65,7 @@ async function main() {
   //   "emitter"  — ground + box occluder + a GUI-movable/resizable emitter sphere.
   //   "simple"   — fixed minimal scene (first-bug diagnosis).
   //   "showcase" — one of every shape kind + several lights.
-  const SCENE = "emitter" as "emitter" | "simple" | "showcase" | "final";
+  const SCENE = "final" as "emitter" | "simple" | "showcase" | "final";
 
   // The configurable emitter (only used by the "emitter" scene). Live-edited from
   // the GUI: position via the transform (re-uploaded every frame), radius via the
@@ -368,6 +368,7 @@ async function main() {
     depthTexture: frame.depthTexture,
     normalTexture: frame.normalTexture,
     albedoTexture: frame.renderTexture,
+    emissionTexture: frame.emissionTexture,
   });
 
   // Present-source selector: which texture reaches the screen.
@@ -577,7 +578,12 @@ async function main() {
       );
       // Voxel: rebind the new G-buffer + recreate its canvas-sized outputs (debug + cone +
       // GI accumulation).
-      voxel.recreate(frame.depthTexture, frame.normalTexture, frame.renderTexture);
+      voxel.recreate(
+        frame.depthTexture,
+        frame.normalTexture,
+        frame.renderTexture,
+        frame.emissionTexture,
+      );
     }
 
     // Drive the dynamic "final"-scene objects, then push transforms → instance buffers.

@@ -25,7 +25,16 @@ export function createFrameTextures(device: GPUDevice, canvas: HTMLCanvasElement
     usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
   });
 
-  return { renderTexture, depthTexture, normalTexture };
+  // Stage-3b G-buffer: per-pixel self-emission written by fs_main as a 3rd color
+  // attachment (uColor.rgb * abs(material.x); a = 1). Sampled by the RC composite
+  // so emitter glow is a surface property — no voxel cross-contamination / flicker.
+  const emissionTexture = device.createTexture({
+    size: [canvas.width, canvas.height, 1],
+    format: "rgba16float",
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+  });
+
+  return { renderTexture, depthTexture, normalTexture, emissionTexture };
 }
 
 export function createFrameTick(
@@ -33,6 +42,7 @@ export function createFrameTick(
     renderTexture,
     depthTexture,
     normalTexture,
+    emissionTexture,
     canvas,
     device,
     background,
@@ -66,6 +76,7 @@ export function createFrameTick(
     const depthView = depthTexture.createView();
     const textureView = renderTexture.createView();
     const normalView = normalTexture.createView();
+    const emissionView = emissionTexture.createView();
 
     const passEncoder = commandEncoder.beginRenderPass({
       colorAttachments: [
@@ -78,6 +89,13 @@ export function createFrameTick(
         {
           // G-buffer world normals. Cleared to 0 → a = 0 = "no surface".
           view: normalView,
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          loadOp: "clear",
+          storeOp: "store",
+        },
+        {
+          // G-buffer per-pixel self-emission. Cleared to 0 (background = no glow).
+          view: emissionView,
           clearValue: { r: 0, g: 0, b: 0, a: 0 },
           loadOp: "clear",
           storeOp: "store",
@@ -96,7 +114,7 @@ export function createFrameTick(
     mainCallback(mainArg);
     passEncoder.end();
 
-    return { renderTexture, depthTexture, normalTexture };
+    return { renderTexture, depthTexture, normalTexture, emissionTexture };
   };
 
   return renderFrame;

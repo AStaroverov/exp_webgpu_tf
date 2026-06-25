@@ -11,11 +11,11 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 //     hemisphere visibility (cone.a).
 //   - direct sun is UNSHADOWED in v1 (ndl·sunColor·intensity); contact occlusion comes from
 //     the indirect/AO terms, not a shadow ray.
-//   - self-emission makes emitters glow: reconstruct world P (depth → reverse-Z NDC →
-//     unproject), map to a voxel coord, and read voxelEmission there.
-// Mirrors voxelCone.shader.ts for the fullscreen setup + `unproject`, and voxelGi's
-// reverse-Z NDC reconstruction + voxelEmission textureLoad. textureLoad (integer coords)
-// for the G-buffer + voxel reads; no sampler needed.
+//   - self-emission makes emitters glow: read the per-pixel G-buffer emission target written
+//     by fs_main (uColor.rgb·abs(material.x)). It is a SURFACE property, so there is no
+//     voxel cross-contamination and no flicker as instances intersect (the previous
+//     voxelEmission nearest-instance read did both).
+// Fullscreen pass over the G-buffer; textureLoad (integer coords) for every read, no sampler.
 
 export const shaderMeta = new ShaderMeta(
   {
@@ -29,12 +29,6 @@ export const shaderMeta = new ShaderMeta(
     sun: new VariableMeta("uSun", VariableKind.Uniform, `vec4<f32>`),
     // .rgb = sun color (linear).
     sunColor: new VariableMeta("uSunColor", VariableKind.Uniform, `vec4<f32>`),
-    // inverse(viewProjMatrix) (reverse-Z), column-major, for world-position reconstruction.
-    invViewProj: new VariableMeta("uInvViewProj", VariableKind.Uniform, `mat4x4<f32>`),
-    // .xyz = world min corner, .w = cellSize.
-    gridOrigin: new VariableMeta("uGridOrigin", VariableKind.Uniform, `vec4<f32>`),
-    // .xyz = voxel counts per axis.
-    gridDims: new VariableMeta("uGridDims", VariableKind.Uniform, `vec4<i32>`),
     // G-buffer albedo (the SDF draw-pass renderTexture).
     albedoTex: new VariableMeta("albedoTex", VariableKind.Texture, `texture_2d<f32>`, {
       textureSampleType: "float",
@@ -43,17 +37,13 @@ export const shaderMeta = new ShaderMeta(
     normalTex: new VariableMeta("normalTex", VariableKind.Texture, `texture_2d<f32>`, {
       textureSampleType: "float",
     }),
-    // G-buffer reverse-Z depth (texture_depth_2d).
-    depthTex: new VariableMeta("depthTex", VariableKind.Texture, `texture_depth_2d`, {
-      textureSampleType: "depth",
-    }),
     // Cone output: rgb = indirect (×giStrength), a = AO visibility.
     coneTex: new VariableMeta("coneTex", VariableKind.Texture, `texture_2d<f32>`, {
       textureSampleType: "float",
     }),
-    // Self-emission voxel texture (rgb = nearest-instance emission).
-    voxelEmission: new VariableMeta("voxelEmission", VariableKind.Texture, `texture_3d<f32>`, {
-      viewDimension: "3d",
+    // G-buffer per-pixel self-emission (rgba16float, rgb = uColor·abs(material.x)).
+    // A surface property — replaces the old voxelEmission nearest-instance read.
+    emissionTex: new VariableMeta("emissionTex", VariableKind.Texture, `texture_2d<f32>`, {
       textureSampleType: "float",
     }),
   },
@@ -82,12 +72,6 @@ fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
   return out;
 }
 
-// Unproject an NDC point (z reverse-Z) to world space.
-fn unproject(ndc: vec3<f32>) -> vec3<f32> {
-  let w = uInvViewProj * vec4<f32>(ndc, 1.0);
-  return w.xyz / w.w;
-}
-
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let pixel = vec2<i32>(floor(input.position.xy));
@@ -111,16 +95,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let ndl = max(dot(N, L), 0.0);
   let direct = ndl * uSunColor.rgb * uSun.w;
 
-  // Self-emission: reconstruct world P from reverse-Z depth, map to a voxel coord, read it.
-  let depth = textureLoad(depthTex, pixel, 0);
-  let uv = (vec2<f32>(pixel) + vec2<f32>(0.5)) / uParams2.xy;
-  let ndc = vec3<f32>(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0, depth);
-  let P = unproject(ndc);
-  let voxelCoord = vec3<i32>(floor((P - uGridOrigin.xyz) / uGridOrigin.w));
-  var emission = vec3<f32>(0.0);
-  if (all(voxelCoord >= vec3<i32>(0)) && all(voxelCoord < uGridDims.xyz)) {
-    emission = textureLoad(voxelEmission, voxelCoord, 0).rgb;
-  }
+  // Self-emission: per-pixel from the G-buffer emission target (surface property).
+  // No voxel cross-contamination / flicker — emitters HDR-glow correctly.
+  let emission = textureLoad(emissionTex, pixel, 0).rgb;
 
   let lit = albedo * (uParams.x * ao + direct + indirect) + emission;
   return vec4f(lit, 1.0);

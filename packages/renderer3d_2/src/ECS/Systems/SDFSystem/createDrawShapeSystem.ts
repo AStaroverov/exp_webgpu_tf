@@ -43,11 +43,13 @@ export function createDrawShapeSystem({
   const gpuShader = new GPUShader(shaderMeta);
 
   // Single pipeline: world-space impostor box → raymarched SDF, with depth.
-  // Stage-3b G-buffer: TWO color targets — (0) albedo into renderTexture
-  // (bgra8unorm), (1) world normal into normalTexture (rgba16float). Must match
-  // createFrameTick's main-pass color-attachment list (see createFrame.ts).
+  // Stage-3b G-buffer: THREE color targets — (0) albedo into renderTexture
+  // (bgra8unorm), (1) world normal into normalTexture (rgba16float), (2) per-pixel
+  // self-emission into emissionTexture (rgba16float). Order MUST match
+  // FragmentOutput locations 0,1,2 AND createFrameTick's main-pass
+  // color-attachment list (see createFrame.ts) — a mismatch is a hard WebGPU error.
   const pipelineSdf = gpuShader.getRenderPipeline(device, "vs_main", "fs_main", {
-    targets: [{ format: "bgra8unorm" }, { format: "rgba16float" }],
+    targets: [{ format: "bgra8unorm" }, { format: "rgba16float" }, { format: "rgba16float" }],
     withDepth: true,
   });
 

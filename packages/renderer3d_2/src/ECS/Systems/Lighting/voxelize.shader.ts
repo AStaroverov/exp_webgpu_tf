@@ -186,8 +186,18 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let world = uGridOrigin.xyz + (vec3<f32>(gid) + vec3<f32>(0.5)) * cellSize;
 
   let hit = scene_sdf(world);
+  // voxelAlbedo / voxelEmission occupancy stays BINARY: the DDA debug/gi raymarchers test
+  // a > 0.5, and the composite reads voxelEmission.rgb directly (full self-emission).
   // Conservative "iso-surface crosses this voxel": within half the voxel diagonal.
   let solid = hit.dist <= cellSize * 0.5 * SQRT3;
+
+  // voxelRADIANCE (the only volume the cone samples, via its mip pyramid) uses ANTI-ALIASED
+  // coverage instead: a linear band across the iso-surface (1 deep inside → 0.5 at the
+  // centre → 0 at the outer extent, matching solid). Stored PREMULTIPLIED (rgb·coverage,
+  // a=coverage) so (1) the premultiplied mip pyramid + cone over-operator stay consistent
+  // and (2) a MOVING object's edge voxels fade smoothly instead of popping 0↔1 each frame —
+  // this is what kills the voxel-grid shimmer/flicker when light passes near an object.
+  let coverage = clamp(0.5 - hit.dist / (cellSize * SQRT3), 0.0, 1.0);
 
   if (solid) {
     let albedo = uColor[hit.instance].rgb;
@@ -199,7 +209,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let radiance = direct + emission_of(hit.instance);
     textureStore(voxelAlbedo, coord, vec4<f32>(albedo, 1.0));
     textureStore(voxelEmission, coord, vec4<f32>(emission_of(hit.instance), 1.0));
-    textureStore(voxelRadiance, coord, vec4<f32>(radiance, 1.0));
+    textureStore(voxelRadiance, coord, vec4<f32>(radiance * coverage, coverage));
   } else {
     textureStore(voxelAlbedo, coord, vec4<f32>(0.0));
     textureStore(voxelEmission, coord, vec4<f32>(0.0));

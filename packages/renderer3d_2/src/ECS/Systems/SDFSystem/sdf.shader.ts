@@ -91,13 +91,18 @@ export const shaderMeta = new ShaderMeta(
         // Stage-3b G-buffer. The main pass no longer shades: lighting comes from
         // the Radiance Cascades composite. We output raw albedo + the world normal
         // so the composite can compute a normal-aware directional term.
-        //   @location(0) albedo : raw uColor.rgb (a = 1 surface present)
-        //   @location(1) normal : vec4(nWorld*0.5+0.5, 1.0) — a = 1 surface mask
-        //                         (background stays cleared 0 → mask 0).
+        //   @location(0) albedo   : raw uColor.rgb (a = 1 surface present)
+        //   @location(1) normal   : vec4(nWorld*0.5+0.5, 1.0) — a = 1 surface mask
+        //                           (background stays cleared 0 → mask 0).
+        //   @location(2) emission : per-pixel self-emission = uColor.rgb *
+        //                           abs(uMaterial.x) (a = 1; pure occluder material.x==0
+        //                           → emission 0). Read by the composite as a surface
+        //                           property (no voxel cross-contamination / flicker).
         //   @builtin(frag_depth)  : reverse-Z, unchanged.
         struct FragmentOutput {
             @location(0) albedo : vec4<f32>,
             @location(1) normal : vec4<f32>,
+            @location(2) emission : vec4<f32>,
             @builtin(frag_depth) depth : f32,
         };
 
@@ -239,6 +244,9 @@ export const shaderMeta = new ShaderMeta(
             out.albedo = vec4<f32>(color.rgb, 1.0);
             // World normal packed into [0,1]; a = 1 marks "surface present".
             out.normal = vec4<f32>(nWorld * 0.5 + 0.5, 1.0);
+            // Per-pixel self-emission (surface property). SAME formula as
+            // emission_of() in voxelize.shader.ts: pure occluder material.x==0 → 0.
+            out.emission = vec4<f32>(color.rgb * abs(uMaterial[instance_index].x), 1.0);
             // Reverse-Z: viewProj already maps NEAR→1, FAR→0 to match the pipeline's
             // greater-equal/clear-0 depth compare. See ResizeSystem.viewProjMatrix.
             out.depth = clip.z / clip.w;

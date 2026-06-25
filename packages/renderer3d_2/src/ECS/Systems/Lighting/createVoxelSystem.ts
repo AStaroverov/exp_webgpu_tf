@@ -60,16 +60,19 @@ export function createVoxelSystem({
   depthTexture,
   normalTexture,
   albedoTexture,
+  emissionTexture,
   grid = DEFAULT_VOXEL_GRID,
 }: {
   device: GPUDevice;
   canvas: HTMLCanvasElement;
   sceneInstances: SceneInstances;
-  // G-buffer (the SDF draw pass output): reverse-Z depth + world normal + albedo. The cone
-  // pass reads depth + normal to reconstruct P + N; albedo is held for a future layer.
+  // G-buffer (the SDF draw pass output): reverse-Z depth + world normal + albedo + per-pixel
+  // self-emission. The cone pass reads depth + normal to reconstruct P + N; the composite
+  // reads albedo + emission.
   depthTexture: GPUTexture;
   normalTexture: GPUTexture;
   albedoTexture: GPUTexture;
+  emissionTexture: GPUTexture;
   grid?: VoxelGridConfig;
 }) {
   const params: VoxelParams = { ambient: 0.12 };
@@ -99,6 +102,7 @@ export function createVoxelSystem({
   let gDepth = depthTexture;
   let gNormal = normalTexture;
   let gAlbedo = albedoTexture;
+  let gEmission = emissionTexture;
 
   // Fixed world box (min corner + extent), derived from the initial config. cellSize is
   // the only thing that varies; dims follow from it.
@@ -224,7 +228,6 @@ export function createVoxelSystem({
   const compParams2Arr = getTypeTypedArray(compositeMeta.uniforms.params2.type); // Float32Array(4)
   const compSunArr = getTypeTypedArray(compositeMeta.uniforms.sun.type); // Float32Array(4)
   const compSunColorArr = getTypeTypedArray(compositeMeta.uniforms.sunColor.type); // Float32Array(4)
-  const compInvArr = getTypeTypedArray(compositeMeta.uniforms.invViewProj.type); // Float32Array(16)
   // Mip scratch: .xyz = destination mip dims (re-uploaded per level).
   const mipArr = getTypeTypedArray(mipMeta.uniforms.mip.type); // Int32Array(4)
 
@@ -318,9 +321,10 @@ export function createVoxelSystem({
     });
   }
 
-  // (Re)build the Layer-4 composite bind group: uniforms + the G-buffer (albedo/normal/depth)
-  // + the cone output (indirect+AO) + the voxelEmission 3D view (self-emission). Rebuilt when
-  // the voxelEmission view changes (grid rebuild) or the G-buffer / coneOutput change (resize).
+  // (Re)build the Layer-4 composite bind group: uniforms + the G-buffer (albedo/normal/
+  // emission) + the cone output (indirect+AO). Self-emission is now a per-pixel G-buffer
+  // target (surface property), so the composite no longer needs depth/invViewProj/grid or
+  // the voxelEmission 3D view. Rebuilt when the G-buffer / coneOutput change (resize).
   function buildCompositeGroup() {
     compositeGroup0 = device.createBindGroup({
       layout: compositePipeline.getBindGroupLayout(0),
@@ -329,16 +333,12 @@ export function createVoxelSystem({
         compositeShader.uniforms.params2.getBindGroupEntry(device),
         compositeShader.uniforms.sun.getBindGroupEntry(device),
         compositeShader.uniforms.sunColor.getBindGroupEntry(device),
-        compositeShader.uniforms.invViewProj.getBindGroupEntry(device),
-        compositeShader.uniforms.gridOrigin.getBindGroupEntry(device),
-        compositeShader.uniforms.gridDims.getBindGroupEntry(device),
         { binding: compositeMeta.uniforms.albedoTex.binding, resource: gAlbedo.createView() },
         { binding: compositeMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
-        { binding: compositeMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
         { binding: compositeMeta.uniforms.coneTex.binding, resource: coneOutput.createView() },
         {
-          binding: compositeMeta.uniforms.voxelEmission.binding,
-          resource: textures.voxelEmission.createView({ dimension: "3d" }),
+          binding: compositeMeta.uniforms.emissionTex.binding,
+          resource: gEmission.createView(),
         },
       ],
     });
@@ -486,12 +486,7 @@ export function createVoxelSystem({
     device.queue.writeBuffer(giShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
     device.queue.writeBuffer(coneShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
     device.queue.writeBuffer(coneShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
-    device.queue.writeBuffer(
-      compositeShader.uniforms.gridOrigin.getGPUBuffer(device),
-      0,
-      originArr,
-    );
-    device.queue.writeBuffer(compositeShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
+    // Composite no longer reads grid uniforms (self-emission is a per-pixel G-buffer target).
 
     dispatchX = Math.ceil(dimX / WORKGROUP);
     dispatchY = Math.ceil(dimY / WORKGROUP);
@@ -743,14 +738,6 @@ export function createVoxelSystem({
       compSunColorArr,
     );
 
-    mat4.invert(invViewProj, viewProjMatrix);
-    compInvArr.set(invViewProj as Float32Array);
-    device.queue.writeBuffer(
-      compositeShader.uniforms.invViewProj.getGPUBuffer(device),
-      0,
-      compInvArr,
-    );
-
     const pass = encoder.beginRenderPass({
       colorAttachments: [
         {
@@ -787,10 +774,16 @@ export function createVoxelSystem({
 
   // Canvas resized: rebind the (new) G-buffer textures, recreate the canvas-sized debug +
   // cone outputs + the GI accumulation textures, and rebuild the cone bind group.
-  function recreate(newDepth: GPUTexture, newNormal: GPUTexture, newAlbedo: GPUTexture) {
+  function recreate(
+    newDepth: GPUTexture,
+    newNormal: GPUTexture,
+    newAlbedo: GPUTexture,
+    newEmission: GPUTexture,
+  ) {
     gDepth = newDepth;
     gNormal = newNormal;
     gAlbedo = newAlbedo;
+    gEmission = newEmission;
     outputTexture.destroy();
     outputTexture = createOutput();
     coneOutput.destroy();
