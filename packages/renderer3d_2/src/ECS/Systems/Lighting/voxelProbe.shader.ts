@@ -3,17 +3,17 @@ import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
 import { wgsl } from "../../../WGSL/wgsl.ts";
 import { voxelTrace } from "./voxelTrace.wgsl.ts";
 
-// Cascade-0 directions per side (octahedral DIR_W×DIR_W tile per probe → DIR_W² directions
-// over the sphere). The probe atlas has size (probesX*DIR_W)×(probesY*DIR_W); cascade c
-// (Stage 2.3b) keeps that size constant (probes/2^c per side × DIR_W*2^c dirs per side).
-export const CASCADE_DIR_W = 8;
+// Base directions per side for cascade 0 (octahedral DIR_W0×DIR_W0 over the sphere).
+// Cascade c has DIR_W0*2^c directions per side and probes/2^c per side, so every cascade
+// atlas is the SAME size: (probesX0*DIR_W0) × (probesY0*DIR_W0). Small base = cheap near
+// field; the merge brings far-field angular detail.
+export const CASCADE_DIR_W = 4;
 
-// Stage 2.3a — directional probe gather. Renders the probe ATLAS: one texel per
-// (probe, direction). Each probe is placed on the visible surface from the G-buffer
-// (anchor pixel → depth/normal), and each direction is a DETERMINISTIC octahedral ray
-// voxel-DDA-traced over the cascade interval. The atlas texel stores rgb = directional
-// radiance, a = validity (0 = no surface under the probe). The hemisphere integration to
-// irradiance happens in the separate integrate pass.
+// Stage 2.3b — directional probe gather, per cascade. Renders ONE cascade's atlas: one
+// texel per (probe, direction). The cascade's spacing / dirs-per-side / interval come from
+// the per-cascade uniform uCascade (a distinct buffer per cascade — see createVoxelSystem,
+// which avoids the writeBuffer-overwrite hazard). Each direction is voxel-DDA-traced over
+// the cascade interval; the texel stores rgb = interval radiance, a = visibility.
 
 const sampled3d = (name: string) =>
   new VariableMeta(name, VariableKind.Texture, `texture_3d<f32>`, {
@@ -23,10 +23,12 @@ const sampled3d = (name: string) =>
 
 export const shaderMeta = new ShaderMeta(
   {
-    // .x = probe spacing (px), .y = maxDist (interval length), .z = normalBias, .w = sky.
+    // .x = normalBias, .y = sky intensity (top-cascade miss).
     params: new VariableMeta("uParams", VariableKind.Uniform, `vec4<f32>`),
-    // .x = screen width, .y = screen height, .z = interval start (world).
+    // .x = screen width, .y = screen height.
     params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
+    // Per-cascade: [0] = (spacing, dirsPerSide, intervalStart, intervalEnd), [1].x = isTop.
+    cascade: new VariableMeta("uCascade", VariableKind.Uniform, `array<vec4<f32>, 2>`),
     invViewProj: new VariableMeta("uInvViewProj", VariableKind.Uniform, `mat4x4<f32>`),
     gridOrigin: new VariableMeta("uGridOrigin", VariableKind.Uniform, `vec4<f32>`),
     gridDims: new VariableMeta("uGridDims", VariableKind.Uniform, `vec4<i32>`),
@@ -42,8 +44,6 @@ export const shaderMeta = new ShaderMeta(
   {},
   // language=WGSL
   wgsl /* wgsl */ `
-const DIR_W: i32 = ${CASCADE_DIR_W};
-
 const POSITION = array<vec2f, 6>(
   vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0),
   vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(-1.0, 1.0)
@@ -62,19 +62,24 @@ ${voxelTrace}
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-  // Atlas texel -> (probe, direction): probe = texel / DIR_W, dir = texel % DIR_W.
-  let texel = vec2<i32>(floor(input.position.xy));
-  let probeCoord = texel / DIR_W;
-  let dirCoord = texel - probeCoord * DIR_W;
+  let spacing = uCascade[0].x;
+  let dirsSide = i32(uCascade[0].y);
+  let intStart = uCascade[0].z;
+  let intEnd = uCascade[0].w;
+  let isTop = uCascade[1].x > 0.5;
 
-  let spacing = uParams.x;
+  // Atlas texel -> (probe, direction) for THIS cascade's dirsSide.
+  let texel = vec2<i32>(floor(input.position.xy));
+  let probeCoord = texel / dirsSide;
+  let dirCoord = texel - probeCoord * dirsSide;
+
   let screen = uParams2.xy;
   let anchorPx = min((vec2<f32>(probeCoord) + vec2<f32>(0.5)) * spacing, screen - vec2<f32>(1.0));
   let px = vec2<i32>(anchorPx);
 
   let n = textureLoad(normalTex, px, 0);
   if (n.a < 0.5) {
-    return vec4f(0.0, 0.0, 0.0, 0.0);
+    return vec4f(0.0, 0.0, 0.0, 0.0); // no surface under this probe
   }
   let N = normalize(n.rgb * 2.0 - 1.0);
 
@@ -84,17 +89,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let worldPos = unproject(ndc);
 
   let cellSize = uGridOrigin.w;
-  // Octahedral direction for this atlas cell (full sphere; cosine weighting is applied
-  // later in the integrate pass).
-  let e = (vec2<f32>(dirCoord) + vec2<f32>(0.5)) / f32(DIR_W) * 2.0 - 1.0;
+  let e = (vec2<f32>(dirCoord) + vec2<f32>(0.5)) / f32(dirsSide) * 2.0 - 1.0;
   let dir = oct_decode(e);
+  let origin = worldPos + N * (cellSize * 1.5 + uParams.x);
 
-  // Trace the cascade interval [intervalStart, intervalStart + maxDist] along dir.
-  let intervalStart = uParams2.z;
-  let origin = worldPos + N * (cellSize * 1.5 + uParams.z) + dir * intervalStart;
-  let radiance = trace_radiance(origin, dir, uParams.y, uParams.w);
-
-  return vec4f(radiance, 1.0);
+  return trace_interval(origin, dir, intStart, intEnd, isTop, uParams.y);
 }
 `,
 );

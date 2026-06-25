@@ -133,4 +133,22 @@ fn trace_radiance(origin: vec3<f32>, dir: vec3<f32>, maxDist: f32, sky: f32) -> 
   }
   return vec3<f32>(sky);
 }
+
+// Radiance Cascades interval trace over the shell [tStart, tEnd] along dir. Returns
+// rgb = radiance gathered in the interval, a = visibility (1 = the interval was clear, so
+// the FARTHER cascade may contribute; 0 = an occluder was hit, blocking the far light).
+//   - hit an opaque voxel in the interval → (its emission, 0)
+//   - reached the interval end clear → (0, 1), or (sky, 1) for the top cascade
+fn trace_interval(
+  origin: vec3<f32>, dir: vec3<f32>, tStart: f32, tEnd: f32, isTop: bool, sky: f32,
+) -> vec4<f32> {
+  let h = dda(origin + dir * tStart, dir, tEnd - tStart);
+  if (h.hit) {
+    return vec4<f32>(textureLoad(voxelEmission, h.coord, 0).rgb, 0.0);
+  }
+  if (isTop) {
+    return vec4<f32>(vec3<f32>(sky), 1.0);
+  }
+  return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+}
 `;

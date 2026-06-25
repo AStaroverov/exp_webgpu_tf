@@ -7,6 +7,7 @@ import { shaderMeta as debugMeta } from "./voxelDebug.shader.ts";
 import { shaderMeta as giMeta } from "./voxelGi.shader.ts";
 import { shaderMeta as probeMeta, CASCADE_DIR_W } from "./voxelProbe.shader.ts";
 import { shaderMeta as integrateMeta } from "./voxelIntegrate.shader.ts";
+import { shaderMeta as mergeMeta } from "./voxelMerge.shader.ts";
 import { shaderMeta as resolveMeta } from "./voxelResolve.shader.ts";
 import {
   createVoxelTextures,
@@ -31,15 +32,19 @@ export type VoxelGiParams = {
   accumAlpha: number; // temporal EMA blend (lower = smoother/more denoise; 1 = off)
 };
 
-// Stage 2.2 Radiance-Cascades (cascade 0) params. Probes gather at a sparse screen grid;
-// the resolve composites them at full resolution.
+// Stage 2.3 Radiance-Cascades params. Probes gather at a sparse screen grid across a
+// cascade hierarchy (each level: ×2 spacing, ×2 dirs/side, ×4 interval length); the merge
+// folds far cascades into cascade 0, the resolve composites at full resolution.
 export type VoxelRcParams = {
   ambient: number;
-  maxDist: number; // probe ray reach (cascade-0 interval length)
+  cascadeCount: number; // number of cascades (N)
+  baseInterval: number; // cascade-0 interval length (world units); len_c = base*4^c
   normalBias: number;
   skyIntensity: number;
   giStrength: number;
 };
+
+const MAX_CASCADES = 6;
 
 // Voxel scene system (Phase 1): voxelize() fills the 3D albedo/emission textures from the
 // SDF scene each frame; debug() raymarches them into a canvas-sized output texture for
@@ -87,12 +92,13 @@ export function createVoxelSystem({
 
   const rcParams: VoxelRcParams = {
     ambient: 0.08,
-    maxDist: 24,
+    cascadeCount: 4,
+    baseInterval: 2,
     normalBias: 0,
     skyIntensity: 0,
     giStrength: 1,
   };
-  let probeSpacing = 8; // screen px between probes
+  let probeSpacing = 8; // screen px between cascade-0 probes
 
   // Fixed world box (min corner + extent), derived from the initial config. cellSize is
   // the only thing that varies; dims follow from it.
@@ -126,6 +132,11 @@ export function createVoxelSystem({
   });
   const integrateShader = new GPUShader(integrateMeta);
   const integratePipeline = integrateShader.getRenderPipeline(device, "vs_main", "fs_main", {
+    targetFormat: "rgba16float",
+    withBlending: false,
+  });
+  const mergeShader = new GPUShader(mergeMeta);
+  const mergePipeline = mergeShader.getRenderPipeline(device, "vs_main", "fs_main", {
     targetFormat: "rgba16float",
     withBlending: false,
   });
@@ -187,6 +198,9 @@ export function createVoxelSystem({
   const resolveParamsArr = getTypeTypedArray(resolveMeta.uniforms.params.type); // Float32Array(4)
   const resolveParams2Arr = getTypeTypedArray(resolveMeta.uniforms.params2.type); // Float32Array(4)
   const resolveInvArr = getTypeTypedArray(resolveMeta.uniforms.invViewProj.type); // Float32Array(16)
+  // Per-cascade / per-merge uniform contents (array<vec4<f32>,2> = 8 floats each).
+  const cascadeUniformArr = new Float32Array(8);
+  const mergeUniformArr = new Float32Array(8);
 
   // --- Grid state (rebuilt by buildGrid). ---
   let cellSize = grid.cellSize;
@@ -258,8 +272,9 @@ export function createVoxelSystem({
       format: "rgba16float",
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
-  // Directional probe atlas: (probesX*DIR_W) × (probesY*DIR_W), one texel per (probe,dir).
-  const createCascadeAtlas = () => {
+  // All cascade atlases share the size (probesX0*DIR_W) × (probesY0*DIR_W): cascade c uses
+  // probesX0/2^c probes × DIR_W*2^c dirs per side, keeping the product constant.
+  const createAtlas = () => {
     const d = probeDims();
     return device.createTexture({
       size: [d.x * CASCADE_DIR_W, d.y * CASCADE_DIR_W, 1],
@@ -267,36 +282,94 @@ export function createVoxelSystem({
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
   };
+  // Per-cascade geometry. probesX_c = floor(probesX0/2^c) so probesX_c*dirsSide_c never
+  // exceeds the atlas width (ceil rounding at coarse spacings would otherwise overflow).
+  const cascadeInfo = (c: number) => {
+    const d = probeDims();
+    const f = 1 << c;
+    return {
+      spacing: probeSpacing * f,
+      dirsSide: CASCADE_DIR_W * f,
+      probesX: Math.max(1, Math.floor(d.x / f)),
+      probesY: Math.max(1, Math.floor(d.y / f)),
+    };
+  };
+
   let probeIrr = createProbeTex();
   let rcOutput = createRcOutput();
-  let cascadeAtlas = createCascadeAtlas();
-  let probeGroup0: GPUBindGroup;
+  let rawAtlas: GPUTexture[] = []; // per cascade
+  let mergedAtlas: GPUTexture[] = []; // index 0..N-2 (top needs no merge target)
+  let cascadeBuf: GPUBuffer[] = []; // per-cascade probe uniform (uCascade)
+  let mergeBuf: GPUBuffer[] = []; // per-merge uniform (uMerge), index 0..N-2
+  let probeGroup: GPUBindGroup[] = [];
+  let mergeGroup: GPUBindGroup[] = []; // index 0..N-2
   let integrateGroup0: GPUBindGroup;
   let resolveGroup0: GPUBindGroup;
 
-  // (Re)build the probe + resolve bind groups from the current voxel textures + probeIrr.
+  // (Re)allocate cascade atlases + per-cascade uniform buffers for the current N / size.
+  function allocCascades() {
+    for (const t of rawAtlas) t.destroy();
+    for (const t of mergedAtlas) t.destroy();
+    for (const b of cascadeBuf) b.destroy();
+    for (const b of mergeBuf) b.destroy();
+    const N = Math.max(1, Math.min(MAX_CASCADES, Math.round(rcParams.cascadeCount)));
+    rawAtlas = Array.from({ length: N }, () => createAtlas());
+    mergedAtlas = Array.from({ length: Math.max(0, N - 1) }, () => createAtlas());
+    cascadeBuf = Array.from({ length: N }, () =>
+      device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
+    );
+    mergeBuf = Array.from({ length: Math.max(0, N - 1) }, () =>
+      device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
+    );
+  }
+  allocCascades();
+
+  // (Re)build the probe (per cascade), merge (per level), integrate and resolve bind
+  // groups from the current voxel textures + G-buffer + cascade atlases.
   function buildRcGroups() {
-    probeGroup0 = device.createBindGroup({
-      layout: probePipeline.getBindGroupLayout(0),
-      entries: [
-        probeShader.uniforms.params.getBindGroupEntry(device),
-        probeShader.uniforms.params2.getBindGroupEntry(device),
-        probeShader.uniforms.invViewProj.getBindGroupEntry(device),
-        probeShader.uniforms.gridOrigin.getBindGroupEntry(device),
-        probeShader.uniforms.gridDims.getBindGroupEntry(device),
-        { binding: probeMeta.uniforms.voxelAlbedo.binding, resource: textures.voxelAlbedo.createView({ dimension: "3d" }) },
-        { binding: probeMeta.uniforms.voxelEmission.binding, resource: textures.voxelEmission.createView({ dimension: "3d" }) },
-        { binding: probeMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
-        { binding: probeMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
-      ],
+    const N = rawAtlas.length;
+
+    // Probe groups: shared bindings + the per-cascade uCascade buffer.
+    probeGroup = rawAtlas.map((_, c) =>
+      device.createBindGroup({
+        layout: probePipeline.getBindGroupLayout(0),
+        entries: [
+          probeShader.uniforms.params.getBindGroupEntry(device),
+          probeShader.uniforms.params2.getBindGroupEntry(device),
+          { binding: probeMeta.uniforms.cascade.binding, resource: { buffer: cascadeBuf[c] } },
+          probeShader.uniforms.invViewProj.getBindGroupEntry(device),
+          probeShader.uniforms.gridOrigin.getBindGroupEntry(device),
+          probeShader.uniforms.gridDims.getBindGroupEntry(device),
+          { binding: probeMeta.uniforms.voxelAlbedo.binding, resource: textures.voxelAlbedo.createView({ dimension: "3d" }) },
+          { binding: probeMeta.uniforms.voxelEmission.binding, resource: textures.voxelEmission.createView({ dimension: "3d" }) },
+          { binding: probeMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
+          { binding: probeMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
+        ],
+      }),
+    );
+
+    // Merge groups (c = 0..N-2): raw_c + upper (merged_{c+1}, or raw_{N-1} for the top one).
+    mergeGroup = mergedAtlas.map((_, c) => {
+      const upper = c + 1 === N - 1 ? rawAtlas[N - 1] : mergedAtlas[c + 1];
+      return device.createBindGroup({
+        layout: mergePipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: mergeMeta.uniforms.merge.binding, resource: { buffer: mergeBuf[c] } },
+          { binding: mergeMeta.uniforms.rawTex.binding, resource: rawAtlas[c].createView() },
+          { binding: mergeMeta.uniforms.upperTex.binding, resource: upper.createView() },
+        ],
+      });
     });
+
+    // Integrate reads cascade-0 (merged if N>1, else raw).
+    const cascade0 = N > 1 ? mergedAtlas[0] : rawAtlas[0];
     integrateGroup0 = device.createBindGroup({
       layout: integratePipeline.getBindGroupLayout(0),
       entries: [
         integrateShader.uniforms.params.getBindGroupEntry(device),
         integrateShader.uniforms.params2.getBindGroupEntry(device),
         { binding: integrateMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
-        { binding: integrateMeta.uniforms.cascadeAtlas.binding, resource: cascadeAtlas.createView() },
+        { binding: integrateMeta.uniforms.cascadeAtlas.binding, resource: cascade0.createView() },
       ],
     });
     resolveGroup0 = device.createBindGroup({
@@ -492,32 +565,58 @@ export function createVoxelSystem({
     giWrite = read;
   }
 
-  // RC (Stage 2.3a — directional, single cascade): probe gather -> directional atlas,
-  // integrate (cosine-weighted) -> probeIrr, full-res resolve -> rcOutput.
+  // RC (Stage 2.3b — cascade hierarchy + merge): N probe passes -> rawAtlas[c]; merge
+  // top-down -> mergedAtlas[c]; integrate cascade-0 -> probeIrr; full-res resolve -> rcOutput.
   function rc(encoder: GPUCommandEncoder) {
     mat4.invert(invViewProj, viewProjMatrix);
+    const N = rawAtlas.length;
 
-    // Probe pass uniforms: params = (spacing, maxDist, normalBias, sky).
-    probeParamsArr[0] = probeSpacing;
-    probeParamsArr[1] = rcParams.maxDist;
-    probeParamsArr[2] = rcParams.normalBias;
-    probeParamsArr[3] = rcParams.skyIntensity;
+    // Shared probe uniforms: params = (normalBias, sky), params2 = (screenW, screenH).
+    probeParamsArr[0] = rcParams.normalBias;
+    probeParamsArr[1] = rcParams.skyIntensity;
     device.queue.writeBuffer(probeShader.uniforms.params.getGPUBuffer(device), 0, probeParamsArr);
     probeParams2Arr[0] = canvas.width;
     probeParams2Arr[1] = canvas.height;
-    probeParams2Arr[2] = 0; // interval start (cascade 0)
     device.queue.writeBuffer(probeShader.uniforms.params2.getGPUBuffer(device), 0, probeParams2Arr);
     probeInvArr.set(invViewProj as Float32Array);
     device.queue.writeBuffer(probeShader.uniforms.invViewProj.getGPUBuffer(device), 0, probeInvArr);
 
-    // Integrate pass uniforms.
+    // Per-cascade uniforms (distinct buffers → safe across passes) + interval radii.
+    let r = 0;
+    for (let c = 0; c < N; c++) {
+      const info = cascadeInfo(c);
+      const len = rcParams.baseInterval * Math.pow(4, c);
+      const isTop = c === N - 1;
+      cascadeUniformArr[0] = info.spacing;
+      cascadeUniformArr[1] = info.dirsSide;
+      cascadeUniformArr[2] = r;
+      cascadeUniformArr[3] = isTop ? 1e6 : r + len;
+      cascadeUniformArr[4] = isTop ? 1 : 0;
+      device.queue.writeBuffer(cascadeBuf[c], 0, cascadeUniformArr);
+      r += len;
+    }
+
+    // Per-merge uniforms.
+    for (let c = 0; c < N - 1; c++) {
+      const info = cascadeInfo(c);
+      const up = cascadeInfo(c + 1);
+      mergeUniformArr[0] = info.spacing;
+      mergeUniformArr[1] = info.dirsSide;
+      mergeUniformArr[2] = up.spacing;
+      mergeUniformArr[3] = up.dirsSide;
+      mergeUniformArr[4] = canvas.width;
+      mergeUniformArr[5] = canvas.height;
+      mergeUniformArr[6] = up.probesX;
+      mergeUniformArr[7] = up.probesY;
+      device.queue.writeBuffer(mergeBuf[c], 0, mergeUniformArr);
+    }
+
+    // Integrate + resolve uniforms.
     integrateParamsArr[0] = probeSpacing;
     device.queue.writeBuffer(integrateShader.uniforms.params.getGPUBuffer(device), 0, integrateParamsArr);
     integrateParams2Arr[0] = canvas.width;
     integrateParams2Arr[1] = canvas.height;
     device.queue.writeBuffer(integrateShader.uniforms.params2.getGPUBuffer(device), 0, integrateParams2Arr);
-
-    // Resolve pass uniforms.
     resolveParamsArr[0] = rcParams.ambient;
     resolveParamsArr[1] = rcParams.giStrength;
     device.queue.writeBuffer(resolveShader.uniforms.params.getGPUBuffer(device), 0, resolveParamsArr);
@@ -526,38 +625,28 @@ export function createVoxelSystem({
     resolveInvArr.set(invViewProj as Float32Array);
     device.queue.writeBuffer(resolveShader.uniforms.invViewProj.getGPUBuffer(device), 0, resolveInvArr);
 
-    // 1. Probe gather -> directional atlas.
-    const probePass = encoder.beginRenderPass({
-      colorAttachments: [
-        { view: cascadeAtlas.createView(), clearValue: [0, 0, 0, 0], loadOp: "clear", storeOp: "store" },
-      ],
-    });
-    probePass.setPipeline(probePipeline);
-    probePass.setBindGroup(0, probeGroup0);
-    probePass.draw(6, 1, 0, 0);
-    probePass.end();
+    const fullPass = (view: GPUTextureView, pipeline: GPURenderPipeline, group: GPUBindGroup) => {
+      const pass = encoder.beginRenderPass({
+        colorAttachments: [{ view, clearValue: [0, 0, 0, 0], loadOp: "clear", storeOp: "store" }],
+      });
+      pass.setPipeline(pipeline);
+      pass.setBindGroup(0, group);
+      pass.draw(6, 1, 0, 0);
+      pass.end();
+    };
 
-    // 2. Integrate atlas tiles -> probeIrr.
-    const integratePass = encoder.beginRenderPass({
-      colorAttachments: [
-        { view: probeIrr.createView(), clearValue: [0, 0, 0, 0], loadOp: "clear", storeOp: "store" },
-      ],
-    });
-    integratePass.setPipeline(integratePipeline);
-    integratePass.setBindGroup(0, integrateGroup0);
-    integratePass.draw(6, 1, 0, 0);
-    integratePass.end();
-
-    // 3. Full-res resolve -> rcOutput.
-    const resolvePass = encoder.beginRenderPass({
-      colorAttachments: [
-        { view: rcOutput.createView(), clearValue: [0, 0, 0, 1], loadOp: "clear", storeOp: "store" },
-      ],
-    });
-    resolvePass.setPipeline(resolvePipeline);
-    resolvePass.setBindGroup(0, resolveGroup0);
-    resolvePass.draw(6, 1, 0, 0);
-    resolvePass.end();
+    // 1. Probe gather per cascade -> rawAtlas[c].
+    for (let c = 0; c < N; c++) {
+      fullPass(rawAtlas[c].createView(), probePipeline, probeGroup[c]);
+    }
+    // 2. Merge top-down -> mergedAtlas[c] (reads mergedAtlas[c+1], already written).
+    for (let c = N - 2; c >= 0; c--) {
+      fullPass(mergedAtlas[c].createView(), mergePipeline, mergeGroup[c]);
+    }
+    // 3. Integrate cascade-0 tiles -> probeIrr.
+    fullPass(probeIrr.createView(), integratePipeline, integrateGroup0);
+    // 4. Full-res resolve -> rcOutput.
+    fullPass(rcOutput.createView(), resolvePipeline, resolveGroup0);
   }
 
   // Change the voxel size (graininess). Destroys the old textures, rebuilds the grid.
@@ -590,18 +679,23 @@ export function createVoxelSystem({
     probeIrr = createProbeTex();
     rcOutput.destroy();
     rcOutput = createRcOutput();
-    cascadeAtlas.destroy();
-    cascadeAtlas = createCascadeAtlas();
+    allocCascades();
     buildRcGroups();
   }
 
-  // Change the probe spacing (px between probes). Rebuilds probeIrr + atlas + RC groups.
+  // Change the probe spacing (cascade-0 px). Rebuilds probeIrr + cascade atlases + groups.
   function setProbeSpacing(spacing: number) {
     probeSpacing = Math.max(1, Math.round(spacing));
     probeIrr.destroy();
     probeIrr = createProbeTex();
-    cascadeAtlas.destroy();
-    cascadeAtlas = createCascadeAtlas();
+    allocCascades();
+    buildRcGroups();
+  }
+
+  // Change the number of cascades. Reallocates atlases/buffers and rebinds.
+  function setCascadeCount(n: number) {
+    rcParams.cascadeCount = Math.max(1, Math.min(MAX_CASCADES, Math.round(n)));
+    allocCascades();
     buildRcGroups();
   }
 
@@ -623,6 +717,7 @@ export function createVoxelSystem({
     setCellSize,
     setGiScale,
     setProbeSpacing,
+    setCascadeCount,
     get giScale() {
       return giScale;
     },

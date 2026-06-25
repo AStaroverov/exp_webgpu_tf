@@ -344,7 +344,11 @@ async function main() {
     .add(rcSpacingCfg, "spacing", [4, 8, 16, 32])
     .name("probe spacing px")
     .onChange((s: number) => voxel.setProbeSpacing(s));
-  rcFolder.add(voxel.rcParams, "maxDist", 1, 64, 0.5).name("ray reach");
+  rcFolder
+    .add(voxel.rcParams, "cascadeCount", 1, 6, 1)
+    .name("cascades")
+    .onChange((n: number) => voxel.setCascadeCount(n));
+  rcFolder.add(voxel.rcParams, "baseInterval", 0.5, 8, 0.25).name("base interval");
   rcFolder.add(voxel.rcParams, "giStrength", 0, 4, 0.05).name("GI strength");
   rcFolder.add(voxel.rcParams, "ambient", 0, 1, 0.01).name("ambient");
   rcFolder.add(voxel.rcParams, "skyIntensity", 0, 2, 0.01).name("sky on miss");
