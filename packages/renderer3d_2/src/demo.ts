@@ -274,6 +274,9 @@ async function main() {
     device,
     canvas,
     sceneInstances: shapeSystem.sceneInstances,
+    depthTexture: frame.depthTexture,
+    normalTexture: frame.normalTexture,
+    albedoTexture: frame.renderTexture,
   });
 
   // Present-source selector: which texture reaches the screen.
@@ -282,21 +285,29 @@ async function main() {
   //                (voxel.outputTexture, debug mode 1).
   //   "lod"      — the voxel debug raymarch sampling the radiance mip pyramid at a chosen
   //                LOD (voxel.outputTexture, debug mode 2); LOD 0 sharp, higher = blurred.
+  //   "cone"     — VCT cone GI: 6-cone diffuse hemisphere gather through the radiance
+  //                pyramid (voxel.coneOutputTexture); indirect only (no albedo/direct yet).
   //   "gi"       — brute-force voxel GI reference (voxel.giOutputTexture).
   //   "raw"      — the unlit albedo G-buffer (frame.renderTexture).
-  // Keys: 1 = voxel, 5 = radiance, 6 = lod, 2 = raw, 3 = gi (also a GUI dropdown below).
+  // Keys: 1 = voxel, 5 = radiance, 6 = lod, 7 = cone, 3 = gi, 2 = raw (also a GUI dropdown).
   // Default to "voxel" (cheap) so the page never opens straight into a heavy GI pass.
-  const view = { presentSource: "voxel" as "voxel" | "raw" | "gi" | "radiance" | "lod" };
+  const view = {
+    presentSource: "voxel" as "voxel" | "raw" | "gi" | "radiance" | "lod" | "cone",
+  };
   window.addEventListener("keydown", (e) => {
     if (e.key === "1") view.presentSource = "voxel";
     else if (e.key === "2") view.presentSource = "raw";
     else if (e.key === "3") view.presentSource = "gi";
     else if (e.key === "5") view.presentSource = "radiance";
     else if (e.key === "6") view.presentSource = "lod";
+    else if (e.key === "7") view.presentSource = "cone";
   });
 
   const gui = new GUI({ title: "Voxel" });
-  gui.add(view, "presentSource", ["voxel", "radiance", "lod", "gi", "raw"]).name("present (1/5/6/3/2)").listen();
+  gui
+    .add(view, "presentSource", ["voxel", "radiance", "lod", "cone", "gi", "raw"])
+    .name("present (1/5/6/7/3/2)")
+    .listen();
 
   // Debug LOD for the "lod" present source: which mip of the radiance pyramid to sample.
   const lodCfg = { lod: 0 };
@@ -343,6 +354,13 @@ async function main() {
   // Temporal denoise: lower = smoother (averages more frames), 1 = off. Auto-resets the
   // frame the camera moves (no reprojection yet → history would smear).
   giFolder.add(voxel.giParams, "accumAlpha", 0.02, 1, 0.01).name("temporal α");
+
+  // Cone GI: the 6-cone diffuse hemisphere trace. Read live each frame by cone().
+  const coneFolder = gui.addFolder("Cone GI");
+  coneFolder.add(voxel.coneParams, "aperture", 0.1, 1.5, 0.01).name("aperture (tan)");
+  coneFolder.add(voxel.coneParams, "maxDist", 1, 64, 0.5).name("cone reach");
+  coneFolder.add(voxel.coneParams, "normalBias", 0, 2, 0.01).name("normal bias");
+  coneFolder.add(voxel.coneParams, "giStrength", 0, 4, 0.05).name("GI strength");
 
   // Live emitter controls (only the "emitter" scene). Position writes the transform
   // (re-uploaded every frame); radius drives BOTH the sphere SDF (Shape.setSphere$)
@@ -426,8 +444,9 @@ async function main() {
         { ...frame, canvas, device, background: [0.043, 0.051, 0.07, 1], getPixelRatio },
         ({ passEncoder }) => shapeSystem.drawShapes(passEncoder),
       );
-      // Voxel: recreate its canvas-sized outputs (debug + GI accumulation).
-      voxel.recreate();
+      // Voxel: rebind the new G-buffer + recreate its canvas-sized outputs (debug + cone +
+      // GI accumulation).
+      voxel.recreate(frame.depthTexture, frame.normalTexture, frame.renderTexture);
     }
 
     execTransformSystem();
@@ -438,8 +457,11 @@ async function main() {
     // sphere-trace (up to 96 steps) is fill-bound: cost scales with on-screen coverage,
     // so it spikes on zoom-in. "voxel"/"gi" don't read the G-buffer (only the voxel 3D
     // textures + scene buffers, which prepare() already uploaded) — they use the voxel
-    // DDA instead — so the SDF pass runs ONLY for the raw view.
-    if (view.presentSource === "raw") frameTick(encoder, delta);
+    // DDA instead. "raw" and "cone" both NEED the SDF pass: raw presents it, cone reads
+    // its depth + normal G-buffer to reconstruct P + N for the trace.
+    if (view.presentSource === "raw" || view.presentSource === "cone") {
+      frameTick(encoder, delta);
+    }
     // Voxelize the SDF scene into the 3D textures, then run the selected voxel pass.
     voxel.voxelize(encoder);
     if (view.presentSource === "voxel") voxel.debug(encoder, 0);
@@ -448,6 +470,10 @@ async function main() {
       // Build the radiance mip pyramid (must follow voxelize), then sample the chosen LOD.
       voxel.mips(encoder);
       voxel.debug(encoder, 2, lodCfg.lod);
+    } else if (view.presentSource === "cone") {
+      // Build the radiance pyramid (must follow voxelize), then trace the diffuse cones.
+      voxel.mips(encoder);
+      voxel.cone(encoder);
     } else if (view.presentSource === "gi") voxel.gi(encoder, frameIndex);
     // Present the chosen source.
     const presented =
@@ -455,9 +481,11 @@ async function main() {
       view.presentSource === "radiance" ||
       view.presentSource === "lod"
         ? voxel.outputTexture
-        : view.presentSource === "gi"
-          ? voxel.giOutputTexture
-          : frame.renderTexture;
+        : view.presentSource === "cone"
+          ? voxel.coneOutputTexture
+          : view.presentSource === "gi"
+            ? voxel.giOutputTexture
+            : frame.renderTexture;
     present(encoder, presented);
     device.queue.submit([encoder.finish()]);
 

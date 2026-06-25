@@ -5,6 +5,7 @@ import { viewProjMatrix } from "../ResizeSystem.ts";
 import { shaderMeta as voxelizeMeta, WORKGROUP } from "./voxelize.shader.ts";
 import { shaderMeta as debugMeta } from "./voxelDebug.shader.ts";
 import { shaderMeta as giMeta } from "./voxelGi.shader.ts";
+import { shaderMeta as coneMeta } from "./voxelCone.shader.ts";
 import { shaderMeta as mipMeta, WORKGROUP as MIP_WG } from "./voxelMip.shader.ts";
 import {
   createVoxelTextures,
@@ -31,6 +32,13 @@ export type VoxelGiParams = {
   accumAlpha: number; // temporal EMA blend (lower = smoother/more denoise; 1 = off)
 };
 
+export type VoxelConeParams = {
+  normalBias: number; // extra lift of the cone origin off the surface
+  maxDist: number; // cone reach (world units)
+  aperture: number; // tan(halfAngle) — cone half-angle (~0.577 = 60° full angle)
+  giStrength: number; // multiplier on the gathered diffuse-cone radiance
+};
+
 // Voxel scene system (Phase 1): voxelize() fills the 3D albedo/emission textures from the
 // SDF scene each frame; debug() raymarches them into a canvas-sized output texture for
 // inspection; gi() is the brute-force voxel-GI reference (the ground truth the upcoming
@@ -44,11 +52,19 @@ export function createVoxelSystem({
   device,
   canvas,
   sceneInstances,
+  depthTexture,
+  normalTexture,
+  albedoTexture,
   grid = DEFAULT_VOXEL_GRID,
 }: {
   device: GPUDevice;
   canvas: HTMLCanvasElement;
   sceneInstances: SceneInstances;
+  // G-buffer (the SDF draw pass output): reverse-Z depth + world normal + albedo. The cone
+  // pass reads depth + normal to reconstruct P + N; albedo is held for a future layer.
+  depthTexture: GPUTexture;
+  normalTexture: GPUTexture;
+  albedoTexture: GPUTexture;
   grid?: VoxelGridConfig;
 }) {
   const params: VoxelParams = { ambient: 0.12 };
@@ -61,9 +77,20 @@ export function createVoxelSystem({
     giStrength: 1,
     accumAlpha: 0.1,
   };
+  const coneParams: VoxelConeParams = {
+    normalBias: 0,
+    maxDist: 24,
+    aperture: 0.577,
+    giStrength: 1,
+  };
   // GI renders at 1/giScale resolution then upscales on present — brute force at full
   // res is billions of textureLoads/frame and hangs the GPU. Reduce rays/res to taste.
   let giScale = 4;
+
+  // G-buffer textures (reassigned by recreate() on canvas resize).
+  let gDepth = depthTexture;
+  let gNormal = normalTexture;
+  let gAlbedo = albedoTexture;
 
   // Fixed world box (min corner + extent), derived from the initial config. cellSize is
   // the only thing that varies; dims follow from it.
@@ -85,6 +112,12 @@ export function createVoxelSystem({
   const giShader = new GPUShader(giMeta);
   // HDR accumulation target (temporal EMA needs >8-bit precision); present upscales it.
   const giPipeline = giShader.getRenderPipeline(device, "vs_main", "fs_main", {
+    targetFormat: "rgba16float",
+    withBlending: false,
+  });
+  // VCT cone GI — 6-cone diffuse hemisphere gather over the G-buffer → full-res HDR target.
+  const coneShader = new GPUShader(coneMeta);
+  const conePipeline = coneShader.getRenderPipeline(device, "vs_main", "fs_main", {
     targetFormat: "rgba16float",
     withBlending: false,
   });
@@ -147,6 +180,10 @@ export function createVoxelSystem({
   const giParamsArr = getTypeTypedArray(giMeta.uniforms.params.type); // Float32Array(4)
   const giParams2Arr = getTypeTypedArray(giMeta.uniforms.params2.type); // Float32Array(4)
   const giInvArr = getTypeTypedArray(giMeta.uniforms.invViewProj.type); // Float32Array(16)
+  // Cone scratch.
+  const coneParamsArr = getTypeTypedArray(coneMeta.uniforms.params.type); // Float32Array(4)
+  const coneParams2Arr = getTypeTypedArray(coneMeta.uniforms.params2.type); // Float32Array(4)
+  const coneInvArr = getTypeTypedArray(coneMeta.uniforms.invViewProj.type); // Float32Array(16)
   // Mip scratch: .xyz = destination mip dims (re-uploaded per level).
   const mipArr = getTypeTypedArray(mipMeta.uniforms.mip.type); // Int32Array(4)
 
@@ -158,6 +195,7 @@ export function createVoxelSystem({
   let textures: VoxelTextures;
   let voxGroup2: GPUBindGroup;
   let debugGroup0: GPUBindGroup;
+  let coneGroup0: GPUBindGroup;
   let dispatchX = 0;
   let dispatchY = 0;
   let dispatchZ = 0;
@@ -206,6 +244,27 @@ export function createVoxelSystem({
         ],
       });
     giRead = [mk(0), mk(1)];
+  }
+
+  // (Re)build the Layer-2 cone bind group: uniforms + the G-buffer (depth/normal) + the
+  // ALL-mips voxelRadiance view + the shared filtering sampler. Rebuilt whenever the
+  // voxelRadiance view changes (grid rebuild) or the G-buffer changes (canvas resize).
+  function buildConeGroup() {
+    coneGroup0 = device.createBindGroup({
+      layout: conePipeline.getBindGroupLayout(0),
+      entries: [
+        coneShader.uniforms.params.getBindGroupEntry(device),
+        coneShader.uniforms.params2.getBindGroupEntry(device),
+        coneShader.uniforms.invViewProj.getBindGroupEntry(device),
+        coneShader.uniforms.gridOrigin.getBindGroupEntry(device),
+        coneShader.uniforms.gridDims.getBindGroupEntry(device),
+        { binding: coneMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
+        { binding: coneMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
+        // ALL-mips sampled view so textureSampleLevel can pick any lod.
+        { binding: coneMeta.uniforms.voxelRadiance.binding, resource: textures.voxelRadiance.createView({ dimension: "3d" }) },
+        { binding: coneMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
+      ],
+    });
   }
 
   // (Re)build the voxel textures + the two texture-referencing bind groups for the
@@ -298,6 +357,8 @@ export function createVoxelSystem({
 
     // GI bind groups reference the same voxel textures + the (already-created) giAccum.
     buildGiReadGroups();
+    // Cone bind group references the rebuilt voxelRadiance view + the (stable) G-buffer.
+    buildConeGroup();
 
     // Grid uniforms (shared by all shaders).
     originArr[0] = originX;
@@ -314,6 +375,8 @@ export function createVoxelSystem({
     device.queue.writeBuffer(debugShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
     device.queue.writeBuffer(giShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
     device.queue.writeBuffer(giShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
+    device.queue.writeBuffer(coneShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
+    device.queue.writeBuffer(coneShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
 
     dispatchX = Math.ceil(dimX / WORKGROUP);
     dispatchY = Math.ceil(dimY / WORKGROUP);
@@ -329,6 +392,15 @@ export function createVoxelSystem({
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
   let outputTexture = createOutput();
+
+  // Full-res HDR target for the Layer-2 cone gather (presented as the "cone" source).
+  const createConeOutput = () =>
+    device.createTexture({
+      size: [canvas.width, canvas.height, 1],
+      format: "rgba16float",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+  let coneOutput = createConeOutput();
 
   // Re-voxelize the scene into the 3D textures (run before debug()/the GI gather).
   function voxelize(encoder: GPUCommandEncoder) {
@@ -466,6 +538,42 @@ export function createVoxelSystem({
     giWrite = read;
   }
 
+  // VCT cone GI: trace the 6-cone diffuse hemisphere at the per-pixel normal through the
+  // voxelRadiance pyramid → coneOutput (full-res HDR). MUST run AFTER voxelize() + mips()
+  // (it samples the pyramid). Reads the G-buffer (depth + normal) for P + N.
+  function cone(encoder: GPUCommandEncoder) {
+    coneParamsArr[0] = coneParams.normalBias;
+    coneParamsArr[1] = coneParams.maxDist;
+    coneParamsArr[2] = coneParams.aperture;
+    coneParamsArr[3] = coneParams.giStrength;
+    device.queue.writeBuffer(coneShader.uniforms.params.getGPUBuffer(device), 0, coneParamsArr);
+
+    coneParams2Arr[0] = canvas.width;
+    coneParams2Arr[1] = canvas.height;
+    coneParams2Arr[2] = 0;
+    coneParams2Arr[3] = 0;
+    device.queue.writeBuffer(coneShader.uniforms.params2.getGPUBuffer(device), 0, coneParams2Arr);
+
+    mat4.invert(invViewProj, viewProjMatrix);
+    coneInvArr.set(invViewProj as Float32Array);
+    device.queue.writeBuffer(coneShader.uniforms.invViewProj.getGPUBuffer(device), 0, coneInvArr);
+
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: coneOutput.createView(),
+          clearValue: [0, 0, 0, 1],
+          loadOp: "clear",
+          storeOp: "store",
+        },
+      ],
+    });
+    pass.setPipeline(conePipeline);
+    pass.setBindGroup(0, coneGroup0);
+    pass.draw(6, 1, 0, 0);
+    pass.end();
+  }
+
   // Change the voxel size (graininess). Destroys the old textures, rebuilds the grid.
   function setCellSize(newCellSize: number) {
     textures.voxelAlbedo.destroy();
@@ -484,11 +592,18 @@ export function createVoxelSystem({
     buildGiReadGroups();
   }
 
-  // Canvas resized: recreate the canvas-sized debug output + the GI accumulation textures.
-  function recreate() {
+  // Canvas resized: rebind the (new) G-buffer textures, recreate the canvas-sized debug +
+  // cone outputs + the GI accumulation textures, and rebuild the cone bind group.
+  function recreate(newDepth: GPUTexture, newNormal: GPUTexture, newAlbedo: GPUTexture) {
+    gDepth = newDepth;
+    gNormal = newNormal;
+    gAlbedo = newAlbedo;
     outputTexture.destroy();
     outputTexture = createOutput();
+    coneOutput.destroy();
+    coneOutput = createConeOutput();
     rebuildGiAccum();
+    buildConeGroup();
   }
 
   // Change the GI resolution divisor (1 = full res, 4 = quarter, …). Bigger = cheaper.
@@ -500,10 +615,12 @@ export function createVoxelSystem({
   return {
     params,
     giParams,
+    coneParams,
     voxelize,
     mips,
     debug,
     gi,
+    cone,
     recreate,
     setCellSize,
     setGiScale,
@@ -527,6 +644,13 @@ export function createVoxelSystem({
     },
     get giOutputTexture() {
       return giAccum[giLast];
+    },
+    get coneOutputTexture() {
+      return coneOutput;
+    },
+    // Held for a future layer (Layer 4 reads albedo); exposed so the closure ref is live.
+    get albedoTexture() {
+      return gAlbedo;
     },
   };
 }
