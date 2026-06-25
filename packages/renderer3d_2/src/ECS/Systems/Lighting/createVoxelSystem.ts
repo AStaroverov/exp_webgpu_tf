@@ -12,6 +12,7 @@ import {
   type VoxelTextures,
 } from "./voxelResources.ts";
 import type { SceneInstances } from "../SDFSystem/createDrawShapeSystem.ts";
+import { SunLight } from "../SunLight.ts";
 
 export type VoxelParams = {
   // Ambient floor added to the debug Lambert shade.
@@ -96,6 +97,8 @@ export function createVoxelSystem({
       voxShader.uniforms.gridOrigin.getBindGroupEntry(device),
       voxShader.uniforms.gridDims.getBindGroupEntry(device),
       voxShader.uniforms.instanceCount.getBindGroupEntry(device),
+      voxShader.uniforms.sun.getBindGroupEntry(device),
+      voxShader.uniforms.sunColor.getBindGroupEntry(device),
     ],
   });
   const voxGroup1 = device.createBindGroup({
@@ -115,6 +118,8 @@ export function createVoxelSystem({
   const originArr = getTypeTypedArray(voxelizeMeta.uniforms.gridOrigin.type); // Float32Array(4)
   const dimsArr = getTypeTypedArray(voxelizeMeta.uniforms.gridDims.type); // Int32Array(4)
   const instanceCountArr = getTypeTypedArray(voxelizeMeta.uniforms.instanceCount.type); // Uint32Array(1)
+  const sunArr = getTypeTypedArray(voxelizeMeta.uniforms.sun.type); // Float32Array(4)
+  const sunColorArr = getTypeTypedArray(voxelizeMeta.uniforms.sunColor.type); // Float32Array(4)
   const paramsArr = getTypeTypedArray(debugMeta.uniforms.params.type); // Float32Array(4)
   const invViewProj = mat4.create();
   const invArr = getTypeTypedArray(debugMeta.uniforms.invViewProj.type); // Float32Array(16)
@@ -197,6 +202,7 @@ export function createVoxelSystem({
       entries: [
         { binding: voxelizeMeta.uniforms.voxelAlbedo.binding, resource: textures.voxelAlbedo.createView({ dimension: "3d" }) },
         { binding: voxelizeMeta.uniforms.voxelEmission.binding, resource: textures.voxelEmission.createView({ dimension: "3d" }) },
+        { binding: voxelizeMeta.uniforms.voxelRadiance.binding, resource: textures.voxelRadiance.createView({ dimension: "3d" }) },
       ],
     });
 
@@ -210,6 +216,7 @@ export function createVoxelSystem({
         debugShader.uniforms.gridDims.getBindGroupEntry(device),
         { binding: debugMeta.uniforms.voxelAlbedo.binding, resource: textures.voxelAlbedo.createView({ dimension: "3d" }) },
         { binding: debugMeta.uniforms.voxelEmission.binding, resource: textures.voxelEmission.createView({ dimension: "3d" }) },
+        { binding: debugMeta.uniforms.voxelRadiance.binding, resource: textures.voxelRadiance.createView({ dimension: "3d" }) },
       ],
     });
 
@@ -256,6 +263,21 @@ export function createVoxelSystem({
       instanceCountArr,
     );
 
+    // Directional sun, recomputed each frame from the SunLight singleton. .xyz = world
+    // dir TOWARD the sun (azimuth + elevation), .w = effective intensity (0 = disabled).
+    const a = SunLight.angle;
+    const e = SunLight.elevation;
+    const ce = Math.cos(e);
+    sunArr[0] = Math.cos(a) * ce;
+    sunArr[1] = Math.sin(a) * ce;
+    sunArr[2] = Math.sin(e);
+    sunArr[3] = SunLight.enabled ? SunLight.intensity : 0;
+    device.queue.writeBuffer(voxShader.uniforms.sun.getGPUBuffer(device), 0, sunArr);
+    sunColorArr[0] = SunLight.color[0];
+    sunColorArr[1] = SunLight.color[1];
+    sunColorArr[2] = SunLight.color[2];
+    device.queue.writeBuffer(voxShader.uniforms.sunColor.getGPUBuffer(device), 0, sunColorArr);
+
     const pass = encoder.beginComputePass();
     pass.setPipeline(voxPipeline);
     pass.setBindGroup(0, voxGroup0);
@@ -265,9 +287,10 @@ export function createVoxelSystem({
     pass.end();
   }
 
-  // Raymarch the voxel grid into outputTexture.
-  function debug(encoder: GPUCommandEncoder) {
+  // Raymarch the voxel grid into outputTexture. mode: 0 = lit albedo, 1 = stored radiance.
+  function debug(encoder: GPUCommandEncoder, mode = 0) {
     paramsArr[0] = params.ambient;
+    paramsArr[1] = mode;
     device.queue.writeBuffer(debugShader.uniforms.params.getGPUBuffer(device), 0, paramsArr);
 
     mat4.invert(invViewProj, viewProjMatrix);
@@ -346,6 +369,7 @@ export function createVoxelSystem({
   function setCellSize(newCellSize: number) {
     textures.voxelAlbedo.destroy();
     textures.voxelEmission.destroy();
+    textures.voxelRadiance.destroy();
     buildGrid(newCellSize);
   }
 

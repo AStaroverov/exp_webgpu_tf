@@ -2,10 +2,11 @@
 // WORLD space (Z-up): origin = its min corner, dims = voxel counts per axis, cellSize =
 // world units per voxel (cubic). Voxel (i,j,k) center = origin + (vec3(i,j,k)+0.5)*cellSize.
 //
-// Two 3D storage textures, both STORAGE_BINDING (written by the voxelize compute pass via
+// Three 3D storage textures, both STORAGE_BINDING (written by the voxelize compute pass via
 // textureStore) + TEXTURE_BINDING (read by later passes as a sampled texture_3d<f32>):
 //   voxelAlbedo   rgba8unorm  — rgb = nearest-instance albedo, a = occupancy (1=solid).
 //   voxelEmission rgba16float — rgb = nearest-instance emission (for the Phase-2 GI).
+//   voxelRadiance rgba16float — rgb = direct-lit radiance (sun N·L·vis) + emission, a = occupancy.
 
 export type VoxelGridConfig = {
   // World-space min corner of the grid box.
@@ -35,6 +36,7 @@ export const DEFAULT_VOXEL_GRID: VoxelGridConfig = {
 export type VoxelTextures = {
   voxelAlbedo: GPUTexture;
   voxelEmission: GPUTexture;
+  voxelRadiance: GPUTexture;
 };
 
 export function createVoxelTextures(
@@ -56,6 +58,12 @@ export function createVoxelTextures(
     format: "rgba16float",
     usage,
   });
+  const voxelRadiance = device.createTexture({
+    size,
+    dimension: "3d",
+    format: "rgba16float",
+    usage,
+  });
 
-  return { voxelAlbedo, voxelEmission };
+  return { voxelAlbedo, voxelEmission, voxelRadiance };
 }

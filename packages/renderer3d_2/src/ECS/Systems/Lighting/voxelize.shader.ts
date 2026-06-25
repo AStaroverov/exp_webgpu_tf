@@ -34,6 +34,11 @@ export const shaderMeta = new ShaderMeta(
     gridDims: uC("uGridDims", `vec4<i32>`),
     // Live scene instance count (<= MAX_INSTANCE_COUNT).
     instanceCount: uC("uInstanceCount", `u32`),
+    // Directional sun: .xyz = normalized world dir TOWARD sun, .w = effective intensity
+    // (0 when the sun is disabled).
+    sun: uC("uSun", `vec4<f32>`),
+    // .rgb = sun color (linear).
+    sunColor: uC("uSunColor", `vec4<f32>`),
 
     // ---- group 1 : per-instance scene storage (StorageRead => @group(1)) ----
     // SAME names/types as sdf.shader.ts / the former gather, so the shared sceneSDF
@@ -61,6 +66,17 @@ export const shaderMeta = new ShaderMeta(
     ),
     voxelEmission: new VariableMeta(
       "voxelEmission",
+      VariableKind.StorageTexture,
+      `texture_storage_3d<rgba16float, write>`,
+      {
+        visibility: GPUShaderStage.COMPUTE,
+        viewDimension: "3d",
+        storageTextureFormat: "rgba16float",
+        storageTextureAccess: "write-only",
+      },
+    ),
+    voxelRadiance: new VariableMeta(
+      "voxelRadiance",
       VariableKind.StorageTexture,
       `texture_storage_3d<rgba16float, write>`,
       {
@@ -112,6 +128,51 @@ fn emission_of(instance: u32) -> vec3<f32> {
   return vec3<f32>(0.0);
 }
 
+// Surface normal at p via central differences of the scene SDF distance. eps = half a
+// cell. Falls back to +Z when the gradient is degenerate (zero-length).
+fn sdf_normal(p: vec3<f32>) -> vec3<f32> {
+  let eps = uGridOrigin.w * 0.5;
+  let dx = vec3<f32>(eps, 0.0, 0.0);
+  let dy = vec3<f32>(0.0, eps, 0.0);
+  let dz = vec3<f32>(0.0, 0.0, eps);
+  let g = vec3<f32>(
+    scene_sdf(p + dx).dist - scene_sdf(p - dx).dist,
+    scene_sdf(p + dy).dist - scene_sdf(p - dy).dist,
+    scene_sdf(p + dz).dist - scene_sdf(p - dz).dist,
+  );
+  let len = length(g);
+  if (len < 1e-6) {
+    return vec3<f32>(0.0, 0.0, 1.0);
+  }
+  return g / len;
+}
+
+// Sun visibility (1 = lit, 0 = shadowed) at surface point p with normal N. We sphere-
+// trace the ANALYTIC scene_sdf (NOT a voxel-DDA over voxelAlbedo) because the voxel
+// storage textures are being WRITTEN this pass and cannot be sampled here.
+fn sun_visibility(p: vec3<f32>, N: vec3<f32>) -> f32 {
+  if (uSun.w <= 0.0) {
+    return 1.0;
+  }
+  let cellSize = uGridOrigin.w;
+  let minStep = cellSize * 0.5;
+  let L = uSun.xyz;
+  let maxDist = length(vec3<f32>(uGridDims.xyz) * cellSize);
+  let ro = p + N * cellSize * 1.5;
+  var t = 0.0;
+  for (var i = 0; i < 128; i = i + 1) {
+    let d = scene_sdf(ro + L * t).dist;
+    if (d < minStep) {
+      return 0.0;
+    }
+    t = t + max(d, minStep);
+    if (t > maxDist) {
+      break;
+    }
+  }
+  return 1.0;
+}
+
 @compute @workgroup_size(${WORKGROUP}, ${WORKGROUP}, ${WORKGROUP})
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let coord = vec3<i32>(gid);
@@ -130,11 +191,19 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
   if (solid) {
     let albedo = uColor[hit.instance].rgb;
+    let N = sdf_normal(world);
+    let L = uSun.xyz;
+    let ndl = max(dot(N, L), 0.0);
+    let vis = sun_visibility(world, N);
+    let direct = albedo * (ndl * uSun.w * vis) * uSunColor.rgb;
+    let radiance = direct + emission_of(hit.instance);
     textureStore(voxelAlbedo, coord, vec4<f32>(albedo, 1.0));
     textureStore(voxelEmission, coord, vec4<f32>(emission_of(hit.instance), 1.0));
+    textureStore(voxelRadiance, coord, vec4<f32>(radiance, 1.0));
   } else {
     textureStore(voxelAlbedo, coord, vec4<f32>(0.0));
     textureStore(voxelEmission, coord, vec4<f32>(0.0));
+    textureStore(voxelRadiance, coord, vec4<f32>(0.0));
   }
 }
 `,

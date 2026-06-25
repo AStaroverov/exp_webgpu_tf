@@ -277,20 +277,23 @@ async function main() {
   });
 
   // Present-source selector: which texture reaches the screen.
-  //   "voxel" — the voxel debug raymarch (voxel.outputTexture).
-  //   "gi"    — brute-force voxel GI reference (voxel.giOutputTexture).
-  //   "raw"   — the unlit albedo G-buffer (frame.renderTexture).
-  // Keys: 1 = voxel, 2 = raw, 3 = gi (also a GUI dropdown below).
+  //   "voxel"    — the voxel debug raymarch, lit-albedo Lambert (voxel.outputTexture).
+  //   "radiance" — the voxel debug raymarch showing stored direct-sun radiance
+  //                (voxel.outputTexture, debug mode 1).
+  //   "gi"       — brute-force voxel GI reference (voxel.giOutputTexture).
+  //   "raw"      — the unlit albedo G-buffer (frame.renderTexture).
+  // Keys: 1 = voxel, 5 = radiance, 2 = raw, 3 = gi (also a GUI dropdown below).
   // Default to "voxel" (cheap) so the page never opens straight into a heavy GI pass.
-  const view = { presentSource: "voxel" as "voxel" | "raw" | "gi" };
+  const view = { presentSource: "voxel" as "voxel" | "raw" | "gi" | "radiance" };
   window.addEventListener("keydown", (e) => {
     if (e.key === "1") view.presentSource = "voxel";
     else if (e.key === "2") view.presentSource = "raw";
     else if (e.key === "3") view.presentSource = "gi";
+    else if (e.key === "5") view.presentSource = "radiance";
   });
 
   const gui = new GUI({ title: "Voxel" });
-  gui.add(view, "presentSource", ["voxel", "gi", "raw"]).name("present (1/3/2)").listen();
+  gui.add(view, "presentSource", ["voxel", "radiance", "gi", "raw"]).name("present (1/5/3/2)").listen();
 
   // Graininess: voxel size in world units. Smaller = finer = more voxels. Rebuilds the
   // 3D textures on release (.onFinishChange, so it rebuilds once when the slider settles).
@@ -311,6 +314,9 @@ async function main() {
   // Sun toggle is read live by the draw pass; keep it exposed for the raw view.
   gui.add(SunLight, "enabled").name("sun enabled");
   gui.add(SunLight, "angle", 0, Math.PI * 2, 0.01).name("sun angle");
+  gui.add(SunLight, "elevation", 0, Math.PI / 2, 0.01).name("sun elevation");
+  gui.add(SunLight, "intensity", 0, 5, 0.05).name("sun intensity");
+  gui.addColor(SunLight, "color", 1).name("sun color"); // rgbScale=1 → array is 0..1 floats
 
   // GI (Stage 2.1a brute-force reference). All read live each frame by voxel.gi().
   const giFolder = gui.addFolder("GI (reference)");
@@ -429,11 +435,12 @@ async function main() {
     if (view.presentSource === "raw") frameTick(encoder, delta);
     // Voxelize the SDF scene into the 3D textures, then run the selected voxel pass.
     voxel.voxelize(encoder);
-    if (view.presentSource === "voxel") voxel.debug(encoder);
+    if (view.presentSource === "voxel") voxel.debug(encoder, 0);
+    else if (view.presentSource === "radiance") voxel.debug(encoder, 1);
     else if (view.presentSource === "gi") voxel.gi(encoder, frameIndex);
     // Present the chosen source.
     const presented =
-      view.presentSource === "voxel"
+      view.presentSource === "voxel" || view.presentSource === "radiance"
         ? voxel.outputTexture
         : view.presentSource === "gi"
           ? voxel.giOutputTexture

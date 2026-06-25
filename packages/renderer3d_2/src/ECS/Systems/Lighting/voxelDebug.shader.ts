@@ -4,8 +4,10 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 
 // Debug visualization of the voxel grid: a fullscreen pass that reconstructs the world-
 // space camera ray per pixel (from invViewProj), DDA-marches (Amanatides–Woo) through the
-// voxel grid, and shades the first solid voxel (occupancy a>0) with a simple Lambert term
-// on the crossed face normal + its emission. A miss returns the background color.
+// voxel grid, and shades the first solid voxel (occupancy a>0). uParams.y selects the
+// mode: 0 = simple Lambert on the crossed face normal + emission (lit albedo);
+// 1 = show the stored voxelRadiance (direct sun lighting baked at voxelize time, +
+// uParams.x * albedo as a faint ambient floor). A miss returns the background color.
 //
 // The voxel textures are read as sampled texture_3d<f32> via textureLoad (exact integer
 // fetch, no filtering) — the SAME GPUTextures the voxelize compute pass wrote.
@@ -18,7 +20,7 @@ const sampled3d = (name: string) =>
 
 export const shaderMeta = new ShaderMeta(
   {
-    // .x = ambient floor. (y/z/w spare.)
+    // .x = ambient floor, .y = mode (0 = lit albedo, 1 = stored radiance). (z/w spare.)
     params: new VariableMeta("uParams", VariableKind.Uniform, `vec4<f32>`),
     // inverse(viewProjMatrix) (reverse-Z), column-major, for world-ray reconstruction.
     invViewProj: new VariableMeta("uInvViewProj", VariableKind.Uniform, `mat4x4<f32>`),
@@ -28,6 +30,7 @@ export const shaderMeta = new ShaderMeta(
     gridDims: new VariableMeta("uGridDims", VariableKind.Uniform, `vec4<i32>`),
     voxelAlbedo: sampled3d("voxelAlbedo"),
     voxelEmission: sampled3d("voxelEmission"),
+    voxelRadiance: sampled3d("voxelRadiance"),
   },
   {},
   // language=WGSL
@@ -117,11 +120,16 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   for (var i = 0; i < maxSteps; i = i + 1) {
     let a = textureLoad(voxelAlbedo, coord, 0);
     if (a.a > 0.5) {
-      let N = normal;
-      let diff = max(0.0, dot(N, normalize(LIGHT_DIR)));
-      let emission = textureLoad(voxelEmission, coord, 0).rgb;
-      let lit = a.rgb * (uParams.x + diff) + emission;
-      return vec4f(lit, 1.0);
+      if (uParams.y >= 0.5) {
+        let rad = textureLoad(voxelRadiance, coord, 0).rgb;
+        return vec4f(rad + uParams.x * a.rgb, 1.0);
+      } else {
+        let N = normal;
+        let diff = max(0.0, dot(N, normalize(LIGHT_DIR)));
+        let emission = textureLoad(voxelEmission, coord, 0).rgb;
+        let lit = a.rgb * (uParams.x + diff) + emission;
+        return vec4f(lit, 1.0);
+      }
     }
 
     // Advance to the next voxel along the smallest tMax axis.
