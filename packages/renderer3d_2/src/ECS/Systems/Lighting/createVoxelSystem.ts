@@ -5,6 +5,8 @@ import { viewProjMatrix } from "../ResizeSystem.ts";
 import { shaderMeta as voxelizeMeta, WORKGROUP } from "./voxelize.shader.ts";
 import { shaderMeta as debugMeta } from "./voxelDebug.shader.ts";
 import { shaderMeta as giMeta } from "./voxelGi.shader.ts";
+import { shaderMeta as probeMeta } from "./voxelProbe.shader.ts";
+import { shaderMeta as resolveMeta } from "./voxelResolve.shader.ts";
 import {
   createVoxelTextures,
   DEFAULT_VOXEL_GRID,
@@ -28,6 +30,17 @@ export type VoxelGiParams = {
   accumAlpha: number; // temporal EMA blend (lower = smoother/more denoise; 1 = off)
 };
 
+// Stage 2.2 Radiance-Cascades (cascade 0) params. Probes gather at a sparse screen grid;
+// the resolve composites them at full resolution.
+export type VoxelRcParams = {
+  ambient: number;
+  numRays: number; // hemisphere rays per PROBE
+  maxDist: number; // probe ray reach
+  normalBias: number;
+  skyIntensity: number;
+  giStrength: number;
+};
+
 // Voxel scene system (Phase 1): voxelize() fills the 3D albedo/emission textures from the
 // SDF scene each frame; debug() raymarches them into a canvas-sized output texture for
 // inspection.
@@ -40,13 +53,24 @@ export function createVoxelSystem({
   device,
   canvas,
   sceneInstances,
+  depthTexture,
+  normalTexture,
+  albedoTexture,
   grid = DEFAULT_VOXEL_GRID,
 }: {
   device: GPUDevice;
   canvas: HTMLCanvasElement;
   sceneInstances: SceneInstances;
+  // G-buffer (from the main SDF pass): used by the RC path for primary visibility.
+  depthTexture: GPUTexture;
+  normalTexture: GPUTexture;
+  albedoTexture: GPUTexture;
   grid?: VoxelGridConfig;
 }) {
+  // G-buffer refs (rebound on resize via recreate()).
+  let gDepth = depthTexture;
+  let gNormal = normalTexture;
+  let gAlbedo = albedoTexture;
   const params: VoxelParams = { ambient: 0.12 };
   const giParams: VoxelGiParams = {
     ambient: 0.08,
@@ -60,6 +84,16 @@ export function createVoxelSystem({
   // GI renders at 1/giScale resolution then upscales on present — brute force at full
   // res is billions of textureLoads/frame and hangs the GPU. Reduce rays/res to taste.
   let giScale = 4;
+
+  const rcParams: VoxelRcParams = {
+    ambient: 0.08,
+    numRays: 64, // ≈ D² deterministic octahedral directions (D≈8)
+    maxDist: 24,
+    normalBias: 0,
+    skyIntensity: 0,
+    giStrength: 1,
+  };
+  let probeSpacing = 8; // screen px between probes
 
   // Fixed world box (min corner + extent), derived from the initial config. cellSize is
   // the only thing that varies; dims follow from it.
@@ -83,6 +117,25 @@ export function createVoxelSystem({
   const giPipeline = giShader.getRenderPipeline(device, "vs_main", "fs_main", {
     targetFormat: "rgba16float",
     withBlending: false,
+  });
+
+  // RC cascade-0: probe gather (-> probeIrr) + full-res resolve (-> rcOutput).
+  const probeShader = new GPUShader(probeMeta);
+  const probePipeline = probeShader.getRenderPipeline(device, "vs_main", "fs_main", {
+    targetFormat: "rgba16float",
+    withBlending: false,
+  });
+  const resolveShader = new GPUShader(resolveMeta);
+  const resolvePipeline = resolveShader.getRenderPipeline(device, "vs_main", "fs_main", {
+    targetFormat: "rgba16float",
+    withBlending: false,
+  });
+  // Linear sampler for the bilinear probe upscale in the resolve pass.
+  const probeSampler = device.createSampler({
+    magFilter: "linear",
+    minFilter: "linear",
+    addressModeU: "clamp-to-edge",
+    addressModeV: "clamp-to-edge",
   });
 
   // Group 0 (voxelize) = grid uniforms; Group 1 = the 7 scene-instance buffers. Both
@@ -121,6 +174,13 @@ export function createVoxelSystem({
   const giParamsArr = getTypeTypedArray(giMeta.uniforms.params.type); // Float32Array(4)
   const giParams2Arr = getTypeTypedArray(giMeta.uniforms.params2.type); // Float32Array(4)
   const giInvArr = getTypeTypedArray(giMeta.uniforms.invViewProj.type); // Float32Array(16)
+  // RC scratch.
+  const probeParamsArr = getTypeTypedArray(probeMeta.uniforms.params.type); // Float32Array(4)
+  const probeParams2Arr = getTypeTypedArray(probeMeta.uniforms.params2.type); // Float32Array(4)
+  const probeInvArr = getTypeTypedArray(probeMeta.uniforms.invViewProj.type); // Float32Array(16)
+  const resolveParamsArr = getTypeTypedArray(resolveMeta.uniforms.params.type); // Float32Array(4)
+  const resolveParams2Arr = getTypeTypedArray(resolveMeta.uniforms.params2.type); // Float32Array(4)
+  const resolveInvArr = getTypeTypedArray(resolveMeta.uniforms.invViewProj.type); // Float32Array(16)
 
   // --- Grid state (rebuilt by buildGrid). ---
   let cellSize = grid.cellSize;
@@ -172,6 +232,65 @@ export function createVoxelSystem({
     giRead = [mk(0), mk(1)];
   }
 
+  // --- RC cascade-0 textures + bind groups. probeIrr is (canvas/probeSpacing) sized;
+  // rcOutput is full canvas. Both rebuilt on resize / spacing change. ---
+  const probeDims = () => ({
+    x: Math.max(1, Math.ceil(canvas.width / probeSpacing)),
+    y: Math.max(1, Math.ceil(canvas.height / probeSpacing)),
+  });
+  const createProbeTex = () => {
+    const d = probeDims();
+    return device.createTexture({
+      size: [d.x, d.y, 1],
+      format: "rgba16float",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+  };
+  const createRcOutput = () =>
+    device.createTexture({
+      size: [canvas.width, canvas.height, 1],
+      format: "rgba16float",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+  let probeIrr = createProbeTex();
+  let rcOutput = createRcOutput();
+  let probeGroup0: GPUBindGroup;
+  let resolveGroup0: GPUBindGroup;
+
+  // (Re)build the probe + resolve bind groups from the current voxel textures + probeIrr.
+  function buildRcGroups() {
+    probeGroup0 = device.createBindGroup({
+      layout: probePipeline.getBindGroupLayout(0),
+      entries: [
+        probeShader.uniforms.params.getBindGroupEntry(device),
+        probeShader.uniforms.params2.getBindGroupEntry(device),
+        probeShader.uniforms.invViewProj.getBindGroupEntry(device),
+        probeShader.uniforms.gridOrigin.getBindGroupEntry(device),
+        probeShader.uniforms.gridDims.getBindGroupEntry(device),
+        { binding: probeMeta.uniforms.voxelAlbedo.binding, resource: textures.voxelAlbedo.createView({ dimension: "3d" }) },
+        { binding: probeMeta.uniforms.voxelEmission.binding, resource: textures.voxelEmission.createView({ dimension: "3d" }) },
+        { binding: probeMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
+        { binding: probeMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
+      ],
+    });
+    resolveGroup0 = device.createBindGroup({
+      layout: resolvePipeline.getBindGroupLayout(0),
+      entries: [
+        resolveShader.uniforms.params.getBindGroupEntry(device),
+        resolveShader.uniforms.params2.getBindGroupEntry(device),
+        resolveShader.uniforms.invViewProj.getBindGroupEntry(device),
+        resolveShader.uniforms.gridOrigin.getBindGroupEntry(device),
+        resolveShader.uniforms.gridDims.getBindGroupEntry(device),
+        { binding: resolveMeta.uniforms.albedoTex.binding, resource: gAlbedo.createView() },
+        { binding: resolveMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
+        { binding: resolveMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
+        { binding: resolveMeta.uniforms.voxelEmission.binding, resource: textures.voxelEmission.createView({ dimension: "3d" }) },
+        { binding: resolveMeta.uniforms.probeIrr.binding, resource: probeIrr.createView() },
+        { binding: resolveMeta.uniforms.probeSampler.binding, resource: probeSampler },
+      ],
+    });
+  }
+
   // (Re)build the voxel textures + the two texture-referencing bind groups for the
   // current cellSize, and upload the grid uniforms to both shaders.
   function buildGrid(newCellSize: number) {
@@ -214,6 +333,8 @@ export function createVoxelSystem({
 
     // GI bind groups reference the same voxel textures + the (already-created) giAccum.
     buildGiReadGroups();
+    // RC bind groups reference the same voxel textures + the (already-created) probeIrr.
+    buildRcGroups();
 
     // Grid uniforms (shared by both shaders).
     originArr[0] = originX;
@@ -230,6 +351,10 @@ export function createVoxelSystem({
     device.queue.writeBuffer(debugShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
     device.queue.writeBuffer(giShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
     device.queue.writeBuffer(giShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
+    device.queue.writeBuffer(probeShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
+    device.queue.writeBuffer(probeShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
+    device.queue.writeBuffer(resolveShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
+    device.queue.writeBuffer(resolveShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
 
     dispatchX = Math.ceil(dimX / WORKGROUP);
     dispatchY = Math.ceil(dimY / WORKGROUP);
@@ -341,6 +466,58 @@ export function createVoxelSystem({
     giWrite = read;
   }
 
+  // RC cascade-0 (Stage 2.2a): probe gather -> probeIrr, then full-res resolve -> rcOutput.
+  // Static seed (no per-frame jitter) → fixed-pattern probe noise, not shimmer; temporal
+  // accumulation comes in a later stage.
+  function rc(encoder: GPUCommandEncoder) {
+    mat4.invert(invViewProj, viewProjMatrix);
+
+    // Probe pass uniforms.
+    probeParamsArr[0] = rcParams.numRays;
+    probeParamsArr[1] = rcParams.maxDist;
+    probeParamsArr[2] = rcParams.normalBias;
+    probeParamsArr[3] = rcParams.skyIntensity;
+    device.queue.writeBuffer(probeShader.uniforms.params.getGPUBuffer(device), 0, probeParamsArr);
+    probeParams2Arr[0] = probeSpacing;
+    probeParams2Arr[1] = canvas.width;
+    probeParams2Arr[2] = canvas.height;
+    probeParams2Arr[3] = 0; // static seed (Stage 2.2a)
+    device.queue.writeBuffer(probeShader.uniforms.params2.getGPUBuffer(device), 0, probeParams2Arr);
+    probeInvArr.set(invViewProj as Float32Array);
+    device.queue.writeBuffer(probeShader.uniforms.invViewProj.getGPUBuffer(device), 0, probeInvArr);
+
+    // Resolve pass uniforms.
+    resolveParamsArr[0] = rcParams.ambient;
+    resolveParamsArr[1] = rcParams.giStrength;
+    device.queue.writeBuffer(resolveShader.uniforms.params.getGPUBuffer(device), 0, resolveParamsArr);
+    resolveParams2Arr[0] = probeSpacing;
+    device.queue.writeBuffer(resolveShader.uniforms.params2.getGPUBuffer(device), 0, resolveParams2Arr);
+    resolveInvArr.set(invViewProj as Float32Array);
+    device.queue.writeBuffer(resolveShader.uniforms.invViewProj.getGPUBuffer(device), 0, resolveInvArr);
+
+    // Probe gather -> probeIrr.
+    const probePass = encoder.beginRenderPass({
+      colorAttachments: [
+        { view: probeIrr.createView(), clearValue: [0, 0, 0, 0], loadOp: "clear", storeOp: "store" },
+      ],
+    });
+    probePass.setPipeline(probePipeline);
+    probePass.setBindGroup(0, probeGroup0);
+    probePass.draw(6, 1, 0, 0);
+    probePass.end();
+
+    // Full-res resolve -> rcOutput.
+    const resolvePass = encoder.beginRenderPass({
+      colorAttachments: [
+        { view: rcOutput.createView(), clearValue: [0, 0, 0, 1], loadOp: "clear", storeOp: "store" },
+      ],
+    });
+    resolvePass.setPipeline(resolvePipeline);
+    resolvePass.setBindGroup(0, resolveGroup0);
+    resolvePass.draw(6, 1, 0, 0);
+    resolvePass.end();
+  }
+
   // Change the voxel size (graininess). Destroys the old textures, rebuilds the grid.
   function setCellSize(newCellSize: number) {
     textures.voxelAlbedo.destroy();
@@ -358,11 +535,28 @@ export function createVoxelSystem({
     buildGiReadGroups();
   }
 
-  // Canvas resized: recreate the (canvas-sized) debug output + the (scaled) GI accum.
-  function recreate() {
+  // Canvas resized: rebind the (recreated) G-buffer + recreate the debug output, GI accum,
+  // and RC probe/output textures.
+  function recreate(newDepth: GPUTexture, newNormal: GPUTexture, newAlbedo: GPUTexture) {
+    gDepth = newDepth;
+    gNormal = newNormal;
+    gAlbedo = newAlbedo;
     outputTexture.destroy();
     outputTexture = createOutput();
     rebuildGiAccum();
+    probeIrr.destroy();
+    probeIrr = createProbeTex();
+    rcOutput.destroy();
+    rcOutput = createRcOutput();
+    buildRcGroups();
+  }
+
+  // Change the probe spacing (px between probes). Rebuilds probeIrr + RC bind groups.
+  function setProbeSpacing(spacing: number) {
+    probeSpacing = Math.max(1, Math.round(spacing));
+    probeIrr.destroy();
+    probeIrr = createProbeTex();
+    buildRcGroups();
   }
 
   // Change the GI resolution divisor (1 = full res, 4 = quarter, …). Bigger = cheaper.
@@ -374,14 +568,23 @@ export function createVoxelSystem({
   return {
     params,
     giParams,
+    rcParams,
     voxelize,
     debug,
     gi,
+    rc,
     recreate,
     setCellSize,
     setGiScale,
+    setProbeSpacing,
     get giScale() {
       return giScale;
+    },
+    get probeSpacing() {
+      return probeSpacing;
+    },
+    get rcOutputTexture() {
+      return rcOutput;
     },
     get cellSize() {
       return cellSize;

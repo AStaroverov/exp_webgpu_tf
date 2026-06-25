@@ -274,23 +274,28 @@ async function main() {
     device,
     canvas,
     sceneInstances: shapeSystem.sceneInstances,
+    depthTexture: frame.depthTexture,
+    normalTexture: frame.normalTexture,
+    albedoTexture: frame.renderTexture,
   });
 
   // Present-source selector: which texture reaches the screen.
   //   "voxel" — the voxel debug raymarch (voxel.outputTexture).
   //   "gi"    — brute-force voxel GI reference (voxel.giOutputTexture).
+  //   "rc"    — Radiance Cascades cascade-0 (voxel.rcOutputTexture).
   //   "raw"   — the unlit albedo G-buffer (frame.renderTexture).
-  // Keys: 1 = voxel, 2 = raw, 3 = gi (also a GUI dropdown below).
-  // Default to "voxel" (cheap) so the page never opens straight into the heavy GI pass.
-  const view = { presentSource: "voxel" as "voxel" | "raw" | "gi" };
+  // Keys: 1 = voxel, 2 = raw, 3 = gi, 4 = rc (also a GUI dropdown below).
+  // Default to "voxel" (cheap) so the page never opens straight into a heavy GI pass.
+  const view = { presentSource: "voxel" as "voxel" | "raw" | "gi" | "rc" };
   window.addEventListener("keydown", (e) => {
     if (e.key === "1") view.presentSource = "voxel";
     else if (e.key === "2") view.presentSource = "raw";
     else if (e.key === "3") view.presentSource = "gi";
+    else if (e.key === "4") view.presentSource = "rc";
   });
 
   const gui = new GUI({ title: "Voxel" });
-  gui.add(view, "presentSource", ["voxel", "gi", "raw"]).name("present (1/3/2)").listen();
+  gui.add(view, "presentSource", ["voxel", "gi", "rc", "raw"]).name("present (1/3/4/2)").listen();
 
   // Graininess: voxel size in world units. Smaller = finer = more voxels. Rebuilds the
   // 3D textures on release (.onFinishChange, so it rebuilds once when the slider settles).
@@ -330,6 +335,21 @@ async function main() {
   // Temporal denoise: lower = smoother (averages more frames), 1 = off. Auto-resets the
   // frame the camera moves (no reprojection yet → history would smear).
   giFolder.add(voxel.giParams, "accumAlpha", 0.02, 1, 0.01).name("temporal α");
+
+  // RC cascade-0 (Stage 2.2a): sparse probes + bilinear resolve. No geometric weighting
+  // yet → expect light leaks at object edges (fixed in 2.2b).
+  const rcFolder = gui.addFolder("RC cascade-0");
+  const rcSpacingCfg = { spacing: voxel.probeSpacing };
+  rcFolder
+    .add(rcSpacingCfg, "spacing", [4, 8, 16, 32])
+    .name("probe spacing px")
+    .onChange((s: number) => voxel.setProbeSpacing(s));
+  rcFolder.add(voxel.rcParams, "numRays", 4, 256, 1).name("directions (≈D²)");
+  rcFolder.add(voxel.rcParams, "maxDist", 1, 64, 0.5).name("ray reach");
+  rcFolder.add(voxel.rcParams, "giStrength", 0, 4, 0.05).name("GI strength");
+  rcFolder.add(voxel.rcParams, "ambient", 0, 1, 0.01).name("ambient");
+  rcFolder.add(voxel.rcParams, "skyIntensity", 0, 2, 0.01).name("sky on miss");
+  rcFolder.add(voxel.rcParams, "normalBias", 0, 2, 0.01).name("normal bias");
 
   // Live emitter controls (only the "emitter" scene). Position writes the transform
   // (re-uploaded every frame); radius drives BOTH the sphere SDF (Shape.setSphere$)
@@ -413,8 +433,8 @@ async function main() {
         { ...frame, canvas, device, background: [0.043, 0.051, 0.07, 1], getPixelRatio },
         ({ passEncoder }) => shapeSystem.drawShapes(passEncoder),
       );
-      // Voxel: recreate the canvas-sized debug output (voxel textures persist).
-      voxel.recreate();
+      // Voxel: rebind the recreated G-buffer + recreate canvas-sized outputs.
+      voxel.recreate(frame.depthTexture, frame.normalTexture, frame.renderTexture);
     }
 
     execTransformSystem();
@@ -425,19 +445,23 @@ async function main() {
     // sphere-trace (up to 96 steps) is fill-bound: cost scales with on-screen coverage,
     // so it spikes on zoom-in. The voxel debug view doesn't read the G-buffer (only the
     // voxel 3D textures + scene buffers, which prepare() already uploaded), so run the
-    // SDF pass ONLY when the raw view is presented.
-    if (view.presentSource === "raw") frameTick(encoder, delta);
+    // SDF pass when the raw view is presented OR for RC (which uses the G-buffer as its
+    // primary visibility — depth/normal/albedo). "voxel"/"gi" use the voxel DDA instead.
+    if (view.presentSource === "raw" || view.presentSource === "rc") frameTick(encoder, delta);
     // Voxelize the SDF scene into the 3D textures, then run the selected voxel pass.
     voxel.voxelize(encoder);
     if (view.presentSource === "voxel") voxel.debug(encoder);
     else if (view.presentSource === "gi") voxel.gi(encoder, frameIndex);
+    else if (view.presentSource === "rc") voxel.rc(encoder);
     // Present the chosen source.
     const presented =
       view.presentSource === "voxel"
         ? voxel.outputTexture
         : view.presentSource === "gi"
           ? voxel.giOutputTexture
-          : frame.renderTexture;
+          : view.presentSource === "rc"
+            ? voxel.rcOutputTexture
+            : frame.renderTexture;
     present(encoder, presented);
     device.queue.submit([encoder.finish()]);
 
