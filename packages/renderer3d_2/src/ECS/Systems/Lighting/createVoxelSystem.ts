@@ -4,6 +4,7 @@ import { getTypeTypedArray } from "../../../Shader/index.ts";
 import { viewProjMatrix } from "../ResizeSystem.ts";
 import { shaderMeta as voxelizeMeta, WORKGROUP } from "./voxelize.shader.ts";
 import { shaderMeta as debugMeta } from "./voxelDebug.shader.ts";
+import { shaderMeta as giMeta } from "./voxelGi.shader.ts";
 import {
   createVoxelTextures,
   DEFAULT_VOXEL_GRID,
@@ -15,6 +16,15 @@ import type { SceneInstances } from "../SDFSystem/createDrawShapeSystem.ts";
 export type VoxelParams = {
   // Ambient floor added to the debug Lambert shade.
   ambient: number;
+};
+
+export type VoxelGiParams = {
+  ambient: number; // ambient floor
+  numRays: number; // hemisphere rays per pixel
+  maxDist: number; // secondary-ray reach (world units)
+  normalBias: number; // extra lift of the secondary origin off the surface
+  skyIntensity: number; // radiance returned on a secondary-ray miss
+  giStrength: number; // multiplier on the gathered GI term
 };
 
 // Voxel scene system (Phase 1): voxelize() fills the 3D albedo/emission textures from the
@@ -37,6 +47,17 @@ export function createVoxelSystem({
   grid?: VoxelGridConfig;
 }) {
   const params: VoxelParams = { ambient: 0.12 };
+  const giParams: VoxelGiParams = {
+    ambient: 0.08,
+    numRays: 8,
+    maxDist: 24,
+    normalBias: 0,
+    skyIntensity: 0,
+    giStrength: 1,
+  };
+  // GI renders at 1/giScale resolution then upscales on present — brute force at full
+  // res is billions of textureLoads/frame and hangs the GPU. Reduce rays/res to taste.
+  let giScale = 4;
 
   // Fixed world box (min corner + extent), derived from the initial config. cellSize is
   // the only thing that varies; dims follow from it.
@@ -53,6 +74,11 @@ export function createVoxelSystem({
   const debugShader = new GPUShader(debugMeta);
   const debugPipeline = debugShader.getRenderPipeline(device, "vs_main", "fs_main", {
     targetFormat: "bgra8unorm", // matches the output texture + frame.renderTexture
+    withBlending: false,
+  });
+  const giShader = new GPUShader(giMeta);
+  const giPipeline = giShader.getRenderPipeline(device, "vs_main", "fs_main", {
+    targetFormat: "bgra8unorm",
     withBlending: false,
   });
 
@@ -88,6 +114,10 @@ export function createVoxelSystem({
   const paramsArr = getTypeTypedArray(debugMeta.uniforms.params.type); // Float32Array(4)
   const invViewProj = mat4.create();
   const invArr = getTypeTypedArray(debugMeta.uniforms.invViewProj.type); // Float32Array(16)
+  // GI scratch.
+  const giParamsArr = getTypeTypedArray(giMeta.uniforms.params.type); // Float32Array(4)
+  const giParams2Arr = getTypeTypedArray(giMeta.uniforms.params2.type); // Float32Array(4)
+  const giInvArr = getTypeTypedArray(giMeta.uniforms.invViewProj.type); // Float32Array(16)
 
   // --- Grid state (rebuilt by buildGrid). ---
   let cellSize = grid.cellSize;
@@ -97,6 +127,7 @@ export function createVoxelSystem({
   let textures: VoxelTextures;
   let voxGroup2: GPUBindGroup;
   let debugGroup0: GPUBindGroup;
+  let giGroup0: GPUBindGroup;
   let dispatchX = 0;
   let dispatchY = 0;
   let dispatchZ = 0;
@@ -141,6 +172,20 @@ export function createVoxelSystem({
       ],
     });
 
+    // Group 0 (GI) = its own uniforms + the SAME voxel textures.
+    giGroup0 = device.createBindGroup({
+      layout: giPipeline.getBindGroupLayout(0),
+      entries: [
+        giShader.uniforms.params.getBindGroupEntry(device),
+        giShader.uniforms.params2.getBindGroupEntry(device),
+        giShader.uniforms.invViewProj.getBindGroupEntry(device),
+        giShader.uniforms.gridOrigin.getBindGroupEntry(device),
+        giShader.uniforms.gridDims.getBindGroupEntry(device),
+        { binding: giMeta.uniforms.voxelAlbedo.binding, resource: textures.voxelAlbedo.createView({ dimension: "3d" }) },
+        { binding: giMeta.uniforms.voxelEmission.binding, resource: textures.voxelEmission.createView({ dimension: "3d" }) },
+      ],
+    });
+
     // Grid uniforms (shared by both shaders).
     originArr[0] = originX;
     originArr[1] = originY;
@@ -154,6 +199,8 @@ export function createVoxelSystem({
     device.queue.writeBuffer(voxShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
     device.queue.writeBuffer(debugShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
     device.queue.writeBuffer(debugShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
+    device.queue.writeBuffer(giShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
+    device.queue.writeBuffer(giShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
 
     dispatchX = Math.ceil(dimX / WORKGROUP);
     dispatchY = Math.ceil(dimY / WORKGROUP);
@@ -169,6 +216,19 @@ export function createVoxelSystem({
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
   let outputTexture = createOutput();
+
+  // GI output at reduced resolution (1/giScale). Upscaled by present().
+  const createGiOutput = () =>
+    device.createTexture({
+      size: [
+        Math.max(1, Math.ceil(canvas.width / giScale)),
+        Math.max(1, Math.ceil(canvas.height / giScale)),
+        1,
+      ],
+      format: "bgra8unorm",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+  let giOutputTexture = createGiOutput();
 
   // Re-voxelize the scene into the 3D textures (run before debug()/the GI gather).
   function voxelize(encoder: GPUCommandEncoder) {
@@ -213,6 +273,41 @@ export function createVoxelSystem({
     pass.end();
   }
 
+  // Brute-force voxel GI (Stage 2.1a) -> giOutputTexture. frameIndex feeds the per-pixel
+  // jitter seed.
+  function gi(encoder: GPUCommandEncoder, frameIndex: number) {
+    giParamsArr[0] = giParams.ambient;
+    giParamsArr[1] = giParams.numRays;
+    giParamsArr[2] = giParams.maxDist;
+    giParamsArr[3] = giParams.normalBias;
+    device.queue.writeBuffer(giShader.uniforms.params.getGPUBuffer(device), 0, giParamsArr);
+
+    giParams2Arr[0] = frameIndex;
+    giParams2Arr[1] = giParams.skyIntensity;
+    giParams2Arr[2] = giParams.giStrength;
+    giParams2Arr[3] = 0;
+    device.queue.writeBuffer(giShader.uniforms.params2.getGPUBuffer(device), 0, giParams2Arr);
+
+    mat4.invert(invViewProj, viewProjMatrix);
+    giInvArr.set(invViewProj as Float32Array);
+    device.queue.writeBuffer(giShader.uniforms.invViewProj.getGPUBuffer(device), 0, giInvArr);
+
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: giOutputTexture.createView(),
+          clearValue: [0, 0, 0, 1],
+          loadOp: "clear",
+          storeOp: "store",
+        },
+      ],
+    });
+    pass.setPipeline(giPipeline);
+    pass.setBindGroup(0, giGroup0);
+    pass.draw(6, 1, 0, 0);
+    pass.end();
+  }
+
   // Change the voxel size (graininess). Destroys the old textures, rebuilds the grid.
   function setCellSize(newCellSize: number) {
     textures.voxelAlbedo.destroy();
@@ -220,18 +315,33 @@ export function createVoxelSystem({
     buildGrid(newCellSize);
   }
 
-  // Canvas resized: only the output texture is canvas-sized.
+  // Canvas resized: recreate the (canvas-sized) debug output + the (scaled) GI output.
   function recreate() {
     outputTexture.destroy();
     outputTexture = createOutput();
+    giOutputTexture.destroy();
+    giOutputTexture = createGiOutput();
+  }
+
+  // Change the GI resolution divisor (1 = full res, 4 = quarter, …). Bigger = cheaper.
+  function setGiScale(scale: number) {
+    giScale = Math.max(1, Math.round(scale));
+    giOutputTexture.destroy();
+    giOutputTexture = createGiOutput();
   }
 
   return {
     params,
+    giParams,
     voxelize,
     debug,
+    gi,
     recreate,
     setCellSize,
+    setGiScale,
+    get giScale() {
+      return giScale;
+    },
     get cellSize() {
       return cellSize;
     },
@@ -243,6 +353,9 @@ export function createVoxelSystem({
     },
     get outputTexture() {
       return outputTexture;
+    },
+    get giOutputTexture() {
+      return giOutputTexture;
     },
   };
 }

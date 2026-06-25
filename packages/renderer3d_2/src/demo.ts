@@ -278,16 +278,19 @@ async function main() {
 
   // Present-source selector: which texture reaches the screen.
   //   "voxel" — the voxel debug raymarch (voxel.outputTexture).
+  //   "gi"    — brute-force voxel GI reference (voxel.giOutputTexture).
   //   "raw"   — the unlit albedo G-buffer (frame.renderTexture).
-  // Keys: 1 = voxel, 2 = raw (also a GUI dropdown below).
-  const view = { presentSource: "voxel" as "voxel" | "raw" };
+  // Keys: 1 = voxel, 2 = raw, 3 = gi (also a GUI dropdown below).
+  // Default to "voxel" (cheap) so the page never opens straight into the heavy GI pass.
+  const view = { presentSource: "voxel" as "voxel" | "raw" | "gi" };
   window.addEventListener("keydown", (e) => {
     if (e.key === "1") view.presentSource = "voxel";
     else if (e.key === "2") view.presentSource = "raw";
+    else if (e.key === "3") view.presentSource = "gi";
   });
 
   const gui = new GUI({ title: "Voxel" });
-  gui.add(view, "presentSource", ["voxel", "raw"]).name("present (1/2)").listen();
+  gui.add(view, "presentSource", ["voxel", "gi", "raw"]).name("present (1/3/2)").listen();
 
   // Graininess: voxel size in world units. Smaller = finer = more voxels. Rebuilds the
   // 3D textures on release (.onFinishChange, so it rebuilds once when the slider settles).
@@ -304,10 +307,26 @@ async function main() {
       dimsCtl.updateDisplay();
     });
 
-  gui.add(voxel.params, "ambient", 0, 1, 0.01).name("ambient");
+  gui.add(voxel.params, "ambient", 0, 1, 0.01).name("voxel ambient");
   // Sun toggle is read live by the draw pass; keep it exposed for the raw view.
   gui.add(SunLight, "enabled").name("sun enabled");
   gui.add(SunLight, "angle", 0, Math.PI * 2, 0.01).name("sun angle");
+
+  // GI (Stage 2.1a brute-force reference). All read live each frame by voxel.gi().
+  const giFolder = gui.addFolder("GI (reference)");
+  // Resolution divisor: GI renders at 1/scale then upscales. Higher = much cheaper.
+  // Rebuilds the GI target on release. THE primary knob if the GI pass is too heavy.
+  const giScaleCfg = { scale: voxel.giScale };
+  giFolder
+    .add(giScaleCfg, "scale", [1, 2, 4, 8])
+    .name("resolution 1/N")
+    .onChange((s: number) => voxel.setGiScale(s));
+  giFolder.add(voxel.giParams, "numRays", 1, 256, 1).name("rays/pixel");
+  giFolder.add(voxel.giParams, "maxDist", 1, 64, 0.5).name("ray reach");
+  giFolder.add(voxel.giParams, "giStrength", 0, 4, 0.05).name("GI strength");
+  giFolder.add(voxel.giParams, "ambient", 0, 1, 0.01).name("ambient");
+  giFolder.add(voxel.giParams, "skyIntensity", 0, 2, 0.01).name("sky on miss");
+  giFolder.add(voxel.giParams, "normalBias", 0, 2, 0.01).name("normal bias");
 
   // Live emitter controls (only the "emitter" scene). Position writes the transform
   // (re-uploaded every frame); radius drives BOTH the sphere SDF (Shape.setSphere$)
@@ -372,9 +391,11 @@ async function main() {
   );
 
   let last = performance.now();
+  let frameIndex = 0;
   function loop(now: number) {
     const delta = Math.min(now - last, 16.6667);
     last = now;
+    frameIndex++;
 
     // Update camera + canvas size first, so prepare() uploads current uniforms
     // and the resize check below sees this frame's dimensions.
@@ -403,12 +424,17 @@ async function main() {
     // voxel 3D textures + scene buffers, which prepare() already uploaded), so run the
     // SDF pass ONLY when the raw view is presented.
     if (view.presentSource === "raw") frameTick(encoder, delta);
-    // Voxelize the SDF scene into the 3D textures, then raymarch them for the debug view.
+    // Voxelize the SDF scene into the 3D textures, then run the selected voxel pass.
     voxel.voxelize(encoder);
     if (view.presentSource === "voxel") voxel.debug(encoder);
+    else if (view.presentSource === "gi") voxel.gi(encoder, frameIndex);
     // Present the chosen source.
     const presented =
-      view.presentSource === "voxel" ? voxel.outputTexture : frame.renderTexture;
+      view.presentSource === "voxel"
+        ? voxel.outputTexture
+        : view.presentSource === "gi"
+          ? voxel.giOutputTexture
+          : frame.renderTexture;
     present(encoder, presented);
     device.queue.submit([encoder.finish()]);
 
