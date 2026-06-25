@@ -7,10 +7,16 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 // voxel grid, and shades the first solid voxel (occupancy a>0). uParams.y selects the
 // mode: 0 = simple Lambert on the crossed face normal + emission (lit albedo);
 // 1 = show the stored voxelRadiance (direct sun lighting baked at voxelize time, +
-// uParams.x * albedo as a faint ambient floor). A miss returns the background color.
+// uParams.x * albedo as a faint ambient floor);
+// 2 = LOD sample: filter voxelRadiance at mip level uParams.z (textureSampleLevel) — LOD 0
+// is sharp, higher LODs are progressively blurred (proves the opacity-weighted mip pyramid).
+// A miss returns the background color.
 //
-// The voxel textures are read as sampled texture_3d<f32> via textureLoad (exact integer
-// fetch, no filtering) — the SAME GPUTextures the voxelize compute pass wrote.
+// uParams.y = mode (0/1/2), uParams.z = lod (float, mode 2 only).
+//
+// modes 0/1 read the voxel textures as sampled texture_3d<f32> via textureLoad (exact
+// integer fetch); mode 2 uses a filtering sampler + textureSampleLevel (explicit lod, so
+// it is legal in non-uniform control flow). The SAME GPUTextures the voxelize pass wrote.
 
 const sampled3d = (name: string) =>
   new VariableMeta(name, VariableKind.Texture, `texture_3d<f32>`, {
@@ -20,8 +26,11 @@ const sampled3d = (name: string) =>
 
 export const shaderMeta = new ShaderMeta(
   {
-    // .x = ambient floor, .y = mode (0 = lit albedo, 1 = stored radiance). (z/w spare.)
+    // .x = ambient floor, .y = mode (0 = lit albedo, 1 = stored radiance, 2 = LOD sample),
+    // .z = lod (mode 2). (w spare.)
     params: new VariableMeta("uParams", VariableKind.Uniform, `vec4<f32>`),
+    // Filtering sampler for the LOD (mode 2) textureSampleLevel.
+    voxelSampler: new VariableMeta("voxelSampler", VariableKind.Sampler, `sampler`),
     // inverse(viewProjMatrix) (reverse-Z), column-major, for world-ray reconstruction.
     invViewProj: new VariableMeta("uInvViewProj", VariableKind.Uniform, `mat4x4<f32>`),
     // .xyz = world min corner, .w = cellSize.
@@ -120,7 +129,12 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   for (var i = 0; i < maxSteps; i = i + 1) {
     let a = textureLoad(voxelAlbedo, coord, 0);
     if (a.a > 0.5) {
-      if (uParams.y >= 0.5) {
+      if (uParams.y >= 1.5) {
+        // Mode 2: sample voxelRadiance's mip pyramid at lod uParams.z (filtered).
+        let uvw = (vec3<f32>(coord) + vec3<f32>(0.5)) / vec3<f32>(dims);
+        let rad = textureSampleLevel(voxelRadiance, voxelSampler, uvw, uParams.z).rgb;
+        return vec4f(rad + uParams.x * a.rgb, 1.0);
+      } else if (uParams.y >= 0.5) {
         let rad = textureLoad(voxelRadiance, coord, 0).rgb;
         return vec4f(rad + uParams.x * a.rgb, 1.0);
       } else {

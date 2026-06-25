@@ -280,20 +280,27 @@ async function main() {
   //   "voxel"    — the voxel debug raymarch, lit-albedo Lambert (voxel.outputTexture).
   //   "radiance" — the voxel debug raymarch showing stored direct-sun radiance
   //                (voxel.outputTexture, debug mode 1).
+  //   "lod"      — the voxel debug raymarch sampling the radiance mip pyramid at a chosen
+  //                LOD (voxel.outputTexture, debug mode 2); LOD 0 sharp, higher = blurred.
   //   "gi"       — brute-force voxel GI reference (voxel.giOutputTexture).
   //   "raw"      — the unlit albedo G-buffer (frame.renderTexture).
-  // Keys: 1 = voxel, 5 = radiance, 2 = raw, 3 = gi (also a GUI dropdown below).
+  // Keys: 1 = voxel, 5 = radiance, 6 = lod, 2 = raw, 3 = gi (also a GUI dropdown below).
   // Default to "voxel" (cheap) so the page never opens straight into a heavy GI pass.
-  const view = { presentSource: "voxel" as "voxel" | "raw" | "gi" | "radiance" };
+  const view = { presentSource: "voxel" as "voxel" | "raw" | "gi" | "radiance" | "lod" };
   window.addEventListener("keydown", (e) => {
     if (e.key === "1") view.presentSource = "voxel";
     else if (e.key === "2") view.presentSource = "raw";
     else if (e.key === "3") view.presentSource = "gi";
     else if (e.key === "5") view.presentSource = "radiance";
+    else if (e.key === "6") view.presentSource = "lod";
   });
 
   const gui = new GUI({ title: "Voxel" });
-  gui.add(view, "presentSource", ["voxel", "radiance", "gi", "raw"]).name("present (1/5/3/2)").listen();
+  gui.add(view, "presentSource", ["voxel", "radiance", "lod", "gi", "raw"]).name("present (1/5/6/3/2)").listen();
+
+  // Debug LOD for the "lod" present source: which mip of the radiance pyramid to sample.
+  const lodCfg = { lod: 0 };
+  gui.add(lodCfg, "lod", 0, voxel.mipCount - 1, 1).name("debug LOD");
 
   // Graininess: voxel size in world units. Smaller = finer = more voxels. Rebuilds the
   // 3D textures on release (.onFinishChange, so it rebuilds once when the slider settles).
@@ -437,10 +444,16 @@ async function main() {
     voxel.voxelize(encoder);
     if (view.presentSource === "voxel") voxel.debug(encoder, 0);
     else if (view.presentSource === "radiance") voxel.debug(encoder, 1);
-    else if (view.presentSource === "gi") voxel.gi(encoder, frameIndex);
+    else if (view.presentSource === "lod") {
+      // Build the radiance mip pyramid (must follow voxelize), then sample the chosen LOD.
+      voxel.mips(encoder);
+      voxel.debug(encoder, 2, lodCfg.lod);
+    } else if (view.presentSource === "gi") voxel.gi(encoder, frameIndex);
     // Present the chosen source.
     const presented =
-      view.presentSource === "voxel" || view.presentSource === "radiance"
+      view.presentSource === "voxel" ||
+      view.presentSource === "radiance" ||
+      view.presentSource === "lod"
         ? voxel.outputTexture
         : view.presentSource === "gi"
           ? voxel.giOutputTexture

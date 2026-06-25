@@ -235,17 +235,31 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
   }
 
   getGPUPipelineLayout(device: GPUDevice, groups?: number[]): GPUPipelineLayout {
-    return (
-      this.pipelineLayout ??
-      (this.pipelineLayout = device.createPipelineLayout({
-        bindGroupLayouts: Array.from(
-          groups ??
-            Object.values(this.shaderMeta.uniforms)
-              .reduce((acc, u) => acc.add(u.group), new Set<number>())
-              .values(),
-        ).map((group) => this.createBindGroupLayout(device, group)),
-      }))
-    );
+    if (this.pipelineLayout) {
+      return this.pipelineLayout;
+    }
+
+    // bindGroupLayouts is POSITIONAL: array index i must be the layout for @group(i). When
+    // a shader uses non-contiguous groups (e.g. a compute pass with group-0 uniforms/texture
+    // + a group-2 StorageTexture but nothing in group 1), the gap MUST be filled with an
+    // empty layout — otherwise @group(2) maps to array index 1 and the pipeline has no
+    // layout for index 2 ("doesn't have a BindGroupLayout for this index"). A group with no
+    // variables yields an empty (but valid) bind group layout.
+    let indices: number[];
+    if (groups) {
+      indices = groups;
+    } else {
+      const used = Object.values(this.shaderMeta.uniforms).reduce(
+        (acc, u) => acc.add(u.group),
+        new Set<number>(),
+      );
+      const max = Math.max(...used);
+      indices = Array.from({ length: max + 1 }, (_, i) => i);
+    }
+
+    return (this.pipelineLayout = device.createPipelineLayout({
+      bindGroupLayouts: indices.map((group) => this.createBindGroupLayout(device, group)),
+    }));
   }
 
   destroy() {

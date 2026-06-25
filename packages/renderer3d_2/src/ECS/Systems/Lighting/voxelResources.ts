@@ -7,6 +7,11 @@
 //   voxelAlbedo   rgba8unorm  — rgb = nearest-instance albedo, a = occupancy (1=solid).
 //   voxelEmission rgba16float — rgb = nearest-instance emission (for the Phase-2 GI).
 //   voxelRadiance rgba16float — rgb = direct-lit radiance (sun N·L·vis) + emission, a = occupancy.
+//
+// voxelRadiance carries a FULL MIP PYRAMID (voxelMipLevelCount levels): mip 0 is written by
+// the voxelize pass, the coarser levels by the voxelMip compute pass (isotropic, opacity-
+// weighted downsample). The pyramid is what the VCT cone-tracing path samples by LOD.
+// voxelAlbedo / voxelEmission stay single-mip.
 
 export type VoxelGridConfig = {
   // World-space min corner of the grid box.
@@ -32,6 +37,12 @@ export const DEFAULT_VOXEL_GRID: VoxelGridConfig = {
   dimZ: 32,
   cellSize: 0.5,
 };
+
+// Number of mip levels for the voxelRadiance pyramid: full chain down to the 1-voxel mip
+// along the LARGEST axis (1 + floor(log2(max dim))).
+export function voxelMipLevelCount(dimX: number, dimY: number, dimZ: number): number {
+  return 1 + Math.floor(Math.log2(Math.max(dimX, dimY, dimZ)));
+}
 
 export type VoxelTextures = {
   voxelAlbedo: GPUTexture;
@@ -62,6 +73,7 @@ export function createVoxelTextures(
     size,
     dimension: "3d",
     format: "rgba16float",
+    mipLevelCount: voxelMipLevelCount(grid.dimX, grid.dimY, grid.dimZ),
     usage,
   });
 

@@ -5,9 +5,11 @@ import { viewProjMatrix } from "../ResizeSystem.ts";
 import { shaderMeta as voxelizeMeta, WORKGROUP } from "./voxelize.shader.ts";
 import { shaderMeta as debugMeta } from "./voxelDebug.shader.ts";
 import { shaderMeta as giMeta } from "./voxelGi.shader.ts";
+import { shaderMeta as mipMeta, WORKGROUP as MIP_WG } from "./voxelMip.shader.ts";
 import {
   createVoxelTextures,
   DEFAULT_VOXEL_GRID,
+  voxelMipLevelCount,
   type VoxelGridConfig,
   type VoxelTextures,
 } from "./voxelResources.ts";
@@ -86,6 +88,24 @@ export function createVoxelSystem({
     targetFormat: "rgba16float",
     withBlending: false,
   });
+  // Voxel-radiance mip-pyramid downsample (one dispatch per level).
+  const mipShader = new GPUShader(mipMeta);
+  const mipPipeline = mipShader.getComputePipeline(device, "main");
+  // The mip shader uses groups 0 (uniform+src) and 2 (dst storage) with NOTHING in group 1,
+  // so its pipeline layout has an empty layout at index 1. Bind a matching empty group there
+  // each dispatch, so strict implementations that require every layout index to be set are
+  // satisfied. (The layout object is the same one the pipeline layout reflects.)
+  const mipEmptyGroup1 = device.createBindGroup({
+    layout: mipShader.createBindGroupLayout(device, 1),
+    entries: [],
+  });
+
+  // Filtering sampler for the LOD debug (textureSampleLevel over the rgba16float pyramid).
+  const voxelSampler = device.createSampler({
+    magFilter: "linear",
+    minFilter: "linear",
+    mipmapFilter: "linear",
+  });
 
   // Group 0 (voxelize) = grid uniforms; Group 1 = the 7 scene-instance buffers. Both
   // reference stable buffers (uniform + draw system's GPUVariables) → built ONCE. Scene
@@ -127,6 +147,8 @@ export function createVoxelSystem({
   const giParamsArr = getTypeTypedArray(giMeta.uniforms.params.type); // Float32Array(4)
   const giParams2Arr = getTypeTypedArray(giMeta.uniforms.params2.type); // Float32Array(4)
   const giInvArr = getTypeTypedArray(giMeta.uniforms.invViewProj.type); // Float32Array(16)
+  // Mip scratch: .xyz = destination mip dims (re-uploaded per level).
+  const mipArr = getTypeTypedArray(mipMeta.uniforms.mip.type); // Int32Array(4)
 
   // --- Grid state (rebuilt by buildGrid). ---
   let cellSize = grid.cellSize;
@@ -139,6 +161,14 @@ export function createVoxelSystem({
   let dispatchX = 0;
   let dispatchY = 0;
   let dispatchZ = 0;
+
+  // Mip-pyramid state (rebuilt by buildGrid). One downsample step per pair of adjacent
+  // levels → mipCount-1 steps, indexed 0..mipCount-2. mipGroup0[L]/mipGroup2[L] downsample
+  // mip L → mip L+1.
+  let mipCount = 1;
+  let mipBuf: GPUBuffer[] = [];
+  let mipGroup0: GPUBindGroup[] = [];
+  let mipGroup2: GPUBindGroup[] = [];
 
   // GI temporal accumulation (ping-pong, reduced resolution, HDR). giRead[i] is the GI
   // bind group whose history binding = giAccum[i]; each frame we write giAccum[w] while
@@ -197,12 +227,14 @@ export function createVoxelSystem({
     });
 
     // Group 2 (voxelize) = voxel output storage textures (write-only, dimension 3d).
+    // voxelRadiance now has a mip pyramid; a storage view MUST span exactly one mip → bind
+    // mip 0 only (the voxelize pass writes level 0; voxelMip builds the rest).
     voxGroup2 = device.createBindGroup({
       layout: voxPipeline.getBindGroupLayout(2),
       entries: [
         { binding: voxelizeMeta.uniforms.voxelAlbedo.binding, resource: textures.voxelAlbedo.createView({ dimension: "3d" }) },
         { binding: voxelizeMeta.uniforms.voxelEmission.binding, resource: textures.voxelEmission.createView({ dimension: "3d" }) },
-        { binding: voxelizeMeta.uniforms.voxelRadiance.binding, resource: textures.voxelRadiance.createView({ dimension: "3d" }) },
+        { binding: voxelizeMeta.uniforms.voxelRadiance.binding, resource: textures.voxelRadiance.createView({ dimension: "3d", baseMipLevel: 0, mipLevelCount: 1 }) },
       ],
     });
 
@@ -214,11 +246,55 @@ export function createVoxelSystem({
         debugShader.uniforms.invViewProj.getBindGroupEntry(device),
         debugShader.uniforms.gridOrigin.getBindGroupEntry(device),
         debugShader.uniforms.gridDims.getBindGroupEntry(device),
+        { binding: debugMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
         { binding: debugMeta.uniforms.voxelAlbedo.binding, resource: textures.voxelAlbedo.createView({ dimension: "3d" }) },
         { binding: debugMeta.uniforms.voxelEmission.binding, resource: textures.voxelEmission.createView({ dimension: "3d" }) },
+        // ALL-mips sampled view so textureSampleLevel can pick any lod.
         { binding: debugMeta.uniforms.voxelRadiance.binding, resource: textures.voxelRadiance.createView({ dimension: "3d" }) },
       ],
     });
+
+    // Mip-pyramid downsample groups (mip L → L+1). srcView is a single-mip SAMPLED view of
+    // mip L; dstView is a single-mip STORAGE view of mip L+1 (different subresources of the
+    // same texture → allowed). Rebuilt here because views/buffers depend on the new dims.
+    for (const b of mipBuf) b.destroy();
+    mipCount = voxelMipLevelCount(dimX, dimY, dimZ);
+    mipBuf = [];
+    mipGroup0 = [];
+    mipGroup2 = [];
+    for (let L = 0; L < mipCount - 1; L++) {
+      const buf = device.createBuffer({
+        size: 16,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+      mipBuf.push(buf);
+
+      const srcView = textures.voxelRadiance.createView({ dimension: "3d", baseMipLevel: L, mipLevelCount: 1 });
+      const dstView = textures.voxelRadiance.createView({ dimension: "3d", baseMipLevel: L + 1, mipLevelCount: 1 });
+
+      mipGroup0.push(
+        device.createBindGroup({
+          layout: mipPipeline.getBindGroupLayout(0),
+          entries: [
+            { binding: mipMeta.uniforms.mip.binding, resource: { buffer: buf } },
+            { binding: mipMeta.uniforms.src.binding, resource: srcView },
+          ],
+        }),
+      );
+      mipGroup2.push(
+        device.createBindGroup({
+          layout: mipPipeline.getBindGroupLayout(2),
+          entries: [{ binding: mipMeta.uniforms.dst.binding, resource: dstView }],
+        }),
+      );
+
+      // Destination dims = mip L+1 dims (halved per axis, floored at 1).
+      mipArr[0] = Math.max(1, dimX >> (L + 1));
+      mipArr[1] = Math.max(1, dimY >> (L + 1));
+      mipArr[2] = Math.max(1, dimZ >> (L + 1));
+      mipArr[3] = 0;
+      device.queue.writeBuffer(buf, 0, mipArr);
+    }
 
     // GI bind groups reference the same voxel textures + the (already-created) giAccum.
     buildGiReadGroups();
@@ -287,10 +363,35 @@ export function createVoxelSystem({
     pass.end();
   }
 
-  // Raymarch the voxel grid into outputTexture. mode: 0 = lit albedo, 1 = stored radiance.
-  function debug(encoder: GPUCommandEncoder, mode = 0) {
+  // Build the voxelRadiance mip pyramid: one compute pass PER level (passes are ordered/
+  // barriered by the encoder, so level L+1 sees level L's writes — dispatches WITHIN a pass
+  // are not synchronized, hence one pass each). Must run AFTER voxelize() (level 0 reads
+  // mip 0 that voxelize wrote) and in the SAME encoder.
+  function mips(encoder: GPUCommandEncoder) {
+    for (let L = 0; L < mipCount - 1; L++) {
+      const dx = Math.max(1, dimX >> (L + 1));
+      const dy = Math.max(1, dimY >> (L + 1));
+      const dz = Math.max(1, dimZ >> (L + 1));
+      const pass = encoder.beginComputePass();
+      pass.setPipeline(mipPipeline);
+      pass.setBindGroup(0, mipGroup0[L]);
+      pass.setBindGroup(1, mipEmptyGroup1);
+      pass.setBindGroup(2, mipGroup2[L]);
+      pass.dispatchWorkgroups(
+        Math.ceil(dx / MIP_WG),
+        Math.ceil(dy / MIP_WG),
+        Math.ceil(dz / MIP_WG),
+      );
+      pass.end();
+    }
+  }
+
+  // Raymarch the voxel grid into outputTexture. mode: 0 = lit albedo, 1 = stored radiance,
+  // 2 = LOD sample of the radiance pyramid at `lod` (requires mips() to have run).
+  function debug(encoder: GPUCommandEncoder, mode = 0, lod = 0) {
     paramsArr[0] = params.ambient;
     paramsArr[1] = mode;
+    paramsArr[2] = lod;
     device.queue.writeBuffer(debugShader.uniforms.params.getGPUBuffer(device), 0, paramsArr);
 
     mat4.invert(invViewProj, viewProjMatrix);
@@ -400,11 +501,15 @@ export function createVoxelSystem({
     params,
     giParams,
     voxelize,
+    mips,
     debug,
     gi,
     recreate,
     setCellSize,
     setGiScale,
+    get mipCount() {
+      return mipCount;
+    },
     get giScale() {
       return giScale;
     },
