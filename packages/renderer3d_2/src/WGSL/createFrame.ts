@@ -67,17 +67,20 @@ export function createFrameTick(
     passEncoder: null as unknown as GPURenderPassEncoder,
   };
 
+  // The frame textures are fixed for this closure's lifetime (a canvas resize rebuilds the
+  // whole tick via createFrameTick), so their attachment views are created ONCE here rather
+  // than per frame — a per-frame createView() is pure GC churn on a stable texture.
+  // Depth convention: reverse-Z. The draw pipeline uses depthCompare "greater-equal" with
+  // depthClearValue 0 (NEAR maps to 1, FAR to 0).
+  const depthView = depthTexture.createView();
+  const textureView = renderTexture.createView();
+  const normalView = normalTexture.createView();
+  const emissionView = emissionTexture.createView();
+
   const renderFrame = (commandEncoder: GPUCommandEncoder, delta: number) => {
     resizeSystem();
 
     // === Main Render Pass ===
-    // Depth convention: reverse-Z. The draw pipeline uses depthCompare
-    // "greater-equal" with depthClearValue 0 (NEAR maps to 1, FAR to 0).
-    const depthView = depthTexture.createView();
-    const textureView = renderTexture.createView();
-    const normalView = normalTexture.createView();
-    const emissionView = emissionTexture.createView();
-
     const passEncoder = commandEncoder.beginRenderPass({
       colorAttachments: [
         {

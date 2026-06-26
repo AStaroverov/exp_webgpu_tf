@@ -158,6 +158,9 @@ export function createVoxelSystem({
     format: "depth32float",
     usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
   });
+  // Cached once (the texture never changes): used both as the sunDepth() depth attachment and
+  // as the composite shadow-map binding — a per-frame createView() would just feed the GC.
+  const sunDepthView = sunDepthTexture.createView();
 
   // Sun bind groups (scene buffers are stable → build ONCE, mirroring voxGroup0/voxGroup1).
   // group0 = sun viewProj + rayDir uniforms; group1 = the 7 scene-instance buffers bound by
@@ -355,7 +358,7 @@ export function createVoxelSystem({
         compositeShader.uniforms.sunViewProj.getBindGroupEntry(device),
         { binding: compositeMeta.uniforms.albedoTex.binding, resource: gAlbedo.createView() },
         { binding: compositeMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
-        { binding: compositeMeta.uniforms.coneTex.binding, resource: coneOutput.createView() },
+        { binding: compositeMeta.uniforms.coneTex.binding, resource: coneView },
         // Linear/clamp sampler (reuse voxelSampler) for the half-res cone upsample.
         { binding: compositeMeta.uniforms.coneSampler.binding, resource: voxelSampler },
         {
@@ -367,7 +370,7 @@ export function createVoxelSystem({
         { binding: compositeMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
         {
           binding: compositeMeta.uniforms.shadowMap.binding,
-          resource: sunDepthTexture.createView(),
+          resource: sunDepthView,
         },
       ],
     });
@@ -525,6 +528,8 @@ export function createVoxelSystem({
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
   let outputTexture = createOutput();
+  // Cached attachment view; refreshed in recreate() when the texture is rebuilt on resize.
+  let outputView = outputTexture.createView();
 
   // HALF-res HDR target for the Layer-2 cone gather (presented as the "cone" source).
   // Half-res for perf (¼ the pixels → ~4× less cone work); the composite bilinear-upsamples
@@ -541,6 +546,9 @@ export function createVoxelSystem({
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
   let coneOutput = createConeOutput();
+  // Cached view; used both as the cone() attachment and as the composite's sampled binding.
+  // Refreshed in recreate() (the texture is rebuilt on resize, before the bind groups).
+  let coneView = coneOutput.createView();
 
   // Full-res HDR target for the Layer-4 composite (the final lit image — "final" source).
   const createCompositeOutput = () =>
@@ -550,6 +558,8 @@ export function createVoxelSystem({
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
   let compositeOutput = createCompositeOutput();
+  // Cached attachment view; refreshed in recreate() when the texture is rebuilt on resize.
+  let compositeView = compositeOutput.createView();
 
   // Built last: buildGrid() (and recreate()) call buildCompositeGroup(), which references
   // coneOutput + compositeOutput, so those textures must exist first.
@@ -661,7 +671,7 @@ export function createVoxelSystem({
     const pass = encoder.beginRenderPass({
       colorAttachments: [],
       depthStencilAttachment: {
-        view: sunDepthTexture.createView(),
+        view: sunDepthView,
         depthClearValue: 1.0, // standard depth: far = 1
         depthLoadOp: "clear",
         depthStoreOp: "store",
@@ -750,7 +760,7 @@ export function createVoxelSystem({
     const pass = encoder.beginRenderPass({
       colorAttachments: [
         {
-          view: outputTexture.createView(),
+          view: outputView,
           clearValue: [0, 0, 0, 1],
           loadOp: "clear",
           storeOp: "store",
@@ -786,7 +796,7 @@ export function createVoxelSystem({
     const pass = encoder.beginRenderPass({
       colorAttachments: [
         {
-          view: coneOutput.createView(),
+          view: coneView,
           clearValue: [0, 0, 0, 1],
           loadOp: "clear",
           storeOp: "store",
@@ -865,7 +875,7 @@ export function createVoxelSystem({
     const pass = encoder.beginRenderPass({
       colorAttachments: [
         {
-          view: compositeOutput.createView(),
+          view: compositeView,
           clearValue: [0, 0, 0, 1],
           loadOp: "clear",
           storeOp: "store",
@@ -900,10 +910,14 @@ export function createVoxelSystem({
     gEmission = newEmission;
     outputTexture.destroy();
     outputTexture = createOutput();
+    outputView = outputTexture.createView();
     coneOutput.destroy();
     coneOutput = createConeOutput();
+    coneView = coneOutput.createView();
     compositeOutput.destroy();
     compositeOutput = createCompositeOutput();
+    compositeView = compositeOutput.createView();
+    // Bind groups below reference coneView, so refresh the cached views first.
     buildConeGroup();
     // Rebuild the composite group: G-buffer + coneOutput changed.
     buildCompositeGroup();
