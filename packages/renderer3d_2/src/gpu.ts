@@ -7,9 +7,12 @@ export async function initWebGPU(
   // The surfel gather binds 10 storage buffers in one compute stage (posr/norw +
   // 7 scene-instance buffers + radiance cache), above the default 8. Request the
   // adapter's max (commonly 10) so it's allowed; clamps to whatever the adapter has.
+  // Anisotropic VCT writes 6 directional storage textures in one compute dispatch,
+  // above the default 4 — request the adapter's max (commonly 8) for the same reason.
   const device = await adapter.requestDevice({
     requiredLimits: {
       maxStorageBuffersPerShaderStage: adapter.limits.maxStorageBuffersPerShaderStage,
+      maxStorageTexturesPerShaderStage: adapter.limits.maxStorageTexturesPerShaderStage,
     },
   });
   const context = canvas.getContext("webgpu") as GPUCanvasContext;

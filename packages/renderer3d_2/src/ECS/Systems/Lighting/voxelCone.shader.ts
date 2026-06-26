@@ -66,12 +66,40 @@ export const shaderMeta = new ShaderMeta(
     normalTex: new VariableMeta("normalTex", VariableKind.Texture, `texture_2d<f32>`, {
       textureSampleType: "float",
     }),
-    // The voxelRadiance mip pyramid (ALL mips) — the cone reads it at the per-step LOD.
+    // .x = uAniso (1 = anisotropic VCT path, 0 = isotropic) — A/B anti-leak toggle. yzw spare.
+    aniso: new VariableMeta("uAniso", VariableKind.Uniform, `vec4<f32>`),
+    // The voxelRadiance mip pyramid (ALL mips) — the ISOTROPIC path + the lod<1 lerp read it.
     voxelRadiance: new VariableMeta("voxelRadiance", VariableKind.Texture, `texture_3d<f32>`, {
       viewDimension: "3d",
       textureSampleType: "float",
     }),
-    // Filtering sampler for textureSampleLevel over the pyramid.
+    // The 6 ANISOTROPIC directional radiance volumes (±X,±Y,±Z), ALL-mips views. The cone picks
+    // the 3 facing back toward its direction and blends them (Crassin). Start at iso mip1 res.
+    voxelDirNegX: new VariableMeta("voxelNegX", VariableKind.Texture, `texture_3d<f32>`, {
+      viewDimension: "3d",
+      textureSampleType: "float",
+    }),
+    voxelDirPosX: new VariableMeta("voxelPosX", VariableKind.Texture, `texture_3d<f32>`, {
+      viewDimension: "3d",
+      textureSampleType: "float",
+    }),
+    voxelDirNegY: new VariableMeta("voxelNegY", VariableKind.Texture, `texture_3d<f32>`, {
+      viewDimension: "3d",
+      textureSampleType: "float",
+    }),
+    voxelDirPosY: new VariableMeta("voxelPosY", VariableKind.Texture, `texture_3d<f32>`, {
+      viewDimension: "3d",
+      textureSampleType: "float",
+    }),
+    voxelDirNegZ: new VariableMeta("voxelNegZ", VariableKind.Texture, `texture_3d<f32>`, {
+      viewDimension: "3d",
+      textureSampleType: "float",
+    }),
+    voxelDirPosZ: new VariableMeta("voxelPosZ", VariableKind.Texture, `texture_3d<f32>`, {
+      viewDimension: "3d",
+      textureSampleType: "float",
+    }),
+    // Filtering sampler for textureSampleLevel over the pyramids (shared by iso + the 6 dir vols).
     voxelSampler: new VariableMeta("voxelSampler", VariableKind.Sampler, `sampler`),
   },
   {},
@@ -113,6 +141,46 @@ fn build_basis(n: vec3<f32>) -> mat3x3<f32> {
   return mat3x3<f32>(t, b, n);
 }
 
+// Clamp the trace LOD to dodge high-mip glitch (the iso pyramid has 8 levels; the directional
+// pyramids only ~7 at base/2, so this is also a bounds guard for the aniso path).
+const MAX_LOD = 6.0;
+
+// Sample the radiance volume(s) in cone direction 'dir' at filtered LOD 'lod' (iso-pyramid LOD).
+// Returns PREMULTIPLIED (rgb=radiance·coverage, a=coverage), the same convention as the iso path.
+//   uAniso < 0.5  → isotropic path: a single textureSampleLevel(voxelRadiance,...) — byte-
+//                   identical to the original cone (the A side of the A/B anti-leak test).
+//   else          → anisotropic path: pick the 3 sign-selected directional volumes (the faces
+//                   looking back toward the cone), weight by dir·dir (sums to 1 for a normalized
+//                   dir → a proper convex blend, Crassin canonical), and sample each. The
+//                   directional volumes start at base/2 = iso mip1, so their LOD axis is shifted
+//                   by 1 (aLod = lod-1). For lod<1 the directional level-0 does not exist yet, so
+//                   sample the ISO base and lerp into the aniso result across [0,1].
+// Sign/face convention (rdinse): dir.x<0 → the -X volume, else +X (the volume whose front-to-back
+// integration sees the cone-facing voxels as "near"); same for Y/Z. Must match the downsample.
+// textureSampleLevel (explicit f32 LOD) is legal in the non-uniform sign-selected branches
+// (unlike textureSample).
+fn sampleRadiance(uvw: vec3<f32>, lod: f32, dir: vec3<f32>) -> vec4<f32> {
+  if (uAniso.x < 0.5) {
+    return textureSampleLevel(voxelRadiance, voxelSampler, uvw, lod);
+  }
+
+  let aLod = max(lod - 1.0, 0.0);
+  let w = dir * dir;
+  var aniso = vec4<f32>(0.0);
+  if (dir.x < 0.0) { aniso = aniso + w.x * textureSampleLevel(voxelNegX, voxelSampler, uvw, aLod); }
+  else            { aniso = aniso + w.x * textureSampleLevel(voxelPosX, voxelSampler, uvw, aLod); }
+  if (dir.y < 0.0) { aniso = aniso + w.y * textureSampleLevel(voxelNegY, voxelSampler, uvw, aLod); }
+  else            { aniso = aniso + w.y * textureSampleLevel(voxelPosY, voxelSampler, uvw, aLod); }
+  if (dir.z < 0.0) { aniso = aniso + w.z * textureSampleLevel(voxelNegZ, voxelSampler, uvw, aLod); }
+  else            { aniso = aniso + w.z * textureSampleLevel(voxelPosZ, voxelSampler, uvw, aLod); }
+
+  if (lod < 1.0) {
+    let iso = textureSampleLevel(voxelRadiance, voxelSampler, uvw, lod);
+    return mix(iso, aniso, clamp(lod, 0.0, 1.0));
+  }
+  return aniso;
+}
+
 // One cone marched along dir from origin: diameter grows with distance, each step samples
 // voxelRadiance at LOD=log2(diameter/voxelSize) and composites front-to-back ("over").
 // reach = how far this cone marches (world units). The step is floored at reach/64 so the
@@ -137,11 +205,11 @@ fn trace_cone(origin: vec3<f32>, dir: vec3<f32>, aperture: f32, reach: f32, fade
   for (var i = 0; i < 64; i = i + 1) {
     if (alpha >= 1.0 || dist > reach) { break; }
     let diameter = max(voxelSize, 2.0 * aperture * dist);
-    let lod = log2(diameter / voxelSize);
+    let lod = min(log2(diameter / voxelSize), MAX_LOD);
     let wp = origin + dir * dist;
     let uvw = (wp - gridMin) / extent;
     if (any(uvw < vec3<f32>(0.0)) || any(uvw > vec3<f32>(1.0))) { break; }
-    let s = textureSampleLevel(voxelRadiance, voxelSampler, uvw, lod);
+    let s = sampleRadiance(uvw, lod, dir);
     var window = 1.0;
     if (fadeFrac > 0.0) {
       window = clamp((reach - dist) / (reach * fadeFrac), 0.0, 1.0);

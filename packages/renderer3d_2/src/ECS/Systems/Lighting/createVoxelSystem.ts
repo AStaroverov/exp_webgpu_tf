@@ -7,11 +7,21 @@ import { shaderMeta as debugMeta } from "./voxelDebug.shader.ts";
 import { shaderMeta as coneMeta } from "./voxelCone.shader.ts";
 import { shaderMeta as compositeMeta } from "./voxelComposite.shader.ts";
 import { shaderMeta as mipMeta, WORKGROUP as MIP_WG } from "./voxelMip.shader.ts";
+import {
+  shaderMeta as anisoBaseMeta,
+  WORKGROUP as ANISO_BASE_WG,
+} from "./voxelAnisoBase.shader.ts";
+import {
+  shaderMeta as anisoVolMeta,
+  WORKGROUP as ANISO_VOL_WG,
+} from "./voxelAnisoVolume.shader.ts";
 import { shaderMeta as sunShadowMeta } from "./sunShadow.shader.ts";
 import {
   createVoxelTextures,
   DEFAULT_VOXEL_GRID,
   voxelMipLevelCount,
+  voxelDirDims,
+  voxelDirLevelCount,
   type VoxelGridConfig,
   type VoxelTextures,
 } from "./voxelResources.ts";
@@ -29,6 +39,7 @@ export type VoxelConeParams = {
   aperture: number; // tan(halfAngle) — cone half-angle (~0.577 = 60° full angle)
   giStrength: number; // multiplier on the gathered diffuse-cone radiance
   coneCount: number; // hemisphere cone count = angular resolution (more = sharper shadows)
+  anisotropic: boolean; // ANISOTROPIC VCT (Layer 6) — direction-correct occlusion (anti-leak)
 };
 
 export type VoxelCompositeParams = {
@@ -73,6 +84,7 @@ export function createVoxelSystem({
     aperture: 0.577,
     giStrength: 1,
     coneCount: 8,
+    anisotropic: false, // deferred "under question" — the build ~2× the per-frame mip cost
   };
   // giStrength stays in coneParams (baked into the cone's rgb); the composite only adds the
   // ambient floor.
@@ -129,6 +141,23 @@ export function createVoxelSystem({
   // satisfied. (The layout object is the same one the pipeline layout reflects.)
   const mipEmptyGroup1 = device.createBindGroup({
     layout: mipShader.createBindGroupLayout(device, 1),
+    entries: [],
+  });
+
+  // Anisotropic VCT (Layer 6) downsample pipelines: anisoBase builds the 6 directional volumes'
+  // level 0 from iso mip 0; anisoVolume downsamples directional level c → c+1 (one dispatch each).
+  // Both use group 0 (uniform + sampled sources) and group 2 (the 6 write storage textures) with
+  // NOTHING in group 1 → bind a matching empty group there each dispatch (like mipEmptyGroup1).
+  const anisoBaseShader = new GPUShader(anisoBaseMeta);
+  const anisoBasePipeline = anisoBaseShader.getComputePipeline(device, "main");
+  const anisoVolShader = new GPUShader(anisoVolMeta);
+  const anisoVolPipeline = anisoVolShader.getComputePipeline(device, "main");
+  const anisoBaseEmpty1 = device.createBindGroup({
+    layout: anisoBaseShader.createBindGroupLayout(device, 1),
+    entries: [],
+  });
+  const anisoVolEmpty1 = device.createBindGroup({
+    layout: anisoVolShader.createBindGroupLayout(device, 1),
     entries: [],
   });
 
@@ -272,6 +301,8 @@ export function createVoxelSystem({
   // Emitter centers to importance-sample (x,y,z,radius per light) — Float32Array(32) for 8.
   const coneLightsArr = getTypeTypedArray(coneMeta.uniforms.lights.type); // Float32Array(32)
   let coneLightCount = 0;
+  // Cone uAniso scratch: .x = anisotropic flag (1/0). Float32Array(4).
+  const coneAnisoArr = getTypeTypedArray(coneMeta.uniforms.aniso.type); // Float32Array(4)
   // Composite scratch (unified model: only ambient + screen dims).
   const compParamsArr = getTypeTypedArray(compositeMeta.uniforms.params.type); // Float32Array(4)
   const compParams2Arr = getTypeTypedArray(compositeMeta.uniforms.params2.type); // Float32Array(4)
@@ -313,6 +344,27 @@ export function createVoxelSystem({
   let mipGroup0: GPUBindGroup[] = [];
   let mipGroup2: GPUBindGroup[] = [];
 
+  // Anisotropic-pyramid state (rebuilt by buildGrid). The 6 directional volumes start at
+  // base/2 (= iso mip1 dims) with their OWN level count (dirLevels). anisoBase builds level 0
+  // (anisoBaseGroup0 reads iso mip0, anisoBaseGroup2 writes the 6 level-0 storage views). Each
+  // anisoVolGroup0[c]/Group2[c] downsamples directional level c → c+1; anisoVolBuf[c] holds that
+  // level's dst dims (distinct buffer per level → no within-encoder writeBuffer clobber).
+  let dirX = 1;
+  let dirY = 1;
+  let dirZ = 1;
+  let dirLevels = 1;
+  const anisoBaseBuf = device.createBuffer({
+    size: 16,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+  let anisoBaseGroup0: GPUBindGroup;
+  let anisoBaseGroup2: GPUBindGroup;
+  let anisoVolBuf: GPUBuffer[] = [];
+  let anisoVolGroup0: GPUBindGroup[] = [];
+  let anisoVolGroup2: GPUBindGroup[] = [];
+  // Scratch for the directional dst-dims uniform uploads.
+  const anisoDimsArr = getTypeTypedArray(anisoBaseMeta.uniforms.dst.type); // Int32Array(4)
+
   // (Re)build the Layer-2 cone bind group: uniforms + the G-buffer (depth/normal) + the
   // ALL-mips voxelRadiance view + the shared filtering sampler. Rebuilt whenever the
   // voxelRadiance view changes (grid rebuild) or the G-buffer changes (canvas resize).
@@ -326,12 +378,38 @@ export function createVoxelSystem({
         coneShader.uniforms.gridOrigin.getBindGroupEntry(device),
         coneShader.uniforms.gridDims.getBindGroupEntry(device),
         coneShader.uniforms.lights.getBindGroupEntry(device),
+        coneShader.uniforms.aniso.getBindGroupEntry(device),
         { binding: coneMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
         { binding: coneMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
         // ALL-mips sampled view so textureSampleLevel can pick any lod.
         {
           binding: coneMeta.uniforms.voxelRadiance.binding,
           resource: textures.voxelRadiance.createView({ dimension: "3d" }),
+        },
+        // The 6 directional volumes (ALL-mips views) for the anisotropic 3-face blend.
+        {
+          binding: coneMeta.uniforms.voxelDirNegX.binding,
+          resource: textures.voxelDirNegX.createView({ dimension: "3d" }),
+        },
+        {
+          binding: coneMeta.uniforms.voxelDirPosX.binding,
+          resource: textures.voxelDirPosX.createView({ dimension: "3d" }),
+        },
+        {
+          binding: coneMeta.uniforms.voxelDirNegY.binding,
+          resource: textures.voxelDirNegY.createView({ dimension: "3d" }),
+        },
+        {
+          binding: coneMeta.uniforms.voxelDirPosY.binding,
+          resource: textures.voxelDirPosY.createView({ dimension: "3d" }),
+        },
+        {
+          binding: coneMeta.uniforms.voxelDirNegZ.binding,
+          resource: textures.voxelDirNegZ.createView({ dimension: "3d" }),
+        },
+        {
+          binding: coneMeta.uniforms.voxelDirPosZ.binding,
+          resource: textures.voxelDirPosZ.createView({ dimension: "3d" }),
         },
         { binding: coneMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
       ],
@@ -478,7 +556,113 @@ export function createVoxelSystem({
       device.queue.writeBuffer(buf, 0, mipArr);
     }
 
-    // Cone bind group references the rebuilt voxelRadiance view + the (stable) G-buffer.
+    // ===== Anisotropic VCT (Layer 6): the 6 directional volumes + their downsample groups. =====
+    const dir = voxelDirDims(dimX, dimY, dimZ);
+    dirX = dir.x;
+    dirY = dir.y;
+    dirZ = dir.z;
+    dirLevels = voxelDirLevelCount(dimX, dimY, dimZ);
+
+    // The 6 directional textures, in dir-convention order (0=-X,1=+X,2=-Y,3=+Y,4=-Z,5=+Z).
+    const dirTex = [
+      textures.voxelDirNegX,
+      textures.voxelDirPosX,
+      textures.voxelDirNegY,
+      textures.voxelDirPosY,
+      textures.voxelDirNegZ,
+      textures.voxelDirPosZ,
+    ];
+    // Single-mip 3D STORAGE views of a level (write); single-mip 3D SAMPLED views of a level (read).
+    const dirStorageViews = (level: number) =>
+      dirTex.map((t) => t.createView({ dimension: "3d", baseMipLevel: level, mipLevelCount: 1 }));
+    const dirSampledViews = (level: number) =>
+      dirTex.map((t) => t.createView({ dimension: "3d", baseMipLevel: level, mipLevelCount: 1 }));
+
+    // anisoBase: iso mip 0 (single-mip sampled view) → the 6 directional level-0 storage views.
+    const baseStorage = dirStorageViews(0);
+    anisoBaseGroup0 = device.createBindGroup({
+      layout: anisoBasePipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: anisoBaseMeta.uniforms.dst.binding, resource: { buffer: anisoBaseBuf } },
+        {
+          binding: anisoBaseMeta.uniforms.srcIso.binding,
+          resource: textures.voxelRadiance.createView({
+            dimension: "3d",
+            baseMipLevel: 0,
+            mipLevelCount: 1,
+          }),
+        },
+      ],
+    });
+    anisoBaseGroup2 = device.createBindGroup({
+      layout: anisoBasePipeline.getBindGroupLayout(2),
+      entries: [
+        { binding: anisoBaseMeta.uniforms.dstNegX.binding, resource: baseStorage[0] },
+        { binding: anisoBaseMeta.uniforms.dstPosX.binding, resource: baseStorage[1] },
+        { binding: anisoBaseMeta.uniforms.dstNegY.binding, resource: baseStorage[2] },
+        { binding: anisoBaseMeta.uniforms.dstPosY.binding, resource: baseStorage[3] },
+        { binding: anisoBaseMeta.uniforms.dstNegZ.binding, resource: baseStorage[4] },
+        { binding: anisoBaseMeta.uniforms.dstPosZ.binding, resource: baseStorage[5] },
+      ],
+    });
+    // uDst = directional level-0 dims; .w = 0 (read iso MIP 0, the premultiplied full-res base).
+    anisoDimsArr[0] = dirX;
+    anisoDimsArr[1] = dirY;
+    anisoDimsArr[2] = dirZ;
+    anisoDimsArr[3] = 0;
+    device.queue.writeBuffer(anisoBaseBuf, 0, anisoDimsArr);
+
+    // anisoVolume: per directional level c → c+1, one bind-group set + one dst-dims buffer each.
+    for (const b of anisoVolBuf) b.destroy();
+    anisoVolBuf = [];
+    anisoVolGroup0 = [];
+    anisoVolGroup2 = [];
+    for (let c = 0; c < dirLevels - 1; c++) {
+      const buf = device.createBuffer({
+        size: 16,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+      anisoVolBuf.push(buf);
+
+      const srcViews = dirSampledViews(c);
+      const dstViews = dirStorageViews(c + 1);
+      anisoVolGroup0.push(
+        device.createBindGroup({
+          layout: anisoVolPipeline.getBindGroupLayout(0),
+          entries: [
+            { binding: anisoVolMeta.uniforms.dst.binding, resource: { buffer: buf } },
+            { binding: anisoVolMeta.uniforms.srcNegX.binding, resource: srcViews[0] },
+            { binding: anisoVolMeta.uniforms.srcPosX.binding, resource: srcViews[1] },
+            { binding: anisoVolMeta.uniforms.srcNegY.binding, resource: srcViews[2] },
+            { binding: anisoVolMeta.uniforms.srcPosY.binding, resource: srcViews[3] },
+            { binding: anisoVolMeta.uniforms.srcNegZ.binding, resource: srcViews[4] },
+            { binding: anisoVolMeta.uniforms.srcPosZ.binding, resource: srcViews[5] },
+          ],
+        }),
+      );
+      anisoVolGroup2.push(
+        device.createBindGroup({
+          layout: anisoVolPipeline.getBindGroupLayout(2),
+          entries: [
+            { binding: anisoVolMeta.uniforms.dstNegX.binding, resource: dstViews[0] },
+            { binding: anisoVolMeta.uniforms.dstPosX.binding, resource: dstViews[1] },
+            { binding: anisoVolMeta.uniforms.dstNegY.binding, resource: dstViews[2] },
+            { binding: anisoVolMeta.uniforms.dstPosY.binding, resource: dstViews[3] },
+            { binding: anisoVolMeta.uniforms.dstNegZ.binding, resource: dstViews[4] },
+            { binding: anisoVolMeta.uniforms.dstPosZ.binding, resource: dstViews[5] },
+          ],
+        }),
+      );
+
+      // Destination dims = directional level c+1 (halved per axis from level 0, floored at 1).
+      anisoDimsArr[0] = Math.max(1, dirX >> (c + 1));
+      anisoDimsArr[1] = Math.max(1, dirY >> (c + 1));
+      anisoDimsArr[2] = Math.max(1, dirZ >> (c + 1));
+      anisoDimsArr[3] = 0;
+      device.queue.writeBuffer(buf, 0, anisoDimsArr);
+    }
+
+    // Cone bind group references the rebuilt voxelRadiance + directional views + the G-buffer.
     buildConeGroup();
     // Composite bind group references the rebuilt voxelEmission view + G-buffer + coneOutput.
     buildCompositeGroup();
@@ -724,6 +908,47 @@ export function createVoxelSystem({
     }
   }
 
+  // Build the ANISOTROPIC pyramid (Layer 6): the 6 directional volumes, front-to-back pre-
+  // integrated → direction-correct occlusion for the cone trace (the anti-leak). MUST run AFTER
+  // voxelize() (the base pass reads iso MIP 0 that voxelize wrote). The iso mips() is independent
+  // of this path (anisoBase reads iso mip0 only), but keep calling mips() too: the cone's
+  // flag-off path + the lod<1 lerp both sample the iso pyramid. Order: voxelize → mips →
+  // anisoMips → cone. Each level in its OWN compute pass (dispatches within a pass are
+  // unsynchronized — same reason iso mips() uses one pass per level).
+  function anisoMips(encoder: GPUCommandEncoder) {
+    // Base: iso mip 0 → the 6 directional level-0 volumes.
+    {
+      const pass = encoder.beginComputePass();
+      pass.setPipeline(anisoBasePipeline);
+      pass.setBindGroup(0, anisoBaseGroup0);
+      pass.setBindGroup(1, anisoBaseEmpty1);
+      pass.setBindGroup(2, anisoBaseGroup2);
+      pass.dispatchWorkgroups(
+        Math.ceil(dirX / ANISO_BASE_WG),
+        Math.ceil(dirY / ANISO_BASE_WG),
+        Math.ceil(dirZ / ANISO_BASE_WG),
+      );
+      pass.end();
+    }
+    // Volume: directional level c → c+1, one pass each.
+    for (let c = 0; c < dirLevels - 1; c++) {
+      const dx = Math.max(1, dirX >> (c + 1));
+      const dy = Math.max(1, dirY >> (c + 1));
+      const dz = Math.max(1, dirZ >> (c + 1));
+      const pass = encoder.beginComputePass();
+      pass.setPipeline(anisoVolPipeline);
+      pass.setBindGroup(0, anisoVolGroup0[c]);
+      pass.setBindGroup(1, anisoVolEmpty1);
+      pass.setBindGroup(2, anisoVolGroup2[c]);
+      pass.dispatchWorkgroups(
+        Math.ceil(dx / ANISO_VOL_WG),
+        Math.ceil(dy / ANISO_VOL_WG),
+        Math.ceil(dz / ANISO_VOL_WG),
+      );
+      pass.end();
+    }
+  }
+
   // Raymarch the voxel grid into outputTexture. mode: 0 = lit albedo, 1 = stored radiance,
   // 2 = LOD sample of the radiance pyramid at `lod` (requires mips() to have run).
   function debug(encoder: GPUCommandEncoder, mode = 0, lod = 0) {
@@ -767,6 +992,10 @@ export function createVoxelSystem({
     coneParams2Arr[2] = coneParams.coneCount;
     coneParams2Arr[3] = coneLightCount;
     device.queue.writeBuffer(coneShader.uniforms.params2.getGPUBuffer(device), 0, coneParams2Arr);
+
+    // Anisotropic A/B flag (default ON): 1 = direction-correct occlusion (anti-leak), 0 = iso.
+    coneAnisoArr[0] = coneParams.anisotropic ? 1 : 0;
+    device.queue.writeBuffer(coneShader.uniforms.aniso.getGPUBuffer(device), 0, coneAnisoArr);
 
     mat4.invert(invViewProj, viewProjMatrix);
     coneInvArr.set(invViewProj as Float32Array);
@@ -844,6 +1073,13 @@ export function createVoxelSystem({
     textures.voxelAlbedo.destroy();
     textures.voxelEmission.destroy();
     textures.voxelRadiance.destroy();
+    // Destroy the 6 directional volumes too (buildGrid recreates them at the new dims).
+    textures.voxelDirNegX.destroy();
+    textures.voxelDirPosX.destroy();
+    textures.voxelDirNegY.destroy();
+    textures.voxelDirPosY.destroy();
+    textures.voxelDirNegZ.destroy();
+    textures.voxelDirPosZ.destroy();
     buildGrid(newCellSize);
   }
 
@@ -880,6 +1116,7 @@ export function createVoxelSystem({
     compositeParams,
     voxelize,
     mips,
+    anisoMips,
     debug,
     cone,
     setLights,

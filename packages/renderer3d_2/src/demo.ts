@@ -67,7 +67,7 @@ async function main() {
   //   "emitter"  — ground + box occluder + a GUI-movable/resizable emitter sphere.
   //   "simple"   — fixed minimal scene (first-bug diagnosis).
   //   "showcase" — one of every shape kind + several lights.
-  const SCENE = "emitter" as "emitter" | "showcase" | "final" | "perf";
+  const SCENE = "final" as "emitter" | "showcase" | "final" | "perf";
 
   // The configurable emitter (only used by the "emitter" scene). Live-edited from
   // the GUI: position via the transform (re-uploaded every frame), radius via the
@@ -91,6 +91,7 @@ async function main() {
     draw: true, // SDF G-buffer draw pass (frameTick)
     voxelize: true, // scene → 3D voxel textures
     mips: true, // radiance mip pyramid
+    anisoMips: false, // 6 directional volumes (anisotropic anti-leak pyramid) — deferred, off by default
     cone: true, // N-cone GI gather (half-res)
     sunDepth: true, // sun shadow-map depth pass (sun-POV SDF depth)
     composite: true, // final lit image
@@ -417,7 +418,7 @@ async function main() {
     radius: 1.5,
     color: [1.0, 0.93, 0.82, 1],
   });
-  LightEmitter.addComponent(world, sunEmitterId, 1.5);
+  LightEmitter.addComponent(world, sunEmitterId, 10.5);
   trackedLights.push({ id: sunEmitterId, radius: 1 });
 
   // --- Systems ---
@@ -516,6 +517,9 @@ async function main() {
   coneFolder.add(voxel.coneParams, "maxDist", 1, 64, 0.5).name("cone reach");
   coneFolder.add(voxel.coneParams, "normalBias", 0, 2, 0.01).name("normal bias");
   coneFolder.add(voxel.coneParams, "giStrength", 0, 4, 0.05).name("GI strength");
+  // Anisotropic VCT (Layer 6): direction-correct occlusion. ON = anti-leak; OFF = isotropic
+  // (the A/B reference) — toggle behind a thin wall to confirm the leak is gone.
+  coneFolder.add(voxel.coneParams, "anisotropic").name("anisotropic (anti-leak)");
 
   // Composite (Layer 4): the final lit image. Sun controls above feed it via SunLight;
   // cone giStrength bakes into the indirect term. Only the ambient floor lives here.
@@ -531,6 +535,7 @@ async function main() {
     pf.add(perf, "draw").name("1· SDF draw pass");
     pf.add(perf, "voxelize").name("2· voxelize");
     pf.add(perf, "mips").name("3· mips");
+    pf.add(perf, "anisoMips").name("3b· aniso mips");
     pf.add(perf, "cone").name("4· cone GI");
     pf.add(perf, "sunDepth").name("5· sun shadow-map pass");
     pf.add(perf, "composite").name("6· composite");
@@ -717,6 +722,7 @@ async function main() {
       if (perf.sunDepth) voxel.sunDepth(encoder); // sun-POV depth feeding voxelize (A) + composite
       if (perf.voxelize) voxel.voxelize(encoder);
       if (perf.mips) voxel.mips(encoder);
+      if (perf.anisoMips) voxel.anisoMips(encoder);
       if (perf.cone) voxel.cone(encoder);
       if (perf.composite) voxel.composite(encoder);
       present(encoder, voxel.compositeOutputTexture);
@@ -749,14 +755,18 @@ async function main() {
         voxel.mips(encoder);
         voxel.debug(encoder, 2, lodCfg.lod);
       } else if (view.presentSource === "cone") {
-        // Build the radiance pyramid (must follow voxelize), then trace the diffuse cones.
+        // Build the radiance pyramid (must follow voxelize), then trace the diffuse cones. The
+        // anisotropic directional volumes are built ONLY when enabled (they ~double the per-frame
+        // mip cost; deferred "under question" for now). mips() always runs — the cone's iso /
+        // lod<1 paths read the iso pyramid.
         voxel.mips(encoder);
+        if (voxel.coneParams.anisotropic) voxel.anisoMips(encoder);
         voxel.cone(encoder);
       } else if (view.presentSource === "final") {
-        // sunDepth already ran before voxelize above. Pyramid -> cone gather -> composite into
-        // the final lit image (composite reads cone). Order: sunDepth -> voxelize -> mips ->
-        // cone -> composite.
+        // sunDepth already ran before voxelize above. Order: sunDepth -> voxelize -> mips ->
+        // (anisoMips only if enabled) -> cone -> composite.
         voxel.mips(encoder);
+        if (voxel.coneParams.anisotropic) voxel.anisoMips(encoder);
         voxel.cone(encoder);
         voxel.composite(encoder);
       }

@@ -43,6 +43,54 @@ kept as an upgrade against light leaking — implemented by
 6. *(optional)* **Multi-bounce / temporal** — re-injection of the previous frame's radiance into
    the voxel volume (§9).
 
+---
+
+## 1b. DECIDED ARCHITECTURE (current — supersedes exploratory text below)
+
+> This section reflects the architecture actually decided after implementation + browser testing.
+> Where it conflicts with later exploratory sections, **this wins.**
+
+**Hard lesson (empirically confirmed in-browser): VCT is an INDIRECT-light technique only. Direct
+light + its shadows MUST be computed separately and analytically.** We first tried a "pure unified"
+model where ALL light (the sun and every emitter) was injected into the voxel volume and the diffuse
+cone gather produced everything, including shadows. Result: a bright emitter's shadow does not darken
+— it **fills/inverts** (the blocked cone gathers the occluder's own lit radiance + bounce, an
+*average* of radiance, not a visibility test). This is intrinsic to the prefiltered diffuse gather
+and is **not** fixed by anisotropy (verified: the inversion is identical with iso and aniso mips;
+aniso only improves indirect colour/softness). Every reference renderer avoids this by structuring
+lighting as **direct (analytic, shadowed) + VCT indirect** — confirmed in
+[jose-villegas light_pass.frag](https://github.com/jose-villegas/VCTRenderer/blob/master/engine/assets/shaders/light_pass.frag)
+(`compositeLighting = (directLighting + indirectLighting.rgb)·indirectLighting.a + emissive`),
+[Crassin 2011](https://research.nvidia.com/sites/default/files/publications/GIVoxels-pg2011-authors.pdf),
+[jose-villegas "Deferred Voxel Shading"](https://jose-villegas.github.io/post/deferred_voxel_shading/),
+and §10 below.
+
+**The decided model:**
+
+1. **VCT cone gather = INDIRECT (bounce) ONLY.** Hemisphere FILL cones (Fibonacci, cosine-weighted)
+   → indirect radiance (rgb) + AO (alpha). **No aimed-at-emitter cones** — the aimed cones were the
+   "direct light via gather" that produced the filled/inverted shadows; they are removed.
+2. **Each light is an ANALYTIC direct term:** `direct += lightColor·intensity·max(N·L,0)·falloff·visibility`.
+   - Emitters (the `LightEmitter` spheres, incl. the "sun" emitter) are these analytic lights.
+   - `falloff` is the inverse-square coefficient k (`1/(1+k·d²)`; k=0 = no falloff = a sun-like even light).
+3. **Visibility = cone-traced soft shadow (Crassin).** One extra occlusion cone from the surface
+   toward the light through the voxel volume; accumulate opacity; `visibility = 1 − opacity` (with
+   distance falloff so distant occluders don't over-darken). Soft, cheap, reuses the voxels, **no
+   shadow map needed.** (Crassin thesis "single cone to capture opacity";
+   [Geeks3D](https://www.geeks3d.com/20121214/voxel-cone-tracing-global-illumination-in-opengl-4-3/),
+   [Friduric](https://github.com/Friduric/voxel-cone-tracing).) A directional sun may instead reuse
+   its existing **shadow map** (sunDepth pass) for a crisp cast shadow — both are standard.
+4. **Composite:** `out = albedo·(ambient·AO + Σ direct + indirect) + emission` (matches jose-villegas /
+   §10).
+5. **Double-counting is avoided structurally:** the direct term is analytic; the gather is bounce
+   only (FILL cones, started with a normal offset so it never samples the receiver's own voxel);
+   removing the aimed cones removes the direct-emitter-via-gather path. Emitter *emission* still lives
+   in the volume so it contributes to others' indirect bounce + its own glow (G-buffer emission), but
+   not as a second copy of the direct term.
+6. **Anisotropy (6 directional volumes, §3/§5) is KEPT** — it improves the indirect bounce
+   (less leak, softer/cleaner colour). It does not (and cannot) fix direct-shadow correctness;
+   that is what the analytic direct + visibility cone is for.
+
 **Rationale.** We already have a regular grid and a compute voxelizer — this is exactly the target
 architecture of Wicked Engine (which deliberately chose a regular grid over an SVO for fast
 voxelization and cache-friendly marching — [Turánszki blog](https://wickedengine.net/2017/08/voxel-based-global-illumination/)).

@@ -44,10 +44,45 @@ export function voxelMipLevelCount(dimX: number, dimY: number, dimZ: number): nu
   return 1 + Math.floor(Math.log2(Math.max(dimX, dimY, dimZ)));
 }
 
+// ===== Anisotropic VCT (Layer 6) — 6 directional radiance volumes (±X,±Y,±Z). =====
+// To make occlusion DIRECTION-correct (and stop bright emitters leaking through occluders at
+// coarse LOD), the radiance pyramid is also stored anisotropically: six 3D volumes, each built
+// with a FRONT-TO-BACK pre-integration along its axis. They start at HALF the base resolution
+// (= iso mip1 dims) with their OWN mip pyramids — the standard memory-saver. The cone trace
+// picks the 3 volumes facing back toward the cone direction and blends them (Crassin).
+
+// Directional-volume level-0 dims = half the base grid (ceil), i.e. the iso mip1 footprint.
+export function voxelDirDims(
+  dimX: number,
+  dimY: number,
+  dimZ: number,
+): { x: number; y: number; z: number } {
+  return {
+    x: Math.max(1, Math.ceil(dimX / 2)),
+    y: Math.max(1, Math.ceil(dimY / 2)),
+    z: Math.max(1, Math.ceil(dimZ / 2)),
+  };
+}
+
+// Mip level count of a directional pyramid (computed from its OWN half-res dims — DIFFERENT
+// from the iso voxelMipLevelCount(base dims); the shorter Z bottoms out earlier).
+export function voxelDirLevelCount(dimX: number, dimY: number, dimZ: number): number {
+  const d = voxelDirDims(dimX, dimY, dimZ);
+  return 1 + Math.floor(Math.log2(Math.max(d.x, d.y, d.z)));
+}
+
 export type VoxelTextures = {
   voxelAlbedo: GPUTexture;
   voxelEmission: GPUTexture;
   voxelRadiance: GPUTexture;
+  // 6 directional radiance volumes (front-to-back pre-integrated), half-res with own mips.
+  // Index/order matches the shader's dir convention: 0=-X,1=+X,2=-Y,3=+Y,4=-Z,5=+Z.
+  voxelDirNegX: GPUTexture;
+  voxelDirPosX: GPUTexture;
+  voxelDirNegY: GPUTexture;
+  voxelDirPosY: GPUTexture;
+  voxelDirNegZ: GPUTexture;
+  voxelDirPosZ: GPUTexture;
 };
 
 export function createVoxelTextures(
@@ -77,5 +112,34 @@ export function createVoxelTextures(
     usage,
   });
 
-  return { voxelAlbedo, voxelEmission, voxelRadiance };
+  // 6 directional volumes at half base resolution, each with its own mip pyramid.
+  const dir = voxelDirDims(grid.dimX, grid.dimY, grid.dimZ);
+  const dirSize: [number, number, number] = [dir.x, dir.y, dir.z];
+  const dirMips = voxelDirLevelCount(grid.dimX, grid.dimY, grid.dimZ);
+  const createDir = () =>
+    device.createTexture({
+      size: dirSize,
+      dimension: "3d",
+      format: "rgba16float",
+      mipLevelCount: dirMips,
+      usage,
+    });
+  const voxelDirNegX = createDir();
+  const voxelDirPosX = createDir();
+  const voxelDirNegY = createDir();
+  const voxelDirPosY = createDir();
+  const voxelDirNegZ = createDir();
+  const voxelDirPosZ = createDir();
+
+  return {
+    voxelAlbedo,
+    voxelEmission,
+    voxelRadiance,
+    voxelDirNegX,
+    voxelDirPosX,
+    voxelDirNegY,
+    voxelDirPosY,
+    voxelDirNegZ,
+    voxelDirPosZ,
+  };
 }
