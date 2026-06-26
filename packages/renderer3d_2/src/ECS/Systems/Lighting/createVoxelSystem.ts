@@ -27,6 +27,7 @@ export type VoxelConeParams = {
   maxDist: number; // cone reach (world units)
   aperture: number; // tan(halfAngle) — cone half-angle (~0.577 = 60° full angle)
   giStrength: number; // multiplier on the gathered diffuse-cone radiance
+  coneCount: number; // hemisphere cone count = angular resolution (more = sharper shadows)
 };
 
 export type VoxelCompositeParams = {
@@ -34,7 +35,7 @@ export type VoxelCompositeParams = {
 };
 
 // Voxel scene system: voxelize() fills the 3D albedo/emission/radiance textures from the SDF
-// scene each frame; mips() builds the radiance pyramid; cone() gathers indirect light (6-cone
+// scene each frame; mips() builds the radiance pyramid; cone() gathers indirect light (N-cone
 // VCT) and composite() produces the final lit image. debug() raymarches the voxels for
 // inspection (see docs/voxel-cone-tracing-impl.md).
 //
@@ -70,6 +71,7 @@ export function createVoxelSystem({
     maxDist: 24,
     aperture: 0.577,
     giStrength: 1,
+    coneCount: 8,
   };
   // giStrength stays in coneParams (baked into the cone's rgb); the composite only adds the
   // ambient floor.
@@ -98,7 +100,7 @@ export function createVoxelSystem({
     targetFormat: "bgra8unorm", // matches the output texture + frame.renderTexture
     withBlending: false,
   });
-  // VCT cone GI — 6-cone diffuse hemisphere gather over the G-buffer → HALF-res HDR target
+  // VCT cone GI — N-cone diffuse hemisphere gather over the G-buffer → HALF-res HDR target
   // (composite bilinear-upsamples to full res; the heavy cone work runs at ¼ the pixels).
   const coneShader = new GPUShader(coneMeta);
   const conePipeline = coneShader.getRenderPipeline(device, "vs_main", "fs_main", {
@@ -191,6 +193,9 @@ export function createVoxelSystem({
   const coneParamsArr = getTypeTypedArray(coneMeta.uniforms.params.type); // Float32Array(4)
   const coneParams2Arr = getTypeTypedArray(coneMeta.uniforms.params2.type); // Float32Array(4)
   const coneInvArr = getTypeTypedArray(coneMeta.uniforms.invViewProj.type); // Float32Array(16)
+  // Emitter centers to importance-sample (x,y,z,radius per light) — Float32Array(32) for 8.
+  const coneLightsArr = getTypeTypedArray(coneMeta.uniforms.lights.type); // Float32Array(32)
+  let coneLightCount = 0;
   // Composite scratch.
   const compParamsArr = getTypeTypedArray(compositeMeta.uniforms.params.type); // Float32Array(4)
   const compParams2Arr = getTypeTypedArray(compositeMeta.uniforms.params2.type); // Float32Array(4)
@@ -233,6 +238,7 @@ export function createVoxelSystem({
         coneShader.uniforms.invViewProj.getBindGroupEntry(device),
         coneShader.uniforms.gridOrigin.getBindGroupEntry(device),
         coneShader.uniforms.gridDims.getBindGroupEntry(device),
+        coneShader.uniforms.lights.getBindGroupEntry(device),
         { binding: coneMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
         { binding: coneMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
         // ALL-mips sampled view so textureSampleLevel can pick any lod.
@@ -246,9 +252,8 @@ export function createVoxelSystem({
   }
 
   // (Re)build the Layer-4 composite bind group: uniforms + the G-buffer (albedo/normal/
-  // emission) + the cone output (indirect+AO). Self-emission is now a per-pixel G-buffer
-  // target (surface property), so the composite no longer needs depth/invViewProj/grid or
-  // the voxelEmission 3D view. Rebuilt when the G-buffer / coneOutput change (resize).
+  // emission) + the cone output (indirect+AO). The coneSampler bilinear-upsamples the half-res
+  // cone output. Rebuilt when the G-buffer / coneOutput change (resize or grid rebuild).
   function buildCompositeGroup() {
     compositeGroup0 = device.createBindGroup({
       layout: compositePipeline.getBindGroupLayout(0),
@@ -260,7 +265,7 @@ export function createVoxelSystem({
         { binding: compositeMeta.uniforms.albedoTex.binding, resource: gAlbedo.createView() },
         { binding: compositeMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
         { binding: compositeMeta.uniforms.coneTex.binding, resource: coneOutput.createView() },
-        // Linear/clamp sampler (reuse voxelSampler) bilinearly upsamples the half-res cone.
+        // Linear/clamp sampler (reuse voxelSampler) for the half-res cone upsample.
         { binding: compositeMeta.uniforms.coneSampler.binding, resource: voxelSampler },
         {
           binding: compositeMeta.uniforms.emissionTex.binding,
@@ -408,7 +413,6 @@ export function createVoxelSystem({
     device.queue.writeBuffer(debugShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
     device.queue.writeBuffer(coneShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
     device.queue.writeBuffer(coneShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
-    // Composite no longer reads grid uniforms (self-emission is a per-pixel G-buffer target).
 
     dispatchX = Math.ceil(dimX / WORKGROUP);
     dispatchY = Math.ceil(dimY / WORKGROUP);
@@ -536,7 +540,7 @@ export function createVoxelSystem({
     pass.end();
   }
 
-  // VCT cone GI: trace the 6-cone diffuse hemisphere at the per-pixel normal through the
+  // VCT cone GI: trace the N-cone diffuse hemisphere at the per-pixel normal through the
   // voxelRadiance pyramid → coneOutput (HALF-res HDR; composite bilinear-upsamples). MUST run
   // AFTER voxelize() + mips() (it samples the pyramid). Reads the G-buffer (depth + normal).
   function cone(encoder: GPUCommandEncoder) {
@@ -548,8 +552,8 @@ export function createVoxelSystem({
 
     coneParams2Arr[0] = canvas.width;
     coneParams2Arr[1] = canvas.height;
-    coneParams2Arr[2] = 0;
-    coneParams2Arr[3] = 0;
+    coneParams2Arr[2] = coneParams.coneCount;
+    coneParams2Arr[3] = coneLightCount;
     device.queue.writeBuffer(coneShader.uniforms.params2.getGPUBuffer(device), 0, coneParams2Arr);
 
     mat4.invert(invViewProj, viewProjMatrix);
@@ -570,6 +574,17 @@ export function createVoxelSystem({
     pass.setBindGroup(0, coneGroup0);
     pass.draw(6, 1, 0, 0);
     pass.end();
+  }
+
+  // Upload the emitter centers the cone pass importance-samples. `flat` holds n*4 floats
+  // (x,y,z,radius per light); `count` is clamped to [0,8] and unused entries are zeroed.
+  // The aimed cones aim at these; count=0 → pure Fibonacci fill (old behavior).
+  function setLights(flat: number[], count: number) {
+    const n = Math.max(0, Math.min(8, count));
+    coneLightsArr.fill(0);
+    coneLightsArr.set(flat.slice(0, n * 4));
+    device.queue.writeBuffer(coneShader.uniforms.lights.getGPUBuffer(device), 0, coneLightsArr);
+    coneLightCount = n;
   }
 
   // VCT composite (Layer 4): combine albedo + cone indirect/AO + direct sun + self-emission
@@ -670,6 +685,7 @@ export function createVoxelSystem({
     mips,
     debug,
     cone,
+    setLights,
     composite,
     recreate,
     setCellSize,

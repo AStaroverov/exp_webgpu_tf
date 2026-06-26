@@ -5,19 +5,34 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 // VCT Layer 3 — the full DIFFUSE HEMISPHERE cone gather. A fullscreen pass over the G-buffer:
 //   1. Reconstruct the per-pixel world position P (from the reverse-Z depth + invViewProj)
 //      and world normal N (from the normal G-buffer; n.rgb*2-1, n.a<0.5 = no surface).
-//   2. Trace 6 cones over the hemisphere around N through the voxelRadiance mip pyramid:
-//      1 cone along the normal + a ring of 5 tilted 60° off the normal (cosine-weighted).
+//   2. Trace N cones over the hemisphere around the normal through the voxelRadiance mip
+//      pyramid, on a procedural Fibonacci (golden-angle) hemisphere with cosine weights.
 //      Each cone's diameter grows with distance (diameter = 2*aperture*dist); each step
 //      samples the pyramid at LOD = log2(diameter / voxelSize) — a wider cone reads a
 //      coarser mip, so one filtered fetch integrates the whole cone cross-section.
-//      Front-to-back "over" compositing accumulates radiance + opacity per cone. The cone
-//      results are combined with cosine weights {π/4 (normal), 3π/20 ×5 (ring)} summing to
-//      π, then normalized by π → the cosine-weighted AVERAGE incoming radiance.
+//      Front-to-back "over" compositing accumulates radiance + opacity per cone, then the
+//      cones are cosine-weight-averaged → the cosine-weighted AVERAGE incoming radiance.
 //   3. Write the gathered radiance (scaled by giStrength) to an HDR texture.
+//
+// ANGULAR RESOLUTION = SHADOW SHARPNESS. The cone count + aperture together set how finely
+// the hemisphere is sampled, and per-direction occupancy (cone.a) IS the shadow term: MORE
+// cones + a NARROWER aperture = sharper umbra/penumbra. But a too-narrow aperture with
+// too-few cones leaves angular GAPS between cones (banding) — raise the cone count whenever
+// you narrow the aperture.
 //
 // PERF: this pass runs at HALF resolution (¼ the pixels → ~4× less cone work). The full-res
 // G-buffer is still sampled (at the half-res pixel ·2, clamped); the composite bilinear-
 // upsamples this output back to full res — indirect light is low-frequency, so that is fine.
+//
+// IMPORTANCE-SAMPLED HEMISPHERE GATHER. Rather than brute-forcing many random hemisphere
+// cones to find the lights, we AIM one narrow cone straight at each emitter (where the
+// radiance is concentrated) for a sharp, far-reaching soft shadow, and keep a few WIDE
+// Fibonacci fill cones for the diffuse bounce / ambient term. Both sets march the SAME
+// trace_cone through the voxelRadiance pyramid with front-to-back occlusion, and accumulate
+// into ONE cosine-weighted hemisphere integral (acc / occAcc / wsum) — it is NOT a separate
+// analytic light, just a smarter sampling of the existing cone gather. The aimed directions
+// are deterministic, so they carry no jitter banding ("denim"); a handful of cones replaces
+// the old 48, killing both the banding and the lag.
 //
 // This is what produces real color bleeding. The earlier single-cone-along-the-normal form
 // was the Layer-2 INTERMEDIATE (a bent-normal / AO preview); the hemisphere gather here is
@@ -32,8 +47,12 @@ export const shaderMeta = new ShaderMeta(
   {
     // .x = normalBias, .y = maxDist (world), .z = aperture = tan(halfAngle), .w = giStrength.
     params: new VariableMeta("uParams", VariableKind.Uniform, `vec4<f32>`),
-    // .x = screen width (px), .y = screen height (px). (z/w spare.)
+    // .x = screen width (px), .y = screen height (px), .z = fill-cone count (angular
+    // resolution of the ambient/bounce term), .w = active light count (0..8).
     params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
+    // Emitters to importance-sample: .xyz = world CENTER, .w = radius (penumbra source).
+    // Only the first i32(uParams2.w) entries are live.
+    lights: new VariableMeta("lights", VariableKind.Uniform, `array<vec4<f32>, 8>`),
     // inverse(viewProjMatrix) (reverse-Z), column-major, for world-position reconstruction.
     invViewProj: new VariableMeta("uInvViewProj", VariableKind.Uniform, `mat4x4<f32>`),
     // .xyz = world min corner, .w = cellSize.
@@ -80,8 +99,6 @@ fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
   return out;
 }
 
-const PI: f32 = 3.14159265;
-
 // Unproject an NDC point (z reverse-Z) to world space.
 fn unproject(ndc: vec3<f32>) -> vec3<f32> {
   let w = uInvViewProj * vec4<f32>(ndc, 1.0);
@@ -98,25 +115,40 @@ fn build_basis(n: vec3<f32>) -> mat3x3<f32> {
 
 // One cone marched along dir from origin: diameter grows with distance, each step samples
 // voxelRadiance at LOD=log2(diameter/voxelSize) and composites front-to-back ("over").
-fn trace_cone(origin: vec3<f32>, dir: vec3<f32>, aperture: f32) -> vec4<f32> {
+// reach = how far this cone marches (world units). The step is floored at reach/64 so the
+// cone ALWAYS spans its full reach within the 64-step budget — without this, a narrow cone's
+// tiny near-field steps burn the budget and it dies ~16 units out (the "light stops at cone
+// reach" problem). fadeFrac>0 tapers the gathered radiance over the last fadeFrac of reach
+// (hides the artificial cutoff of the fill cones); pass 0 for aimed cones, which end at the
+// real light, so they must NOT be tapered. Occlusion (alpha) is never tapered → shadows stay.
+fn trace_cone(origin: vec3<f32>, dir: vec3<f32>, aperture: f32, reach: f32, fadeFrac: f32, startJ: f32) -> vec4<f32> {
   var col = vec3<f32>(0.0);
   var alpha = 0.0;
   let voxelSize = uGridOrigin.w;
   let gridMin = uGridOrigin.xyz;
   let extent = vec3<f32>(uGridDims.xyz) * voxelSize;
-  var dist = voxelSize;
-  let maxDist = uParams.y;
+  let stepFloor = reach / 64.0;
+  // Per-pixel SCALE of the start distance (startJ in [0,1)). Because the march is ~geometric
+  // (step grows with distance), scaling dist0 shifts the sampling "shells" by a per-pixel
+  // factor at EVERY distance → the concentric "tree-ring" banding around bright sources
+  // dithers across pixels and is blurred away by the half-res upsample. Lets few cones look
+  // smooth without going to 48.
+  var dist = voxelSize * (1.0 + startJ);
   for (var i = 0; i < 64; i = i + 1) {
-    if (alpha >= 1.0 || dist > maxDist) { break; }
+    if (alpha >= 1.0 || dist > reach) { break; }
     let diameter = max(voxelSize, 2.0 * aperture * dist);
     let lod = log2(diameter / voxelSize);
     let wp = origin + dir * dist;
     let uvw = (wp - gridMin) / extent;
     if (any(uvw < vec3<f32>(0.0)) || any(uvw > vec3<f32>(1.0))) { break; }
     let s = textureSampleLevel(voxelRadiance, voxelSampler, uvw, lod);
-    col = col + (1.0 - alpha) * s.rgb;
+    var window = 1.0;
+    if (fadeFrac > 0.0) {
+      window = clamp((reach - dist) / (reach * fadeFrac), 0.0, 1.0);
+    }
+    col = col + (1.0 - alpha) * s.rgb * window;
     alpha = alpha + (1.0 - alpha) * s.a;
-    dist = dist + diameter * 0.5;
+    dist = dist + max(diameter * 0.5, stepFloor);
   }
   return vec4<f32>(col, alpha);
 }
@@ -145,35 +177,69 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let cellSize = uGridOrigin.w;
   let origin = P + N * (cellSize * 1.5 + uParams.x);
 
-  // 6-cone cosine-weighted diffuse hemisphere gather around N.
+  // N-cone cosine-weighted diffuse hemisphere gather around N, on a procedural Fibonacci
+  // (golden-angle) hemisphere. The cone count (uParams2.z) is the angular resolution: per-
+  // direction occupancy (cone.a) IS the shadow term, so more cones = sharper shadows.
   let basis = build_basis(N);
   let aperture = uParams.z;
+  let count = max(1, i32(uParams2.z));
+  // Per-pixel azimuth rotation of the whole cone set (interleaved-gradient-noise hash) so the
+  // gaps between narrow cones fall in DIFFERENT directions each pixel → fixed "ray" banding
+  // becomes fine dither, which the half-res + bilinear upsample then blurs away. Lets a narrow
+  // aperture use FEWER cones without visible streaks.
+  let jitter = fract(52.9829189 * fract(dot(vec2<f32>(half), vec2<f32>(0.06711056, 0.00583715)))) * 6.2831853;
+  // Decorrelated [0,1) per-pixel value for radial (start-distance) dither — kills the
+  // concentric "tree-ring" banding around bright sources at low cone counts.
+  let jrad = fract(jitter * 1.61803399);
 
   var acc = vec3<f32>(0.0);
   // occAcc accumulates the SAME cosine-weighted average over each cone's opacity (.a) — the
-  // hemisphere "how blocked am I" measure that becomes ambient occlusion in the composite.
+  // hemisphere "how blocked am I" measure that becomes ambient occlusion / soft shadows.
   var occAcc = 0.0;
-  // Center cone along the normal, weight π/4.
-  let rCenter = trace_cone(origin, N, aperture);
-  acc = acc + (PI / 4.0) * rCenter.rgb;
-  occAcc = occAcc + (PI / 4.0) * rCenter.a;
+  var wsum = 0.0;
 
-  // Ring of 5 side cones tilted 60° off the normal (local z = cos60 = 0.5, local xy
-  // magnitude = sin60 ≈ 0.86602540), azimuth φ_i = i·(2π/5), weight 3π/20 each.
-  for (var i = 0; i < 5; i = i + 1) {
-    let phi = f32(i) * (2.0 * PI / 5.0);
-    let local = vec3<f32>(0.86602540 * cos(phi), 0.86602540 * sin(phi), 0.5);
-    let dir = normalize(basis * local);
-    let rSide = trace_cone(origin, dir, aperture);
-    acc = acc + (3.0 * PI / 20.0) * rSide.rgb;
-    occAcc = occAcc + (3.0 * PI / 20.0) * rSide.a;
+  // (a) AIMED cones — one narrow cone per emitter, pointed straight at the light center for a
+  // sharp, far-reaching direct + soft-shadow term. Its aperture = the light's angular size
+  // (radius / distance) sets the penumbra width, and the cosine term (ndl) is its weight, so
+  // these fold into the SAME hemisphere integral as the fill cones below.
+  let lc = min(8, max(0, i32(uParams2.w)));
+  for (var j = 0; j < lc; j = j + 1) {
+    let toL = lights[j].xyz - origin;
+    let d = length(toL);
+    if (d < 1e-3) { continue; }
+    let dir = toL / d;
+    let ndl = max(dot(N, dir), 0.0);
+    if (ndl <= 0.0) { continue; }
+    let ap = clamp(lights[j].w / d, 0.02, 0.5);   // angular size of the light = penumbra width
+    // reach = distance to the light so the cone always arrives at the emitter (light reaches
+    // as far as the source is, within the grid); no fade (it ends at the real light).
+    let r = trace_cone(origin, dir, ap, d, 0.0, jrad);
+    acc = acc + ndl * r.rgb;
+    occAcc = occAcc + ndl * r.a;
+    wsum = wsum + ndl;
   }
 
-  // Σweights = π/4 + 5·3π/20 = π → dividing gives the cosine-weighted average radiance.
-  let irradiance = acc / PI;
-  // Weighted-average opacity the cones hit → visibility = 1 - occlusion (the AO term).
-  let occlusion = occAcc / PI;
-  let visibility = clamp(1.0 - occlusion, 0.0, 1.0);
+  // (b) FILL cones — the wide Fibonacci hemisphere set for soft ambient / bounce, accumulated
+  // into the SAME acc/occAcc/wsum with cosine weights.
+  for (var i = 0; i < count; i = i + 1) {
+    let k = (f32(i) + 0.5) / f32(count);
+    let cosT = 1.0 - k;                       // hemisphere: cosTheta in (0,1]
+    let sinT = sqrt(max(0.0, 1.0 - cosT * cosT));
+    let phi = f32(i) * 2.39996323 + jitter;   // golden angle + per-pixel rotation
+    let local = vec3<f32>(sinT * cos(phi), sinT * sin(phi), cosT);
+    let dir = normalize(basis * local);
+    let w = cosT;                             // cosine weight
+    // Fill/bounce cones reach the global maxDist (uParams.y) and softly fade over the last
+    // quarter so their artificial cutoff doesn't show as a circle.
+    let r = trace_cone(origin, dir, aperture, uParams.y, 0.25, jrad);
+    acc = acc + w * r.rgb;
+    occAcc = occAcc + w * r.a;
+    wsum = wsum + w;
+  }
+
+  // Cosine-weighted average radiance + visibility (= 1 - occlusion, the AO / soft-shadow term).
+  let irradiance = acc / max(wsum, 1e-4);
+  let visibility = clamp(1.0 - occAcc / max(wsum, 1e-4), 0.0, 1.0);
   // rgb = indirect radiance·giStrength (the "cone" present mode shows this unchanged);
   // a = hemisphere visibility, read as AO by the composite.
   return vec4f(irradiance * uParams.w, visibility);

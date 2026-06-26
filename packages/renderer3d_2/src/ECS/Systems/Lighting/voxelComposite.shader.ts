@@ -9,18 +9,19 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 //   - indirect already carries giStrength (baked into the cone's rgb); AO = the cone's
 //     hemisphere visibility (cone.a). The cone output is HALF-res, so it is bilinear-
 //     upsampled here (linear sampler) — indirect light is low-frequency, so that is fine.
-//   - direct sun is UNSHADOWED in v1 (ndl·sunColor·intensity); contact occlusion comes from
-//     the indirect/AO terms, not a shadow ray.
+//   - direct sun is UNSHADOWED (ndl·sunColor·intensity); contact occlusion + soft shadows come
+//     from the indirect/AO terms (the cone gather's per-direction occupancy), not a shadow ray.
 //   - self-emission makes emitters glow: read the per-pixel G-buffer emission target written
 //     by fs_main (uColor.rgb·abs(material.x)). It is a SURFACE property, so there is no
 //     voxel cross-contamination and no flicker as instances intersect (the previous
 //     voxelEmission nearest-instance read did both).
-// Fullscreen pass over the G-buffer; textureLoad (integer coords) for every read, no sampler.
+// Fullscreen pass over the G-buffer; textureLoad (integer coords) for the G-buffer reads,
+// textureSampleLevel (explicit LOD, uniform-control-flow safe) for the half-res cone upsample.
 
 export const shaderMeta = new ShaderMeta(
   {
-    // .x = ambient (the floor scaled by AO). z/w spare; giStrength is already baked into
-    // the cone's rgb, so it is NOT re-applied here.
+    // .x = ambient (the floor scaled by AO). giStrength is already baked into the cone's rgb,
+    // so it is NOT re-applied here. (y/z/w spare.)
     params: new VariableMeta("uParams", VariableKind.Uniform, `vec4<f32>`),
     // .x = screen width (px), .y = screen height (px). (z/w spare.)
     params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
@@ -94,7 +95,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let indirect = cone.rgb;
   let ao = cone.a;
 
-  // Direct sun, unshadowed in v1: contact occlusion comes from indirect/AO instead.
+  // Direct sun, unshadowed: contact occlusion + soft shadows come from the indirect/AO terms.
   let L = uSun.xyz;
   let ndl = max(dot(N, L), 0.0);
   let direct = ndl * uSunColor.rgb * uSun.w;

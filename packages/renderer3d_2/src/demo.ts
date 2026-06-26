@@ -30,6 +30,7 @@ import {
 import { computeSmokeTest } from "./WGSL/computeSmokeTest.ts";
 import {
   applyMatrixRotateZ,
+  getMatrixTranslation,
   setMatrixRotateZ,
   setMatrixTranslate,
 } from "./ECS/Components/Transform.ts";
@@ -401,9 +402,12 @@ async function main() {
   gui.add(SunLight, "intensity", 0, 5, 0.05).name("sun intensity");
   gui.addColor(SunLight, "color", 1).name("sun color"); // rgbScale=1 → array is 0..1 floats
 
-  // Cone GI: the 6-cone diffuse hemisphere trace. Read live each frame by cone().
+  // Cone GI: the N-cone diffuse hemisphere trace. Shadows emerge from this single gather —
+  // the cone count is the angular resolution: more cones + narrower aperture = sharper
+  // shadows (but too-narrow + too-few cones bands). Read live each frame by cone().
   const coneFolder = gui.addFolder("Cone GI");
-  coneFolder.add(voxel.coneParams, "aperture", 0.1, 1.5, 0.01).name("aperture (tan)");
+  coneFolder.add(voxel.coneParams, "coneCount", [6, 8, 16, 24, 32, 48]).name("cones (shadow sharpness)");
+  coneFolder.add(voxel.coneParams, "aperture", 0.1, 1.5, 0.01).name("aperture (lower=sharper)");
   coneFolder.add(voxel.coneParams, "maxDist", 1, 64, 0.5).name("cone reach");
   coneFolder.add(voxel.coneParams, "normalBias", 0, 2, 0.01).name("normal bias");
   coneFolder.add(voxel.coneParams, "giStrength", 0, 4, 0.05).name("GI strength");
@@ -443,6 +447,29 @@ async function main() {
     const f = gui.addFolder("Final scene");
     f.add(finalDyn, "animate").name("animate");
     f.add(finalDyn, "speed", 0, 3, 0.05).name("speed");
+  }
+
+  // Emitters the cone pass importance-samples (aimed sharp soft-shadow cones). Only the
+  // "final" scene tracks any; .radius feeds the penumbra width + the sphere-center Z offset
+  // (SDF center.z = baseZ + radius). Filtered to live ids (>= 0).
+  const finalLights = [
+    { id: dynOrbitEmitter, radius: 0.8 },
+    { id: dynPulseEmitter, radius: 0.9 },
+  ].filter((l) => l.id >= 0);
+  // Flat scratch (x,y,z,radius per light) reused every frame for voxel.setLights.
+  const lightsFlat: number[] = [];
+
+  // Recompute the importance-sampled light centers from the current transforms and push them
+  // to the cone pass. center = LocalTransform translation + (0,0,radius). Empty when the scene
+  // has no tracked emitters → count 0 → pure fill cones (old behavior).
+  function updateLights() {
+    lightsFlat.length = 0;
+    for (let i = 0; i < finalLights.length; i++) {
+      const { id, radius } = finalLights[i];
+      const t = getMatrixTranslation(LocalTransform.matrix.getBatch(id));
+      lightsFlat.push(t[0], t[1], t[2] + radius, radius);
+    }
+    voxel.setLights(lightsFlat, finalLights.length);
   }
 
   // Animate the "final" scene: position (orbit), angle (spin), size (pulse radius),
@@ -536,6 +563,9 @@ async function main() {
 
     // Drive the dynamic "final"-scene objects, then push transforms → instance buffers.
     animateFinal(now);
+    // Refresh the importance-sampled emitter centers for the cone pass (positions are now
+    // current). Empty when no emitters are tracked → count 0 → pure fill cones.
+    updateLights();
     execTransformSystem();
     shapeSystem.prepare();
 
