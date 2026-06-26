@@ -2,7 +2,7 @@ import { mat4, vec3 } from "gl-matrix";
 import { GPUShader } from "../../../WGSL/GPUShader.ts";
 import { getTypeTypedArray } from "../../../Shader/index.ts";
 import { viewProjMatrix } from "../ResizeSystem.ts";
-import { shaderMeta as voxelizeMeta, WORKGROUP } from "./voxelize.shader.ts";
+import { shaderMeta as voxelizeMeta, WORKGROUP, WORKGROUP_1D } from "./voxelize.shader.ts";
 import { shaderMeta as coneMeta } from "./voxelCone.shader.ts";
 import { shaderMeta as compositeMeta } from "./voxelComposite.shader.ts";
 import { shaderMeta as mipMeta, WORKGROUP as MIP_WG } from "./voxelMip.shader.ts";
@@ -95,6 +95,11 @@ export function createVoxelSystem({
 
   // ===== Shaders + pipelines (created once; only textures/bind groups rebuild). =====
   const voxShader = new GPUShader(voxelizeMeta);
+  // Two compute pipelines from the one shader: `clear` zeroes the full volume (one thread per
+  // voxel), `main` is the per-shape scatter (one thread per (instance, voxel-in-AABB) pair).
+  // They share one pipeline layout (groups 0/1/2 — clear binds the same groups, harmless since
+  // it does not read the aabb* / scene buffers).
+  const voxClearPipeline = voxShader.getComputePipeline(device, "clear");
   const voxPipeline = voxShader.getComputePipeline(device, "main");
   // VCT cone GI — N-cone diffuse hemisphere gather over the G-buffer → HALF-res HDR target
   // (composite bilinear-upsamples to full res; the heavy cone work runs at ¼ the pixels).
@@ -205,6 +210,7 @@ export function createVoxelSystem({
       voxShader.uniforms.sun.getBindGroupEntry(device),
       voxShader.uniforms.sunColor.getBindGroupEntry(device),
       voxShader.uniforms.sunViewProj.getBindGroupEntry(device),
+      voxShader.uniforms.dispatch.getBindGroupEntry(device),
       // Sun shadow map: the sun-POV depth texture, sampled to shadow the injected directional sun.
       { binding: voxelizeMeta.uniforms.shadowMap.binding, resource: sunDepthView },
     ],
@@ -240,6 +246,11 @@ export function createVoxelSystem({
         binding: voxelizeMeta.uniforms.material.binding,
         resource: { buffer: sceneInstances.material.getGPUBuffer(device) },
       },
+      // Per-instance voxel-AABB boxes + prefix sum, built on the CPU each frame and uploaded to
+      // these two new StorageRead buffers (their own GPUVariables — sized MAX_INSTANCE_COUNT*4
+      // i32, STORAGE | COPY_DST). Bound at the voxelize meta's new binding numbers (7, 8).
+      voxShader.uniforms.aabbMin.getBindGroupEntry(device),
+      voxShader.uniforms.aabbDim.getBindGroupEntry(device),
     ],
   });
 
@@ -251,6 +262,12 @@ export function createVoxelSystem({
   const sunColorArr = getTypeTypedArray(voxelizeMeta.uniforms.sunColor.type); // Float32Array(4)
   // The sun view-proj voxelize samples the shadow map with (for the shadowed sun injection).
   const voxSunViewProjArr = getTypeTypedArray(voxelizeMeta.uniforms.sunViewProj.type); // Float32Array(16)
+  // Scatter dispatch: .x = total work items, .y = threads per workgroup-grid row, .z/.w spare.
+  const dispatchArr = getTypeTypedArray(voxelizeMeta.uniforms.dispatch.type); // Int32Array(4)
+  // Per-instance AABB scratch (allocated ONCE — never per frame). Packed vec4<i32> per instance:
+  // aabbMinArr[k*4 + 0..2] = voxel box min, +3 = prefix start; aabbDimArr[k*4 + 0..2] = dims, +3 = n.
+  const aabbMinArr = getTypeTypedArray(voxelizeMeta.uniforms.aabbMin.type) as Int32Array; // Int32Array(MAX*4)
+  const aabbDimArr = getTypeTypedArray(voxelizeMeta.uniforms.aabbDim.type) as Int32Array; // Int32Array(MAX*4)
   const invViewProj = mat4.create(); // reused by cone() + composite() for inverse-viewProj
   // Cone scratch.
   const coneParamsArr = getTypeTypedArray(coneMeta.uniforms.params.type); // Float32Array(4)
@@ -298,6 +315,10 @@ export function createVoxelSystem({
   let dispatchX = 0;
   let dispatchY = 0;
   let dispatchZ = 0;
+  // Scatter dispatch (rebuilt every frame from the prefix-sum total in voxelize()).
+  let scatterTotal = 0;
+  let scatterDispatchX = 0;
+  let scatterDispatchY = 0;
 
   // Mip-pyramid state (rebuilt by buildGrid). One downsample step per pair of adjacent
   // levels → mipCount-1 steps, indexed 0..mipCount-2. mipGroup0[L]/mipGroup2[L] downsample
@@ -665,13 +686,133 @@ export function createVoxelSystem({
     // uSunViewProj is uploaded by buildSunViewProj() inside sunDepth(), which runs BEFORE
     // voxelize() in the loop (so the shadowed-sun injection samples the matching matrix).
 
-    const pass = encoder.beginComputePass();
-    pass.setPipeline(voxPipeline);
-    pass.setBindGroup(0, voxGroup0);
-    pass.setBindGroup(1, voxGroup1);
-    pass.setBindGroup(2, voxGroup2);
-    pass.dispatchWorkgroups(dispatchX, dispatchY, dispatchZ);
-    pass.end();
+    // ===== Build per-instance voxel AABBs + the prefix-sum work list (CPU). =====
+    // The CPU arrays are filled by prepare() (which runs before voxelize() each frame), so
+    // they are current. For each instance compute a CONSERVATIVE (yaw-invariant) world AABB,
+    // convert it to a voxel box clamped to the grid, and accumulate the prefix sum of voxel
+    // counts. The scatter shader walks this flat list via a binary search on `start`.
+    const n = sceneInstances.instanceCount;
+    const tr = sceneInstances.cpuTransform;
+    const kindArr = sceneInstances.cpuKind;
+    const valArr = sceneInstances.cpuValues;
+    const roundArr = sceneInstances.cpuRoundness;
+    const heightArr = sceneInstances.cpuHeights;
+    let prefix = 0;
+    for (let k = 0; k < n; k++) {
+      // Translation is column-major mat4 elements 12,13,14 (per-instance 16-float stride).
+      const cx = tr[k * 16 + 12];
+      const cy = tr[k * 16 + 13];
+      const tz = tr[k * 16 + 14];
+      const kind = kindArr[k];
+      const h = heightArr[k];
+      const round = roundArr[k];
+
+      // Conservative bounding-circle radius in XY, computed from the SAME geometry the
+      // footprint uses so the AABB never clips the shape. max(|value|) is NOT a valid
+      // bound for skewed/diagonal footprints, so kinds 3 (parallelogram) and 5 (triangle)
+      // get the Euclidean extent of their true footprint; all others fall back to max(|value|)
+      // (which covers axis-aligned half-extents and the sphere radius in values[0]).
+      const v0 = valArr[k * 6 + 0];
+      const v1 = valArr[k * 6 + 1];
+      const v2 = valArr[k * 6 + 2];
+      const v3 = valArr[k * 6 + 3];
+      const v4 = valArr[k * 6 + 4];
+      const v5 = valArr[k * 6 + 5];
+      let rxyShape: number;
+      if (kind === 3) {
+        // Parallelogram: skew widens the X half-extent (halfX = width/2 + |skew|); the worst
+        // corner is at hypot(halfX, height/2). values = (width, height, skew, ...).
+        const halfX = v0 / 2 + Math.abs(v2);
+        const halfY = v1 / 2;
+        rxyShape = Math.hypot(halfX, halfY);
+      } else if (kind === 5) {
+        // Triangle: the 6 values are signed vertex coordinates (ax,ay,bx,by,cx,cy). The
+        // conservative radius is the farthest vertex distance from the local origin.
+        rxyShape = Math.max(Math.hypot(v0, v1), Math.hypot(v2, v3), Math.hypot(v4, v5));
+      } else {
+        let maxAbs = 0;
+        for (let j = 0; j < 6; j++) {
+          const v = Math.abs(valArr[k * 6 + j]);
+          if (v > maxAbs) maxAbs = v;
+        }
+        rxyShape = maxAbs;
+      }
+      const rxy = rxyShape + round + cellSize;
+      // Z half-extent: sphere (kind 6) uses its radius (values[0]); everything else is an
+      // extruded footprint of half-height h*0.5. Expanded by roundness + one cell.
+      const zHalf = (kind === 6 ? valArr[k * 6] : h * 0.5) + round + cellSize;
+      const centerZ = tz + h * 0.5;
+
+      const minX = cx - rxy;
+      const maxX = cx + rxy;
+      const minY = cy - rxy;
+      const maxY = cy + rxy;
+      const minZ = centerZ - zHalf;
+      const maxZ = centerZ + zHalf;
+
+      // World AABB -> voxel index box, clamped to [0, dim] (floor min, ceil max), then size.
+      const vx0 = Math.min(Math.max(Math.floor((minX - originX) / cellSize), 0), dimX);
+      const vx1 = Math.min(Math.max(Math.ceil((maxX - originX) / cellSize), 0), dimX);
+      const vy0 = Math.min(Math.max(Math.floor((minY - originY) / cellSize), 0), dimY);
+      const vy1 = Math.min(Math.max(Math.ceil((maxY - originY) / cellSize), 0), dimY);
+      const vz0 = Math.min(Math.max(Math.floor((minZ - originZ) / cellSize), 0), dimZ);
+      const vz1 = Math.min(Math.max(Math.ceil((maxZ - originZ) / cellSize), 0), dimZ);
+      const nx = Math.max(0, vx1 - vx0);
+      const ny = Math.max(0, vy1 - vy0);
+      const nz = Math.max(0, vz1 - vz0);
+      const count = nx * ny * nz;
+
+      // Every index gets a `start` (empty ranges share their successor's start and are skipped
+      // by the binary search). aabbMin.w = prefix start; aabbDim.w = voxel count.
+      aabbMinArr[k * 4 + 0] = vx0;
+      aabbMinArr[k * 4 + 1] = vy0;
+      aabbMinArr[k * 4 + 2] = vz0;
+      aabbMinArr[k * 4 + 3] = prefix;
+      aabbDimArr[k * 4 + 0] = nx;
+      aabbDimArr[k * 4 + 1] = ny;
+      aabbDimArr[k * 4 + 2] = nz;
+      aabbDimArr[k * 4 + 3] = count;
+      prefix += count;
+    }
+    scatterTotal = prefix;
+
+    // Upload the AABB lists (only the live n entries matter; the binary search bound is
+    // uInstanceCount = n). Uploading the whole MAX-sized buffer is simplest + allocation-free.
+    device.queue.writeBuffer(voxShader.uniforms.aabbMin.getGPUBuffer(device), 0, aabbMinArr);
+    device.queue.writeBuffer(voxShader.uniforms.aabbDim.getGPUBuffer(device), 0, aabbDimArr);
+
+    // Scatter dispatch sizing — 2D over workgroups to dodge the 65535 per-dim workgroup cap.
+    const wgTotal = Math.ceil(scatterTotal / WORKGROUP_1D);
+    scatterDispatchX = Math.min(wgTotal, 65535);
+    scatterDispatchY = scatterDispatchX > 0 ? Math.ceil(wgTotal / scatterDispatchX) : 0;
+    // uDispatch: .x = total work items, .y = threads per workgroup-grid row (= dispatchX * WG).
+    dispatchArr[0] = scatterTotal;
+    dispatchArr[1] = scatterDispatchX * WORKGROUP_1D;
+    dispatchArr[2] = 0;
+    dispatchArr[3] = 0;
+    device.queue.writeBuffer(voxShader.uniforms.dispatch.getGPUBuffer(device), 0, dispatchArr);
+
+    // CLEAR (full grid) then SCATTER (compacted work list), in SEPARATE compute passes so the
+    // encoder barriers between them — the scatter's textureStore must see a fully-zeroed volume
+    // (dispatches within ONE pass are NOT synchronized; a same-pass clear could race/clobber a
+    // solid voxel). Clear ALWAYS runs so the volume is zeroed; the scatter only writes solids.
+    const clearPass = encoder.beginComputePass();
+    clearPass.setPipeline(voxClearPipeline);
+    clearPass.setBindGroup(0, voxGroup0);
+    clearPass.setBindGroup(1, voxGroup1);
+    clearPass.setBindGroup(2, voxGroup2);
+    clearPass.dispatchWorkgroups(dispatchX, dispatchY, dispatchZ);
+    clearPass.end();
+
+    if (scatterTotal > 0) {
+      const scatterPass = encoder.beginComputePass();
+      scatterPass.setPipeline(voxPipeline);
+      scatterPass.setBindGroup(0, voxGroup0);
+      scatterPass.setBindGroup(1, voxGroup1);
+      scatterPass.setBindGroup(2, voxGroup2);
+      scatterPass.dispatchWorkgroups(scatterDispatchX, scatterDispatchY, 1);
+      scatterPass.end();
+    }
   }
 
   // Build the voxelRadiance mip pyramid: one compute pass PER level (passes are ordered/

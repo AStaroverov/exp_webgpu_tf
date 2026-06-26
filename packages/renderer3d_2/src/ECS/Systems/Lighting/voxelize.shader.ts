@@ -4,15 +4,28 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 import { MAX_INSTANCE_COUNT } from "../SDFSystem/sdf.shader.ts";
 import { sceneSDF } from "../SDFSystem/sceneSDF.wgsl.ts";
 
-// Voxelization compute pass — one thread per voxel. The voxel center is mapped to world
-// space, the scene SDF (min over all instances, reusing the SAME shared helpers + scene
-// buffers as the draw/gather passes) is evaluated, and a voxel that the surface crosses
-// is filled with the nearest instance's albedo + emission. Output goes to two 3D storage
-// textures (group 2).
+// Voxelization compute pass — SCATTER. Instead of one thread per voxel evaluating the
+// WHOLE scene SDF (cost = NumVoxels x NumInstances, plus 6 more evals for the normal),
+// each shape fills ONLY the voxels inside its own world AABB, evaluating ONLY its own
+// local SDF. cost = SUM over instances of (voxels in its AABB) — asymptotically
+// independent of the grid size and of the OTHER instances.
+//
+// The work is a flat 1D list: instance k owns the contiguous range
+// [start[k], start[k] + n[k]) where n[k] = nx*ny*nz voxels of its AABB box. The CPU
+// builds the per-instance AABB voxel boxes + the prefix-sum `start`; one 1D dispatch
+// (2D-flattened to dodge the 65535 per-dim workgroup cap) walks the list, a per-thread
+// binary search maps the global work index back to its owning instance, and the local
+// offset decodes to a voxel coord inside that instance's box.
 //
 // COORDINATES: world is Z-up, footprints in XY (identical to sceneSDF / the gather pass).
 // A voxel is "solid" when |sdf| at its center <= half its diagonal (cellSize*0.5*sqrt(3));
 // that's the conservative test for "the iso-surface passes through this cell".
+//
+// Two @compute entry points share this module + the sceneSDF helpers:
+//   clear : one thread per voxel over the FULL grid — zeroes all three storage textures.
+//           The scatter pass only ever WRITES solid voxels (last-writer-wins on overlap),
+//           so the volume MUST be cleared first.
+//   main  : the scatter described above.
 
 // COMPUTE-visibility group-0 uniform helper.
 const uC = (name: string, type: string) =>
@@ -23,7 +36,8 @@ const uC = (name: string, type: string) =>
 const sceneBuf = (name: string, type: string) =>
   new VariableMeta(name, VariableKind.StorageRead, type, { visibility: GPUShaderStage.COMPUTE });
 
-export const WORKGROUP = 4; // 4*4*4 = 64 threads/workgroup
+export const WORKGROUP = 4; // clear pass: 4*4*4 = 64 threads/workgroup over the 3D grid
+export const WORKGROUP_1D = 64; // scatter pass: 64 threads/workgroup over the 1D work list
 
 export const shaderMeta = new ShaderMeta(
   {
@@ -43,11 +57,15 @@ export const shaderMeta = new ShaderMeta(
     // pass uses. Projects a voxel-center world position into the sun shadow map for the SHADOWED
     // sun injection (only matters when the directional sun is enabled; sun.w == 0 otherwise).
     sunViewProj: uC("uSunViewProj", `mat4x4<f32>`),
+    // Scatter dispatch description: .x = uTotal (total work items = prefix sum of all AABB
+    // voxel counts), .y = uDispatchWidth (threads per workgroup-grid row = dispatchX *
+    // WORKGROUP_1D), .z/.w spare. The flat work index is g = gid.y*uDispatchWidth + gid.x.
+    dispatch: uC("uDispatch", `vec4<i32>`),
 
     // ---- group 1 : per-instance scene storage (StorageRead => @group(1)) ----
     // SAME names/types as sdf.shader.ts / the former gather, so the shared sceneSDF
     // helpers (which read uKind/uValues/uRoundness by global name) see the live scene.
-    // Bound to sceneInstances.* GPUVariables in THIS declaration order.
+    // Bound to sceneInstances.* GPUVariables in THIS declaration order (bindings 0..6).
     transform: sceneBuf("uTransform", `array<mat4x4<f32>, ${MAX_INSTANCE_COUNT}>`),
     kind: sceneBuf("uKind", `array<u32, ${MAX_INSTANCE_COUNT}>`),
     values: sceneBuf("uValues", `array<f32, ${MAX_INSTANCE_COUNT * 6}>`),
@@ -55,6 +73,12 @@ export const shaderMeta = new ShaderMeta(
     heights: sceneBuf("uHeights", `array<f32, ${MAX_INSTANCE_COUNT}>`),
     color: sceneBuf("uColor", `array<vec4<f32>, ${MAX_INSTANCE_COUNT}>`),
     material: sceneBuf("uMaterial", `array<vec4<f32>, ${MAX_INSTANCE_COUNT}>`),
+    // Per-instance AABB voxel box (built on the CPU each frame; bindings 7..8 — declared
+    // AFTER the 7 scene buffers so their binding numbers are preserved).
+    // .xyz = voxel box MIN (vx0,vy0,vz0), .w = prefix start (monotonic non-decreasing).
+    aabbMin: sceneBuf("uAabbMin", `array<vec4<i32>, ${MAX_INSTANCE_COUNT}>`),
+    // .xyz = voxel box DIMS (nx,ny,nz), .w = n = nx*ny*nz.
+    aabbDim: sceneBuf("uAabbDim", `array<vec4<i32>, ${MAX_INSTANCE_COUNT}>`),
 
     // ---- group 2 : voxel output (StorageTexture, write-only) ----
     voxelAlbedo: new VariableMeta(
@@ -93,8 +117,8 @@ export const shaderMeta = new ShaderMeta(
 
     // ---- group 0 : sun shadow map (Texture => @group(0)), COMPUTE-visible ----
     // Sun-POV depth (depth32float from the sunShadow pass). Sampled (single tap, nearest,
-    // no PCF) when model==0 to inject SHADOWED sun into the volume. Read via textureLoad
-    // (integer coords + i32 LOD 0 — a depth texture cannot use a filtering sampler).
+    // no PCF) to inject SHADOWED sun into the volume. Read via textureLoad (integer coords
+    // + i32 LOD 0 — a depth texture cannot use a filtering sampler).
     shadowMap: new VariableMeta("shadowMap", VariableKind.Texture, `texture_depth_2d`, {
       visibility: GPUShaderStage.COMPUTE,
       textureSampleType: "depth",
@@ -105,34 +129,12 @@ export const shaderMeta = new ShaderMeta(
   wgsl /* wgsl */ `
 const SQRT3: f32 = 1.7320508;
 
-// Shared local-SDF helpers (rotZ, sd_*, sd_2d_for_kind, extrude, sd_shape3d, …). They
-// read uKind/uValues/uRoundness by global name, declared in group 1 with identical types.
+// Shared local-SDF helpers (rotZ, sd_*, sd_2d_for_kind, extrude, sd_shape3d, sd_normal3d).
+// They read uKind/uValues/uRoundness by global name, declared in group 1 with identical types.
 ${sceneSDF}
 
-// scene_sdf = nearest instance's local SDF (world->local: subtract center, inverse yaw,
-// then sd_shape3d). Tracks the hit instance for albedo/emission lookup. Same as gather.
-struct Hit { dist: f32, instance: u32 };
-
-fn scene_sdf(p: vec3<f32>) -> Hit {
-  var best = Hit(1e30, 0u);
-  let n = min(uInstanceCount, ${MAX_INSTANCE_COUNT}u);
-  for (var k: u32 = 0u; k < n; k = k + 1u) {
-    let tr = uTransform[k];
-    let hz = uHeights[k] * 0.5;
-    let center = vec3<f32>(tr[3].x, tr[3].y, tr[3].z + hz);
-    let yaw = atan2(tr[0].y, tr[0].x);
-    let rel = p - center;
-    let lp = vec3<f32>(rotZ(rel.xy, cos(-yaw), sin(-yaw)), rel.z);
-    let d = sd_shape3d(lp, k, hz);
-    if (d < best.dist) {
-      best = Hit(d, k);
-    }
-  }
-  return best;
-}
-
 // Emission of an instance. material.x encodes intensity; SIGN is a flag, so brightness
-// is abs(intensity). intensity == 0 is a pure occluder. Same as gather.
+// is abs(intensity). intensity == 0 is a pure occluder.
 fn emission_of(instance: u32) -> vec3<f32> {
   let intensity = uMaterial[instance].x;
   if (intensity != 0.0) {
@@ -141,29 +143,10 @@ fn emission_of(instance: u32) -> vec3<f32> {
   return vec3<f32>(0.0);
 }
 
-// Surface normal at p via central differences of the scene SDF distance. eps = half a
-// cell. Falls back to +Z when the gradient is degenerate (zero-length).
-fn sdf_normal(p: vec3<f32>) -> vec3<f32> {
-  let eps = uGridOrigin.w * 0.5;
-  let dx = vec3<f32>(eps, 0.0, 0.0);
-  let dy = vec3<f32>(0.0, eps, 0.0);
-  let dz = vec3<f32>(0.0, 0.0, eps);
-  let g = vec3<f32>(
-    scene_sdf(p + dx).dist - scene_sdf(p - dx).dist,
-    scene_sdf(p + dy).dist - scene_sdf(p - dy).dist,
-    scene_sdf(p + dz).dist - scene_sdf(p - dz).dist,
-  );
-  let len = length(g);
-  if (len < 1e-6) {
-    return vec3<f32>(0.0, 0.0, 1.0);
-  }
-  return g / len;
-}
-
-// Single-tap (nearest, no PCF) sun shadow lookup for the voxelize pass (unified model): project
-// the voxel-center world point P (pushed off the surface along N to fight acne) into the sun map
-// and compare, so the sun injected into the volume is SHADOWED. Out-of-frustum / past near-far ->
-// lit. textureLoad: i32 coords + i32 LOD 0 (a depth texture cannot use a filtering sampler).
+// Single-tap (nearest, no PCF) sun shadow lookup: project the voxel-center world point P
+// (pushed off the surface along N to fight acne) into the sun map and compare, so the sun
+// injected into the volume is SHADOWED. Out-of-frustum / past near-far -> lit. textureLoad:
+// i32 coords + i32 LOD 0 (a depth texture cannot use a filtering sampler).
 fn sun_vis_vox(P: vec3<f32>, N: vec3<f32>) -> f32 {
   let worldTexel = uGridOrigin.w;               // approx normal-offset scale = cellSize
   let Po = P + N * (1.5 * worldTexel);
@@ -181,52 +164,112 @@ fn sun_vis_vox(P: vec3<f32>, N: vec3<f32>) -> f32 {
   return select(0.0, 1.0, ndc.z <= s + bias);
 }
 
+// CLEAR — one thread per voxel over the FULL grid. Zeroes all three storage textures so the
+// scatter pass (which writes ONLY solid voxels) starts from an empty volume.
 @compute @workgroup_size(${WORKGROUP}, ${WORKGROUP}, ${WORKGROUP})
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+fn clear(@builtin(global_invocation_id) gid: vec3<u32>) {
   let coord = vec3<i32>(gid);
   // Dispatch is ceil-rounded; drop threads past the grid bounds.
   if (coord.x >= uGridDims.x || coord.y >= uGridDims.y || coord.z >= uGridDims.z) {
     return;
   }
+  textureStore(voxelAlbedo, coord, vec4<f32>(0.0));
+  textureStore(voxelEmission, coord, vec4<f32>(0.0));
+  textureStore(voxelRadiance, coord, vec4<f32>(0.0));
+}
 
+// SCATTER — one thread per (instance, voxel-in-its-AABB) pair. The thread:
+//   1) flattens its 2D workgroup-grid id into a global work index g,
+//   2) binary-searches the per-instance prefix start to find the owning instance,
+//   3) decodes the local offset into a voxel coord inside that instance's AABB box,
+//   4) evaluates ONLY that instance's local SDF, and writes the voxel if it is solid.
+@compute @workgroup_size(${WORKGROUP_1D}, 1, 1)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let uTotal = uDispatch.x;
+  let uDispatchWidth = uDispatch.y;
+  // Flatten the 2D thread grid to a 1D work index (the dispatch is 2D over workgroups to
+  // dodge the 65535 per-dimension workgroup limit). uDispatchWidth = the X extent IN THREADS.
+  let g = i32(gid.y) * uDispatchWidth + i32(gid.x);
+  if (g >= uTotal) {
+    return;
+  }
+
+  // Binary search the prefix start (= uAabbMin[k].w, monotonic non-decreasing): find the
+  // largest ins with start[ins] <= g (standard upper_bound - 1). Empty ranges (n == 0)
+  // share their successor's start and are skipped naturally — g never lands inside one.
+  var lo: i32 = 0;
+  var hi: i32 = i32(uInstanceCount);
+  loop {
+    if (lo >= hi) { break; }
+    let mid = (lo + hi) / 2;
+    if (uAabbMin[mid].w <= g) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  let ins = u32(lo - 1);
+
+  // Local offset within this instance's voxel box, decoded to (lx,ly,lz).
+  let dim = uAabbDim[ins];
+  let nx = dim.x;
+  let ny = dim.y;
+  let local = g - uAabbMin[ins].w;
+  let lx = local % nx;
+  let ly = (local / nx) % ny;
+  let lz = local / (nx * ny);
+
+  // Voxel coord (already clamped to [0,dim) on the CPU side) + its world-space center.
+  let coord = uAabbMin[ins].xyz + vec3<i32>(lx, ly, lz);
   let cellSize = uGridOrigin.w;
-  // Voxel center in world space.
-  let world = uGridOrigin.xyz + (vec3<f32>(gid) + vec3<f32>(0.5)) * cellSize;
+  let world = uGridOrigin.xyz + (vec3<f32>(coord) + vec3<f32>(0.5)) * cellSize;
 
-  let hit = scene_sdf(world);
-  // voxelAlbedo / voxelEmission occupancy stays BINARY: the DDA debug/gi raymarchers test
-  // a > 0.5, and the composite reads voxelEmission.rgb directly (full self-emission).
-  // Conservative "iso-surface crosses this voxel": within half the voxel diagonal.
-  let solid = hit.dist <= cellSize * 0.5 * SQRT3;
+  // Evaluate ONLY instance ins: world -> local (subtract center, inverse yaw via rotZ),
+  // then its LOCAL sd_shape3d. (No loop over the other instances — the whole point.)
+  let tr = uTransform[ins];
+  let hz = uHeights[ins] * 0.5;
+  let center = vec3<f32>(tr[3].x, tr[3].y, tr[3].z + hz);
+  let yaw = atan2(tr[0].y, tr[0].x);
+  let rel = world - center;
+  let lp = vec3<f32>(rotZ(rel.xy, cos(-yaw), sin(-yaw)), rel.z);
+  let d = sd_shape3d(lp, ins, hz);
+
+  // Conservative "iso-surface crosses this voxel": within half the voxel diagonal. NOT solid
+  // -> write nothing (clear already zeroed it; writing zero here would clobber a DIFFERENT
+  // instance that legitimately filled this voxel via last-writer-wins).
+  if (d > cellSize * 0.5 * SQRT3) {
+    return;
+  }
+
+  // LOCAL normal of THIS instance only, rotated back to world by +yaw.
+  let nLocal = sd_normal3d(lp, ins, hz);
+  let cy = cos(yaw);
+  let sy = sin(yaw);
+  let N = vec3<f32>(rotZ(nLocal.xy, cy, sy), nLocal.z);
 
   // voxelRADIANCE (the only volume the cone samples, via its mip pyramid) uses ANTI-ALIASED
-  // coverage instead: a linear band across the iso-surface (1 deep inside → 0.5 at the
-  // centre → 0 at the outer extent, matching solid). Stored PREMULTIPLIED (rgb·coverage,
-  // a=coverage) so (1) the premultiplied mip pyramid + cone over-operator stay consistent
-  // and (2) a MOVING object's edge voxels fade smoothly instead of popping 0↔1 each frame —
-  // this is what kills the voxel-grid shimmer/flicker when light passes near an object.
-  let coverage = clamp(0.5 - hit.dist / (cellSize * SQRT3), 0.0, 1.0);
+  // coverage: a linear band across the iso-surface (1 deep inside -> 0.5 at the centre -> 0 at
+  // the outer extent). Stored PREMULTIPLIED (rgb*coverage, a=coverage) so the premultiplied mip
+  // pyramid + cone over-operator stay consistent AND a MOVING object's edge voxels fade smoothly
+  // instead of popping 0<->1 each frame (kills the voxel-grid shimmer when light passes near).
+  let coverage = clamp(0.5 - d / (cellSize * SQRT3), 0.0, 1.0);
 
-  if (solid) {
-    let albedo = uColor[hit.instance].rgb;
-    let N = sdf_normal(world);
-    let L = uSun.xyz;
-    let ndl = max(dot(N, L), 0.0);
-    // The directional sun is injected SHADOWED into the volume: vis from a single-tap sun shadow
-    // lookup, so the cone-GI 'indirect' carries an already-shadowed sun. One texture sample per
-    // solid voxel — cheap. (Only matters when the directional sun is enabled; uSun.w == 0 → the
-    // whole direct term is 0. The sun is a regular emitter by default.)
-    let vis = sun_vis_vox(world, N);
-    let direct = albedo * (ndl * uSun.w) * uSunColor.rgb * vis;
-    let radiance = direct + emission_of(hit.instance);
-    textureStore(voxelAlbedo, coord, vec4<f32>(albedo, 1.0));
-    textureStore(voxelEmission, coord, vec4<f32>(emission_of(hit.instance), 1.0));
-    textureStore(voxelRadiance, coord, vec4<f32>(radiance * coverage, coverage));
-  } else {
-    textureStore(voxelAlbedo, coord, vec4<f32>(0.0));
-    textureStore(voxelEmission, coord, vec4<f32>(0.0));
-    textureStore(voxelRadiance, coord, vec4<f32>(0.0));
-  }
+  let albedo = uColor[ins].rgb;
+  let L = uSun.xyz;
+  let ndl = max(dot(N, L), 0.0);
+  // The directional sun is injected SHADOWED into the volume: vis from a single-tap sun shadow
+  // lookup, so the cone-GI 'indirect' carries an already-shadowed sun. (Only matters when the
+  // sun is enabled; uSun.w == 0 -> the whole direct term is 0.)
+  let vis = sun_vis_vox(world, N);
+  let direct = albedo * (ndl * uSun.w) * uSunColor.rgb * vis;
+  let emission = emission_of(ins);
+  let radiance = direct + emission;
+
+  // Last-writer-wins on AABB overlap — acceptable. voxelAlbedo / voxelEmission occupancy stays
+  // BINARY (the DDA/gi raymarchers test a > 0.5; the composite reads voxelEmission.rgb directly).
+  textureStore(voxelAlbedo, coord, vec4<f32>(albedo, 1.0));
+  textureStore(voxelEmission, coord, vec4<f32>(emission, 1.0));
+  textureStore(voxelRadiance, coord, vec4<f32>(radiance * coverage, coverage));
 }
 `,
 );

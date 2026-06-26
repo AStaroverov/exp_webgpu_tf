@@ -32,10 +32,10 @@ export const DEFAULT_VOXEL_GRID: VoxelGridConfig = {
   originX: -32,
   originY: -32,
   originZ: -2,
-  dimX: 128,
-  dimY: 128,
-  dimZ: 32,
-  cellSize: 0.5,
+  dimX: 4 * 128,
+  dimY: 4 * 128,
+  dimZ: 4 * 32,
+  cellSize: 0.5 / 4,
 };
 
 // Number of mip levels for the voxelRadiance pyramid: full chain down to the 1-voxel mip

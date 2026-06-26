@@ -20,6 +20,15 @@ export type SceneInstances = {
   heights: GPUVariable;
   color: GPUVariable;
   material: GPUVariable;
+  // CPU-side copies of the per-instance collect arrays (the SAME references, not copies),
+  // filled by prepare() each frame. The voxel scatter pass reads these post-prepare() to
+  // compute per-instance world AABBs WITHOUT a GPU readback. Only the 5 fields the AABB math
+  // needs are exposed; color/material are read on the GPU by the voxel pass as before.
+  cpuTransform: Float32Array;
+  cpuKind: Uint32Array;
+  cpuValues: Float32Array;
+  cpuRoundness: Float32Array;
+  cpuHeights: Float32Array;
   readonly instanceCount: number;
 };
 
@@ -264,6 +273,13 @@ export function createDrawShapeSystem({
       heights: gpuShader.uniforms.heights,
       color: gpuShader.uniforms.color,
       material: gpuShader.uniforms.material,
+      // CPU-side collect arrays (same references) so the voxel scatter pass can compute
+      // per-instance AABBs after prepare() has filled them this frame — no GPU readback.
+      cpuTransform: transformCollect as Float32Array,
+      cpuKind: kindCollect as Uint32Array,
+      cpuValues: valuesCollect as Float32Array,
+      cpuRoundness: roundnessCollect as Float32Array,
+      cpuHeights: heightsCollect as Float32Array,
       // Live count actually written this frame (clamped to MAX_INSTANCE_COUNT).
       // MUST be a getter — preparedEntityCount is reassigned every prepare().
       get instanceCount() {
