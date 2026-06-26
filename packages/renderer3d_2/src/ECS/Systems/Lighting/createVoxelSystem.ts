@@ -269,8 +269,10 @@ export function createVoxelSystem({
   const coneParamsArr = getTypeTypedArray(coneMeta.uniforms.params.type); // Float32Array(4)
   const coneParams2Arr = getTypeTypedArray(coneMeta.uniforms.params2.type); // Float32Array(4)
   const coneInvArr = getTypeTypedArray(coneMeta.uniforms.invViewProj.type); // Float32Array(16)
-  // Emitter centers to importance-sample (x,y,z,radius per light) — Float32Array(32) for 8.
+  // Auto-discovered emitter centers the cone importance-samples (x,y,z,radius per light) +
+  // parallel colors (r,g,b,intensity) for the analytic-direct shadow term.
   const coneLightsArr = getTypeTypedArray(coneMeta.uniforms.lights.type); // Float32Array(32)
+  const coneLightColorsArr = getTypeTypedArray(coneMeta.uniforms.lightColor.type); // Float32Array(32)
   let coneLightCount = 0;
   // Composite scratch (unified model: only ambient + screen dims).
   const compParamsArr = getTypeTypedArray(compositeMeta.uniforms.params.type); // Float32Array(4)
@@ -326,6 +328,7 @@ export function createVoxelSystem({
         coneShader.uniforms.gridOrigin.getBindGroupEntry(device),
         coneShader.uniforms.gridDims.getBindGroupEntry(device),
         coneShader.uniforms.lights.getBindGroupEntry(device),
+        coneShader.uniforms.lightColor.getBindGroupEntry(device),
         { binding: coneMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
         { binding: coneMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
         // ALL-mips sampled view so textureSampleLevel can pick any lod.
@@ -788,14 +791,23 @@ export function createVoxelSystem({
     pass.end();
   }
 
-  // Upload the emitter centers the cone pass importance-samples (aimed cones). `flat` holds n*4
-  // floats (x,y,z,radius per light); `count` is clamped to [0,8] and unused entries are zeroed.
-  // count=0 → pure Fibonacci fill cones (old behavior).
-  function setLights(flat: number[], count: number) {
+  // Upload the emitter data the cone pass importance-samples (aimed cones). `flat` = n*4 floats
+  // (x,y,z,radius per light); `colorsFlat` = parallel n*4 (r,g,b,intensity per light) for the
+  // analytic-direct shadow term. `count` is clamped to [0,8]; unused entries zeroed. The caller
+  // discovers these from the LightEmitter component each frame (no manual light list). count=0 →
+  // pure Fibonacci fill cones.
+  function setLights(flat: number[], count: number, colorsFlat: number[]) {
     const n = Math.max(0, Math.min(8, count));
     coneLightsArr.fill(0);
     coneLightsArr.set(flat.slice(0, n * 4));
     device.queue.writeBuffer(coneShader.uniforms.lights.getGPUBuffer(device), 0, coneLightsArr);
+    coneLightColorsArr.fill(0);
+    coneLightColorsArr.set(colorsFlat.slice(0, n * 4));
+    device.queue.writeBuffer(
+      coneShader.uniforms.lightColor.getGPUBuffer(device),
+      0,
+      coneLightColorsArr,
+    );
     coneLightCount = n;
   }
 

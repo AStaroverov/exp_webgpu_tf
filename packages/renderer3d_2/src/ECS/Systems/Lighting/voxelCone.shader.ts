@@ -24,15 +24,12 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 // G-buffer is still sampled (at the half-res pixel ·2, clamped); the composite bilinear-
 // upsamples this output back to full res — indirect light is low-frequency, so that is fine.
 //
-// IMPORTANCE-SAMPLED HEMISPHERE GATHER. Rather than brute-forcing many random hemisphere
-// cones to find the lights, we AIM one narrow cone straight at each emitter (where the
-// radiance is concentrated) for a sharp, far-reaching soft shadow, and keep a few WIDE
-// Fibonacci fill cones for the diffuse bounce / ambient term. Both sets march the SAME
-// trace_cone through the voxelRadiance pyramid with front-to-back occlusion, and accumulate
-// into ONE cosine-weighted hemisphere integral (acc / occAcc / wsum) — it is NOT a separate
-// analytic light, just a smarter sampling of the existing cone gather. The aimed directions
-// are deterministic, so they carry no jitter banding ("denim"); a handful of cones replaces
-// the old 48, killing both the banding and the lag.
+// IMPORTANCE-SAMPLED HEMISPHERE GATHER. Wide Fibonacci fill cones at a 60° aperture read coarse
+// mips, so they smear a small bright emitter across the whole cone → too dim + no directional
+// shadow if used alone. So we ALSO aim one narrow cone straight at each emitter (full reach to the
+// source, no fade) for a bright, sharply-shadowed contribution, folded into the SAME cosine-
+// weighted hemisphere integral (acc/occAcc/wsum). The emitters are AUTO-DISCOVERED from the
+// LightEmitter component every frame (no manual light list) — every emitter is treated the same.
 //
 // This is what produces real color bleeding. The earlier single-cone-along-the-normal form
 // was the Layer-2 INTERMEDIATE (a bent-normal / AO preview); the hemisphere gather here is
@@ -50,9 +47,15 @@ export const shaderMeta = new ShaderMeta(
     // .x = screen width (px), .y = screen height (px), .z = fill-cone count (angular
     // resolution of the ambient/bounce term), .w = active light count (0..8).
     params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
-    // Emitters to importance-sample: .xyz = world CENTER, .w = radius (penumbra source).
-    // Only the first i32(uParams2.w) entries are live.
+    // Emitters to importance-sample: .xyz = world CENTER, .w = radius (penumbra source). These
+    // are AUTO-DISCOVERED from the LightEmitter component (every emitter, no manual list); only
+    // the first i32(uParams2.w) entries are live.
     lights: new VariableMeta("lights", VariableKind.Uniform, `array<vec4<f32>, 8>`),
+    // Parallel to lights[]: .rgb = emitter color, .w = intensity → Lj = rgb·|w| is the emitter's
+    // true radiance. Used to compute analytic direct light (so a blocked cone DARKENS instead of
+    // picking up the occluder's own emission = the "white shadow" bug), with a bleed term so a
+    // BRIGHT occluder cancels its own false shadow.
+    lightColor: new VariableMeta("lightColor", VariableKind.Uniform, `array<vec4<f32>, 8>`),
     // inverse(viewProjMatrix) (reverse-Z), column-major, for world-position reconstruction.
     invViewProj: new VariableMeta("uInvViewProj", VariableKind.Uniform, `mat4x4<f32>`),
     // .xyz = world min corner, .w = cellSize.
@@ -199,9 +202,10 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   var wsum = 0.0;
 
   // (a) AIMED cones — one narrow cone per emitter, pointed straight at the light center for a
-  // sharp, far-reaching direct + soft-shadow term. Its aperture = the light's angular size
-  // (radius / distance) sets the penumbra width, and the cosine term (ndl) is its weight, so
-  // these fold into the SAME hemisphere integral as the fill cones below.
+  // bright, far-reaching direct + soft-shadow term. Aperture = the light's angular size
+  // (radius / distance) sets the penumbra width; the cosine term (ndl) is its weight, so these
+  // fold into the SAME hemisphere integral as the fill cones below. Emitters are auto-discovered
+  // (uParams2.w = live count, lights[] = world centers + radius).
   let lc = min(8, max(0, i32(uParams2.w)));
   for (var j = 0; j < lc; j = j + 1) {
     let toL = lights[j].xyz - origin;
@@ -211,11 +215,19 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let ndl = max(dot(N, dir), 0.0);
     if (ndl <= 0.0) { continue; }
     let ap = clamp(lights[j].w / d, 0.02, 0.5);   // angular size of the light = penumbra width
-    // reach = distance to the light so the cone always arrives at the emitter (light reaches
-    // as far as the source is, within the grid); no fade (it ends at the real light).
     let r = trace_cone(origin, dir, ap, d, 0.0, jrad);
-    acc = acc + ndl * r.rgb;
-    occAcc = occAcc + ndl * r.a;
+    // ANALYTIC DIRECT + bleed-cancel (fixes the "white shadow"). full = the emitter's own light.
+    // shadow = how much the cone's opacity removes; bleed = the radiance the cone actually
+    // gathered along the way (a BRIGHT occluder => big bleed => its false shadow is cancelled;
+    // a DARK occluder => ~0 bleed => the shadow survives). The target emitter itself bleeds ≈ its
+    // own Lj, so it always delivers full light. Clamped so it can only darken, never exceed full.
+    let occ = clamp(r.a, 0.0, 1.0);
+    let full = ndl * lightColor[j].rgb * abs(lightColor[j].w);
+    let shadow = full * occ;
+    let bleed = ndl * r.rgb;
+    let contrib = full - max(vec3<f32>(0.0), shadow - bleed);
+    acc = acc + max(vec3<f32>(0.0), contrib);
+    occAcc = occAcc + ndl * occ;
     wsum = wsum + ndl;
   }
 

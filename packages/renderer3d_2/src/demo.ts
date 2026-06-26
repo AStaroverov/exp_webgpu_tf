@@ -12,6 +12,7 @@
 
 import GUI from "lil-gui";
 import Stats from "stats-gl";
+import { hasComponent, query } from "bitecs";
 import { initWebGPU } from "./gpu.ts";
 import { createWorld, getRenderComponents } from "./ECS/world.ts";
 import { createFrameTextures, createFrameTick } from "./WGSL/createFrame.ts";
@@ -61,13 +62,13 @@ async function main() {
   const getPixelRatio = () => window.devicePixelRatio;
 
   const world = createWorld();
-  const { LocalTransform, LightEmitter, Shape, Height } = getRenderComponents(world);
+  const { LocalTransform, LightEmitter, Shape, Height, Color } = getRenderComponents(world);
 
   // Scene selection:
   //   "emitter"  — ground + box occluder + a GUI-movable/resizable emitter sphere.
   //   "simple"   — fixed minimal scene (first-bug diagnosis).
   //   "showcase" — one of every shape kind + several lights.
-  const SCENE = "emitter" as "emitter" | "showcase" | "final" | "perf";
+  const SCENE = "perf" as "emitter" | "showcase" | "final" | "perf";
 
   // The configurable emitter (only used by the "emitter" scene). Live-edited from
   // the GUI: position via the transform (re-uploaded every frame), radius via the
@@ -96,12 +97,6 @@ async function main() {
     composite: true, // final lit image
   };
   const perfEntities: number[] = []; // ids of the grid instances (spun by animatePerf)
-
-  // Emitters the cone pass importance-samples (aimed soft-shadow cones). Each scene pushes its
-  // own emitters; a "sun" emitter is added to EVERY scene below, replacing the directional
-  // SunLight. radius feeds the aimed-cone penumbra width + the sphere-center Z offset
-  // (SDF center.z = baseZ + radius).
-  const trackedLights: { id: number; radius: number }[] = [];
 
   if (SCENE === "emitter") {
     SunLight.enabled = false; // isolate the single emitter
@@ -336,8 +331,6 @@ async function main() {
       color: [0.35, 0.6, 1.0, 1],
     });
     LightEmitter.addComponent(world, dynPulseEmitter, 2.5);
-    trackedLights.push({ id: dynOrbitEmitter, radius: 0.8 });
-    trackedLights.push({ id: dynPulseEmitter, radius: 0.9 });
   }
 
   // --- Perf scene: a dense grid of mixed shapes to stress voxelize (O(voxels×instances))
@@ -410,15 +403,23 @@ async function main() {
   // emission is injected into the voxel volume and gathered by the cone GI). Kept INSIDE the
   // voxel grid (z within originZ..originZ+extentZ) so the volume picks it up.
   SunLight.enabled = false;
-  const sunEmitterId = createSphere(world, {
-    x: -10,
-    y: 9,
-    z: 10.5,
-    radius: 1.5,
+  const sunEmitterId = createCircle(world, {
+    x: 0,
+    y: 0,
+    z: 200,
+    radius: 100,
     color: [1.0, 0.93, 0.82, 1],
   });
-  LightEmitter.addComponent(world, sunEmitterId, 1.5);
-  trackedLights.push({ id: sunEmitterId, radius: 1 });
+  LightEmitter.addComponent(world, sunEmitterId, 6);
+
+  // const sunEmitterId2 = createSphere(world, {
+  //   x: 10,
+  //   y: 9,
+  //   z: 10.5,
+  //   radius: 1.5,
+  //   color: [1.0, 0.93, 0.82, 1],
+  // });
+  // LightEmitter.addComponent(world, sunEmitterId2, 2);
 
   // --- Systems ---
   const execTransformSystem = createTransformSystem(world, stubChildren);
@@ -569,20 +570,27 @@ async function main() {
     f.add(finalDyn, "speed", 0, 3, 0.05).name("speed");
   }
 
-  // Flat scratch reused every frame for voxel.setLights: x,y,z,radius per cone-sampled light.
-  const lightsFlat: number[] = [];
-
-  // Recompute the tracked light centers from the current transforms and push them to the cone
-  // pass (xyz+radius). center = LocalTransform translation + (0,0,radius). Empty list → 0 lights
-  // → pure fill cones. Clamped to 8 by setLights.
+  // Auto-discover every emitter from the ECS each frame and hand the cone pass their world
+  // centers + radius for importance sampling — NO manual light list. Any entity with a
+  // LightEmitter is a light, treated identically. center = transform translation + (0,0,radius),
+  // radius ≈ half-height (the sphere radius for emitter spheres). Capped at 8 by setLights.
+  const emitterLightsFlat: number[] = [];
+  const emitterColorsFlat: number[] = []; // r,g,b,intensity per light (analytic-direct radiance)
   function updateLights() {
-    lightsFlat.length = 0;
-    for (let i = 0; i < trackedLights.length; i++) {
-      const tl = trackedLights[i];
-      const t = getMatrixTranslation(LocalTransform.matrix.getBatch(tl.id));
-      lightsFlat.push(t[0], t[1], t[2] + tl.radius, tl.radius);
+    emitterLightsFlat.length = 0;
+    emitterColorsFlat.length = 0;
+    const ents = query(world, [LightEmitter, LocalTransform]);
+    let n = 0;
+    for (let i = 0; i < ents.length && n < 8; i++) {
+      const id = ents[i];
+      const t = getMatrixTranslation(LocalTransform.matrix.getBatch(id));
+      const r = hasComponent(world, id, Height) ? Height.value[id] * 0.5 : 0.5;
+      emitterLightsFlat.push(t[0], t[1], t[2] + r, r);
+      const c = Color.getArray(id); // rgba; rgb = c[0..2]
+      emitterColorsFlat.push(c[0], c[1], c[2], LightEmitter.intensity[id]);
+      n++;
     }
-    voxel.setLights(lightsFlat, trackedLights.length);
+    voxel.setLights(emitterLightsFlat, n, emitterColorsFlat);
   }
 
   // Animate the "final" scene: position (orbit), angle (spin), size (pulse radius),
@@ -697,8 +705,7 @@ async function main() {
     // Drive the dynamic "final"-scene objects, then push transforms → instance buffers.
     animateFinal(now);
     animatePerf(now);
-    // Refresh the importance-sampled emitter centers for the cone pass (positions are now
-    // current). Empty when no emitters are tracked → count 0 → pure fill cones.
+    // Auto-discover emitters (positions are now current) → cone importance-sampling lights.
     updateLights();
     execTransformSystem();
     shapeSystem.prepare();
