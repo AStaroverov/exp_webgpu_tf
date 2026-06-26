@@ -402,15 +402,15 @@ async function main() {
   // the directional SunLight (disabled). It lights the scene through the unified VCT path (its
   // emission is injected into the voxel volume and gathered by the cone GI). Kept INSIDE the
   // voxel grid (z within originZ..originZ+extentZ) so the volume picks it up.
-  SunLight.enabled = false;
-  const sunEmitterId = createCircle(world, {
-    x: 0,
-    y: 0,
-    z: 200,
-    radius: 100,
-    color: [1.0, 0.93, 0.82, 1],
-  });
-  LightEmitter.addComponent(world, sunEmitterId, 6);
+  SunLight.enabled = true;
+  // const sunEmitterId = createCircle(world, {
+  //   x: 0,
+  //   y: 0,
+  //   z: 200,
+  //   radius: 100,
+  //   color: [1.0, 0.93, 0.82, 1],
+  // });
+  // LightEmitter.addComponent(world, sunEmitterId, 6);
 
   // const sunEmitterId2 = createSphere(world, {
   //   x: 10,

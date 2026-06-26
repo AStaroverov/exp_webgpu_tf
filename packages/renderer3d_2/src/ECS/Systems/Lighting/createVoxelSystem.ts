@@ -274,9 +274,15 @@ export function createVoxelSystem({
   const coneLightsArr = getTypeTypedArray(coneMeta.uniforms.lights.type); // Float32Array(32)
   const coneLightColorsArr = getTypeTypedArray(coneMeta.uniforms.lightColor.type); // Float32Array(32)
   let coneLightCount = 0;
-  // Composite scratch (unified model: only ambient + screen dims).
+  // Composite scratch.
   const compParamsArr = getTypeTypedArray(compositeMeta.uniforms.params.type); // Float32Array(4)
   const compParams2Arr = getTypeTypedArray(compositeMeta.uniforms.params2.type); // Float32Array(4)
+  const compSunArr = getTypeTypedArray(compositeMeta.uniforms.sun.type); // Float32Array(4)
+  const compSunColorArr = getTypeTypedArray(compositeMeta.uniforms.sunColor.type); // Float32Array(4)
+  const compInvArr = getTypeTypedArray(compositeMeta.uniforms.invViewProj.type); // Float32Array(16)
+  const compSunViewProjArr = getTypeTypedArray(compositeMeta.uniforms.sunViewProj.type); // Float32Array(16)
+  // World units per shadow texel (sun ortho width / SHADOW_SIZE) → composite normal-offset bias.
+  let sunWorldTexel = 0;
   // Mip scratch: .xyz = destination mip dims (re-uploaded per level).
   const mipArr = getTypeTypedArray(mipMeta.uniforms.mip.type); // Int32Array(4)
 
@@ -350,6 +356,10 @@ export function createVoxelSystem({
       entries: [
         compositeShader.uniforms.params.getBindGroupEntry(device),
         compositeShader.uniforms.params2.getBindGroupEntry(device),
+        compositeShader.uniforms.sun.getBindGroupEntry(device),
+        compositeShader.uniforms.sunColor.getBindGroupEntry(device),
+        compositeShader.uniforms.invViewProj.getBindGroupEntry(device),
+        compositeShader.uniforms.sunViewProj.getBindGroupEntry(device),
         { binding: compositeMeta.uniforms.albedoTex.binding, resource: gAlbedo.createView() },
         { binding: compositeMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
         { binding: compositeMeta.uniforms.coneTex.binding, resource: coneView },
@@ -359,6 +369,9 @@ export function createVoxelSystem({
           binding: compositeMeta.uniforms.emissionTex.binding,
           resource: gEmission.createView(),
         },
+        // Sun shadow: reverse-Z camera depth (reconstruct P) + the sun-POV depth map.
+        { binding: compositeMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
+        { binding: compositeMeta.uniforms.shadowMap.binding, resource: sunDepthView },
       ],
     });
   }
@@ -625,11 +638,20 @@ export function createVoxelSystem({
     mat4.orthoZO(sunProj, lminX, lmaxX, lminY, lmaxY, near, far);
     mat4.multiply(sunViewProj, sunProj, sunView);
 
+    // World units per shadow texel (larger ortho axis / map resolution) → composite normal-offset.
+    sunWorldTexel = Math.max(lmaxX - lminX, lmaxY - lminY) / SHADOW_SIZE;
+
     sunViewProjArr.set(sunViewProj as Float32Array);
     device.queue.writeBuffer(
       sunShadowShader.uniforms.viewProj.getGPUBuffer(device),
       0,
       sunViewProjArr,
+    );
+    compSunViewProjArr.set(sunViewProj as Float32Array);
+    device.queue.writeBuffer(
+      compositeShader.uniforms.sunViewProj.getGPUBuffer(device),
+      0,
+      compSunViewProjArr,
     );
     // ALSO upload to voxelize's uSunViewProj — it samples the shadow map at voxelize time and
     // MUST use the same matrix that rendered the map (sunDepth runs first in the loop).
@@ -817,12 +839,21 @@ export function createVoxelSystem({
   function composite(encoder: GPUCommandEncoder) {
     compParamsArr[0] = compositeParams.ambient;
     compParamsArr[1] = 0;
-    compParamsArr[2] = 0;
+    compParamsArr[2] = sunWorldTexel; // sun shadow-map world texel size (normal-offset bias)
     compParamsArr[3] = 0;
     device.queue.writeBuffer(
       compositeShader.uniforms.params.getGPUBuffer(device),
       0,
       compParamsArr,
+    );
+
+    // inverse(viewProj) for the sun-shadow world-position reconstruction.
+    mat4.invert(invViewProj, viewProjMatrix);
+    compInvArr.set(invViewProj as Float32Array);
+    device.queue.writeBuffer(
+      compositeShader.uniforms.invViewProj.getGPUBuffer(device),
+      0,
+      compInvArr,
     );
 
     compParams2Arr[0] = canvas.width;
@@ -833,6 +864,25 @@ export function createVoxelSystem({
       compositeShader.uniforms.params2.getGPUBuffer(device),
       0,
       compParams2Arr,
+    );
+
+    // Directional sun: .xyz = world dir TOWARD the sun (azimuth + elevation), .w = effective
+    // intensity (0 = disabled). Same packing as voxelize's uSun.
+    const a = SunLight.angle;
+    const e = SunLight.elevation;
+    const ce = Math.cos(e);
+    compSunArr[0] = Math.cos(a) * ce;
+    compSunArr[1] = Math.sin(a) * ce;
+    compSunArr[2] = Math.sin(e);
+    compSunArr[3] = SunLight.enabled ? SunLight.intensity : 0;
+    device.queue.writeBuffer(compositeShader.uniforms.sun.getGPUBuffer(device), 0, compSunArr);
+    compSunColorArr[0] = SunLight.color[0];
+    compSunColorArr[1] = SunLight.color[1];
+    compSunColorArr[2] = SunLight.color[2];
+    device.queue.writeBuffer(
+      compositeShader.uniforms.sunColor.getGPUBuffer(device),
+      0,
+      compSunColorArr,
     );
 
     const pass = encoder.beginRenderPass({
