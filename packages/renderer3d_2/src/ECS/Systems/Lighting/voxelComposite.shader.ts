@@ -3,19 +3,17 @@ import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
 import { wgsl } from "../../../WGSL/wgsl.ts";
 
 // VCT Layer 4 — the COMPOSITE: turn the indirect cone gather into the FINAL lit image.
-//   final = albedo·(ambient·AO + indirect) + selfEmission.
+//   final = albedo·(ambient·AO + directSun·shadow + indirect) + selfEmission.
 // A fullscreen FULL-res pass over the G-buffer. Per pixel:
 //   - albedo  = G-buffer albedo (the SDF renderTexture).
-//   - indirect already carries giStrength (baked into the cone's rgb); AO = the cone's
-//     hemisphere visibility (cone.a). The cone output is HALF-res, so it is bilinear-
-//     upsampled here (linear sampler) — indirect light is low-frequency, so that is fine.
-//   - self-emission makes emitters glow: read the per-pixel G-buffer emission target written
-//     by fs_main (uColor.rgb·abs(material.x)). It is a SURFACE property, so there is no voxel
-//     cross-contamination / flicker as instances intersect.
-// UNIFIED lighting model: ALL light (the sun — now a regular emitter — and every other emitter)
-// arrives through the cone-GI 'indirect' term, which gathers the voxel radiance volume. There is
-// NO separate sun direct term and NO per-emitter direct term here (those were the removed B-lite
-// path); shadows/soft-shadows are the cone gather's per-direction occupancy.
+//   - directSun = the directional sun (N·L · color · intensity), with a CRISP cast shadow from
+//     the sun-POV depth map (sun_shadow(): reconstruct world P, project into the sun's orthoZO
+//     clip space, compare depth with normal-offset + slope bias + 5×5 tent PCF).
+//   - indirect already carries giStrength (baked into the cone's rgb); AO = the cone's hemisphere
+//     visibility (cone.a). The cone output is HALF-res → bilinear-upsampled here (linear sampler).
+//     The emitters (point lights) live entirely in this indirect cone-GI term.
+//   - self-emission makes emitters glow: read the per-pixel G-buffer emission target written by
+//     fs_main (uColor.rgb·abs(material.x)). A SURFACE property → no voxel cross-contamination.
 
 export const shaderMeta = new ShaderMeta(
   {

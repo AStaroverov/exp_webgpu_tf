@@ -3,7 +3,6 @@ import { GPUShader } from "../../../WGSL/GPUShader.ts";
 import { getTypeTypedArray } from "../../../Shader/index.ts";
 import { viewProjMatrix } from "../ResizeSystem.ts";
 import { shaderMeta as voxelizeMeta, WORKGROUP } from "./voxelize.shader.ts";
-import { shaderMeta as debugMeta } from "./voxelDebug.shader.ts";
 import { shaderMeta as coneMeta } from "./voxelCone.shader.ts";
 import { shaderMeta as compositeMeta } from "./voxelComposite.shader.ts";
 import { shaderMeta as mipMeta, WORKGROUP as MIP_WG } from "./voxelMip.shader.ts";
@@ -17,11 +16,6 @@ import {
 } from "./voxelResources.ts";
 import type { SceneInstances } from "../SDFSystem/createDrawShapeSystem.ts";
 import { SunLight } from "../SunLight.ts";
-
-export type VoxelParams = {
-  // Ambient floor added to the debug Lambert shade.
-  ambient: number;
-};
 
 export type VoxelConeParams = {
   normalBias: number; // extra lift of the cone origin off the surface
@@ -37,8 +31,8 @@ export type VoxelCompositeParams = {
 
 // Voxel scene system: voxelize() fills the 3D albedo/emission/radiance textures from the SDF
 // scene each frame; mips() builds the radiance pyramid; cone() gathers indirect light (N-cone
-// VCT) and composite() produces the final lit image. debug() raymarches the voxels for
-// inspection (see docs/voxel-cone-tracing-impl.md).
+// VCT); sunDepth() renders the sun-POV shadow map; composite() produces the final lit image
+// (see docs/voxel-cone-tracing-impl.md).
 //
 // GRANULARITY: the world box (origin + extent) is FIXED; cellSize controls voxel size
 // (and thus per-axis dims = round(extent/cellSize)) — the "graininess" knob. Smaller
@@ -66,7 +60,6 @@ export function createVoxelSystem({
   emissionTexture: GPUTexture;
   grid?: VoxelGridConfig;
 }) {
-  const params: VoxelParams = { ambient: 0.12 };
   const coneParams: VoxelConeParams = {
     normalBias: 0,
     maxDist: 24,
@@ -78,11 +71,12 @@ export function createVoxelSystem({
   // ambient floor.
   const compositeParams: VoxelCompositeParams = { ambient: 0.05 };
 
-  // UNIFIED lighting model: all light (the sun — now a regular emitter — and every emitter) goes
-  // through the voxel volume + cone-GI. The sun shadow map (sunDepth pass) survives only to
-  // SHADOW the directional sun when it is injected into the volume (voxelize); it is dormant
-  // while the directional SunLight is disabled (sun.w == 0). The composite has no sun/emitter
-  // direct terms (those were the removed B-lite path).
+  // LIGHTING MODEL:
+  //  - emitters (point lights) → injected into the voxel volume → gathered by the cone GI
+  //    (aimed + fill cones). This is the composite's 'indirect' term.
+  //  - directional sun (SunLight) → a DIRECT term in the composite (N·L) with a crisp cast shadow
+  //    from the sun-POV depth map (sunDepth pass). It is also injected (shadowed) into the volume
+  //    by voxelize, so it contributes a GI bounce too. Dormant when SunLight is disabled (sun.w==0).
 
   // G-buffer textures (reassigned by recreate() on canvas resize).
   let gDepth = depthTexture;
@@ -102,11 +96,6 @@ export function createVoxelSystem({
   // ===== Shaders + pipelines (created once; only textures/bind groups rebuild). =====
   const voxShader = new GPUShader(voxelizeMeta);
   const voxPipeline = voxShader.getComputePipeline(device, "main");
-  const debugShader = new GPUShader(debugMeta);
-  const debugPipeline = debugShader.getRenderPipeline(device, "vs_main", "fs_main", {
-    targetFormat: "bgra8unorm", // matches the output texture + frame.renderTexture
-    withBlending: false,
-  });
   // VCT cone GI — N-cone diffuse hemisphere gather over the G-buffer → HALF-res HDR target
   // (composite bilinear-upsamples to full res; the heavy cone work runs at ¼ the pixels).
   const coneShader = new GPUShader(coneMeta);
@@ -262,9 +251,7 @@ export function createVoxelSystem({
   const sunColorArr = getTypeTypedArray(voxelizeMeta.uniforms.sunColor.type); // Float32Array(4)
   // The sun view-proj voxelize samples the shadow map with (for the shadowed sun injection).
   const voxSunViewProjArr = getTypeTypedArray(voxelizeMeta.uniforms.sunViewProj.type); // Float32Array(16)
-  const paramsArr = getTypeTypedArray(debugMeta.uniforms.params.type); // Float32Array(4)
-  const invViewProj = mat4.create();
-  const invArr = getTypeTypedArray(debugMeta.uniforms.invViewProj.type); // Float32Array(16)
+  const invViewProj = mat4.create(); // reused by cone() + composite() for inverse-viewProj
   // Cone scratch.
   const coneParamsArr = getTypeTypedArray(coneMeta.uniforms.params.type); // Float32Array(4)
   const coneParams2Arr = getTypeTypedArray(coneMeta.uniforms.params2.type); // Float32Array(4)
@@ -306,7 +293,6 @@ export function createVoxelSystem({
   let dimZ = grid.dimZ;
   let textures: VoxelTextures;
   let voxGroup2: GPUBindGroup;
-  let debugGroup0: GPUBindGroup;
   let coneGroup0: GPUBindGroup;
   let compositeGroup0: GPUBindGroup;
   let dispatchX = 0;
@@ -419,31 +405,6 @@ export function createVoxelSystem({
       ],
     });
 
-    // Group 0 (debug) = uniforms (stable buffers) + the SAME textures sampled as 3d.
-    debugGroup0 = device.createBindGroup({
-      layout: debugPipeline.getBindGroupLayout(0),
-      entries: [
-        debugShader.uniforms.params.getBindGroupEntry(device),
-        debugShader.uniforms.invViewProj.getBindGroupEntry(device),
-        debugShader.uniforms.gridOrigin.getBindGroupEntry(device),
-        debugShader.uniforms.gridDims.getBindGroupEntry(device),
-        { binding: debugMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
-        {
-          binding: debugMeta.uniforms.voxelAlbedo.binding,
-          resource: textures.voxelAlbedo.createView({ dimension: "3d" }),
-        },
-        {
-          binding: debugMeta.uniforms.voxelEmission.binding,
-          resource: textures.voxelEmission.createView({ dimension: "3d" }),
-        },
-        // ALL-mips sampled view so textureSampleLevel can pick any lod.
-        {
-          binding: debugMeta.uniforms.voxelRadiance.binding,
-          resource: textures.voxelRadiance.createView({ dimension: "3d" }),
-        },
-      ],
-    });
-
     // Mip-pyramid downsample groups (mip L → L+1). srcView is a single-mip SAMPLED view of
     // mip L; dstView is a single-mip STORAGE view of mip L+1 (different subresources of the
     // same texture → allowed). Rebuilt here because views/buffers depend on the new dims.
@@ -510,8 +471,6 @@ export function createVoxelSystem({
     dimsArr[3] = 0;
     device.queue.writeBuffer(voxShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
     device.queue.writeBuffer(voxShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
-    device.queue.writeBuffer(debugShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
-    device.queue.writeBuffer(debugShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
     device.queue.writeBuffer(coneShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
     device.queue.writeBuffer(coneShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
     // (composite no longer has grid uniforms — its sun shadow uses the shadow map, not voxels.)
@@ -520,18 +479,7 @@ export function createVoxelSystem({
     dispatchY = Math.ceil(dimY / WORKGROUP);
     dispatchZ = Math.ceil(dimZ / WORKGROUP);
   }
-  // Canvas-sized debug output (presented). Independent of the voxel grid.
-  const createOutput = () =>
-    device.createTexture({
-      size: [canvas.width, canvas.height, 1],
-      format: "bgra8unorm",
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-  let outputTexture = createOutput();
-  // Cached attachment view; refreshed in recreate() when the texture is rebuilt on resize.
-  let outputView = outputTexture.createView();
-
-  // HALF-res HDR target for the Layer-2 cone gather (presented as the "cone" source).
+  // HALF-res HDR target for the Layer-2 cone gather.
   // Half-res for perf (¼ the pixels → ~4× less cone work); the composite bilinear-upsamples
   // it back to full res (indirect light is low-frequency, so that is fine). The render pass
   // viewport IS the texture size, so the cone pass renders at half res automatically.
@@ -749,34 +697,6 @@ export function createVoxelSystem({
     }
   }
 
-  // Raymarch the voxel grid into outputTexture. mode: 0 = lit albedo, 1 = stored radiance,
-  // 2 = LOD sample of the radiance pyramid at `lod` (requires mips() to have run).
-  function debug(encoder: GPUCommandEncoder, mode = 0, lod = 0) {
-    paramsArr[0] = params.ambient;
-    paramsArr[1] = mode;
-    paramsArr[2] = lod;
-    device.queue.writeBuffer(debugShader.uniforms.params.getGPUBuffer(device), 0, paramsArr);
-
-    mat4.invert(invViewProj, viewProjMatrix);
-    invArr.set(invViewProj as Float32Array);
-    device.queue.writeBuffer(debugShader.uniforms.invViewProj.getGPUBuffer(device), 0, invArr);
-
-    const pass = encoder.beginRenderPass({
-      colorAttachments: [
-        {
-          view: outputView,
-          clearValue: [0, 0, 0, 1],
-          loadOp: "clear",
-          storeOp: "store",
-        },
-      ],
-    });
-    pass.setPipeline(debugPipeline);
-    pass.setBindGroup(0, debugGroup0);
-    pass.draw(6, 1, 0, 0);
-    pass.end();
-  }
-
   // VCT cone GI: trace the N-cone diffuse hemisphere at the per-pixel normal through the
   // voxelRadiance pyramid → coneOutput (HALF-res HDR; composite bilinear-upsamples). MUST run
   // AFTER voxelize() + mips() (it samples the pyramid). Reads the G-buffer (depth + normal).
@@ -909,8 +829,8 @@ export function createVoxelSystem({
     buildGrid(newCellSize);
   }
 
-  // Canvas resized: rebind the (new) G-buffer textures, recreate the canvas-sized debug +
-  // cone + composite outputs, and rebuild the cone/composite bind groups.
+  // Canvas resized: rebind the (new) G-buffer textures, recreate the canvas-sized cone +
+  // composite outputs, and rebuild the cone/composite bind groups.
   function recreate(
     newDepth: GPUTexture,
     newNormal: GPUTexture,
@@ -921,9 +841,6 @@ export function createVoxelSystem({
     gNormal = newNormal;
     gAlbedo = newAlbedo;
     gEmission = newEmission;
-    outputTexture.destroy();
-    outputTexture = createOutput();
-    outputView = outputTexture.createView();
     coneOutput.destroy();
     coneOutput = createConeOutput();
     coneView = coneOutput.createView();
@@ -937,12 +854,10 @@ export function createVoxelSystem({
   }
 
   return {
-    params,
     coneParams,
     compositeParams,
     voxelize,
     mips,
-    debug,
     cone,
     setLights,
     sunDepth,
@@ -960,9 +875,6 @@ export function createVoxelSystem({
     },
     get textures() {
       return textures;
-    },
-    get outputTexture() {
-      return outputTexture;
     },
     get coneOutputTexture() {
       return coneOutput;

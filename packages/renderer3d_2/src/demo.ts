@@ -398,29 +398,6 @@ async function main() {
     LightEmitter.addComponent(world, pe3, 6.0);
   }
 
-  // --- Sun imitation (ALL scenes): a single bright "sun" emitter high above center, replacing
-  // the directional SunLight (disabled). It lights the scene through the unified VCT path (its
-  // emission is injected into the voxel volume and gathered by the cone GI). Kept INSIDE the
-  // voxel grid (z within originZ..originZ+extentZ) so the volume picks it up.
-  SunLight.enabled = true;
-  // const sunEmitterId = createCircle(world, {
-  //   x: 0,
-  //   y: 0,
-  //   z: 200,
-  //   radius: 100,
-  //   color: [1.0, 0.93, 0.82, 1],
-  // });
-  // LightEmitter.addComponent(world, sunEmitterId, 6);
-
-  // const sunEmitterId2 = createSphere(world, {
-  //   x: 10,
-  //   y: 9,
-  //   z: 10.5,
-  //   radius: 1.5,
-  //   color: [1.0, 0.93, 0.82, 1],
-  // });
-  // LightEmitter.addComponent(world, sunEmitterId2, 2);
-
   // --- Systems ---
   const execTransformSystem = createTransformSystem(world, stubChildren);
   const shapeSystem = createDrawShapeSystem({ world, device });
@@ -437,8 +414,7 @@ async function main() {
     ({ passEncoder }) => shapeSystem.drawShapes(passEncoder),
   );
 
-  // Phase 1: voxelize the SDF scene into 3D albedo/emission textures, then raymarch
-  // them (DDA) into voxel.outputTexture for debug inspection.
+  // Voxel GI system: voxelize the scene, build the radiance pyramid, cone-gather + composite.
   const voxel = createVoxelSystem({
     device,
     canvas,
@@ -449,39 +425,7 @@ async function main() {
     emissionTexture: frame.emissionTexture,
   });
 
-  // Present-source selector: which texture reaches the screen.
-  //   "voxel"    — the voxel debug raymarch, lit-albedo Lambert (voxel.outputTexture).
-  //   "radiance" — the voxel debug raymarch showing stored direct-sun radiance
-  //                (voxel.outputTexture, debug mode 1).
-  //   "lod"      — the voxel debug raymarch sampling the radiance mip pyramid at a chosen
-  //                LOD (voxel.outputTexture, debug mode 2); LOD 0 sharp, higher = blurred.
-  //   "cone"     — VCT cone GI: 6-cone diffuse hemisphere gather through the radiance
-  //                pyramid (voxel.coneOutputTexture); indirect only (no albedo/direct yet).
-  //   "final"    — the composited VCT image (voxel.compositeOutputTexture): the real lit
-  //                picture = albedo·(ambient·AO + directSun + indirect) + selfEmission.
-  //   "raw"      — the unlit albedo G-buffer (frame.renderTexture).
-  // Keys: 1 = voxel, 5 = radiance, 6 = lod, 7 = cone, 8 = final, 2 = raw (also a GUI dropdown).
-  const view = {
-    presentSource: "final" as "voxel" | "raw" | "radiance" | "lod" | "cone" | "final",
-  };
-  window.addEventListener("keydown", (e) => {
-    if (e.key === "1") view.presentSource = "voxel";
-    else if (e.key === "2") view.presentSource = "raw";
-    else if (e.key === "5") view.presentSource = "radiance";
-    else if (e.key === "6") view.presentSource = "lod";
-    else if (e.key === "7") view.presentSource = "cone";
-    else if (e.key === "8") view.presentSource = "final";
-  });
-
   const gui = new GUI({ title: "Voxel" });
-  gui
-    .add(view, "presentSource", ["raw", "voxel", "radiance", "lod", "cone", "final"])
-    .name("present")
-    .listen();
-
-  // Debug LOD for the "lod" present source: which mip of the radiance pyramid to sample.
-  const lodCfg = { lod: 0 };
-  gui.add(lodCfg, "lod", 0, voxel.mipCount - 1, 1).name("debug LOD");
 
   // Graininess: voxel size in world units. Smaller = finer = more voxels. Rebuilds the
   // 3D textures on release (.onFinishChange, so it rebuilds once when the slider settles).
@@ -498,7 +442,6 @@ async function main() {
       dimsCtl.updateDisplay();
     });
 
-  gui.add(voxel.params, "ambient", 0, 1, 0.01).name("voxel ambient");
   // Sun toggle is read live by the draw pass; keep it exposed for the raw view.
   gui.add(SunLight, "enabled").name("sun enabled");
   gui.add(SunLight, "angle", 0, Math.PI * 2, 0.01).name("sun angle");
@@ -728,57 +671,18 @@ async function main() {
       if (perf.composite) voxel.composite(encoder);
       present(encoder, voxel.compositeOutputTexture);
     } else {
-      // Main SDF draw pass -> renderTexture (raw albedo G-buffer). Its per-fragment
-      // sphere-trace (up to 96 steps) is fill-bound: cost scales with on-screen coverage,
-      // so it spikes on zoom-in. "voxel" doesn't read the G-buffer (only the voxel 3D
-      // textures + scene buffers, which prepare() already uploaded) — it uses the voxel
-      // DDA instead. "raw", "cone" and "final" all NEED the SDF pass: raw presents it; cone +
-      // final read its depth + normal G-buffer to reconstruct P + N (final also reads albedo).
-      if (
-        view.presentSource === "raw" ||
-        view.presentSource === "cone" ||
-        view.presentSource === "final"
-      ) {
-        frameTick(encoder, delta);
-      }
-      // Voxelize the SDF scene into the 3D textures, then run the selected voxel pass. sunDepth
-      // (the sun-POV depth map) runs FIRST so voxelize can sample it to SHADOW the injected
-      // directional sun — only needed when the directional sun is enabled (it is disabled by
-      // default; the sun is a regular emitter). Otherwise the 4096² depth pass is skipped.
+      // Final lit image. Order: SDF G-buffer draw → (sun depth, only when the directional sun is
+      // on) → voxelize → mips → cone gather → composite. The sun-POV depth map feeds the
+      // composite's crisp cast shadow (and voxelize's shadowed sun injection).
+      frameTick(encoder, delta);
       if (SunLight.enabled) {
         voxel.sunDepth(encoder);
       }
       voxel.voxelize(encoder);
-      if (view.presentSource === "voxel") voxel.debug(encoder, 0);
-      else if (view.presentSource === "radiance") voxel.debug(encoder, 1);
-      else if (view.presentSource === "lod") {
-        // Build the radiance mip pyramid (must follow voxelize), then sample the chosen LOD.
-        voxel.mips(encoder);
-        voxel.debug(encoder, 2, lodCfg.lod);
-      } else if (view.presentSource === "cone") {
-        // Build the radiance pyramid (must follow voxelize), then trace the diffuse cones.
-        voxel.mips(encoder);
-        voxel.cone(encoder);
-      } else if (view.presentSource === "final") {
-        // sunDepth already ran before voxelize above. Pyramid -> cone gather -> composite into
-        // the final lit image (composite reads cone). Order: sunDepth -> voxelize -> mips ->
-        // cone -> composite.
-        voxel.mips(encoder);
-        voxel.cone(encoder);
-        voxel.composite(encoder);
-      }
-      // Present the chosen source.
-      const presented =
-        view.presentSource === "voxel" ||
-        view.presentSource === "radiance" ||
-        view.presentSource === "lod"
-          ? voxel.outputTexture
-          : view.presentSource === "cone"
-            ? voxel.coneOutputTexture
-            : view.presentSource === "final"
-              ? voxel.compositeOutputTexture
-              : frame.renderTexture;
-      present(encoder, presented);
+      voxel.mips(encoder);
+      voxel.cone(encoder);
+      voxel.composite(encoder);
+      present(encoder, voxel.compositeOutputTexture);
     }
 
     // GPU time of this frame's submitted work — resolves when the GPU finishes, BEFORE the

@@ -36,9 +36,8 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 // directly comparable to the brute-force gi reference, which is also a cosine-weighted
 // hemisphere average.
 //
-// Mirrors voxelDebug.shader.ts for the fullscreen setup + `unproject` + reverse-Z NDC
-// reconstruction. textureSampleLevel (explicit LOD) is used in the trace loop — legal in
-// non-uniform control flow (unlike textureSample).
+// Fullscreen pass with `unproject` + reverse-Z NDC reconstruction. textureSampleLevel (explicit
+// LOD) is used in the trace loop — legal in non-uniform control flow (unlike textureSample).
 
 export const shaderMeta = new ShaderMeta(
   {
