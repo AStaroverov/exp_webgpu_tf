@@ -67,7 +67,7 @@ async function main() {
   //   "emitter"  — ground + box occluder + a GUI-movable/resizable emitter sphere.
   //   "simple"   — fixed minimal scene (first-bug diagnosis).
   //   "showcase" — one of every shape kind + several lights.
-  const SCENE = "perf" as "emitter" | "showcase" | "final" | "perf";
+  const SCENE = "emitter" as "emitter" | "showcase" | "final" | "perf";
 
   // The configurable emitter (only used by the "emitter" scene). Live-edited from
   // the GUI: position via the transform (re-uploaded every frame), radius via the
@@ -90,13 +90,18 @@ async function main() {
     animate: true,
     draw: true, // SDF G-buffer draw pass (frameTick)
     voxelize: true, // scene → 3D voxel textures
-    sunShadow: false, // OLD per-voxel sun shadow ray in voxelize (~96% of frame — off)
-    sunShadowSS: true, // NEW screen-space sun shadow in composite (cheap, on)
     mips: true, // radiance mip pyramid
     cone: true, // N-cone GI gather (half-res)
+    sunDepth: true, // sun shadow-map depth pass (sun-POV SDF depth)
     composite: true, // final lit image
   };
   const perfEntities: number[] = []; // ids of the grid instances (spun by animatePerf)
+
+  // Emitters the cone pass importance-samples (aimed soft-shadow cones). Each scene pushes its
+  // own emitters; a "sun" emitter is added to EVERY scene below, replacing the directional
+  // SunLight. radius feeds the aimed-cone penumbra width + the sphere-center Z offset
+  // (SDF center.z = baseZ + radius).
+  const trackedLights: { id: number; radius: number }[] = [];
 
   if (SCENE === "emitter") {
     SunLight.enabled = false; // isolate the single emitter
@@ -331,6 +336,8 @@ async function main() {
       color: [0.35, 0.6, 1.0, 1],
     });
     LightEmitter.addComponent(world, dynPulseEmitter, 2.5);
+    trackedLights.push({ id: dynOrbitEmitter, radius: 0.8 });
+    trackedLights.push({ id: dynPulseEmitter, radius: 0.9 });
   }
 
   // --- Perf scene: a dense grid of mixed shapes to stress voxelize (O(voxels×instances))
@@ -364,11 +371,26 @@ async function main() {
         const k = (i + j) % 3;
         let id: number;
         if (k === 0) {
-          id = createRectangle(world, { x, y, z: 0, width: 2, height: 2, depth: 3, color: [0.8, 0.5, 0.4, 1] });
+          id = createRectangle(world, {
+            x,
+            y,
+            z: 0,
+            width: 2,
+            height: 2,
+            depth: 3,
+            color: [0.8, 0.5, 0.4, 1],
+          });
         } else if (k === 1) {
           id = createSphere(world, { x, y, z: 0, radius: 1.3, color: [0.5, 0.7, 0.85, 1] });
         } else {
-          id = createCircle(world, { x, y, z: 0, radius: 1.2, height: 3, color: [0.6, 0.8, 0.6, 1] });
+          id = createCircle(world, {
+            x,
+            y,
+            z: 0,
+            radius: 1.2,
+            height: 3,
+            color: [0.6, 0.8, 0.6, 1],
+          });
         }
         perfEntities.push(id);
       }
@@ -382,6 +404,21 @@ async function main() {
     const pe3 = createSphere(world, { x: 0, y: half, z: 3, radius: 1, color: [0.8, 1, 0.5, 1] });
     LightEmitter.addComponent(world, pe3, 6.0);
   }
+
+  // --- Sun imitation (ALL scenes): a single bright "sun" emitter high above center, replacing
+  // the directional SunLight (disabled). It lights the scene through the unified VCT path (its
+  // emission is injected into the voxel volume and gathered by the cone GI). Kept INSIDE the
+  // voxel grid (z within originZ..originZ+extentZ) so the volume picks it up.
+  SunLight.enabled = false;
+  const sunEmitterId = createSphere(world, {
+    x: -10,
+    y: 9,
+    z: 10.5,
+    radius: 1.5,
+    color: [1.0, 0.93, 0.82, 1],
+  });
+  LightEmitter.addComponent(world, sunEmitterId, 1.5);
+  trackedLights.push({ id: sunEmitterId, radius: 1 });
 
   // --- Systems ---
   const execTransformSystem = createTransformSystem(world, stubChildren);
@@ -472,7 +509,9 @@ async function main() {
   // the cone count is the angular resolution: more cones + narrower aperture = sharper
   // shadows (but too-narrow + too-few cones bands). Read live each frame by cone().
   const coneFolder = gui.addFolder("Cone GI");
-  coneFolder.add(voxel.coneParams, "coneCount", [6, 8, 16, 24, 32, 48]).name("cones (shadow sharpness)");
+  coneFolder
+    .add(voxel.coneParams, "coneCount", [6, 8, 16, 24, 32, 48])
+    .name("cones (shadow sharpness)");
   coneFolder.add(voxel.coneParams, "aperture", 0.1, 1.5, 0.01).name("aperture (lower=sharper)");
   coneFolder.add(voxel.coneParams, "maxDist", 1, 64, 0.5).name("cone reach");
   coneFolder.add(voxel.coneParams, "normalBias", 0, 2, 0.01).name("normal bias");
@@ -487,25 +526,14 @@ async function main() {
   // toggle flips to attribute cost to that pass (gpuMs comes from onSubmittedWorkDone, so it
   // is NOT capped by vsync the way the rAF fps is). Only shown for the perf scene.
   if (SCENE === "perf") {
-    voxel.debugFlags.sunShadow = perf.sunShadow;
-    voxel.debugFlags.sunShadowSS = perf.sunShadowSS;
     const pf = gui.addFolder("Perf");
     pf.add(perf, "animate").name("animate grid");
     pf.add(perf, "draw").name("1· SDF draw pass");
     pf.add(perf, "voxelize").name("2· voxelize");
-    pf.add(perf, "sunShadow")
-      .name("2b· voxelize sun-shadow (OLD)")
-      .onChange((v: boolean) => {
-        voxel.debugFlags.sunShadow = v;
-      });
     pf.add(perf, "mips").name("3· mips");
     pf.add(perf, "cone").name("4· cone GI");
-    pf.add(perf, "composite").name("5· composite");
-    pf.add(perf, "sunShadowSS")
-      .name("5b· sun shadow (map)")
-      .onChange((v: boolean) => {
-        voxel.debugFlags.sunShadowSS = v;
-      });
+    pf.add(perf, "sunDepth").name("5· sun shadow-map pass");
+    pf.add(perf, "composite").name("6· composite");
     pf.open();
   }
 
@@ -541,27 +569,20 @@ async function main() {
     f.add(finalDyn, "speed", 0, 3, 0.05).name("speed");
   }
 
-  // Emitters the cone pass importance-samples (aimed sharp soft-shadow cones). Only the
-  // "final" scene tracks any; .radius feeds the penumbra width + the sphere-center Z offset
-  // (SDF center.z = baseZ + radius). Filtered to live ids (>= 0).
-  const finalLights = [
-    { id: dynOrbitEmitter, radius: 0.8 },
-    { id: dynPulseEmitter, radius: 0.9 },
-  ].filter((l) => l.id >= 0);
-  // Flat scratch (x,y,z,radius per light) reused every frame for voxel.setLights.
+  // Flat scratch reused every frame for voxel.setLights: x,y,z,radius per cone-sampled light.
   const lightsFlat: number[] = [];
 
-  // Recompute the importance-sampled light centers from the current transforms and push them
-  // to the cone pass. center = LocalTransform translation + (0,0,radius). Empty when the scene
-  // has no tracked emitters → count 0 → pure fill cones (old behavior).
+  // Recompute the tracked light centers from the current transforms and push them to the cone
+  // pass (xyz+radius). center = LocalTransform translation + (0,0,radius). Empty list → 0 lights
+  // → pure fill cones. Clamped to 8 by setLights.
   function updateLights() {
     lightsFlat.length = 0;
-    for (let i = 0; i < finalLights.length; i++) {
-      const { id, radius } = finalLights[i];
-      const t = getMatrixTranslation(LocalTransform.matrix.getBatch(id));
-      lightsFlat.push(t[0], t[1], t[2] + radius, radius);
+    for (let i = 0; i < trackedLights.length; i++) {
+      const tl = trackedLights[i];
+      const t = getMatrixTranslation(LocalTransform.matrix.getBatch(tl.id));
+      lightsFlat.push(t[0], t[1], t[2] + tl.radius, tl.radius);
     }
-    voxel.setLights(lightsFlat, finalLights.length);
+    voxel.setLights(lightsFlat, trackedLights.length);
   }
 
   // Animate the "final" scene: position (orbit), angle (spin), size (pulse radius),
@@ -688,16 +709,16 @@ async function main() {
       // textures stale — valid GPU work, no crash). Always presents the composite output, so
       // toggling a pass changes ONLY that pass's GPU work → the gpuMs delta attributes its
       // cost. The full chain is voxelize → mips → cone → composite (+ the SDF draw G-buffer).
+      // sunDepth runs FIRST so model A's voxelize can sample the sun shadow map (and
+      // buildSunViewProj uploads the matrix to voxelize + composite). If sunDepth is toggled OFF
+      // while voxelize is ON in model A, voxelize samples a STALE sun depth map — acceptable for
+      // a cost harness (the binding is always valid; no crash).
       if (perf.draw) frameTick(encoder, delta);
+      if (perf.sunDepth) voxel.sunDepth(encoder); // sun-POV depth feeding voxelize (A) + composite
       if (perf.voxelize) voxel.voxelize(encoder);
       if (perf.mips) voxel.mips(encoder);
       if (perf.cone) voxel.cone(encoder);
-      if (perf.composite) {
-        // Sun shadow map (sun-POV depth) feeds the composite's shadow lookup; render it
-        // right before. Gated by the composite toggle (the shadow only matters there).
-        voxel.sunDepth(encoder);
-        voxel.composite(encoder);
-      }
+      if (perf.composite) voxel.composite(encoder);
       present(encoder, voxel.compositeOutputTexture);
     } else {
       // Main SDF draw pass -> renderTexture (raw albedo G-buffer). Its per-fragment
@@ -713,7 +734,13 @@ async function main() {
       ) {
         frameTick(encoder, delta);
       }
-      // Voxelize the SDF scene into the 3D textures, then run the selected voxel pass.
+      // Voxelize the SDF scene into the 3D textures, then run the selected voxel pass. sunDepth
+      // (the sun-POV depth map) runs FIRST so voxelize can sample it to SHADOW the injected
+      // directional sun — only needed when the directional sun is enabled (it is disabled by
+      // default; the sun is a regular emitter). Otherwise the 4096² depth pass is skipped.
+      if (SunLight.enabled) {
+        voxel.sunDepth(encoder);
+      }
       voxel.voxelize(encoder);
       if (view.presentSource === "voxel") voxel.debug(encoder, 0);
       else if (view.presentSource === "radiance") voxel.debug(encoder, 1);
@@ -726,10 +753,11 @@ async function main() {
         voxel.mips(encoder);
         voxel.cone(encoder);
       } else if (view.presentSource === "final") {
-        // Pyramid → cone gather → composite into the final lit image (composite reads cone).
+        // sunDepth already ran before voxelize above. Pyramid -> cone gather -> composite into
+        // the final lit image (composite reads cone). Order: sunDepth -> voxelize -> mips ->
+        // cone -> composite.
         voxel.mips(encoder);
         voxel.cone(encoder);
-        voxel.sunDepth(encoder);
         voxel.composite(encoder);
       }
       // Present the chosen source.

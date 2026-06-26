@@ -39,6 +39,10 @@ export const shaderMeta = new ShaderMeta(
     sun: uC("uSun", `vec4<f32>`),
     // .rgb = sun color (linear).
     sunColor: uC("uSunColor", `vec4<f32>`),
+    // Sun orthographic view-projection (orthoZO, z in [0,1]) — SAME matrix the sunShadow depth
+    // pass uses. Projects a voxel-center world position into the sun shadow map for the SHADOWED
+    // sun injection (only matters when the directional sun is enabled; sun.w == 0 otherwise).
+    sunViewProj: uC("uSunViewProj", `mat4x4<f32>`),
 
     // ---- group 1 : per-instance scene storage (StorageRead => @group(1)) ----
     // SAME names/types as sdf.shader.ts / the former gather, so the shared sceneSDF
@@ -86,6 +90,15 @@ export const shaderMeta = new ShaderMeta(
         storageTextureAccess: "write-only",
       },
     ),
+
+    // ---- group 0 : sun shadow map (Texture => @group(0)), COMPUTE-visible ----
+    // Sun-POV depth (depth32float from the sunShadow pass). Sampled (single tap, nearest,
+    // no PCF) when model==0 to inject SHADOWED sun into the volume. Read via textureLoad
+    // (integer coords + i32 LOD 0 — a depth texture cannot use a filtering sampler).
+    shadowMap: new VariableMeta("shadowMap", VariableKind.Texture, `texture_depth_2d`, {
+      visibility: GPUShaderStage.COMPUTE,
+      textureSampleType: "depth",
+    }),
   },
   {},
   // language=WGSL
@@ -147,30 +160,25 @@ fn sdf_normal(p: vec3<f32>) -> vec3<f32> {
   return g / len;
 }
 
-// Sun visibility (1 = lit, 0 = shadowed) at surface point p with normal N. We sphere-
-// trace the ANALYTIC scene_sdf (NOT a voxel-DDA over voxelAlbedo) because the voxel
-// storage textures are being WRITTEN this pass and cannot be sampled here.
-fn sun_visibility(p: vec3<f32>, N: vec3<f32>) -> f32 {
-  if (uSun.w <= 0.0) {
+// Single-tap (nearest, no PCF) sun shadow lookup for the voxelize pass (unified model): project
+// the voxel-center world point P (pushed off the surface along N to fight acne) into the sun map
+// and compare, so the sun injected into the volume is SHADOWED. Out-of-frustum / past near-far ->
+// lit. textureLoad: i32 coords + i32 LOD 0 (a depth texture cannot use a filtering sampler).
+fn sun_vis_vox(P: vec3<f32>, N: vec3<f32>) -> f32 {
+  let worldTexel = uGridOrigin.w;               // approx normal-offset scale = cellSize
+  let Po = P + N * (1.5 * worldTexel);
+  let ls = uSunViewProj * vec4<f32>(Po, 1.0);
+  let ndc = ls.xyz / ls.w;
+  var uv = ndc.xy * 0.5 + vec2<f32>(0.5, 0.5);
+  uv.y = 1.0 - uv.y;
+  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || ndc.z < 0.0 || ndc.z > 1.0) {
     return 1.0;
   }
-  let cellSize = uGridOrigin.w;
-  let minStep = cellSize * 0.5;
-  let L = uSun.xyz;
-  let maxDist = length(vec3<f32>(uGridDims.xyz) * cellSize);
-  let ro = p + N * cellSize * 1.5;
-  var t = 0.0;
-  for (var i = 0; i < 128; i = i + 1) {
-    let d = scene_sdf(ro + L * t).dist;
-    if (d < minStep) {
-      return 0.0;
-    }
-    t = t + max(d, minStep);
-    if (t > maxDist) {
-      break;
-    }
-  }
-  return 1.0;
+  let dim = vec2<i32>(textureDimensions(shadowMap, 0));
+  let c = clamp(vec2<i32>(uv * vec2<f32>(dim)), vec2<i32>(0, 0), dim - vec2<i32>(1, 1));
+  let s = textureLoad(shadowMap, c, 0);
+  let bias = 0.002;
+  return select(0.0, 1.0, ndc.z <= s + bias);
 }
 
 @compute @workgroup_size(${WORKGROUP}, ${WORKGROUP}, ${WORKGROUP})
@@ -204,15 +212,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let N = sdf_normal(world);
     let L = uSun.xyz;
     let ndl = max(dot(N, L), 0.0);
-    // PERF TOGGLE: uGridDims.w != 0 enables the per-voxel sun shadow ray (a 128-step
-    // sphere-trace of the analytic scene SDF, O(instances) per step — the single most
-    // expensive thing in this pass). 0 = inject UNSHADOWED direct light (vis = 1). Lets
-    // the perf scene isolate this term's cost without changing any binding.
-    var vis = 1.0;
-    if (uGridDims.w != 0) {
-      vis = sun_visibility(world, N);
-    }
-    let direct = albedo * (ndl * uSun.w * vis) * uSunColor.rgb;
+    // The directional sun is injected SHADOWED into the volume: vis from a single-tap sun shadow
+    // lookup, so the cone-GI 'indirect' carries an already-shadowed sun. One texture sample per
+    // solid voxel — cheap. (Only matters when the directional sun is enabled; uSun.w == 0 → the
+    // whole direct term is 0. The sun is a regular emitter by default.)
+    let vis = sun_vis_vox(world, N);
+    let direct = albedo * (ndl * uSun.w) * uSunColor.rgb * vis;
     let radiance = direct + emission_of(hit.instance);
     textureStore(voxelAlbedo, coord, vec4<f32>(albedo, 1.0));
     textureStore(voxelEmission, coord, vec4<f32>(emission_of(hit.instance), 1.0));

@@ -78,14 +78,11 @@ export function createVoxelSystem({
   // ambient floor.
   const compositeParams: VoxelCompositeParams = { ambient: 0.05 };
 
-  // Perf/diagnostic flags.
-  //  - sunShadow: the OLD per-voxel sun shadow ray in voxelize (uGridDims.w). Catastrophically
-  //    expensive (a 128-step analytic march per solid voxel, O(instances)/step) and almost
-  //    invisible — DEFAULT OFF. Kept as a perf-reference toggle. Off = unshadowed injection.
-  //  - sunShadowSS: the sun shadow-MAP path in the composite (project the per-pixel world P
-  //    into a sun-POV depth map rendered by sunDepth() → real crisp sun shadows in the final
-  //    image). DEFAULT ON, ~cheap.
-  const debugFlags = { sunShadow: false, sunShadowSS: true };
+  // UNIFIED lighting model: all light (the sun — now a regular emitter — and every emitter) goes
+  // through the voxel volume + cone-GI. The sun shadow map (sunDepth pass) survives only to
+  // SHADOW the directional sun when it is injected into the volume (voxelize); it is dormant
+  // while the directional SunLight is disabled (sun.w == 0). The composite has no sun/emitter
+  // direct terms (those were the removed B-lite path).
 
   // G-buffer textures (reassigned by recreate() on canvas resize).
   let gDepth = depthTexture;
@@ -218,6 +215,9 @@ export function createVoxelSystem({
       voxShader.uniforms.instanceCount.getBindGroupEntry(device),
       voxShader.uniforms.sun.getBindGroupEntry(device),
       voxShader.uniforms.sunColor.getBindGroupEntry(device),
+      voxShader.uniforms.sunViewProj.getBindGroupEntry(device),
+      // Sun shadow map: the sun-POV depth texture, sampled to shadow the injected directional sun.
+      { binding: voxelizeMeta.uniforms.shadowMap.binding, resource: sunDepthView },
     ],
   });
   const voxGroup1 = device.createBindGroup({
@@ -260,6 +260,8 @@ export function createVoxelSystem({
   const instanceCountArr = getTypeTypedArray(voxelizeMeta.uniforms.instanceCount.type); // Uint32Array(1)
   const sunArr = getTypeTypedArray(voxelizeMeta.uniforms.sun.type); // Float32Array(4)
   const sunColorArr = getTypeTypedArray(voxelizeMeta.uniforms.sunColor.type); // Float32Array(4)
+  // The sun view-proj voxelize samples the shadow map with (for the shadowed sun injection).
+  const voxSunViewProjArr = getTypeTypedArray(voxelizeMeta.uniforms.sunViewProj.type); // Float32Array(16)
   const paramsArr = getTypeTypedArray(debugMeta.uniforms.params.type); // Float32Array(4)
   const invViewProj = mat4.create();
   const invArr = getTypeTypedArray(debugMeta.uniforms.invViewProj.type); // Float32Array(16)
@@ -270,13 +272,9 @@ export function createVoxelSystem({
   // Emitter centers to importance-sample (x,y,z,radius per light) — Float32Array(32) for 8.
   const coneLightsArr = getTypeTypedArray(coneMeta.uniforms.lights.type); // Float32Array(32)
   let coneLightCount = 0;
-  // Composite scratch.
+  // Composite scratch (unified model: only ambient + screen dims).
   const compParamsArr = getTypeTypedArray(compositeMeta.uniforms.params.type); // Float32Array(4)
   const compParams2Arr = getTypeTypedArray(compositeMeta.uniforms.params2.type); // Float32Array(4)
-  const compSunArr = getTypeTypedArray(compositeMeta.uniforms.sun.type); // Float32Array(4)
-  const compSunColorArr = getTypeTypedArray(compositeMeta.uniforms.sunColor.type); // Float32Array(4)
-  const compInvArr = getTypeTypedArray(compositeMeta.uniforms.invViewProj.type); // Float32Array(16)
-  const compSunViewProjArr = getTypeTypedArray(compositeMeta.uniforms.sunViewProj.type); // Float32Array(16)
   // Mip scratch: .xyz = destination mip dims (re-uploaded per level).
   const mipArr = getTypeTypedArray(mipMeta.uniforms.mip.type); // Int32Array(4)
 
@@ -292,9 +290,6 @@ export function createVoxelSystem({
   const sunCorner = vec3.create();
   const sunViewProjArr = getTypeTypedArray(sunShadowMeta.uniforms.viewProj.type); // Float32Array(16)
   const sunRayDirArr = getTypeTypedArray(sunShadowMeta.uniforms.rayDir.type); // Float32Array(4)
-  // World units per shadow-map texel (sun ortho width / SHADOW_SIZE). Set by buildSunViewProj,
-  // uploaded to the composite as uParams.z for the normal-offset shadow bias.
-  let sunWorldTexel = 0;
 
   // --- Grid state (rebuilt by buildGrid). ---
   let cellSize = grid.cellSize;
@@ -352,10 +347,6 @@ export function createVoxelSystem({
       entries: [
         compositeShader.uniforms.params.getBindGroupEntry(device),
         compositeShader.uniforms.params2.getBindGroupEntry(device),
-        compositeShader.uniforms.sun.getBindGroupEntry(device),
-        compositeShader.uniforms.sunColor.getBindGroupEntry(device),
-        compositeShader.uniforms.invViewProj.getBindGroupEntry(device),
-        compositeShader.uniforms.sunViewProj.getBindGroupEntry(device),
         { binding: compositeMeta.uniforms.albedoTex.binding, resource: gAlbedo.createView() },
         { binding: compositeMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
         { binding: compositeMeta.uniforms.coneTex.binding, resource: coneView },
@@ -364,13 +355,6 @@ export function createVoxelSystem({
         {
           binding: compositeMeta.uniforms.emissionTex.binding,
           resource: gEmission.createView(),
-        },
-        // Sun shadow map: reverse-Z camera depth (to reconstruct P) + the sun-POV depth map
-        // (read via textureLoad — no sampler, depth textures can't use a filtering sampler).
-        { binding: compositeMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
-        {
-          binding: compositeMeta.uniforms.shadowMap.binding,
-          resource: sunDepthView,
         },
       ],
     });
@@ -638,21 +622,19 @@ export function createVoxelSystem({
     mat4.orthoZO(sunProj, lminX, lmaxX, lminY, lmaxY, near, far);
     mat4.multiply(sunViewProj, sunProj, sunView);
 
-    // World units per shadow texel (the larger ortho axis / map resolution) — drives the
-    // composite's normal-offset bias so it tracks the actual sun-frustum coverage.
-    sunWorldTexel = Math.max(lmaxX - lminX, lmaxY - lminY) / SHADOW_SIZE;
-
     sunViewProjArr.set(sunViewProj as Float32Array);
     device.queue.writeBuffer(
       sunShadowShader.uniforms.viewProj.getGPUBuffer(device),
       0,
       sunViewProjArr,
     );
-    compSunViewProjArr.set(sunViewProj as Float32Array);
+    // ALSO upload to voxelize's uSunViewProj — it samples the shadow map at voxelize time and
+    // MUST use the same matrix that rendered the map (sunDepth runs first in the loop).
+    voxSunViewProjArr.set(sunViewProj as Float32Array);
     device.queue.writeBuffer(
-      compositeShader.uniforms.sunViewProj.getGPUBuffer(device),
+      voxShader.uniforms.sunViewProj.getGPUBuffer(device),
       0,
-      compSunViewProjArr,
+      voxSunViewProjArr,
     );
 
     // Sun travel direction = -dirTowardSun (already unit). xyz dir, w unused.
@@ -707,11 +689,8 @@ export function createVoxelSystem({
     sunColorArr[1] = SunLight.color[1];
     sunColorArr[2] = SunLight.color[2];
     device.queue.writeBuffer(voxShader.uniforms.sunColor.getGPUBuffer(device), 0, sunColorArr);
-
-    // Pack the sun-shadow perf toggle into the (otherwise unused) gridDims.w each frame.
-    // dimsArr already holds the live dims from buildGrid; only .w varies here.
-    dimsArr[3] = debugFlags.sunShadow ? 1 : 0;
-    device.queue.writeBuffer(voxShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
+    // uSunViewProj is uploaded by buildSunViewProj() inside sunDepth(), which runs BEFORE
+    // voxelize() in the loop (so the shadowed-sun injection samples the matching matrix).
 
     const pass = encoder.beginComputePass();
     pass.setPipeline(voxPipeline);
@@ -809,9 +788,9 @@ export function createVoxelSystem({
     pass.end();
   }
 
-  // Upload the emitter centers the cone pass importance-samples. `flat` holds n*4 floats
-  // (x,y,z,radius per light); `count` is clamped to [0,8] and unused entries are zeroed.
-  // The aimed cones aim at these; count=0 → pure Fibonacci fill (old behavior).
+  // Upload the emitter centers the cone pass importance-samples (aimed cones). `flat` holds n*4
+  // floats (x,y,z,radius per light); `count` is clamped to [0,8] and unused entries are zeroed.
+  // count=0 → pure Fibonacci fill cones (old behavior).
   function setLights(flat: number[], count: number) {
     const n = Math.max(0, Math.min(8, count));
     coneLightsArr.fill(0);
@@ -825,22 +804,13 @@ export function createVoxelSystem({
   // coneOutput). Reads the G-buffer (albedo/normal/depth) + voxelEmission.
   function composite(encoder: GPUCommandEncoder) {
     compParamsArr[0] = compositeParams.ambient;
-    compParamsArr[1] = debugFlags.sunShadowSS ? 1 : 0; // sun shadow-map enable
-    compParamsArr[2] = sunWorldTexel; // world units per shadow texel (normal-offset bias)
+    compParamsArr[1] = 0;
+    compParamsArr[2] = 0;
     compParamsArr[3] = 0;
     device.queue.writeBuffer(
       compositeShader.uniforms.params.getGPUBuffer(device),
       0,
       compParamsArr,
-    );
-
-    // inverse(viewProj) for the screen-space sun-shadow world-position reconstruction.
-    mat4.invert(invViewProj, viewProjMatrix);
-    compInvArr.set(invViewProj as Float32Array);
-    device.queue.writeBuffer(
-      compositeShader.uniforms.invViewProj.getGPUBuffer(device),
-      0,
-      compInvArr,
     );
 
     compParams2Arr[0] = canvas.width;
@@ -851,25 +821,6 @@ export function createVoxelSystem({
       compositeShader.uniforms.params2.getGPUBuffer(device),
       0,
       compParams2Arr,
-    );
-
-    // Directional sun, computed EXACTLY like voxelize(): .xyz = world dir TOWARD the sun
-    // (azimuth + elevation), .w = effective intensity (0 = disabled), color in uSunColor.
-    const a = SunLight.angle;
-    const e = SunLight.elevation;
-    const ce = Math.cos(e);
-    compSunArr[0] = Math.cos(a) * ce;
-    compSunArr[1] = Math.sin(a) * ce;
-    compSunArr[2] = Math.sin(e);
-    compSunArr[3] = SunLight.enabled ? SunLight.intensity : 0;
-    device.queue.writeBuffer(compositeShader.uniforms.sun.getGPUBuffer(device), 0, compSunArr);
-    compSunColorArr[0] = SunLight.color[0];
-    compSunColorArr[1] = SunLight.color[1];
-    compSunColorArr[2] = SunLight.color[2];
-    device.queue.writeBuffer(
-      compositeShader.uniforms.sunColor.getGPUBuffer(device),
-      0,
-      compSunColorArr,
     );
 
     const pass = encoder.beginRenderPass({
@@ -927,7 +878,6 @@ export function createVoxelSystem({
     params,
     coneParams,
     compositeParams,
-    debugFlags,
     voxelize,
     mips,
     debug,
