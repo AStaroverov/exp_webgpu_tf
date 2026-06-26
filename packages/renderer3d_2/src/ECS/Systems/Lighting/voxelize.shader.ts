@@ -204,7 +204,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let N = sdf_normal(world);
     let L = uSun.xyz;
     let ndl = max(dot(N, L), 0.0);
-    let vis = sun_visibility(world, N);
+    // PERF TOGGLE: uGridDims.w != 0 enables the per-voxel sun shadow ray (a 128-step
+    // sphere-trace of the analytic scene SDF, O(instances) per step — the single most
+    // expensive thing in this pass). 0 = inject UNSHADOWED direct light (vis = 1). Lets
+    // the perf scene isolate this term's cost without changing any binding.
+    var vis = 1.0;
+    if (uGridDims.w != 0) {
+      vis = sun_visibility(world, N);
+    }
     let direct = albedo * (ndl * uSun.w * vis) * uSunColor.rgb;
     let radiance = direct + emission_of(hit.instance);
     textureStore(voxelAlbedo, coord, vec4<f32>(albedo, 1.0));

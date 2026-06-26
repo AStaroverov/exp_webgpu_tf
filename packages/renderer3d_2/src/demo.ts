@@ -11,6 +11,7 @@
 // shader's frag_depth both follow it. See sdf.shader.ts / ResizeSystem.ts.
 
 import GUI from "lil-gui";
+import Stats from "stats-gl";
 import { initWebGPU } from "./gpu.ts";
 import { createWorld, getRenderComponents } from "./ECS/world.ts";
 import { createFrameTextures, createFrameTick } from "./WGSL/createFrame.ts";
@@ -66,7 +67,7 @@ async function main() {
   //   "emitter"  — ground + box occluder + a GUI-movable/resizable emitter sphere.
   //   "simple"   — fixed minimal scene (first-bug diagnosis).
   //   "showcase" — one of every shape kind + several lights.
-  const SCENE = "final" as "emitter" | "showcase" | "final";
+  const SCENE = "perf" as "emitter" | "showcase" | "final" | "perf";
 
   // The configurable emitter (only used by the "emitter" scene). Live-edited from
   // the GUI: position via the transform (re-uploaded every frame), radius via the
@@ -81,6 +82,21 @@ async function main() {
   let dynRotBox = -1; // angle — spins about Z (moving occluder)
   let dynSizeSphere = -1; // size — radius pulses
   let dynPulseEmitter = -1; // intensity — emission pulses
+
+  // Perf-test scene: a dense instance grid + per-pass toggles so the cost of each pass can
+  // be isolated by reading the GPU-time delta when a layer is switched off. `stats` is the
+  // live readout (rAF fps + onSubmittedWorkDone GPU ms, the latter NOT vsync-capped).
+  const perf = {
+    animate: true,
+    draw: true, // SDF G-buffer draw pass (frameTick)
+    voxelize: true, // scene → 3D voxel textures
+    sunShadow: false, // OLD per-voxel sun shadow ray in voxelize (~96% of frame — off)
+    sunShadowSS: true, // NEW screen-space sun shadow in composite (cheap, on)
+    mips: true, // radiance mip pyramid
+    cone: true, // N-cone GI gather (half-res)
+    composite: true, // final lit image
+  };
+  const perfEntities: number[] = []; // ids of the grid instances (spun by animatePerf)
 
   if (SCENE === "emitter") {
     SunLight.enabled = false; // isolate the single emitter
@@ -317,6 +333,56 @@ async function main() {
     LightEmitter.addComponent(world, dynPulseEmitter, 2.5);
   }
 
+  // --- Perf scene: a dense grid of mixed shapes to stress voxelize (O(voxels×instances))
+  //     and the SDF draw (per-fragment march + overdraw), plus a few emitters. Heavy enough
+  //     to push GPU time well above the inspector's ~4 ms floor so pass toggles read clearly.
+  if (SCENE === "perf") {
+    SunLight.enabled = true;
+    SunLight.angle = 2.4;
+    SunLight.elevation = 0.95;
+    SunLight.intensity = 0.9;
+    SunLight.color = [1.0, 0.93, 0.82];
+
+    createRectangle(world, {
+      x: 0,
+      y: 0,
+      z: -0.4,
+      width: 80,
+      height: 80,
+      depth: 0.4,
+      color: [0.2, 0.2, 0.22, 1],
+    });
+
+    // N×N grid of alternating box / sphere / cylinder (covers all three march costs).
+    const N = 11;
+    const spacing = 4.5;
+    const half = ((N - 1) * spacing) / 2;
+    for (let i = 0; i < N; i++) {
+      for (let j = 0; j < N; j++) {
+        const x = i * spacing - half;
+        const y = j * spacing - half;
+        const k = (i + j) % 3;
+        let id: number;
+        if (k === 0) {
+          id = createRectangle(world, { x, y, z: 0, width: 2, height: 2, depth: 3, color: [0.8, 0.5, 0.4, 1] });
+        } else if (k === 1) {
+          id = createSphere(world, { x, y, z: 0, radius: 1.3, color: [0.5, 0.7, 0.85, 1] });
+        } else {
+          id = createCircle(world, { x, y, z: 0, radius: 1.2, height: 3, color: [0.6, 0.8, 0.6, 1] });
+        }
+        perfEntities.push(id);
+      }
+    }
+
+    // Three emitters at mid height (radiance sources for the cone gather).
+    const pe1 = createSphere(world, { x: -half, y: 0, z: 3, radius: 1, color: [1, 0.6, 0.2, 1] });
+    LightEmitter.addComponent(world, pe1, 6.0);
+    const pe2 = createSphere(world, { x: half, y: 0, z: 3, radius: 1, color: [0.3, 0.6, 1, 1] });
+    LightEmitter.addComponent(world, pe2, 6.0);
+    const pe3 = createSphere(world, { x: 0, y: half, z: 3, radius: 1, color: [0.8, 1, 0.5, 1] });
+    LightEmitter.addComponent(world, pe3, 6.0);
+  }
+
   // --- Systems ---
   const execTransformSystem = createTransformSystem(world, stubChildren);
   const shapeSystem = createDrawShapeSystem({ world, device });
@@ -417,6 +483,32 @@ async function main() {
   const compositeFolder = gui.addFolder("Composite");
   compositeFolder.add(voxel.compositeParams, "ambient", 0, 0.5, 0.01).name("composite ambient");
 
+  // Perf folder: live fps / GPU-ms readout + per-pass toggles. Read the GPU-ms delta when a
+  // toggle flips to attribute cost to that pass (gpuMs comes from onSubmittedWorkDone, so it
+  // is NOT capped by vsync the way the rAF fps is). Only shown for the perf scene.
+  if (SCENE === "perf") {
+    voxel.debugFlags.sunShadow = perf.sunShadow;
+    voxel.debugFlags.sunShadowSS = perf.sunShadowSS;
+    const pf = gui.addFolder("Perf");
+    pf.add(perf, "animate").name("animate grid");
+    pf.add(perf, "draw").name("1· SDF draw pass");
+    pf.add(perf, "voxelize").name("2· voxelize");
+    pf.add(perf, "sunShadow")
+      .name("2b· voxelize sun-shadow (OLD)")
+      .onChange((v: boolean) => {
+        voxel.debugFlags.sunShadow = v;
+      });
+    pf.add(perf, "mips").name("3· mips");
+    pf.add(perf, "cone").name("4· cone GI");
+    pf.add(perf, "composite").name("5· composite");
+    pf.add(perf, "sunShadowSS")
+      .name("5b· sun shadow (map)")
+      .onChange((v: boolean) => {
+        voxel.debugFlags.sunShadowSS = v;
+      });
+    pf.open();
+  }
+
   // Live emitter controls (only the "emitter" scene). Position writes the transform
   // (re-uploaded every frame); radius drives BOTH the sphere SDF (Shape.setSphere$)
   // and its vertical extent (Height.set$ = 2*radius); intensity via LightEmitter.set$.
@@ -496,6 +588,16 @@ async function main() {
     LightEmitter.set$(dynPulseEmitter, 2.0 + 1.8 * Math.sin(t * 1.6), 0);
   }
 
+  // Spin every perf-grid instance slowly about Z so voxelize re-runs on moving occupancy
+  // (mirrors real dynamic usage; cost is the same whether they move or not).
+  function animatePerf(now: number) {
+    if (!perf.animate || perfEntities.length === 0) return;
+    const t = now * 0.0003;
+    for (let i = 0; i < perfEntities.length; i++) {
+      setMatrixRotateZ(LocalTransform.matrix.getBatch(perfEntities[i]), t + i * 0.3);
+    }
+  }
+
   // Standalone resize/camera update, run BEFORE prepare() so the camera uniforms
   // uploaded each frame are current. (createFrameTick has its own internal resize
   // system, but it runs inside the main pass — i.e. after prepare — which would
@@ -533,8 +635,18 @@ async function main() {
     { passive: false },
   );
 
+  // stats-gl overlay: FPS + CPU come from begin()/end() (no init needed). stats-gl's NATIVE
+  // GPU timer needs a WebGL2 context or a three.js renderer — we have neither (raw WebGPU),
+  // so we feed our own GPU ms (onSubmittedWorkDone, below) into a custom panel instead.
+  const stats = new Stats({ trackGPU: false, horizontal: true, precision: 2 });
+  document.body.appendChild(stats.dom);
+  const gpuPanel = stats.addPanel(new Stats.Panel("GPU ms", "#ff8", "#221"));
+  let gpuMsMax = 1;
+
   let last = performance.now();
-  function loop(now: number) {
+  let gpuMsEMA = 0;
+  async function loop(now: number) {
+    stats.begin();
     const delta = Math.min(now - last, 16.6667);
     last = now;
 
@@ -563,6 +675,7 @@ async function main() {
 
     // Drive the dynamic "final"-scene objects, then push transforms → instance buffers.
     animateFinal(now);
+    animatePerf(now);
     // Refresh the importance-sampled emitter centers for the cone pass (positions are now
     // current). Empty when no emitters are tracked → count 0 → pure fill cones.
     updateLights();
@@ -570,50 +683,86 @@ async function main() {
     shapeSystem.prepare();
 
     const encoder = device.createCommandEncoder();
-    // Main SDF draw pass -> renderTexture (raw albedo G-buffer). Its per-fragment
-    // sphere-trace (up to 96 steps) is fill-bound: cost scales with on-screen coverage,
-    // so it spikes on zoom-in. "voxel" doesn't read the G-buffer (only the voxel 3D
-    // textures + scene buffers, which prepare() already uploaded) — it uses the voxel
-    // DDA instead. "raw", "cone" and "final" all NEED the SDF pass: raw presents it; cone +
-    // final read its depth + normal G-buffer to reconstruct P + N (final also reads albedo).
-    if (
-      view.presentSource === "raw" ||
-      view.presentSource === "cone" ||
-      view.presentSource === "final"
-    ) {
-      frameTick(encoder, delta);
+    if (SCENE === "perf") {
+      // Perf harness: every pass runs purely by its toggle (skipped passes just leave their
+      // textures stale — valid GPU work, no crash). Always presents the composite output, so
+      // toggling a pass changes ONLY that pass's GPU work → the gpuMs delta attributes its
+      // cost. The full chain is voxelize → mips → cone → composite (+ the SDF draw G-buffer).
+      if (perf.draw) frameTick(encoder, delta);
+      if (perf.voxelize) voxel.voxelize(encoder);
+      if (perf.mips) voxel.mips(encoder);
+      if (perf.cone) voxel.cone(encoder);
+      if (perf.composite) {
+        // Sun shadow map (sun-POV depth) feeds the composite's shadow lookup; render it
+        // right before. Gated by the composite toggle (the shadow only matters there).
+        voxel.sunDepth(encoder);
+        voxel.composite(encoder);
+      }
+      present(encoder, voxel.compositeOutputTexture);
+    } else {
+      // Main SDF draw pass -> renderTexture (raw albedo G-buffer). Its per-fragment
+      // sphere-trace (up to 96 steps) is fill-bound: cost scales with on-screen coverage,
+      // so it spikes on zoom-in. "voxel" doesn't read the G-buffer (only the voxel 3D
+      // textures + scene buffers, which prepare() already uploaded) — it uses the voxel
+      // DDA instead. "raw", "cone" and "final" all NEED the SDF pass: raw presents it; cone +
+      // final read its depth + normal G-buffer to reconstruct P + N (final also reads albedo).
+      if (
+        view.presentSource === "raw" ||
+        view.presentSource === "cone" ||
+        view.presentSource === "final"
+      ) {
+        frameTick(encoder, delta);
+      }
+      // Voxelize the SDF scene into the 3D textures, then run the selected voxel pass.
+      voxel.voxelize(encoder);
+      if (view.presentSource === "voxel") voxel.debug(encoder, 0);
+      else if (view.presentSource === "radiance") voxel.debug(encoder, 1);
+      else if (view.presentSource === "lod") {
+        // Build the radiance mip pyramid (must follow voxelize), then sample the chosen LOD.
+        voxel.mips(encoder);
+        voxel.debug(encoder, 2, lodCfg.lod);
+      } else if (view.presentSource === "cone") {
+        // Build the radiance pyramid (must follow voxelize), then trace the diffuse cones.
+        voxel.mips(encoder);
+        voxel.cone(encoder);
+      } else if (view.presentSource === "final") {
+        // Pyramid → cone gather → composite into the final lit image (composite reads cone).
+        voxel.mips(encoder);
+        voxel.cone(encoder);
+        voxel.sunDepth(encoder);
+        voxel.composite(encoder);
+      }
+      // Present the chosen source.
+      const presented =
+        view.presentSource === "voxel" ||
+        view.presentSource === "radiance" ||
+        view.presentSource === "lod"
+          ? voxel.outputTexture
+          : view.presentSource === "cone"
+            ? voxel.coneOutputTexture
+            : view.presentSource === "final"
+              ? voxel.compositeOutputTexture
+              : frame.renderTexture;
+      present(encoder, presented);
     }
-    // Voxelize the SDF scene into the 3D textures, then run the selected voxel pass.
-    voxel.voxelize(encoder);
-    if (view.presentSource === "voxel") voxel.debug(encoder, 0);
-    else if (view.presentSource === "radiance") voxel.debug(encoder, 1);
-    else if (view.presentSource === "lod") {
-      // Build the radiance mip pyramid (must follow voxelize), then sample the chosen LOD.
-      voxel.mips(encoder);
-      voxel.debug(encoder, 2, lodCfg.lod);
-    } else if (view.presentSource === "cone") {
-      // Build the radiance pyramid (must follow voxelize), then trace the diffuse cones.
-      voxel.mips(encoder);
-      voxel.cone(encoder);
-    } else if (view.presentSource === "final") {
-      // Pyramid → cone gather → composite into the final lit image (composite reads cone).
-      voxel.mips(encoder);
-      voxel.cone(encoder);
-      voxel.composite(encoder);
-    }
-    // Present the chosen source.
-    const presented =
-      view.presentSource === "voxel" ||
-      view.presentSource === "radiance" ||
-      view.presentSource === "lod"
-        ? voxel.outputTexture
-        : view.presentSource === "cone"
-          ? voxel.coneOutputTexture
-          : view.presentSource === "final"
-            ? voxel.compositeOutputTexture
-            : frame.renderTexture;
-    present(encoder, presented);
+
+    // GPU time of this frame's submitted work — resolves when the GPU finishes, BEFORE the
+    // vsync present, so it is not capped at 16.6 ms the way the rAF fps is. EMA-smoothed;
+    // read the DELTA when a perf toggle flips to attribute cost to that pass.
+    const tSubmit = performance.now();
     device.queue.submit([encoder.finish()]);
+    // Serialize: wait for THIS frame's GPU work to fully finish before timing + encoding the
+    // next. Removes the cross-frame queue backlog, so gpuMs is a clean single-frame number and
+    // a pass toggle changes it unambiguously (diagnostic mode — not how a shipping loop runs).
+    await device.queue.onSubmittedWorkDone();
+    const dt = performance.now() - tSubmit;
+    gpuMsEMA = gpuMsEMA ? gpuMsEMA * 0.8 + dt * 0.2 : dt;
+    gpuMsMax = Math.max(gpuMsMax, gpuMsEMA);
+    gpuPanel.update(gpuMsEMA, gpuMsMax);
+
+    // CPU/FPS frame bracket for stats-gl (GPU panel is fed by the timer above).
+    stats.end();
+    stats.update();
 
     requestAnimationFrame(loop);
   }

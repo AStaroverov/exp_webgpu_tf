@@ -1,4 +1,4 @@
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { GPUShader } from "../../../WGSL/GPUShader.ts";
 import { getTypeTypedArray } from "../../../Shader/index.ts";
 import { viewProjMatrix } from "../ResizeSystem.ts";
@@ -7,6 +7,7 @@ import { shaderMeta as debugMeta } from "./voxelDebug.shader.ts";
 import { shaderMeta as coneMeta } from "./voxelCone.shader.ts";
 import { shaderMeta as compositeMeta } from "./voxelComposite.shader.ts";
 import { shaderMeta as mipMeta, WORKGROUP as MIP_WG } from "./voxelMip.shader.ts";
+import { shaderMeta as sunShadowMeta } from "./sunShadow.shader.ts";
 import {
   createVoxelTextures,
   DEFAULT_VOXEL_GRID,
@@ -77,6 +78,15 @@ export function createVoxelSystem({
   // ambient floor.
   const compositeParams: VoxelCompositeParams = { ambient: 0.05 };
 
+  // Perf/diagnostic flags.
+  //  - sunShadow: the OLD per-voxel sun shadow ray in voxelize (uGridDims.w). Catastrophically
+  //    expensive (a 128-step analytic march per solid voxel, O(instances)/step) and almost
+  //    invisible — DEFAULT OFF. Kept as a perf-reference toggle. Off = unshadowed injection.
+  //  - sunShadowSS: the sun shadow-MAP path in the composite (project the per-pixel world P
+  //    into a sun-POV depth map rendered by sunDepth() → real crisp sun shadows in the final
+  //    image). DEFAULT ON, ~cheap.
+  const debugFlags = { sunShadow: false, sunShadowSS: true };
+
   // G-buffer textures (reassigned by recreate() on canvas resize).
   let gDepth = depthTexture;
   let gNormal = normalTexture;
@@ -130,6 +140,67 @@ export function createVoxelSystem({
     magFilter: "linear",
     minFilter: "linear",
     mipmapFilter: "linear",
+  });
+
+  // ===== Sun shadow map (depth-only pass from the sun's POV; grid/camera-independent). =====
+  // Standard depth (orthoZO [0,1]) so the composite's shadow test is the simple "fragment
+  // depth > stored ⇒ shadowed". Pipeline uses depthCompare "less-equal" + clear 1.0, fully
+  // decoupled from the main camera's reverse-Z. Built ONCE; only sunViewProj/rayDir refresh.
+  const SHADOW_SIZE = 4096;
+  const sunShadowShader = new GPUShader(sunShadowMeta);
+  const sunShadowPipeline = sunShadowShader.getRenderPipeline(device, "vs_main", "fs_depth", {
+    withDepth: true,
+    depthCompare: "less-equal",
+    targets: [], // depth-only: no color attachments
+  });
+  const sunDepthTexture = device.createTexture({
+    size: [SHADOW_SIZE, SHADOW_SIZE, 1],
+    format: "depth32float",
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+  });
+
+  // Sun bind groups (scene buffers are stable → build ONCE, mirroring voxGroup0/voxGroup1).
+  // group0 = sun viewProj + rayDir uniforms; group1 = the 7 scene-instance buffers bound by
+  // BINDING NUMBER (the StorageRead declaration order matches sceneInstances.* exactly).
+  const sunGroup0 = device.createBindGroup({
+    layout: sunShadowPipeline.getBindGroupLayout(0),
+    entries: [
+      sunShadowShader.uniforms.viewProj.getBindGroupEntry(device),
+      sunShadowShader.uniforms.rayDir.getBindGroupEntry(device),
+    ],
+  });
+  const sunGroup1 = device.createBindGroup({
+    layout: sunShadowPipeline.getBindGroupLayout(1),
+    entries: [
+      {
+        binding: sunShadowMeta.uniforms.transform.binding,
+        resource: { buffer: sceneInstances.transform.getGPUBuffer(device) },
+      },
+      {
+        binding: sunShadowMeta.uniforms.kind.binding,
+        resource: { buffer: sceneInstances.kind.getGPUBuffer(device) },
+      },
+      {
+        binding: sunShadowMeta.uniforms.values.binding,
+        resource: { buffer: sceneInstances.values.getGPUBuffer(device) },
+      },
+      {
+        binding: sunShadowMeta.uniforms.roundness.binding,
+        resource: { buffer: sceneInstances.roundness.getGPUBuffer(device) },
+      },
+      {
+        binding: sunShadowMeta.uniforms.heights.binding,
+        resource: { buffer: sceneInstances.heights.getGPUBuffer(device) },
+      },
+      {
+        binding: sunShadowMeta.uniforms.color.binding,
+        resource: { buffer: sceneInstances.color.getGPUBuffer(device) },
+      },
+      {
+        binding: sunShadowMeta.uniforms.material.binding,
+        resource: { buffer: sceneInstances.material.getGPUBuffer(device) },
+      },
+    ],
   });
 
   // Group 0 (voxelize) = grid uniforms; Group 1 = the 7 scene-instance buffers. Both
@@ -201,8 +272,26 @@ export function createVoxelSystem({
   const compParams2Arr = getTypeTypedArray(compositeMeta.uniforms.params2.type); // Float32Array(4)
   const compSunArr = getTypeTypedArray(compositeMeta.uniforms.sun.type); // Float32Array(4)
   const compSunColorArr = getTypeTypedArray(compositeMeta.uniforms.sunColor.type); // Float32Array(4)
+  const compInvArr = getTypeTypedArray(compositeMeta.uniforms.invViewProj.type); // Float32Array(16)
+  const compSunViewProjArr = getTypeTypedArray(compositeMeta.uniforms.sunViewProj.type); // Float32Array(16)
   // Mip scratch: .xyz = destination mip dims (re-uploaded per level).
   const mipArr = getTypeTypedArray(mipMeta.uniforms.mip.type); // Int32Array(4)
+
+  // Sun shadow scratch (allocate ONCE — never per frame). sunViewProj is computed each frame
+  // from SunLight + the grid AABB and uploaded to BOTH the sunShadow shader (vs uViewProj)
+  // and the composite (uSunViewProj). rayDir = sun travel direction (= -dirTowardSun).
+  const sunView = mat4.create();
+  const sunProj = mat4.create();
+  const sunViewProj = mat4.create();
+  const sunEye = vec3.create();
+  const sunCenter = vec3.create();
+  const sunUp = vec3.create();
+  const sunCorner = vec3.create();
+  const sunViewProjArr = getTypeTypedArray(sunShadowMeta.uniforms.viewProj.type); // Float32Array(16)
+  const sunRayDirArr = getTypeTypedArray(sunShadowMeta.uniforms.rayDir.type); // Float32Array(4)
+  // World units per shadow-map texel (sun ortho width / SHADOW_SIZE). Set by buildSunViewProj,
+  // uploaded to the composite as uParams.z for the normal-offset shadow bias.
+  let sunWorldTexel = 0;
 
   // --- Grid state (rebuilt by buildGrid). ---
   let cellSize = grid.cellSize;
@@ -262,6 +351,8 @@ export function createVoxelSystem({
         compositeShader.uniforms.params2.getBindGroupEntry(device),
         compositeShader.uniforms.sun.getBindGroupEntry(device),
         compositeShader.uniforms.sunColor.getBindGroupEntry(device),
+        compositeShader.uniforms.invViewProj.getBindGroupEntry(device),
+        compositeShader.uniforms.sunViewProj.getBindGroupEntry(device),
         { binding: compositeMeta.uniforms.albedoTex.binding, resource: gAlbedo.createView() },
         { binding: compositeMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
         { binding: compositeMeta.uniforms.coneTex.binding, resource: coneOutput.createView() },
@@ -270,6 +361,13 @@ export function createVoxelSystem({
         {
           binding: compositeMeta.uniforms.emissionTex.binding,
           resource: gEmission.createView(),
+        },
+        // Sun shadow map: reverse-Z camera depth (to reconstruct P) + the sun-POV depth map
+        // (read via textureLoad — no sampler, depth textures can't use a filtering sampler).
+        { binding: compositeMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
+        {
+          binding: compositeMeta.uniforms.shadowMap.binding,
+          resource: sunDepthTexture.createView(),
         },
       ],
     });
@@ -413,6 +511,7 @@ export function createVoxelSystem({
     device.queue.writeBuffer(debugShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
     device.queue.writeBuffer(coneShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
     device.queue.writeBuffer(coneShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
+    // (composite no longer has grid uniforms — its sun shadow uses the shadow map, not voxels.)
 
     dispatchX = Math.ceil(dimX / WORKGROUP);
     dispatchY = Math.ceil(dimY / WORKGROUP);
@@ -456,6 +555,125 @@ export function createVoxelSystem({
   // coneOutput + compositeOutput, so those textures must exist first.
   buildGrid(cellSize);
 
+  // Compute the sun's orthographic view-projection (orthoZO, z in [0,1]) fitted to the grid
+  // AABB, plus the sun travel ray. Uploads sunViewProj to BOTH the sunShadow shader and the
+  // composite, and rayDir to the sunShadow shader. Recomputed each frame (sun/GUI can move).
+  function buildSunViewProj() {
+    const minX = originX;
+    const minY = originY;
+    const minZ = originZ;
+    const maxX = originX + extentX;
+    const maxY = originY + extentY;
+    const maxZ = originZ + extentZ;
+    const cx = (minX + maxX) * 0.5;
+    const cy = (minY + maxY) * 0.5;
+    const cz = (minZ + maxZ) * 0.5;
+
+    // Direction TOWARD the sun (unit), same formula as voxelize()/composite().
+    const a = SunLight.angle;
+    const e = SunLight.elevation;
+    const ce = Math.cos(e);
+    const sdx = Math.cos(a) * ce;
+    const sdy = Math.sin(a) * ce;
+    const sdz = Math.sin(e);
+
+    // Eye pulled back from the AABB center along +dirTowardSun; the ortho near/far fit below
+    // folds the distance out, so any value past the bounding-sphere radius is fine.
+    const radius = 0.5 * Math.hypot(extentX, extentY, extentZ);
+    const dist = radius * 2.0 + 1.0;
+    sunCenter[0] = cx;
+    sunCenter[1] = cy;
+    sunCenter[2] = cz;
+    sunEye[0] = cx + sdx * dist;
+    sunEye[1] = cy + sdy * dist;
+    sunEye[2] = cz + sdz * dist;
+
+    // Up-vector degeneracy: when the sun is near-vertical (|sdz|→1) forward ∥ +Z makes lookAt
+    // produce NaNs; swap up to +Y in that case.
+    if (Math.abs(sdz) > 0.999) {
+      sunUp[0] = 0;
+      sunUp[1] = 1;
+      sunUp[2] = 0;
+    } else {
+      sunUp[0] = 0;
+      sunUp[1] = 0;
+      sunUp[2] = 1;
+    }
+    mat4.lookAt(sunView, sunEye, sunCenter, sunUp);
+
+    // Fit an orthographic box to the 8 AABB corners IN LIGHT/VIEW space (tight, sun-angle
+    // independent). In view space the camera looks down -Z, so visible z is negative.
+    let lminX = Infinity;
+    let lminY = Infinity;
+    let lminZ = Infinity;
+    let lmaxX = -Infinity;
+    let lmaxY = -Infinity;
+    let lmaxZ = -Infinity;
+    for (let i = 0; i < 8; i++) {
+      sunCorner[0] = i & 1 ? maxX : minX;
+      sunCorner[1] = i & 2 ? maxY : minY;
+      sunCorner[2] = i & 4 ? maxZ : minZ;
+      vec3.transformMat4(sunCorner, sunCorner, sunView);
+      if (sunCorner[0] < lminX) lminX = sunCorner[0];
+      if (sunCorner[0] > lmaxX) lmaxX = sunCorner[0];
+      if (sunCorner[1] < lminY) lminY = sunCorner[1];
+      if (sunCorner[1] > lmaxY) lmaxY = sunCorner[1];
+      if (sunCorner[2] < lminZ) lminZ = sunCorner[2];
+      if (sunCorner[2] > lmaxZ) lmaxZ = sunCorner[2];
+    }
+    // near/far are POSITIVE distances; view-space z is negative going forward, so
+    // near = -lmaxZ (closest), far = -lminZ (farthest). Pad to avoid front-face clipping.
+    const near = -lmaxZ - 1.0;
+    const far = -lminZ + 1.0;
+    mat4.orthoZO(sunProj, lminX, lmaxX, lminY, lmaxY, near, far);
+    mat4.multiply(sunViewProj, sunProj, sunView);
+
+    // World units per shadow texel (the larger ortho axis / map resolution) — drives the
+    // composite's normal-offset bias so it tracks the actual sun-frustum coverage.
+    sunWorldTexel = Math.max(lmaxX - lminX, lmaxY - lminY) / SHADOW_SIZE;
+
+    sunViewProjArr.set(sunViewProj as Float32Array);
+    device.queue.writeBuffer(
+      sunShadowShader.uniforms.viewProj.getGPUBuffer(device),
+      0,
+      sunViewProjArr,
+    );
+    compSunViewProjArr.set(sunViewProj as Float32Array);
+    device.queue.writeBuffer(
+      compositeShader.uniforms.sunViewProj.getGPUBuffer(device),
+      0,
+      compSunViewProjArr,
+    );
+
+    // Sun travel direction = -dirTowardSun (already unit). xyz dir, w unused.
+    sunRayDirArr[0] = -sdx;
+    sunRayDirArr[1] = -sdy;
+    sunRayDirArr[2] = -sdz;
+    sunRayDirArr[3] = 0;
+    device.queue.writeBuffer(sunShadowShader.uniforms.rayDir.getGPUBuffer(device), 0, sunRayDirArr);
+  }
+
+  // Render the SDF scene from the sun's POV into sunDepthTexture (depth-only). MUST run after
+  // prepare() (scene buffers current) and before composite() (which samples the map). Refreshes
+  // the sun matrices each call, so it can run any time before composite.
+  function sunDepth(encoder: GPUCommandEncoder) {
+    buildSunViewProj();
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [],
+      depthStencilAttachment: {
+        view: sunDepthTexture.createView(),
+        depthClearValue: 1.0, // standard depth: far = 1
+        depthLoadOp: "clear",
+        depthStoreOp: "store",
+      },
+    });
+    pass.setPipeline(sunShadowPipeline);
+    pass.setBindGroup(0, sunGroup0);
+    pass.setBindGroup(1, sunGroup1);
+    pass.draw(36, sceneInstances.instanceCount, 0, 0);
+    pass.end();
+  }
+
   // Re-voxelize the scene into the 3D textures (run before debug()/the GI gather).
   function voxelize(encoder: GPUCommandEncoder) {
     instanceCountArr[0] = sceneInstances.instanceCount;
@@ -479,6 +697,11 @@ export function createVoxelSystem({
     sunColorArr[1] = SunLight.color[1];
     sunColorArr[2] = SunLight.color[2];
     device.queue.writeBuffer(voxShader.uniforms.sunColor.getGPUBuffer(device), 0, sunColorArr);
+
+    // Pack the sun-shadow perf toggle into the (otherwise unused) gridDims.w each frame.
+    // dimsArr already holds the live dims from buildGrid; only .w varies here.
+    dimsArr[3] = debugFlags.sunShadow ? 1 : 0;
+    device.queue.writeBuffer(voxShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
 
     const pass = encoder.beginComputePass();
     pass.setPipeline(voxPipeline);
@@ -592,13 +815,22 @@ export function createVoxelSystem({
   // coneOutput). Reads the G-buffer (albedo/normal/depth) + voxelEmission.
   function composite(encoder: GPUCommandEncoder) {
     compParamsArr[0] = compositeParams.ambient;
-    compParamsArr[1] = 0;
-    compParamsArr[2] = 0;
+    compParamsArr[1] = debugFlags.sunShadowSS ? 1 : 0; // sun shadow-map enable
+    compParamsArr[2] = sunWorldTexel; // world units per shadow texel (normal-offset bias)
     compParamsArr[3] = 0;
     device.queue.writeBuffer(
       compositeShader.uniforms.params.getGPUBuffer(device),
       0,
       compParamsArr,
+    );
+
+    // inverse(viewProj) for the screen-space sun-shadow world-position reconstruction.
+    mat4.invert(invViewProj, viewProjMatrix);
+    compInvArr.set(invViewProj as Float32Array);
+    device.queue.writeBuffer(
+      compositeShader.uniforms.invViewProj.getGPUBuffer(device),
+      0,
+      compInvArr,
     );
 
     compParams2Arr[0] = canvas.width;
@@ -681,11 +913,13 @@ export function createVoxelSystem({
     params,
     coneParams,
     compositeParams,
+    debugFlags,
     voxelize,
     mips,
     debug,
     cone,
     setLights,
+    sunDepth,
     composite,
     recreate,
     setCellSize,

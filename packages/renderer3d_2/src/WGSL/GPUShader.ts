@@ -37,6 +37,10 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
     fragmentName: string,
     options?: {
       withDepth?: boolean;
+      /** Depth compare for the depthStencil block. Defaults to the reverse-Z
+       * "greater-equal" so existing call sites are unchanged; the sun-shadow
+       * pipeline passes "less-equal" (standard [0,1] orthoZO depth). */
+      depthCompare?: GPUCompareFunction;
       shaderModule?: GPUShaderModule;
       targetFormat?: GPUTextureFormat;
       withBlending?: boolean;
@@ -48,6 +52,7 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
     },
   ): GPURenderPipeline {
     const withDepth = options?.withDepth ?? false;
+    const depthCompare = options?.depthCompare ?? "greater-equal";
     const targetFormat = options?.targetFormat ?? navigator.gpu.getPreferredCanvasFormat();
     const withBlending = options?.withBlending ?? true;
     const blend = options?.blend ?? "alpha";
@@ -90,7 +95,7 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
 
     const pipelineKey = `${vertexName}-${fragmentName}`;
     const targetsKey = targets.map((t) => `${t.format}:${t.blend}`).join(",");
-    const key = `${pipelineKey}-${withDepth}-${targetsKey}-${autoLayout}`;
+    const key = `${pipelineKey}-${withDepth}-${depthCompare}-${targetsKey}-${autoLayout}`;
     const shaderModule = options?.shaderModule ?? this.getShaderModule(device);
 
     if (!this.mapRenderPipeline.has(key)) {
@@ -114,7 +119,7 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
         depthStencil: withDepth
           ? {
               format: "depth32float",
-              depthCompare: "greater-equal",
+              depthCompare,
               depthWriteEnabled: true,
             }
           : undefined,
