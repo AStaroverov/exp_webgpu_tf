@@ -246,22 +246,29 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let dir = toL / d;
     let ndl = max(dot(N, dir), 0.0);
     if (ndl <= 0.0) { continue; }
-    let ap = clamp(lights[j].w / d, 0.02, 0.5);   // angular size of the light = penumbra width
-    // AIMED: full march budget + no early opacity cut → the sharp direct shadow stays crisp.
-    let r = trace_cone(origin, dir, ap, d, 0.0, jrad, 64, 1.0);
     // Distance falloff: without it the direct light is a FLAT-bright pool with a hard rim (reads as
     // an "invisible bigger sphere" the surface cuts through). atten = 1 at the light center, ~1/d²
     // far. uParams2.z = falloff coefficient (0 = none → flat sun-like emitter; 1 = standard); lr =
     // emitter radius (lights[j].w) so it is 1 inside the source and fades smoothly outside.
     let lr = max(lights[j].w, 1e-3);
     let atten = 1.0 / (1.0 + uParams2.z * (d * d) / (lr * lr));
+    let full = ndl * lightColor[j].rgb * abs(lightColor[j].w) * atten;
+    // LIGHT CULL: the 64-step shadow march is the dominant cost. Compute this emitter's direct
+    // contribution FIRST (cheap, no trace) and skip the march entirely if it is negligible here —
+    // far away, steep grazing, dim, or faded out by the falloff. For "many small emitters" most
+    // pixels see only a few relevant lights, so this is a big win at ~zero visible change (the
+    // skipped term was ≈0). With falloff=0 (flat sun-like) atten stays 1, so global lights are
+    // never culled — exactly the intended behavior for that mode.
+    if (max(full.r, max(full.g, full.b)) * uAoParams.w < 0.003) { continue; }
+    let ap = clamp(lights[j].w / d, 0.02, 0.5);   // angular size of the light = penumbra width
+    // AIMED: full march budget + no early opacity cut → the sharp direct shadow stays crisp.
+    let r = trace_cone(origin, dir, ap, d, 0.0, jrad, 64, 1.0);
     // ANALYTIC DIRECT + bleed-cancel (fixes the "white shadow"). full = the emitter's own light.
     // shadow = how much the cone's opacity removes; bleed = the radiance the cone actually
     // gathered along the way (a BRIGHT occluder => big bleed => its false shadow is cancelled;
     // a DARK occluder => ~0 bleed => the shadow survives). The target emitter itself bleeds ≈ its
     // own Lj, so it always delivers full light. Clamped so it can only darken, never exceed full.
     let occ = clamp(r.a, 0.0, 1.0);
-    let full = ndl * lightColor[j].rgb * abs(lightColor[j].w) * atten;
     let shadow = full * occ;
     let bleed = ndl * r.rgb;
     let contrib = full - max(vec3<f32>(0.0), shadow - bleed);
