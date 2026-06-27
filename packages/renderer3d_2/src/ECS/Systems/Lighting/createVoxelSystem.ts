@@ -25,8 +25,9 @@ export type VoxelConeParams = {
   normalBias: number; // extra lift of the cone origin off the surface
   maxDist: number; // cone reach (world units)
   aperture: number; // tan(halfAngle) — cone half-angle (~0.577 = 60° full angle)
-  giStrength: number; // multiplier on the gathered diffuse-cone radiance
-  coneCount: number; // hemisphere cone count = angular resolution (more = sharper shadows)
+  giStrength: number; // multiplier on the probe bounce (indirect) term
+  emitterDirect: number; // multiplier on the summed emitter aimed-cone DIRECT light (vs the sun)
+  emitterFalloff: number; // emitter distance falloff coefficient (0 = none/flat, 1 = standard 1/d²)
 };
 
 export type VoxelCompositeParams = {
@@ -76,7 +77,8 @@ export function createVoxelSystem({
     maxDist: 24,
     aperture: 0.577,
     giStrength: 1,
-    coneCount: 32,
+    emitterDirect: 1,
+    emitterFalloff: 1,
   };
   // giStrength stays in coneParams (baked into the cone's rgb); the composite only adds the
   // ambient floor.
@@ -992,14 +994,14 @@ export function createVoxelSystem({
 
     coneParams2Arr[0] = canvas.width;
     coneParams2Arr[1] = canvas.height;
-    coneParams2Arr[2] = coneParams.coneCount;
+    coneParams2Arr[2] = coneParams.emitterFalloff; // emitter distance-falloff coefficient
     coneParams2Arr[3] = coneLightCount;
     device.queue.writeBuffer(coneShader.uniforms.params2.getGPUBuffer(device), 0, coneParams2Arr);
 
     coneAoArr[0] = probeParams.aoConeCount;
     coneAoArr[1] = probeParams.aoReach;
     coneAoArr[2] = probeParams.aoSteps;
-    coneAoArr[3] = 0;
+    coneAoArr[3] = coneParams.emitterDirect; // emitter direct strength (vs the sun)
     device.queue.writeBuffer(coneShader.uniforms.aoParams.getGPUBuffer(device), 0, coneAoArr);
 
     mat4.invert(invViewProj, viewProjMatrix);

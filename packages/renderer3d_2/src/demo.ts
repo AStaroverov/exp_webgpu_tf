@@ -68,7 +68,7 @@ async function main() {
   //   "emitter"  — ground + box occluder + a GUI-movable/resizable emitter sphere.
   //   "simple"   — fixed minimal scene (first-bug diagnosis).
   //   "showcase" — one of every shape kind + several lights.
-  const SCENE = "perf" as "emitter" | "showcase" | "final" | "perf";
+  const SCENE = "emitter" as "emitter" | "showcase" | "final" | "perf";
 
   // The configurable emitter (only used by the "emitter" scene). Live-edited from
   // the GUI: position via the transform (re-uploaded every frame), radius via the
@@ -454,13 +454,15 @@ async function main() {
   // from the probe SH volume (see Probe GI folder); coneCount only sets the fill/bounce BLEND
   // weight (= count/2). Read live each frame by cone().
   const coneFolder = gui.addFolder("Cone GI");
-  coneFolder
-    .add(voxel.coneParams, "coneCount", [6, 8, 16, 24, 32, 48])
-    .name("fill blend weight (count/2)");
+  // Emitter DIRECT strength: multiplier on the summed aimed-cone direct light. Raise it to let a
+  // bright emitter overpower the sun (e.g. fill the sun-shadow it casts under itself).
+  coneFolder.add(voxel.coneParams, "emitterDirect", 0, 8, 0.1).name("emitter direct strength");
+  // Distance falloff for emitter direct light: 0 = flat (sun-like, hard rim), 1 = standard 1/d².
+  coneFolder.add(voxel.coneParams, "emitterFalloff", 0, 4, 0.05).name("emitter falloff");
   coneFolder.add(voxel.coneParams, "aperture", 0.1, 1.5, 0.01).name("aperture (lower=sharper)");
   coneFolder.add(voxel.coneParams, "maxDist", 1, 64, 0.5).name("cone reach");
   coneFolder.add(voxel.coneParams, "normalBias", 0, 2, 0.01).name("normal bias");
-  coneFolder.add(voxel.coneParams, "giStrength", 0, 4, 0.05).name("GI strength");
+  coneFolder.add(voxel.coneParams, "giStrength", 0, 4, 0.05).name("GI strength (bounce)");
 
   // Probe GI: the low-res irradiance-probe volume that replaced the per-pixel fill hemisphere.
   // conesPerProbe is the bounce quality (probes run at low res, once per frame → afford many);

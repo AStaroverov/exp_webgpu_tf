@@ -43,13 +43,13 @@ export const shaderMeta = new ShaderMeta(
   {
     // .x = normalBias, .y = maxDist (world), .z = aperture = tan(halfAngle), .w = giStrength.
     params: new VariableMeta("uParams", VariableKind.Uniform, `vec4<f32>`),
-    // .x = screen width (px), .y = screen height (px), .z = fill weight count (sets the bounce/
-    // ambient blend weight = count/2, matching the OLD Fibonacci fill term), .w = active light
-    // count (0..8).
+    // .x = screen width (px), .y = screen height (px), .z = emitter distance-falloff coefficient
+    // (0 = none / flat sun-like, 1 = standard 1/d²), .w = active light count (0..8).
     params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
-    // Short-range AO cones (contact occlusion → the .a/visibility output, read by the composite
-    // as ambient occlusion). .x = AO cone count (i32), .y = AO reach (world), .z = AO march steps
-    // (i32), .w spare. Kept per-pixel + short so small moving objects still darken their contacts.
+    // Short-range AO cones + the emitter-direct strength. .x = AO cone count (i32), .y = AO reach
+    // (world), .z = AO march steps (i32) — kept per-pixel + short so small moving objects still
+    // darken their contacts. .w = emitter DIRECT strength (multiplier on the summed aimed-cone
+    // direct light; raise to let bright emitters overpower the sun).
     aoParams: new VariableMeta("uAoParams", VariableKind.Uniform, `vec4<f32>`),
     // Emitters to importance-sample: .xyz = world CENTER, .w = radius (penumbra source). These
     // are AUTO-DISCOVERED from the LightEmitter component (every emitter, no manual list); only
@@ -218,7 +218,6 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   // only sets the fill/bounce blend weight (Wf = count/2), matching the old Fibonacci fill term.
   let basis = build_basis(N);
   let aperture = uParams.z;
-  let count = max(1, i32(uParams2.z));
   // Per-pixel azimuth rotation of the whole cone set (interleaved-gradient-noise hash) so the
   // gaps between narrow cones fall in DIFFERENT directions each pixel → fixed "ray" banding
   // becomes fine dither, which the half-res + bilinear upsample then blurs away. Lets a narrow
@@ -228,11 +227,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   // concentric "tree-ring" banding around bright sources at low cone counts.
   let jrad = fract(jitter * 1.61803399);
 
-  var acc = vec3<f32>(0.0);
-  // occAcc accumulates the SAME cosine-weighted average over each cone's opacity (.a) — the
-  // hemisphere "how blocked am I" measure that becomes ambient occlusion / soft shadows.
+  // Emitter DIRECT light, SUMMED on the SAME scale as the sun (NO /wsum averaging) so a brighter
+  // emitter actually competes with (and overpowers) the sun — e.g. a bright lamp near the floor
+  // fills the sun-shadow it casts on itself. occAcc = AO occlusion from the short AO cones below.
+  var directEmitters = vec3<f32>(0.0);
   var occAcc = 0.0;
-  var wsum = 0.0;
 
   // (a) AIMED cones — one narrow cone per emitter, pointed straight at the light center for a
   // bright, far-reaching direct + soft-shadow term. Aperture = the light's angular size
@@ -250,33 +249,34 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let ap = clamp(lights[j].w / d, 0.02, 0.5);   // angular size of the light = penumbra width
     // AIMED: full march budget + no early opacity cut → the sharp direct shadow stays crisp.
     let r = trace_cone(origin, dir, ap, d, 0.0, jrad, 64, 1.0);
+    // Distance falloff: without it the direct light is a FLAT-bright pool with a hard rim (reads as
+    // an "invisible bigger sphere" the surface cuts through). atten = 1 at the light center, ~1/d²
+    // far. uParams2.z = falloff coefficient (0 = none → flat sun-like emitter; 1 = standard); lr =
+    // emitter radius (lights[j].w) so it is 1 inside the source and fades smoothly outside.
+    let lr = max(lights[j].w, 1e-3);
+    let atten = 1.0 / (1.0 + uParams2.z * (d * d) / (lr * lr));
     // ANALYTIC DIRECT + bleed-cancel (fixes the "white shadow"). full = the emitter's own light.
     // shadow = how much the cone's opacity removes; bleed = the radiance the cone actually
     // gathered along the way (a BRIGHT occluder => big bleed => its false shadow is cancelled;
     // a DARK occluder => ~0 bleed => the shadow survives). The target emitter itself bleeds ≈ its
     // own Lj, so it always delivers full light. Clamped so it can only darken, never exceed full.
     let occ = clamp(r.a, 0.0, 1.0);
-    let full = ndl * lightColor[j].rgb * abs(lightColor[j].w);
+    let full = ndl * lightColor[j].rgb * abs(lightColor[j].w) * atten;
     let shadow = full * occ;
     let bleed = ndl * r.rgb;
     let contrib = full - max(vec3<f32>(0.0), shadow - bleed);
-    acc = acc + max(vec3<f32>(0.0), contrib);
-    wsum = wsum + ndl;
+    directEmitters = directEmitters + max(vec3<f32>(0.0), contrib);
   }
 
-  // (b) FILL / bounce — REPLACED by the irradiance-probe SH volume (built once per frame in the
-  // voxelProbe pass). One trilinear SH fetch per channel + a cosine-weighted reconstruction gives
-  // the same low-frequency hemisphere bounce the old per-pixel fill cones produced, at O(1) cost.
-  // Folded into the SAME acc/wsum average with the weight the old fill term carried (Σcosθ over
-  // count Fibonacci cones = count/2), so the aimed/bounce blend AND brightness are preserved.
+  // (b) FILL / bounce — the irradiance-probe SH volume (built once per frame in voxelProbe). One
+  // trilinear SH fetch per channel + a cosine-weighted reconstruction = the low-frequency
+  // hemisphere bounce the old per-pixel fill cones produced, at O(1) cost. Added as its OWN term
+  // (scaled by giStrength below) — no longer averaged against the emitter direct.
   let pUvw = (origin - uGridOrigin.xyz) / (vec3<f32>(uGridDims.xyz) * cellSize);
   let cR = textureSampleLevel(shR, voxelSampler, pUvw, 0.0);
   let cG = textureSampleLevel(shG, voxelSampler, pUvw, 0.0);
   let cB = textureSampleLevel(shB, voxelSampler, pUvw, 0.0);
   let fillAvg = vec3<f32>(sh_avg_radiance(cR, N), sh_avg_radiance(cG, N), sh_avg_radiance(cB, N));
-  let Wf = f32(count) * 0.5;
-  acc = acc + fillAvg * Wf;
-  wsum = wsum + Wf;
 
   // (c) AO — a few SHORT hemisphere occlusion cones (opacity ONLY, no radiance → no double-count
   // with the probe bounce). Becomes the .a/visibility output the composite reads as ambient
@@ -297,11 +297,12 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     aoW = aoW + cosT;
   }
 
-  // Cosine-weighted average radiance (aimed direct + probe bounce) + AO visibility (1 - occlusion).
-  let irradiance = acc / max(wsum, 1e-4);
+  // Combine: emitter DIRECT (summed, sun-scale) × emitterDirect strength (uAoParams.w) + probe
+  // bounce × giStrength (uParams.w). No /wsum averaging → a bright emitter competes with the sun.
+  let indirect = directEmitters * uAoParams.w + fillAvg * uParams.w;
   let visibility = clamp(1.0 - occAcc / max(aoW, 1e-4), 0.0, 1.0);
-  // rgb = indirect radiance·giStrength; a = ambient-occlusion visibility, read by the composite.
-  return vec4f(irradiance * uParams.w, visibility);
+  // rgb = emitter direct + indirect bounce; a = AO visibility, read by the composite.
+  return vec4f(indirect, visibility);
 }
 `,
 );
