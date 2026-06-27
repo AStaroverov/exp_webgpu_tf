@@ -11,7 +11,8 @@
     "packages/debug",
     "packages/ppo",
     "packages/ppo_unknown",
-    "packages/burn_rl"
+    "packages/burn_rl",
+    "packages/engine"
   ],
   "type": "module",
   "scripts": {

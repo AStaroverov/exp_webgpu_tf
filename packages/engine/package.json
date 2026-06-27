@@ -1,0 +1,24 @@
+{
+  "name": "engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config config.vite.ts --port 3344",
+    "build": "tsc && vite build --config config.vite.ts",
+    "preview": "vite preview --config config.vite.ts"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-simd": "^0.19.3",
+    "@webgpu/types": "^0.1.31",
+    "bitecs": "^0.4.0",
+    "gl-matrix": "^3.4.3",
+    "lil-gui": "^0.21.0",
+    "ring-buffer-ts": "^1.2.0",
+    "stats-gl": "^3.6.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vite-plugin-top-level-await": "^1.5.0",
+    "vite-plugin-wasm": "^3.4.1"
+  }
+}

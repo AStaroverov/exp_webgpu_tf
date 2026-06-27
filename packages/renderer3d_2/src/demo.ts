@@ -68,7 +68,7 @@ async function main() {
   //   "emitter"  — ground + box occluder + a GUI-movable/resizable emitter sphere.
   //   "simple"   — fixed minimal scene (first-bug diagnosis).
   //   "showcase" — one of every shape kind + several lights.
-  const SCENE = "perf2" as "emitter" | "showcase" | "final" | "perf" | "perf2";
+  const SCENE = "emitter" as "emitter" | "showcase" | "final" | "perf" | "perf2";
   // Both perf scenes drive the same GPU-cost harness (per-pass toggles + serialized timing).
   const PERF = SCENE === "perf" || SCENE === "perf2";
 
