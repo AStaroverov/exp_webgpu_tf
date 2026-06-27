@@ -45,6 +45,28 @@ export function voxelMipLevelCount(dimX: number, dimY: number, dimZ: number): nu
   return 1 + Math.floor(Math.log2(Math.max(dimX, dimY, dimZ)));
 }
 
+// Irradiance-probe volume resolution (spans the SAME world box as the voxel grid; only the
+// resolution differs). 32×32×16 over the 64×64×16 box ≈ 2-unit probe spacing — coarse, but
+// indirect bounce is low-frequency, so that is fine. 16384 probes × 3 SH textures × rgba16float
+// (8 B) ≈ 0.4 MB.
+export type ProbeGridDims = { x: number; y: number; z: number };
+export const DEFAULT_PROBE_DIMS: ProbeGridDims = { x: 32, y: 32, z: 16 };
+
+export type ProbeTextures = {
+  shR: GPUTexture;
+  shG: GPUTexture;
+  shB: GPUTexture;
+};
+
+// The three SH-L1 textures (one per color channel; .xyzw = the 4 SH-L1 coefficients). Written by
+// the voxelProbe compute pass (textureStore) and read by the cone pass (sampled, trilinear).
+export function createProbeTextures(device: GPUDevice, dims: ProbeGridDims): ProbeTextures {
+  const size: [number, number, number] = [dims.x, dims.y, dims.z];
+  const usage = GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING;
+  const make = () => device.createTexture({ size, dimension: "3d", format: "rgba16float", usage });
+  return { shR: make(), shG: make(), shB: make() };
+}
+
 export type VoxelTextures = {
   voxelRadiance: GPUTexture;
 };

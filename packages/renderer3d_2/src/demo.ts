@@ -92,6 +92,7 @@ async function main() {
     draw: true, // SDF G-buffer draw pass (frameTick)
     voxelize: true, // scene → 3D voxel textures
     mips: true, // radiance mip pyramid
+    probe: true, // irradiance-probe SH volume (fill/bounce)
     cone: true, // N-cone GI gather (half-res)
     sunDepth: true, // sun shadow-map depth pass (sun-POV SDF depth)
     composite: true, // final lit image
@@ -449,17 +450,26 @@ async function main() {
   gui.add(SunLight, "intensity", 0, 5, 0.05).name("sun intensity");
   gui.addColor(SunLight, "color", 1).name("sun color"); // rgbScale=1 → array is 0..1 floats
 
-  // Cone GI: the N-cone diffuse hemisphere trace. Shadows emerge from this single gather —
-  // the cone count is the angular resolution: more cones + narrower aperture = sharper
-  // shadows (but too-narrow + too-few cones bands). Read live each frame by cone().
+  // Cone GI: per-pixel AIMED emitter cones (sharp direct + shadow). The fill/bounce now comes
+  // from the probe SH volume (see Probe GI folder); coneCount only sets the fill/bounce BLEND
+  // weight (= count/2). Read live each frame by cone().
   const coneFolder = gui.addFolder("Cone GI");
   coneFolder
     .add(voxel.coneParams, "coneCount", [6, 8, 16, 24, 32, 48])
-    .name("cones (shadow sharpness)");
+    .name("fill blend weight (count/2)");
   coneFolder.add(voxel.coneParams, "aperture", 0.1, 1.5, 0.01).name("aperture (lower=sharper)");
   coneFolder.add(voxel.coneParams, "maxDist", 1, 64, 0.5).name("cone reach");
   coneFolder.add(voxel.coneParams, "normalBias", 0, 2, 0.01).name("normal bias");
   coneFolder.add(voxel.coneParams, "giStrength", 0, 4, 0.05).name("GI strength");
+
+  // Probe GI: the low-res irradiance-probe volume that replaced the per-pixel fill hemisphere.
+  // conesPerProbe is the bounce quality (probes run at low res, once per frame → afford many);
+  // aoConeCount/aoReach are the SHORT per-pixel contact-AO cones (the .a/visibility term).
+  const probeFolder = gui.addFolder("Probe GI");
+  // SH-L1 saturates ~16 cones, so higher values only cut noise (no detail) — keep this low.
+  probeFolder.add(voxel.probeParams, "conesPerProbe", [8, 16, 32, 64, 128]).name("cones / probe");
+  probeFolder.add(voxel.probeParams, "aoConeCount", 0, 8, 1).name("AO cones (contact)");
+  probeFolder.add(voxel.probeParams, "aoReach", 1, 16, 0.5).name("AO reach");
 
   // Composite (Layer 4): the final lit image. Sun controls above feed it via SunLight;
   // cone giStrength bakes into the indirect term. Only the ambient floor lives here.
@@ -475,9 +485,10 @@ async function main() {
     pf.add(perf, "draw").name("1· SDF draw pass");
     pf.add(perf, "voxelize").name("2· voxelize");
     pf.add(perf, "mips").name("3· mips");
-    pf.add(perf, "cone").name("4· cone GI");
-    pf.add(perf, "sunDepth").name("5· sun shadow-map pass");
-    pf.add(perf, "composite").name("6· composite");
+    pf.add(perf, "probe").name("4· probe GI (SH)");
+    pf.add(perf, "cone").name("5· cone GI");
+    pf.add(perf, "sunDepth").name("6· sun shadow-map pass");
+    pf.add(perf, "composite").name("7· composite");
     pf.open();
   }
 
@@ -667,6 +678,7 @@ async function main() {
       if (perf.sunDepth) voxel.sunDepth(encoder); // sun-POV depth feeding voxelize (A) + composite
       if (perf.voxelize) voxel.voxelize(encoder);
       if (perf.mips) voxel.mips(encoder);
+      if (perf.probe) voxel.probe(encoder);
       if (perf.cone) voxel.cone(encoder);
       if (perf.composite) voxel.composite(encoder);
       present(encoder, voxel.compositeOutputTexture);
@@ -680,6 +692,7 @@ async function main() {
       }
       voxel.voxelize(encoder);
       voxel.mips(encoder);
+      voxel.probe(encoder);
       voxel.cone(encoder);
       voxel.composite(encoder);
       present(encoder, voxel.compositeOutputTexture);

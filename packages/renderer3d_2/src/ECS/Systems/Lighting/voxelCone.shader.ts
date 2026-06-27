@@ -43,9 +43,14 @@ export const shaderMeta = new ShaderMeta(
   {
     // .x = normalBias, .y = maxDist (world), .z = aperture = tan(halfAngle), .w = giStrength.
     params: new VariableMeta("uParams", VariableKind.Uniform, `vec4<f32>`),
-    // .x = screen width (px), .y = screen height (px), .z = fill-cone count (angular
-    // resolution of the ambient/bounce term), .w = active light count (0..8).
+    // .x = screen width (px), .y = screen height (px), .z = fill weight count (sets the bounce/
+    // ambient blend weight = count/2, matching the OLD Fibonacci fill term), .w = active light
+    // count (0..8).
     params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
+    // Short-range AO cones (contact occlusion → the .a/visibility output, read by the composite
+    // as ambient occlusion). .x = AO cone count (i32), .y = AO reach (world), .z = AO march steps
+    // (i32), .w spare. Kept per-pixel + short so small moving objects still darken their contacts.
+    aoParams: new VariableMeta("uAoParams", VariableKind.Uniform, `vec4<f32>`),
     // Emitters to importance-sample: .xyz = world CENTER, .w = radius (penumbra source). These
     // are AUTO-DISCOVERED from the LightEmitter component (every emitter, no manual list); only
     // the first i32(uParams2.w) entries are live.
@@ -68,12 +73,28 @@ export const shaderMeta = new ShaderMeta(
     normalTex: new VariableMeta("normalTex", VariableKind.Texture, `texture_2d<f32>`, {
       textureSampleType: "float",
     }),
-    // The voxelRadiance mip pyramid (ALL mips) — the cone reads it at the per-step LOD.
+    // The voxelRadiance mip pyramid (ALL mips) — the cone reads it at the per-step LOD (for the
+    // aimed emitter cones + the short AO cones).
     voxelRadiance: new VariableMeta("voxelRadiance", VariableKind.Texture, `texture_3d<f32>`, {
       viewDimension: "3d",
       textureSampleType: "float",
     }),
-    // Filtering sampler for textureSampleLevel over the pyramid.
+    // Irradiance-probe SH-L1 volume (one texture per color channel, .xyzw = the 4 SH coeffs).
+    // Sampled trilinearly (voxelSampler) to reconstruct the low-frequency bounce that REPLACES the
+    // old per-pixel fill hemisphere cones.
+    shR: new VariableMeta("shR", VariableKind.Texture, `texture_3d<f32>`, {
+      viewDimension: "3d",
+      textureSampleType: "float",
+    }),
+    shG: new VariableMeta("shG", VariableKind.Texture, `texture_3d<f32>`, {
+      viewDimension: "3d",
+      textureSampleType: "float",
+    }),
+    shB: new VariableMeta("shB", VariableKind.Texture, `texture_3d<f32>`, {
+      viewDimension: "3d",
+      textureSampleType: "float",
+    }),
+    // Filtering sampler for textureSampleLevel over the pyramid + the SH volume.
     voxelSampler: new VariableMeta("voxelSampler", VariableKind.Sampler, `sampler`),
   },
   {},
@@ -159,6 +180,15 @@ fn trace_cone(origin: vec3<f32>, dir: vec3<f32>, aperture: f32, reach: f32, fade
   return vec4<f32>(col, alpha);
 }
 
+// Reconstruct the cosine-weighted AVERAGE radiance from an SH-L1 channel (.xyzw = L00,L1m1,L10,L11)
+// for surface normal N. The SH-L1 diffuse IRRADIANCE is E = 0.886227*L00 + 1.023328*(L1·N); we
+// divide by PI to get the average incoming radiance (for uniform radiance L, E/PI = L), so this
+// matches the scale of the OLD per-cone fill average it replaces. Clamped against SH ringing.
+fn sh_avg_radiance(c: vec4<f32>, N: vec3<f32>) -> f32 {
+  let E = 0.886227 * c.x + 1.023328 * (c.y * N.y + c.z * N.z + c.w * N.x);
+  return max(0.0, E * 0.31830989); // * (1/PI)
+}
+
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   // This pass renders at HALF res; map the half-res framebuffer coord to a representative
@@ -183,9 +213,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let cellSize = uGridOrigin.w;
   let origin = P + N * (cellSize * 1.5 + uParams.x);
 
-  // N-cone cosine-weighted diffuse hemisphere gather around N, on a procedural Fibonacci
-  // (golden-angle) hemisphere. The cone count (uParams2.z) is the angular resolution: per-
-  // direction occupancy (cone.a) IS the shadow term, so more cones = sharper shadows.
+  // Hemisphere basis (for the AO cones below) + the bounce-blend weight. count (uParams2.z) is
+  // no longer a per-pixel cone count — the fill hemisphere now comes from the probe SH volume; it
+  // only sets the fill/bounce blend weight (Wf = count/2), matching the old Fibonacci fill term.
   let basis = build_basis(N);
   let aperture = uParams.z;
   let count = max(1, i32(uParams2.z));
@@ -231,35 +261,46 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let bleed = ndl * r.rgb;
     let contrib = full - max(vec3<f32>(0.0), shadow - bleed);
     acc = acc + max(vec3<f32>(0.0), contrib);
-    occAcc = occAcc + ndl * occ;
     wsum = wsum + ndl;
   }
 
-  // (b) FILL cones — the wide Fibonacci hemisphere set for soft ambient / bounce, accumulated
-  // into the SAME acc/occAcc/wsum with cosine weights.
-  for (var i = 0; i < count; i = i + 1) {
-    let k = (f32(i) + 0.5) / f32(count);
-    let cosT = 1.0 - k;                       // hemisphere: cosTheta in (0,1]
+  // (b) FILL / bounce — REPLACED by the irradiance-probe SH volume (built once per frame in the
+  // voxelProbe pass). One trilinear SH fetch per channel + a cosine-weighted reconstruction gives
+  // the same low-frequency hemisphere bounce the old per-pixel fill cones produced, at O(1) cost.
+  // Folded into the SAME acc/wsum average with the weight the old fill term carried (Σcosθ over
+  // count Fibonacci cones = count/2), so the aimed/bounce blend AND brightness are preserved.
+  let pUvw = (origin - uGridOrigin.xyz) / (vec3<f32>(uGridDims.xyz) * cellSize);
+  let cR = textureSampleLevel(shR, voxelSampler, pUvw, 0.0);
+  let cG = textureSampleLevel(shG, voxelSampler, pUvw, 0.0);
+  let cB = textureSampleLevel(shB, voxelSampler, pUvw, 0.0);
+  let fillAvg = vec3<f32>(sh_avg_radiance(cR, N), sh_avg_radiance(cG, N), sh_avg_radiance(cB, N));
+  let Wf = f32(count) * 0.5;
+  acc = acc + fillAvg * Wf;
+  wsum = wsum + Wf;
+
+  // (c) AO — a few SHORT hemisphere occlusion cones (opacity ONLY, no radiance → no double-count
+  // with the probe bounce). Becomes the .a/visibility output the composite reads as ambient
+  // occlusion; kept per-pixel + short so small moving objects still darken their contacts.
+  let aoCount = max(0, i32(uAoParams.x));
+  let aoReach = uAoParams.y;
+  let aoSteps = max(1, i32(uAoParams.z));
+  var aoW = 0.0;
+  for (var a = 0; a < aoCount; a = a + 1) {
+    let k = (f32(a) + 0.5) / f32(aoCount);
+    let cosT = 1.0 - k;
     let sinT = sqrt(max(0.0, 1.0 - cosT * cosT));
-    let phi = f32(i) * 2.39996323 + jitter;   // golden angle + per-pixel rotation
+    let phi = f32(a) * 2.39996323 + jitter;
     let local = vec3<f32>(sinT * cos(phi), sinT * sin(phi), cosT);
     let dir = normalize(basis * local);
-    let w = cosT;                             // cosine weight
-    // Fill/bounce cones reach the global maxDist (uParams.y) and softly fade over the last
-    // quarter so their artificial cutoff doesn't show as a circle. HALF the march budget (the
-    // bounce term is low-frequency → smooth either way) + early-out at 0.95 opacity → this halves
-    // the dominant cone cost with no visible change.
-    let r = trace_cone(origin, dir, aperture, uParams.y, 0.25, jrad, 32, 0.95);
-    acc = acc + w * r.rgb;
-    occAcc = occAcc + w * r.a;
-    wsum = wsum + w;
+    let r = trace_cone(origin, dir, aperture, aoReach, 0.0, jrad, aoSteps, 0.95);
+    occAcc = occAcc + cosT * r.a;
+    aoW = aoW + cosT;
   }
 
-  // Cosine-weighted average radiance + visibility (= 1 - occlusion, the AO / soft-shadow term).
+  // Cosine-weighted average radiance (aimed direct + probe bounce) + AO visibility (1 - occlusion).
   let irradiance = acc / max(wsum, 1e-4);
-  let visibility = clamp(1.0 - occAcc / max(wsum, 1e-4), 0.0, 1.0);
-  // rgb = indirect radiance·giStrength (the "cone" present mode shows this unchanged);
-  // a = hemisphere visibility, read as AO by the composite.
+  let visibility = clamp(1.0 - occAcc / max(aoW, 1e-4), 0.0, 1.0);
+  // rgb = indirect radiance·giStrength; a = ambient-occlusion visibility, read by the composite.
   return vec4f(irradiance * uParams.w, visibility);
 }
 `,
