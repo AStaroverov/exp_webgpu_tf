@@ -3,11 +3,12 @@ import { GPUShader } from "../../../WGSL/GPUShader.ts";
 import { getTypeTypedArray } from "../../../Shader/index.ts";
 import { viewProjMatrix } from "../ResizeSystem.ts";
 import { shaderMeta as voxelizeMeta, WORKGROUP, WORKGROUP_1D } from "./voxelize.shader.ts";
-import { shaderMeta as coneMeta } from "./voxelCone.shader.ts";
-import { shaderMeta as compositeMeta } from "./voxelComposite.shader.ts";
+import { createConeShaderMeta } from "./voxelCone.shader.ts";
+import { createCompositeShaderMeta } from "./voxelComposite.shader.ts";
 import { shaderMeta as mipMeta, WORKGROUP as MIP_WG } from "./voxelMip.shader.ts";
-import { shaderMeta as probeMeta, WORKGROUP as PROBE_WG } from "./voxelProbe.shader.ts";
+import { createProbeShaderMeta, WORKGROUP as PROBE_WG } from "./voxelProbe.shader.ts";
 import { shaderMeta as sunShadowMeta } from "./sunShadow.shader.ts";
+import { DEFAULT_VOXEL_BAKED_CONFIG, type VoxelBakedConfig } from "./voxelConfig.ts";
 import {
   createProbeTextures,
   createVoxelTextures,
@@ -20,30 +21,6 @@ import {
 } from "./voxelResources.ts";
 import type { SceneInstances } from "../SDFSystem/createDrawShapeSystem.ts";
 import { SunLight } from "../SunLight.ts";
-
-export type VoxelConeParams = {
-  normalBias: number; // extra lift of the cone origin off the surface
-  maxDist: number; // cone reach (world units)
-  aperture: number; // tan(halfAngle) — cone half-angle (~0.577 = 60° full angle)
-  giStrength: number; // multiplier on the probe bounce (indirect) term
-  emitterDirect: number; // multiplier on the summed emitter aimed-cone DIRECT light (vs the sun)
-  emitterFalloff: number; // emitter distance falloff coefficient (0 = none/flat, 1 = standard 1/d²)
-  aimedSteps: number; // aimed-cone march step budget (lower = cheaper, shorter/coarser shadows)
-  aimedAlphaCut: number; // aimed-cone early-out opacity (<1 stops a near-opaque cone → saves the tail)
-};
-
-export type VoxelCompositeParams = {
-  ambient: number; // ambient floor (scaled by the cone's AO term)
-  exposure: number; // HDR exposure multiplier applied before the ACES tonemap
-  penumbra: number; // sun shadow softening strength: PCF filter widens as sun intensity drops below 1
-};
-
-export type VoxelProbeParams = {
-  conesPerProbe: number; // full-sphere cones per probe; SH-L1 saturates ~16, so more only cuts noise
-  aoConeCount: number; // short per-pixel hemisphere occlusion cones for contact AO (0 = no AO)
-  aoReach: number; // AO cone reach (world units) — short, near-field contact occlusion
-  aoSteps: number; // AO cone march budget (short)
-};
 
 // Voxel scene system: voxelize() fills the 3D albedo/emission/radiance textures from the SDF
 // scene each frame; mips() builds the radiance pyramid; cone() gathers indirect light (N-cone
@@ -76,28 +53,10 @@ export function createVoxelSystem({
   emissionTexture: GPUTexture;
   grid?: VoxelGridConfig;
 }) {
-  const coneParams: VoxelConeParams = {
-    normalBias: 0,
-    maxDist: 24,
-    aperture: 0.577,
-    giStrength: 1,
-    emitterDirect: 1,
-    emitterFalloff: 1,
-    aimedSteps: 64,
-    aimedAlphaCut: 1,
-  };
-  // giStrength stays in coneParams (baked into the cone's rgb); the composite only adds the
-  // ambient floor.
-  const compositeParams: VoxelCompositeParams = { ambient: 0.05, exposure: 1, penumbra: 4 };
-  // Probe volume (fill/bounce) + per-pixel contact AO. The bounce is stored as SH-L1 (only 4
-  // coeffs/channel), which ~16 cones already fully determine — so conesPerProbe past ~16-32 adds
-  // nothing visible, only probe-pass cost. 32 is a safe, cheap default. AO is a few short cones.
-  const probeParams: VoxelProbeParams = {
-    conesPerProbe: 32,
-    aoConeCount: 4,
-    aoReach: 6,
-    aoSteps: 12,
-  };
+  // All quality/tuning knobs that are baked into the WGSL (cone/composite/probe shaders) live in
+  // ONE config object. Mutate it and call rebuild() to recompile the affected shaders with the new
+  // baked consts. Genuinely dynamic data (sun, camera, emitters, grid) stays in uniforms.
+  const config: VoxelBakedConfig = { ...DEFAULT_VOXEL_BAKED_CONFIG };
 
   // LIGHTING MODEL:
   //  - emitters (point lights) → injected into the voxel volume → gathered by the cone GI
@@ -131,14 +90,16 @@ export function createVoxelSystem({
   const voxPipeline = voxShader.getComputePipeline(device, "main");
   // VCT cone GI — N-cone diffuse hemisphere gather over the G-buffer → HALF-res HDR target
   // (composite bilinear-upsamples to full res; the heavy cone work runs at ¼ the pixels).
-  const coneShader = new GPUShader(coneMeta);
-  const conePipeline = coneShader.getRenderPipeline(device, "vs_main", "fs_main", {
+  // Built from a factory that bakes the current config consts into the WGSL → reassignable on
+  // rebuild().
+  let coneShader = new GPUShader(createConeShaderMeta(config));
+  let conePipeline = coneShader.getRenderPipeline(device, "vs_main", "fs_main", {
     targetFormat: "rgba16float",
     withBlending: false,
   });
   // VCT composite (Layer 4): final = albedo·(ambient·AO + directSun + indirect) + emission.
-  const compositeShader = new GPUShader(compositeMeta);
-  const compositePipeline = compositeShader.getRenderPipeline(device, "vs_main", "fs_main", {
+  let compositeShader = new GPUShader(createCompositeShaderMeta(config));
+  let compositePipeline = compositeShader.getRenderPipeline(device, "vs_main", "fs_main", {
     targetFormat: "rgba16float",
     withBlending: false,
   });
@@ -157,9 +118,9 @@ export function createVoxelSystem({
   // Irradiance-probe pass: one thread per probe traces full-sphere cones into voxelRadiance and
   // writes SH-L1 (3 textures). group0 = uniforms + voxelRadiance + sampler, group2 = the SH
   // outputs, group1 empty (same situation as the mip pass → bind a matching empty group).
-  const probeShader = new GPUShader(probeMeta);
-  const probePipeline = probeShader.getComputePipeline(device, "main");
-  const probeEmptyGroup1 = device.createBindGroup({
+  let probeShader = new GPUShader(createProbeShaderMeta(config));
+  let probePipeline = probeShader.getComputePipeline(device, "main");
+  let probeEmptyGroup1 = device.createBindGroup({
     layout: probeShader.createBindGroupLayout(device, 1),
     entries: [],
   });
@@ -318,29 +279,25 @@ export function createVoxelSystem({
   const aabbMinArr = getTypeTypedArray(voxelizeMeta.uniforms.aabbMin.type) as Int32Array; // Int32Array(MAX*4)
   const aabbDimArr = getTypeTypedArray(voxelizeMeta.uniforms.aabbDim.type) as Int32Array; // Int32Array(MAX*4)
   const invViewProj = mat4.create(); // reused by cone() + composite() for inverse-viewProj
-  // Cone scratch.
-  const coneParamsArr = getTypeTypedArray(coneMeta.uniforms.params.type); // Float32Array(4)
-  const coneParams2Arr = getTypeTypedArray(coneMeta.uniforms.params2.type); // Float32Array(4)
-  const coneAoArr = getTypeTypedArray(coneMeta.uniforms.aoParams.type); // Float32Array(4)
-  const coneTuneArr = getTypeTypedArray(coneMeta.uniforms.tune.type); // Float32Array(4)
-  const coneInvArr = getTypeTypedArray(coneMeta.uniforms.invViewProj.type); // Float32Array(16)
-  // Probe scratch.
-  const probeOriginArr = getTypeTypedArray(probeMeta.uniforms.gridOrigin.type); // Float32Array(4)
-  const probeGridDimsArr = getTypeTypedArray(probeMeta.uniforms.gridDims.type); // Int32Array(4)
-  const probeDimsArr = getTypeTypedArray(probeMeta.uniforms.probeDims.type); // Int32Array(4)
-  const probeParamsArr = getTypeTypedArray(probeMeta.uniforms.probeParams.type); // Float32Array(4)
+  // Cone scratch. (params/aoParams/tune are now BAKED consts — no scratch arrays.)
+  const coneParams2Arr = getTypeTypedArray(coneShader.shaderMeta.uniforms.params2.type); // Float32Array(4)
+  const coneInvArr = getTypeTypedArray(coneShader.shaderMeta.uniforms.invViewProj.type); // Float32Array(16)
+  // Probe scratch. (probeParams is now BAKED — no scratch array.)
+  const probeOriginArr = getTypeTypedArray(probeShader.shaderMeta.uniforms.gridOrigin.type); // Float32Array(4)
+  const probeGridDimsArr = getTypeTypedArray(probeShader.shaderMeta.uniforms.gridDims.type); // Int32Array(4)
+  const probeDimsArr = getTypeTypedArray(probeShader.shaderMeta.uniforms.probeDims.type); // Int32Array(4)
   // Auto-discovered emitter centers the cone importance-samples (x,y,z,radius per light) +
   // parallel colors (r,g,b,intensity) for the analytic-direct shadow term.
-  const coneLightsArr = getTypeTypedArray(coneMeta.uniforms.lights.type); // Float32Array(32)
-  const coneLightColorsArr = getTypeTypedArray(coneMeta.uniforms.lightColor.type); // Float32Array(32)
+  const coneLightsArr = getTypeTypedArray(coneShader.shaderMeta.uniforms.lights.type); // Float32Array(32)
+  const coneLightColorsArr = getTypeTypedArray(coneShader.shaderMeta.uniforms.lightColor.type); // Float32Array(32)
   let coneLightCount = 0;
   // Composite scratch.
-  const compParamsArr = getTypeTypedArray(compositeMeta.uniforms.params.type); // Float32Array(4)
-  const compParams2Arr = getTypeTypedArray(compositeMeta.uniforms.params2.type); // Float32Array(4)
-  const compSunArr = getTypeTypedArray(compositeMeta.uniforms.sun.type); // Float32Array(4)
-  const compSunColorArr = getTypeTypedArray(compositeMeta.uniforms.sunColor.type); // Float32Array(4)
-  const compInvArr = getTypeTypedArray(compositeMeta.uniforms.invViewProj.type); // Float32Array(16)
-  const compSunViewProjArr = getTypeTypedArray(compositeMeta.uniforms.sunViewProj.type); // Float32Array(16)
+  const compParamsArr = getTypeTypedArray(compositeShader.shaderMeta.uniforms.params.type); // Float32Array(4)
+  const compParams2Arr = getTypeTypedArray(compositeShader.shaderMeta.uniforms.params2.type); // Float32Array(4)
+  const compSunArr = getTypeTypedArray(compositeShader.shaderMeta.uniforms.sun.type); // Float32Array(4)
+  const compSunColorArr = getTypeTypedArray(compositeShader.shaderMeta.uniforms.sunColor.type); // Float32Array(4)
+  const compInvArr = getTypeTypedArray(compositeShader.shaderMeta.uniforms.invViewProj.type); // Float32Array(16)
+  const compSunViewProjArr = getTypeTypedArray(compositeShader.shaderMeta.uniforms.sunViewProj.type); // Float32Array(16)
   // World units per shadow texel (sun ortho width / SHADOW_SIZE) → composite normal-offset bias.
   let sunWorldTexel = 0;
   // Mip scratch: .xyz = destination mip dims (re-uploaded per level).
@@ -396,36 +353,33 @@ export function createVoxelSystem({
     coneGroup0 = device.createBindGroup({
       layout: conePipeline.getBindGroupLayout(0),
       entries: [
-        coneShader.uniforms.params.getBindGroupEntry(device),
         coneShader.uniforms.params2.getBindGroupEntry(device),
-        coneShader.uniforms.aoParams.getBindGroupEntry(device),
-        coneShader.uniforms.tune.getBindGroupEntry(device),
         coneShader.uniforms.invViewProj.getBindGroupEntry(device),
         coneShader.uniforms.gridOrigin.getBindGroupEntry(device),
         coneShader.uniforms.gridDims.getBindGroupEntry(device),
         coneShader.uniforms.lights.getBindGroupEntry(device),
         coneShader.uniforms.lightColor.getBindGroupEntry(device),
-        { binding: coneMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
-        { binding: coneMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
+        { binding: coneShader.shaderMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
+        { binding: coneShader.shaderMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
         // ALL-mips sampled view so textureSampleLevel can pick any lod.
         {
-          binding: coneMeta.uniforms.voxelRadiance.binding,
+          binding: coneShader.shaderMeta.uniforms.voxelRadiance.binding,
           resource: textures.voxelRadiance.createView({ dimension: "3d" }),
         },
         // Irradiance-probe SH-L1 volume (one sampled 3D view per channel) for the fill term.
         {
-          binding: coneMeta.uniforms.shR.binding,
+          binding: coneShader.shaderMeta.uniforms.shR.binding,
           resource: probeTextures.shR.createView({ dimension: "3d" }),
         },
         {
-          binding: coneMeta.uniforms.shG.binding,
+          binding: coneShader.shaderMeta.uniforms.shG.binding,
           resource: probeTextures.shG.createView({ dimension: "3d" }),
         },
         {
-          binding: coneMeta.uniforms.shB.binding,
+          binding: coneShader.shaderMeta.uniforms.shB.binding,
           resource: probeTextures.shB.createView({ dimension: "3d" }),
         },
-        { binding: coneMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
+        { binding: coneShader.shaderMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
       ],
     });
   }
@@ -440,27 +394,26 @@ export function createVoxelSystem({
         probeShader.uniforms.gridOrigin.getBindGroupEntry(device),
         probeShader.uniforms.gridDims.getBindGroupEntry(device),
         probeShader.uniforms.probeDims.getBindGroupEntry(device),
-        probeShader.uniforms.probeParams.getBindGroupEntry(device),
         {
-          binding: probeMeta.uniforms.voxelRadiance.binding,
+          binding: probeShader.shaderMeta.uniforms.voxelRadiance.binding,
           resource: textures.voxelRadiance.createView({ dimension: "3d" }),
         },
-        { binding: probeMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
+        { binding: probeShader.shaderMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
       ],
     });
     probeGroup2 = device.createBindGroup({
       layout: probePipeline.getBindGroupLayout(2),
       entries: [
         {
-          binding: probeMeta.uniforms.shR.binding,
+          binding: probeShader.shaderMeta.uniforms.shR.binding,
           resource: probeTextures.shR.createView({ dimension: "3d" }),
         },
         {
-          binding: probeMeta.uniforms.shG.binding,
+          binding: probeShader.shaderMeta.uniforms.shG.binding,
           resource: probeTextures.shG.createView({ dimension: "3d" }),
         },
         {
-          binding: probeMeta.uniforms.shB.binding,
+          binding: probeShader.shaderMeta.uniforms.shB.binding,
           resource: probeTextures.shB.createView({ dimension: "3d" }),
         },
       ],
@@ -480,18 +433,18 @@ export function createVoxelSystem({
         compositeShader.uniforms.sunColor.getBindGroupEntry(device),
         compositeShader.uniforms.invViewProj.getBindGroupEntry(device),
         compositeShader.uniforms.sunViewProj.getBindGroupEntry(device),
-        { binding: compositeMeta.uniforms.albedoTex.binding, resource: gAlbedo.createView() },
-        { binding: compositeMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
-        { binding: compositeMeta.uniforms.coneTex.binding, resource: coneView },
+        { binding: compositeShader.shaderMeta.uniforms.albedoTex.binding, resource: gAlbedo.createView() },
+        { binding: compositeShader.shaderMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
+        { binding: compositeShader.shaderMeta.uniforms.coneTex.binding, resource: coneView },
         // Linear/clamp sampler (reuse voxelSampler) for the half-res cone upsample.
-        { binding: compositeMeta.uniforms.coneSampler.binding, resource: voxelSampler },
+        { binding: compositeShader.shaderMeta.uniforms.coneSampler.binding, resource: voxelSampler },
         {
-          binding: compositeMeta.uniforms.emissionTex.binding,
+          binding: compositeShader.shaderMeta.uniforms.emissionTex.binding,
           resource: gEmission.createView(),
         },
         // Sun shadow: reverse-Z camera depth (reconstruct P) + the sun-POV depth map.
-        { binding: compositeMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
-        { binding: compositeMeta.uniforms.shadowMap.binding, resource: sunDepthView },
+        { binding: compositeShader.shaderMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
+        { binding: compositeShader.shaderMeta.uniforms.shadowMap.binding, resource: sunDepthView },
       ],
     });
   }
@@ -903,10 +856,10 @@ export function createVoxelSystem({
     }
     scatterTotal = prefix;
 
-    // Upload the AABB lists (only the live n entries matter; the binary search bound is
-    // uInstanceCount = n). Uploading the whole MAX-sized buffer is simplest + allocation-free.
-    device.queue.writeBuffer(voxShader.uniforms.aabbMin.getGPUBuffer(device), 0, aabbMinArr);
-    device.queue.writeBuffer(voxShader.uniforms.aabbDim.getGPUBuffer(device), 0, aabbDimArr);
+    // Upload the AABB lists. Only the live n entries matter (the binary search bound is
+    // uInstanceCount = n), so upload exactly n*4 i32 elements instead of the whole MAX-sized buffer.
+    device.queue.writeBuffer(voxShader.uniforms.aabbMin.getGPUBuffer(device), 0, aabbMinArr, 0, n * 4);
+    device.queue.writeBuffer(voxShader.uniforms.aabbDim.getGPUBuffer(device), 0, aabbDimArr, 0, n * 4);
 
     // Scatter dispatch sizing — 2D over workgroups to dodge the 65535 per-dim workgroup cap.
     const wgTotal = Math.ceil(scatterTotal / WORKGROUP_1D);
@@ -969,16 +922,8 @@ export function createVoxelSystem({
   // voxelRadiance pyramid → SH-L1 (shR/shG/shB). MUST run AFTER mips() (it samples the pyramid)
   // and BEFORE cone() (which reads the SH volume for the fill term). One compute dispatch.
   function probe(encoder: GPUCommandEncoder) {
-    probeParamsArr[0] = probeParams.conesPerProbe;
-    probeParamsArr[1] = coneParams.maxDist; // probe cone reach = the global GI max distance
-    probeParamsArr[2] = coneParams.aperture; // same aperture as the (former) fill cones
-    probeParamsArr[3] = 0;
-    device.queue.writeBuffer(
-      probeShader.uniforms.probeParams.getGPUBuffer(device),
-      0,
-      probeParamsArr,
-    );
-
+    // conesPerProbe / maxDist / aperture are now BAKED consts in the probe shader — nothing to
+    // upload per frame; just dispatch.
     const pass = encoder.beginComputePass();
     pass.setPipeline(probePipeline);
     pass.setBindGroup(0, probeGroup0);
@@ -996,28 +941,15 @@ export function createVoxelSystem({
   // fetch for the fill/bounce + short AO cones → coneOutput (HALF-res HDR; composite bilinear-
   // upsamples). MUST run AFTER voxelize() + mips() + probe(). Reads the G-buffer (depth + normal).
   function cone(encoder: GPUCommandEncoder) {
-    coneParamsArr[0] = coneParams.normalBias;
-    coneParamsArr[1] = coneParams.maxDist;
-    coneParamsArr[2] = coneParams.aperture;
-    coneParamsArr[3] = coneParams.giStrength;
-    device.queue.writeBuffer(coneShader.uniforms.params.getGPUBuffer(device), 0, coneParamsArr);
-
+    // params/aoParams/tune are BAKED consts now — only params2 carries dynamic data.
+    // .x = canvas width, .y = canvas height, .z = SPARE (emitterFalloff is baked), .w = light count.
     coneParams2Arr[0] = canvas.width;
     coneParams2Arr[1] = canvas.height;
-    coneParams2Arr[2] = coneParams.emitterFalloff; // emitter distance-falloff coefficient
+    coneParams2Arr[2] = 0;
     coneParams2Arr[3] = coneLightCount;
     device.queue.writeBuffer(coneShader.uniforms.params2.getGPUBuffer(device), 0, coneParams2Arr);
 
-    coneAoArr[0] = probeParams.aoConeCount;
-    coneAoArr[1] = probeParams.aoReach;
-    coneAoArr[2] = probeParams.aoSteps;
-    coneAoArr[3] = coneParams.emitterDirect; // emitter direct strength (vs the sun)
-    device.queue.writeBuffer(coneShader.uniforms.aoParams.getGPUBuffer(device), 0, coneAoArr);
-
-    coneTuneArr[0] = coneParams.aimedSteps; // aimed-cone march step budget
-    coneTuneArr[1] = coneParams.aimedAlphaCut; // aimed-cone early-out opacity
-    device.queue.writeBuffer(coneShader.uniforms.tune.getGPUBuffer(device), 0, coneTuneArr);
-
+    // invViewProj computed ONCE per frame here (cone runs before composite, which reuses it).
     mat4.invert(invViewProj, viewProjMatrix);
     coneInvArr.set(invViewProj as Float32Array);
     device.queue.writeBuffer(coneShader.uniforms.invViewProj.getGPUBuffer(device), 0, coneInvArr);
@@ -1062,18 +994,16 @@ export function createVoxelSystem({
   // into the final lit image → compositeOutput (full-res HDR). MUST run AFTER cone() (it reads
   // coneOutput). Reads the G-buffer (albedo/normal/depth/emission).
   function composite(encoder: GPUCommandEncoder) {
-    compParamsArr[0] = compositeParams.ambient;
-    compParamsArr[1] = compositeParams.exposure; // HDR exposure before ACES tonemap
-    compParamsArr[2] = sunWorldTexel; // sun shadow-map world texel size (normal-offset bias)
-    compParamsArr[3] = compositeParams.penumbra; // sun-dim → wider PCF (soft penumbra)
+    // ambient/exposure/penumbra are BAKED consts now; only .z (sun shadow-map world texel size,
+    // the normal-offset bias) is still read by the shader.
+    compParamsArr[2] = sunWorldTexel;
     device.queue.writeBuffer(
       compositeShader.uniforms.params.getGPUBuffer(device),
       0,
       compParamsArr,
     );
 
-    // inverse(viewProj) for the sun-shadow world-position reconstruction.
-    mat4.invert(invViewProj, viewProjMatrix);
+    // invViewProj already computed in cone() this frame (cone runs before composite); just reuse it.
     compInvArr.set(invViewProj as Float32Array);
     device.queue.writeBuffer(
       compositeShader.uniforms.invViewProj.getGPUBuffer(device),
@@ -1126,6 +1056,40 @@ export function createVoxelSystem({
     pass.end();
   }
 
+  // Explicit, infrequent action: recompile the three BAKED shaders (cone/composite/probe) with the
+  // CURRENT config, recreate their pipelines + bind groups, and re-upload the buildGrid-time
+  // uniforms that the fresh GPU buffers lost (the per-frame ones refill next frame).
+  function rebuild() {
+    coneShader.destroy();
+    compositeShader.destroy();
+    probeShader.destroy();
+    coneShader = new GPUShader(createConeShaderMeta(config));
+    compositeShader = new GPUShader(createCompositeShaderMeta(config));
+    probeShader = new GPUShader(createProbeShaderMeta(config));
+    conePipeline = coneShader.getRenderPipeline(device, "vs_main", "fs_main", {
+      targetFormat: "rgba16float",
+      withBlending: false,
+    });
+    compositePipeline = compositeShader.getRenderPipeline(device, "vs_main", "fs_main", {
+      targetFormat: "rgba16float",
+      withBlending: false,
+    });
+    probePipeline = probeShader.getComputePipeline(device, "main");
+    probeEmptyGroup1 = device.createBindGroup({
+      layout: probeShader.createBindGroupLayout(device, 1),
+      entries: [],
+    });
+    buildConeGroup();
+    buildCompositeGroup();
+    buildProbeGroups();
+    // Re-upload buildGrid-time uniforms to the NEW shader buffers (per-frame ones refill next frame).
+    device.queue.writeBuffer(coneShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
+    device.queue.writeBuffer(coneShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
+    device.queue.writeBuffer(probeShader.uniforms.gridOrigin.getGPUBuffer(device), 0, probeOriginArr);
+    device.queue.writeBuffer(probeShader.uniforms.gridDims.getGPUBuffer(device), 0, probeGridDimsArr);
+    device.queue.writeBuffer(probeShader.uniforms.probeDims.getGPUBuffer(device), 0, probeDimsArr);
+  }
+
   // Change the voxel size (graininess). Destroys the old textures, rebuilds the grid.
   function setCellSize(newCellSize: number) {
     textures.voxelRadiance.destroy();
@@ -1168,9 +1132,8 @@ export function createVoxelSystem({
   }
 
   return {
-    coneParams,
-    compositeParams,
-    probeParams,
+    config,
+    rebuild,
     voxelize,
     mips,
     probe,

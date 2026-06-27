@@ -1,6 +1,7 @@
 import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
 import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
 import { wgsl } from "../../../WGSL/wgsl.ts";
+import { VoxelBakedConfig } from "./voxelConfig.ts";
 
 // VCT — IRRADIANCE PROBE VOLUME (one compute pass, one thread per probe). This moves the
 // expensive low-frequency FILL hemisphere out of the per-pixel cone pass into a LOW-RES 3D
@@ -30,7 +31,8 @@ const uC = (name: string, type: string) =>
 
 export const WORKGROUP = 4; // 4*4*4 = 64 threads/workgroup over the 3D probe grid
 
-export const shaderMeta = new ShaderMeta(
+export function createProbeShaderMeta(cfg: VoxelBakedConfig) {
+  return new ShaderMeta(
   {
     // ---- group 0 : uniforms (COMPUTE-only) ----
     // .xyz = world min corner of the grid box, .w = cellSize (world units per voxel). SAME box
@@ -40,9 +42,6 @@ export const shaderMeta = new ShaderMeta(
     gridDims: uC("uGridDims", `vec4<i32>`),
     // .xyz = probe counts per axis (the resolution of THIS volume), .w unused.
     probeDims: uC("uProbeDims", `vec4<i32>`),
-    // .x = cones-per-probe (read as i32), .y = maxDist / cone reach (world units), .z = aperture
-    // = tan(halfAngle), .w spare.
-    probeParams: uC("uProbeParams", `vec4<f32>`),
 
     // ---- group 0 : voxelRadiance pyramid (Texture => @group(0)) + linear sampler ----
     // Declared as Texture/Sampler so they land in group 0 alongside the uniforms (mapKindToGroup),
@@ -81,6 +80,9 @@ export const shaderMeta = new ShaderMeta(
   // language=WGSL
   wgsl /* wgsl */ `
 const PI: f32 = 3.14159265359;
+const CONES_PER_PROBE: i32 = ${cfg.conesPerProbe};
+const MAX_DIST: f32 = ${cfg.maxDist};
+const APERTURE: f32 = ${cfg.aperture};
 
 // One fill cone marched from origin along dir through the voxelRadiance pyramid — IDENTICAL
 // premultiplied front-to-back "over" integration as trace_cone() in voxelCone.shader.ts
@@ -125,9 +127,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let extent = vec3<f32>(uGridDims.xyz) * uGridOrigin.w;
   let P = boxMin + (vec3<f32>(coord) + vec3<f32>(0.5)) / vec3<f32>(uProbeDims.xyz) * extent;
 
-  let C = max(1, i32(uProbeParams.x));
-  let reach = uProbeParams.y;
-  let aperture = uProbeParams.z;
+  let C = CONES_PER_PROBE;
+  let reach = MAX_DIST;
+  let aperture = APERTURE;
 
   // SH-L1 radiance accumulators, per color channel (.xyzw = L00, L1m1, L10, L11).
   var cR = vec4<f32>(0.0);
@@ -162,4 +164,5 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   textureStore(shB, coord, cB);
 }
 `,
-);
+  );
+}

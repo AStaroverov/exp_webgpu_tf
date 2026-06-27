@@ -539,15 +539,23 @@ async function main() {
   // from the probe SH volume (see Probe GI folder); coneCount only sets the fill/bounce BLEND
   // weight (= count/2). Read live each frame by cone().
   const coneFolder = gui.addFolder("Cone GI");
+  // Baked-config controls recompile the GI shaders on release (onFinishChange), not per drag tick.
+  const rebuild = () => voxel.rebuild();
   // Emitter DIRECT strength: multiplier on the summed aimed-cone direct light. Raise it to let a
   // bright emitter overpower the sun (e.g. fill the sun-shadow it casts under itself).
-  coneFolder.add(voxel.coneParams, "emitterDirect", 0, 8, 0.1).name("emitter direct strength");
+  coneFolder
+    .add(voxel.config, "emitterDirect", 0, 8, 0.1)
+    .name("emitter direct strength")
+    .onFinishChange(rebuild);
   // Distance falloff for emitter direct light: 0 = flat (sun-like, hard rim), 1 = standard 1/d².
-  coneFolder.add(voxel.coneParams, "emitterFalloff", 0, 4, 0.05).name("emitter falloff");
-  coneFolder.add(voxel.coneParams, "aperture", 0.1, 1.5, 0.01).name("aperture (lower=sharper)");
-  coneFolder.add(voxel.coneParams, "maxDist", 1, 64, 0.5).name("cone reach");
-  coneFolder.add(voxel.coneParams, "normalBias", 0, 2, 0.01).name("normal bias");
-  coneFolder.add(voxel.coneParams, "giStrength", 0, 4, 0.05).name("GI strength (bounce)");
+  coneFolder.add(voxel.config, "emitterFalloff", 0, 4, 0.05).name("emitter falloff").onFinishChange(rebuild);
+  coneFolder
+    .add(voxel.config, "aperture", 0.1, 1.5, 0.01)
+    .name("aperture (lower=sharper)")
+    .onFinishChange(rebuild);
+  coneFolder.add(voxel.config, "maxDist", 1, 64, 0.5).name("cone reach").onFinishChange(rebuild);
+  coneFolder.add(voxel.config, "normalBias", 0, 2, 0.01).name("normal bias").onFinishChange(rebuild);
+  coneFolder.add(voxel.config, "giStrength", 0, 4, 0.05).name("GI strength (bounce)").onFinishChange(rebuild);
   // Cone-pass resolution: 2 = half-res (¼ pixels), 4 = quarter-res (1/16), 8 = eighth-res (1/64).
   // The biggest perf lever for heavy scenes — lower res blurs the GI but the bilateral upsample
   // keeps edges crisp.
@@ -558,30 +566,33 @@ async function main() {
     .onChange((s: number) => voxel.setConeScale(s));
   // Aimed-cone march budget: fewer steps = cheaper, but shorter/coarser emitter shadows (and
   // possible light leak through thin occluders). 64 = the original crisp default.
-  coneFolder.add(voxel.coneParams, "aimedSteps", 8, 64, 1).name("aimed steps");
+  coneFolder.add(voxel.config, "aimedSteps", 8, 64, 1).name("aimed steps").onFinishChange(rebuild);
   // Early-out opacity: <1 lets a near-opaque aimed cone stop before its full budget (saves the tail
   // when the light is blocked). 1 = no early cut (sharpest shadow).
-  coneFolder.add(voxel.coneParams, "aimedAlphaCut", 0.5, 1, 0.01).name("aimed alpha cut");
+  coneFolder.add(voxel.config, "aimedAlphaCut", 0.5, 1, 0.01).name("aimed alpha cut").onFinishChange(rebuild);
 
   // Probe GI: the low-res irradiance-probe volume that replaced the per-pixel fill hemisphere.
   // conesPerProbe is the bounce quality (probes run at low res, once per frame → afford many);
   // aoConeCount/aoReach are the SHORT per-pixel contact-AO cones (the .a/visibility term).
   const probeFolder = gui.addFolder("Probe GI");
   // SH-L1 saturates ~16 cones, so higher values only cut noise (no detail) — keep this low.
-  probeFolder.add(voxel.probeParams, "conesPerProbe", [8, 16, 32, 64, 128]).name("cones / probe");
-  probeFolder.add(voxel.probeParams, "aoConeCount", 0, 8, 1).name("AO cones (contact)");
-  probeFolder.add(voxel.probeParams, "aoReach", 1, 16, 0.5).name("AO reach");
+  probeFolder
+    .add(voxel.config, "conesPerProbe", [8, 16, 32, 64, 128])
+    .name("cones / probe")
+    .onFinishChange(rebuild);
+  probeFolder.add(voxel.config, "aoConeCount", 0, 8, 1).name("AO cones (contact)").onFinishChange(rebuild);
+  probeFolder.add(voxel.config, "aoReach", 1, 16, 0.5).name("AO reach").onFinishChange(rebuild);
 
   // Composite (Layer 4): the final lit image. Sun controls above feed it via SunLight;
   // cone giStrength bakes into the indirect term. Only the ambient floor lives here.
   const compositeFolder = gui.addFolder("Composite");
-  compositeFolder.add(voxel.compositeParams, "ambient", 0, 0.5, 0.01).name("composite ambient");
+  compositeFolder.add(voxel.config, "ambient", 0, 0.5, 0.01).name("composite ambient").onFinishChange(rebuild);
   // HDR exposure before the ACES tonemap. Raise for a brighter image; highlights roll off instead
   // of clipping to flat white.
-  compositeFolder.add(voxel.compositeParams, "exposure", 0.1, 4, 0.05).name("exposure");
+  compositeFolder.add(voxel.config, "exposure", 0.1, 4, 0.05).name("exposure").onFinishChange(rebuild);
   // Sun-shadow penumbra: the PCF filter widens as the sun intensity drops below 1, so a dimmer sun
   // casts a softer, wider shadow edge. 0 = always crisp; higher = stronger softening when sun < 1.
-  compositeFolder.add(voxel.compositeParams, "penumbra", 0, 12, 0.5).name("penumbra (sun-dim)");
+  compositeFolder.add(voxel.config, "penumbra", 0, 12, 0.5).name("penumbra (sun-dim)").onFinishChange(rebuild);
 
   // Perf folder: live fps / GPU-ms readout + per-pass toggles. Read the GPU-ms delta when a
   // toggle flips to attribute cost to that pass (gpuMs comes from onSubmittedWorkDone, so it

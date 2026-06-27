@@ -1,6 +1,7 @@
 import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
 import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
 import { wgsl } from "../../../WGSL/wgsl.ts";
+import { VoxelBakedConfig } from "./voxelConfig.ts";
 
 // VCT Layer 3 — the full DIFFUSE HEMISPHERE cone gather. A fullscreen pass over the G-buffer:
 //   1. Reconstruct the per-pixel world position P (from the reverse-Z depth + invViewProj)
@@ -40,22 +41,12 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 // Fullscreen pass with `unproject` + reverse-Z NDC reconstruction. textureSampleLevel (explicit
 // LOD) is used in the trace loop — legal in non-uniform control flow (unlike textureSample).
 
-export const shaderMeta = new ShaderMeta(
+export function createConeShaderMeta(cfg: VoxelBakedConfig) {
+  return new ShaderMeta(
   {
-    // .x = normalBias, .y = maxDist (world), .z = aperture = tan(halfAngle), .w = giStrength.
-    params: new VariableMeta("uParams", VariableKind.Uniform, `vec4<f32>`),
-    // .x = screen width (px), .y = screen height (px), .z = emitter distance-falloff coefficient
-    // (0 = none / flat sun-like, 1 = standard 1/d²), .w = active light count (0..8).
+    // .x = screen width (px), .y = screen height (px), .z = SPARE (emitter distance-falloff is now
+    // baked as the EMITTER_FALLOFF const), .w = active light count (0..8).
     params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
-    // Short-range AO cones + the emitter-direct strength. .x = AO cone count (i32), .y = AO reach
-    // (world), .z = AO march steps (i32) — kept per-pixel + short so small moving objects still
-    // darken their contacts. .w = emitter DIRECT strength (multiplier on the summed aimed-cone
-    // direct light; raise to let bright emitters overpower the sun).
-    aoParams: new VariableMeta("uAoParams", VariableKind.Uniform, `vec4<f32>`),
-    // Aimed-cone perf tuning. .x = march step budget (i32; lower = cheaper, shorter/coarser emitter
-    // shadows). .y = early-out opacity (alphaCut; <1 stops a near-opaque cone early → saves the
-    // tail steps). (.zw spare.)
-    tune: new VariableMeta("uTune", VariableKind.Uniform, `vec4<f32>`),
     // Emitters to importance-sample: .xyz = world CENTER, .w = radius (penumbra source). These
     // are AUTO-DISCOVERED from the LightEmitter component (every emitter, no manual list); only
     // the first i32(uParams2.w) entries are live.
@@ -105,6 +96,18 @@ export const shaderMeta = new ShaderMeta(
   {},
   // language=WGSL
   wgsl /* wgsl */ `
+// BAKED tuning consts (interpolated from VoxelBakedConfig at shader-build time). See voxelConfig.ts.
+const NORMAL_BIAS: f32 = ${cfg.normalBias};
+const APERTURE: f32 = ${cfg.aperture};
+const GI_STRENGTH: f32 = ${cfg.giStrength};
+const EMITTER_FALLOFF: f32 = ${cfg.emitterFalloff};
+const EMITTER_DIRECT: f32 = ${cfg.emitterDirect};
+const AIMED_STEPS: i32 = ${cfg.aimedSteps};
+const AIMED_ALPHA_CUT: f32 = ${cfg.aimedAlphaCut};
+const AO_CONE_COUNT: i32 = ${cfg.aoConeCount};
+const AO_REACH: f32 = ${cfg.aoReach};
+const AO_STEPS: i32 = ${cfg.aoSteps};
+
 const POSITION = array<vec2f, 6>(
   vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0),
   vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(-1.0, 1.0)
@@ -218,13 +221,12 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
 
   // Lift the cone origin off the surface to avoid self-sampling the originating voxel.
   let cellSize = uGridOrigin.w;
-  let origin = P + N * (cellSize * 1.5 + uParams.x);
+  let origin = P + N * (cellSize * 1.5 + NORMAL_BIAS);
 
-  // Hemisphere basis (for the AO cones below) + the bounce-blend weight. count (uParams2.z) is
-  // no longer a per-pixel cone count — the fill hemisphere now comes from the probe SH volume; it
-  // only sets the fill/bounce blend weight (Wf = count/2), matching the old Fibonacci fill term.
+  // Hemisphere basis (for the AO cones below). The fill hemisphere now comes from the probe SH
+  // volume; the per-pixel cone count is gone (replaced by the baked AO_CONE_COUNT for contact AO).
   let basis = build_basis(N);
-  let aperture = uParams.z;
+  let aperture = APERTURE;
   // Per-pixel azimuth rotation of the whole cone set (interleaved-gradient-noise hash) so the
   // gaps between narrow cones fall in DIFFERENT directions each pixel → fixed "ray" banding
   // becomes fine dither, which the half-res + bilinear upsample then blurs away. Lets a narrow
@@ -255,10 +257,10 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     if (ndl <= 0.0) { continue; }
     // Distance falloff: without it the direct light is a FLAT-bright pool with a hard rim (reads as
     // an "invisible bigger sphere" the surface cuts through). atten = 1 at the light center, ~1/d²
-    // far. uParams2.z = falloff coefficient (0 = none → flat sun-like emitter; 1 = standard); lr =
-    // emitter radius (lights[j].w) so it is 1 inside the source and fades smoothly outside.
+    // far. EMITTER_FALLOFF = falloff coefficient (0 = none → flat sun-like emitter; 1 = standard);
+    // lr = emitter radius (lights[j].w) so it is 1 inside the source and fades smoothly outside.
     let lr = max(lights[j].w, 1e-3);
-    let atten = 1.0 / (1.0 + uParams2.z * (d * d) / (lr * lr));
+    let atten = 1.0 / (1.0 + EMITTER_FALLOFF * (d * d) / (lr * lr));
     let full = ndl * lightColor[j].rgb * abs(lightColor[j].w) * atten;
     // LIGHT CULL: the 64-step shadow march is the dominant cost. Compute this emitter's direct
     // contribution FIRST (cheap, no trace) and skip the march entirely if it is negligible here —
@@ -266,11 +268,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     // pixels see only a few relevant lights, so this is a big win at ~zero visible change (the
     // skipped term was ≈0). With falloff=0 (flat sun-like) atten stays 1, so global lights are
     // never culled — exactly the intended behavior for that mode.
-    if (max(full.r, max(full.g, full.b)) * uAoParams.w < 0.003) { continue; }
+    if (max(full.r, max(full.g, full.b)) * EMITTER_DIRECT < 0.003) { continue; }
     let ap = clamp(lights[j].w / d, 0.02, 0.5);   // angular size of the light = penumbra width
-    // AIMED: step budget + early-out opacity from uTune (perf knobs). Defaults (64, 1.0) = the old
-    // crisp behavior; lower steps / a <1 alphaCut trade shadow precision for speed on heavy scenes.
-    let r = trace_cone(origin, dir, ap, d, 0.0, jrad, max(1, i32(uTune.x)), uTune.y);
+    // AIMED: step budget + early-out opacity baked (AIMED_STEPS, AIMED_ALPHA_CUT). Defaults (32, 1.0)
+    // = crisp behavior; lower steps / a <1 alphaCut trade shadow precision for speed on heavy scenes.
+    let r = trace_cone(origin, dir, ap, d, 0.0, jrad, max(1, AIMED_STEPS), AIMED_ALPHA_CUT);
     // ANALYTIC DIRECT + bleed-cancel (fixes the "white shadow"). full = the emitter's own light.
     // shadow = how much the cone's opacity removes; bleed = the radiance the cone actually
     // gathered along the way (a BRIGHT occluder => big bleed => its false shadow is cancelled;
@@ -296,9 +298,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   // (c) AO — a few SHORT hemisphere occlusion cones (opacity ONLY, no radiance → no double-count
   // with the probe bounce). Becomes the .a/visibility output the composite reads as ambient
   // occlusion; kept per-pixel + short so small moving objects still darken their contacts.
-  let aoCount = max(0, i32(uAoParams.x));
-  let aoReach = uAoParams.y;
-  let aoSteps = max(1, i32(uAoParams.z));
+  let aoCount = AO_CONE_COUNT;
+  let aoReach = AO_REACH;
+  let aoSteps = max(1, AO_STEPS);
   var aoW = 0.0;
   for (var a = 0; a < aoCount; a = a + 1) {
     let k = (f32(a) + 0.5) / f32(aoCount);
@@ -312,12 +314,13 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     aoW = aoW + cosT;
   }
 
-  // Combine: emitter DIRECT (summed, sun-scale) × emitterDirect strength (uAoParams.w) + probe
-  // bounce × giStrength (uParams.w). No /wsum averaging → a bright emitter competes with the sun.
-  let indirect = directEmitters * uAoParams.w + fillAvg * uParams.w;
+  // Combine: emitter DIRECT (summed, sun-scale) × EMITTER_DIRECT strength + probe bounce ×
+  // GI_STRENGTH. No /wsum averaging → a bright emitter competes with the sun.
+  let indirect = directEmitters * EMITTER_DIRECT + fillAvg * GI_STRENGTH;
   let visibility = clamp(1.0 - occAcc / max(aoW, 1e-4), 0.0, 1.0);
   // rgb = emitter direct + indirect bounce; a = AO visibility, read by the composite.
   return vec4f(indirect, visibility);
 }
 `,
-);
+  );
+}

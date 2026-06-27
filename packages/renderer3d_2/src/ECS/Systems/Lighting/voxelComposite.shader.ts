@@ -1,6 +1,7 @@
 import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
 import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
 import { wgsl } from "../../../WGSL/wgsl.ts";
+import { VoxelBakedConfig } from "./voxelConfig.ts";
 
 // VCT Layer 4 — the COMPOSITE: turn the indirect cone gather into the FINAL lit image.
 //   final = albedo·(ambient·AO + directSun·shadow + indirect) + selfEmission.
@@ -16,13 +17,12 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 //   - self-emission makes emitters glow: read the per-pixel G-buffer emission target written by
 //     fs_main (uColor.rgb·abs(material.x)). A SURFACE property → no voxel cross-contamination.
 
-export const shaderMeta = new ShaderMeta(
+export function createCompositeShaderMeta(cfg: VoxelBakedConfig) {
+  return new ShaderMeta(
   {
-    // .x = ambient (the floor scaled by AO). giStrength is already baked into the cone's rgb,
-    // so it is NOT re-applied here. .y = exposure (HDR multiplier before ACES tonemapping).
-    // .z = sun shadow-map world texel size (world units per texel, for the normal-offset bias).
-    // .w = penumbra softness strength — the PCF filter widens as the sun intensity (uSun.w) drops
-    //      below 1, so a dimmer sun casts a softer, wider shadow edge (physical-ish penumbra).
+    // .x ambient and .y exposure and .w penumbra are now BAKED consts (see the const block at the
+    // top of the WGSL body); only .z (sun shadow-map world texel size, world units per texel, for
+    // the normal-offset bias) remains live.
     params: new VariableMeta("uParams", VariableKind.Uniform, `vec4<f32>`),
     // .x = screen width (px), .y = screen height (px) — for the cone upsample uv. .z = cone
     // downscale factor (2 = half-res, 4 = quarter-res) used by upsample_cone. (.w spare.)
@@ -69,6 +69,10 @@ export const shaderMeta = new ShaderMeta(
   {},
   // language=WGSL
   wgsl /* wgsl */ `
+const AMBIENT: f32 = ${cfg.ambient};
+const EXPOSURE: f32 = ${cfg.exposure};
+const PENUMBRA: f32 = ${cfg.penumbra};
+
 const POSITION = array<vec2f, 6>(
   vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0),
   vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(-1.0, 1.0)
@@ -232,16 +236,17 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let uvP = (vec2<f32>(pixel) + vec2<f32>(0.5)) / uParams2.xy;
     let P = unproject(vec3<f32>(uvP.x * 2.0 - 1.0, (1.0 - uvP.y) * 2.0 - 1.0, depthP));
     // Penumbra grows as the sun dims below 1: spread = 1 at full sun, up to 1 + penumbra at sun→0.
-    let spread = 1.0 + uParams.w * clamp(1.0 - uSun.w, 0.0, 1.0);
+    let spread = 1.0 + PENUMBRA * clamp(1.0 - uSun.w, 0.0, 1.0);
     sunVis = sun_shadow(P, N, ndl, spread, input.position.xy);
   }
   let sunDirect = ndl * uSunColor.rgb * uSun.w * sunVis;
 
-  let lit = albedo * (uParams.x * ao + sunDirect + indirect) + emission;
-  // HDR → display: exposure (uParams.y) then ACES tonemap, so bright sources roll off instead of
+  let lit = albedo * (AMBIENT * ao + sunDirect + indirect) + emission;
+  // HDR → display: exposure (EXPOSURE) then ACES tonemap, so bright sources roll off instead of
   // clipping to flat white. (Gamma/sRGB encode is left to the present chain as today.)
-  let mapped = aces(lit * uParams.y);
+  let mapped = aces(lit * EXPOSURE);
   return vec4f(mapped, 1.0);
 }
 `,
-);
+  );
+}
