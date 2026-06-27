@@ -20,7 +20,8 @@ export const shaderMeta = new ShaderMeta(
     // .x = ambient (the floor scaled by AO). giStrength is already baked into the cone's rgb,
     // so it is NOT re-applied here. .y = exposure (HDR multiplier before ACES tonemapping).
     // .z = sun shadow-map world texel size (world units per texel, for the normal-offset bias).
-    // (w spare.)
+    // .w = penumbra softness strength — the PCF filter widens as the sun intensity (uSun.w) drops
+    //      below 1, so a dimmer sun casts a softer, wider shadow edge (physical-ish penumbra).
     params: new VariableMeta("uParams", VariableKind.Uniform, `vec4<f32>`),
     // .x = screen width (px), .y = screen height (px) — for the half-res cone upsample uv. (z/w spare.)
     params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
@@ -94,12 +95,34 @@ fn unproject(ndc: vec3<f32>) -> vec3<f32> {
   return w.xyz / w.w;
 }
 
+// 16-sample Poisson disk (unit disk). A scattered, low-discrepancy tap set: scaling it gives a
+// wide soft kernel WITHOUT the regular-grid banding a square 5×5 kernel produces at large radii.
+const POISSON16 = array<vec2<f32>, 16>(
+  vec2<f32>(-0.94201624, -0.39906216), vec2<f32>( 0.94558609, -0.76890725),
+  vec2<f32>(-0.09418410, -0.92938870), vec2<f32>( 0.34495938,  0.29387760),
+  vec2<f32>(-0.91588581,  0.45771432), vec2<f32>(-0.81544232, -0.87912464),
+  vec2<f32>(-0.38277543,  0.27676845), vec2<f32>( 0.97484398,  0.75648379),
+  vec2<f32>( 0.44323325, -0.97511554), vec2<f32>( 0.53742981, -0.47373420),
+  vec2<f32>(-0.26496911, -0.41893023), vec2<f32>( 0.79197514,  0.19090188),
+  vec2<f32>(-0.24188840,  0.99706507), vec2<f32>(-0.81409955,  0.91437590),
+  vec2<f32>( 0.19984126,  0.78641367), vec2<f32>( 0.14383161, -0.14100790)
+);
+
+// Interleaved gradient noise (Jimenez) — a cheap per-pixel pseudo-random scalar in [0,1). Used to
+// rotate the Poisson disk per fragment so the residual under-sampling shows up as fine noise the
+// eye reads as softness, instead of correlated stair-steps.
+fn ign(p: vec2<f32>) -> f32 {
+  return fract(52.9829189 * fract(dot(p, vec2<f32>(0.06711056, 0.00583715))));
+}
+
 // Sun shadow-map lookup: project the surface point P into the sun's orthographic clip space and
 // compare depth. 1 = lit, 0 = shadowed. Normal-offset bias (uParams.z = world texel size) is the
-// main acne killer; tiny slope-scaled constant bias on top; 5×5 tent PCF for a soft edge. The map
-// is orthoZO + clear 1.0 + "less-equal", so it stores the nearest-to-sun depth → shadowed when the
-// fragment's sun-space depth is GREATER than stored (+ bias).
-fn sun_shadow(P: vec3<f32>, N: vec3<f32>, ndl: f32) -> f32 {
+// main acne killer; tiny slope-scaled constant bias on top. The map is orthoZO + clear 1.0 +
+// "less-equal", so it stores the nearest-to-sun depth → shadowed when the fragment's sun-space
+// depth is GREATER than stored (+ bias).
+// Soft shadows: a per-pixel-rotated Poisson disk of radius = spread (texels). spread=1 is the
+// near-crisp baseline; larger values widen the penumbra (driven by sun dimness in fs_main).
+fn sun_shadow(P: vec3<f32>, N: vec3<f32>, ndl: f32, spread: f32, seed: vec2<f32>) -> f32 {
   let Po = P + N * (uParams.z * 2.5);
   let ls = uSunViewProj * vec4<f32>(Po, 1.0);
   let ndc = ls.xyz / ls.w;
@@ -111,25 +134,19 @@ fn sun_shadow(P: vec3<f32>, N: vec3<f32>, ndl: f32) -> f32 {
   let bias = 0.0004 + 0.0015 * (1.0 - ndl);
   let dim = vec2<i32>(textureDimensions(shadowMap, 0));
   let texelPos = uv * vec2<f32>(dim) - vec2<f32>(0.5);
-  let base = vec2<i32>(floor(texelPos));
-  let f = texelPos - floor(texelPos);
-  let R = 2;
-  let denom = f32(R) + 1.0;
+  // Per-pixel rotation of the whole disk → decorrelates the taps so banding becomes noise.
+  let ang = ign(seed) * 6.2831853;
+  let ca = cos(ang);
+  let sa = sin(ang);
   var sum = 0.0;
-  var wsum = 0.0;
-  for (var oy = -R; oy <= R; oy = oy + 1) {
-    for (var ox = -R; ox <= R; ox = ox + 1) {
-      let c = clamp(base + vec2<i32>(ox, oy), vec2<i32>(0, 0), dim - vec2<i32>(1, 1));
-      let s = textureLoad(shadowMap, c, 0);
-      let litTap = select(0.0, 1.0, ndc.z <= s + bias);
-      let wx = max(0.0, 1.0 - abs(f32(ox) - f.x) / denom);
-      let wy = max(0.0, 1.0 - abs(f32(oy) - f.y) / denom);
-      let w = wx * wy;
-      sum = sum + litTap * w;
-      wsum = wsum + w;
-    }
+  for (var i = 0; i < 16; i = i + 1) {
+    let o = POISSON16[i];
+    let r = vec2<f32>(o.x * ca - o.y * sa, o.x * sa + o.y * ca) * spread;
+    let c = clamp(vec2<i32>(round(texelPos + r)), vec2<i32>(0, 0), dim - vec2<i32>(1, 1));
+    let s = textureLoad(shadowMap, c, 0);
+    sum = sum + select(0.0, 1.0, ndc.z <= s + bias);
   }
-  return sum / wsum;
+  return sum / 16.0;
 }
 
 // ACES filmic tonemap (Narkowicz approximation): compresses unbounded HDR into [0,1] with a
@@ -174,7 +191,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let depthP = textureLoad(depthTex, pixel, 0);
     let uvP = (vec2<f32>(pixel) + vec2<f32>(0.5)) / uParams2.xy;
     let P = unproject(vec3<f32>(uvP.x * 2.0 - 1.0, (1.0 - uvP.y) * 2.0 - 1.0, depthP));
-    sunVis = sun_shadow(P, N, ndl);
+    // Penumbra grows as the sun dims below 1: spread = 1 at full sun, up to 1 + penumbra at sun→0.
+    let spread = 1.0 + uParams.w * clamp(1.0 - uSun.w, 0.0, 1.0);
+    sunVis = sun_shadow(P, N, ndl, spread, input.position.xy);
   }
   let sunDirect = ndl * uSunColor.rgb * uSun.w * sunVis;
 

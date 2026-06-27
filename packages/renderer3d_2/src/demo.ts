@@ -480,6 +480,9 @@ async function main() {
   // HDR exposure before the ACES tonemap. Raise for a brighter image; highlights roll off instead
   // of clipping to flat white.
   compositeFolder.add(voxel.compositeParams, "exposure", 0.1, 4, 0.05).name("exposure");
+  // Sun-shadow penumbra: the PCF filter widens as the sun intensity drops below 1, so a dimmer sun
+  // casts a softer, wider shadow edge. 0 = always crisp; higher = stronger softening when sun < 1.
+  compositeFolder.add(voxel.compositeParams, "penumbra", 0, 12, 0.5).name("penumbra (sun-dim)");
 
   // Perf folder: live fps / GPU-ms readout + per-pass toggles. Read the GPU-ms delta when a
   // toggle flips to attribute cost to that pass (gpuMs comes from onSubmittedWorkDone, so it
