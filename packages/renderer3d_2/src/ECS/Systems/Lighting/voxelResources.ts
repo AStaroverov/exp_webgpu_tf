@@ -2,16 +2,16 @@
 // WORLD space (Z-up): origin = its min corner, dims = voxel counts per axis, cellSize =
 // world units per voxel (cubic). Voxel (i,j,k) center = origin + (vec3(i,j,k)+0.5)*cellSize.
 //
-// Three 3D storage textures, both STORAGE_BINDING (written by the voxelize compute pass via
+// One 3D storage texture, both STORAGE_BINDING (written by the voxelize compute pass via
 // textureStore) + TEXTURE_BINDING (read by later passes as a sampled texture_3d<f32>):
-//   voxelAlbedo   rgba8unorm  — rgb = nearest-instance albedo, a = occupancy (1=solid).
-//   voxelEmission rgba16float — rgb = nearest-instance emission (for the Phase-2 GI).
 //   voxelRadiance rgba16float — rgb = direct-lit radiance (sun N·L·vis) + emission, a = occupancy.
 //
 // voxelRadiance carries a FULL MIP PYRAMID (voxelMipLevelCount levels): mip 0 is written by
 // the voxelize pass, the coarser levels by the voxelMip compute pass (isotropic, opacity-
 // weighted downsample). The pyramid is what the VCT cone-tracing path samples by LOD.
-// voxelAlbedo / voxelEmission stay single-mip.
+//
+// (The former voxelAlbedo / voxelEmission 3D volumes were removed: their only reader was the
+// unimported voxelTrace.wgsl.ts; the composite reads the 2D G-buffer emission, not a volume.)
 
 export type VoxelGridConfig = {
   // World-space min corner of the grid box.
@@ -26,16 +26,17 @@ export type VoxelGridConfig = {
   cellSize: number;
 };
 
-// Covers the showcase scene: x,y in [-32, 32], z in [-2, 14]. 128*128*32 = 524 288 voxels
-// (albedo 2 MB, emission 4 MB).
+// World box x,y in [-32, 32], z in [-2, 14] (extent 64×64×16). At cellSize 0.25 that is
+// 256×256×64 = 4 194 304 voxels → voxelRadiance (rgba16float + mip pyramid) ≈ 38 MB. Fine enough
+// to resolve small objects in GI; raise cellSize via the GUI for coarser/cheaper, lower for finer.
 export const DEFAULT_VOXEL_GRID: VoxelGridConfig = {
   originX: -32,
   originY: -32,
   originZ: -2,
-  dimX: 4 * 128,
-  dimY: 4 * 128,
-  dimZ: 4 * 32,
-  cellSize: 0.5 / 4,
+  dimX: 256,
+  dimY: 256,
+  dimZ: 64,
+  cellSize: 0.25,
 };
 
 // Number of mip levels for the voxelRadiance pyramid: full chain down to the 1-voxel mip
@@ -45,8 +46,6 @@ export function voxelMipLevelCount(dimX: number, dimY: number, dimZ: number): nu
 }
 
 export type VoxelTextures = {
-  voxelAlbedo: GPUTexture;
-  voxelEmission: GPUTexture;
   voxelRadiance: GPUTexture;
 };
 
@@ -57,18 +56,6 @@ export function createVoxelTextures(
   const size: [number, number, number] = [grid.dimX, grid.dimY, grid.dimZ];
   const usage = GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING;
 
-  const voxelAlbedo = device.createTexture({
-    size,
-    dimension: "3d",
-    format: "rgba8unorm",
-    usage,
-  });
-  const voxelEmission = device.createTexture({
-    size,
-    dimension: "3d",
-    format: "rgba16float",
-    usage,
-  });
   const voxelRadiance = device.createTexture({
     size,
     dimension: "3d",
@@ -77,5 +64,5 @@ export function createVoxelTextures(
     usage,
   });
 
-  return { voxelAlbedo, voxelEmission, voxelRadiance };
+  return { voxelRadiance };
 }

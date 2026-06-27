@@ -81,28 +81,10 @@ export const shaderMeta = new ShaderMeta(
     aabbDim: sceneBuf("uAabbDim", `array<vec4<i32>, ${MAX_INSTANCE_COUNT}>`),
 
     // ---- group 2 : voxel output (StorageTexture, write-only) ----
-    voxelAlbedo: new VariableMeta(
-      "voxelAlbedo",
-      VariableKind.StorageTexture,
-      `texture_storage_3d<rgba8unorm, write>`,
-      {
-        visibility: GPUShaderStage.COMPUTE,
-        viewDimension: "3d",
-        storageTextureFormat: "rgba8unorm",
-        storageTextureAccess: "write-only",
-      },
-    ),
-    voxelEmission: new VariableMeta(
-      "voxelEmission",
-      VariableKind.StorageTexture,
-      `texture_storage_3d<rgba16float, write>`,
-      {
-        visibility: GPUShaderStage.COMPUTE,
-        viewDimension: "3d",
-        storageTextureFormat: "rgba16float",
-        storageTextureAccess: "write-only",
-      },
-    ),
+    // Only voxelRadiance is live: the cone-GI pass + mip pyramid read it. The former
+    // voxelAlbedo / voxelEmission 3D volumes were dead (their sole reader, voxelTrace.wgsl.ts,
+    // is unimported; the composite reads the 2D G-buffer emission, not a volume) — removed to
+    // reclaim VRAM.
     voxelRadiance: new VariableMeta(
       "voxelRadiance",
       VariableKind.StorageTexture,
@@ -173,8 +155,6 @@ fn clear(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (coord.x >= uGridDims.x || coord.y >= uGridDims.y || coord.z >= uGridDims.z) {
     return;
   }
-  textureStore(voxelAlbedo, coord, vec4<f32>(0.0));
-  textureStore(voxelEmission, coord, vec4<f32>(0.0));
   textureStore(voxelRadiance, coord, vec4<f32>(0.0));
 }
 
@@ -265,10 +245,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let emission = emission_of(ins);
   let radiance = direct + emission;
 
-  // Last-writer-wins on AABB overlap — acceptable. voxelAlbedo / voxelEmission occupancy stays
-  // BINARY (the DDA/gi raymarchers test a > 0.5; the composite reads voxelEmission.rgb directly).
-  textureStore(voxelAlbedo, coord, vec4<f32>(albedo, 1.0));
-  textureStore(voxelEmission, coord, vec4<f32>(emission, 1.0));
+  // Last-writer-wins on AABB overlap — acceptable for a mip-blurred GI volume. radiance is stored
+  // PREMULTIPLIED (rgb*coverage, a=coverage) so the mip pyramid + cone over-operator stay consistent.
   textureStore(voxelRadiance, coord, vec4<f32>(radiance * coverage, coverage));
 }
 `,

@@ -408,14 +408,6 @@ export function createVoxelSystem({
       layout: voxPipeline.getBindGroupLayout(2),
       entries: [
         {
-          binding: voxelizeMeta.uniforms.voxelAlbedo.binding,
-          resource: textures.voxelAlbedo.createView({ dimension: "3d" }),
-        },
-        {
-          binding: voxelizeMeta.uniforms.voxelEmission.binding,
-          resource: textures.voxelEmission.createView({ dimension: "3d" }),
-        },
-        {
           binding: voxelizeMeta.uniforms.voxelRadiance.binding,
           resource: textures.voxelRadiance.createView({
             dimension: "3d",
@@ -478,7 +470,7 @@ export function createVoxelSystem({
 
     // Cone bind group references the rebuilt voxelRadiance view + the (stable) G-buffer.
     buildConeGroup();
-    // Composite bind group references the rebuilt voxelEmission view + G-buffer + coneOutput.
+    // Composite bind group references the G-buffer (albedo/normal/emission/depth) + coneOutput.
     buildCompositeGroup();
 
     // Grid uniforms (shared by all shaders).
@@ -896,7 +888,7 @@ export function createVoxelSystem({
 
   // VCT composite (Layer 4): combine albedo + cone indirect/AO + direct sun + self-emission
   // into the final lit image → compositeOutput (full-res HDR). MUST run AFTER cone() (it reads
-  // coneOutput). Reads the G-buffer (albedo/normal/depth) + voxelEmission.
+  // coneOutput). Reads the G-buffer (albedo/normal/depth/emission).
   function composite(encoder: GPUCommandEncoder) {
     compParamsArr[0] = compositeParams.ambient;
     compParamsArr[1] = 0;
@@ -964,8 +956,6 @@ export function createVoxelSystem({
 
   // Change the voxel size (graininess). Destroys the old textures, rebuilds the grid.
   function setCellSize(newCellSize: number) {
-    textures.voxelAlbedo.destroy();
-    textures.voxelEmission.destroy();
     textures.voxelRadiance.destroy();
     buildGrid(newCellSize);
   }

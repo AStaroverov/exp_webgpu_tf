@@ -68,7 +68,7 @@ async function main() {
   //   "emitter"  — ground + box occluder + a GUI-movable/resizable emitter sphere.
   //   "simple"   — fixed minimal scene (first-bug diagnosis).
   //   "showcase" — one of every shape kind + several lights.
-  const SCENE = "perf" as "emitter" | "showcase" | "final" | "perf";
+  const SCENE = "final" as "emitter" | "showcase" | "final" | "perf";
 
   // The configurable emitter (only used by the "emitter" scene). Live-edited from
   // the GUI: position via the transform (re-uploaded every frame), radius via the
@@ -434,7 +434,7 @@ async function main() {
   const dimsLabel = { dims: `${voxel.dims.x}×${voxel.dims.y}×${voxel.dims.z}` };
   const dimsCtl = gui.add(dimsLabel, "dims").name("voxel dims").disable();
   gui
-    .add(voxCfg, "cellSize", 0.25, 2, 0.05)
+    .add(voxCfg, "cellSize", 0.125, 2, 0.025)
     .name("voxel size (graininess)")
     .onFinishChange((cs: number) => {
       voxel.setCellSize(cs);
