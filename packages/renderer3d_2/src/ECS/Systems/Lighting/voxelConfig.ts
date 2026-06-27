@@ -12,6 +12,7 @@
 //                    aimedSteps, aimedAlphaCut, aoConeCount, aoReach, aoSteps
 //   composite shader: ambient, exposure, penumbra
 //   probe shader   : conesPerProbe, maxDist (cone+probe reach), aperture
+//   probe-blur shader: probeBlurRadius
 // (maxDist is unused by the cone shader body itself; it only drives the probe reach + CPU side.)
 export type VoxelBakedConfig = {
   // ── cone pass ───────────────────────────────────────────────────────────────────────
@@ -32,6 +33,10 @@ export type VoxelBakedConfig = {
   penumbra: number; // sun shadow softening strength: PCF widens as sun intensity drops below 1
   // ── probe pass ──────────────────────────────────────────────────────────────────────
   conesPerProbe: number; // full-sphere cones per probe; SH-L1 saturates ~16, so more only cuts noise
+  // ── probe-blur pass ───────────────────────────────────────────────────────────────────
+  probeBlurRadius: number; // 3D Gaussian blur radius (probes) over the SH volume; 0 = no blur.
+  //   Spatially smooths the low-frequency bounce so a moving source's fill stops stepping by
+  //   probe cells — far cheaper than raising probe resolution (O(probes·kernel), not ·cones).
 };
 
 export const DEFAULT_VOXEL_BAKED_CONFIG: VoxelBakedConfig = {
@@ -50,4 +55,5 @@ export const DEFAULT_VOXEL_BAKED_CONFIG: VoxelBakedConfig = {
   exposure: 1,
   penumbra: 4,
   conesPerProbe: 16,
+  probeBlurRadius: 2,
 };

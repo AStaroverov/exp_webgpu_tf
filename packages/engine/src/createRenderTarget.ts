@@ -110,7 +110,7 @@ export async function createRenderTarget(
 
     const encoder = device.createCommandEncoder();
     // Order (must not be reordered): SDF G-buffer draw → (sun depth, only when the
-    // directional sun is on) → voxelize → mips → probe → cone → composite → present.
+    // directional sun is on) → voxelize → mips → probe → probeBlur → cone → composite → present.
     frameTick(encoder, delta);
     if (SunLight.enabled) {
       voxel.sunDepth(encoder);
@@ -118,6 +118,7 @@ export async function createRenderTarget(
     voxel.voxelize(encoder);
     voxel.mips(encoder);
     voxel.probe(encoder);
+    voxel.probeBlur(encoder);
     voxel.cone(encoder);
     voxel.composite(encoder);
     present(encoder, voxel.compositeOutputTexture);
@@ -129,10 +130,13 @@ export async function createRenderTarget(
   RenderDI.device = device;
   RenderDI.context = context;
   RenderDI.renderFrame = renderFrame;
+  // Expose the VCT system so a host (demo) can build a tuning GUI against voxel.config.
+  RenderDI.voxel = voxel;
 
   function destroy() {
     RenderDI.enabled = false;
     RenderDI.renderFrame = undefined;
+    RenderDI.voxel = undefined;
   }
   RenderDI.destroy = destroy;
 

@@ -7,6 +7,7 @@ import { createConeShaderMeta } from "./voxelCone.shader.ts";
 import { createCompositeShaderMeta } from "./voxelComposite.shader.ts";
 import { shaderMeta as mipMeta, WORKGROUP as MIP_WG } from "./voxelMip.shader.ts";
 import { createProbeShaderMeta, WORKGROUP as PROBE_WG } from "./voxelProbe.shader.ts";
+import { createProbeBlurShaderMeta } from "./voxelProbeBlur.shader.ts";
 import { shaderMeta as sunShadowMeta } from "./sunShadow.shader.ts";
 import { DEFAULT_VOXEL_BAKED_CONFIG, type VoxelBakedConfig } from "./voxelConfig.ts";
 import {
@@ -125,6 +126,16 @@ export function createVoxelSystem({
     entries: [],
   });
 
+  // Probe-volume blur: a cheap 3D Gaussian over the SH-L1 textures (config.probeBlurRadius), run
+  // AFTER probe() so the cone fill samples a SPATIALLY-SMOOTHED bounce → a moving source's fill
+  // stops stepping by probe cells without paying for more probe trace work. Baked R → rebuildable.
+  let probeBlurShader = new GPUShader(createProbeBlurShaderMeta(config));
+  let probeBlurPipeline = probeBlurShader.getComputePipeline(device, "main");
+  let probeBlurEmptyGroup1 = device.createBindGroup({
+    layout: probeBlurShader.createBindGroupLayout(device, 1),
+    entries: [],
+  });
+
   // Filtering sampler for textureSampleLevel over the rgba16float voxelRadiance pyramid AND the
   // trilinear probe-SH fetch.
   const voxelSampler = device.createSampler({
@@ -137,6 +148,9 @@ export function createVoxelSystem({
   // here; the bind groups that reference voxelRadiance (which IS rebuilt on cellSize change) are
   // rebuilt in buildGrid via buildProbeGroups().
   const probeTextures: ProbeTextures = createProbeTextures(device, DEFAULT_PROBE_DIMS);
+  // Second SH set: the probe-blur pass reads probeTextures (raw) and writes here; the cone pass
+  // samples THIS blurred set. Same resolution as probeTextures (the blur is in-place in grid space).
+  const probeTexturesBlur: ProbeTextures = createProbeTextures(device, DEFAULT_PROBE_DIMS);
   const probeDimsVal = DEFAULT_PROBE_DIMS;
 
   // ===== Sun shadow map (depth-only pass from the sun's POV; grid/camera-independent). =====
@@ -333,6 +347,11 @@ export function createVoxelSystem({
   // textures and is built once but is convenient to rebuild alongside.
   let probeGroup0: GPUBindGroup;
   let probeGroup2: GPUBindGroup;
+  // Probe-blur bind groups: group0 = probeDims uniform + the RAW SH textures (src), group2 = the
+  // BLURRED SH textures (dst). Both reference the persistent probe textures (resolution-fixed), so
+  // they rebuild only when the blur shader is recompiled (rebuild()), not on grid changes.
+  let blurGroup0: GPUBindGroup;
+  let blurGroup2: GPUBindGroup;
   let dispatchX = 0;
   let dispatchY = 0;
   let dispatchZ = 0;
@@ -370,17 +389,18 @@ export function createVoxelSystem({
           resource: textures.voxelRadiance.createView({ dimension: "3d" }),
         },
         // Irradiance-probe SH-L1 volume (one sampled 3D view per channel) for the fill term.
+        // Reads the BLURRED set (probeTexturesBlur), written by probeBlur() after probe().
         {
           binding: coneShader.shaderMeta.uniforms.shR.binding,
-          resource: probeTextures.shR.createView({ dimension: "3d" }),
+          resource: probeTexturesBlur.shR.createView({ dimension: "3d" }),
         },
         {
           binding: coneShader.shaderMeta.uniforms.shG.binding,
-          resource: probeTextures.shG.createView({ dimension: "3d" }),
+          resource: probeTexturesBlur.shG.createView({ dimension: "3d" }),
         },
         {
           binding: coneShader.shaderMeta.uniforms.shB.binding,
-          resource: probeTextures.shB.createView({ dimension: "3d" }),
+          resource: probeTexturesBlur.shB.createView({ dimension: "3d" }),
         },
         { binding: coneShader.shaderMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
       ],
@@ -421,6 +441,56 @@ export function createVoxelSystem({
         },
       ],
     });
+  }
+
+  // (Re)build the probe-blur bind groups. group0 = probeDims uniform + the RAW SH textures (src);
+  // group2 = the BLURRED SH textures (dst). Rebuilt when the blur shader is recompiled (rebuild()).
+  function buildBlurGroups() {
+    blurGroup0 = device.createBindGroup({
+      layout: probeBlurPipeline.getBindGroupLayout(0),
+      entries: [
+        probeBlurShader.uniforms.probeDims.getBindGroupEntry(device),
+        {
+          binding: probeBlurShader.shaderMeta.uniforms.srcR.binding,
+          resource: probeTextures.shR.createView({ dimension: "3d" }),
+        },
+        {
+          binding: probeBlurShader.shaderMeta.uniforms.srcG.binding,
+          resource: probeTextures.shG.createView({ dimension: "3d" }),
+        },
+        {
+          binding: probeBlurShader.shaderMeta.uniforms.srcB.binding,
+          resource: probeTextures.shB.createView({ dimension: "3d" }),
+        },
+      ],
+    });
+    blurGroup2 = device.createBindGroup({
+      layout: probeBlurPipeline.getBindGroupLayout(2),
+      entries: [
+        {
+          binding: probeBlurShader.shaderMeta.uniforms.dstR.binding,
+          resource: probeTexturesBlur.shR.createView({ dimension: "3d" }),
+        },
+        {
+          binding: probeBlurShader.shaderMeta.uniforms.dstG.binding,
+          resource: probeTexturesBlur.shG.createView({ dimension: "3d" }),
+        },
+        {
+          binding: probeBlurShader.shaderMeta.uniforms.dstB.binding,
+          resource: probeTexturesBlur.shB.createView({ dimension: "3d" }),
+        },
+      ],
+    });
+  }
+
+  // Upload the blur pass's probeDims uniform (constant = the probe resolution). Called once after
+  // the scratch arrays exist and again on rebuild() (the recompiled shader has a fresh buffer).
+  function uploadBlurUniforms() {
+    probeDimsArr[0] = probeDimsVal.x;
+    probeDimsArr[1] = probeDimsVal.y;
+    probeDimsArr[2] = probeDimsVal.z;
+    probeDimsArr[3] = 0;
+    device.queue.writeBuffer(probeBlurShader.uniforms.probeDims.getGPUBuffer(device), 0, probeDimsArr);
   }
 
   // (Re)build the Layer-4 composite bind group: uniforms + the G-buffer (albedo/normal/
@@ -611,6 +681,11 @@ export function createVoxelSystem({
   // Built last: buildGrid() (and recreate()) call buildCompositeGroup(), which references
   // coneOutput + compositeOutput, so those textures must exist first.
   buildGrid(cellSize);
+
+  // Probe-blur groups + uniform (independent of the grid → built once here, after the scratch
+  // arrays exist; rebuilt only when the blur shader recompiles in rebuild()).
+  buildBlurGroups();
+  uploadBlurUniforms();
 
   // Compute the sun's orthographic view-projection (orthoZO, z in [0,1]) fitted to the grid
   // AABB, plus the sun travel ray. Uploads sunViewProj to BOTH the sunShadow shader and the
@@ -933,6 +1008,23 @@ export function createVoxelSystem({
     pass.end();
   }
 
+  // Probe-volume blur: 3D Gaussian over the SH-L1 set (probeTextures → probeTexturesBlur). MUST run
+  // AFTER probe() (reads its output) and BEFORE cone() (which samples the blurred set). One compute
+  // dispatch over the probe grid. With probeBlurRadius=0 the shader is a passthrough copy.
+  function probeBlur(encoder: GPUCommandEncoder) {
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(probeBlurPipeline);
+    pass.setBindGroup(0, blurGroup0);
+    pass.setBindGroup(1, probeBlurEmptyGroup1);
+    pass.setBindGroup(2, blurGroup2);
+    pass.dispatchWorkgroups(
+      Math.ceil(probeDimsVal.x / PROBE_WG),
+      Math.ceil(probeDimsVal.y / PROBE_WG),
+      Math.ceil(probeDimsVal.z / PROBE_WG),
+    );
+    pass.end();
+  }
+
   // VCT cone GI: per-pixel AIMED emitter cones (sharp direct + shadow) + a trilinear probe-SH
   // fetch for the fill/bounce + short AO cones → coneOutput (HALF-res HDR; composite bilinear-
   // upsamples). MUST run AFTER voxelize() + mips() + probe(). Reads the G-buffer (depth + normal).
@@ -1053,9 +1145,19 @@ export function createVoxelSystem({
       layout: probeShader.createBindGroupLayout(device, 1),
       entries: [],
     });
+    // Probe-blur shader is ALSO baked (probeBlurRadius) → recompile + rebuild its groups/uniform.
+    probeBlurShader.destroy();
+    probeBlurShader = new GPUShader(createProbeBlurShaderMeta(config));
+    probeBlurPipeline = probeBlurShader.getComputePipeline(device, "main");
+    probeBlurEmptyGroup1 = device.createBindGroup({
+      layout: probeBlurShader.createBindGroupLayout(device, 1),
+      entries: [],
+    });
     buildConeGroup();
     buildCompositeGroup();
     buildProbeGroups();
+    buildBlurGroups();
+    uploadBlurUniforms();
     // Re-upload buildGrid-time uniforms to the NEW shader buffers (per-frame ones refill next frame).
     device.queue.writeBuffer(coneShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
     device.queue.writeBuffer(coneShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
@@ -1111,6 +1213,7 @@ export function createVoxelSystem({
     voxelize,
     mips,
     probe,
+    probeBlur,
     cone,
     setLights,
     sunDepth,

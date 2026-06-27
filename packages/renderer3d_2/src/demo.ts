@@ -95,6 +95,7 @@ async function main() {
     voxelize: true, // scene → 3D voxel textures
     mips: true, // radiance mip pyramid
     probe: true, // irradiance-probe SH volume (fill/bounce)
+    probeBlur: true, // 3D Gaussian smoothing of the probe SH volume
     cone: true, // N-cone GI gather (half-res)
     sunDepth: true, // sun shadow-map depth pass (sun-POV SDF depth)
     composite: true, // final lit image
@@ -597,6 +598,12 @@ async function main() {
     .name("AO cones (contact)")
     .onFinishChange(rebuild);
   probeFolder.add(voxel.config, "aoReach", 1, 16, 0.5).name("AO reach").onFinishChange(rebuild);
+  // Probe-volume blur radius (probes): 3D Gaussian smoothing of the SH bounce so a moving source's
+  // fill stops stepping by probe cells. 0 = off. Cheap (O(probes·kernel), no extra cones).
+  probeFolder
+    .add(voxel.config, "probeBlurRadius", 0, 4, 1)
+    .name("probe blur radius")
+    .onFinishChange(rebuild);
 
   // Composite (Layer 4): the final lit image. Sun controls above feed it via SunLight;
   // cone giStrength bakes into the indirect term. Only the ambient floor lives here.
@@ -628,6 +635,7 @@ async function main() {
     pf.add(perf, "voxelize").name("2· voxelize");
     pf.add(perf, "mips").name("3· mips");
     pf.add(perf, "probe").name("4· probe GI (SH)");
+    pf.add(perf, "probeBlur").name("4b· probe blur");
     pf.add(perf, "cone").name("5· cone GI");
     pf.add(perf, "sunDepth").name("6· sun shadow-map pass");
     pf.add(perf, "composite").name("7· composite");
@@ -857,6 +865,7 @@ async function main() {
       if (perf.voxelize) voxel.voxelize(encoder);
       if (perf.mips) voxel.mips(encoder);
       if (perf.probe) voxel.probe(encoder);
+      if (perf.probeBlur) voxel.probeBlur(encoder);
       if (perf.cone) voxel.cone(encoder);
       if (perf.composite) voxel.composite(encoder);
       present(encoder, voxel.compositeOutputTexture);
@@ -871,6 +880,7 @@ async function main() {
       voxel.voxelize(encoder);
       voxel.mips(encoder);
       voxel.probe(encoder);
+      voxel.probeBlur(encoder);
       voxel.cone(encoder);
       voxel.composite(encoder);
       present(encoder, voxel.compositeOutputTexture);

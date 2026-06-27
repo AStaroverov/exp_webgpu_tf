@@ -14,6 +14,7 @@ import type { EngineWorld } from "./ECS/createEngineWorld.ts";
 import type { PhysicalWorld } from "./Physics/initPhysicalWorld.ts";
 import type { TColor } from "../../renderer3d_2/src/ECS/Components/Common.ts";
 import { SunLight } from "../../renderer3d_2/src/ECS/Systems/SunLight.ts";
+import { RenderDI, type VoxelSystem } from "./DI/RenderDI.ts";
 import {
   cameraAzimuth,
   cameraElevation,
@@ -142,14 +143,108 @@ function buildGui(world: EngineWorld, pw: PhysicalWorld, spawned: Spawned[]): GU
   spawn.add({ clear: () => clearDynamic() }, "clear").name("Clear");
   spawn.add(params, "count").name("dynamic bodies").disable().listen();
 
-  const scene = gui.addFolder("Scene").close();
-  scene.add(SunLight, "enabled").name("sun enabled");
-  scene.add(SunLight, "intensity", 0, 5, 0.05).name("sun intensity");
-
   // seed a handful so the scene isn't empty on load
   spawnMany(6);
 
   return gui;
+}
+
+// ── VCT tuning GUI ─────────────────────────────────────────────────────────────
+// Mirrors renderer3d_2/src/demo.ts's voxel folders, wired to the SAME voxel system
+// (RenderDI.voxel). Baked-config controls recompile the GI shaders on RELEASE
+// (.onFinishChange → voxel.rebuild()), not per drag tick; the sun + cone-resolution
+// are read live. So both packages share one render config — tune here, the values
+// live in voxel.config (defaults come from voxelConfig.ts, common to both demos).
+function addVoxelControls(gui: GUI, voxel: VoxelSystem): void {
+  const rebuild = () => voxel.rebuild();
+
+  // Graininess: voxel size in world units. Rebuilds the 3D textures on release.
+  const voxCfg = { cellSize: voxel.cellSize };
+  const dimsLabel = { dims: `${voxel.dims.x}×${voxel.dims.y}×${voxel.dims.z}` };
+  const dimsCtl = gui.add(dimsLabel, "dims").name("voxel dims").disable();
+  gui
+    .add(voxCfg, "cellSize", 0.125, 2, 0.025)
+    .name("voxel size (graininess)")
+    .onFinishChange((cs: number) => {
+      voxel.setCellSize(cs);
+      dimsLabel.dims = `${voxel.dims.x}×${voxel.dims.y}×${voxel.dims.z}`;
+      dimsCtl.updateDisplay();
+    });
+
+  // Sun (directional key, read live by voxelize + composite).
+  const sun = gui.addFolder("Sun");
+  sun.add(SunLight, "enabled").name("sun enabled");
+  sun.add(SunLight, "angle", 0, Math.PI * 2, 0.01).name("sun angle");
+  sun.add(SunLight, "elevation", 0, Math.PI / 2, 0.01).name("sun elevation");
+  sun.add(SunLight, "intensity", 0, 5, 0.05).name("sun intensity");
+  sun.addColor(SunLight, "color", 1).name("sun color"); // rgbScale=1 → 0..1 floats
+
+  // Cone GI: per-pixel AIMED emitter cones (sharp direct + shadow). Baked → rebuild on release.
+  const coneFolder = gui.addFolder("Cone GI");
+  coneFolder
+    .add(voxel.config, "emitterDirect", 0, 8, 0.1)
+    .name("emitter direct strength")
+    .onFinishChange(rebuild);
+  coneFolder
+    .add(voxel.config, "emitterFalloff", 0, 4, 0.05)
+    .name("emitter falloff")
+    .onFinishChange(rebuild);
+  coneFolder
+    .add(voxel.config, "aperture", 0.1, 1.5, 0.01)
+    .name("aperture (lower=sharper)")
+    .onFinishChange(rebuild);
+  coneFolder.add(voxel.config, "maxDist", 1, 64, 0.5).name("cone reach").onFinishChange(rebuild);
+  coneFolder
+    .add(voxel.config, "normalBias", 0, 2, 0.01)
+    .name("normal bias")
+    .onFinishChange(rebuild);
+  coneFolder
+    .add(voxel.config, "giStrength", 0, 4, 0.05)
+    .name("GI strength (bounce)")
+    .onFinishChange(rebuild);
+  const coneResCfg = { scale: voxel.coneScale };
+  coneFolder
+    .add(coneResCfg, "scale", { "half-res (2)": 2, "quarter-res (4)": 4, "eighth-res (8)": 8 })
+    .name("cone resolution")
+    .onChange((s: number) => voxel.setConeScale(s));
+  coneFolder.add(voxel.config, "aimedSteps", 8, 64, 1).name("aimed steps").onFinishChange(rebuild);
+  coneFolder
+    .add(voxel.config, "aimedAlphaCut", 0.5, 1, 0.01)
+    .name("aimed alpha cut")
+    .onFinishChange(rebuild);
+
+  // Probe GI: the low-res irradiance-probe volume (fill/bounce) + short contact-AO cones.
+  const probeFolder = gui.addFolder("Probe GI");
+  probeFolder
+    .add(voxel.config, "conesPerProbe", [8, 16, 32, 64, 128])
+    .name("cones / probe")
+    .onFinishChange(rebuild);
+  probeFolder
+    .add(voxel.config, "aoConeCount", 0, 8, 1)
+    .name("AO cones (contact)")
+    .onFinishChange(rebuild);
+  probeFolder.add(voxel.config, "aoReach", 1, 16, 0.5).name("AO reach").onFinishChange(rebuild);
+  // Probe-volume blur radius: 3D Gaussian smoothing of the SH bounce so a moving source's fill
+  // stops stepping by probe cells. 0 = off. Cheap (O(probes·kernel), not ·cones).
+  probeFolder
+    .add(voxel.config, "probeBlurRadius", 0, 4, 1)
+    .name("probe blur radius")
+    .onFinishChange(rebuild);
+
+  // Composite: ambient floor + HDR exposure + sun-dim penumbra.
+  const compositeFolder = gui.addFolder("Composite");
+  compositeFolder
+    .add(voxel.config, "ambient", 0, 0.5, 0.01)
+    .name("composite ambient")
+    .onFinishChange(rebuild);
+  compositeFolder
+    .add(voxel.config, "exposure", 0.1, 4, 0.05)
+    .name("exposure")
+    .onFinishChange(rebuild);
+  compositeFolder
+    .add(voxel.config, "penumbra", 0, 12, 0.5)
+    .name("penumbra (sun-dim)")
+    .onFinishChange(rebuild);
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
@@ -163,6 +258,11 @@ async function main(): Promise<void> {
 
   const orbit = { enabled: true };
   gui.add(orbit, "enabled").name("orbit camera");
+
+  // VCT tuning folders — wired to the SAME voxel system the renderer3d_2 demo tunes
+  // (RenderDI.voxel, set by createRenderTarget). createEngine({canvas}) has already
+  // built the render target, so the handle is live here.
+  if (RenderDI.voxel) addVoxelControls(gui, RenderDI.voxel);
 
   let then = performance.now();
   function loop(now: number): void {

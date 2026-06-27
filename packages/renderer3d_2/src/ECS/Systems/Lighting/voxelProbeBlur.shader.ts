@@ -1,0 +1,124 @@
+import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
+import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
+import { wgsl } from "../../../WGSL/wgsl.ts";
+import { VoxelBakedConfig } from "./voxelConfig.ts";
+
+// VCT — PROBE-VOLUME BLUR (one compute pass, one thread per probe). A 3D Gaussian smoothing of
+// the SH-L1 irradiance volume the voxelProbe pass produced, written into a SECOND set of SH
+// textures (ping read src → write dst; the cone pass then samples the BLURRED set).
+//
+// WHY: the probe grid is coarse (probeDims << gridDims → ~2-unit spacing by default). Its
+// trilinear fetch is C0-continuous, but as a light source MOVES the per-probe values jump
+// relative to their neighbours and the bounce "steps" by probe cells. Raising probe resolution
+// fixes it but costs O(probes·cones·steps) — the probe TRACE is the expensive part. A blur fixes
+// the SAME artifact for O(probes·kernel) (no extra cones, no extra marching): cheap, because the
+// probe count is tiny (~16k) vs. the trace work.
+//
+// VALID because SH-L1 is LINEAR: blurring the coefficients spatially == blurring the reconstructed
+// radiance field. Reconstruction (sh_avg_radiance in the cone shader) is linear in the coeffs, so a
+// weighted average of neighbour coefficients is the weighted average of their radiance. Purely
+// SPATIAL (no temporal history) → no ghosting, consistent with the probe pass's design.
+//
+// The kernel is a dense 3D Gaussian (separable weights applied as a product gw(x)·gw(y)·gw(z) over
+// the (2R+1)³ neighbourhood). R is BAKED (config.probeBlurRadius); R=0 → single tap = passthrough
+// copy. textureLoad (integer coords, no sampler — exact per-probe fetch).
+
+// COMPUTE-visibility group-0 uniform helper (mirrors voxelProbe.shader.ts).
+const uC = (name: string, type: string) =>
+  new VariableMeta(name, VariableKind.Uniform, type, { visibility: GPUShaderStage.COMPUTE });
+
+export const WORKGROUP = 4; // 4*4*4 = 64 threads/workgroup over the 3D probe grid
+
+export function createProbeBlurShaderMeta(cfg: VoxelBakedConfig) {
+  return new ShaderMeta(
+    {
+      // ---- group 0 : uniforms + source SH textures (Texture => @group(0)) ----
+      // .xyz = probe counts per axis (bounds + clamp), .w unused.
+      probeDims: uC("uProbeDims", `vec4<i32>`),
+      // The SH-L1 volume to blur (one texture per color channel; .xyzw = the 4 coeffs). Read via
+      // textureLoad (integer coords, LOD 0) — no sampler.
+      srcR: new VariableMeta("srcR", VariableKind.Texture, `texture_3d<f32>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        viewDimension: "3d",
+        textureSampleType: "float",
+      }),
+      srcG: new VariableMeta("srcG", VariableKind.Texture, `texture_3d<f32>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        viewDimension: "3d",
+        textureSampleType: "float",
+      }),
+      srcB: new VariableMeta("srcB", VariableKind.Texture, `texture_3d<f32>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        viewDimension: "3d",
+        textureSampleType: "float",
+      }),
+
+      // ---- group 2 : blurred SH outputs (StorageTexture, write-only) ----
+      dstR: new VariableMeta("dstR", VariableKind.StorageTexture, `texture_storage_3d<rgba16float, write>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        viewDimension: "3d",
+        storageTextureFormat: "rgba16float",
+        storageTextureAccess: "write-only",
+      }),
+      dstG: new VariableMeta("dstG", VariableKind.StorageTexture, `texture_storage_3d<rgba16float, write>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        viewDimension: "3d",
+        storageTextureFormat: "rgba16float",
+        storageTextureAccess: "write-only",
+      }),
+      dstB: new VariableMeta("dstB", VariableKind.StorageTexture, `texture_storage_3d<rgba16float, write>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        viewDimension: "3d",
+        storageTextureFormat: "rgba16float",
+        storageTextureAccess: "write-only",
+      }),
+    },
+    {},
+    // language=WGSL
+    wgsl /* wgsl */ `
+const R: i32 = ${cfg.probeBlurRadius};
+
+// 1D Gaussian weight; sigma = R/2 (a moderate bell that still tapers within the radius). R=0 → the
+// loop runs only i=0 and gw(0)=1, so the pass is an exact copy (passthrough).
+fn gw(i: i32) -> f32 {
+  let sigma = max(0.5, f32(R) * 0.5);
+  return exp(-f32(i * i) / (2.0 * sigma * sigma));
+}
+
+@compute @workgroup_size(${WORKGROUP}, ${WORKGROUP}, ${WORKGROUP})
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let coord = vec3<i32>(gid);
+  // Dispatch is ceil-rounded; drop threads past the probe-grid bounds.
+  if (coord.x >= uProbeDims.x || coord.y >= uProbeDims.y || coord.z >= uProbeDims.z) {
+    return;
+  }
+
+  var aR = vec4<f32>(0.0);
+  var aG = vec4<f32>(0.0);
+  var aB = vec4<f32>(0.0);
+  var wsum = 0.0;
+  let hi = uProbeDims.xyz - vec3<i32>(1);
+  for (var z = -R; z <= R; z = z + 1) {
+    let wz = gw(z);
+    for (var y = -R; y <= R; y = y + 1) {
+      let wy = gw(y);
+      for (var x = -R; x <= R; x = x + 1) {
+        // Clamp to edge so border probes don't darken (no wrap, no out-of-bounds).
+        let c = clamp(coord + vec3<i32>(x, y, z), vec3<i32>(0), hi);
+        let w = wz * wy * gw(x);
+        aR = aR + textureLoad(srcR, c, 0) * w;
+        aG = aG + textureLoad(srcG, c, 0) * w;
+        aB = aB + textureLoad(srcB, c, 0) * w;
+        wsum = wsum + w;
+      }
+    }
+  }
+
+  let inv = 1.0 / wsum;
+  textureStore(dstR, coord, aR * inv);
+  textureStore(dstG, coord, aG * inv);
+  textureStore(dstB, coord, aB * inv);
+}
+`,
+  );
+}

@@ -36,7 +36,7 @@ export const DEFAULT_VOXEL_GRID: VoxelGridConfig = {
   dimX: 256,
   dimY: 256,
   dimZ: 64,
-  cellSize: 0.25,
+  cellSize: 0.5,
 };
 
 // Number of mip levels for the voxelRadiance pyramid: full chain down to the 1-voxel mip
@@ -46,7 +46,7 @@ export function voxelMipLevelCount(dimX: number, dimY: number, dimZ: number): nu
 }
 
 // Irradiance-probe volume resolution (spans the SAME world box as the voxel grid; only the
-// resolution differs). 32×32×16 over the 64×64×16 box ≈ 2-unit probe spacing — coarse, but
+// resolution differs). 64x64x32 over the 64×64×16 box ≈ 2-unit probe spacing — coarse, but
 // indirect bounce is low-frequency, so that is fine. 16384 probes × 3 SH textures × rgba16float
 // (8 B) ≈ 0.4 MB.
 export type ProbeGridDims = { x: number; y: number; z: number };
