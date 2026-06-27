@@ -10,7 +10,7 @@
 // Field → where it bakes:
 //   cone shader    : normalBias, aperture, giStrength, emitterDirect, emitterFalloff,
 //                    aimedSteps, aimedAlphaCut, aoConeCount, aoReach, aoSteps
-//   composite shader: ambient, exposure, penumbra
+//   composite shader: ambient, exposure, penumbra, shadowBaseSpread
 //   probe shader   : conesPerProbe, maxDist (cone+probe reach), aperture
 //   probe-blur shader: probeBlurRadius
 // (maxDist is unused by the cone shader body itself; it only drives the probe reach + CPU side.)
@@ -31,6 +31,8 @@ export type VoxelBakedConfig = {
   ambient: number; // ambient floor (scaled by the cone's AO term)
   exposure: number; // HDR exposure multiplier applied before the ACES tonemap
   penumbra: number; // sun shadow softening strength: PCF widens as sun intensity drops below 1
+  shadowBaseSpread: number; // base sun-shadow PCF radius (texels) ALWAYS applied, even at full sun;
+  //   smooths the shadow-map texel staircase into a soft edge. 1 = near-hard (old behavior).
   // ── probe pass ──────────────────────────────────────────────────────────────────────
   conesPerProbe: number; // full-sphere cones per probe; SH-L1 saturates ~16, so more only cuts noise
   // ── probe-blur pass ───────────────────────────────────────────────────────────────────
@@ -54,6 +56,7 @@ export const DEFAULT_VOXEL_BAKED_CONFIG: VoxelBakedConfig = {
   ambient: 0.05,
   exposure: 1,
   penumbra: 4,
+  shadowBaseSpread: 2,
   conesPerProbe: 16,
   probeBlurRadius: 2,
 };

@@ -333,6 +333,9 @@ export function createVoxelSystem({
   const sunCenter = vec3.create();
   const sunUp = vec3.create();
   const sunCorner = vec3.create();
+  // Camera-frustum fit scratch: inverse camera viewProj + a reused corner (unprojected NDC → world).
+  const camInvViewProj = mat4.create();
+  const camCorner = vec3.create();
   const sunViewProjArr = getTypeTypedArray(sunShadowMeta.uniforms.viewProj.type); // Float32Array(16)
   const sunRayDirArr = getTypeTypedArray(sunShadowMeta.uniforms.rayDir.type); // Float32Array(4)
 
@@ -705,19 +708,61 @@ export function createVoxelSystem({
   buildBlurGroups();
   uploadBlurUniforms();
 
-  // Compute the sun's orthographic view-projection (orthoZO, z in [0,1]) fitted to the grid
-  // AABB, plus the sun travel ray. Uploads sunViewProj to BOTH the sunShadow shader and the
-  // composite, and rayDir to the sunShadow shader. Recomputed each frame (sun/GUI can move).
+  // Compute the sun's orthographic view-projection (orthoZO, z in [0,1]). XY is fitted to the
+  // CAMERA's visible region (clamped to the grid) so the 2048² shadow texels concentrate where the
+  // camera looks → finer edges, and effective resolution scales with zoom (kills the texel
+  // staircase). The DEPTH (Z) range spans the FULL grid so casters at any height are captured even
+  // if they sit outside the view's XY (extending depth costs no XY resolution). Recomputed each
+  // frame. Uploads sunViewProj to the sunShadow shader + composite, and rayDir to sunShadow.
   function buildSunViewProj() {
-    const minX = originX;
-    const minY = originY;
-    const minZ = originZ;
-    const maxX = originX + extentX;
-    const maxY = originY + extentY;
-    const maxZ = originZ + extentZ;
-    const cx = (minX + maxX) * 0.5;
-    const cy = (minY + maxY) * 0.5;
-    const cz = (minZ + maxZ) * 0.5;
+    // Grid AABB (world) — the clamp region + the depth range.
+    const gMinX = originX;
+    const gMinY = originY;
+    const gMinZ = originZ;
+    const gMaxX = originX + extentX;
+    const gMaxY = originY + extentY;
+    const gMaxZ = originZ + extentZ;
+
+    // (A) Camera visible XY region: unproject the 8 reverse-Z NDC cube corners through the inverse
+    // camera viewProj and clamp each into the grid box. The XY span of the clamped set is the
+    // region the shadow map should cover at full resolution.
+    mat4.invert(camInvViewProj, viewProjMatrix);
+    let wMinX = Infinity;
+    let wMinY = Infinity;
+    let wMaxX = -Infinity;
+    let wMaxY = -Infinity;
+    for (let i = 0; i < 8; i++) {
+      camCorner[0] = i & 1 ? 1 : -1;
+      camCorner[1] = i & 2 ? 1 : -1;
+      camCorner[2] = i & 4 ? 1 : 0; // reverse-Z: near=1, far=0 → both clip planes
+      vec3.transformMat4(camCorner, camCorner, camInvViewProj);
+      const px = Math.min(Math.max(camCorner[0], gMinX), gMaxX);
+      const py = Math.min(Math.max(camCorner[1], gMinY), gMaxY);
+      if (px < wMinX) wMinX = px;
+      if (px > wMaxX) wMaxX = px;
+      if (py < wMinY) wMinY = py;
+      if (py > wMaxY) wMaxY = py;
+    }
+    // Degenerate (camera doesn't overlap the grid / inverted matrix) → fall back to the full grid.
+    if (!(wMaxX > wMinX) || !(wMaxY > wMinY)) {
+      wMinX = gMinX;
+      wMaxX = gMaxX;
+      wMinY = gMinY;
+      wMaxY = gMaxY;
+    }
+    // Pad XY so a caster just outside the view still casts its shadow tip into it (the XY fit is
+    // clipped; the margin trades a little resolution for fewer popping edges), re-clamped to grid.
+    const padX = (wMaxX - wMinX) * 0.15 + cellSize;
+    const padY = (wMaxY - wMinY) * 0.15 + cellSize;
+    wMinX = Math.max(gMinX, wMinX - padX);
+    wMaxX = Math.min(gMaxX, wMaxX + padX);
+    wMinY = Math.max(gMinY, wMinY - padY);
+    wMaxY = Math.min(gMaxY, wMaxY + padY);
+
+    // Region center: XY from the fitted view region, Z from the full grid (eye centered in depth).
+    const cx = (wMinX + wMaxX) * 0.5;
+    const cy = (wMinY + wMaxY) * 0.5;
+    const cz = (gMinZ + gMaxZ) * 0.5;
 
     // Direction TOWARD the sun (unit), same formula as voxelize()/composite().
     const a = SunLight.angle;
@@ -727,9 +772,9 @@ export function createVoxelSystem({
     const sdy = Math.sin(a) * ce;
     const sdz = Math.sin(e);
 
-    // Eye pulled back from the AABB center along +dirTowardSun; the ortho near/far fit below
+    // Eye pulled back from the region center along +dirTowardSun; the ortho near/far fit below
     // folds the distance out, so any value past the bounding-sphere radius is fine.
-    const radius = 0.5 * Math.hypot(extentX, extentY, extentZ);
+    const radius = 0.5 * Math.hypot(wMaxX - wMinX, wMaxY - wMinY, extentZ);
     const dist = radius * 2.0 + 1.0;
     sunCenter[0] = cx;
     sunCenter[1] = cy;
@@ -751,8 +796,10 @@ export function createVoxelSystem({
     }
     mat4.lookAt(sunView, sunEye, sunCenter, sunUp);
 
-    // Fit an orthographic box to the 8 AABB corners IN LIGHT/VIEW space (tight, sun-angle
-    // independent). In view space the camera looks down -Z, so visible z is negative.
+    // Fit the ortho box IN LIGHT/VIEW space to the box [viewXY] × [full grid Z]: the full grid Z
+    // is used for the corners' height so a tall caster's top (which under a tilted sun projects to
+    // a different light-space XY than its base) is still inside the XY bounds. In view space the
+    // camera looks down -Z, so visible z is negative.
     let lminX = Infinity;
     let lminY = Infinity;
     let lminZ = Infinity;
@@ -760,9 +807,9 @@ export function createVoxelSystem({
     let lmaxY = -Infinity;
     let lmaxZ = -Infinity;
     for (let i = 0; i < 8; i++) {
-      sunCorner[0] = i & 1 ? maxX : minX;
-      sunCorner[1] = i & 2 ? maxY : minY;
-      sunCorner[2] = i & 4 ? maxZ : minZ;
+      sunCorner[0] = i & 1 ? wMaxX : wMinX;
+      sunCorner[1] = i & 2 ? wMaxY : wMinY;
+      sunCorner[2] = i & 4 ? gMaxZ : gMinZ;
       vec3.transformMat4(sunCorner, sunCorner, sunView);
       if (sunCorner[0] < lminX) lminX = sunCorner[0];
       if (sunCorner[0] > lmaxX) lmaxX = sunCorner[0];

@@ -70,6 +70,7 @@ export function createCompositeShaderMeta(cfg: VoxelBakedConfig) {
 const AMBIENT: f32 = ${cfg.ambient};
 const EXPOSURE: f32 = ${cfg.exposure};
 const PENUMBRA: f32 = ${cfg.penumbra};
+const SHADOW_BASE_SPREAD: f32 = ${cfg.shadowBaseSpread};
 
 // Per-frame uniforms, one consolidated UBO (uF). All members are 16-byte aligned (vec4 / mat4x4)
 // so the std140 layout is dense: params@0, params2@16, sun@32, sunColor@48, invViewProj@64,
@@ -245,8 +246,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let depthP = textureLoad(depthTex, pixel, 0);
     let uvP = (vec2<f32>(pixel) + vec2<f32>(0.5)) / uF.params2.xy;
     let P = unproject(vec3<f32>(uvP.x * 2.0 - 1.0, (1.0 - uvP.y) * 2.0 - 1.0, depthP));
-    // Penumbra grows as the sun dims below 1: spread = 1 at full sun, up to 1 + penumbra at sun→0.
-    let spread = 1.0 + PENUMBRA * clamp(1.0 - uF.sun.w, 0.0, 1.0);
+    // Base PCF softness ALWAYS applied (kills the shadow-map texel staircase even at full sun),
+    // and grows further as the sun dims below 1 (a dimmer sun → softer, wider penumbra).
+    let spread = SHADOW_BASE_SPREAD + PENUMBRA * clamp(1.0 - uF.sun.w, 0.0, 1.0);
     sunVis = sun_shadow(P, N, ndl, spread, input.position.xy);
   }
   let sunDirect = ndl * uF.sunColor.rgb * uF.sun.w * sunVis;

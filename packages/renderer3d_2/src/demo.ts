@@ -624,6 +624,12 @@ async function main() {
     .add(voxel.config, "penumbra", 0, 12, 0.5)
     .name("penumbra (sun-dim)")
     .onFinishChange(rebuild);
+  // Base sun-shadow PCF radius applied even at full sun → smooths the shadow-map texel staircase.
+  // 1 = near-hard (old). The sun frustum also auto-fits the camera view, so steps shrink on zoom.
+  compositeFolder
+    .add(voxel.config, "shadowBaseSpread", 1, 6, 0.25)
+    .name("shadow softness")
+    .onFinishChange(rebuild);
 
   // Perf folder: live fps / GPU-ms readout + per-pass toggles. Read the GPU-ms delta when a
   // toggle flips to attribute cost to that pass (gpuMs comes from onSubmittedWorkDone, so it
