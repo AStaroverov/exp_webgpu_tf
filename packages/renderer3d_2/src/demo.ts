@@ -68,7 +68,7 @@ async function main() {
   //   "emitter"  — ground + box occluder + a GUI-movable/resizable emitter sphere.
   //   "simple"   — fixed minimal scene (first-bug diagnosis).
   //   "showcase" — one of every shape kind + several lights.
-  const SCENE = "emitter" as "emitter" | "showcase" | "final" | "perf" | "perf2";
+  const SCENE = "perf2" as "emitter" | "showcase" | "final" | "perf" | "perf2";
   // Both perf scenes drive the same GPU-cost harness (per-pass toggles + serialized timing).
   const PERF = SCENE === "perf" || SCENE === "perf2";
 
@@ -313,7 +313,7 @@ async function main() {
       radius: 3,
       color: [1.0, 0.55, 0.2, 1],
     });
-    LightEmitter.addComponent(world, dynOrbitEmitter, 30.0);
+    LightEmitter.addComponent(world, dynOrbitEmitter, 10.0);
     // (2) ANGLE — a tall slab rotating about Z: a moving occluder → shifting AO/bounce.
     dynRotBox = createRectangle(world, {
       x: 0,
@@ -477,7 +477,7 @@ async function main() {
         radius: 0.8,
         color: emColors[e],
       });
-      LightEmitter.addComponent(world, id, 8.0);
+      LightEmitter.addComponent(world, id, 1.0);
       perf2Emitters.push(id);
     }
   }

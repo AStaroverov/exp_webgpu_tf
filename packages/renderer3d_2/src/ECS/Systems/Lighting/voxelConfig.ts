@@ -39,7 +39,7 @@ export const DEFAULT_VOXEL_BAKED_CONFIG: VoxelBakedConfig = {
   maxDist: 24,
   aperture: 0.577,
   giStrength: 1,
-  emitterDirect: 1,
+  emitterDirect: 5,
   emitterFalloff: 1,
   aimedSteps: 32,
   aimedAlphaCut: 1,
