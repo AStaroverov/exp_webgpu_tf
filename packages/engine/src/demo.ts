@@ -245,6 +245,12 @@ function addVoxelControls(gui: GUI, voxel: VoxelSystem): void {
     .add(voxel.config, "penumbra", 0, 12, 0.5)
     .name("penumbra (sun-dim)")
     .onFinishChange(rebuild);
+  // Base sun-shadow PCF radius applied even at full sun → smooths the shadow-map texel staircase.
+  // 1 = near-hard. The sun frustum also auto-fits the camera view, so steps shrink on zoom.
+  compositeFolder
+    .add(voxel.config, "shadowBaseSpread", 1, 6, 0.25)
+    .name("shadow softness")
+    .onFinishChange(rebuild);
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
