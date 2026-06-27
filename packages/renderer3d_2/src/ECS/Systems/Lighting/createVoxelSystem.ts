@@ -32,6 +32,7 @@ export type VoxelConeParams = {
 
 export type VoxelCompositeParams = {
   ambient: number; // ambient floor (scaled by the cone's AO term)
+  exposure: number; // HDR exposure multiplier applied before the ACES tonemap
 };
 
 export type VoxelProbeParams = {
@@ -82,7 +83,7 @@ export function createVoxelSystem({
   };
   // giStrength stays in coneParams (baked into the cone's rgb); the composite only adds the
   // ambient floor.
-  const compositeParams: VoxelCompositeParams = { ambient: 0.05 };
+  const compositeParams: VoxelCompositeParams = { ambient: 0.05, exposure: 1 };
   // Probe volume (fill/bounce) + per-pixel contact AO. The bounce is stored as SH-L1 (only 4
   // coeffs/channel), which ~16 cones already fully determine — so conesPerProbe past ~16-32 adds
   // nothing visible, only probe-pass cost. 32 is a safe, cheap default. AO is a few short cones.
@@ -1049,7 +1050,7 @@ export function createVoxelSystem({
   // coneOutput). Reads the G-buffer (albedo/normal/depth/emission).
   function composite(encoder: GPUCommandEncoder) {
     compParamsArr[0] = compositeParams.ambient;
-    compParamsArr[1] = 0;
+    compParamsArr[1] = compositeParams.exposure; // HDR exposure before ACES tonemap
     compParamsArr[2] = sunWorldTexel; // sun shadow-map world texel size (normal-offset bias)
     compParamsArr[3] = 0;
     device.queue.writeBuffer(

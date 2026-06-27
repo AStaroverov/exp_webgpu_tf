@@ -18,8 +18,9 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 export const shaderMeta = new ShaderMeta(
   {
     // .x = ambient (the floor scaled by AO). giStrength is already baked into the cone's rgb,
-    // so it is NOT re-applied here. .z = sun shadow-map world texel size (world units per texel,
-    // for the normal-offset bias). (y/w spare.)
+    // so it is NOT re-applied here. .y = exposure (HDR multiplier before ACES tonemapping).
+    // .z = sun shadow-map world texel size (world units per texel, for the normal-offset bias).
+    // (w spare.)
     params: new VariableMeta("uParams", VariableKind.Uniform, `vec4<f32>`),
     // .x = screen width (px), .y = screen height (px) — for the half-res cone upsample uv. (z/w spare.)
     params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
@@ -131,6 +132,18 @@ fn sun_shadow(P: vec3<f32>, N: vec3<f32>, ndl: f32) -> f32 {
   return sum / wsum;
 }
 
+// ACES filmic tonemap (Narkowicz approximation): compresses unbounded HDR into [0,1] with a
+// highlight roll-off, so bright emitters/sun keep their shape instead of clipping to flat white
+// (and a sun-shadow under a bright light reads as a soft dip, not a hard black step on white).
+fn aces(x: vec3<f32>) -> vec3<f32> {
+  let a = 2.51;
+  let b = 0.03;
+  let c = 2.43;
+  let d = 0.59;
+  let e = 0.14;
+  return clamp((x * (a * x + b)) / (x * (c * x + d) + e), vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let pixel = vec2<i32>(floor(input.position.xy));
@@ -166,7 +179,10 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let sunDirect = ndl * uSunColor.rgb * uSun.w * sunVis;
 
   let lit = albedo * (uParams.x * ao + sunDirect + indirect) + emission;
-  return vec4f(lit, 1.0);
+  // HDR → display: exposure (uParams.y) then ACES tonemap, so bright sources roll off instead of
+  // clipping to flat white. (Gamma/sRGB encode is left to the present chain as today.)
+  let mapped = aces(lit * uParams.y);
+  return vec4f(mapped, 1.0);
 }
 `,
 );

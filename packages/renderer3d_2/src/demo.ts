@@ -68,7 +68,7 @@ async function main() {
   //   "emitter"  — ground + box occluder + a GUI-movable/resizable emitter sphere.
   //   "simple"   — fixed minimal scene (first-bug diagnosis).
   //   "showcase" — one of every shape kind + several lights.
-  const SCENE = "emitter" as "emitter" | "showcase" | "final" | "perf";
+  const SCENE = "perf" as "emitter" | "showcase" | "final" | "perf";
 
   // The configurable emitter (only used by the "emitter" scene). Live-edited from
   // the GUI: position via the transform (re-uploaded every frame), radius via the
@@ -477,6 +477,9 @@ async function main() {
   // cone giStrength bakes into the indirect term. Only the ambient floor lives here.
   const compositeFolder = gui.addFolder("Composite");
   compositeFolder.add(voxel.compositeParams, "ambient", 0, 0.5, 0.01).name("composite ambient");
+  // HDR exposure before the ACES tonemap. Raise for a brighter image; highlights roll off instead
+  // of clipping to flat white.
+  compositeFolder.add(voxel.compositeParams, "exposure", 0.1, 4, 0.05).name("exposure");
 
   // Perf folder: live fps / GPU-ms readout + per-pass toggles. Read the GPU-ms delta when a
   // toggle flips to attribute cost to that pass (gpuMs comes from onSubmittedWorkDone, so it
