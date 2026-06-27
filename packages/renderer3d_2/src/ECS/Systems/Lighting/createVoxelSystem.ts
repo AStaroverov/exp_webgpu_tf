@@ -137,7 +137,11 @@ export function createVoxelSystem({
   // Standard depth (orthoZO [0,1]) so the composite's shadow test is the simple "fragment
   // depth > stored ⇒ shadowed". Pipeline uses depthCompare "less-equal" + clear 1.0, fully
   // decoupled from the main camera's reverse-Z. Built ONCE; only sunViewProj/rayDir refresh.
-  const SHADOW_SIZE = 4096;
+  // 2048² over the 64-unit world box ≈ 0.03 world/texel — crisp enough for small objects, and
+  // 4× cheaper to render + store than 4096² (depth32float: 4096²=67 MB → 2048²=17 MB). The map
+  // re-renders every frame because the scene is dynamic (its content depends on object positions,
+  // not just the sun direction — so it cannot be cached across frames while objects move).
+  const SHADOW_SIZE = 2048;
   const sunShadowShader = new GPUShader(sunShadowMeta);
   const sunShadowPipeline = sunShadowShader.getRenderPipeline(device, "vs_main", "fs_depth", {
     withDepth: true,
