@@ -117,27 +117,31 @@ fn build_basis(n: vec3<f32>) -> mat3x3<f32> {
 
 // One cone marched along dir from origin: diameter grows with distance, each step samples
 // voxelRadiance at LOD=log2(diameter/voxelSize) and composites front-to-back ("over").
-// reach = how far this cone marches (world units). The step is floored at reach/64 so the
-// cone ALWAYS spans its full reach within the 64-step budget — without this, a narrow cone's
+// reach = how far this cone marches (world units). The step is floored at reach/maxSteps so the
+// cone ALWAYS spans its full reach within the step budget — without this, a narrow cone's
 // tiny near-field steps burn the budget and it dies ~16 units out (the "light stops at cone
 // reach" problem). fadeFrac>0 tapers the gathered radiance over the last fadeFrac of reach
 // (hides the artificial cutoff of the fill cones); pass 0 for aimed cones, which end at the
 // real light, so they must NOT be tapered. Occlusion (alpha) is never tapered → shadows stay.
-fn trace_cone(origin: vec3<f32>, dir: vec3<f32>, aperture: f32, reach: f32, fadeFrac: f32, startJ: f32) -> vec4<f32> {
+// maxSteps = march budget (aimed cones want it high for sharp shadows; the low-frequency fill
+// hemisphere is fine with ~half — its bounce is smooth, so fewer steps barely change it but
+// halve the dominant cone cost). alphaCut = early-out opacity: a fill cone that is ~opaque adds
+// almost nothing more, so cutting at <1 saves the tail steps; aimed cones pass 1.0 (no early cut).
+fn trace_cone(origin: vec3<f32>, dir: vec3<f32>, aperture: f32, reach: f32, fadeFrac: f32, startJ: f32, maxSteps: i32, alphaCut: f32) -> vec4<f32> {
   var col = vec3<f32>(0.0);
   var alpha = 0.0;
   let voxelSize = uGridOrigin.w;
   let gridMin = uGridOrigin.xyz;
   let extent = vec3<f32>(uGridDims.xyz) * voxelSize;
-  let stepFloor = reach / 64.0;
+  let stepFloor = reach / f32(maxSteps);
   // Per-pixel SCALE of the start distance (startJ in [0,1)). Because the march is ~geometric
   // (step grows with distance), scaling dist0 shifts the sampling "shells" by a per-pixel
   // factor at EVERY distance → the concentric "tree-ring" banding around bright sources
   // dithers across pixels and is blurred away by the half-res upsample. Lets few cones look
   // smooth without going to 48.
   var dist = voxelSize * (1.0 + startJ);
-  for (var i = 0; i < 64; i = i + 1) {
-    if (alpha >= 1.0 || dist > reach) { break; }
+  for (var i = 0; i < maxSteps; i = i + 1) {
+    if (alpha >= alphaCut || dist > reach) { break; }
     let diameter = max(voxelSize, 2.0 * aperture * dist);
     let lod = log2(diameter / voxelSize);
     let wp = origin + dir * dist;
@@ -214,7 +218,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let ndl = max(dot(N, dir), 0.0);
     if (ndl <= 0.0) { continue; }
     let ap = clamp(lights[j].w / d, 0.02, 0.5);   // angular size of the light = penumbra width
-    let r = trace_cone(origin, dir, ap, d, 0.0, jrad);
+    // AIMED: full march budget + no early opacity cut → the sharp direct shadow stays crisp.
+    let r = trace_cone(origin, dir, ap, d, 0.0, jrad, 64, 1.0);
     // ANALYTIC DIRECT + bleed-cancel (fixes the "white shadow"). full = the emitter's own light.
     // shadow = how much the cone's opacity removes; bleed = the radiance the cone actually
     // gathered along the way (a BRIGHT occluder => big bleed => its false shadow is cancelled;
@@ -241,8 +246,10 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let dir = normalize(basis * local);
     let w = cosT;                             // cosine weight
     // Fill/bounce cones reach the global maxDist (uParams.y) and softly fade over the last
-    // quarter so their artificial cutoff doesn't show as a circle.
-    let r = trace_cone(origin, dir, aperture, uParams.y, 0.25, jrad);
+    // quarter so their artificial cutoff doesn't show as a circle. HALF the march budget (the
+    // bounce term is low-frequency → smooth either way) + early-out at 0.95 opacity → this halves
+    // the dominant cone cost with no visible change.
+    let r = trace_cone(origin, dir, aperture, uParams.y, 0.25, jrad, 32, 0.95);
     acc = acc + w * r.rgb;
     occAcc = occAcc + w * r.a;
     wsum = wsum + w;
