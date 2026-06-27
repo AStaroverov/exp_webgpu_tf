@@ -126,11 +126,14 @@ export function createVoxelSystem({
     entries: [],
   });
 
-  // Probe-volume blur: a cheap 3D Gaussian over the SH-L1 textures (config.probeBlurRadius), run
-  // AFTER probe() so the cone fill samples a SPATIALLY-SMOOTHED bounce → a moving source's fill
-  // stops stepping by probe cells without paying for more probe trace work. Baked R → rebuildable.
+  // Probe-volume blur: a SEPARABLE 3D Gaussian over the SH-L1 textures (config.probeBlurRadius),
+  // run AFTER probe() so the cone fill samples a SPATIALLY-SMOOTHED bounce → a moving source's fill
+  // stops stepping by probe cells without paying for more probe trace work. Three 1D passes (X/Y/Z,
+  // O(R) taps each, NOT O(R³)) ping-pong A→B→A→B between the two SH sets. Baked R → rebuildable.
   let probeBlurShader = new GPUShader(createProbeBlurShaderMeta(config));
-  let probeBlurPipeline = probeBlurShader.getComputePipeline(device, "main");
+  let probeBlurPipelineX = probeBlurShader.getComputePipeline(device, "blur_x");
+  let probeBlurPipelineY = probeBlurShader.getComputePipeline(device, "blur_y");
+  let probeBlurPipelineZ = probeBlurShader.getComputePipeline(device, "blur_z");
   let probeBlurEmptyGroup1 = device.createBindGroup({
     layout: probeBlurShader.createBindGroupLayout(device, 1),
     entries: [],
@@ -347,11 +350,16 @@ export function createVoxelSystem({
   // textures and is built once but is convenient to rebuild alongside.
   let probeGroup0: GPUBindGroup;
   let probeGroup2: GPUBindGroup;
-  // Probe-blur bind groups: group0 = probeDims uniform + the RAW SH textures (src), group2 = the
-  // BLURRED SH textures (dst). Both reference the persistent probe textures (resolution-fixed), so
-  // they rebuild only when the blur shader is recompiled (rebuild()), not on grid changes.
-  let blurGroup0: GPUBindGroup;
-  let blurGroup2: GPUBindGroup;
+  // Probe-blur bind groups for the separable ping-pong. Two src→dst directions, each a (group0 =
+  // probeDims + src SH textures, group2 = dst SH textures) pair:
+  //   AB: src = probeTextures (A)     → dst = probeTexturesBlur (B)   — used by the X and Z passes
+  //   BA: src = probeTexturesBlur (B) → dst = probeTextures (A)       — used by the Y pass
+  // They reference the persistent probe textures (resolution-fixed) → rebuilt only when the blur
+  // shader recompiles (rebuild()), not on grid changes.
+  let blurGroupAB0: GPUBindGroup;
+  let blurGroupAB2: GPUBindGroup;
+  let blurGroupBA0: GPUBindGroup;
+  let blurGroupBA2: GPUBindGroup;
   let dispatchX = 0;
   let dispatchY = 0;
   let dispatchZ = 0;
@@ -443,44 +451,54 @@ export function createVoxelSystem({
     });
   }
 
-  // (Re)build the probe-blur bind groups. group0 = probeDims uniform + the RAW SH textures (src);
-  // group2 = the BLURRED SH textures (dst). Rebuilt when the blur shader is recompiled (rebuild()).
+  // (Re)build the probe-blur bind groups for both ping-pong directions. group0 = probeDims uniform
+  // + the SOURCE SH textures; group2 = the DEST SH textures. All 3 entry points (blur_x/_y/_z)
+  // share one pipeline layout, so any pipeline's layout works. Rebuilt when the blur shader is
+  // recompiled (rebuild()).
   function buildBlurGroups() {
-    blurGroup0 = device.createBindGroup({
-      layout: probeBlurPipeline.getBindGroupLayout(0),
-      entries: [
-        probeBlurShader.uniforms.probeDims.getBindGroupEntry(device),
-        {
-          binding: probeBlurShader.shaderMeta.uniforms.srcR.binding,
-          resource: probeTextures.shR.createView({ dimension: "3d" }),
-        },
-        {
-          binding: probeBlurShader.shaderMeta.uniforms.srcG.binding,
-          resource: probeTextures.shG.createView({ dimension: "3d" }),
-        },
-        {
-          binding: probeBlurShader.shaderMeta.uniforms.srcB.binding,
-          resource: probeTextures.shB.createView({ dimension: "3d" }),
-        },
-      ],
-    });
-    blurGroup2 = device.createBindGroup({
-      layout: probeBlurPipeline.getBindGroupLayout(2),
-      entries: [
-        {
-          binding: probeBlurShader.shaderMeta.uniforms.dstR.binding,
-          resource: probeTexturesBlur.shR.createView({ dimension: "3d" }),
-        },
-        {
-          binding: probeBlurShader.shaderMeta.uniforms.dstG.binding,
-          resource: probeTexturesBlur.shG.createView({ dimension: "3d" }),
-        },
-        {
-          binding: probeBlurShader.shaderMeta.uniforms.dstB.binding,
-          resource: probeTexturesBlur.shB.createView({ dimension: "3d" }),
-        },
-      ],
-    });
+    // group0 = probeDims + the three source SH views.
+    const group0 = (src: ProbeTextures) =>
+      device.createBindGroup({
+        layout: probeBlurPipelineX.getBindGroupLayout(0),
+        entries: [
+          probeBlurShader.uniforms.probeDims.getBindGroupEntry(device),
+          {
+            binding: probeBlurShader.shaderMeta.uniforms.srcR.binding,
+            resource: src.shR.createView({ dimension: "3d" }),
+          },
+          {
+            binding: probeBlurShader.shaderMeta.uniforms.srcG.binding,
+            resource: src.shG.createView({ dimension: "3d" }),
+          },
+          {
+            binding: probeBlurShader.shaderMeta.uniforms.srcB.binding,
+            resource: src.shB.createView({ dimension: "3d" }),
+          },
+        ],
+      });
+    // group2 = the three destination SH storage views.
+    const group2 = (dst: ProbeTextures) =>
+      device.createBindGroup({
+        layout: probeBlurPipelineX.getBindGroupLayout(2),
+        entries: [
+          {
+            binding: probeBlurShader.shaderMeta.uniforms.dstR.binding,
+            resource: dst.shR.createView({ dimension: "3d" }),
+          },
+          {
+            binding: probeBlurShader.shaderMeta.uniforms.dstG.binding,
+            resource: dst.shG.createView({ dimension: "3d" }),
+          },
+          {
+            binding: probeBlurShader.shaderMeta.uniforms.dstB.binding,
+            resource: dst.shB.createView({ dimension: "3d" }),
+          },
+        ],
+      });
+    blurGroupAB0 = group0(probeTextures); // src A
+    blurGroupAB2 = group2(probeTexturesBlur); // dst B
+    blurGroupBA0 = group0(probeTexturesBlur); // src B
+    blurGroupBA2 = group2(probeTextures); // dst A
   }
 
   // Upload the blur pass's probeDims uniform (constant = the probe resolution). Called once after
@@ -1008,21 +1026,32 @@ export function createVoxelSystem({
     pass.end();
   }
 
-  // Probe-volume blur: 3D Gaussian over the SH-L1 set (probeTextures → probeTexturesBlur). MUST run
-  // AFTER probe() (reads its output) and BEFORE cone() (which samples the blurred set). One compute
-  // dispatch over the probe grid. With probeBlurRadius=0 the shader is a passthrough copy.
-  function probeBlur(encoder: GPUCommandEncoder) {
+  // Probe-volume blur: SEPARABLE 3D Gaussian over the SH-L1 set. MUST run AFTER probe() (reads its
+  // output) and BEFORE cone() (which samples the blurred set). Three 1D compute passes ping-pong
+  // A→B (X), B→A (Y), A→B (Z) so the FINAL blurred volume lands in probeTexturesBlur (B) — exactly
+  // what buildConeGroup binds. Each pass is a separate compute pass so the encoder barriers between
+  // them (a pass reads the previous pass's writes). With probeBlurRadius=0 each pass is a copy.
+  const blurDX = Math.ceil(probeDimsVal.x / PROBE_WG);
+  const blurDY = Math.ceil(probeDimsVal.y / PROBE_WG);
+  const blurDZ = Math.ceil(probeDimsVal.z / PROBE_WG);
+  function blurPass(
+    encoder: GPUCommandEncoder,
+    pipeline: GPUComputePipeline,
+    group0: GPUBindGroup,
+    group2: GPUBindGroup,
+  ) {
     const pass = encoder.beginComputePass();
-    pass.setPipeline(probeBlurPipeline);
-    pass.setBindGroup(0, blurGroup0);
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, group0);
     pass.setBindGroup(1, probeBlurEmptyGroup1);
-    pass.setBindGroup(2, blurGroup2);
-    pass.dispatchWorkgroups(
-      Math.ceil(probeDimsVal.x / PROBE_WG),
-      Math.ceil(probeDimsVal.y / PROBE_WG),
-      Math.ceil(probeDimsVal.z / PROBE_WG),
-    );
+    pass.setBindGroup(2, group2);
+    pass.dispatchWorkgroups(blurDX, blurDY, blurDZ);
     pass.end();
+  }
+  function probeBlur(encoder: GPUCommandEncoder) {
+    blurPass(encoder, probeBlurPipelineX, blurGroupAB0, blurGroupAB2); // X: A→B
+    blurPass(encoder, probeBlurPipelineY, blurGroupBA0, blurGroupBA2); // Y: B→A
+    blurPass(encoder, probeBlurPipelineZ, blurGroupAB0, blurGroupAB2); // Z: A→B (final in B)
   }
 
   // VCT cone GI: per-pixel AIMED emitter cones (sharp direct + shadow) + a trilinear probe-SH
@@ -1148,7 +1177,9 @@ export function createVoxelSystem({
     // Probe-blur shader is ALSO baked (probeBlurRadius) → recompile + rebuild its groups/uniform.
     probeBlurShader.destroy();
     probeBlurShader = new GPUShader(createProbeBlurShaderMeta(config));
-    probeBlurPipeline = probeBlurShader.getComputePipeline(device, "main");
+    probeBlurPipelineX = probeBlurShader.getComputePipeline(device, "blur_x");
+    probeBlurPipelineY = probeBlurShader.getComputePipeline(device, "blur_y");
+    probeBlurPipelineZ = probeBlurShader.getComputePipeline(device, "blur_z");
     probeBlurEmptyGroup1 = device.createBindGroup({
       layout: probeBlurShader.createBindGroupLayout(device, 1),
       entries: [],
