@@ -68,7 +68,7 @@ async function main() {
   //   "emitter"  — ground + box occluder + a GUI-movable/resizable emitter sphere.
   //   "simple"   — fixed minimal scene (first-bug diagnosis).
   //   "showcase" — one of every shape kind + several lights.
-  const SCENE = "perf" as "emitter" | "showcase" | "final" | "perf" | "perf2";
+  const SCENE = "perf2" as "emitter" | "showcase" | "final" | "perf" | "perf2";
   // Both perf scenes drive the same GPU-cost harness (per-pass toggles + serialized timing).
   const PERF = SCENE === "perf" || SCENE === "perf2";
 
@@ -548,14 +548,23 @@ async function main() {
     .name("emitter direct strength")
     .onFinishChange(rebuild);
   // Distance falloff for emitter direct light: 0 = flat (sun-like, hard rim), 1 = standard 1/d².
-  coneFolder.add(voxel.config, "emitterFalloff", 0, 4, 0.05).name("emitter falloff").onFinishChange(rebuild);
+  coneFolder
+    .add(voxel.config, "emitterFalloff", 0, 4, 0.05)
+    .name("emitter falloff")
+    .onFinishChange(rebuild);
   coneFolder
     .add(voxel.config, "aperture", 0.1, 1.5, 0.01)
     .name("aperture (lower=sharper)")
     .onFinishChange(rebuild);
   coneFolder.add(voxel.config, "maxDist", 1, 64, 0.5).name("cone reach").onFinishChange(rebuild);
-  coneFolder.add(voxel.config, "normalBias", 0, 2, 0.01).name("normal bias").onFinishChange(rebuild);
-  coneFolder.add(voxel.config, "giStrength", 0, 4, 0.05).name("GI strength (bounce)").onFinishChange(rebuild);
+  coneFolder
+    .add(voxel.config, "normalBias", 0, 2, 0.01)
+    .name("normal bias")
+    .onFinishChange(rebuild);
+  coneFolder
+    .add(voxel.config, "giStrength", 0, 4, 0.05)
+    .name("GI strength (bounce)")
+    .onFinishChange(rebuild);
   // Cone-pass resolution: 2 = half-res (¼ pixels), 4 = quarter-res (1/16), 8 = eighth-res (1/64).
   // The biggest perf lever for heavy scenes — lower res blurs the GI but the bilateral upsample
   // keeps edges crisp.
@@ -569,7 +578,10 @@ async function main() {
   coneFolder.add(voxel.config, "aimedSteps", 8, 64, 1).name("aimed steps").onFinishChange(rebuild);
   // Early-out opacity: <1 lets a near-opaque aimed cone stop before its full budget (saves the tail
   // when the light is blocked). 1 = no early cut (sharpest shadow).
-  coneFolder.add(voxel.config, "aimedAlphaCut", 0.5, 1, 0.01).name("aimed alpha cut").onFinishChange(rebuild);
+  coneFolder
+    .add(voxel.config, "aimedAlphaCut", 0.5, 1, 0.01)
+    .name("aimed alpha cut")
+    .onFinishChange(rebuild);
 
   // Probe GI: the low-res irradiance-probe volume that replaced the per-pixel fill hemisphere.
   // conesPerProbe is the bounce quality (probes run at low res, once per frame → afford many);
@@ -580,19 +592,31 @@ async function main() {
     .add(voxel.config, "conesPerProbe", [8, 16, 32, 64, 128])
     .name("cones / probe")
     .onFinishChange(rebuild);
-  probeFolder.add(voxel.config, "aoConeCount", 0, 8, 1).name("AO cones (contact)").onFinishChange(rebuild);
+  probeFolder
+    .add(voxel.config, "aoConeCount", 0, 8, 1)
+    .name("AO cones (contact)")
+    .onFinishChange(rebuild);
   probeFolder.add(voxel.config, "aoReach", 1, 16, 0.5).name("AO reach").onFinishChange(rebuild);
 
   // Composite (Layer 4): the final lit image. Sun controls above feed it via SunLight;
   // cone giStrength bakes into the indirect term. Only the ambient floor lives here.
   const compositeFolder = gui.addFolder("Composite");
-  compositeFolder.add(voxel.config, "ambient", 0, 0.5, 0.01).name("composite ambient").onFinishChange(rebuild);
+  compositeFolder
+    .add(voxel.config, "ambient", 0, 0.5, 0.01)
+    .name("composite ambient")
+    .onFinishChange(rebuild);
   // HDR exposure before the ACES tonemap. Raise for a brighter image; highlights roll off instead
   // of clipping to flat white.
-  compositeFolder.add(voxel.config, "exposure", 0.1, 4, 0.05).name("exposure").onFinishChange(rebuild);
+  compositeFolder
+    .add(voxel.config, "exposure", 0.1, 4, 0.05)
+    .name("exposure")
+    .onFinishChange(rebuild);
   // Sun-shadow penumbra: the PCF filter widens as the sun intensity drops below 1, so a dimmer sun
   // casts a softer, wider shadow edge. 0 = always crisp; higher = stronger softening when sun < 1.
-  compositeFolder.add(voxel.config, "penumbra", 0, 12, 0.5).name("penumbra (sun-dim)").onFinishChange(rebuild);
+  compositeFolder
+    .add(voxel.config, "penumbra", 0, 12, 0.5)
+    .name("penumbra (sun-dim)")
+    .onFinishChange(rebuild);
 
   // Perf folder: live fps / GPU-ms readout + per-pass toggles. Read the GPU-ms delta when a
   // toggle flips to attribute cost to that pass (gpuMs comes from onSubmittedWorkDone, so it

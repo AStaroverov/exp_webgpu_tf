@@ -291,13 +291,16 @@ export function createVoxelSystem({
   const coneLightsArr = getTypeTypedArray(coneShader.shaderMeta.uniforms.lights.type); // Float32Array(32)
   const coneLightColorsArr = getTypeTypedArray(coneShader.shaderMeta.uniforms.lightColor.type); // Float32Array(32)
   let coneLightCount = 0;
-  // Composite scratch.
-  const compParamsArr = getTypeTypedArray(compositeShader.shaderMeta.uniforms.params.type); // Float32Array(4)
-  const compParams2Arr = getTypeTypedArray(compositeShader.shaderMeta.uniforms.params2.type); // Float32Array(4)
-  const compSunArr = getTypeTypedArray(compositeShader.shaderMeta.uniforms.sun.type); // Float32Array(4)
-  const compSunColorArr = getTypeTypedArray(compositeShader.shaderMeta.uniforms.sunColor.type); // Float32Array(4)
-  const compInvArr = getTypeTypedArray(compositeShader.shaderMeta.uniforms.invViewProj.type); // Float32Array(16)
-  const compSunViewProjArr = getTypeTypedArray(compositeShader.shaderMeta.uniforms.sunViewProj.type); // Float32Array(16)
+  // Composite scratch — ONE consolidated frame UBO (matches the WGSL `CompositeFrame` struct).
+  // 48 f32 = 192 bytes. Field offsets (in f32 elements): params@0, params2@4, sun@8, sunColor@12,
+  // invViewProj@16, sunViewProj@32. Filled across composite() + buildSunViewProj(), one writeBuffer.
+  const compFrameArr = new Float32Array(48);
+  const CF_PARAMS = 0;
+  const CF_PARAMS2 = 4;
+  const CF_SUN = 8;
+  const CF_SUNCOLOR = 12;
+  const CF_INVVP = 16;
+  const CF_SUNVP = 32;
   // World units per shadow texel (sun ortho width / SHADOW_SIZE) → composite normal-offset bias.
   let sunWorldTexel = 0;
   // Mip scratch: .xyz = destination mip dims (re-uploaded per level).
@@ -427,12 +430,7 @@ export function createVoxelSystem({
     compositeGroup0 = device.createBindGroup({
       layout: compositePipeline.getBindGroupLayout(0),
       entries: [
-        compositeShader.uniforms.params.getBindGroupEntry(device),
-        compositeShader.uniforms.params2.getBindGroupEntry(device),
-        compositeShader.uniforms.sun.getBindGroupEntry(device),
-        compositeShader.uniforms.sunColor.getBindGroupEntry(device),
-        compositeShader.uniforms.invViewProj.getBindGroupEntry(device),
-        compositeShader.uniforms.sunViewProj.getBindGroupEntry(device),
+        compositeShader.uniforms.frame.getBindGroupEntry(device),
         { binding: compositeShader.shaderMeta.uniforms.albedoTex.binding, resource: gAlbedo.createView() },
         { binding: compositeShader.shaderMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
         { binding: compositeShader.shaderMeta.uniforms.coneTex.binding, resource: coneView },
@@ -696,12 +694,10 @@ export function createVoxelSystem({
       0,
       sunViewProjArr,
     );
-    compSunViewProjArr.set(sunViewProj as Float32Array);
-    device.queue.writeBuffer(
-      compositeShader.uniforms.sunViewProj.getGPUBuffer(device),
-      0,
-      compSunViewProjArr,
-    );
+    // Composite's frame UBO is uploaded once in composite() (runs after sunDepth); here we just
+    // stage the sun matrix + texel size into the shared scratch (params.z + the sunViewProj block).
+    compFrameArr.set(sunViewProj as Float32Array, CF_SUNVP);
+    compFrameArr[CF_PARAMS + 2] = sunWorldTexel;
     // ALSO upload to voxelize's uSunViewProj — it samples the shadow map at voxelize time and
     // MUST use the same matrix that rendered the map (sunDepth runs first in the loop).
     voxSunViewProjArr.set(sunViewProj as Float32Array);
@@ -994,51 +990,29 @@ export function createVoxelSystem({
   // into the final lit image → compositeOutput (full-res HDR). MUST run AFTER cone() (it reads
   // coneOutput). Reads the G-buffer (albedo/normal/depth/emission).
   function composite(encoder: GPUCommandEncoder) {
-    // ambient/exposure/penumbra are BAKED consts now; only .z (sun shadow-map world texel size,
-    // the normal-offset bias) is still read by the shader.
-    compParamsArr[2] = sunWorldTexel;
-    device.queue.writeBuffer(
-      compositeShader.uniforms.params.getGPUBuffer(device),
-      0,
-      compParamsArr,
-    );
-
+    // Fill the consolidated frame UBO and upload it in ONE writeBuffer. params.z + the sunViewProj
+    // block (CF_SUNVP) are already staged by buildSunViewProj() in sunDepth() (runs before this).
+    // ambient/exposure/penumbra are BAKED consts; params.z = sun shadow-map world texel size.
+    compFrameArr[CF_PARAMS + 2] = sunWorldTexel;
     // invViewProj already computed in cone() this frame (cone runs before composite); just reuse it.
-    compInvArr.set(invViewProj as Float32Array);
-    device.queue.writeBuffer(
-      compositeShader.uniforms.invViewProj.getGPUBuffer(device),
-      0,
-      compInvArr,
-    );
-
-    compParams2Arr[0] = canvas.width;
-    compParams2Arr[1] = canvas.height;
-    compParams2Arr[2] = coneScale; // cone downscale factor → upsample_cone maps cone↔full res
-    compParams2Arr[3] = 0;
-    device.queue.writeBuffer(
-      compositeShader.uniforms.params2.getGPUBuffer(device),
-      0,
-      compParams2Arr,
-    );
-
+    compFrameArr.set(invViewProj as Float32Array, CF_INVVP);
+    compFrameArr[CF_PARAMS2 + 0] = canvas.width;
+    compFrameArr[CF_PARAMS2 + 1] = canvas.height;
+    compFrameArr[CF_PARAMS2 + 2] = coneScale; // cone downscale factor → upsample_cone maps cone↔full res
+    compFrameArr[CF_PARAMS2 + 3] = 0;
     // Directional sun: .xyz = world dir TOWARD the sun (azimuth + elevation), .w = effective
     // intensity (0 = disabled). Same packing as voxelize's uSun.
     const a = SunLight.angle;
     const e = SunLight.elevation;
     const ce = Math.cos(e);
-    compSunArr[0] = Math.cos(a) * ce;
-    compSunArr[1] = Math.sin(a) * ce;
-    compSunArr[2] = Math.sin(e);
-    compSunArr[3] = SunLight.enabled ? SunLight.intensity : 0;
-    device.queue.writeBuffer(compositeShader.uniforms.sun.getGPUBuffer(device), 0, compSunArr);
-    compSunColorArr[0] = SunLight.color[0];
-    compSunColorArr[1] = SunLight.color[1];
-    compSunColorArr[2] = SunLight.color[2];
-    device.queue.writeBuffer(
-      compositeShader.uniforms.sunColor.getGPUBuffer(device),
-      0,
-      compSunColorArr,
-    );
+    compFrameArr[CF_SUN + 0] = Math.cos(a) * ce;
+    compFrameArr[CF_SUN + 1] = Math.sin(a) * ce;
+    compFrameArr[CF_SUN + 2] = Math.sin(e);
+    compFrameArr[CF_SUN + 3] = SunLight.enabled ? SunLight.intensity : 0;
+    compFrameArr[CF_SUNCOLOR + 0] = SunLight.color[0];
+    compFrameArr[CF_SUNCOLOR + 1] = SunLight.color[1];
+    compFrameArr[CF_SUNCOLOR + 2] = SunLight.color[2];
+    device.queue.writeBuffer(compositeShader.uniforms.frame.getGPUBuffer(device), 0, compFrameArr);
 
     const pass = encoder.beginRenderPass({
       colorAttachments: [

@@ -20,23 +20,21 @@ import { VoxelBakedConfig } from "./voxelConfig.ts";
 export function createCompositeShaderMeta(cfg: VoxelBakedConfig) {
   return new ShaderMeta(
   {
-    // .x ambient and .y exposure and .w penumbra are now BAKED consts (see the const block at the
-    // top of the WGSL body); only .z (sun shadow-map world texel size, world units per texel, for
-    // the normal-offset bias) remains live.
-    params: new VariableMeta("uParams", VariableKind.Uniform, `vec4<f32>`),
-    // .x = screen width (px), .y = screen height (px) — for the cone upsample uv. .z = cone
-    // downscale factor (2 = half-res, 4 = quarter-res) used by upsample_cone. (.w spare.)
-    params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
-    // Directional sun: .xyz = normalized world dir TOWARD the sun, .w = effective intensity
-    // (0 when disabled). A real parallel sun — its DIRECT term lights every surface by N·L.
-    sun: new VariableMeta("uSun", VariableKind.Uniform, `vec4<f32>`),
-    // .rgb = sun color (linear).
-    sunColor: new VariableMeta("uSunColor", VariableKind.Uniform, `vec4<f32>`),
-    // ── Sun shadow-map inputs (crisp directional cast shadow) ──────────────────────────
-    // inverse(viewProj) (reverse-Z) to reconstruct world P from the camera depth.
-    invViewProj: new VariableMeta("uInvViewProj", VariableKind.Uniform, `mat4x4<f32>`),
-    // Sun orthographic view-projection (orthoZO, z in [0,1]) — projects P into the shadow map.
-    sunViewProj: new VariableMeta("uSunViewProj", VariableKind.Uniform, `mat4x4<f32>`),
+    // All per-frame scalar/vector/matrix uniforms consolidated into ONE struct buffer (uF) so the
+    // pass binds + uploads a single UBO instead of six. The WGSL `CompositeFrame` struct is defined
+    // in the body below; the type name here is opaque to the meta system, so size/bufferSize are
+    // given explicitly (48 f32 = 192 bytes: 4×vec4 + 2×mat4x4, all 16-byte aligned → no padding).
+    // Fields:
+    //   params  .z = sun shadow-map world texel size (normal-offset bias). .x/.y/.w baked consts.
+    //   params2 .x/.y = screen width/height px (cone upsample uv), .z = cone downscale factor.
+    //   sun     .xyz = normalized world dir TOWARD the sun, .w = effective intensity (0 = disabled).
+    //   sunColor.rgb = sun color (linear).
+    //   invViewProj = inverse(viewProj) (reverse-Z) → reconstruct world P from camera depth.
+    //   sunViewProj = sun orthographic view-projection (orthoZO) → project P into the shadow map.
+    frame: new VariableMeta("uF", VariableKind.Uniform, `CompositeFrame`, {
+      size: 48,
+      bufferSize: 192,
+    }),
     // G-buffer reverse-Z camera depth, to reconstruct the per-pixel world position P.
     depthTex: new VariableMeta("depthTex", VariableKind.Texture, `texture_depth_2d`, {
       textureSampleType: "depth",
@@ -73,6 +71,18 @@ const AMBIENT: f32 = ${cfg.ambient};
 const EXPOSURE: f32 = ${cfg.exposure};
 const PENUMBRA: f32 = ${cfg.penumbra};
 
+// Per-frame uniforms, one consolidated UBO (uF). All members are 16-byte aligned (vec4 / mat4x4)
+// so the std140 layout is dense: params@0, params2@16, sun@32, sunColor@48, invViewProj@64,
+// sunViewProj@128 (bytes). Mirrored by the CPU scratch layout in createVoxelSystem.composite().
+struct CompositeFrame {
+  params: vec4<f32>,
+  params2: vec4<f32>,
+  sun: vec4<f32>,
+  sunColor: vec4<f32>,
+  invViewProj: mat4x4<f32>,
+  sunViewProj: mat4x4<f32>,
+};
+
 const POSITION = array<vec2f, 6>(
   vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0),
   vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(-1.0, 1.0)
@@ -97,7 +107,7 @@ fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 
 // Unproject an NDC point (z reverse-Z) to world space.
 fn unproject(ndc: vec3<f32>) -> vec3<f32> {
-  let w = uInvViewProj * vec4<f32>(ndc, 1.0);
+  let w = uF.invViewProj * vec4<f32>(ndc, 1.0);
   return w.xyz / w.w;
 }
 
@@ -122,15 +132,15 @@ fn ign(p: vec2<f32>) -> f32 {
 }
 
 // Sun shadow-map lookup: project the surface point P into the sun's orthographic clip space and
-// compare depth. 1 = lit, 0 = shadowed. Normal-offset bias (uParams.z = world texel size) is the
+// compare depth. 1 = lit, 0 = shadowed. Normal-offset bias (uF.params.z = world texel size) is the
 // main acne killer; tiny slope-scaled constant bias on top. The map is orthoZO + clear 1.0 +
 // "less-equal", so it stores the nearest-to-sun depth → shadowed when the fragment's sun-space
 // depth is GREATER than stored (+ bias).
 // Soft shadows: a per-pixel-rotated Poisson disk of radius = spread (texels). spread=1 is the
 // near-crisp baseline; larger values widen the penumbra (driven by sun dimness in fs_main).
 fn sun_shadow(P: vec3<f32>, N: vec3<f32>, ndl: f32, spread: f32, seed: vec2<f32>) -> f32 {
-  let Po = P + N * (uParams.z * 2.5);
-  let ls = uSunViewProj * vec4<f32>(Po, 1.0);
+  let Po = P + N * (uF.params.z * 2.5);
+  let ls = uF.sunViewProj * vec4<f32>(Po, 1.0);
   let ndc = ls.xyz / ls.w;
   var uv = ndc.xy * 0.5 + vec2<f32>(0.5, 0.5);
   uv.y = 1.0 - uv.y;
@@ -179,7 +189,7 @@ fn upsample_cone(pixel: vec2<i32>, cn: vec3<f32>) -> vec4<f32> {
   let fullDim = vec2<i32>(textureDimensions(depthTex, 0));
   let coneDim = vec2<i32>(textureDimensions(coneTex, 0));
   // Cone downscale factor (2 = half-res, 4 = quarter-res), set on the CPU.
-  let s = max(1.0, uParams2.z);
+  let s = max(1.0, uF.params2.z);
   let si = i32(s);
   // Center pixel mapped into cone-res texel space (texel centers at integer+0.5).
   let hp = (vec2<f32>(pixel) + vec2<f32>(0.5)) / s - vec2<f32>(0.5, 0.5);
@@ -227,19 +237,19 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   // Self-emission: per-pixel from the G-buffer emission target (surface property).
   let emission = textureLoad(emissionTex, pixel, 0).rgb;
 
-  // Direct parallel sun (uSun.w = 0 when disabled), with a crisp shadow-map cast shadow.
+  // Direct parallel sun (uF.sun.w = 0 when disabled), with a crisp shadow-map cast shadow.
   // N·L Lambert × sun color × intensity × shadow visibility. P reconstructed from camera depth.
-  let ndl = max(dot(N, uSun.xyz), 0.0);
+  let ndl = max(dot(N, uF.sun.xyz), 0.0);
   var sunVis = 1.0;
-  if (uSun.w > 0.0 && ndl > 0.0) {
+  if (uF.sun.w > 0.0 && ndl > 0.0) {
     let depthP = textureLoad(depthTex, pixel, 0);
-    let uvP = (vec2<f32>(pixel) + vec2<f32>(0.5)) / uParams2.xy;
+    let uvP = (vec2<f32>(pixel) + vec2<f32>(0.5)) / uF.params2.xy;
     let P = unproject(vec3<f32>(uvP.x * 2.0 - 1.0, (1.0 - uvP.y) * 2.0 - 1.0, depthP));
     // Penumbra grows as the sun dims below 1: spread = 1 at full sun, up to 1 + penumbra at sun→0.
-    let spread = 1.0 + PENUMBRA * clamp(1.0 - uSun.w, 0.0, 1.0);
+    let spread = 1.0 + PENUMBRA * clamp(1.0 - uF.sun.w, 0.0, 1.0);
     sunVis = sun_shadow(P, N, ndl, spread, input.position.xy);
   }
-  let sunDirect = ndl * uSunColor.rgb * uSun.w * sunVis;
+  let sunDirect = ndl * uF.sunColor.rgb * uF.sun.w * sunVis;
 
   let lit = albedo * (AMBIENT * ao + sunDirect + indirect) + emission;
   // HDR → display: exposure (EXPOSURE) then ACES tonemap, so bright sources roll off instead of

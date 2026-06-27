@@ -12,7 +12,7 @@ export function wgsl(
     let valueStr = "";
 
     if (value === undefined || typeof value === "string" || typeof value === "number") {
-      valueStr = value ? String(value) : "";
+      valueStr = value === undefined ? "" : String(value);
     }
 
     if (typeof value === "object") {
