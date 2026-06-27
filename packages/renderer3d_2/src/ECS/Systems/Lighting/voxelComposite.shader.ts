@@ -10,7 +10,8 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 //     the sun-POV depth map (sun_shadow(): reconstruct world P, project into the sun's orthoZO
 //     clip space, compare depth with normal-offset + slope bias + 5×5 tent PCF).
 //   - indirect already carries giStrength (baked into the cone's rgb); AO = the cone's hemisphere
-//     visibility (cone.a). The cone output is HALF-res → bilinear-upsampled here (linear sampler).
+//     visibility (cone.a). The cone output is HALF-res → normal-aware (bilateral) upsample here
+//     (upsample_cone) so a near emitter's light does not smear across shape silhouettes.
 //     The emitters (point lights) live entirely in this indirect cone-GI term.
 //   - self-emission makes emitters glow: read the per-pixel G-buffer emission target written by
 //     fs_main (uColor.rgb·abs(material.x)). A SURFACE property → no voxel cross-contamination.
@@ -161,6 +162,41 @@ fn aces(x: vec3<f32>) -> vec3<f32> {
   return clamp((x * (a * x + b)) / (x * (c * x + d) + e), vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
+// Normal-aware (bilateral) upsample of the HALF-res cone output. Plain bilinear bleeds a half-res
+// texel's value ~2 full-res px past a silhouette, so when a bright emitter passes near a small shape
+// its lit value smears onto the shape's edge (a blown rim, worse when zoomed out — the edge is a
+// bigger fraction of the shape). Fix: blend the 4 nearest half-res taps but weight each by how well
+// its surface normal matches THIS pixel's normal, and drop taps that sit on background (a<0.5). Taps
+// across a silhouette (different orientation, or no surface) stop contributing → the edge stays crisp.
+// The +1e-4 floor degrades gracefully to plain bilinear if every tap is rejected (never worse than
+// today). No derivatives are used, so this is safe in the post-early-return (non-uniform) flow.
+fn upsample_cone(pixel: vec2<i32>, cn: vec3<f32>) -> vec4<f32> {
+  let fullDim = vec2<i32>(textureDimensions(depthTex, 0));
+  let halfDim = vec2<i32>(textureDimensions(coneTex, 0));
+  // Center pixel mapped into half-res texel space (texel centers at integer+0.5).
+  let hp = (vec2<f32>(pixel) + vec2<f32>(0.5)) * 0.5 - vec2<f32>(0.5, 0.5);
+  let base = vec2<i32>(floor(hp));
+  let fr = hp - floor(hp);
+  var sum = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+  var wsum = 0.0;
+  for (var oy = 0; oy <= 1; oy = oy + 1) {
+    for (var ox = 0; ox <= 1; ox = ox + 1) {
+      let h = clamp(base + vec2<i32>(ox, oy), vec2<i32>(0, 0), halfDim - vec2<i32>(1, 1));
+      let bw = select(1.0 - fr.x, fr.x, ox == 1) * select(1.0 - fr.y, fr.y, oy == 1);
+      // Representative full-res sample for this half-res texel (its lower-right covered pixel).
+      let fp = clamp(h * 2 + vec2<i32>(1, 1), vec2<i32>(0, 0), fullDim - vec2<i32>(1, 1));
+      let nt = textureLoad(normalTex, fp, 0);
+      let ntDir = normalize(nt.rgb * 2.0 - 1.0);
+      // Background taps (a<0.5) contribute 0 so masked regions never bleed onto a silhouette.
+      let nwgt = select(0.0, pow(max(dot(ntDir, cn), 0.0), 4.0), nt.a >= 0.5);
+      let w = bw * (nwgt + 1e-4);
+      sum = sum + textureLoad(coneTex, h, 0) * w;
+      wsum = wsum + w;
+    }
+  }
+  return sum / wsum;
+}
+
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let pixel = vec2<i32>(floor(input.position.xy));
@@ -174,9 +210,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
 
   let albedo = textureLoad(albedoTex, pixel, 0).rgb;
 
-  // Indirect radiance (already ×giStrength) + hemisphere visibility (AO). coneTex is half-res;
-  // the linear sampler bilinearly upsamples it. uParams2.xy = full dims.
-  let cone = textureSampleLevel(coneTex, coneSampler, (vec2<f32>(pixel) + vec2<f32>(0.5)) / uParams2.xy, 0.0);
+  // Indirect radiance (already ×giStrength) + hemisphere visibility (AO). coneTex is half-res →
+  // normal-aware bilateral upsample (keeps emitter light from smearing onto shape silhouettes).
+  let cone = upsample_cone(pixel, N);
   let indirect = cone.rgb;
   let ao = cone.a;
 
