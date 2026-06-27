@@ -28,6 +28,8 @@ export type VoxelConeParams = {
   giStrength: number; // multiplier on the probe bounce (indirect) term
   emitterDirect: number; // multiplier on the summed emitter aimed-cone DIRECT light (vs the sun)
   emitterFalloff: number; // emitter distance falloff coefficient (0 = none/flat, 1 = standard 1/d²)
+  aimedSteps: number; // aimed-cone march step budget (lower = cheaper, shorter/coarser shadows)
+  aimedAlphaCut: number; // aimed-cone early-out opacity (<1 stops a near-opaque cone → saves the tail)
 };
 
 export type VoxelCompositeParams = {
@@ -81,6 +83,8 @@ export function createVoxelSystem({
     giStrength: 1,
     emitterDirect: 1,
     emitterFalloff: 1,
+    aimedSteps: 64,
+    aimedAlphaCut: 1,
   };
   // giStrength stays in coneParams (baked into the cone's rgb); the composite only adds the
   // ambient floor.
@@ -318,6 +322,7 @@ export function createVoxelSystem({
   const coneParamsArr = getTypeTypedArray(coneMeta.uniforms.params.type); // Float32Array(4)
   const coneParams2Arr = getTypeTypedArray(coneMeta.uniforms.params2.type); // Float32Array(4)
   const coneAoArr = getTypeTypedArray(coneMeta.uniforms.aoParams.type); // Float32Array(4)
+  const coneTuneArr = getTypeTypedArray(coneMeta.uniforms.tune.type); // Float32Array(4)
   const coneInvArr = getTypeTypedArray(coneMeta.uniforms.invViewProj.type); // Float32Array(16)
   // Probe scratch.
   const probeOriginArr = getTypeTypedArray(probeMeta.uniforms.gridOrigin.type); // Float32Array(4)
@@ -394,6 +399,7 @@ export function createVoxelSystem({
         coneShader.uniforms.params.getBindGroupEntry(device),
         coneShader.uniforms.params2.getBindGroupEntry(device),
         coneShader.uniforms.aoParams.getBindGroupEntry(device),
+        coneShader.uniforms.tune.getBindGroupEntry(device),
         coneShader.uniforms.invViewProj.getBindGroupEntry(device),
         coneShader.uniforms.gridOrigin.getBindGroupEntry(device),
         coneShader.uniforms.gridDims.getBindGroupEntry(device),
@@ -619,15 +625,17 @@ export function createVoxelSystem({
     dispatchY = Math.ceil(dimY / WORKGROUP);
     dispatchZ = Math.ceil(dimZ / WORKGROUP);
   }
-  // HALF-res HDR target for the Layer-2 cone gather.
-  // Half-res for perf (¼ the pixels → ~4× less cone work); the composite bilinear-upsamples
-  // it back to full res (indirect light is low-frequency, so that is fine). The render pass
-  // viewport IS the texture size, so the cone pass renders at half res automatically.
+  // DOWNSCALED HDR target for the Layer-2 cone gather. coneScale = 2 (half-res, ¼ the pixels →
+  // ~4× less cone work) by default; 4 (quarter-res, 1/16 the pixels) for heavily-loaded scenes.
+  // The composite normal-aware-upsamples it back to full res (indirect light is low-frequency, so
+  // that is fine). The render pass viewport IS the texture size, so the cone pass renders at the
+  // downscaled res automatically; the cone shader maps via texCoord, so it needs no scale uniform.
+  let coneScale = 2;
   const createConeOutput = () =>
     device.createTexture({
       size: [
-        Math.max(1, Math.ceil(canvas.width / 2)),
-        Math.max(1, Math.ceil(canvas.height / 2)),
+        Math.max(1, Math.ceil(canvas.width / coneScale)),
+        Math.max(1, Math.ceil(canvas.height / coneScale)),
         1,
       ],
       format: "rgba16float",
@@ -1006,6 +1014,10 @@ export function createVoxelSystem({
     coneAoArr[3] = coneParams.emitterDirect; // emitter direct strength (vs the sun)
     device.queue.writeBuffer(coneShader.uniforms.aoParams.getGPUBuffer(device), 0, coneAoArr);
 
+    coneTuneArr[0] = coneParams.aimedSteps; // aimed-cone march step budget
+    coneTuneArr[1] = coneParams.aimedAlphaCut; // aimed-cone early-out opacity
+    device.queue.writeBuffer(coneShader.uniforms.tune.getGPUBuffer(device), 0, coneTuneArr);
+
     mat4.invert(invViewProj, viewProjMatrix);
     coneInvArr.set(invViewProj as Float32Array);
     device.queue.writeBuffer(coneShader.uniforms.invViewProj.getGPUBuffer(device), 0, coneInvArr);
@@ -1071,7 +1083,7 @@ export function createVoxelSystem({
 
     compParams2Arr[0] = canvas.width;
     compParams2Arr[1] = canvas.height;
-    compParams2Arr[2] = 0;
+    compParams2Arr[2] = coneScale; // cone downscale factor → upsample_cone maps cone↔full res
     compParams2Arr[3] = 0;
     device.queue.writeBuffer(
       compositeShader.uniforms.params2.getGPUBuffer(device),
@@ -1120,6 +1132,17 @@ export function createVoxelSystem({
     buildGrid(newCellSize);
   }
 
+  // Change the cone-pass downscale factor (2 = half-res, 4 = quarter-res). Recreates the cone
+  // output at the new size and rebuilds the composite bind group (which samples it). The cone
+  // shader is resolution-agnostic; the composite reads coneScale via its params2 each frame.
+  function setConeScale(newScale: number) {
+    coneScale = Math.max(1, Math.round(newScale));
+    coneOutput.destroy();
+    coneOutput = createConeOutput();
+    coneView = coneOutput.createView();
+    buildCompositeGroup(); // composite samples coneView → rebind the new texture
+  }
+
   // Canvas resized: rebind the (new) G-buffer textures, recreate the canvas-sized cone +
   // composite outputs, and rebuild the cone/composite bind groups.
   function recreate(
@@ -1157,6 +1180,10 @@ export function createVoxelSystem({
     composite,
     recreate,
     setCellSize,
+    setConeScale,
+    get coneScale() {
+      return coneScale;
+    },
     get mipCount() {
       return mipCount;
     },

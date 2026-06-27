@@ -24,7 +24,8 @@ export const shaderMeta = new ShaderMeta(
     // .w = penumbra softness strength — the PCF filter widens as the sun intensity (uSun.w) drops
     //      below 1, so a dimmer sun casts a softer, wider shadow edge (physical-ish penumbra).
     params: new VariableMeta("uParams", VariableKind.Uniform, `vec4<f32>`),
-    // .x = screen width (px), .y = screen height (px) — for the half-res cone upsample uv. (z/w spare.)
+    // .x = screen width (px), .y = screen height (px) — for the cone upsample uv. .z = cone
+    // downscale factor (2 = half-res, 4 = quarter-res) used by upsample_cone. (.w spare.)
     params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
     // Directional sun: .xyz = normalized world dir TOWARD the sun, .w = effective intensity
     // (0 when disabled). A real parallel sun — its DIRECT term lights every surface by N·L.
@@ -172,19 +173,22 @@ fn aces(x: vec3<f32>) -> vec3<f32> {
 // today). No derivatives are used, so this is safe in the post-early-return (non-uniform) flow.
 fn upsample_cone(pixel: vec2<i32>, cn: vec3<f32>) -> vec4<f32> {
   let fullDim = vec2<i32>(textureDimensions(depthTex, 0));
-  let halfDim = vec2<i32>(textureDimensions(coneTex, 0));
-  // Center pixel mapped into half-res texel space (texel centers at integer+0.5).
-  let hp = (vec2<f32>(pixel) + vec2<f32>(0.5)) * 0.5 - vec2<f32>(0.5, 0.5);
+  let coneDim = vec2<i32>(textureDimensions(coneTex, 0));
+  // Cone downscale factor (2 = half-res, 4 = quarter-res), set on the CPU.
+  let s = max(1.0, uParams2.z);
+  let si = i32(s);
+  // Center pixel mapped into cone-res texel space (texel centers at integer+0.5).
+  let hp = (vec2<f32>(pixel) + vec2<f32>(0.5)) / s - vec2<f32>(0.5, 0.5);
   let base = vec2<i32>(floor(hp));
   let fr = hp - floor(hp);
   var sum = vec4<f32>(0.0, 0.0, 0.0, 0.0);
   var wsum = 0.0;
   for (var oy = 0; oy <= 1; oy = oy + 1) {
     for (var ox = 0; ox <= 1; ox = ox + 1) {
-      let h = clamp(base + vec2<i32>(ox, oy), vec2<i32>(0, 0), halfDim - vec2<i32>(1, 1));
+      let h = clamp(base + vec2<i32>(ox, oy), vec2<i32>(0, 0), coneDim - vec2<i32>(1, 1));
       let bw = select(1.0 - fr.x, fr.x, ox == 1) * select(1.0 - fr.y, fr.y, oy == 1);
-      // Representative full-res sample for this half-res texel (its lower-right covered pixel).
-      let fp = clamp(h * 2 + vec2<i32>(1, 1), vec2<i32>(0, 0), fullDim - vec2<i32>(1, 1));
+      // Representative full-res sample for this cone texel (center of the s×s block it covers).
+      let fp = clamp(h * si + vec2<i32>(si / 2, si / 2), vec2<i32>(0, 0), fullDim - vec2<i32>(1, 1));
       let nt = textureLoad(normalTex, fp, 0);
       let ntDir = normalize(nt.rgb * 2.0 - 1.0);
       // Background taps (a<0.5) contribute 0 so masked regions never bleed onto a silhouette.

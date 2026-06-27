@@ -20,9 +20,10 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 // too-few cones leaves angular GAPS between cones (banding) — raise the cone count whenever
 // you narrow the aperture.
 //
-// PERF: this pass runs at HALF resolution (¼ the pixels → ~4× less cone work). The full-res
-// G-buffer is still sampled (at the half-res pixel ·2, clamped); the composite bilinear-
-// upsamples this output back to full res — indirect light is low-frequency, so that is fine.
+// PERF: this pass runs at a DOWNSCALED resolution (half by default → ¼ the pixels → ~4× less
+// cone work; quarter → 1/16). The downscale factor is chosen on the CPU via the cone output size;
+// the shader is resolution-agnostic (maps via texCoord). The composite normal-aware-upsamples
+// this output back to full res — indirect light is low-frequency, so that is fine.
 //
 // IMPORTANCE-SAMPLED HEMISPHERE GATHER. Wide Fibonacci fill cones at a 60° aperture read coarse
 // mips, so they smear a small bright emitter across the whole cone → too dim + no directional
@@ -51,6 +52,10 @@ export const shaderMeta = new ShaderMeta(
     // darken their contacts. .w = emitter DIRECT strength (multiplier on the summed aimed-cone
     // direct light; raise to let bright emitters overpower the sun).
     aoParams: new VariableMeta("uAoParams", VariableKind.Uniform, `vec4<f32>`),
+    // Aimed-cone perf tuning. .x = march step budget (i32; lower = cheaper, shorter/coarser emitter
+    // shadows). .y = early-out opacity (alphaCut; <1 stops a near-opaque cone early → saves the
+    // tail steps). (.zw spare.)
+    tune: new VariableMeta("uTune", VariableKind.Uniform, `vec4<f32>`),
     // Emitters to importance-sample: .xyz = world CENTER, .w = radius (penumbra source). These
     // are AUTO-DISCOVERED from the LightEmitter component (every emitter, no manual list); only
     // the first i32(uParams2.w) entries are live.
@@ -191,10 +196,12 @@ fn sh_avg_radiance(c: vec4<f32>, N: vec3<f32>) -> f32 {
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-  // This pass renders at HALF res; map the half-res framebuffer coord to a representative
-  // full-res G-buffer texel (clamped). uParams2.xy carries the FULL canvas dims.
+  // This pass renders at a downscaled res (half or quarter — set on the CPU by the cone output
+  // size). Map this cone pixel to a representative full-res G-buffer texel via the normalized
+  // texCoord, which spans [0,1] across the target at ANY resolution → no scale uniform needed.
+  // uParams2.xy carries the FULL canvas dims. (half below is still the per-pixel jitter seed.)
   let half = vec2<i32>(floor(input.position.xy));
-  let full = min(half * 2, vec2<i32>(uParams2.xy) - vec2<i32>(1));
+  let full = min(vec2<i32>(input.texCoord * uParams2.xy), vec2<i32>(uParams2.xy) - vec2<i32>(1));
 
   // World normal from the G-buffer; a<0.5 = no surface at this pixel.
   let n = textureLoad(normalTex, full, 0);
@@ -261,8 +268,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     // never culled — exactly the intended behavior for that mode.
     if (max(full.r, max(full.g, full.b)) * uAoParams.w < 0.003) { continue; }
     let ap = clamp(lights[j].w / d, 0.02, 0.5);   // angular size of the light = penumbra width
-    // AIMED: full march budget + no early opacity cut → the sharp direct shadow stays crisp.
-    let r = trace_cone(origin, dir, ap, d, 0.0, jrad, 64, 1.0);
+    // AIMED: step budget + early-out opacity from uTune (perf knobs). Defaults (64, 1.0) = the old
+    // crisp behavior; lower steps / a <1 alphaCut trade shadow precision for speed on heavy scenes.
+    let r = trace_cone(origin, dir, ap, d, 0.0, jrad, max(1, i32(uTune.x)), uTune.y);
     // ANALYTIC DIRECT + bleed-cancel (fixes the "white shadow"). full = the emitter's own light.
     // shadow = how much the cone's opacity removes; bleed = the radiance the cone actually
     // gathered along the way (a BRIGHT occluder => big bleed => its false shadow is cancelled;

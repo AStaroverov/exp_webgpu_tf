@@ -68,7 +68,7 @@ async function main() {
   //   "emitter"  — ground + box occluder + a GUI-movable/resizable emitter sphere.
   //   "simple"   — fixed minimal scene (first-bug diagnosis).
   //   "showcase" — one of every shape kind + several lights.
-  const SCENE = "perf2" as "emitter" | "showcase" | "final" | "perf" | "perf2";
+  const SCENE = "perf" as "emitter" | "showcase" | "final" | "perf" | "perf2";
   // Both perf scenes drive the same GPU-cost harness (per-pass toggles + serialized timing).
   const PERF = SCENE === "perf" || SCENE === "perf2";
 
@@ -548,6 +548,20 @@ async function main() {
   coneFolder.add(voxel.coneParams, "maxDist", 1, 64, 0.5).name("cone reach");
   coneFolder.add(voxel.coneParams, "normalBias", 0, 2, 0.01).name("normal bias");
   coneFolder.add(voxel.coneParams, "giStrength", 0, 4, 0.05).name("GI strength (bounce)");
+  // Cone-pass resolution: 2 = half-res (¼ pixels), 4 = quarter-res (1/16), 8 = eighth-res (1/64).
+  // The biggest perf lever for heavy scenes — lower res blurs the GI but the bilateral upsample
+  // keeps edges crisp.
+  const coneResCfg = { scale: voxel.coneScale };
+  coneFolder
+    .add(coneResCfg, "scale", { "half-res (2)": 2, "quarter-res (4)": 4, "eighth-res (8)": 8 })
+    .name("cone resolution")
+    .onChange((s: number) => voxel.setConeScale(s));
+  // Aimed-cone march budget: fewer steps = cheaper, but shorter/coarser emitter shadows (and
+  // possible light leak through thin occluders). 64 = the original crisp default.
+  coneFolder.add(voxel.coneParams, "aimedSteps", 8, 64, 1).name("aimed steps");
+  // Early-out opacity: <1 lets a near-opaque aimed cone stop before its full budget (saves the tail
+  // when the light is blocked). 1 = no early cut (sharpest shadow).
+  coneFolder.add(voxel.coneParams, "aimedAlphaCut", 0.5, 1, 0.01).name("aimed alpha cut");
 
   // Probe GI: the low-res irradiance-probe volume that replaced the per-pixel fill hemisphere.
   // conesPerProbe is the bounce quality (probes run at low res, once per frame → afford many);
@@ -696,8 +710,8 @@ async function main() {
       setMatrixRotateZ(m, t * 0.5 + ph);
     }
     // Emitters: wide XY sweep + Z bobbing across the whole stack (z0 .. top layer).
-    const zMid = PERF2.z0 + ((PERF2.layers - 1) * PERF2.dz) * 0.5;
-    const zAmp = ((PERF2.layers - 1) * PERF2.dz) * 0.5;
+    const zMid = PERF2.z0 + (PERF2.layers - 1) * PERF2.dz * 0.5;
+    const zAmp = (PERF2.layers - 1) * PERF2.dz * 0.5;
     for (let e = 0; e < perf2Emitters.length; e++) {
       const ph = e * 1.3;
       setMatrixTranslate(
