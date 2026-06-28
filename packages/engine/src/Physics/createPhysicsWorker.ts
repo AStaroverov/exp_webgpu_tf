@@ -9,6 +9,12 @@
 import type { SabBundle } from "../../../common/src/sab/registry.ts";
 
 export type PhysicsWorker = {
+  // Resolves once the worker has loaded Rapier, built its world, and started its
+  // self-clock (it posts {type:"ready"}). Rejects if the worker reports an init error
+  // or dies uncaught. Callers MUST await this before treating the engine as live — the
+  // pose bank stays unpublished until then, and a failed Rapier load is otherwise a
+  // silent dead worker (every body reads the origin forever).
+  ready: Promise<void>;
   // Structural ops no longer flow through the worker port — main writes them into the
   // OPS ring SAB (engineSab.pushOps) and the worker drains the ring. This seam only
   // constructs the worker, hands over the bundle, and owns teardown.
@@ -23,38 +29,38 @@ export function createPhysicsWorker(bundle: SabBundle): PhysicsWorker {
     type: "module",
   });
 
-  // Surface worker failures LOUDLY. The pose flows through the SAB with no per-frame
-  // messages, so a worker that dies after init is otherwise invisible (the renderer just
-  // reads a never-published bank → every body sits at the origin). These handlers turn
-  // that silent failure into a console error.
+  let resolveReady!: () => void;
+  let rejectReady!: (err: Error) => void;
+  const ready = new Promise<void>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+
+  // Surface worker failures LOUDLY and settle `ready`. The pose flows through the SAB
+  // with no per-frame messages, so a worker that dies after init is otherwise invisible
+  // (the renderer just reads a never-published bank → every body sits at the origin).
   worker.onerror = (e) => {
-    console.error("[physics.worker] uncaught error:", e.message, e.filename, e.lineno, e);
+    rejectReady(new Error(`physics worker uncaught error: ${e.message} (${e.filename}:${e.lineno})`));
   };
   worker.onmessageerror = (e) => {
-    console.error("[physics.worker] message deserialization error:", e);
+    rejectReady(new Error(`physics worker message deserialization error: ${String(e)}`));
   };
   worker.onmessage = (ev: MessageEvent) => {
     const msg = ev.data as { type?: string; message?: string; stack?: string };
     if (msg?.type === "ready") {
-      console.info("[physics.worker] ready — Rapier initialized, self-clock started");
+      resolveReady();
     } else if (msg?.type === "error") {
-      console.error("[physics.worker] reported error:", msg.message, msg.stack);
+      rejectReady(new Error(`physics worker init failed: ${msg.message}\n${msg.stack ?? ""}`));
     }
   };
 
   // INIT exactly once. Ops posted before the worker replies {type:"ready"} are buffered
-  // worker-side and drained at its first phase boundary, so gating on ready is optional.
-  console.log(
-    "[main] created worker; posting init. dataSab",
-    bundle.dataSab.byteLength,
-    "controlSab",
-    bundle.controlSab.byteLength,
-    "isSAB",
-    bundle.dataSab instanceof SharedArrayBuffer,
-  );
+  // worker-side (in the OPS ring SAB) and drained at its first phase boundary, so they
+  // are never lost — but callers must still await `ready` so an init failure surfaces.
   worker.postMessage({ type: "init", bundle });
 
   return {
+    ready,
     terminate() {
       worker.terminate();
     },

@@ -21,7 +21,9 @@ import { adoptEntity } from "../../common/src/sab/adoptEntity.ts";
 import {
   decodeOp,
   isInitMessage,
+  isMoveBody,
   isSpawnBody,
+  type MoveBodyOp,
   type SpawnBodyOp,
   type WorkerInbound,
   type WorkerOutbound,
@@ -38,7 +40,6 @@ let initPhysicalWorld: typeof import("./Physics/initPhysicalWorld.ts").initPhysi
 let spawnBodyFromOp: typeof import("./Physics/spawnBodyFromOp.ts").spawnBodyFromOp | null = null;
 
 // ---- DIAGNOSTIC LOGGING (temporary; remove once the worker is confirmed) -----
-console.log("[worker] module evaluated (imports + Rapier WASM TLA resolved)");
 let bodyCount = 0;
 
 // ---- Worker-local state -----------------------------------------------------
@@ -72,11 +73,8 @@ function post(msg: WorkerOutbound): void {
 }
 
 self.onmessage = (ev: MessageEvent<WorkerInbound>) => {
-  const msg = ev.data;
-  console.log("[worker] onmessage:", (msg as { type?: string })?.type);
-
-  if (isInitMessage(msg)) {
-    void onInit(msg.bundle);
+  if (isInitMessage(ev.data)) {
+    void onInit(ev.data.bundle);
     return;
   }
 };
@@ -88,14 +86,12 @@ async function onInit(bundle: {
   layoutVersion: number;
 }): Promise<void> {
   try {
-    console.log("[worker] onInit: dynamically importing Rapier modules…");
     const [physMod, spawnMod] = await Promise.all([
       import("./Physics/initPhysicalWorld.ts"),
       import("./Physics/spawnBodyFromOp.ts"),
     ]);
     initPhysicalWorld = physMod.initPhysicalWorld;
     spawnBodyFromOp = spawnMod.spawnBodyFromOp;
-    console.log("[worker] onInit: Rapier modules loaded; building worlds…");
 
     world = createPhysicsWorkerWorld(bundle);
     physicalWorld = initPhysicalWorld();
@@ -121,8 +117,24 @@ function drainOps(): void {
   getEngineSab(world!).drainOps((opcode, payload, slot) => {
     const op = decodeOp(opcode, payload, slot);
     if (isSpawnBody(op)) spawnBody(op);
+    else if (isMoveBody(op)) moveBody(op);
     else despawnBody(op.eid);
   });
+}
+
+function moveBody(op: MoveBodyOp): void {
+  const w = world!;
+  const pw = physicalWorld!;
+  const { RigidBodyRef } = getEngineComponents(w);
+
+  const pid = RigidBodyRef.id[op.eid];
+  if (pid !== 0) {
+    const body = pw.getRigidBody(pid);
+    if (body) {
+      body.setTranslation({ x: op.x, y: op.y, z: op.z }, true);
+      body.setRotation({ x: op.qx, y: op.qy, z: op.qz, w: op.qw }, true);
+    }
+  }
 }
 
 function spawnBody(op: SpawnBodyOp): void {
