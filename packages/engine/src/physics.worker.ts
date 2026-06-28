@@ -18,6 +18,13 @@ import {
 import type { PhysicalWorld } from "./Physics/initPhysicalWorld.ts";
 import { createRigidBodyStateSystem } from "./ECS/Systems/createRigidBodyStateSystem.ts";
 import { adoptEntity } from "../../renderer3d_2/src/sab/adoptEntity.ts";
+import {
+  isInitMessage,
+  isSpawnBody,
+  type SpawnBodyOp,
+  type WorkerInbound,
+  type WorkerOutbound,
+} from "./Physics/opChannel.ts";
 
 // Rapier-touching modules are imported DYNAMICALLY (in onInit) on purpose: the Rapier
 // WASM ESM import carries a top-level await (vite-plugin-wasm), and a STATIC import of
@@ -28,17 +35,9 @@ import { adoptEntity } from "../../renderer3d_2/src/sab/adoptEntity.ts";
 let initPhysicalWorld: typeof import("./Physics/initPhysicalWorld.ts").initPhysicalWorld | null =
   null;
 let spawnBodyFromOp: typeof import("./Physics/spawnBodyFromOp.ts").spawnBodyFromOp | null = null;
-import {
-  isInitMessage,
-  isSpawnBody,
-  type SpawnBodyOp,
-  type WorkerInbound,
-  type WorkerOutbound,
-} from "./Physics/opChannel.ts";
 
 // ---- DIAGNOSTIC LOGGING (temporary; remove once the worker is confirmed) -----
 console.log("[worker] module evaluated (imports + Rapier WASM TLA resolved)");
-let stepLog = 0;
 let bodyCount = 0;
 
 // ---- Worker-local state -----------------------------------------------------
@@ -86,9 +85,9 @@ self.onmessage = (ev: MessageEvent<WorkerInbound>) => {
 };
 
 async function onInit(bundle: {
+  opsSab: SharedArrayBuffer;
   dataSab: SharedArrayBuffer;
   controlSab: SharedArrayBuffer;
-  opsSab: SharedArrayBuffer;
   layoutVersion: number;
 }): Promise<void> {
   // Build the physics-only mirror world bound to the RECEIVED SABs (same bytes as
@@ -148,10 +147,21 @@ function spawnBody(op: SpawnBodyOp): void {
   // RigidBodyRef (also registers its own pid→eid map internally).
   const pid = spawnBodyFromOp!(pw, op);
   RigidBodyRef.addComponent(w, op.eid, pid);
-  RigidBodyState.addComponent(w, op.eid);
+  // The drained op IS a BodySpec (+ op/eid); pass it as the required spec. Consumer side,
+  // so addComponent re-seeds the shared banks (same values) and does NOT re-emit an op.
+  RigidBodyState.addComponent(w, op.eid, op);
   pidToEid.set(pid, op.eid);
   bodyCount++;
-  console.log("[worker] spawnBody eid", op.eid, op.kind, op.bodyType, "-> pid", pid, "bodies", bodyCount);
+  console.log(
+    "[worker] spawnBody eid",
+    op.eid,
+    op.kind,
+    op.bodyType,
+    "-> pid",
+    pid,
+    "bodies",
+    bodyCount,
+  );
 }
 
 function despawnBody(eid: number): void {
@@ -193,20 +203,6 @@ function stepOnce(): void {
   world!.time.elapsed = elapsedMs;
   // Publish the just-written bank: flip SEQ so main reads a complete, tear-free pose.
   sab.publish(elapsedMs);
-
-  if (stepLog < 10) {
-    const c = getEngineComponents(world!);
-    // sample the FIRST adopted body's freshly-written pose (writeBank was current bank)
-    const sampleEid = pidToEid.size > 0 ? [...pidToEid.values()][0] : -1;
-    const px = sampleEid >= 0 ? c.RigidBodyState.position.get(sampleEid, 2) : NaN;
-    console.log(
-      "[worker] step#", stepLog,
-      "bodies", bodyCount,
-      "SEQ", Atomics.load(sab.control, 1),
-      "sampleEid", sampleEid, "z", px,
-    );
-    stepLog++;
-  }
 }
 
 function tick(): void {

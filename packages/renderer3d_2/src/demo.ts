@@ -2,9 +2,10 @@
 //
 // Minimal runnable ECS scene mirroring the engine wiring (createWorld → initWebGPU
 // → frame textures → draw system → resize/transform systems → present), but
-// stripped to renderer3d. Spawns one of every ShapeKind with varied baseZ / height
-// / yaw / roundness / color, including a box + sphere stacked on a raised platform
-// so "положение Z" (baseZ, the bottom) reads distinctly from honest height.
+// stripped to renderer3d. Spawns one of every ShapeKind with varied center-Z / depth
+// / yaw / roundness / color, including a box + sphere stacked on a raised platform.
+// Center-origin: the transform z is the body CENTER, and each shape's Z extent lives
+// in its Shape.values depth slot (no Height component).
 //
 // DEPTH CONVENTION — REVERSE-Z (NEAR=1 .. FAR=0): the draw pipeline compares
 // depth "greater-equal" against a 0 clear; ResizeSystem.viewProjMatrix and the
@@ -62,7 +63,7 @@ async function main() {
   const getPixelRatio = () => window.devicePixelRatio;
 
   const world = createWorld();
-  const { LocalTransform, LightEmitter, Shape, Height, Color } = getRenderComponents(world);
+  const { LocalTransform, LightEmitter, Shape, Color } = getRenderComponents(world);
 
   // Scene selection:
   //   "emitter"  — ground + box occluder + a GUI-movable/resizable emitter sphere.
@@ -74,7 +75,7 @@ async function main() {
 
   // The configurable emitter (only used by the "emitter" scene). Live-edited from
   // the GUI: position via the transform (re-uploaded every frame), radius via the
-  // Shape + Height setters (onSet → re-collected), intensity via LightEmitter.set$.
+  // Shape setter (onSet → re-collected), intensity via LightEmitter.set$.
   const emitterCfg = { x: -6, y: 0, z: 2.5, radius: 2.5, intensity: 2.0 };
   let emitterId = -1;
 
@@ -649,8 +650,8 @@ async function main() {
   }
 
   // Live emitter controls (only the "emitter" scene). Position writes the transform
-  // (re-uploaded every frame); radius drives BOTH the sphere SDF (Shape.setSphere$)
-  // and its vertical extent (Height.set$ = 2*radius); intensity via LightEmitter.set$.
+  // (re-uploaded every frame); radius drives the sphere SDF (Shape.setSphere$ — the
+  // sphere's radius is its own full Z extent); intensity via LightEmitter.set$.
   if (emitterId >= 0) {
     const moveEmitter = () =>
       setMatrixTranslate(
@@ -661,7 +662,6 @@ async function main() {
       );
     const resizeEmitter = () => {
       Shape.setSphere$(emitterId, emitterCfg.radius);
-      Height.set$(emitterId, emitterCfg.radius * 2);
     };
     const em = gui.addFolder("Emitter");
     em.add(emitterCfg, "x", -20, 20, 0.1).onChange(moveEmitter);
@@ -682,8 +682,8 @@ async function main() {
 
   // Auto-discover every emitter from the ECS each frame and hand the cone pass their world
   // centers + radius for importance sampling — NO manual light list. Any entity with a
-  // LightEmitter is a light, treated identically. center = transform translation + (0,0,radius),
-  // radius ≈ half-height (the sphere radius for emitter spheres). Capped at 8 by setLights.
+  // LightEmitter is a light, treated identically. center = transform translation (center-origin),
+  // radius = the sphere radius (Shape.values[0]) for emitter spheres. Capped at 8 by setLights.
   const emitterLightsFlat: number[] = [];
   const emitterColorsFlat: number[] = []; // r,g,b,intensity per light (analytic-direct radiance)
   function updateLights() {
@@ -694,8 +694,8 @@ async function main() {
     for (let i = 0; i < ents.length && n < 8; i++) {
       const id = ents[i];
       const t = getMatrixTranslation(LocalTransform.matrix.getBatch(id));
-      const r = hasComponent(world, id, Height) ? Height.value[id] * 0.5 : 0.5;
-      emitterLightsFlat.push(t[0], t[1], t[2] + r, r);
+      const r = hasComponent(world, id, Shape) ? Shape.values.get(id, 0) : 0.5;
+      emitterLightsFlat.push(t[0], t[1], t[2], r);
       const c = Color.getArray(id); // rgba; rgb = c[0..2]
       emitterColorsFlat.push(c[0], c[1], c[2], LightEmitter.intensity[id]);
       n++;
@@ -718,11 +718,10 @@ async function main() {
     );
     // (2) angle — spin the slab about Z (its translation persists from creation).
     setMatrixRotateZ(LocalTransform.matrix.getBatch(dynRotBox), t * 0.8);
-    // (3) size — radius 1..3, re-voxelized via the Shape + Height setters (Height = 2·r keeps
-    // the bottom on the ground, since the SDF center.z = baseZ + Height/2).
+    // (3) size — radius 1..3, re-voxelized via the Shape setter (the sphere radius is its
+    // own full Z extent; center-origin keeps it about its transform center).
     const r = 2.0 + 1.0 * Math.sin(t * 1.2);
     Shape.setSphere$(dynSizeSphere, r);
-    Height.set$(dynSizeSphere, r * 2);
     // (4) intensity — emission 0.2..3.8 (kept positive; negative would mean "directional").
     LightEmitter.set$(dynPulseEmitter, 2.0 + 1.8 * Math.sin(t * 1.6), 0);
   }

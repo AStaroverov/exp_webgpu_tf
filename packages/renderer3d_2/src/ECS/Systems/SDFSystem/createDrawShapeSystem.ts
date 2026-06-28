@@ -4,12 +4,12 @@ import { GPUShader } from "../../../WGSL/GPUShader.ts";
 import { getTypeTypedArray } from "../../../Shader/index.ts";
 import { cameraRayDir, sceneLightDir, viewProjMatrix } from "../ResizeSystem.ts";
 import { createChangeDetector } from "../ChangedDetectorSystem.ts";
-import { getRenderComponents, type RenderWorldLike } from "../../world.ts";
+import { getRenderComponents, type RenderWorld } from "../../world.ts";
 import type { GPUVariable } from "../../../WebGPU/GPUVariable.ts";
 
 // Live per-instance scene storage exposed by createDrawShapeSystem so the
 // world-space gather pass can bind the SAME GPU buffers (no data copy). The
-// seven fields are the GPUVariable wrappers around the instance buffers filled
+// fields are the GPUVariable wrappers around the instance buffers filled
 // each frame by prepare(); instanceCount is the live clamped count for the
 // gather loop bound (read it AFTER prepare() has run this frame).
 export type SceneInstances = {
@@ -17,18 +17,16 @@ export type SceneInstances = {
   kind: GPUVariable;
   values: GPUVariable;
   roundness: GPUVariable;
-  heights: GPUVariable;
   color: GPUVariable;
   material: GPUVariable;
   // CPU-side copies of the per-instance collect arrays (the SAME references, not copies),
   // filled by prepare() each frame. The voxel scatter pass reads these post-prepare() to
-  // compute per-instance world AABBs WITHOUT a GPU readback. Only the 5 fields the AABB math
+  // compute per-instance world AABBs WITHOUT a GPU readback. Only the fields the AABB math
   // needs are exposed; color/material are read on the GPU by the voxel pass as before.
   cpuTransform: Float32Array;
   cpuKind: Uint32Array;
   cpuValues: Float32Array;
   cpuRoundness: Float32Array;
-  cpuHeights: Float32Array;
   readonly instanceCount: number;
 };
 
@@ -44,10 +42,10 @@ export function createDrawShapeSystem({
   device,
   world,
 }: {
-  world: RenderWorldLike;
+  world: RenderWorld;
   device: GPUDevice;
 }) {
-  const { Blurness, Color, GlobalTransform, Height, LightEmitter, Roundness, Shape, Translucency } =
+  const { Blurness, Color, GlobalTransform, LightEmitter, Roundness, Shape, Translucency } =
     getRenderComponents(world);
   const gpuShader = new GPUShader(shaderMeta);
 
@@ -77,7 +75,7 @@ export function createDrawShapeSystem({
       // not referenced by the emit entry points, so it must NOT appear here — an
       // autoLayout bind group's entries must match the shader's reflected usage.
       0: ["viewProj", "rayDir"],
-      1: ["transform", "kind", "values", "roundness", "heights", "color", "material"],
+      1: ["transform", "kind", "values", "roundness", "color", "material"],
     },
   });
 
@@ -98,14 +96,12 @@ export function createDrawShapeSystem({
   const colorCollect = getTypeTypedArray(shaderMeta.uniforms.color.type);
   const valuesCollect = getTypeTypedArray(shaderMeta.uniforms.values.type);
   const roundnessCollect = getTypeTypedArray(shaderMeta.uniforms.roundness.type);
-  const heightsCollect = getTypeTypedArray(shaderMeta.uniforms.heights.type);
   // Emission material packed per instance: vec4(intensity, translucency, blurness, _).
   const materialCollect = getTypeTypedArray(shaderMeta.uniforms.material.type);
 
   const shapeChanges = createChangeDetector(world, [onAdd(Shape), onSet(Shape)]);
   const colorChanges = createChangeDetector(world, [onAdd(Color), onSet(Color)]);
   const roundnessChanges = createChangeDetector(world, [onAdd(Roundness), onSet(Roundness)]);
-  const heightChanges = createChangeDetector(world, [onAdd(Height), onSet(Height)]);
   const intensityChanges = createChangeDetector(world, [onAdd(LightEmitter), onSet(LightEmitter)]);
   const translucencyChanges = createChangeDetector(world, [
     onAdd(Translucency),
@@ -117,7 +113,7 @@ export function createDrawShapeSystem({
   let overflowReported = false;
 
   function prepare() {
-    const entities = query(world, [GlobalTransform, Shape, Color]); // Roundness, Height optional
+    const entities = query(world, [GlobalTransform, Shape, Color]); // Roundness optional
 
     // The instance buffers are fixed at MAX_INSTANCE_COUNT; writing past it
     // throws "offset is out of bounds" and kills the frame. Clamp instead —
@@ -151,7 +147,7 @@ export function createDrawShapeSystem({
 
       if (countChanged || shapeChanges.hasChanges()) {
         kindCollect[i] = Shape.kind[id];
-        valuesCollect.set(Shape.values.getBatch(id), i * 6);
+        valuesCollect.set(Shape.values.getBatch(id), i * 8);
       }
 
       if (countChanged || colorChanges.hasChanges()) {
@@ -160,10 +156,6 @@ export function createDrawShapeSystem({
 
       if (countChanged || roundnessChanges.hasChanges()) {
         roundnessCollect[i] = hasComponent(world, id, Roundness) ? Roundness.value[id] : 0;
-      }
-
-      if (countChanged || heightChanges.hasChanges()) {
-        heightsCollect[i] = hasComponent(world, id, Height) ? Height.value[id] : 0;
       }
 
       if (countChanged || materialChanged) {
@@ -216,18 +208,17 @@ export function createDrawShapeSystem({
       );
     }
 
-    if (countChanged || heightChanges.hasChanges()) {
-      device.queue.writeBuffer(gpuShader.uniforms.heights.getGPUBuffer(device), 0, heightsCollect);
-    }
-
     if (countChanged || materialChanged) {
-      device.queue.writeBuffer(gpuShader.uniforms.material.getGPUBuffer(device), 0, materialCollect);
+      device.queue.writeBuffer(
+        gpuShader.uniforms.material.getGPUBuffer(device),
+        0,
+        materialCollect,
+      );
     }
 
     shapeChanges.clear();
     colorChanges.clear();
     roundnessChanges.clear();
-    heightChanges.clear();
     intensityChanges.clear();
     translucencyChanges.clear();
     blurnessChanges.clear();
@@ -270,7 +261,6 @@ export function createDrawShapeSystem({
       kind: gpuShader.uniforms.kind,
       values: gpuShader.uniforms.values,
       roundness: gpuShader.uniforms.roundness,
-      heights: gpuShader.uniforms.heights,
       color: gpuShader.uniforms.color,
       material: gpuShader.uniforms.material,
       // CPU-side collect arrays (same references) so the voxel scatter pass can compute
@@ -279,7 +269,6 @@ export function createDrawShapeSystem({
       cpuKind: kindCollect as Uint32Array,
       cpuValues: valuesCollect as Float32Array,
       cpuRoundness: roundnessCollect as Float32Array,
-      cpuHeights: heightsCollect as Float32Array,
       // Live count actually written this frame (clamped to MAX_INSTANCE_COUNT).
       // MUST be a getter — preparedEntityCount is reassigned every prepare().
       get instanceCount() {

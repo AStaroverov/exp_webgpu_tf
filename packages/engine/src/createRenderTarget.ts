@@ -25,7 +25,7 @@ export async function createRenderTarget(
 
   const getPixelRatio = () => window.devicePixelRatio;
 
-  const { LocalTransform, LightEmitter, Height, Color } = getEngineComponents(world);
+  const { LocalTransform, LightEmitter, Shape, Color } = getEngineComponents(world);
 
   // --- Systems ---
   const execTransformSystem = createTransformSystem(world, stubChildren);
@@ -70,8 +70,9 @@ export async function createRenderTarget(
     for (let i = 0; i < ents.length && n < 8; i++) {
       const id = ents[i];
       const t = getMatrixTranslation(LocalTransform.matrix.getBatch(id));
-      const r = hasComponent(world, id, Height) ? Height.value[id] * 0.5 : 0.5;
-      emitterLightsFlat.push(t[0], t[1], t[2] + r, r);
+      // Emitter radius from the shape's first value slot (sphere/circle radius); default 0.5.
+      const r = hasComponent(world, id, Shape) ? Shape.values.get(id, 0) || 0.5 : 0.5;
+      emitterLightsFlat.push(t[0], t[1], t[2], r);
       const c = Color.getArray(id);
       emitterColorsFlat.push(c[0], c[1], c[2], LightEmitter.intensity[id]);
       n++;

@@ -28,23 +28,30 @@ export type OpCode = (typeof OpCode)[number & keyof typeof OpCode];
 
 export type Vec3 = { x: number; y: number; z: number };
 
-// `position` is always the body CENTER (Rapier translation), NOT the render bottom.
-// RigidShapes' render z is center − halfHeight; the op carries the physics center so
-// the worker mirrors createBody exactly. `density` is optional (defaults to 1 in the
-// collider factory, matching createRigid).
-export type SpawnBodyOp = {
-  readonly op: typeof OpCode.SPAWN_BODY;
-  readonly eid: number;
+// The body description an entity supplies when it gains RigidBodyState (the public ECS
+// surface). `position` is the body CENTER (Rapier translation); center-origin means the
+// render z is the SAME center, so the worker mirrors createBody exactly. `density` is
+// optional (defaults to 1 in the collider factory). It carries NO eid: the eid is the entity the component is
+// added to (RigidBodyState.addComponent stamps it when emitting the op).
+export type BodySpec = {
   readonly bodyType: "dynamic" | "fixed";
   readonly position: Vec3; // body CENTER
   readonly density?: number;
-} & (
-  | { readonly kind: "box"; readonly hx: number; readonly hy: number; readonly hz: number }
-  // groundBox is just a fixed thin box; kept as a distinct kind so the worker / main
-  // can special-case it later (e.g. ground never despawns) without re-deriving intent.
-  | { readonly kind: "groundBox"; readonly hx: number; readonly hy: number; readonly hz: number }
-  | { readonly kind: "sphere"; readonly radius: number }
-);
+} &
+  // `halfExtents` = half the box size per axis (a Vec3, like `position`), matching
+  // Rapier's `ColliderDesc.cuboid(hx, hy, hz)` which takes half-extents.
+  (
+    | { readonly kind: "box"; readonly halfExtents: Vec3 }
+    // groundBox is just a fixed thin box; a distinct kind so it can be special-cased later.
+    | { readonly kind: "groundBox"; readonly halfExtents: Vec3 }
+    | { readonly kind: "sphere"; readonly radius: number }
+  );
+
+// The wire/ring form: a BodySpec stamped with its eid + the SPAWN opcode.
+export type SpawnBodyOp = {
+  readonly op: typeof OpCode.SPAWN_BODY;
+  readonly eid: number;
+} & BodySpec;
 
 export type DespawnBodyOp = {
   readonly op: typeof OpCode.DESPAWN_BODY;
@@ -52,6 +59,10 @@ export type DespawnBodyOp = {
 };
 
 export type StructuralOp = SpawnBodyOp | DespawnBodyOp;
+
+export function toSpawnOp(eid: number, spec: BodySpec): SpawnBodyOp {
+  return { op: OpCode.SPAWN_BODY, eid, ...spec };
+}
 
 // ---- Lifecycle messages (plan §6.2) -----------------------------------------
 // Only the ONE-TIME init handshake uses postMessage now (it hands over the SAB bundle).
@@ -63,9 +74,9 @@ export type StructuralOp = SpawnBodyOp | DespawnBodyOp;
 export type InitMessage = {
   readonly type: "init";
   readonly bundle: {
+    readonly opsSab: SharedArrayBuffer;
     readonly dataSab: SharedArrayBuffer;
     readonly controlSab: SharedArrayBuffer;
-    readonly opsSab: SharedArrayBuffer;
     readonly layoutVersion: number;
   };
 };
@@ -88,40 +99,6 @@ export function isInitMessage(msg: unknown): msg is InitMessage {
   );
 }
 
-// ---- Builders (main side) ---------------------------------------------------
-
-export function spawnBox(
-  eid: number,
-  bodyType: "dynamic" | "fixed",
-  position: Vec3,
-  hx: number,
-  hy: number,
-  hz: number,
-  density?: number,
-): SpawnBodyOp {
-  return { op: OpCode.SPAWN_BODY, eid, kind: "box", bodyType, position, hx, hy, hz, density };
-}
-
-export function spawnGroundBox(
-  eid: number,
-  position: Vec3,
-  hx: number,
-  hy: number,
-  hz: number,
-): SpawnBodyOp {
-  return { op: OpCode.SPAWN_BODY, eid, kind: "groundBox", bodyType: "fixed", position, hx, hy, hz };
-}
-
-export function spawnSphere(
-  eid: number,
-  bodyType: "dynamic" | "fixed",
-  position: Vec3,
-  radius: number,
-  density?: number,
-): SpawnBodyOp {
-  return { op: OpCode.SPAWN_BODY, eid, kind: "sphere", bodyType, position, radius, density };
-}
-
 export function despawnBody(eid: number): DespawnBodyOp {
   return { op: OpCode.DESPAWN_BODY, eid };
 }
@@ -141,7 +118,7 @@ export function isDespawnBody(op: StructuralOp): op is DespawnBodyOp {
 // Fixed-stride Float64 record matching OPS_PAYLOAD_STRIDE. The opcode itself rides the
 // ring's Int32 STATE slot (the Atomics gate), so the payload holds only the fields:
 //   [0] eid  [1] bodyType(0=dynamic,1=fixed)  [2] kind(0=box,1=groundBox,2=sphere)
-//   [3..5] position xyz (body CENTER)  [6..8] dims (box: hx,hy,hz | sphere: radius in [6])
+//   [3..5] position xyz (body CENTER)  [6..8] half-extents xyz (box) | radius in [6] (sphere)
 //   [9] density (0 = unset)  [10] reserved
 const KIND_CODE = { box: 0, groundBox: 1, sphere: 2 } as const;
 
@@ -158,9 +135,9 @@ export function encodeOp(op: StructuralOp, payload: Float64Array, slot: number):
   if (op.kind === "sphere") {
     payload[b + 6] = op.radius;
   } else {
-    payload[b + 6] = op.hx;
-    payload[b + 7] = op.hy;
-    payload[b + 8] = op.hz;
+    payload[b + 6] = op.halfExtents.x;
+    payload[b + 7] = op.halfExtents.y;
+    payload[b + 8] = op.halfExtents.z;
   }
   payload[b + 9] = op.density ?? 0;
   return OpCode.SPAWN_BODY;
@@ -176,7 +153,15 @@ export function decodeOp(opcode: number, payload: Float64Array, slot: number): S
   const density = payload[b + 9] || undefined;
   const kindCode = payload[b + 2];
   if (kindCode === KIND_CODE.sphere) {
-    return { op: OpCode.SPAWN_BODY, eid, bodyType, kind: "sphere", position, radius: payload[b + 6], density };
+    return {
+      op: OpCode.SPAWN_BODY,
+      eid,
+      bodyType,
+      kind: "sphere",
+      position,
+      radius: payload[b + 6],
+      density,
+    };
   }
   const kind = kindCode === KIND_CODE.groundBox ? "groundBox" : "box";
   return {
@@ -185,9 +170,7 @@ export function decodeOp(opcode: number, payload: Float64Array, slot: number): S
     bodyType,
     kind,
     position,
-    hx: payload[b + 6],
-    hy: payload[b + 7],
-    hz: payload[b + 8],
+    halfExtents: { x: payload[b + 6], y: payload[b + 7], z: payload[b + 8] },
     density,
   };
 }

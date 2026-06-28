@@ -75,10 +75,6 @@ export async function createEngine({
   EngineDI.width = width;
   EngineDI.height = height;
   EngineDI.world = world;
-  // Structural ops go through the OPS ring SAB (plan §4.3), not the worker message port:
-  // main writes records, the worker drains them at its step boundary. Ops written before
-  // the worker finishes booting simply wait in the ring.
-  EngineDI.postOps = (ops) => sab.pushOps(ops);
   EngineDI.tick = tick;
   EngineDI.destroy = destroy;
   // EngineApi types setRenderTarget as sync-returning; the async render setup is

@@ -23,6 +23,24 @@ import {
 import type { SceneInstances } from "../SDFSystem/createDrawShapeSystem.ts";
 import { SunLight } from "../SunLight.ts";
 
+// Half the shape's Z extent from its per-kind depth slot in Shape.values (stride 8).
+// Mirrors footprint_half_z in sceneSDF.wgsl; sphere (6) is unhalved (radius == half-extent).
+function footprintHalfZ(kind: number, values: Float32Array, k: number): number {
+  switch (kind) {
+    case 0:
+      return values[k * 8 + 1] * 0.5;
+    case 1:
+      return values[k * 8 + 2] * 0.5;
+    case 3:
+    case 4:
+      return values[k * 8 + 3] * 0.5;
+    case 5:
+      return values[k * 8 + 6] * 0.5;
+    default:
+      return values[k * 8 + 0];
+  }
+}
+
 // Voxel scene system: voxelize() fills the 3D albedo/emission/radiance textures from the SDF
 // scene each frame; mips() builds the radiance pyramid; cone() gathers indirect light (N-cone
 // VCT); sunDepth() renders the sun-POV shadow map; composite() produces the final lit image
@@ -210,10 +228,6 @@ export function createVoxelSystem({
         resource: { buffer: sceneInstances.roundness.getGPUBuffer(device) },
       },
       {
-        binding: sunShadowMeta.uniforms.heights.binding,
-        resource: { buffer: sceneInstances.heights.getGPUBuffer(device) },
-      },
-      {
         binding: sunShadowMeta.uniforms.color.binding,
         resource: { buffer: sceneInstances.color.getGPUBuffer(device) },
       },
@@ -260,10 +274,6 @@ export function createVoxelSystem({
       {
         binding: voxelizeMeta.uniforms.roundness.binding,
         resource: { buffer: sceneInstances.roundness.getGPUBuffer(device) },
-      },
-      {
-        binding: voxelizeMeta.uniforms.heights.binding,
-        resource: { buffer: sceneInstances.heights.getGPUBuffer(device) },
       },
       {
         binding: voxelizeMeta.uniforms.color.binding,
@@ -912,7 +922,6 @@ export function createVoxelSystem({
     const kindArr = sceneInstances.cpuKind;
     const valArr = sceneInstances.cpuValues;
     const roundArr = sceneInstances.cpuRoundness;
-    const heightArr = sceneInstances.cpuHeights;
     let prefix = 0;
     for (let k = 0; k < n; k++) {
       // Translation is column-major mat4 elements 12,13,14 (per-instance 16-float stride).
@@ -920,44 +929,44 @@ export function createVoxelSystem({
       const cy = tr[k * 16 + 13];
       const tz = tr[k * 16 + 14];
       const kind = kindArr[k];
-      const h = heightArr[k];
       const round = roundArr[k];
 
       // Conservative bounding-circle radius in XY, computed from the SAME geometry the
-      // footprint uses so the AABB never clips the shape. max(|value|) is NOT a valid
-      // bound for skewed/diagonal footprints, so kinds 3 (parallelogram) and 5 (triangle)
-      // get the Euclidean extent of their true footprint; all others fall back to max(|value|)
-      // (which covers axis-aligned half-extents and the sphere radius in values[0]).
-      const v0 = valArr[k * 6 + 0];
-      const v1 = valArr[k * 6 + 1];
-      const v2 = valArr[k * 6 + 2];
-      const v3 = valArr[k * 6 + 3];
-      const v4 = valArr[k * 6 + 4];
-      const v5 = valArr[k * 6 + 5];
+      // footprint uses so the AABB never clips the shape. The depth slot must be EXCLUDED
+      // from the XY bound, so each kind reads only its footprint (XY) slots — mirroring
+      // footprint_half_xy in sceneSDF.wgsl.
+      const v0 = valArr[k * 8 + 0];
+      const v1 = valArr[k * 8 + 1];
+      const v2 = valArr[k * 8 + 2];
       let rxyShape: number;
       if (kind === 3) {
         // Parallelogram: skew widens the X half-extent (halfX = width/2 + |skew|); the worst
-        // corner is at hypot(halfX, height/2). values = (width, height, skew, ...).
-        const halfX = v0 / 2 + Math.abs(v2);
-        const halfY = v1 / 2;
-        rxyShape = Math.hypot(halfX, halfY);
+        // corner is at hypot(halfX, height/2). values = (width, height, skew, depth).
+        rxyShape = Math.hypot(v0 / 2 + Math.abs(v2), v1 / 2);
       } else if (kind === 5) {
-        // Triangle: the 6 values are signed vertex coordinates (ax,ay,bx,by,cx,cy). The
+        // Triangle: the first 6 slots are signed vertex coords (ax,ay,bx,by,cx,cy). The
         // conservative radius is the farthest vertex distance from the local origin.
-        rxyShape = Math.max(Math.hypot(v0, v1), Math.hypot(v2, v3), Math.hypot(v4, v5));
+        rxyShape = Math.max(
+          Math.hypot(valArr[k * 8 + 0], valArr[k * 8 + 1]),
+          Math.hypot(valArr[k * 8 + 2], valArr[k * 8 + 3]),
+          Math.hypot(valArr[k * 8 + 4], valArr[k * 8 + 5]),
+        );
+      } else if (kind === 0 || kind === 6) {
+        // Circle/cylinder + sphere: values[0] = radius (the full XY half-extent).
+        rxyShape = v0;
+      } else if (kind === 4) {
+        // Trapezoid: values = [topWidth, bottomWidth, ySize, depth]. Bound = wider end / 2 in X,
+        // ySize / 2 in Y → the worst corner is at hypot of those.
+        rxyShape = Math.hypot(Math.max(v0, v1) / 2, v2 / 2);
       } else {
-        let maxAbs = 0;
-        for (let j = 0; j < 6; j++) {
-          const v = Math.abs(valArr[k * 6 + j]);
-          if (v > maxAbs) maxAbs = v;
-        }
-        rxyShape = maxAbs;
+        // Rectangle/box: values = [width, height, depth]. Corner at hypot(width/2, height/2).
+        rxyShape = Math.hypot(v0 / 2, v1 / 2);
       }
       const rxy = rxyShape + round + cellSize;
-      // Z half-extent: sphere (kind 6) uses its radius (values[0]); everything else is an
-      // extruded footprint of half-height h*0.5. Expanded by roundness + one cell.
-      const zHalf = (kind === 6 ? valArr[k * 6] : h * 0.5) + round + cellSize;
-      const centerZ = tz + h * 0.5;
+      // Z half-extent: sphere (kind 6) uses its radius (values[0]); everything else is half
+      // the per-kind depth slot. Expanded by roundness + one cell.
+      const zHalf = footprintHalfZ(kind, valArr, k) + round + cellSize;
+      const centerZ = tz;
 
       const minX = cx - rxy;
       const maxX = cx + rxy;

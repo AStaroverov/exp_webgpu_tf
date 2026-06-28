@@ -4,8 +4,8 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 // world-space RC gather pass. Pure functions over a per-instance index; they read
 // the storage buffers uKind / uValues / uRoundness by global name — any shader that
 // inlines this fragment MUST declare those buffers with identical names + types
-// (uValues = 6 f32 / instance). hz (half-height) is always a parameter, never read
-// from a buffer here.
+// (uValues = 8 f32 / instance). The half-height is read per-kind from uValues via
+// footprint_half_z — there is no separate Height buffer.
 //
 // Extracted verbatim from sdf.shader.ts (the former "Helpers" + 2D/3D SDF blocks).
 // The wgsl`` tag inlines a no-`name` fragment's `.body` in-place, so the emitted
@@ -107,8 +107,8 @@ export const sceneSDF = wgsl /* WGSL */ `
         // handled separately in sd_shape3d — never reaches here.)
         fn sd_2d_for_kind(p: vec2<f32>, instance_index: u32) -> f32 {
             let kind = uKind[instance_index];
-            let width = uValues[instance_index * 6u + 0u];
-            let height = uValues[instance_index * 6u + 1u];
+            let width = uValues[instance_index * 8u + 0u];
+            let height = uValues[instance_index * 8u + 1u];
             let roundness = uRoundness[instance_index];
             var dist = 1.0;
 
@@ -118,23 +118,23 @@ export const sceneSDF = wgsl /* WGSL */ `
             } else if (kind == 1u) {
                 dist = sd_rectangle(p, width / 2.0 - roundness, height / 2.0 - roundness);
             } else if (kind == 3u) {
-                dist = sd_parallelogram(p, width / 2.0 - roundness, height / 2.0 - roundness, uValues[instance_index * 6u + 2u]);
+                dist = sd_parallelogram(p, width / 2.0 - roundness, height / 2.0 - roundness, uValues[instance_index * 8u + 2u]);
             } else if (kind == 4u) {
                 // Trapezoid: values = [topWidth, bottomWidth, height].
                 // sd_trapezoid(p, r1=bottom half-width, r2=top half-width, he=half-height).
                 dist = sd_trapezoid(
                     p,
-                    uValues[instance_index * 6u + 1u] / 2.0 - roundness,
-                    uValues[instance_index * 6u + 0u] / 2.0 - roundness,
-                    uValues[instance_index * 6u + 2u] / 2.0 - roundness,
+                    uValues[instance_index * 8u + 1u] / 2.0 - roundness,
+                    uValues[instance_index * 8u + 0u] / 2.0 - roundness,
+                    uValues[instance_index * 8u + 2u] / 2.0 - roundness,
                 );
             } else if (kind == 5u) {
-                let ax = uValues[instance_index * 6u + 0u] - sign(uValues[instance_index * 6u + 0u]) * roundness;
-                let ay = uValues[instance_index * 6u + 1u] - sign(uValues[instance_index * 6u + 1u]) * roundness;
-                let bx = uValues[instance_index * 6u + 2u] - sign(uValues[instance_index * 6u + 2u]) * roundness;
-                let by = uValues[instance_index * 6u + 3u] - sign(uValues[instance_index * 6u + 3u]) * roundness;
-                let cx = uValues[instance_index * 6u + 4u] - sign(uValues[instance_index * 6u + 4u]) * roundness;
-                let cy = uValues[instance_index * 6u + 5u] - sign(uValues[instance_index * 6u + 5u]) * roundness;
+                let ax = uValues[instance_index * 8u + 0u] - sign(uValues[instance_index * 8u + 0u]) * roundness;
+                let ay = uValues[instance_index * 8u + 1u] - sign(uValues[instance_index * 8u + 1u]) * roundness;
+                let bx = uValues[instance_index * 8u + 2u] - sign(uValues[instance_index * 8u + 2u]) * roundness;
+                let by = uValues[instance_index * 8u + 3u] - sign(uValues[instance_index * 8u + 3u]) * roundness;
+                let cx = uValues[instance_index * 8u + 4u] - sign(uValues[instance_index * 8u + 4u]) * roundness;
+                let cy = uValues[instance_index * 8u + 5u] - sign(uValues[instance_index * 8u + 5u]) * roundness;
                 dist = sd_triangle(p, vec2f(ax, ay), vec2f(bx, by), vec2f(cx, cy));
             }
 
@@ -153,22 +153,40 @@ export const sceneSDF = wgsl /* WGSL */ `
             return min(max(w.x, w.y), 0.0) + length(max(w, vec2<f32>(0.0)));
         }
 
-        fn sd_shape3d(p: vec3<f32>, instance_index: u32, hz: f32) -> f32 {
-            if (uKind[instance_index] == 6u) {
-                // True 3D sphere; values[0] = radius.
-                return length(p) - uValues[instance_index * 6u + 0u];
+        // Half of the shape's Z extent, read per-kind from uValues' depth slot. Sphere
+        // (6) has no extrusion: its radius is already its full half-extent.
+        fn footprint_half_z(instance_index: u32) -> f32 {
+            let kind = uKind[instance_index];
+            if (kind == 0u) {
+                return uValues[instance_index * 8u + 1u] * 0.5;
+            } else if (kind == 1u) {
+                return uValues[instance_index * 8u + 2u] * 0.5;
+            } else if (kind == 3u) {
+                return uValues[instance_index * 8u + 3u] * 0.5;
+            } else if (kind == 4u) {
+                return uValues[instance_index * 8u + 3u] * 0.5;
+            } else if (kind == 5u) {
+                return uValues[instance_index * 8u + 6u] * 0.5;
             }
-            let d2 = sd_2d_for_kind(p.xy, instance_index);
-            return extrude(d2, p.z, hz);
+            return uValues[instance_index * 8u + 0u];
         }
 
-        fn sd_normal3d(p: vec3<f32>, instance_index: u32, hz: f32) -> vec3<f32> {
+        fn sd_shape3d(p: vec3<f32>, instance_index: u32) -> f32 {
+            if (uKind[instance_index] == 6u) {
+                // True 3D sphere; values[0] = radius.
+                return length(p) - uValues[instance_index * 8u + 0u];
+            }
+            let d2 = sd_2d_for_kind(p.xy, instance_index);
+            return extrude(d2, p.z, footprint_half_z(instance_index));
+        }
+
+        fn sd_normal3d(p: vec3<f32>, instance_index: u32) -> vec3<f32> {
             let e = vec2<f32>(0.0015, -0.0015);
             return normalize(
-                e.xyy * sd_shape3d(p + e.xyy, instance_index, hz) +
-                e.yyx * sd_shape3d(p + e.yyx, instance_index, hz) +
-                e.yxy * sd_shape3d(p + e.yxy, instance_index, hz) +
-                e.xxx * sd_shape3d(p + e.xxx, instance_index, hz)
+                e.xyy * sd_shape3d(p + e.xyy, instance_index) +
+                e.yyx * sd_shape3d(p + e.yyx, instance_index) +
+                e.yxy * sd_shape3d(p + e.yxy, instance_index) +
+                e.xxx * sd_shape3d(p + e.xxx, instance_index)
             );
         }
 
@@ -176,28 +194,28 @@ export const sceneSDF = wgsl /* WGSL */ `
         // bounding-box logic), so the impostor box silhouette never clips the SDF.
         fn footprint_half_xy(instance_index: u32) -> vec2<f32> {
             let kind = uKind[instance_index];
-            var width = uValues[instance_index * 6u + 0u];
-            var height = uValues[instance_index * 6u + 1u];
+            var width = uValues[instance_index * 8u + 0u];
+            var height = uValues[instance_index * 8u + 1u];
 
             if (kind == 0u) {
                 // Circle / cylinder: square footprint from the radius (values[0] = radius).
                 height = width;
             } else if (kind == 6u) {
                 // Sphere: values[0] = radius → full extent 2r in both axes.
-                width = uValues[instance_index * 6u + 0u] * 2.0;
+                width = uValues[instance_index * 8u + 0u] * 2.0;
                 height = width;
             } else if (kind == 3u) {
                 // Parallelogram: footprint widens by the skew amount on each side.
-                width += abs(uValues[instance_index * 6u + 2u]) * 2.0;
+                width += abs(uValues[instance_index * 8u + 2u]) * 2.0;
             } else if (kind == 4u) {
                 // Trapezoid: values = [topWidth, bottomWidth, height]. Footprint bound =
                 // wider of the two ends in X, the height value in Y.
-                width = max(uValues[instance_index * 6u + 0u], uValues[instance_index * 6u + 1u]);
-                height = uValues[instance_index * 6u + 2u];
+                width = max(uValues[instance_index * 8u + 0u], uValues[instance_index * 8u + 1u]);
+                height = uValues[instance_index * 8u + 2u];
             } else if (kind == 5u) {
                 // Triangle: bounding box from the three vertices.
-                width = max(width, max(uValues[instance_index * 6u + 2u], uValues[instance_index * 6u + 4u])) * 2.0;
-                height = max(height, max(uValues[instance_index * 6u + 3u], uValues[instance_index * 6u + 5u])) * 2.0;
+                width = max(width, max(uValues[instance_index * 8u + 2u], uValues[instance_index * 8u + 4u])) * 2.0;
+                height = max(height, max(uValues[instance_index * 8u + 3u], uValues[instance_index * 8u + 5u])) * 2.0;
             }
 
             return vec2<f32>(width / 2.0, height / 2.0);

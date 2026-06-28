@@ -10,8 +10,6 @@ import { removeEntity } from "bitecs";
 import { createEngine } from "./createEngine.ts";
 import { getEngineComponents } from "./ECS/createEngineWorld.ts";
 import { createGround, createRigidBox, createRigidSphere } from "./ECS/Entities/RigidShapes.ts";
-import { despawnBody } from "./Physics/opChannel.ts";
-import { EngineDI } from "./DI/EngineDI.ts";
 import type { EngineWorld } from "./ECS/createEngineWorld.ts";
 import type { TColor } from "../../renderer3d_2/src/ECS/Components/Common.ts";
 import { SunLight } from "../../renderer3d_2/src/ECS/Systems/SunLight.ts";
@@ -117,10 +115,9 @@ function buildGui(world: EngineWorld, spawned: Spawned[]): GUI {
   }
 
   function clearDynamic(): void {
-    // Fire-and-forget despawn (plan §6.3): post DESPAWN_BODY for the worker, then remove
-    // the render entity on main. eids never recycle, so a late worker pose-write into the
-    // dead row is harmless. Batch all despawns into one structural message.
-    EngineDI.postOps(spawned.map((s) => despawnBody(s.eid)));
+    // Despawn is pure ECS: removeEntity on the producer (main) world fires RigidBodyState's
+    // onRemove → emits DESPAWN_BODY for the worker (fire-and-forget; eids never recycle, so
+    // a late worker pose-write into the dead row is harmless). No method call here.
     for (let i = 0; i < spawned.length; i++) removeEntity(world, spawned[i].eid);
     spawned.length = 0;
     params.count = 0;

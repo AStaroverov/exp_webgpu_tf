@@ -13,9 +13,8 @@
 //   - RigidBodyState.linvel / angvel     : debug-only, single-buffered; tearing
 //     tolerated (plan §3.2 table).
 // Everything else stays MAIN-PRIVATE on purpose:
-//   - Height.value and RigidBodyRef.id are read only by code that runs on MAIN
-//     (applyRigidBodyToTransform reads Height; despawn is keyed by eid, not pid),
-//     so neither has a real cross-thread reader. The worker backfills pid into its
+//   - RigidBodyRef.id is read only by code that runs on MAIN (despawn is keyed by
+//     eid, not pid), so it has no real cross-thread reader. The worker backfills pid into its
 //     OWN RigidBodyRef.id and keeps a worker-local pid→eid Map. If a genuine
 //     cross-thread reader ever appears (e.g. main needs the live pid), promote the
 //     column here — until then keeping them private saves SAB memory and avoids a
@@ -118,9 +117,9 @@ export function computeLayout(
 // ---- Allocation (main only) -------------------------------------------------
 
 export type SabBundle = {
+  readonly opsSab: SharedArrayBuffer;
   readonly dataSab: SharedArrayBuffer;
   readonly controlSab: SharedArrayBuffer;
-  readonly opsSab: SharedArrayBuffer;
   readonly layoutVersion: number;
 };
 
@@ -136,9 +135,9 @@ export function allocate(): SabBundle {
     );
   }
   const layout = computeLayout();
+  const opsSab = new SharedArrayBuffer(OPS_SAB_BYTES);
   const dataSab = new SharedArrayBuffer(layout.dataByteLength);
   const controlSab = new SharedArrayBuffer(CONTROL_SLOTS * Int32Array.BYTES_PER_ELEMENT);
-  const opsSab = new SharedArrayBuffer(OPS_SAB_BYTES);
   return { dataSab, controlSab, opsSab, layoutVersion: LAYOUT_VERSION };
 }
 
@@ -176,7 +175,11 @@ export type BoundColumns = ReadonlyMap<string, BoundColumn>;
 // Compute the per-bank byte offsets for every bridge column over the given DATA
 // SAB. Views are built lazily by the component (via NestedArray's { sab, byteOffset }
 // ctor) so this stays a pure address table; both threads call it identically.
-export function bindFromSAB(dataSab: ArrayBufferLike, controlSab: ArrayBufferLike, layoutVersion: number): {
+export function bindFromSAB(
+  dataSab: ArrayBufferLike,
+  controlSab: ArrayBufferLike,
+  layoutVersion: number,
+): {
   columns: BoundColumns;
   control: Int32Array;
 } {

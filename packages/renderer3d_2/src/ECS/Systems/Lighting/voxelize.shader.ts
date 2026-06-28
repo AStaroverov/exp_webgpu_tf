@@ -65,16 +65,15 @@ export const shaderMeta = new ShaderMeta(
     // ---- group 1 : per-instance scene storage (StorageRead => @group(1)) ----
     // SAME names/types as sdf.shader.ts / the former gather, so the shared sceneSDF
     // helpers (which read uKind/uValues/uRoundness by global name) see the live scene.
-    // Bound to sceneInstances.* GPUVariables in THIS declaration order (bindings 0..6).
+    // Bound to sceneInstances.* GPUVariables in THIS declaration order (bindings 0..5).
     transform: sceneBuf("uTransform", `array<mat4x4<f32>, ${MAX_INSTANCE_COUNT}>`),
     kind: sceneBuf("uKind", `array<u32, ${MAX_INSTANCE_COUNT}>`),
-    values: sceneBuf("uValues", `array<f32, ${MAX_INSTANCE_COUNT * 6}>`),
+    values: sceneBuf("uValues", `array<f32, ${MAX_INSTANCE_COUNT * 8}>`),
     roundness: sceneBuf("uRoundness", `array<f32, ${MAX_INSTANCE_COUNT}>`),
-    heights: sceneBuf("uHeights", `array<f32, ${MAX_INSTANCE_COUNT}>`),
     color: sceneBuf("uColor", `array<vec4<f32>, ${MAX_INSTANCE_COUNT}>`),
     material: sceneBuf("uMaterial", `array<vec4<f32>, ${MAX_INSTANCE_COUNT}>`),
-    // Per-instance AABB voxel box (built on the CPU each frame; bindings 7..8 — declared
-    // AFTER the 7 scene buffers so their binding numbers are preserved).
+    // Per-instance AABB voxel box (built on the CPU each frame; bindings 6..7 — declared
+    // AFTER the 6 scene buffers so their binding numbers are preserved).
     // .xyz = voxel box MIN (vx0,vy0,vz0), .w = prefix start (monotonic non-decreasing).
     aabbMin: sceneBuf("uAabbMin", `array<vec4<i32>, ${MAX_INSTANCE_COUNT}>`),
     // .xyz = voxel box DIMS (nx,ny,nz), .w = n = nx*ny*nz.
@@ -207,12 +206,11 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // Evaluate ONLY instance ins: world -> local (subtract center, inverse yaw via rotZ),
   // then its LOCAL sd_shape3d. (No loop over the other instances — the whole point.)
   let tr = uTransform[ins];
-  let hz = uHeights[ins] * 0.5;
-  let center = vec3<f32>(tr[3].x, tr[3].y, tr[3].z + hz);
+  let center = vec3<f32>(tr[3].x, tr[3].y, tr[3].z);
   let yaw = atan2(tr[0].y, tr[0].x);
   let rel = world - center;
   let lp = vec3<f32>(rotZ(rel.xy, cos(-yaw), sin(-yaw)), rel.z);
-  let d = sd_shape3d(lp, ins, hz);
+  let d = sd_shape3d(lp, ins);
 
   // Conservative "iso-surface crosses this voxel": within half the voxel diagonal. NOT solid
   // -> write nothing (clear already zeroed it; writing zero here would clobber a DIFFERENT
@@ -222,7 +220,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // LOCAL normal of THIS instance only, rotated back to world by +yaw.
-  let nLocal = sd_normal3d(lp, ins, hz);
+  let nLocal = sd_normal3d(lp, ins);
   let cy = cos(yaw);
   let sy = sin(yaw);
   let N = vec3<f32>(rotZ(nLocal.xy, cy, sy), nLocal.z);

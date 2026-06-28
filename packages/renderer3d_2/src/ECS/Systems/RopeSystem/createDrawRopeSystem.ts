@@ -7,9 +7,9 @@ import { getTypeTypedArray } from "../../../Shader/index.ts";
 import { viewProjMatrix } from "../ResizeSystem.ts";
 import { ROPE_BUFFER_LENGTH, ROPE_POINTS_COUNT } from "../../Components/Rope.ts";
 import { query } from "bitecs";
-import { getRenderComponents, type RenderWorldLike } from "../../world.ts";
+import { getRenderComponents, type RenderWorld } from "../../world.ts";
 
-export function createDrawRopeSystem(world: RenderWorldLike, device: GPUDevice) {
+export function createDrawRopeSystem(world: RenderWorld, device: GPUDevice) {
   const { Color, GlobalTransform, Rope, Thinness } = getRenderComponents(world);
   const gpuShader = new GPUShader(shaderMeta);
   const pipeline = gpuShader.getRenderPipeline(device, "vertex", "fragment", { withDepth: true });

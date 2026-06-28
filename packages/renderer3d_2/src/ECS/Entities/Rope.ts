@@ -1,9 +1,9 @@
 import { addEntity } from "bitecs";
 import { addTransformComponents, applyMatrixTranslate } from "../Components/Transform.ts";
-import { getRenderComponents, type RenderWorldLike } from "../world.ts";
+import { getRenderComponents, type RenderWorld } from "../world.ts";
 
 export function createRope(
-  world: RenderWorldLike,
+  world: RenderWorld,
   {
     x,
     y,

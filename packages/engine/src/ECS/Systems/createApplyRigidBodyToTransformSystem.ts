@@ -5,26 +5,24 @@ import { getEngineComponents } from "../createEngineWorld.ts";
 
 // state → LocalTransform.matrix. The load-bearing matrix write.
 //
-// Z-origin is the BOTTOM of the shape (sdf.shader.ts: transform col3.z = baseZ;
-// the shader lifts center.z = baseZ + Height/2). Rapier's body translation is the
-// CENTROID, so we write baseZ = centerZ − Height/2. Because the entity factory
-// sets Height = the body's full Z extent, the shader recovers
-// center.z = baseZ + Height/2 = centerZ exactly.
+// Center-origin: the render transform's translation IS the body center, and the SDF is
+// symmetric about local z=0, so we write Rapier's body CENTROID straight into the matrix
+// with no Z offset (and no Shape read). render center == physics center exactly.
 //
 // We build the full 3D rotation via mat4.fromRotationTranslation even though the
 // SDF pass only honors yaw (and spheres are rotation-invariant) — it costs the
 // same and is future-proof for a shader upgrade (see plan §1/§8).
 export function createApplyRigidBodyToTransformSystem(world: EngineWorld): () => void {
   // RigidBodyRef is WORKER-LOCAL at Step 3 (main never uses pid), so it is NOT in the
-  // query — main matches on RigidBodyState (added by RigidShapes' main half) + Height.
-  const { LocalTransform, RigidBodyState, Height } = getEngineComponents(world);
+  // query — main matches on RigidBodyState (added by RigidShapes' main half).
+  const { LocalTransform, RigidBodyState } = getEngineComponents(world);
 
   const _q = quat.create();
   const _t = vec3.create();
   let frameLog = 0;
 
   return function applyRigidBodyToLocalTransform() {
-    const entities = query(world, [LocalTransform, RigidBodyState, Height]);
+    const entities = query(world, [LocalTransform, RigidBodyState]);
     if (frameLog < 10) {
       const e0 = entities[0];
       console.log(
@@ -38,7 +36,6 @@ export function createApplyRigidBodyToTransformSystem(world: EngineWorld): () =>
     }
     for (let i = 0; i < entities.length; i++) {
       const eid = entities[i];
-      const hz = Height.value[eid] * 0.5; // half vertical extent
 
       quat.set(
         _q,
@@ -51,7 +48,7 @@ export function createApplyRigidBodyToTransformSystem(world: EngineWorld): () =>
         _t,
         RigidBodyState.position.get(eid, 0),
         RigidBodyState.position.get(eid, 1),
-        RigidBodyState.position.get(eid, 2) - hz, // baseZ = centerZ − hz
+        RigidBodyState.position.get(eid, 2), // center-origin: position IS the render center
       );
 
       const m = LocalTransform.matrix.getBatch(eid) as unknown as mat4;

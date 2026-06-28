@@ -22,7 +22,7 @@ export function spawnBodyFromOp(physicalWorld: PhysicalWorld, op: SpawnBodyOp): 
   switch (op.kind) {
     case "box":
     case "groundBox":
-      return createRigidBox(physicalWorld, body, op.hx, op.hy, op.hz);
+      return createRigidBox(physicalWorld, body, op.halfExtents.x, op.halfExtents.y, op.halfExtents.z);
     case "sphere":
       return createRigidBall(physicalWorld, body, op.radius);
   }

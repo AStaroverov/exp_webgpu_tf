@@ -2,21 +2,21 @@ import { addEntity } from "bitecs";
 import { addTransformComponents, applyMatrixTranslate } from "../Components/Transform.ts";
 import { TColor } from "../Components/Common.ts";
 import { ShapeKind } from "../Components/Shape.ts";
-import { getRenderComponents, type RenderWorldLike } from "../world.ts";
+import { getRenderComponents, type RenderWorld } from "../world.ts";
 import { adoptEntity } from "../../sab/adoptEntity.ts";
 
 // Entity id source. When `eid` is supplied (the engine's shared-counter path,
 // plan §4.2/§6.3) the world ADOPTS that exact id; otherwise bitecs allocates one
 // from its own per-world counter (single-world renderer-only callers). Keeping
 // this one helper means every shape factory honors a caller-chosen eid for free.
-function createOrAdoptEntity(world: RenderWorldLike, eid?: number): number {
+function createOrAdoptEntity(world: RenderWorld, eid?: number): number {
   return eid === undefined ? addEntity(world) : adoptEntity(world, eid);
 }
 
 // A sphere is the only true-3D primitive: its radius alone defines its vertical
-// extent, so it takes no `height`. baseZ (`z`) is still the bottom of the shape.
+// extent, so it takes no `height`. `z` is the CENTER of the shape (center-origin).
 export function createSphere(
-  world: RenderWorldLike,
+  world: RenderWorld,
   {
     x,
     y,
@@ -33,7 +33,7 @@ export function createSphere(
     eid?: number;
   },
 ) {
-  const { Color, LocalTransform, Shape, Height } = getRenderComponents(world);
+  const { Color, LocalTransform, Shape } = getRenderComponents(world);
   const id = createOrAdoptEntity(world, eid);
 
   addTransformComponents(world, id);
@@ -41,15 +41,13 @@ export function createSphere(
 
   Shape.addComponent(world, id, ShapeKind.Sphere, radius);
   Color.addComponent(world, id, color[0], color[1], color[2], color[3]);
-  // A sphere's diameter is its honest vertical extent.
-  Height.addComponent(world, id, radius * 2);
 
   return id;
 }
 
 // A circle extrudes to a cylinder of the given `height` (default 0 = flat disc).
 export function createCircle(
-  world: RenderWorldLike,
+  world: RenderWorld,
   {
     x,
     y,
@@ -66,21 +64,20 @@ export function createCircle(
     height?: number;
   },
 ) {
-  const { Color, LocalTransform, Shape, Height } = getRenderComponents(world);
+  const { Color, LocalTransform, Shape } = getRenderComponents(world);
   const id = addEntity(world);
 
   addTransformComponents(world, id);
   applyMatrixTranslate(LocalTransform.matrix.getBatch(id), x, y, z);
 
-  Shape.addComponent(world, id, ShapeKind.Circle, radius);
+  Shape.addComponent(world, id, ShapeKind.Circle, radius, height ?? 0);
   Color.addComponent(world, id, color[0], color[1], color[2], color[3]);
-  Height.addComponent(world, id, height ?? 0);
 
   return id;
 }
 
 export function createRectangle(
-  world: RenderWorldLike,
+  world: RenderWorld,
   {
     x,
     y,
@@ -99,27 +96,26 @@ export function createRectangle(
     height: number;
     color: TColor;
     roundness?: number;
-    // Vertical extent of the extruded box (default 0 = flat slab footprint).
+    // Z extent of the extruded box (default 0 = flat slab footprint).
     depth?: number;
     eid?: number;
   },
 ) {
-  const { Color, LocalTransform, Roundness, Shape, Height } = getRenderComponents(world);
+  const { Color, LocalTransform, Roundness, Shape } = getRenderComponents(world);
   const id = createOrAdoptEntity(world, eid);
 
   addTransformComponents(world, id);
   applyMatrixTranslate(LocalTransform.matrix.getBatch(id), x, y, z);
 
-  Shape.addComponent(world, id, ShapeKind.Rectangle, width, height);
+  Shape.addComponent(world, id, ShapeKind.Rectangle, width, height, depth ?? 0);
   Color.addComponent(world, id, color[0], color[1], color[2], color[3]);
   Roundness.addComponent(world, id, roundness ?? 0);
-  Height.addComponent(world, id, depth ?? 0);
 
   return id;
 }
 
 export function createParallelogram(
-  world: RenderWorldLike,
+  world: RenderWorld,
   {
     x,
     y,
@@ -142,22 +138,21 @@ export function createParallelogram(
     depth?: number;
   },
 ) {
-  const { Color, LocalTransform, Roundness, Shape, Height } = getRenderComponents(world);
+  const { Color, LocalTransform, Roundness, Shape } = getRenderComponents(world);
   const id = addEntity(world);
 
   addTransformComponents(world, id);
   applyMatrixTranslate(LocalTransform.matrix.getBatch(id), x, y, z);
 
-  Shape.addComponent(world, id, ShapeKind.Parallelogram, width, height, skew);
+  Shape.addComponent(world, id, ShapeKind.Parallelogram, width, height, skew, depth ?? 0);
   Color.addComponent(world, id, color[0], color[1], color[2], color[3]);
   Roundness.addComponent(world, id, roundness ?? 0);
-  Height.addComponent(world, id, depth ?? 0);
 
   return id;
 }
 
 export function createTrapezoid(
-  world: RenderWorldLike,
+  world: RenderWorld,
   {
     x,
     y,
@@ -180,22 +175,21 @@ export function createTrapezoid(
     depth?: number;
   },
 ) {
-  const { Color, LocalTransform, Roundness, Shape, Height } = getRenderComponents(world);
+  const { Color, LocalTransform, Roundness, Shape } = getRenderComponents(world);
   const id = addEntity(world);
 
   addTransformComponents(world, id);
   applyMatrixTranslate(LocalTransform.matrix.getBatch(id), x, y, z);
 
-  Shape.addComponent(world, id, ShapeKind.Trapezoid, topWidth, bottomWidth, height);
+  Shape.addComponent(world, id, ShapeKind.Trapezoid, topWidth, bottomWidth, height, depth ?? 0);
   Color.addComponent(world, id, color[0], color[1], color[2], color[3]);
   Roundness.addComponent(world, id, roundness ?? 0);
-  Height.addComponent(world, id, depth ?? 0);
 
   return id;
 }
 
 export function createTriangle(
-  world: RenderWorldLike,
+  world: RenderWorld,
   {
     x,
     y,
@@ -218,7 +212,7 @@ export function createTriangle(
     depth?: number;
   },
 ) {
-  const { Color, LocalTransform, Roundness, Shape, Height } = getRenderComponents(world);
+  const { Color, LocalTransform, Roundness, Shape } = getRenderComponents(world);
   const id = addEntity(world);
 
   addTransformComponents(world, id);
@@ -234,10 +228,10 @@ export function createTriangle(
     point2[1],
     point3[0],
     point3[1],
+    depth ?? 0,
   );
   Color.addComponent(world, id, color[0], color[1], color[2], color[3]);
   Roundness.addComponent(world, id, roundness ?? 0);
-  Height.addComponent(world, id, depth ?? 0);
 
   return id;
 }

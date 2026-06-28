@@ -1,12 +1,12 @@
 import { mat4 } from "gl-matrix";
-import { getRenderComponents, type RenderWorldLike } from "../world.ts";
+import { getRenderComponents, type RenderWorld } from "../world.ts";
 import { query } from "bitecs";
 type ChildrenLike = {
   entitiesCount: { get(eid: number): number };
   entitiesIds: { get(eid: number, i: number): number };
 };
 
-export function createTransformSystem(world: RenderWorldLike, Children: ChildrenLike) {
+export function createTransformSystem(world: RenderWorld, Children: ChildrenLike) {
   const { GlobalTransform, LocalTransform } = getRenderComponents(world);
   return function execMainTransformSystem() {
     {

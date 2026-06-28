@@ -1,22 +1,19 @@
 import { createRectangle, createSphere } from "../../../../renderer3d_2/src/ECS/Entities/Shapes.ts";
 import type { TColor } from "../../../../renderer3d_2/src/ECS/Components/Common.ts";
 import type { EngineWorld } from "../createEngineWorld.ts";
-import { getEngineComponents, getEngineSab } from "../createEngineWorld.ts";
-import { spawnBox, spawnGroundBox, spawnSphere } from "../../Physics/opChannel.ts";
-import { EngineDI } from "../../DI/EngineDI.ts";
+import { createEntityId, getEngineComponents } from "../createEngineWorld.ts";
 
 // MAIN half of the RigidShapes split (plan §6.1/§6.3). The worker owns Rapier, so each
 // factory here only: (a) pulls eid from the shared monotonic counter, (b) builds the
-// RENDER entity at that eid, (c) adds RigidBodyState so the apply system's query matches
-// and the shape shows at its spawn pose until the first worker publish, (d) posts a
-// SPAWN_BODY op (carrying the body CENTER + dims) for the worker to materialize. Returns
-// the eid; there is no pid on main (it is worker-local).
+// RENDER entity at that eid, (c) gives it RigidBodyState WITH the body spec — that single
+// component-add seeds the spawn pose AND emits the SPAWN_BODY op for the worker (the op
+// write lives INSIDE addComponent, not a separate method call). Returns the eid; there is
+// no pid on main (it is worker-local).
 //
-// The crucial invariant every factory establishes: Height (render) = the body's FULL Z
-// extent, so the §4 sync's baseZ = centerZ − Height/2 offset is exact for every kind.
-// The render `z` is passed as the BOTTOM (center − halfHeight); the op carries the
-// physics CENTER (the same z createBody received before the split) so the worker mirrors
-// the render placement exactly.
+// Center-origin: the render `z` and the physics body CENTER are the SAME value (the SDF is
+// symmetric about local z=0), so each factory passes the same z to both the shape and the
+// body spec. The Z extent rides in the shape's values (createRectangle's `depth`, the
+// sphere's radius) — there is no separate Height component.
 
 // Box: render = a rectangle footprint extruded by `sz`; physics = cuboid(hx,hy,hz).
 export function createRigidBox(
@@ -37,28 +34,34 @@ export function createRigidBox(
   const hz = sz / 2;
   // eid from the shared monotonic counter (plan §4.2): the one authority the worker
   // adopts. createRectangle adopts this exact id rather than auto-allocating.
-  // @TODO: инкапсулируй 41 строку в createEntityId
-  const eid = getEngineSab(world).nextEid();
-  // render: footprint sx×sy in XY, extruded sz along Z; z passed is the BOTTOM.
-  // createRectangle sets Height = sz via `depth`.
-  createRectangle(world, { x, y, z: z - hz, width: sx, height: sy, color, depth: sz, eid });
-  RigidBodyState.addComponent(world, eid);
-  // op position = body CENTER (z), matching the pre-split createBody translation.
-  EngineDI.postOps([spawnBox(eid, "dynamic", { x, y, z }, hx, hy, hz)]);
+  const eid = createEntityId(world);
+  // render: footprint sx×sy in XY, extruded sz along Z; z is the CENTER (== body center).
+  createRectangle(world, { x, y, z, width: sx, height: sy, color, depth: sz, eid });
+  // Spec position = body CENTER (z), matching the pre-split createBody translation.
+  RigidBodyState.addComponent(world, eid, {
+    kind: "box",
+    bodyType: "dynamic",
+    position: { x, y, z },
+    halfExtents: { x: hx, y: hy, z: hz },
+  });
   return eid;
 }
 
-// Sphere: render = createSphere (sets Height = 2r); physics = ball(r). Rotation-invariant.
+// Sphere: render = createSphere; physics = ball(r). Rotation-invariant.
 export function createRigidSphere(
   world: EngineWorld,
   { x, y, z, radius, color }: { x: number; y: number; z: number; radius: number; color: TColor },
 ): number {
   const { RigidBodyState } = getEngineComponents(world);
-  const eid = getEngineSab(world).nextEid(); // shared-counter authority (plan §4.2)
-  // z = bottom = center − r
-  createSphere(world, { x, y, z: z - radius, radius, color, eid });
-  RigidBodyState.addComponent(world, eid);
-  EngineDI.postOps([spawnSphere(eid, "dynamic", { x, y, z }, radius)]); // op pos = CENTER
+  const eid = createEntityId(world); // shared-counter authority (plan §4.2)
+  // z = CENTER (== body center).
+  createSphere(world, { x, y, z, radius, color, eid });
+  RigidBodyState.addComponent(world, eid, {
+    kind: "sphere",
+    bodyType: "dynamic",
+    position: { x, y, z },
+    radius,
+  });
   return eid;
 }
 
@@ -74,21 +77,24 @@ export function createGround(
 ): number {
   const { RigidBodyState } = getEngineComponents(world);
   const hz = thickness / 2;
-  const eid = getEngineSab(world).nextEid(); // shared-counter authority (plan §4.2)
-  // The fixed body's center sits at z − hz; its render bottom is therefore
-  // (z − hz) − hz = z − thickness. The top face lands exactly at z.
+  const eid = createEntityId(world); // shared-counter authority (plan §4.2)
+  // Center-origin: the slab center sits at z − hz so its top face lands exactly at z.
+  // Render center == fixed-body center == z − hz.
   createRectangle(world, {
     x: 0,
     y: 0,
-    z: z - thickness,
+    z: z - hz,
     width: size,
     height: size,
     color,
     depth: thickness,
     eid,
   });
-  RigidBodyState.addComponent(world, eid);
-  // op position = fixed body CENTER (z − hz), matching the pre-split createBody call.
-  EngineDI.postOps([spawnGroundBox(eid, { x: 0, y: 0, z: z - hz }, size / 2, size / 2, hz)]);
+  RigidBodyState.addComponent(world, eid, {
+    kind: "groundBox",
+    bodyType: "fixed",
+    position: { x: 0, y: 0, z: z - hz },
+    halfExtents: { x: size / 2, y: size / 2, z: hz },
+  });
   return eid;
 }

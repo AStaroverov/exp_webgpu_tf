@@ -21,7 +21,7 @@ import { sceneSDF } from "../SDFSystem/sceneSDF.wgsl.ts";
 //
 // group0 = uViewProj (sun) + uRayDir (sun travel dir). group1 = the 7 scene-instance
 // StorageRead buffers, IDENTICAL names/types/order to voxelize.shader.ts / sdf.shader.ts
-// so the shared ${sceneSDF} helpers resolve uKind/uValues/uRoundness/uHeights/uTransform
+// so the shared ${sceneSDF} helpers resolve uKind/uValues/uRoundness/uTransform
 // by global name, and so the bind-group numbering lines up 1:1 with sceneInstances.*.
 // These are a RENDER pass (vertex+fragment), so the scene buffers use the DEFAULT
 // VERTEX|FRAGMENT visibility (NOT COMPUTE like voxelize).
@@ -37,8 +37,8 @@ export const shaderMeta = new ShaderMeta(
 
     // ---- group 1 : per-instance scene storage (StorageRead => @group(1)) ----
     // IDENTICAL global names + WGSL types + DECLARATION ORDER to voxelize.shader.ts so the
-    // ${sceneSDF} helpers read uKind/uValues/uRoundness/uHeights/uTransform by global name and
-    // bindings 0..6 line up with sceneInstances.* in the createVoxelSystem sun group1 build.
+    // ${sceneSDF} helpers read uKind/uValues/uRoundness/uTransform by global name and
+    // bindings 0..5 line up with sceneInstances.* in the createVoxelSystem sun group1 build.
     transform: new VariableMeta(
       "uTransform",
       VariableKind.StorageRead,
@@ -48,15 +48,10 @@ export const shaderMeta = new ShaderMeta(
     values: new VariableMeta(
       "uValues",
       VariableKind.StorageRead,
-      `array<f32, ${MAX_INSTANCE_COUNT * 6}>`,
+      `array<f32, ${MAX_INSTANCE_COUNT * 8}>`,
     ),
     roundness: new VariableMeta(
       "uRoundness",
-      VariableKind.StorageRead,
-      `array<f32, ${MAX_INSTANCE_COUNT}>`,
-    ),
-    heights: new VariableMeta(
-      "uHeights",
       VariableKind.StorageRead,
       `array<f32, ${MAX_INSTANCE_COUNT}>`,
     ),
@@ -109,10 +104,8 @@ export const shaderMeta = new ShaderMeta(
             @builtin(instance_index) instance_index: u32
         ) -> VertexOutput {
             let transform = uTransform[instance_index];
-            let baseZ = transform[3].z;
-            let height = uHeights[instance_index];
-            let hz = height * 0.5;
-            let center = vec3<f32>(transform[3].x, transform[3].y, baseZ + hz);
+            let hz = footprint_half_z(instance_index);
+            let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z);
 
             let yaw = atan2(transform[0].y, transform[0].x);
 
@@ -145,9 +138,8 @@ export const shaderMeta = new ShaderMeta(
             }
 
             let transform = uTransform[instance_index];
-            let height = uHeights[instance_index];
-            let hz = height * 0.5;
-            let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z + hz);
+            let hz = footprint_half_z(instance_index);
+            let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z);
             let yaw = atan2(transform[0].y, transform[0].x);
 
             // World ray (origin = this fragment's box-surface point) → instance-local space
@@ -177,7 +169,7 @@ export const shaderMeta = new ShaderMeta(
             var t = max(t0, 0.0);
             var hit = false;
             for (var i = 0; i < 96; i = i + 1) {
-                let d = sd_shape3d(lo + ld * t, instance_index, hz);
+                let d = sd_shape3d(lo + ld * t, instance_index);
                 if (d < 0.001) {
                     hit = true;
                     break;

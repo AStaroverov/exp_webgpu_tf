@@ -1,5 +1,11 @@
-import { addComponent, World } from "bitecs";
+import { addComponent, observe, onRemove, World } from "bitecs";
 import { defineComponent } from "../../../../renderer3d_2/src/ECS/utils.ts";
+import {
+  despawnBody,
+  encodeOp,
+  toSpawnOp,
+  type BodySpec,
+} from "../../Physics/opChannel.ts";
 
 // Per-frame physics snapshot in 3D. The single biggest 2D→3D delta from the
 // unknown package: position is [x,y,z], rotation is a QUATERNION [x,y,z,w]
@@ -26,6 +32,14 @@ export const createRigidBodyStateComponent = defineComponent((RigidBodyState, ct
   const writePosition = () => positionBanks[sab.writeBank()];
   const writeRotation = () => rotationBanks[sab.writeBank()];
 
+  // Despawn is ECS-driven (no public method): removing the entity (or this component) on
+  // the PRODUCER world emits a DESPAWN_BODY op for the worker. The consumer (worker) also
+  // removeEntity()s while applying ops, so it must NOT re-emit — gate on isProducer (else
+  // an infinite spawn/despawn echo between the threads).
+  observe(ctx.world, onRemove(RigidBodyState), (eid: number) => {
+    if (sab.isProducer) sab.pushOp((payload, slot) => encodeOp(despawnBody(eid), payload, slot));
+  });
+
   // Read accessors for position/rotation. NOTE: these MUST be method objects,
   // NOT getters — defineComponent does Object.assign(ref, create(...)), which
   // copies a getter's VALUE once (snapshotting a stale bank). A small wrapper
@@ -43,17 +57,27 @@ export const createRigidBodyStateComponent = defineComponent((RigidBodyState, ct
     rotation: readAccessor(rotationBanks),
     linvel,
     angvel,
-    addComponent(world: World, eid: number) {
+    // Giving an entity RigidBodyState IS the spawn command (the public ECS surface — no
+    // postOps method call). The BodySpec is REQUIRED: it seeds BOTH pose banks to the
+    // spawn pose (so the shape renders there immediately, before the worker's first
+    // publish) and — on the PRODUCER — emits a SPAWN_BODY op for the worker to materialize
+    // the Rapier body. The worker also calls this (passing the drained op as the spec):
+    // it re-seeds the shared banks (same values) and, being a CONSUMER, does NOT re-emit.
+    addComponent(world: World, eid: number, spec: BodySpec) {
       addComponent(world, eid, RigidBodyState);
-      // Init BOTH banks so a never-synced (fixed) body has a valid pose in
-      // whichever bank a reader lands on. Identity quaternion: w = 1.
-      for (const p of positionBanks) p.getBatch(eid).fill(0);
+      // Identity quaternion (w = 1) + the body CENTER, written to both banks.
+      for (const p of positionBanks) {
+        p.set(eid, 0, spec.position.x).set(eid, 1, spec.position.y).set(eid, 2, spec.position.z);
+      }
       for (const r of rotationBanks) {
         r.getBatch(eid).fill(0);
         r.set(eid, 3, 1);
       }
       linvel.getBatch(eid).fill(0);
       angvel.getBatch(eid).fill(0);
+      if (sab.isProducer) {
+        sab.pushOp((payload, slot) => encodeOp(toSpawnOp(eid, spec), payload, slot));
+      }
     },
     update(
       eid: number,

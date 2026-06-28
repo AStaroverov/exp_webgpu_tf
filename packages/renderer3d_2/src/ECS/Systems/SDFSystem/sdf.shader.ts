@@ -15,10 +15,11 @@ import { sceneSDF } from "./sceneSDF.wgsl.ts";
 // SHAPE KINDS (src/ECS/Components/Shape.ts ShapeKind): Circle=0 (extrudes to a
 // CYLINDER), Rectangle=1, Parallelogram=3, Trapezoid=4, Triangle=5, Sphere=6
 // (the ONLY non-extruded primitive: length(p) - r). Everything else is the exact
-// 2D footprint SDF extruded by the entity's Height.
+// 2D footprint SDF extruded by its per-kind depth slot in Shape.values.
 //
-// HEIGHT MODEL: transform col3.z = baseZ (bottom). center.z = baseZ + height*0.5,
-// half-height hz = height*0.5.
+// HEIGHT MODEL: transform col3.z = the body CENTER. The 3D SDF is centered at
+// local z=0 (extrude is symmetric about z=0; sphere is length(p)-r). Half-height
+// hz = footprint_half_z(instance) reads the depth slot from uValues.
 //
 // DEPTH CONVENTION — REVERSE-Z. The pipeline uses depthCompare "greater-equal"
 // with depthClearValue 0 (GPUShader.ts withDepth + createFrame.ts), so nearer =
@@ -48,16 +49,10 @@ export const shaderMeta = new ShaderMeta(
     values: new VariableMeta(
       "uValues",
       VariableKind.StorageRead,
-      `array<f32, ${MAX_INSTANCE_COUNT * 6}>`,
+      `array<f32, ${MAX_INSTANCE_COUNT * 8}>`,
     ),
     roundness: new VariableMeta(
       "uRoundness",
-      VariableKind.StorageRead,
-      `array<f32, ${MAX_INSTANCE_COUNT}>`,
-    ),
-    // Honest vertical extent per instance (world units).
-    heights: new VariableMeta(
-      "uHeights",
       VariableKind.StorageRead,
       `array<f32, ${MAX_INSTANCE_COUNT}>`,
     ),
@@ -138,11 +133,8 @@ export const shaderMeta = new ShaderMeta(
             @builtin(instance_index) instance_index: u32
         ) -> VertexOutput {
             let transform = uTransform[instance_index];
-            let baseZ = transform[3].z;
-            let height = uHeights[instance_index];
-            let hz = height * 0.5;
-            // Object center sits half a height above the base.
-            let center = vec3<f32>(transform[3].x, transform[3].y, baseZ + hz);
+            let hz = footprint_half_z(instance_index);
+            let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z);
 
             // Yaw from the upper-left 2x2 of the transform.
             let yaw = atan2(transform[0].y, transform[0].x);
@@ -177,9 +169,8 @@ export const shaderMeta = new ShaderMeta(
             }
 
             let transform = uTransform[instance_index];
-            let height = uHeights[instance_index];
-            let hz = height * 0.5;
-            let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z + hz);
+            let hz = footprint_half_z(instance_index);
+            let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z);
             let yaw = atan2(transform[0].y, transform[0].x);
 
             // World ray (origin = this fragment's box-surface point) → instance-local
@@ -212,7 +203,7 @@ export const shaderMeta = new ShaderMeta(
             var t = max(t0, 0.0);
             var hit = false;
             for (var i = 0; i < 96; i = i + 1) {
-                let d = sd_shape3d(lo + ld * t, instance_index, hz);
+                let d = sd_shape3d(lo + ld * t, instance_index);
                 if (d < 0.001) {
                     hit = true;
                     break;
@@ -227,7 +218,7 @@ export const shaderMeta = new ShaderMeta(
             }
 
             let pLocal = lo + ld * t;
-            let nLocal = sd_normal3d(pLocal, instance_index, hz);
+            let nLocal = sd_normal3d(pLocal, instance_index);
 
             // Back to world (forward yaw).
             let fc = cos(yaw);
@@ -290,10 +281,8 @@ export const shaderMeta = new ShaderMeta(
         ) -> VertexOutput {
             // Identical impostor box to vs_main.
             let transform = uTransform[instance_index];
-            let baseZ = transform[3].z;
-            let height = uHeights[instance_index];
-            let hz = height * 0.5;
-            let center = vec3<f32>(transform[3].x, transform[3].y, baseZ + hz);
+            let hz = footprint_half_z(instance_index);
+            let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z);
 
             let yaw = atan2(transform[0].y, transform[0].x);
 
@@ -323,9 +312,8 @@ export const shaderMeta = new ShaderMeta(
             }
 
             let transform = uTransform[instance_index];
-            let height = uHeights[instance_index];
-            let hz = height * 0.5;
-            let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z + hz);
+            let hz = footprint_half_z(instance_index);
+            let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z);
             let yaw = atan2(transform[0].y, transform[0].x);
 
             // World ray -> instance-local space (same as fs_main).
@@ -355,7 +343,7 @@ export const shaderMeta = new ShaderMeta(
             var hit = false;
             var hitDist = 1.0;
             for (var i = 0; i < 96; i = i + 1) {
-                let d = sd_shape3d(lo + ld * t, instance_index, hz);
+                let d = sd_shape3d(lo + ld * t, instance_index);
                 if (d < 0.001) {
                     hit = true;
                     hitDist = d;
