@@ -6,7 +6,7 @@
 // Steady state crosses ZERO messages — pose flows through the DATA SAB, ops through the
 // OPS SAB. This module defines the op TYPES + the fixed-stride record CODEC the ring
 // uses (encodeOp on main, decodeOp on the worker). The ring mechanics (cursors, Atomics
-// gate) live in engineSab; the SAB layout lives in renderer3d_2 sab/registry.
+// gate) live in engineSab; the SAB layout lives in the ecs package sab/registry.
 //
 // CONTRACT for the main side: pull `eid = sab.nextEid()` (the one shared authority),
 // build the render entity at that eid, then push a SPAWN_BODY carrying that SAME eid
@@ -14,7 +14,7 @@
 // body. Despawn pushes DESPAWN_BODY{eid} and is fire-and-forget (eids never recycle,
 // plan §6.3) — no ack.
 
-import { OPS_PAYLOAD_STRIDE } from "../../../renderer3d_2/src/sab/registry.ts";
+import { OPS_PAYLOAD_STRIDE } from "../../../ECS/src/sab/registry.ts";
 
 // ---- Opcodes ----------------------------------------------------------------
 

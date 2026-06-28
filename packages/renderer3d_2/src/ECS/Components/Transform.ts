@@ -1,7 +1,7 @@
 import { addComponent, World } from "bitecs";
 import { mat4 } from "gl-matrix";
 import { NestedArray } from "../../utils.ts";
-import { delegate } from "../../delegate.ts";
+import { delegate } from "../../../../ECS/src/delegate.ts";
 
 export function createLocalTransformComponent() {
   return {

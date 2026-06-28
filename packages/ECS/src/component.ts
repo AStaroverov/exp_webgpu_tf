@@ -2,9 +2,7 @@ import { addComponent, observe, onAdd, onRemove } from "bitecs";
 import type { World } from "bitecs";
 import { createTable } from "./Table.ts";
 import type { Table, TableHandle } from "./Table.ts";
-import type { NestedArray } from "../utils.ts";
-import { bindBundle, PhysicsRole } from "../../../engine/src/sab/engineSab.ts";
-import { allocate } from "../sab/registry.ts";
+import type { NestedArray } from "./typedArray.ts";
 
 const $CompRef = Symbol("CompRef");
 let indexCompRef = 0;
@@ -14,31 +12,12 @@ type ReactiveSetter = (eid: number, ...args: any[]) => any;
 
 export type Obs = <F extends ReactiveSetter>(setter: F) => F;
 
-export interface ComponentSab {
-  readonly isProducer: boolean;
-  readBank(): number;
-  writeBank(): number;
-  banks(name: string): NestedArray<Float64ArrayConstructor>[];
-  pushOp(encode: (payload: Float64Array, slot: number) => number): void;
-}
-
 export type ComponentContext = {
   readonly obs: Obs;
   readonly world: World;
   readonly table: Table;
   readonly sab: ComponentSab;
 };
-
-const componentSabInstances = new WeakMap<World, ComponentSab>();
-export function getComponentSab(world: World): ComponentSab | undefined {
-  if (!componentSabInstances.has(world)) {
-    const role = (world as { physicsRole: PhysicsRole }).physicsRole;
-    const sab =
-      role.kind === "consumer" ? bindBundle(role.bundle, false) : bindBundle(allocate(), true);
-    return (componentSabInstances.set(world, sab), sab);
-  }
-  return componentSabInstances.get(world)!;
-}
 
 export type SubComponent<T extends object, A extends unknown[] = []> = (
   component: object,
@@ -105,4 +84,29 @@ export function defineComponent<T extends object>(
     nextCompRef = { [$CompRef]: indexCompRef++ };
     return comp;
   };
+}
+
+export interface ComponentSab {
+  readonly isProducer: boolean;
+  readBank(): number;
+  writeBank(): number;
+  banks(name: string): NestedArray<Float64ArrayConstructor>[];
+  pushOp(encode: (payload: Float64Array, slot: number) => number): void;
+}
+
+const componentSabFactories = new WeakMap<World, () => ComponentSab>();
+const componentSabInstances = new WeakMap<World, ComponentSab>();
+
+export function setComponentSabFactory(world: World, factory: () => ComponentSab): void {
+  componentSabFactories.set(world, factory);
+}
+
+export function getComponentSab(world: World): ComponentSab | undefined {
+  const existing = componentSabInstances.get(world);
+  if (existing !== undefined) return existing;
+  const factory = componentSabFactories.get(world);
+  if (factory === undefined) return undefined;
+  const sab = factory();
+  componentSabInstances.set(world, sab);
+  return sab;
 }

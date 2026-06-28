@@ -1,7 +1,7 @@
-import { delegate } from "../../delegate.ts";
+import { delegate } from "../../../../ECS/src/delegate.ts";
 import { NestedArray } from "../../utils.ts";
 import { addComponent, World } from "bitecs";
-import { defineComponent } from "../utils.ts";
+import { defineComponent } from "../../../../ECS/src/component.ts";
 
 export enum ShapeKind {
   Circle = 0,

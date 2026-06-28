@@ -17,8 +17,9 @@ import {
 } from "./ECS/createEngineWorld.ts";
 import type { PhysicalWorld } from "./Physics/initPhysicalWorld.ts";
 import { createRigidBodyStateSystem } from "./ECS/Systems/createRigidBodyStateSystem.ts";
-import { adoptEntity } from "../../renderer3d_2/src/sab/adoptEntity.ts";
+import { adoptEntity } from "../../ECS/src/sab/adoptEntity.ts";
 import {
+  decodeOp,
   isInitMessage,
   isSpawnBody,
   type SpawnBodyOp,
@@ -67,7 +68,6 @@ let elapsedMs = 0;
 // ---- Message handling -------------------------------------------------------
 
 function post(msg: WorkerOutbound): void {
-  // eslint-disable-next-line no-restricted-globals -- worker global scope
   (self as unknown as Worker).postMessage(msg);
 }
 
@@ -79,9 +79,6 @@ self.onmessage = (ev: MessageEvent<WorkerInbound>) => {
     void onInit(msg.bundle);
     return;
   }
-
-  // Structural ops no longer arrive by message — they live in the OPS ring SAB and are
-  // drained in the step loop. The only inbound message is `init`.
 };
 
 async function onInit(bundle: {
@@ -90,13 +87,6 @@ async function onInit(bundle: {
   controlSab: SharedArrayBuffer;
   layoutVersion: number;
 }): Promise<void> {
-  // Build the physics-only mirror world bound to the RECEIVED SABs (same bytes as
-  // main), then the Rapier world (Z-up gravity, reserveHandleZero). After both exist
-  // the worker is READY and can materialize bodies.
-  //
-  // Wrapped: if Rapier WASM fails to init in the worker, or world build throws, report
-  // it to main (which logs it) instead of dying silently — a dead worker shows up only
-  // as every body frozen at the origin (the never-published bank).
   try {
     console.log("[worker] onInit: dynamically importing Rapier modules…");
     const [physMod, spawnMod] = await Promise.all([
@@ -119,7 +109,7 @@ async function onInit(bundle: {
   post({ type: "ready" });
 
   // Kick the self-clock. From here the worker free-runs independently of main's rAF.
-  lastWakeMs = now();
+  lastWakeMs = performance.now();
   scheduleStep();
 }
 
@@ -128,7 +118,8 @@ async function onInit(bundle: {
 function drainOps(): void {
   // Drain the OPS ring in cursor order: spawns adopt eids + build bodies, despawns tear
   // down. The worker's engineSab owns the read cursor and zeroes each consumed slot.
-  getEngineSab(world!).drainOps((op) => {
+  getEngineSab(world!).drainOps((opcode, payload, slot) => {
+    const op = decodeOp(opcode, payload, slot);
     if (isSpawnBody(op)) spawnBody(op);
     else despawnBody(op.eid);
   });
@@ -169,9 +160,6 @@ function despawnBody(eid: number): void {
   const pw = physicalWorld!;
   const { RigidBodyRef } = getEngineComponents(w);
 
-  // Fire-and-forget (plan §6.3): no ack. eids are never recycled, so a late pose write
-  // would land in a dead row no query reads — harmless. Remove the Rapier body, drop
-  // the reverse map, then remove the entity from the worker world.
   const pid = RigidBodyRef.id[eid];
   if (pid !== 0) {
     const body = pw.getRigidBody(pid);
@@ -184,55 +172,32 @@ function despawnBody(eid: number): void {
 
 // ---- Self-clocked fixed-step loop (plan §7) ---------------------------------
 
-function now(): number {
-  // performance.now exists in worker scope; fall back to Date for node hosts.
-  return typeof performance !== "undefined" ? performance.now() : Date.now();
-}
-
 function stepOnce(): void {
   const pw = physicalWorld!;
   const sab = getEngineSab(world!);
 
-  // Phase boundary: structural changes happen BEFORE step, never mid-query (plan §4.3).
   drainOps();
-
-  pw.step(); // Rapier integrates the fixed step (gravity)
-  syncRigidBodyState!(); // Rapier bodies → RigidBodyState back bank (ALL bodies)
-
-  elapsedMs += FIXED_STEP_MS;
-  world!.time.elapsed = elapsedMs;
-  // Publish the just-written bank: flip SEQ so main reads a complete, tear-free pose.
-  sab.publish(elapsedMs);
+  pw.step();
+  syncRigidBodyState!();
+  sab.publish((elapsedMs += FIXED_STEP_MS));
 }
 
 function tick(): void {
-  const t = now();
+  const t = performance.now();
   accumulatorMs += t - lastWakeMs;
   lastWakeMs = t;
 
   let substeps = 0;
-  try {
-    while (accumulatorMs >= FIXED_STEP_MS && substeps < MAX_SUBSTEPS) {
-      stepOnce();
-      accumulatorMs -= FIXED_STEP_MS;
-      substeps++;
-    }
-  } catch (err) {
-    // Report once and stop the loop — otherwise a per-step throw (e.g. a bad op or a
-    // Rapier handle) would spam every frame. Main logs this.
-    post({ type: "error", message: `step failed: ${(err as Error)?.stack ?? String(err)}` });
-    return; // do not reschedule
+  while (accumulatorMs >= FIXED_STEP_MS && substeps < MAX_SUBSTEPS) {
+    stepOnce();
+    accumulatorMs -= FIXED_STEP_MS;
+    substeps++;
   }
-  // If we hit the substep cap we're behind real time; drop the backlog so we don't
-  // spiral (better to run slow-mo than to freeze catching up).
   if (substeps >= MAX_SUBSTEPS) accumulatorMs = 0;
 
   scheduleStep();
 }
 
-// rAF is unavailable in workers; pace with setTimeout. The accumulator decouples the
-// (coarse) timer cadence from the fixed physics step, so jitter in setTimeout does not
-// change how many steps run — only when.
 function scheduleStep(): void {
   setTimeout(tick, FIXED_STEP_MS);
 }

@@ -13,13 +13,13 @@
 
 import GUI from "lil-gui";
 import Stats from "stats-gl";
-import { hasComponent, query } from "bitecs";
 import { initWebGPU } from "./gpu.ts";
 import { createWorld, getRenderComponents } from "./ECS/world.ts";
 import { createFrameTextures, createFrameTick } from "./WGSL/createFrame.ts";
 import { createPresent } from "./WGSL/createPresent.ts";
 import { createDrawShapeSystem } from "./ECS/Systems/SDFSystem/createDrawShapeSystem.ts";
 import { createVoxelSystem } from "./ECS/Systems/Lighting/createVoxelSystem.ts";
+import { createLightEmitterSystem } from "./ECS/Systems/Lighting/createLightEmitterSystem.ts";
 import { SunLight } from "./ECS/Systems/SunLight.ts";
 import { createTransformSystem } from "./ECS/Systems/TransformSystem.ts";
 import {
@@ -33,7 +33,6 @@ import {
 import { computeSmokeTest } from "./WGSL/computeSmokeTest.ts";
 import {
   applyMatrixRotateZ,
-  getMatrixTranslation,
   setMatrixRotateZ,
   setMatrixTranslate,
 } from "./ECS/Components/Transform.ts";
@@ -63,7 +62,7 @@ async function main() {
   const getPixelRatio = () => window.devicePixelRatio;
 
   const world = createWorld();
-  const { LocalTransform, LightEmitter, Shape, Color } = getRenderComponents(world);
+  const { LocalTransform, LightEmitter, Shape } = getRenderComponents(world);
 
   // Scene selection:
   //   "emitter"  — ground + box occluder + a GUI-movable/resizable emitter sphere.
@@ -680,28 +679,8 @@ async function main() {
     f.add(finalDyn, "speed", 0, 3, 0.05).name("speed");
   }
 
-  // Auto-discover every emitter from the ECS each frame and hand the cone pass their world
-  // centers + radius for importance sampling — NO manual light list. Any entity with a
-  // LightEmitter is a light, treated identically. center = transform translation (center-origin),
-  // radius = the sphere radius (Shape.values[0]) for emitter spheres. Capped at 8 by setLights.
-  const emitterLightsFlat: number[] = [];
-  const emitterColorsFlat: number[] = []; // r,g,b,intensity per light (analytic-direct radiance)
-  function updateLights() {
-    emitterLightsFlat.length = 0;
-    emitterColorsFlat.length = 0;
-    const ents = query(world, [LightEmitter, LocalTransform]);
-    let n = 0;
-    for (let i = 0; i < ents.length && n < 8; i++) {
-      const id = ents[i];
-      const t = getMatrixTranslation(LocalTransform.matrix.getBatch(id));
-      const r = hasComponent(world, id, Shape) ? Shape.values.get(id, 0) : 0.5;
-      emitterLightsFlat.push(t[0], t[1], t[2], r);
-      const c = Color.getArray(id); // rgba; rgb = c[0..2]
-      emitterColorsFlat.push(c[0], c[1], c[2], LightEmitter.intensity[id]);
-      n++;
-    }
-    voxel.setLights(emitterLightsFlat, n, emitterColorsFlat);
-  }
+  // Auto-discover scene emitters → cone importance-sampling lights each frame.
+  const updateLights = createLightEmitterSystem(world, voxel);
 
   // Animate the "final" scene: position (orbit), angle (spin), size (pulse radius),
   // intensity (pulse emission). Mutates ECS state BEFORE prepare()/voxelize so the change

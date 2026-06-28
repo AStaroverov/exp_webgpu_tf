@@ -6,9 +6,6 @@ export enum VariableKind {
   Uniform = "uniform",
   StorageRead = "storage, read",
   StorageWrite = "storage, write",
-  // Writable storage texture (texture_storage_Nd<format, access>). The compute pass
-  // writes voxels via textureStore; later passes read the SAME GPUTexture as a sampled
-  // texture_Nd<f32>. Carries `storageTextureFormat` + `storageTextureAccess`.
   StorageTexture = "storage_texture",
 }
 
@@ -18,7 +15,6 @@ export class VariableMeta {
   public visibility: GPUFlagsConstant;
   public textureSampleType?: GPUTextureSampleType;
   public viewDimension?: GPUTextureViewDimension;
-  // StorageTexture only: WGSL/layout format + access (default "write-only").
   public storageTextureFormat?: GPUTextureFormat;
   public storageTextureAccess: GPUStorageTextureAccess;
 

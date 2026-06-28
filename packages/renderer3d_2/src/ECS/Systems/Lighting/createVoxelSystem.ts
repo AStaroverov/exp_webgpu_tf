@@ -1148,13 +1148,13 @@ export function createVoxelSystem({
   // analytic-direct shadow term. `count` is clamped to [0,8]; unused entries zeroed. The caller
   // discovers these from the LightEmitter component each frame (no manual light list). count=0 →
   // pure Fibonacci fill cones.
-  function setLights(flat: number[], count: number, colorsFlat: number[]) {
+  function setLights(flat: Float32Array, count: number, colorsFlat: Float32Array) {
     const n = Math.max(0, Math.min(8, count));
-    coneLightsArr.fill(0);
-    coneLightsArr.set(flat.slice(0, n * 4));
+    // `flat`/`colorsFlat` are exactly 32 floats with the tail (beyond n*4) already zeroed
+    // by the caller, so set() directly — no slice (allocation) needed.
+    coneLightsArr.set(flat);
     device.queue.writeBuffer(coneShader.uniforms.lights.getGPUBuffer(device), 0, coneLightsArr);
-    coneLightColorsArr.fill(0);
-    coneLightColorsArr.set(colorsFlat.slice(0, n * 4));
+    coneLightColorsArr.set(colorsFlat);
     device.queue.writeBuffer(
       coneShader.uniforms.lightColor.getGPUBuffer(device),
       0,

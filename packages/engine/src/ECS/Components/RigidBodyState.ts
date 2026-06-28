@@ -1,5 +1,5 @@
 import { addComponent, observe, onRemove, World } from "bitecs";
-import { defineComponent } from "../../../../renderer3d_2/src/ECS/utils.ts";
+import { defineComponent } from "../../../../ECS/src/component.ts";
 import {
   despawnBody,
   encodeOp,
