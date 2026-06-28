@@ -1,5 +1,5 @@
 import { addComponent, observe, onRemove, World } from "bitecs";
-import { defineComponent } from "../../../../ECS/src/component.ts";
+import { defineComponent } from "../../../../common/src/component.ts";
 import {
   despawnBody,
   encodeOp,

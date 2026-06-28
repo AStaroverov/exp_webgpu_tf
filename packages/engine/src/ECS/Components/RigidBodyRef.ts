@@ -1,6 +1,6 @@
 import { addComponent, World } from "bitecs";
-import { delegate } from "../../../../ECS/src/delegate.ts";
-import { defineComponent } from "../../../../ECS/src/component.ts";
+import { delegate } from "../../../../common/src/delegate.ts";
+import { defineComponent } from "../../../../common/src/component.ts";
 
 // Stores the Rapier body handle (pid) per entity, and maintains the reverse
 // pid→eid map for collision-event resolution. Handle 0 is the reserved

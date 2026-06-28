@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "workspaces": [
-    "packages/ECS",
+    "packages/common",
     "packages/renderer",
     "packages/tanks",
     "packages/ppo_tanks",

@@ -1,4 +1,4 @@
-import { OPS_PAYLOAD_STRIDE } from "../../../ECS/src/sab/registry.ts";
+import { OPS_PAYLOAD_STRIDE } from "../../../common/src/sab/registry.ts";
 
 // ---- Opcodes ----------------------------------------------------------------
 

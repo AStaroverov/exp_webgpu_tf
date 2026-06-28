@@ -3,7 +3,7 @@ import { addTransformComponents, applyMatrixTranslate } from "../Components/Tran
 import { TColor } from "../Components/Common.ts";
 import { ShapeKind } from "../Components/Shape.ts";
 import { getRenderComponents, type RenderWorld } from "../world.ts";
-import { adoptEntity } from "../../../../ECS/src/sab/adoptEntity.ts";
+import { adoptEntity } from "../../../../common/src/sab/adoptEntity.ts";
 
 // Entity id source. When `eid` is supplied (the engine's shared-counter path,
 // plan §4.2/§6.3) the world ADOPTS that exact id; otherwise bitecs allocates one

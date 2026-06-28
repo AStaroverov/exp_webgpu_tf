@@ -1,7 +1,7 @@
 import { NestedArray } from "../../utils.ts";
-import { delegate } from "../../../../ECS/src/delegate.ts";
+import { delegate } from "../../../../common/src/delegate.ts";
 import { addComponent, World } from "bitecs";
-import { defineComponent } from "../../../../ECS/src/component.ts";
+import { defineComponent } from "../../../../common/src/component.ts";
 
 export const ROPE_BUFFER_LENGTH = 100;
 export const ROPE_POINTS_COUNT = ROPE_BUFFER_LENGTH / 2;

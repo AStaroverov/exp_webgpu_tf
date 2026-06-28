@@ -20,5 +20,5 @@ export function notNil<T>(v: T | null | undefined): v is T {
   return v !== null && v !== undefined;
 }
 
-export { TypedArray, NestedArray } from "../../ECS/src/typedArray.ts";
-export type { NestedArrayOpts } from "../../ECS/src/typedArray.ts";
+export { TypedArray, NestedArray } from "../../common/src/typedArray.ts";
+export type { NestedArrayOpts } from "../../common/src/typedArray.ts";

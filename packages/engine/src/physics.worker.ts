@@ -17,7 +17,7 @@ import {
 } from "./ECS/createEngineWorld.ts";
 import type { PhysicalWorld } from "./Physics/initPhysicalWorld.ts";
 import { createRigidBodyStateSystem } from "./ECS/Systems/createRigidBodyStateSystem.ts";
-import { adoptEntity } from "../../ECS/src/sab/adoptEntity.ts";
+import { adoptEntity } from "../../common/src/sab/adoptEntity.ts";
 import {
   decodeOp,
   isInitMessage,

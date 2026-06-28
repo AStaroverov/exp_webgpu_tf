@@ -1,9 +1,9 @@
 import { createWorld as createBitecsWorld, createEntityIndex, World } from "bitecs";
 import { createRenderComponents, type RenderComponents } from "../../../renderer/src/ECS/world.ts";
 import { createEngineComponents } from "./components.ts";
-import { bindBundle, type Sab } from "../../../ECS/src/sab/sab.ts";
-import { getComponentSab, setComponentSabFactory } from "../../../ECS/src/component.ts";
-import { allocate, type SabBundle } from "../../../ECS/src/sab/registry.ts";
+import { bindBundle, type Sab } from "../../../common/src/sab/sab.ts";
+import { getComponentSab, setComponentSabFactory } from "../../../common/src/component.ts";
+import { allocate, type SabBundle } from "../../../common/src/sab/registry.ts";
 
 export type PhysicsComponents = ReturnType<typeof createEngineComponents>;
 export type PhysicsWorkerWorld = World<{ components: PhysicsComponents }>;

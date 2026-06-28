@@ -6,7 +6,7 @@
 // (same physics.worker.ts logic, only the host that constructs the Worker + posts
 // `init` differs) — left as a clean seam, NOT built (plan §6.4).
 
-import type { SabBundle } from "../../../ECS/src/sab/registry.ts";
+import type { SabBundle } from "../../../common/src/sab/registry.ts";
 
 export type PhysicsWorker = {
   // Structural ops no longer flow through the worker port — main writes them into the

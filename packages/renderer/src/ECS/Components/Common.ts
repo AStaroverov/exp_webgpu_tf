@@ -1,7 +1,7 @@
-import { delegate } from "../../../../ECS/src/delegate.ts";
+import { delegate } from "../../../../common/src/delegate.ts";
 import { NestedArray, TypedArray } from "../../utils.ts";
 import { addComponent, World } from "bitecs";
-import { defineComponent } from "../../../../ECS/src/component.ts";
+import { defineComponent } from "../../../../common/src/component.ts";
 
 export const createThinnessComponent = defineComponent((Thinness, { obs }) => {
   const value = TypedArray.f64(delegate.defaultSize);
