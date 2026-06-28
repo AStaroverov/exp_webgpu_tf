@@ -8,5 +8,3 @@ export function createEngineComponents(world: World) {
     RigidBodyState: createRigidBodyStateComponent(world),
   };
 }
-
-export type EngineComponentsLocal = ReturnType<typeof createEngineComponents>;

@@ -9,14 +9,9 @@ export type CreateBodyOptions = {
   x: number;
   y: number;
   z: number;
-  // Rapier Rotation interface {x,y,z,w}; identity = (0,0,0,1). Plain objects are
-  // accepted. Defaults to no rotation.
   rot?: Rotation;
 };
 
-// Generic rigid-body builder: 3D translation (3 args) + a quaternion rotation.
-// The collider is attached separately by createRigid* (so body and shape stay
-// decoupled).
 export function createBody(
   world: PhysicalWorld,
   { type, x, y, z, rot = IDENTITY_QUAT }: CreateBodyOptions,
