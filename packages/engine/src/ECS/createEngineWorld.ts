@@ -1,8 +1,5 @@
 import { createWorld as createBitecsWorld, createEntityIndex, World } from "bitecs";
-import {
-  createRenderComponents,
-  type RenderComponents,
-} from "../../../renderer3d_2/src/ECS/world.ts";
+import { createRenderComponents, type RenderComponents } from "../../../renderer/src/ECS/world.ts";
 import { createEngineComponents, type EngineComponentsLocal } from "./components.ts";
 import { bindBundle, type Sab, type SabRole } from "../../../ECS/src/sab/sab.ts";
 import { getComponentSab, setComponentSabFactory } from "../../../ECS/src/component.ts";

@@ -1,4 +1,4 @@
-// engine demo — Rapier 3D physics driving the renderer3d_2 (2.5D SDF) renderer.
+// engine demo — Rapier 3D physics driving the renderer (2.5D SDF) renderer.
 //
 // Gravity drops boxes and spheres onto a ground plane, lit by the VCT sun, viewed
 // by a tilted orthographic camera. Z-up world; gravity (0,0,-9.81). A lil-gui panel
@@ -11,8 +11,8 @@ import { createEngine } from "./createEngine.ts";
 import { getEngineComponents } from "./ECS/createEngineWorld.ts";
 import { createGround, createRigidBox, createRigidSphere } from "./ECS/Entities/RigidShapes.ts";
 import type { EngineWorld } from "./ECS/createEngineWorld.ts";
-import type { TColor } from "../../renderer3d_2/src/ECS/Components/Common.ts";
-import { SunLight } from "../../renderer3d_2/src/ECS/Systems/SunLight.ts";
+import type { TColor } from "../../renderer/src/ECS/Components/Common.ts";
+import { SunLight } from "../../renderer/src/ECS/Systems/SunLight.ts";
 import { RenderDI, type VoxelSystem } from "./DI/RenderDI.ts";
 import {
   cameraAzimuth,
@@ -21,7 +21,7 @@ import {
   setCameraAzimuth,
   setCameraElevation,
   setCameraPosition,
-} from "../../renderer3d_2/src/ECS/Systems/ResizeSystem.ts";
+} from "../../renderer/src/ECS/Systems/ResizeSystem.ts";
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -100,7 +100,15 @@ function buildGui(world: EngineWorld, spawned: Spawned[]): GUI {
     const eid =
       params.shape === "sphere"
         ? createRigidSphere(world, { x, y, z, radius: params.size / 2, color })
-        : createRigidBox(world, { x, y, z, sx: params.size, sy: params.size, sz: params.size, color });
+        : createRigidBox(world, {
+            x,
+            y,
+            z,
+            sx: params.size,
+            sy: params.size,
+            sz: params.size,
+            color,
+          });
     if (params.lightEmitter) {
       // radius lifts the light center to the shape center (translation is the bottom).
       // Light color is the entity's Color; the voxel feed caps at 8 lights.
@@ -146,7 +154,7 @@ function buildGui(world: EngineWorld, spawned: Spawned[]): GUI {
 }
 
 // ── VCT tuning GUI ─────────────────────────────────────────────────────────────
-// Mirrors renderer3d_2/src/demo.ts's voxel folders, wired to the SAME voxel system
+// Mirrors renderer/src/demo.ts's voxel folders, wired to the SAME voxel system
 // (RenderDI.voxel). Baked-config controls recompile the GI shaders on RELEASE
 // (.onFinishChange → voxel.rebuild()), not per drag tick; the sun + cone-resolution
 // are read live. So both packages share one render config — tune here, the values
@@ -261,7 +269,7 @@ async function main(): Promise<void> {
   const orbit = { enabled: true };
   gui.add(orbit, "enabled").name("orbit camera");
 
-  // VCT tuning folders — wired to the SAME voxel system the renderer3d_2 demo tunes
+  // VCT tuning folders — wired to the SAME voxel system the renderer demo tunes
   // (RenderDI.voxel, set by createRenderTarget). createEngine({canvas}) has already
   // built the render target, so the handle is live here.
   if (RenderDI.voxel) addVoxelControls(gui, RenderDI.voxel);

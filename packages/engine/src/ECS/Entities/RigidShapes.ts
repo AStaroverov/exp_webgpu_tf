@@ -1,5 +1,5 @@
-import { createRectangle, createSphere } from "../../../../renderer3d_2/src/ECS/Entities/Shapes.ts";
-import type { TColor } from "../../../../renderer3d_2/src/ECS/Components/Common.ts";
+import { createRectangle, createSphere } from "../../../../renderer/src/ECS/Entities/Shapes.ts";
+import type { TColor } from "../../../../renderer/src/ECS/Components/Common.ts";
 import type { EngineWorld } from "../createEngineWorld.ts";
 import { createEntityId, getEngineComponents } from "../createEngineWorld.ts";
 

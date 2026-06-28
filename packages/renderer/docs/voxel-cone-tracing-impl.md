@@ -1,7 +1,7 @@
-# Voxel Cone Tracing (VCT) — Integration Design for renderer3d_2
+# Voxel Cone Tracing (VCT) — Integration Design for renderer
 
 > Technical design document. Goal: add **hybrid VCT** (voxel cone tracing) global illumination (GI)
-> to the existing WebGPU/WGSL renderer `renderer3d_2`. The document covers decisions, formulas, and
+> to the existing WebGPU/WGSL renderer `renderer`. The document covers decisions, formulas, and
 > their mapping to specific engine passes. No copy-paste-ready code is included — only prose,
 > formulas, and short pseudo-snippets. Every significant choice is accompanied by a reference to
 > the source repository/paper.
@@ -32,7 +32,7 @@ kept as an upgrade against light leaking — implemented by
 1. **G-buffer** — already exists (SDF pass writes depth/normal/albedo).
 2. **Voxelize + inject direct light** — a basic compute voxelize already exists (fills
    `voxelAlbedo.rgb=albedo, .a=occupancy`, `voxelEmission.rgb`). **Adding**: write of
-   *direct-lit radiance* into a new volume `voxelRadiance` (see §4).
+   _direct-lit radiance_ into a new volume `voxelRadiance` (see §4).
 3. **3D texture mip pyramid** — **new** custom compute pass (isotropic opacity-weighted downsample;
    later — 6 directional convolutions). WebGPU has no `generateMipmap` for 3D (see §5).
 4. **Cone-trace GI** — **new** fullscreen render pass over the G-buffer: 5–6 diffuse cones +
@@ -40,7 +40,7 @@ kept as an upgrade against light leaking — implemented by
    texture (analogous to `gi`/`rc` in `createVoxelSystem`).
 5. **Composite/resolve** — **new** (or extend the existing resolve): bilinear/bilateral upsample of
    indirect, addition with direct light, multiplication by AO and albedo (see §10).
-6. *(optional)* **Multi-bounce / temporal** — re-injection of the previous frame's radiance into
+6. _(optional)_ **Multi-bounce / temporal** — re-injection of the previous frame's radiance into
    the voxel volume (§9).
 
 **Rationale.** We already have a regular grid and a compute voxelizer — this is exactly the target
@@ -52,7 +52,7 @@ already have compute (see §4).
 
 ---
 
-## 2. What Already Exists in renderer3d_2 and What We Are Adding (Gap Analysis)
+## 2. What Already Exists in renderer and What We Are Adding (Gap Analysis)
 
 **Already exists** (files under `src/ECS/Systems/Lighting/`):
 
@@ -73,17 +73,17 @@ already have compute (see §4).
 
 **Adding for VCT:**
 
-| What | Resource/pass type | Format |
-|---|---|---|
-| `voxelRadiance` — direct-lit radiance per voxel (mip 0) | 3D texture, `STORAGE` (inject write) + `TEXTURE` (mip/trace read) | `rgba16float` (HDR) |
-| `voxelRadiance` mip pyramid (isotropic) | custom compute pass, one dispatch per level | `rgba16float`, separate view per mip |
-| *(upgrade)* 6 directional radiance volumes with mips | 6× 3D textures (or one packed ×6 along X) | `rgba16float` |
-| Inject direct light into `voxelRadiance` | extension of compute-voxelize **or** separate compute | — |
-| Cone-trace GI pass | fullscreen render over G-buffer | output `rgba16float` |
-| Composite/resolve | fullscreen render | output `bgra8unorm`/`rgba16float` |
+| What                                                    | Resource/pass type                                                | Format                               |
+| ------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------ |
+| `voxelRadiance` — direct-lit radiance per voxel (mip 0) | 3D texture, `STORAGE` (inject write) + `TEXTURE` (mip/trace read) | `rgba16float` (HDR)                  |
+| `voxelRadiance` mip pyramid (isotropic)                 | custom compute pass, one dispatch per level                       | `rgba16float`, separate view per mip |
+| _(upgrade)_ 6 directional radiance volumes with mips    | 6× 3D textures (or one packed ×6 along X)                         | `rgba16float`                        |
+| Inject direct light into `voxelRadiance`                | extension of compute-voxelize **or** separate compute             | —                                    |
+| Cone-trace GI pass                                      | fullscreen render over G-buffer                                   | output `rgba16float`                 |
+| Composite/resolve                                       | fullscreen render                                                 | output `bgra8unorm`/`rgba16float`    |
 
 **Key difference from the existing RC branches (`gi`/`rc`).** RC traces thin rays through a
-*binary* grid (`occupancy`>0.5 → emission at first hit). VCT instead **samples the mip pyramid**
+_binary_ grid (`occupancy`>0.5 → emission at first hit). VCT instead **samples the mip pyramid**
 with a wide cone: a single `textureSampleLevel` at the appropriate LOD replaces dozens of march
 steps. That is the core win: a pre-integrated volume instead of a full ray march.
 
@@ -108,20 +108,20 @@ volumes: albedo/normal/emissive/radiance/flag).
 
 ### Isotropic vs Anisotropic — Comparison Table
 
-| | Isotropic (1 volume) | Anisotropic (6 directions) |
-|---|---|---|
-| Storage | 1× `rgba16float` 3D + mips | 6× `rgba16float` 3D + mips |
-| Cone sample | 1 `textureSampleLevel` | 3 samples (visible faces), blended by `abs(dir)` |
-| Light leaking through walls | strong (mip averages occupancy end-to-end) | weak (directional occlusion) |
-| Mip pass complexity | 1 convolution `0.125·Σ8` (or opacity-weighted) | 6 directional front-to-back convolutions |
-| Memory for 128×128×32 | see below | ×6 |
-| Repositories | Friduric, Cigg, Ramanjs, AlerianEmperor, maritim, sfreed141 | rdinse/VCTGI, jose-villegas, HarshLight, DXE, Wicked |
+|                             | Isotropic (1 volume)                                        | Anisotropic (6 directions)                           |
+| --------------------------- | ----------------------------------------------------------- | ---------------------------------------------------- |
+| Storage                     | 1× `rgba16float` 3D + mips                                  | 6× `rgba16float` 3D + mips                           |
+| Cone sample                 | 1 `textureSampleLevel`                                      | 3 samples (visible faces), blended by `abs(dir)`     |
+| Light leaking through walls | strong (mip averages occupancy end-to-end)                  | weak (directional occlusion)                         |
+| Mip pass complexity         | 1 convolution `0.125·Σ8` (or opacity-weighted)              | 6 directional front-to-back convolutions             |
+| Memory for 128×128×32       | see below                                                   | ×6                                                   |
+| Repositories                | Friduric, Cigg, Ramanjs, AlerianEmperor, maritim, sfreed141 | rdinse/VCTGI, jose-villegas, HarshLight, DXE, Wicked |
 
 **Memory (our grid 128×128×32 = 524 288 voxels).** `rgba16float` = 8 bytes/voxel.
 Base level = 4 MB. Full mip pyramid adds ≈ 1/7 ≈ +14% → ≈ **4.6 MB** for an isotropic
 `voxelRadiance`. Anisotropic = **×6 ≈ 27 MB** (if all 6 volumes are at full resolution). Many
-repos store the directional volumes at **half resolution** — jose-villegas: *"six 3D textures at
-half resolution of the radiance volume"* — giving ×6·(1/8) ≈ ×0.75 of full resolution, i.e.
+repos store the directional volumes at **half resolution** — jose-villegas: _"six 3D textures at
+half resolution of the radiance volume"_ — giving ×6·(1/8) ≈ ×0.75 of full resolution, i.e.
 ≈ 3.4 MB. For a cube of 128³ this would be more significant (Friduric 64³, Cigg 512³,
 rdinse/DXE/HarshLight 256³), but with our Z=32 the volume is small — memory is not a concern
 in either variant.
@@ -175,7 +175,8 @@ Two variants, both appear in the literature:
 
 **(A) Inject inside the voxelize pass** (Friduric, Cigg, AlerianEmperor, Ramanjs): for each solid
 voxel, compute direct lighting immediately and write `voxelRadiance.rgb = albedo·(N·L)·shadow·lightColor
-+ emission`, `a = occupancy`. Injection formula (Ramanjs
+
+- emission`, `a = occupancy`. Injection formula (Ramanjs
 [voxelization.frag](https://github.com/Ramanjs/vxgi/blob/main/shaders/voxelization.frag)):
 `lighting = (1-shadow)·max(dot(L,N),0)·lightColor·albedo + ke·emissive`.
 
@@ -233,7 +234,7 @@ mips in a **custom compute pass**:
 [rdinse PreIntegration.comp](https://github.com/rdinse/VCTGI/blob/master/src/shaders/VCTGI/PreIntegration.comp),
 [maritim voxelMipmapCompute.glsl](https://github.com/maritim/Voxel-Cone-Tracing/blob/master/Assets/Shaders/Voxelize/voxelMipmapCompute.glsl),
 [sfreed141 filterRadiance.comp](https://github.com/sfreed141/vct/blob/master/shaders/filterRadiance.comp),
-[HarshLight anisotropic_mipmap_*](https://github.com/MangoSister/HarshLight/blob/master/HarshLight/src/shaders/anisotropic_mipmap_start_comp.glsl),
+[HarshLight anisotropic*mipmap*\*](https://github.com/MangoSister/HarshLight/blob/master/HarshLight/src/shaders/anisotropic_mipmap_start_comp.glsl),
 [jose-villegas aniso_mipmapbase.comp](https://github.com/jose-villegas/VCTRenderer/blob/master/engine/assets/shaders/aniso_mipmapbase.comp).
 
 ### Isotropic Downsample (Stage 1) — Opacity-Weighted
@@ -244,6 +245,7 @@ Not a plain box average. maritim averages color only over **non-empty** children
 // for each of the 8 children: contribution = (a==0) ? 0 : 1
 // finalColor = Σ rgb·contribution / Σ contribution ; alpha = Σ a
 ```
+
 ([maritim voxelMipmapCompute.glsl](https://github.com/maritim/Voxel-Cone-Tracing/blob/master/Assets/Shaders/Voxelize/voxelMipmapCompute.glsl)).
 sfreed141 and Cigg/Ramanjs use a flat `value·0.125` (8 children) — simpler, but more leaking.
 **Recommendation:** opacity-weighted per maritim — nearly free, noticeably less leaking and less
@@ -258,6 +260,7 @@ direction (rdinse):
 ```
 dst = (v0 + v4·(1-v0.a) + v1 + v5·(1-v1.a) + v2 + v6·(1-v2.a) + v3 + v7·(1-v3.a)) / 4
 ```
+
 ([rdinse PreIntegration.comp](https://github.com/rdinse/VCTGI/blob/master/src/shaders/VCTGI/PreIntegration.comp),
 identically in [jose-villegas aniso_mipmapbase.comp](https://github.com/jose-villegas/VCTRenderer/blob/master/engine/assets/shaders/aniso_mipmapbase.comp),
 [HarshLight](https://github.com/MangoSister/HarshLight/blob/master/HarshLight/src/shaders/anisotropic_mipmap_start_comp.glsl)).
@@ -331,6 +334,7 @@ the matrix. 6 cones is the best quality/cost tradeoff (majority of sources; 16 i
 high-quality preset — start with 6).
 
 Pseudo-set (tangent space, normal = +Z of our basis as in `build_basis`):
+
 ```
 cone[0] = normal               , w0 = π/4
 cone[1..5] = basis · ringDir_i , wi = 3π/20    // 5 directions at 60° from normal
@@ -349,32 +353,39 @@ jose-villegas/Friduric):
 
 **LOD selection by diameter.** At distance `dist`, cone diameter is
 `diameter = max(voxelSize, 2·tan(aperture/2)·dist)`, and
+
 ```
 LOD = log2(diameter / voxelSize)
 ```
+
 (jose-villegas/Crassin; identical to rdinse `log2(diameter·voxelRes)`, sfreed141
 `log2(max(1,2·coneRadius))`, DXE `log2(radius/VOXELSCALE)`, Cigg/AlerianEmperor
 `log2(diameter/voxelWorldSize)`). Clamped to `maxLod` (see §5).
 
 **Front-to-back accumulation** (premultiplied alpha, "over" operator):
+
 ```
 c += (1 - alpha) · s.rgb ;   alpha += (1 - alpha) · s.a
 ```
+
 (rdinse, jose-villegas, sfreed141, Cigg, AlerianEmperor, Wicked — all use this). Friduric/Ramanjs
 use an artistic variant `acc += 0.075·ll·voxel·pow(1-voxel.a,2)` — convenient for isotropic
 without alpha normalization, but the standard "over" is cleaner for HDR. **We use the standard
 front-to-back.**
 
 **Step size.** Grows with diameter to bound the number of steps:
+
 ```
 step = max(diameter·0.5, voxelSize) ;   dist += step ;   diameter = 2·tan(aperture/2)·dist
 ```
+
 (rdinse `max(diameter/2, voxelSize)`, Cigg `diameter·0.5`, sfreed141 `coneHeight += coneRadius`,
 jose-villegas `dist += diameter·β`, β≤1). **We use `diameter·0.5`** (half-diameter — smoother, as
 in Cigg).
 
 **Start offset against self-intersection** (so the cone does not sample the surface's own voxel).
 Two techniques, we use both:
+
 - shift the **origin** along the normal: `startPos = P + normal · k·voxelSize`, `k≈1..2.5`
   (Wicked `P + N·voxelSize0`; rdinse `P + 2.5·N/voxelRes`; Cigg/AlerianEmperor `P + N·voxelSize`;
   sfreed141 `P + bias·N·scale`, bias 1.0);
@@ -448,9 +459,11 @@ force (it averages a mip rather than Monte Carlo rays), so:
 ## 10. Compositing with Direct Light; AO from Alpha; GI Scale
 
 **Composite** (deferred, over the G-buffer). Sources agree:
+
 ```
 out = (directLighting + indirectDiffuse) · albedo + indirectSpecular · specColor
 ```
+
 with an AO multiplier (jose-villegas: `compositeLighting = (direct + indirect.rgb)·indirect.a`;
 sfreed141: `indirect.rgb *= ambientScale·albedo; color = indirect + direct + specular`;
 DXE: `(diffuseCol·Alb·lit + directCol)·(1-spec) + spec·specCol·lit`).
@@ -458,9 +471,11 @@ DXE: `(diffuseCol·Alb·lit + directCol)·(1-spec) + spec·specCol·lit`).
 **AO from cone alpha** — free. The accumulated `alpha` of the diffuse cones = coverage:
 `occlusion = 1 - clamp(indirect.a, 0, 1)` (sfreed141, Wicked). With distance falloff so distant
 occluders do not over-darken:
+
 ```
 aoSample += ((1 - aoSample)·s.a) / (1 + dist·aoFalloff)
 ```
+
 (rdinse, jose-villegas `f(r)=1/(1+λr)`, Cigg/AlerianEmperor `/(1+0.03·diameter)`). AO multiplies
 the entire result (or is blended with a floor `min(aoFloor + ao, 1)` — rdinse
 [ScreenFillCompositing.frag](https://github.com/rdinse/VCTGI/blob/master/src/shaders/VCTGI/ScreenFillCompositing.frag)).
@@ -481,15 +496,15 @@ G-buffer normal.
 
 ## 11. Pitfalls and Fixes
 
-| Problem | Symptom | Fix (source) |
-|---|---|---|
-| **Self-occlusion / self-intersection** | surface shadows/illuminates itself, acne artifacts | start the cone with a normal offset `P + N·k·voxelSize` (k≈1.5..2.5) + `dist0≈voxelSize`; specular — larger offset. Wicked, rdinse `2.5·N/voxelRes`, sfreed141 bias 1.0/1.7, Friduric `N·(1+4·ISQRT2)·VOXEL_SIZE`. **Our engine**: `normalBias` parameter. |
-| **Light leaking through thin walls** | light bleeds through a wall ~1 voxel thick | (1) **anisotropic 6-directional mips** with opacity-weighted front-to-back — primary fix (Crassin, rdinse, jose-villegas, HarshLight, DXE, Wicked); (2) opacity-weighted isotropic downsample (maritim) — partial improvement; (3) LOD clamp (Friduric `MIPMAP_HARDCAP 5.4`); (4) larger start offset "removes bleeding from close surfaces" (Friduric). **Thin walls are possible in our grid (Z=32 is shallow) → anisotropy will likely be needed.** |
-| **Voxel aliasing / flickering** | staircase artifacts, jitter on a coarse grid | trilinear + continuous LOD `textureSampleLevel` (all sources); opacity-weighted mips; our compute voxelizer is deterministic (no last-writer-wins flickering, unlike Friduric/Cigg/Ramanjs/AlerianEmperor where this occurs). |
-| **Over-occlusion (double-counted alpha)** | GI too dark | cone weights sum to 1; proper front-to-back `(1-alpha)`, not additive; distance-falloff AO. |
-| **Darkening from empty voxels in mip** | mip level darker than it should be | average color only over non-empty children (maritim `finalColor/contributionCount`). |
-| **writeBuffer hazard between passes** | mip levels/cascades read stale uniform | distinct uniform buffer per pass/level (we already do this for `cascadeBuf[c]`). |
-| **Sample + write same texture** | WebGPU validation error/UB | read mip `c` (sampled view), write mip `c+1` (storage view) — different views; ping-pong for temporal. |
+| Problem                                   | Symptom                                            | Fix (source)                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Self-occlusion / self-intersection**    | surface shadows/illuminates itself, acne artifacts | start the cone with a normal offset `P + N·k·voxelSize` (k≈1.5..2.5) + `dist0≈voxelSize`; specular — larger offset. Wicked, rdinse `2.5·N/voxelRes`, sfreed141 bias 1.0/1.7, Friduric `N·(1+4·ISQRT2)·VOXEL_SIZE`. **Our engine**: `normalBias` parameter.                                                                                                                                                                                             |
+| **Light leaking through thin walls**      | light bleeds through a wall ~1 voxel thick         | (1) **anisotropic 6-directional mips** with opacity-weighted front-to-back — primary fix (Crassin, rdinse, jose-villegas, HarshLight, DXE, Wicked); (2) opacity-weighted isotropic downsample (maritim) — partial improvement; (3) LOD clamp (Friduric `MIPMAP_HARDCAP 5.4`); (4) larger start offset "removes bleeding from close surfaces" (Friduric). **Thin walls are possible in our grid (Z=32 is shallow) → anisotropy will likely be needed.** |
+| **Voxel aliasing / flickering**           | staircase artifacts, jitter on a coarse grid       | trilinear + continuous LOD `textureSampleLevel` (all sources); opacity-weighted mips; our compute voxelizer is deterministic (no last-writer-wins flickering, unlike Friduric/Cigg/Ramanjs/AlerianEmperor where this occurs).                                                                                                                                                                                                                          |
+| **Over-occlusion (double-counted alpha)** | GI too dark                                        | cone weights sum to 1; proper front-to-back `(1-alpha)`, not additive; distance-falloff AO.                                                                                                                                                                                                                                                                                                                                                            |
+| **Darkening from empty voxels in mip**    | mip level darker than it should be                 | average color only over non-empty children (maritim `finalColor/contributionCount`).                                                                                                                                                                                                                                                                                                                                                                   |
+| **writeBuffer hazard between passes**     | mip levels/cascades read stale uniform             | distinct uniform buffer per pass/level (we already do this for `cascadeBuf[c]`).                                                                                                                                                                                                                                                                                                                                                                       |
+| **Sample + write same texture**           | WebGPU validation error/UB                         | read mip `c` (sampled view), write mip `c+1` (storage view) — different views; ping-pong for temporal.                                                                                                                                                                                                                                                                                                                                                 |
 
 ---
 
@@ -553,11 +568,11 @@ was inaccessible, that is noted.
 - **Crassin et al. 2011, "Interactive Indirect Illumination Using Voxel Cone Tracing"** —
   [research.nvidia.com](https://research.nvidia.com/publication/2011-09_interactive-indirect-illumination-using-voxel-cone-tracing).
   The canonical reference: anisotropic 6-directional voxels, `LOD=log2(d/voxelSize)`, front-to-back,
-  6 cones at 60°, 2 bounces. *The PDF itself was too large to fetch; formulas confirmed via
-  Villegas/Friduric, who cite them verbatim.*
+  6 cones at 60°, 2 bounces. _The PDF itself was too large to fetch; formulas confirmed via
+  Villegas/Friduric, who cite them verbatim._
 - **Wicked Engine — Turánszki, "Voxel-based GI"** —
-  [article](https://wickedengine.net/2017/08/voxel-based-global-illumination/) *(original returned
-  522/Cloudflare, archive.org blocked in the environment — formulas taken from live engine shaders)*; code:
+  [article](https://wickedengine.net/2017/08/voxel-based-global-illumination/) _(original returned
+  522/Cloudflare, archive.org blocked in the environment — formulas taken from live engine shaders)_; code:
   [voxelConeTracingHF.hlsli](https://github.com/turanszkij/WickedEngine/blob/master/WickedEngine/shaders/voxelConeTracingHF.hlsli),
   [ShaderInterop_VXGI.h](https://github.com/turanszkij/WickedEngine/blob/master/WickedEngine/shaders/ShaderInterop_VXGI.h),
   [objectPS_voxelizer.hlsl](https://github.com/turanszkij/WickedEngine/blob/master/WickedEngine/shaders/objectPS_voxelizer.hlsl),
@@ -572,7 +587,7 @@ was inaccessible, that is noted.
   [aniso_mipmapvolume.comp](https://github.com/jose-villegas/VCTRenderer/blob/master/engine/assets/shaders/aniso_mipmapvolume.comp),
   [light_pass.frag](https://github.com/jose-villegas/VCTRenderer/blob/master/engine/assets/shaders/light_pass.frag).
   Anisotropic, 2 bounces, AO formula.
-- **rdinse / VCTGI** (bachelor's thesis; bc3.moe project page *returned 522, repository read directly*) —
+- **rdinse / VCTGI** (bachelor's thesis; bc3.moe project page _returned 522, repository read directly_) —
   [ScreenFillGlobalIllumination.frag](https://github.com/rdinse/VCTGI/blob/master/src/shaders/VCTGI/ScreenFillGlobalIllumination.frag),
   [PreIntegration.comp](https://github.com/rdinse/VCTGI/blob/master/src/shaders/VCTGI/PreIntegration.comp),
   [Voxelization.frag](https://github.com/rdinse/VCTGI/blob/master/src/shaders/VCTGI/Voxelization.frag),

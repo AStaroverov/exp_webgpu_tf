@@ -14,7 +14,8 @@ published pose bank). Browser gate **0a** confirmed by the user. **`vite build` 
 (the prior Rapier-WASM bundling error is gone — `config.vite.ts` worker `format:'es'` +
 `wasm()`/`topLevelAwait()` emit a separate ES worker chunk + `rapier_wasm3d_bg.wasm`).
 A node `worker_threads` integration test (`spikes/step3-opchannel.*`) proved the op-channel
-+ SAB + `adoptEntity` pipeline end-to-end across real threads (16/16; Rapier stubbed).
+
+- SAB + `adoptEntity` pipeline end-to-end across real threads (16/16; Rapier stubbed).
 
 Remaining: **browser runtime gate** for Step 3 (boxes fall driven by the worker thread;
 Rapier WASM actually loads in the ES worker at runtime; spawn/despawn/clear) — user-run.
@@ -41,7 +42,7 @@ Concretely:
 
 - Rapier (`physicalWorld.step()` + body/collider state) runs on a **module Web
   Worker**.
-- WebGPU rendering (the whole `renderer3d_2` read path) stays on the **main thread**.
+- WebGPU rendering (the whole `renderer` read path) stays on the **main thread**.
 - There are **two bitecs worlds** — a physics world in the worker, a render world on
   main — each with its own entity registry, queries, and component bitmasks.
 - The bridge is **shared memory, not message passing**: the eid-indexed component
@@ -97,7 +98,7 @@ Retained grafts:
   added later without re-architecting (we do not ship interpolation now).
 
 > ⚠️ **New tension introduced by decisions 1 + 3 — eid exhaustion (see §10).** A global
-> never-recycled counter against the fixed `defaultSize = 30000` cap means total *lifetime*
+> never-recycled counter against the fixed `defaultSize = 30000` cap means total _lifetime_
 > spawns are capped at 30k. Fine for the demo; **training churns spawn/despawn across
 > thousands of episodes and will blow the cap.** Resolution is deferred but flagged: either a
 > single **shared** SAB free-list as the one eid authority (recycling without divergence,
@@ -151,7 +152,7 @@ produces a render component), so `LocalTransform.matrix` need **not** be shared.
 
 ### 3.1 The single seam: `NestedArray` / `TypedArray` over a SAB
 
-Today (`renderer3d_2/src/utils.ts`):
+Today (`renderer/src/utils.ts`):
 
 - `NestedArray` ctor line 52: `this.buffer = new kind(batchLength * batchCount)`.
 - `TypedArray.fXX(length)` = `new Float64Array(length)` etc. (lines 26–34).
@@ -176,7 +177,7 @@ non-bridge columns still use it.
 
 ### 3.2 The shared-buffer registry
 
-New module: `renderer3d_2/src/sab/registry.ts`.
+New module: `renderer/src/sab/registry.ts`.
 
 - A **deterministic layout table**: an ordered list of
   `{ name: "Component.field", ctor, stride, banks }` entries. `name` is a stable
@@ -196,17 +197,17 @@ New module: `renderer3d_2/src/sab/registry.ts`.
 
 Scope (what is shared vs private):
 
-| Column                       | Shared? | Banks | Notes                              |
-|------------------------------|---------|-------|------------------------------------|
-| `RigidBodyState.position`    | yes     | 2     | hot pose, double-buffered          |
-| `RigidBodyState.rotation`    | yes     | 2     | hot pose quat, double-buffered     |
-| `RigidBodyState.linvel`      | yes     | 1     | debug only; tearing tolerated      |
-| `RigidBodyState.angvel`      | yes     | 1     | debug only; tearing tolerated      |
-| `RigidBodyRef.id`            | yes     | 1     | worker backfills pid; main reads   |
-| `Height.value`              | yes     | 1     | read by applyRigidBodyToTransform  |
-| `LocalTransform.matrix`      | no      | —     | main-private (applyRBT runs main)  |
-| `GlobalTransform.matrix`     | no      | —     | main-private (composed on main)    |
-| Shape/Color/Rope/Roundness/Blurness/Translucency/LightEmitter | no | — | render-only, main-private |
+| Column                                                        | Shared? | Banks | Notes                             |
+| ------------------------------------------------------------- | ------- | ----- | --------------------------------- |
+| `RigidBodyState.position`                                     | yes     | 2     | hot pose, double-buffered         |
+| `RigidBodyState.rotation`                                     | yes     | 2     | hot pose quat, double-buffered    |
+| `RigidBodyState.linvel`                                       | yes     | 1     | debug only; tearing tolerated     |
+| `RigidBodyState.angvel`                                       | yes     | 1     | debug only; tearing tolerated     |
+| `RigidBodyRef.id`                                             | yes     | 1     | worker backfills pid; main reads  |
+| `Height.value`                                                | yes     | 1     | read by applyRigidBodyToTransform |
+| `LocalTransform.matrix`                                       | no      | —     | main-private (applyRBT runs main) |
+| `GlobalTransform.matrix`                                      | no      | —     | main-private (composed on main)   |
+| Shape/Color/Rope/Roundness/Blurness/Translucency/LightEmitter | no      | —     | render-only, main-private         |
 
 ### 3.3 Worker reconstructs views
 
@@ -235,10 +236,10 @@ Required change (independent of the worker, testable in-process — see Step 1):
 - `addTransformComponents` (lines 21–35): drop the `?? LocalTransform` singleton
   fallback — always read `world.components.LocalTransform/GlobalTransform`; throw if
   absent (a world that lacks them is a bug, not a fallback case).
-- `createRenderComponents` (`renderer3d_2/src/ECS/world.ts`) calls the factories
+- `createRenderComponents` (`renderer/src/ECS/world.ts`) calls the factories
   per-world. Since `LocalTransform`/`GlobalTransform` are main-private here, the worker
   variant can skip them entirely.
-- **Grep** `LocalTransform` / `GlobalTransform` across `renderer3d_2` and `engine` for
+- **Grep** `LocalTransform` / `GlobalTransform` across `renderer` and `engine` for
   any direct importer of the singleton and convert each to read from
   `getRenderComponents(world)` / `world.components`.
 
@@ -252,7 +253,7 @@ Required change (independent of the worker, testable in-process — see Step 1):
   state — `EntityIndex` (id allocation/recycle), `entityMasks` (presence bitmasks),
   `entityComponents`, query `SparseSet`s — is **per-world plain JS** and is **not**
   shareable. Putting data in SAB makes the bytes visible in both worlds, but neither
-  world *knows* an entity exists or which components it has unless the same
+  world _knows_ an entity exists or which components it has unless the same
   `addEntity`/`addComponent`/`removeComponent`/`removeEntity` calls are replayed there.
 - **No `addEntityWithId`** in the 0.4 exports. You cannot ask a world to adopt a
   specific eid via public API.
@@ -280,7 +281,7 @@ shared:
   is created only in the render world; the worker never needs a no-op mirror of it,
   because the next physics entity still pulls a fresh, higher counter value. The two
   worlds' eid spaces can never collide or drift.
-- **eids are globally unique forever.** Trade-off: total *lifetime* spawns are bounded by
+- **eids are globally unique forever.** Trade-off: total _lifetime_ spawns are bounded by
   `defaultSize` (30000). Acceptable for the demo; **must be revisited for training** (§2
   warning, §10).
 
@@ -288,7 +289,7 @@ Adoption mechanism — **RESOLVED by Spike 0d (`packages/engine/spikes/eid-adopt
 21/21 green).** ⚠️ The previously-assumed `addEntityId(ctx.entityIndex, eid)` **does not
 exist** in bitecs 0.4: `addEntityId(index)` takes no eid arg (it allocates/recycles
 internally) and isn't even re-exported. The proven mechanism is a small custom id-path,
-shipped at `packages/renderer3d_2/src/sab/adoptEntity.ts`:
+shipped at `packages/renderer/src/sab/adoptEntity.ts`:
 
 - Both worlds use `createEntityIndex()` with **`versioning:false`** so `eid === raw id`
   (required by the counter).
@@ -339,8 +340,8 @@ render-only components**, so it would never register those obs-shadows — guara
 divergent bitflag assignment **if any code ever compares masks across threads**.
 
 Mitigation: we **never compare entityMasks across threads** (presence is mirrored via
-the op channel, not read from shared bytes), so divergent bitflags are harmless *as
-long as that invariant holds*. To make it robust, route both worlds' bridge-component
+the op channel, not read from shared bytes), so divergent bitflags are harmless _as
+long as that invariant holds_. To make it robust, route both worlds' bridge-component
 registration through a single ordered `componentRegistry` array so the **bridge**
 components at least line up; render-only/obs-shadow ordering is irrelevant because the
 worker neither registers nor queries them. Document this invariant loudly.
@@ -375,11 +376,12 @@ torn reads (new position with old/half-written quaternion → visible rotation p
 ### 5.3 Sleeping-body hole (must resolve — see Spike 5)
 
 `syncRigidBodyState` skips sleeping bodies. A double-buffer publishes one seq after
-writing all *awake* bodies; a sleeping body's row in the back bank is **stale** (last
+writing all _awake_ bodies; a sleeping body's row in the back bank is **stale** (last
 written in the other bank), so after a bank flip the renderer reads a sleeping body
 from a bank that never received its pose → it teleports to an old/zero pose.
 
 Resolution (pick in Spike 5):
+
 - **(a)** On bank flip, the worker copies the previous bank's row forward for bodies it
   skipped this step (cheap memcpy of the asleep rows), OR
 - **(b)** Write ALL bodies (including sleeping) into the back bank every step (remove
@@ -424,6 +426,7 @@ render frame including `applyRigidBodyToTransform` (reads published pose bank + 
 synchronously on main and return `[eid, pid]`; physics moves async, so:
 
 **Spawn**:
+
 1. Main pulls `eid = Atomics.add(CONTROL, NEXT_EID, 1)` and creates the render entity
    fully at that eid (`createRectangle`/`createSphere` set Shape/Color/Height/
    LocalTransform — all main-private or shared-`Height`).
@@ -442,6 +445,7 @@ dangling-entity risk. Callers that need the pid read `RigidBodyRef.id[eid]` (0 =
 pending) — but the demo only used pid for despawn lookup, which now goes through eid.
 
 **Despawn** (`demo.ts` `clearDynamic`) — fire-and-forget, no ack:
+
 1. Main appends `DESPAWN_BODY(eid)`, then immediately `RigidBodyRef.clear(eid)` +
    `removeEntity(render world)`. The eid is **never reused**, so there is nothing to gate.
 2. Worker drains at its phase boundary: `removeRigidBody`, `Map.delete(pid)`,
@@ -494,11 +498,11 @@ export default defineConfig({
 - The production host that serves the built engine must send the same headers, or SAB
   fails only in production. With **no fallback** (user decision), a missing-isolation
   startup must **fail loud** with a clear message (`crossOriginIsolated === false → set
-  COOP/COEP`), not silently degrade.
+COOP/COEP`), not silently degrade.
 - **Headless/training (node) needs no COOP/COEP** — `SharedArrayBuffer` + `worker_threads`
   are always available in node; `crossOriginIsolated` is a browser concept. The worker+SAB
   path is the same code; only the worker construction differs (`new Worker(url,{type:
-  'module'})` in the browser vs `node:worker_threads` in training). Abstract that one seam.
+'module'})` in the browser vs `node:worker_threads` in training). Abstract that one seam.
 
 ---
 
@@ -529,10 +533,11 @@ Each step is independently verifiable. Steps 0–1 are pure prerequisites and ca
 worker risk; the worker only appears at Step 3.
 
 ### Step 0 — Spikes (gate everything). No production code.
+
 - **0a (headers gate)**: add COOP/COEP to `config.vite.ts`, run the **existing**
   engine demo unchanged. Verify `globalThis.crossOriginIsolated === true`, WebGPU still
-  inits, the voxel/SDF scene renders identically, Rapier WASM still loads. *If
-  require-corp breaks the render path, the whole approach is blocked.*
+  inits, the voxel/SDF scene renders identically, Rapier WASM still loads. _If
+  require-corp breaks the render path, the whole approach is blocked._
 - **0b (Rapier-in-worker under Vite)**: bare module worker
   (`new Worker(new URL('./physics.worker.ts', import.meta.url), {type:'module'})`),
   import `@dimforge/rapier3d-simd` inside it, run `initPhysicalWorld` + a few `step()`s,
@@ -541,7 +546,7 @@ worker risk; the worker only appears at Step 3.
 - **0c (SAB NestedArray)**: add the `(sab, byteOffset)` ctor path; allocate one column
   on a SAB on main, postMessage the SAB to a worker, write a quaternion in the worker,
   read it on main; assert byte-identical and `col.buffer.buffer instanceof
-  SharedArrayBuffer` on **both** threads.
+SharedArrayBuffer` on **both** threads.
 - **0d (shared-counter eid adoption)**: prove a world can be forced to adopt a specific
   eid pulled from a shared `Atomics` counter — via `addEntityId(ctx.entityIndex, eid)`
   (internal) or a tiny custom id path with `versioning:false`. Drive two worlds where one
@@ -552,18 +557,20 @@ worker risk; the worker only appears at Step 3.
 - **Verify**: each spike runs green before proceeding. 0a and 0d are hard gates.
 
 ### Step 1 — Kill transform singletons, single-threaded (no SAB yet).
-- **Files**: `renderer3d_2/src/ECS/Components/Transform.ts` (remove singletons +
-  fallback), `renderer3d_2/src/ECS/world.ts` (per-world factory calls), every grep hit
+
+- **Files**: `renderer/src/ECS/Components/Transform.ts` (remove singletons +
+  fallback), `renderer/src/ECS/world.ts` (per-world factory calls), every grep hit
   of `LocalTransform`/`GlobalTransform` direct import.
 - **Verify**: existing single-thread demo renders identically. Flushes out all direct
   singleton importers.
 
 ### Step 2 — SAB-back the bridge storage, single-threaded.
-- **Files**: `renderer3d_2/src/utils.ts` (SAB ctor path), `renderer3d_2/src/sab/
-  registry.ts` (NEW), `renderer3d_2/src/sab/componentRegistry.ts` (NEW),
+
+- **Files**: `renderer/src/utils.ts` (SAB ctor path), `renderer/src/sab/
+registry.ts` (NEW), `renderer/src/sab/componentRegistry.ts` (NEW),
   `engine/src/ECS/components.ts` + `engine/src/ECS/createEngineWorld.ts` (bind bridge
   columns via registry; `skipRenderOnly` flag), `engine/src/ECS/Components/
-  RigidBodyState.ts` (pose getters/setters address active bank), `RigidBodyRef.ts`
+RigidBodyState.ts` (pose getters/setters address active bank), `RigidBodyRef.ts`
   (document worker-only Map). Add a `crossOriginIsolated` **fail-loud guard** at startup
   (no fallback — user decision); add the shared `NEXT_EID` counter in the CONTROL SAB and
   route all eid allocation through it.
@@ -572,6 +579,7 @@ worker risk; the worker only appears at Step 3.
   shared counter. No behavior change yet — this is the storage + eid-source swap.
 
 ### Step 3 — Move Rapier to the worker; wire structural-op channel + pose double-buffer.
+
 - **Files**: `engine/src/physics.worker.ts` (NEW), `engine/src/sab/opChannel.ts`
   (NEW: op-ring + ack-ring, or postMessage first-cut), `engine/src/createEngine.ts`
   (spawn worker, allocate+post SABs, drop `physicalFrame`, move
@@ -583,6 +591,7 @@ worker risk; the worker only appears at Step 3.
   assertion "adopted eid === counter value from the op" holds.
 
 ### Step 4 — Demo spawn/despawn over the async protocol.
+
 - **Files**: `engine/src/ECS/Entities/RigidShapes.ts` (return eid only, post spawn,
   drop PhysicalWorld arg), `engine/src/demo.ts` (`Spawned = {eid}`, `clearDynamic`
   posts despawn + ack-gated recycle), `engine/src/DI/EngineDI.ts`
@@ -591,6 +600,7 @@ worker risk; the worker only appears at Step 3.
   corrupt (no recycle ⇒ fresh eids, dead rows never re-read); count readout correct.
 
 ### Step 5 — Sync/tearing hardening.
+
 - Resolve the **sleeping-body** publish hole (Spike 5 decision (b) recommended).
 - Stress the double-buffer under a worker stepping faster than rAF; confirm no torn
   quaternions, no teleporting sleeping bodies.
@@ -602,19 +612,19 @@ worker risk; the worker only appears at Step 3.
 
 ## 9. Risks & required spikes (from adversarial review)
 
-| Risk | Mitigation |
-|------|------------|
-| ~~**eid recycle divergence**~~ — **ELIMINATED by the shared-counter decision.** eids come from one `Atomics` counter and are never recycled, so the two worlds cannot drift. | Shared `NEXT_EID` in CONTROL SAB; force-adopt the value on each world (Section 4.2). **Spike 0d** picks the adoption mechanism (`addEntityId(ctx.entityIndex,eid)` vs custom path). |
-| **External EntityIndex not shareable** — `dense`/`sparse` are plain JS Arrays. | Moot with the shared counter — we don't share the index object, only the counter. |
-| **Transform module singletons mask the bug in-process** then break in a real worker. | Step 1 removes singletons + fallback before any sharing; grep all importers. |
-| **obs() shadow components break component-order parity** when worker skips render-only. | Never compare entityMasks across threads; presence is mirrored via the op channel, not read from shared bytes. Route bridge registration through a single ordered `componentRegistry`. Document the invariant. |
-| **Torn 7-float pose reads.** | Double-buffer pose + single Atomics seqcount (Section 5.2). |
-| **Sleeping-body publish hole** — skipped bodies leave stale rows after bank flip. | **Spike 5**; recommended: write all bodies (incl. sleeping) into the back bank every step. |
-| **eid exhaustion** — never-recycled counter vs fixed 30k cap; training churn overruns it. | Demo is safe. **Before training**: a single *shared* SAB free-list as the one eid authority (recycle without divergence), per-episode world teardown, or larger/growable capacity. Flagged in §2 / §10. |
-| **Headless/training path** — must run with no renderer/WebGPU. | **No fallback** (user decision): worker+SAB everywhere. node provides SAB + `worker_threads` natively (no COOP/COEP); abstract only the worker-construction seam. Fail loud if isolation missing in the browser. |
-| **COOP/COEP side effects** on WebGPU/assets. | **Spike 0a** smoke-tests the existing render path under headers before any work. |
-| **Memory doubling** if worker private-allocs a bridge column. | Registry binding is the #1 correctness point; dev assert `col.buffer.buffer instanceof SharedArrayBuffer` on both threads after init. |
-| **Vite worker + WASM bundling** (TLA unsupported in classic workers). | `worker.format: 'es'` + plugins mirrored; **Spike 0b**. |
+| Risk                                                                                                                                                                         | Mitigation                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ~~**eid recycle divergence**~~ — **ELIMINATED by the shared-counter decision.** eids come from one `Atomics` counter and are never recycled, so the two worlds cannot drift. | Shared `NEXT_EID` in CONTROL SAB; force-adopt the value on each world (Section 4.2). **Spike 0d** picks the adoption mechanism (`addEntityId(ctx.entityIndex,eid)` vs custom path).                              |
+| **External EntityIndex not shareable** — `dense`/`sparse` are plain JS Arrays.                                                                                               | Moot with the shared counter — we don't share the index object, only the counter.                                                                                                                                |
+| **Transform module singletons mask the bug in-process** then break in a real worker.                                                                                         | Step 1 removes singletons + fallback before any sharing; grep all importers.                                                                                                                                     |
+| **obs() shadow components break component-order parity** when worker skips render-only.                                                                                      | Never compare entityMasks across threads; presence is mirrored via the op channel, not read from shared bytes. Route bridge registration through a single ordered `componentRegistry`. Document the invariant.   |
+| **Torn 7-float pose reads.**                                                                                                                                                 | Double-buffer pose + single Atomics seqcount (Section 5.2).                                                                                                                                                      |
+| **Sleeping-body publish hole** — skipped bodies leave stale rows after bank flip.                                                                                            | **Spike 5**; recommended: write all bodies (incl. sleeping) into the back bank every step.                                                                                                                       |
+| **eid exhaustion** — never-recycled counter vs fixed 30k cap; training churn overruns it.                                                                                    | Demo is safe. **Before training**: a single _shared_ SAB free-list as the one eid authority (recycle without divergence), per-episode world teardown, or larger/growable capacity. Flagged in §2 / §10.          |
+| **Headless/training path** — must run with no renderer/WebGPU.                                                                                                               | **No fallback** (user decision): worker+SAB everywhere. node provides SAB + `worker_threads` natively (no COOP/COEP); abstract only the worker-construction seam. Fail loud if isolation missing in the browser. |
+| **COOP/COEP side effects** on WebGPU/assets.                                                                                                                                 | **Spike 0a** smoke-tests the existing render path under headers before any work.                                                                                                                                 |
+| **Memory doubling** if worker private-allocs a bridge column.                                                                                                                | Registry binding is the #1 correctness point; dev assert `col.buffer.buffer instanceof SharedArrayBuffer` on both threads after init.                                                                            |
+| **Vite worker + WASM bundling** (TLA unsupported in classic workers).                                                                                                        | `worker.format: 'es'` + plugins mirrored; **Spike 0b**.                                                                                                                                                          |
 
 **Required spikes** (Step 0): 0a headers gate, 0b Rapier-in-worker, 0c SAB NestedArray,
 0d shared-counter eid adoption. Plus Spike 5 (tearing + sleeping body) before Step 5
@@ -638,25 +648,28 @@ sign-off. (The despawn-race spike is dropped — no recycle, no race.)
 
 - **Structural channel: SAB op-ring vs. batched postMessage** — start with **batched
   postMessage** at phase boundaries; move to the SAB ring only if spawn/despawn volume
-  makes messaging a bottleneck. *Default: postMessage first.*
+  makes messaging a bottleneck. _Default: postMessage first._
 - **Sleeping-body publish** — **write all bodies (incl. sleeping) into the back bank
-  every step** (Spike 5 confirms). *Default: (b).*
+  every step** (Spike 5 confirms). _Default: (b)._
 - **Interpolation** — **defer** (snap to latest bank); keep the `physicsTimeMs` stamp so
-  lerp/slerp is a later local change. *Default: defer.*
+  lerp/slerp is a later local change. _Default: defer._
 - **Pose double-buffer scope** — double-buffer **position + rotation only**; keep
   `linvel`/`angvel` single-buffered (debug-only). Confirm no render/effects code does
-  matrix math on velocities. *Default: pose only.*
+  matrix math on velocities. _Default: pose only._
 - ~~**eid adoption mechanism**~~ — **RESOLVED** (Spike 0d): custom `adoptEntity()` over
   `world[$internal]` with `versioning:false`; the assumed `addEntityId(ctx.entityIndex,
-  eid)` does not exist. Shipped at `renderer3d_2/src/sab/adoptEntity.ts` (§4.2).
+eid)` does not exist. Shipped at `renderer/src/sab/adoptEntity.ts` (§4.2).
 
 ### ⚠️ Required follow-up before training (consequence of the locked eid + headless choices)
 
-- **eid exhaustion.** A never-recycled counter against `defaultSize = 30000` caps *total
-  lifetime* spawns at 30k. The demo is safe; **training (worker+SAB everywhere, high
+- **eid exhaustion.** A never-recycled counter against `defaultSize = 30000` caps _total
+  lifetime_ spawns at 30k. The demo is safe; **training (worker+SAB everywhere, high
   spawn/despawn churn across thousands of episodes) will overrun it.** Resolve before
   wiring ppo_engine: (a) a single **shared** SAB free-list as the one eid authority —
   recycling without divergence because it stays one shared source; (b) tear down + rebuild
-  the worlds per episode; or (c) raise/grow capacity. *Recommendation: (a) when training
-  lands; keep the monotonic counter for the demo now.*
+  the worlds per episode; or (c) raise/grow capacity. _Recommendation: (a) when training
+  lands; keep the monotonic counter for the demo now._
+
+```
+
 ```

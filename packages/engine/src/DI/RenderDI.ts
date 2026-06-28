@@ -1,4 +1,4 @@
-import type { createVoxelSystem } from "../../../renderer3d_2/src/ECS/Systems/Lighting/createVoxelSystem.ts";
+import type { createVoxelSystem } from "../../../renderer/src/ECS/Systems/Lighting/createVoxelSystem.ts";
 
 // The VCT voxel-GI system handle (config + rebuild + setCellSize + …). Inferred from the
 // factory so the demo/host can build a tuning GUI against it without re-declaring the surface.

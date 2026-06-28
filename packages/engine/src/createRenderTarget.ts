@@ -1,18 +1,18 @@
-import { initWebGPU } from "../../renderer3d_2/src/gpu.ts";
-import { createFrameTextures, createFrameTick } from "../../renderer3d_2/src/WGSL/createFrame.ts";
-import { createPresent } from "../../renderer3d_2/src/WGSL/createPresent.ts";
-import { createDrawShapeSystem } from "../../renderer3d_2/src/ECS/Systems/SDFSystem/createDrawShapeSystem.ts";
-import { createVoxelSystem } from "../../renderer3d_2/src/ECS/Systems/Lighting/createVoxelSystem.ts";
-import { createLightEmitterSystem } from "../../renderer3d_2/src/ECS/Systems/Lighting/createLightEmitterSystem.ts";
-import { createTransformSystem } from "../../renderer3d_2/src/ECS/Systems/TransformSystem.ts";
-import { createResizeSystem } from "../../renderer3d_2/src/ECS/Systems/ResizeSystem.ts";
-import { SunLight } from "../../renderer3d_2/src/ECS/Systems/SunLight.ts";
+import { initWebGPU } from "../../renderer/src/gpu.ts";
+import { createFrameTextures, createFrameTick } from "../../renderer/src/WGSL/createFrame.ts";
+import { createPresent } from "../../renderer/src/WGSL/createPresent.ts";
+import { createDrawShapeSystem } from "../../renderer/src/ECS/Systems/SDFSystem/createDrawShapeSystem.ts";
+import { createVoxelSystem } from "../../renderer/src/ECS/Systems/Lighting/createVoxelSystem.ts";
+import { createLightEmitterSystem } from "../../renderer/src/ECS/Systems/Lighting/createLightEmitterSystem.ts";
+import { createTransformSystem } from "../../renderer/src/ECS/Systems/TransformSystem.ts";
+import { createResizeSystem } from "../../renderer/src/ECS/Systems/ResizeSystem.ts";
+import { SunLight } from "../../renderer/src/ECS/Systems/SunLight.ts";
 import type { EngineWorld } from "./ECS/createEngineWorld.ts";
 import { RenderDI } from "./DI/RenderDI.ts";
 import { stubChildren } from "./lib/constants.ts";
 
 // Builds the GPU render target and the per-frame render closure. Mirrors
-// renderer3d_2/src/demo.ts's render path function-for-function (the §4 render
+// renderer/src/demo.ts's render path function-for-function (the §4 render
 // block), including the resize-rebuild of the frame textures + voxel.recreate.
 // Fills RenderDI and returns { renderFrame, destroy }.
 export async function createRenderTarget(

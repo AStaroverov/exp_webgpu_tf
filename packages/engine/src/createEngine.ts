@@ -1,4 +1,4 @@
-import { createTransformSystem } from "../../renderer3d_2/src/ECS/Systems/TransformSystem.ts";
+import { createTransformSystem } from "../../renderer/src/ECS/Systems/TransformSystem.ts";
 import { createEngineWorld, getEngineSab } from "./ECS/createEngineWorld.ts";
 import { createApplyRigidBodyToTransformSystem } from "./ECS/Systems/createApplyRigidBodyToTransformSystem.ts";
 import { createPhysicsWorker } from "./Physics/createPhysicsWorker.ts";
