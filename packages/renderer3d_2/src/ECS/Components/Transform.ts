@@ -15,20 +15,27 @@ export function createGlobalTransformComponent() {
   };
 }
 
-export const LocalTransform = createLocalTransformComponent();
-export const GlobalTransform = createGlobalTransformComponent();
-
 export function addTransformComponents(world: World, id: number) {
+  // Each world owns its OWN transform instances (created per-world in
+  // createRenderComponents). There is no module-singleton fallback: a world
+  // that lacks them is a bug, not a default case — and across a real worker the
+  // module re-executes over private memory, so a shared singleton would silently
+  // break. Read strictly from world.components.
   const components = (
     world as World<{
       components?: {
-        LocalTransform: typeof LocalTransform;
-        GlobalTransform: typeof GlobalTransform;
+        LocalTransform: ReturnType<typeof createLocalTransformComponent>;
+        GlobalTransform: ReturnType<typeof createGlobalTransformComponent>;
       };
     }>
   ).components;
-  const worldLocalTransform = components?.LocalTransform ?? LocalTransform;
-  const worldGlobalTransform = components?.GlobalTransform ?? GlobalTransform;
+  if (!components?.LocalTransform || !components?.GlobalTransform) {
+    throw new Error(
+      "addTransformComponents: world.components.LocalTransform/GlobalTransform are missing",
+    );
+  }
+  const worldLocalTransform = components.LocalTransform;
+  const worldGlobalTransform = components.GlobalTransform;
   addComponent(world, id, worldLocalTransform);
   addComponent(world, id, worldGlobalTransform);
   worldLocalTransform.matrix.setBatch(id, IDENTIFY_MATRIX);

@@ -2,9 +2,15 @@ import { addComponent, World } from "bitecs";
 import { delegate } from "../../../../renderer3d_2/src/delegate.ts";
 import { defineComponent } from "../../../../renderer3d_2/src/ECS/utils.ts";
 
-// Bridge component: stores the Rapier body handle (pid) per entity, and maintains
-// the reverse pid→eid map for collision-event resolution. Handle 0 is the
-// reserved empty-memory sentinel (see initPhysicalWorld.reserveHandleZero).
+// Stores the Rapier body handle (pid) per entity, and maintains the reverse
+// pid→eid map for collision-event resolution. Handle 0 is the reserved
+// empty-memory sentinel (see initPhysicalWorld.reserveHandleZero).
+//
+// NOT a SHARED bridge column (plan §3.2 audit): the pid and the pid→eid Map are
+// only ever read where Rapier runs. At Step 2 that is inline on main; at Step 3
+// it moves wholesale into the worker. The renderer addresses entities by eid, not
+// pid, and despawn is keyed by eid — so there is no cross-thread reader of pid.
+// Therefore `id` and this Map stay thread-PRIVATE (each thread keeps its own).
 const mapPhysicalIdToEntityId = new Map<number, number>();
 
 export const createRigidBodyRefComponent = defineComponent((RigidBodyRef) => {

@@ -10,12 +10,17 @@ import {
 } from "./Components/Common.ts";
 import { createRopeComponent } from "./Components/Rope.ts";
 import { createShapeComponent } from "./Components/Shape.ts";
-import { GlobalTransform, LocalTransform } from "./Components/Transform.ts";
+import {
+  createGlobalTransformComponent,
+  createLocalTransformComponent,
+} from "./Components/Transform.ts";
 
 export function createRenderComponents(world: World) {
   return {
-    GlobalTransform,
-    LocalTransform,
+    // Per-world instances: never share a module singleton across worlds — in a
+    // real worker the module re-executes over private memory and sharing breaks.
+    GlobalTransform: createGlobalTransformComponent(),
+    LocalTransform: createLocalTransformComponent(),
     Rope: createRopeComponent(world),
     Shape: createShapeComponent(world),
     Color: createColorComponent(world),

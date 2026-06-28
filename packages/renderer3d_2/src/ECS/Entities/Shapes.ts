@@ -3,6 +3,15 @@ import { addTransformComponents, applyMatrixTranslate } from "../Components/Tran
 import { TColor } from "../Components/Common.ts";
 import { ShapeKind } from "../Components/Shape.ts";
 import { getRenderComponents, type RenderWorldLike } from "../world.ts";
+import { adoptEntity } from "../../sab/adoptEntity.ts";
+
+// Entity id source. When `eid` is supplied (the engine's shared-counter path,
+// plan §4.2/§6.3) the world ADOPTS that exact id; otherwise bitecs allocates one
+// from its own per-world counter (single-world renderer-only callers). Keeping
+// this one helper means every shape factory honors a caller-chosen eid for free.
+function createOrAdoptEntity(world: RenderWorldLike, eid?: number): number {
+  return eid === undefined ? addEntity(world) : adoptEntity(world, eid);
+}
 
 // A sphere is the only true-3D primitive: its radius alone defines its vertical
 // extent, so it takes no `height`. baseZ (`z`) is still the bottom of the shape.
@@ -14,16 +23,18 @@ export function createSphere(
     z,
     radius,
     color,
+    eid,
   }: {
     x: number;
     y: number;
     z: number;
     radius: number;
     color: TColor;
+    eid?: number;
   },
 ) {
   const { Color, LocalTransform, Shape, Height } = getRenderComponents(world);
-  const id = addEntity(world);
+  const id = createOrAdoptEntity(world, eid);
 
   addTransformComponents(world, id);
   applyMatrixTranslate(LocalTransform.matrix.getBatch(id), x, y, z);
@@ -79,6 +90,7 @@ export function createRectangle(
     color,
     roundness,
     depth,
+    eid,
   }: {
     x: number;
     y: number;
@@ -89,10 +101,11 @@ export function createRectangle(
     roundness?: number;
     // Vertical extent of the extruded box (default 0 = flat slab footprint).
     depth?: number;
+    eid?: number;
   },
 ) {
   const { Color, LocalTransform, Roundness, Shape, Height } = getRenderComponents(world);
-  const id = addEntity(world);
+  const id = createOrAdoptEntity(world, eid);
 
   addTransformComponents(world, id);
   applyMatrixTranslate(LocalTransform.matrix.getBatch(id), x, y, z);

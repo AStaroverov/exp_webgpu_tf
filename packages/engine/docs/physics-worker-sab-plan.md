@@ -4,8 +4,28 @@
 > Two bitecs worlds (one per thread) over **one** set of component columns that
 > physically live in `SharedArrayBuffer`, so both worlds read/write the SAME memory.
 
-Status: **planning only**. Nothing here is implemented. Read this top to bottom before
-touching code; Step 0 spikes gate everything else.
+Status: **Steps 0–3 implemented & verified** (2026-06-28). Done and tsc/node-green:
+node spikes 0c/0d; **Step 1** (transform singletons killed); **Step 2** (SAB storage seam +
+`sab/registry.ts` + `sab/adoptEntity.ts` + shared `NEXT_EID` + COOP/COEP); **Step 3**
+(Rapier moved into a self-clocked module worker `physics.worker.ts`; physics-only worker
+world bound to the received SABs; op channel `Physics/opChannel.ts` over postMessage;
+`createEngine`/`RigidShapes`/`demo`/`EngineDI` rewired to drive the worker and read the
+published pose bank). Browser gate **0a** confirmed by the user. **`vite build` now SUCCEEDS**
+(the prior Rapier-WASM bundling error is gone — `config.vite.ts` worker `format:'es'` +
+`wasm()`/`topLevelAwait()` emit a separate ES worker chunk + `rapier_wasm3d_bg.wasm`).
+A node `worker_threads` integration test (`spikes/step3-opchannel.*`) proved the op-channel
++ SAB + `adoptEntity` pipeline end-to-end across real threads (16/16; Rapier stubbed).
+
+Remaining: **browser runtime gate** for Step 3 (boxes fall driven by the worker thread;
+Rapier WASM actually loads in the ES worker at runtime; spawn/despawn/clear) — user-run.
+Then **Steps 4–5** (demo polish already largely folded into Step 3; sleeping-body/tearing
+hardening) and the pre-training **eid-exhaustion** fix (§10).
+
+> **Known minor artifact (Step 3, not a blocker):** `RigidBodyState.addComponent`
+> zero-fills both pose banks, so a freshly-spawned shape renders at the WORLD ORIGIN for
+> the single frame (~16 ms) before the worker's first `publish()`, instead of at its spawn
+> pose. Fix (optional): seed the spawn pose into both banks in `RigidShapes` / let
+> `addComponent` take an initial pose.
 
 ---
 
@@ -264,12 +284,26 @@ shared:
   `defaultSize` (30000). Acceptable for the demo; **must be revisited for training** (§2
   warning, §10).
 
-Adoption mechanism (decide in Spike 0d): bitecs 0.4 has no public `addEntityWithId`, so
-forcing a specific eid means either calling the internal `addEntityId(ctx.entityIndex,
-eid)` (couples to bitecs internals but is a one-liner) **or** running both worlds with
-`versioning:false` and a tiny custom id path that writes the eid straight into
-`entityIndex`. Spike 0d picks whichever is robust; the public surface stays "the shared
-counter is the authority."
+Adoption mechanism — **RESOLVED by Spike 0d (`packages/engine/spikes/eid-adoption.mjs`,
+21/21 green).** ⚠️ The previously-assumed `addEntityId(ctx.entityIndex, eid)` **does not
+exist** in bitecs 0.4: `addEntityId(index)` takes no eid arg (it allocates/recycles
+internally) and isn't even re-exported. The proven mechanism is a small custom id-path,
+shipped at `packages/renderer3d_2/src/sab/adoptEntity.ts`:
+
+- Both worlds use `createEntityIndex()` with **`versioning:false`** so `eid === raw id`
+  (required by the counter).
+- `adoptEntity(world, eid)` reaches `world[$internal]` (the exported, stable `$internal`
+  Symbol) → `entityIndex` and writes the caller-chosen eid directly:
+  `dense[aliveCount]=eid; sparse[eid]=denseIndex; aliveCount++; maxId=max(maxId,eid)`,
+  then replays `addEntity`'s per-entity init (`entityComponents.set(eid, new Set())`).
+  It never touches the recycle branch. Guards: throws on `versioning:true` and on
+  double-adopt of a live eid.
+- Coupling (stable across 0.4, in the published `.d.ts`): the `$internal` Symbol, the
+  `EntityIndex {dense,sparse,aliveCount,maxId,versioning}` shape, and `entityComponents`.
+- **Documented gap**: the internal `notQueries` refresh (for `Not(...)` queries) is not
+  replayed — inert today (no `Not()` queries on bridge entities); revisit if added.
+
+The dev guard from §4.2 (assert adopted eid === op-carried counter value) still applies.
 
 Dev-mode guard: assert the adopted eid equals the counter value the op carried (catch a
 desync loudly), and assert bridge columns are SAB-backed on both threads.
@@ -612,9 +646,9 @@ sign-off. (The despawn-race spike is dropped — no recycle, no race.)
 - **Pose double-buffer scope** — double-buffer **position + rotation only**; keep
   `linvel`/`angvel` single-buffered (debug-only). Confirm no render/effects code does
   matrix math on velocities. *Default: pose only.*
-- **eid adoption mechanism** (Spike 0d) — `addEntityId(ctx.entityIndex, eid)` (internal
-  coupling, one-liner) vs. a custom id path with `versioning:false`. *Default: whichever
-  Spike 0d proves robust; prefer the internal one-liner if stable.*
+- ~~**eid adoption mechanism**~~ — **RESOLVED** (Spike 0d): custom `adoptEntity()` over
+  `world[$internal]` with `versioning:false`; the assumed `addEntityId(ctx.entityIndex,
+  eid)` does not exist. Shipped at `renderer3d_2/src/sab/adoptEntity.ts` (§4.2).
 
 ### ⚠️ Required follow-up before training (consequence of the locked eid + headless choices)
 

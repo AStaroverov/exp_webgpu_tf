@@ -10,8 +10,9 @@ import { removeEntity } from "bitecs";
 import { createEngine } from "./createEngine.ts";
 import { getEngineComponents } from "./ECS/createEngineWorld.ts";
 import { createGround, createRigidBox, createRigidSphere } from "./ECS/Entities/RigidShapes.ts";
+import { despawnBody } from "./Physics/opChannel.ts";
+import { EngineDI } from "./DI/EngineDI.ts";
 import type { EngineWorld } from "./ECS/createEngineWorld.ts";
-import type { PhysicalWorld } from "./Physics/initPhysicalWorld.ts";
 import type { TColor } from "../../renderer3d_2/src/ECS/Components/Common.ts";
 import { SunLight } from "../../renderer3d_2/src/ECS/Systems/SunLight.ts";
 import { RenderDI, type VoxelSystem } from "./DI/RenderDI.ts";
@@ -54,13 +55,13 @@ function randomColor(): TColor {
 
 // ── scene + spawning ─────────────────────────────────────────────────────────
 
-type Spawned = { eid: number; pid: number };
+type Spawned = { eid: number };
 
-function setupScene(world: EngineWorld, pw: PhysicalWorld): Spawned[] {
+function setupScene(world: EngineWorld): Spawned[] {
   const spawned: Spawned[] = [];
 
   // Ground: a wide, thin, fixed slab with its top face at z = 0.
-  createGround(world, pw, { size: 80, thickness: 1, z: 0, color: [0.18, 0.2, 0.24, 1] });
+  createGround(world, { size: 80, thickness: 1, z: 0, color: [0.18, 0.2, 0.24, 1] });
 
   // Sun (VCT): a soft warm key from above.
   SunLight.enabled = true;
@@ -78,8 +79,8 @@ function setupScene(world: EngineWorld, pw: PhysicalWorld): Spawned[] {
   return spawned;
 }
 
-function buildGui(world: EngineWorld, pw: PhysicalWorld, spawned: Spawned[]): GUI {
-  const { RigidBodyRef, LightEmitter } = getEngineComponents(world);
+function buildGui(world: EngineWorld, spawned: Spawned[]): GUI {
+  const { LightEmitter } = getEngineComponents(world);
 
   const params = {
     shape: "box" as "box" | "sphere",
@@ -98,16 +99,16 @@ function buildGui(world: EngineWorld, pw: PhysicalWorld, spawned: Spawned[]): GU
     const y = (Math.random() - 0.5) * 2 * params.spread;
     const z = params.height;
     const color = params.randomColor ? randomColor() : hexToRgba(params.color);
-    const [eid, pid] =
+    const eid =
       params.shape === "sphere"
-        ? createRigidSphere(world, pw, { x, y, z, radius: params.size / 2, color })
-        : createRigidBox(world, pw, { x, y, z, sx: params.size, sy: params.size, sz: params.size, color });
+        ? createRigidSphere(world, { x, y, z, radius: params.size / 2, color })
+        : createRigidBox(world, { x, y, z, sx: params.size, sy: params.size, sz: params.size, color });
     if (params.lightEmitter) {
       // radius lifts the light center to the shape center (translation is the bottom).
       // Light color is the entity's Color; the voxel feed caps at 8 lights.
       LightEmitter.addComponent(world, eid, params.emitterIntensity, params.size / 2);
     }
-    spawned.push({ eid, pid });
+    spawned.push({ eid });
     params.count = spawned.length;
   }
 
@@ -116,13 +117,11 @@ function buildGui(world: EngineWorld, pw: PhysicalWorld, spawned: Spawned[]): GU
   }
 
   function clearDynamic(): void {
-    for (let i = 0; i < spawned.length; i++) {
-      const { eid, pid } = spawned[i];
-      const body = pw.getRigidBody(pid);
-      if (body) pw.removeRigidBody(body);
-      RigidBodyRef.clear(eid);
-      removeEntity(world, eid);
-    }
+    // Fire-and-forget despawn (plan §6.3): post DESPAWN_BODY for the worker, then remove
+    // the render entity on main. eids never recycle, so a late worker pose-write into the
+    // dead row is harmless. Batch all despawns into one structural message.
+    EngineDI.postOps(spawned.map((s) => despawnBody(s.eid)));
+    for (let i = 0; i < spawned.length; i++) removeEntity(world, spawned[i].eid);
     spawned.length = 0;
     params.count = 0;
   }
@@ -259,8 +258,8 @@ async function main(): Promise<void> {
   const canvas = document.getElementById("c") as HTMLCanvasElement;
   const engine = await createEngine({ canvas });
 
-  const spawned = setupScene(engine.world, engine.physicalWorld);
-  const gui = buildGui(engine.world, engine.physicalWorld, spawned);
+  const spawned = setupScene(engine.world);
+  const gui = buildGui(engine.world, spawned);
 
   const orbit = { enabled: true };
   gui.add(orbit, "enabled").name("orbit camera");
