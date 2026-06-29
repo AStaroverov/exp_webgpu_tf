@@ -57,19 +57,49 @@ export function applyMatrixRotateZ(m: mat4, angle: number) {
   mat4.rotateZ(m, m, angle);
 }
 
-export function setMatrixTranslate(m: mat4, x: number, y: number, z?: number) {
-  m[12] = x; // Set translation X
-  m[13] = y; // Set translation Y
-  m[14] = z ?? m[14]; // Set translation Z
+export function setMatrixTranslate(m: mat4, x: number, y: number, z: number) {
+  m[12] = x;
+  m[13] = y;
+  m[14] = z;
 }
 
 export function setMatrixRotateZ(m: mat4, angle: number) {
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);
-  m[0] = cos; // Set rotation X
-  m[1] = sin; // Set rotation Y
-  m[4] = -sin; // Set rotation X
-  m[5] = cos; // Set rotation Y
+  const sx = Math.sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
+  const sy = Math.sqrt(m[4] * m[4] + m[5] * m[5] + m[6] * m[6]);
+  m[0] = cos * sx;
+  m[1] = sin * sx;
+  m[2] = 0;
+  m[4] = -sin * sy;
+  m[5] = cos * sy;
+  m[6] = 0;
+}
+
+export function setMatrixRotateY(m: mat4, angle: number) {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const sx = Math.sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
+  const sz = Math.sqrt(m[8] * m[8] + m[9] * m[9] + m[10] * m[10]);
+  m[0] = cos * sx;
+  m[1] = 0;
+  m[2] = -sin * sx;
+  m[8] = sin * sz;
+  m[9] = 0;
+  m[10] = cos * sz;
+}
+
+export function setMatrixRotateX(m: mat4, angle: number) {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const sy = Math.sqrt(m[4] * m[4] + m[5] * m[5] + m[6] * m[6]);
+  const sz = Math.sqrt(m[8] * m[8] + m[9] * m[9] + m[10] * m[10]);
+  m[4] = 0;
+  m[5] = cos * sy;
+  m[6] = sin * sy;
+  m[8] = 0;
+  m[9] = -sin * sz;
+  m[10] = cos * sz;
 }
 
 export function getMatrixTranslationX(m: mat4) {
@@ -88,11 +118,11 @@ export function getMatrixRotationZ(m: mat4) {
   return Math.atan2(m[1], m[0]);
 }
 
-export function applyMatrixScale(m: mat4, sx: number, sy: number, sz: number = 1) {
+export function applyMatrixScale(m: mat4, sx: number, sy = sx, sz = sx) {
   mat4.scale(m, m, [sx, sy, sz]);
 }
 
-export function setMatrixScale(m: mat4, sx: number, sy: number, sz: number = 1) {
+export function setMatrixScale(m: mat4, sx: number, sy = sx, sz = sx) {
   // Extract current rotation
   const cosR = m[0];
   const sinR = m[1];

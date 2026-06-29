@@ -1,21 +1,26 @@
 import { createRectangle, createSphere } from "../../../../renderer/src/ECS/Entities/Shapes.ts";
-import { addTransformComponents } from "../../../../renderer/src/ECS/Components/Transform.ts";
+import {
+  addTransformComponents,
+  applyMatrixScale,
+} from "../../../../renderer/src/ECS/Components/Transform.ts";
 import type { TColor } from "../../../../renderer/src/ECS/Components/Common.ts";
 import {
   createEntityId,
   getEngineComponents,
   type EngineWorld,
 } from "../../../../engine/src/ECS/createEngineWorld.ts";
+import type { EntityInstance, EntityOptions } from "./registry.ts";
 
 function rand(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
 
-export function buildTree(world: EngineWorld): number {
-  const { Children } = getEngineComponents(world);
+export function buildTree(world: EngineWorld, { scale }: EntityOptions): EntityInstance {
+  const { Children, LocalTransform } = getEngineComponents(world);
 
   const root = createEntityId(world);
   addTransformComponents(world, root);
+  applyMatrixScale(LocalTransform.matrix.getBatch(root), scale, scale, scale);
   Children.addComponent(world, root);
 
   const trunkHeight = rand(3.5, 5);
@@ -50,5 +55,5 @@ export function buildTree(world: EngineWorld): number {
     Children.addChild(root, blob);
   }
 
-  return root;
+  return { root, animations: {} };
 }

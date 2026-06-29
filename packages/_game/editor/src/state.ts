@@ -15,4 +15,6 @@ export function persistentState<T>(key: string, initial: T): BehaviorSubject<T> 
 }
 
 export const selectedEntityId$ = persistentState<string>("viewer.entity", ENTITIES[0].id);
+export const selectedAnimation$ = persistentState<string>("viewer.animation", "none");
+export const selectedScale$ = persistentState<number>("viewer.scale", 1);
 export const selectedEid$ = new BehaviorSubject<number>(-1);

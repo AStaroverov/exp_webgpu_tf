@@ -37,7 +37,8 @@
         color: #5c6675;
       }
       #panel select,
-      #panel button {
+      #panel button,
+      #panel input[type="range"] {
         width: 100%;
         background: #1a1f29;
         color: #cdd5e0;
@@ -83,6 +84,14 @@
         <div>
           <label for="entity-select">Entity</label>
           <select id="entity-select"></select>
+        </div>
+        <div>
+          <label for="animation-select">Animation</label>
+          <select id="animation-select"></select>
+        </div>
+        <div>
+          <label for="scale-input">Scale</label>
+          <input type="range" id="scale-input" min="0.25" max="3" step="0.05" />
         </div>
         <button id="regen">Regenerate</button>
         <div>

@@ -22,5 +22,21 @@ export const createChildrenComponent = defineComponent((Children, ctx) => {
       entitiesIds.set(parentEid, len, childEid);
       entitiesCount.set(parentEid, len + 1);
     },
+
+    removeChild(parentEid: number, childEid: number) {
+      const len = entitiesCount.get(parentEid);
+      let index = -1;
+      for (let i = 0; i < len; i++) {
+        if (entitiesIds.get(parentEid, i) === childEid) {
+          index = i;
+          break;
+        }
+      }
+      if (index === -1) return;
+      for (let i = index; i < len - 1; i++) {
+        entitiesIds.set(parentEid, i, entitiesIds.get(parentEid, i + 1));
+      }
+      entitiesCount.set(parentEid, len - 1);
+    },
   };
 });

@@ -9,6 +9,7 @@ import { createResizeSystem } from "../../renderer/src/ECS/Systems/ResizeSystem.
 import { SunLight } from "../../renderer/src/ECS/Systems/SunLight.ts";
 import { getEngineComponents, type EngineWorld } from "./ECS/createEngineWorld.ts";
 import { RenderDI } from "./DI/RenderDI.ts";
+import { EngineDI } from "./DI/EngineDI.ts";
 
 // Builds the GPU render target and the per-frame render closure. Mirrors
 // renderer/src/demo.ts's render path function-for-function (the §4 render
@@ -23,7 +24,11 @@ export async function createRenderTarget(
   const getPixelRatio = () => window.devicePixelRatio;
 
   // --- Systems ---
-  const execTransformSystem = createTransformSystem(world, getEngineComponents(world).Children);
+  const execTransformSystem = createTransformSystem(
+    world,
+    getEngineComponents(world).Children,
+    EngineDI.sceneRoot,
+  );
   const shapeSystem = createDrawShapeSystem({ world, device });
   const present = createPresent(device, context);
 

@@ -53,6 +53,7 @@ export function createCircle(
     radius,
     color,
     height,
+    eid,
   }: {
     x: number;
     y: number;
@@ -60,10 +61,11 @@ export function createCircle(
     radius: number;
     color: TColor;
     height?: number;
+    eid?: number;
   },
 ) {
   const { Color, LocalTransform, Shape } = getRenderComponents(world);
-  const id = addEntity(world);
+  const id = createOrAdoptEntity(world, eid);
 
   addTransformComponents(world, id);
   applyMatrixTranslate(LocalTransform.matrix.getBatch(id), x, y, z);

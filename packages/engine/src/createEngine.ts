@@ -1,5 +1,11 @@
 import { createTransformSystem } from "../../renderer/src/ECS/Systems/TransformSystem.ts";
-import { createEngineWorld, getEngineComponents, getEngineSab } from "./ECS/createEngineWorld.ts";
+import { addTransformComponents } from "../../renderer/src/ECS/Components/Transform.ts";
+import {
+  createEngineWorld,
+  createEntityId,
+  getEngineComponents,
+  getEngineSab,
+} from "./ECS/createEngineWorld.ts";
 import { createApplyRigidBodyToTransformSystem } from "./ECS/Systems/createApplyRigidBodyToTransformSystem.ts";
 import { createPhysicsWorker } from "./Physics/createPhysicsWorker.ts";
 import { createRenderTarget } from "./createRenderTarget.ts";
@@ -29,7 +35,13 @@ export async function createEngine({
   const world = createEngineWorld();
   const physicsWorker = createPhysicsWorker(getEngineSab(world).bundle);
 
-  const execTransformSystem = createTransformSystem(world, getEngineComponents(world).Children);
+  // The one scene-graph root: everything renderable is parented under it (see EngineDI.sceneRoot).
+  const sceneRoot = createEntityId(world);
+  addTransformComponents(world, sceneRoot);
+  getEngineComponents(world).Children.addComponent(world, sceneRoot);
+  EngineDI.sceneRoot = sceneRoot;
+
+  const execTransformSystem = createTransformSystem(world, getEngineComponents(world).Children, sceneRoot);
   const applyRigidBodyToLocalTransform = createApplyRigidBodyToTransformSystem(world);
 
   function tick(delta: number): void {

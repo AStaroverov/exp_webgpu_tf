@@ -505,7 +505,7 @@ async function main() {
   }
 
   // --- Systems ---
-  const execTransformSystem = createTransformSystem(world, stubChildren);
+  const execTransformSystem = createTransformSystem(world, stubChildren, -1);
   const shapeSystem = createDrawShapeSystem({ world, device });
   const present = createPresent(device, context);
 

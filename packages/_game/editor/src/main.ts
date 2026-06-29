@@ -20,18 +20,23 @@ import {
   setCameraPosition,
   setCameraZoom,
 } from "../../../renderer/src/ECS/Systems/ResizeSystem.ts";
-import { ENTITIES } from "./Entities/registry.ts";
-import { selectedEid$, selectedEntityId$ } from "./state.ts";
+import { ENTITIES, type EntityAnimations } from "./Entities/registry.ts";
+import { selectedAnimation$, selectedEid$, selectedEntityId$, selectedScale$ } from "./state.ts";
+
+const NONE = "none";
 
 async function main(): Promise<void> {
   const canvas = document.getElementById("c") as HTMLCanvasElement;
   const selectEl = document.getElementById("entity-select") as HTMLSelectElement;
+  const animSelectEl = document.getElementById("animation-select") as HTMLSelectElement;
+  const scaleEl = document.getElementById("scale-input") as HTMLInputElement;
   const regenBtn = document.getElementById("regen") as HTMLButtonElement;
   const treeEl = document.getElementById("tree") as HTMLElement;
   const componentsEl = document.getElementById("components") as HTMLElement;
 
   const engine = await createEngine({ canvas });
   const world = engine.world as EngineWorld;
+  const sceneRoot = engine.sceneRoot;
 
   const components = getEngineComponents(world);
   const componentEntries = Object.entries(components) as Array<
@@ -103,7 +108,7 @@ async function main(): Promise<void> {
   cameraElevation.value = 55;
   cameraAzimuth.value = 45;
 
-  createRectangle(world, {
+  const ground = createRectangle(world, {
     x: 0,
     y: 0,
     z: -0.5,
@@ -113,6 +118,7 @@ async function main(): Promise<void> {
     color: [0.18, 0.2, 0.24, 1],
     eid: createEntityId(world),
   });
+  components.Children.addChild(sceneRoot, ground);
 
   for (let i = 0; i < ENTITIES.length; i++) {
     const option = document.createElement("option");
@@ -122,12 +128,32 @@ async function main(): Promise<void> {
   }
 
   let currentRoot = -1;
+  let currentAnimations: EntityAnimations = {};
   function build(id: string): void {
-    if (currentRoot >= 0) removeEntityTree(world, currentRoot);
+    if (currentRoot >= 0) {
+      components.Children.removeChild(sceneRoot, currentRoot);
+      removeEntityTree(world, currentRoot);
+    }
     const def = ENTITIES.find((d) => d.id === id) ?? ENTITIES[0];
-    currentRoot = def.build(world);
+    const instance = def.build(world, { scale: selectedScale$.value });
+    currentRoot = instance.root;
+    components.Children.addChild(sceneRoot, currentRoot);
+    currentAnimations = instance.animations;
+    fillAnimationOptions();
     renderTree(currentRoot, def.label);
     selectedEid$.next(currentRoot);
+  }
+
+  function fillAnimationOptions(): void {
+    const names = [NONE, ...Object.keys(currentAnimations)];
+    animSelectEl.replaceChildren();
+    for (let i = 0; i < names.length; i++) {
+      const option = document.createElement("option");
+      option.value = names[i];
+      option.textContent = names[i];
+      animSelectEl.append(option);
+    }
+    animSelectEl.value = names.includes(selectedAnimation$.value) ? selectedAnimation$.value : NONE;
   }
 
   const rebuild$ = new Subject<void>();
@@ -147,6 +173,21 @@ async function main(): Promise<void> {
     }),
   );
   subs.add(fromEvent(selectEl, "change").subscribe(() => selectedEntityId$.next(selectEl.value)));
+  subs.add(
+    fromEvent(animSelectEl, "change").subscribe(() => selectedAnimation$.next(animSelectEl.value)),
+  );
+  subs.add(
+    selectedScale$.subscribe((scale) => {
+      const v = String(scale);
+      if (scaleEl.value !== v) scaleEl.value = v;
+    }),
+  );
+  subs.add(
+    fromEvent(scaleEl, "input").subscribe(() => {
+      selectedScale$.next(Number(scaleEl.value));
+      rebuild$.next();
+    }),
+  );
   subs.add(fromEvent(regenBtn, "click").subscribe(() => rebuild$.next()));
 
   subs.add(
@@ -197,6 +238,8 @@ async function main(): Promise<void> {
   function loop(now: number): void {
     const delta = Math.min(now - then, 16.6667) / 1000;
     then = now;
+    const anim = currentAnimations[selectedAnimation$.value];
+    if (anim) anim(delta);
     engine.tick(delta);
     requestAnimationFrame(loop);
   }
