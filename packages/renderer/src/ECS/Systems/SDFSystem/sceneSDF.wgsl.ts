@@ -13,8 +13,12 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 export const sceneSDF = wgsl /* WGSL */ `
         // ============= Helpers =============
 
-        fn rotZ(p: vec2<f32>, c: f32, s: f32) -> vec2<f32> {
-            return vec2<f32>(p.x * c - p.y * s, p.x * s + p.y * c);
+        // Per-instance rotation basis from the rigid transform's columns. normalize()
+        // defensively drops any accidental uniform scale; for the rigid case (the only
+        // case here) the columns are already unit. transpose(R) = inverse(R) for an
+        // orthonormal R: world->local dir = transpose(R)*v, local->world = R*v.
+        fn instance_rot(t: mat4x4<f32>) -> mat3x3<f32> {
+            return mat3x3<f32>(normalize(t[0].xyz), normalize(t[1].xyz), normalize(t[2].xyz));
         }
 
         fn op_round(d: f32, r: f32) -> f32 {

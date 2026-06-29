@@ -12,6 +12,7 @@
 // shader's frag_depth both follow it. See sdf.shader.ts / ResizeSystem.ts.
 
 import GUI from "lil-gui";
+import { mat4 } from "gl-matrix";
 import Stats from "stats-gl";
 import { initWebGPU } from "./gpu.ts";
 import { createWorld, getRenderComponents } from "./ECS/world.ts";
@@ -64,11 +65,16 @@ async function main() {
   const world = createWorld();
   const { LocalTransform, LightEmitter, Shape } = getRenderComponents(world);
 
-  // Scene selection:
+  // Scene selection (pick it live from the GUI; persisted in localStorage, applied on reload):
   //   "emitter"  — ground + box occluder + a GUI-movable/resizable emitter sphere.
-  //   "simple"   — fixed minimal scene (first-bug diagnosis).
   //   "showcase" — one of every shape kind + several lights.
-  const SCENE = "perf2" as "emitter" | "showcase" | "final" | "perf" | "perf2";
+  //   "final" / "perf" / "perf2" — animated final scene / perf-cost harnesses.
+  const SCENE_OPTIONS = ["emitter", "showcase", "final", "perf", "perf2"] as const;
+  type SceneName = (typeof SCENE_OPTIONS)[number];
+  const savedScene = localStorage.getItem("demo.scene");
+  const SCENE: SceneName = (SCENE_OPTIONS as readonly string[]).includes(savedScene ?? "")
+    ? (savedScene as SceneName)
+    : "showcase";
   // Both perf scenes drive the same GPU-cost harness (per-pass toggles + serialized timing).
   const PERF = SCENE === "perf" || SCENE === "perf2";
 
@@ -229,6 +235,21 @@ async function main() {
       color: [0.95, 0.55, 0.55, 1],
     });
     createSphere(world, { x: 9, y: 7, z: 4.5, radius: 1, color: [0.95, 0.95, 0.95, 1] });
+
+    // Three non-symmetric boxes, each tilted about ONE axis (X / Y / Z) to prove the
+    // impostor honors full 3D rotation, not just yaw.
+    const tiltX = createRectangle(world, {
+      x: 3, y: -7, z: 3, width: 2, height: 5, depth: 2, color: [0.85, 0.4, 0.4, 1],
+    });
+    mat4.rotateX(LocalTransform.matrix.getBatch(tiltX), LocalTransform.matrix.getBatch(tiltX), 0.7);
+    const tiltY = createRectangle(world, {
+      x: 0, y: -11, z: 3, width: 2, height: 5, depth: 2, color: [0.4, 0.85, 0.4, 1],
+    });
+    mat4.rotateY(LocalTransform.matrix.getBatch(tiltY), LocalTransform.matrix.getBatch(tiltY), 0.7);
+    const tiltZ = createRectangle(world, {
+      x: -3, y: -11, z: 3, width: 2, height: 5, depth: 2, color: [0.4, 0.4, 0.85, 1],
+    });
+    mat4.rotateZ(LocalTransform.matrix.getBatch(tiltZ), LocalTransform.matrix.getBatch(tiltZ), 0.7);
 
     // --- Light emitters (GI sources). ---
     // intensity > 0 = omni; intensity < 0 = directional (facing = world +X).
@@ -513,6 +534,14 @@ async function main() {
   });
 
   const gui = new GUI({ title: "Voxel" });
+
+  gui
+    .add({ scene: SCENE }, "scene", SCENE_OPTIONS as unknown as string[])
+    .name("scene")
+    .onChange((v: string) => {
+      localStorage.setItem("demo.scene", v);
+      location.reload();
+    });
 
   // Graininess: voxel size in world units. Smaller = finer = more voxels. Rebuilds the
   // 3D textures on release (.onFinishChange, so it rebuilds once when the slider settles).

@@ -107,14 +107,11 @@ export const shaderMeta = new ShaderMeta(
             let hz = footprint_half_z(instance_index);
             let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z);
 
-            let yaw = atan2(transform[0].y, transform[0].x);
-
             let halfXY = footprint_half_xy(instance_index);
             let corner = CUBE[vertex_index];
 
             let scaled = corner * vec3<f32>(halfXY.x, halfXY.y, hz);
-            let xy = rotZ(scaled.xy, cos(yaw), sin(yaw));
-            let world = center + vec3<f32>(xy, scaled.z);
+            let world = center + instance_rot(transform) * scaled;
 
             var out: VertexOutput;
             // Rasterize through the SUN view-projection (uViewProj is the sun matrix here).
@@ -140,15 +137,13 @@ export const shaderMeta = new ShaderMeta(
             let transform = uTransform[instance_index];
             let hz = footprint_half_z(instance_index);
             let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z);
-            let yaw = atan2(transform[0].y, transform[0].x);
+            let Rm = instance_rot(transform);
 
             // World ray (origin = this fragment's box-surface point) → instance-local space
-            // (remove yaw). The ray direction is the SUN travel direction (uRayDir).
-            let ic = cos(-yaw);
-            let is = sin(-yaw);
+            // (transpose(R) = inverse rotation). The ray direction is the SUN travel direction (uRayDir).
             let relW = world - center;
-            let lo = vec3<f32>(rotZ(relW.xy, ic, is), relW.z);
-            let ld = normalize(vec3<f32>(rotZ(uRayDir.xy, ic, is), uRayDir.z));
+            let lo = transpose(Rm) * relW;
+            let ld = normalize(transpose(Rm) * uRayDir.xyz);
 
             // Slab test against the local AABB (footprint half-extents + half-height).
             let halfXY = footprint_half_xy(instance_index);
@@ -185,10 +180,8 @@ export const shaderMeta = new ShaderMeta(
 
             let pLocal = lo + ld * t;
 
-            // Back to world (forward yaw), then to sun clip space.
-            let fc = cos(yaw);
-            let fs_ = sin(yaw);
-            let pWorld = center + vec3<f32>(rotZ(pLocal.xy, fc, fs_), pLocal.z);
+            // Back to world (forward rotation), then to sun clip space.
+            let pWorld = center + Rm * pLocal;
             let clip = uViewProj * vec4<f32>(pWorld, 1.0);
 
             // Standard depth (orthoZO, z in [0,1]); the pipeline compares "less-equal".

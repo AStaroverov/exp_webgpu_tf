@@ -914,7 +914,7 @@ export function createVoxelSystem({
 
     // ===== Build per-instance voxel AABBs + the prefix-sum work list (CPU). =====
     // The CPU arrays are filled by prepare() (which runs before voxelize() each frame), so
-    // they are current. For each instance compute a CONSERVATIVE (yaw-invariant) world AABB,
+    // they are current. For each instance compute a CONSERVATIVE rotated-box world AABB,
     // convert it to a voxel box clamped to the grid, and accumulate the prefix sum of voxel
     // counts. The scatter shader walks this flat list via a binary search on `start`.
     const n = sceneInstances.instanceCount;
@@ -962,18 +962,31 @@ export function createVoxelSystem({
         // Rectangle/box: values = [width, height, depth]. Corner at hypot(width/2, height/2).
         rxyShape = Math.hypot(v0 / 2, v1 / 2);
       }
-      const rxy = rxyShape + round + cellSize;
-      // Z half-extent: sphere (kind 6) uses its radius (values[0]); everything else is half
-      // the per-kind depth slot. Expanded by roundness + one cell.
-      const zHalf = footprintHalfZ(kind, valArr, k) + round + cellSize;
-      const centerZ = tz;
+      // Local conservative half-extents: a single bounding-circle radius for X and Y
+      // (yaw-invariant) plus the per-kind Z half. Under full rotation each axis grows by
+      // the rotated box bound half_world = abs(R) * half_local (R = the instance's 3x3
+      // rotation, column-major in tr: element (row r, col c) = tr[k*16 + c*4 + r]).
+      const hLocalXY = rxyShape;
+      const hLocalZ = footprintHalfZ(kind, valArr, k);
+      const m0 = Math.abs(tr[k * 16 + 0]);
+      const m1 = Math.abs(tr[k * 16 + 1]);
+      const m2 = Math.abs(tr[k * 16 + 2]);
+      const m4 = Math.abs(tr[k * 16 + 4]);
+      const m5 = Math.abs(tr[k * 16 + 5]);
+      const m6 = Math.abs(tr[k * 16 + 6]);
+      const m8 = Math.abs(tr[k * 16 + 8]);
+      const m9 = Math.abs(tr[k * 16 + 9]);
+      const m10 = Math.abs(tr[k * 16 + 10]);
+      const halfWX = m0 * hLocalXY + m4 * hLocalXY + m8 * hLocalZ + round + cellSize;
+      const halfWY = m1 * hLocalXY + m5 * hLocalXY + m9 * hLocalZ + round + cellSize;
+      const halfWZ = m2 * hLocalXY + m6 * hLocalXY + m10 * hLocalZ + round + cellSize;
 
-      const minX = cx - rxy;
-      const maxX = cx + rxy;
-      const minY = cy - rxy;
-      const maxY = cy + rxy;
-      const minZ = centerZ - zHalf;
-      const maxZ = centerZ + zHalf;
+      const minX = cx - halfWX;
+      const maxX = cx + halfWX;
+      const minY = cy - halfWY;
+      const maxY = cy + halfWY;
+      const minZ = tz - halfWZ;
+      const maxZ = tz + halfWZ;
 
       // World AABB -> voxel index box, clamped to [0, dim] (floor min, ceil max), then size.
       const vx0 = Math.min(Math.max(Math.floor((minX - originX) / cellSize), 0), dimX);

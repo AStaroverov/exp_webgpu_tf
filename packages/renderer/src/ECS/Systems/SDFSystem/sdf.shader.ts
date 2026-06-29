@@ -39,7 +39,7 @@ export const shaderMeta = new ShaderMeta(
     lightDir: new VariableMeta("uLightDir", VariableKind.Uniform, `vec4<f32>`),
 
     // ---- group 1 : per-instance storage ----
-    // Full per-instance transform: center = col3.xyz, yaw from upper-left 2x2.
+    // Full per-instance transform: center = col3.xyz, rotation basis = cols 0..2.
     transform: new VariableMeta(
       "uTransform",
       VariableKind.StorageRead,
@@ -136,17 +136,13 @@ export const shaderMeta = new ShaderMeta(
             let hz = footprint_half_z(instance_index);
             let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z);
 
-            // Yaw from the upper-left 2x2 of the transform.
-            let yaw = atan2(transform[0].y, transform[0].x);
-
             let halfXY = footprint_half_xy(instance_index);
             let corner = CUBE[vertex_index];
 
             // Unit-cube corner scaled by footprint half-extents + half-height,
-            // rotated by yaw into world.
+            // rotated by the full instance basis into world.
             let scaled = corner * vec3<f32>(halfXY.x, halfXY.y, hz);
-            let xy = rotZ(scaled.xy, cos(yaw), sin(yaw));
-            let world = center + vec3<f32>(xy, scaled.z);
+            let world = center + instance_rot(transform) * scaled;
 
             var out: VertexOutput;
             out.position = uViewProj * vec4<f32>(world, 1.0);
@@ -171,15 +167,13 @@ export const shaderMeta = new ShaderMeta(
             let transform = uTransform[instance_index];
             let hz = footprint_half_z(instance_index);
             let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z);
-            let yaw = atan2(transform[0].y, transform[0].x);
+            let Rm = instance_rot(transform);
 
             // World ray (origin = this fragment's box-surface point) → instance-local
-            // space (remove yaw; rigid transform preserves distances).
-            let ic = cos(-yaw);
-            let is = sin(-yaw);
+            // space (transpose(R) = inverse rotation; rigid transform preserves distances).
             let relW = world - center;
-            let lo = vec3<f32>(rotZ(relW.xy, ic, is), relW.z);
-            let ld = normalize(vec3<f32>(rotZ(uRayDir.xy, ic, is), uRayDir.z));
+            let lo = transpose(Rm) * relW;
+            let ld = normalize(transpose(Rm) * uRayDir.xyz);
 
             // Slab test against the local AABB (footprint half-extents + half-height).
             let halfXY = footprint_half_xy(instance_index);
@@ -220,11 +214,9 @@ export const shaderMeta = new ShaderMeta(
             let pLocal = lo + ld * t;
             let nLocal = sd_normal3d(pLocal, instance_index);
 
-            // Back to world (forward yaw).
-            let fc = cos(yaw);
-            let fs_ = sin(yaw);
-            let nWorld = normalize(vec3<f32>(rotZ(nLocal.xy, fc, fs_), nLocal.z));
-            let pWorld = center + vec3<f32>(rotZ(pLocal.xy, fc, fs_), pLocal.z);
+            // Back to world (forward rotation).
+            let nWorld = normalize(Rm * nLocal);
+            let pWorld = center + Rm * pLocal;
 
             let clip = uViewProj * vec4<f32>(pWorld, 1.0);
 
@@ -284,14 +276,11 @@ export const shaderMeta = new ShaderMeta(
             let hz = footprint_half_z(instance_index);
             let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z);
 
-            let yaw = atan2(transform[0].y, transform[0].x);
-
             let halfXY = footprint_half_xy(instance_index);
             let corner = CUBE[vertex_index];
 
             let scaled = corner * vec3<f32>(halfXY.x, halfXY.y, hz);
-            let xy = rotZ(scaled.xy, cos(yaw), sin(yaw));
-            let world = center + vec3<f32>(xy, scaled.z);
+            let world = center + instance_rot(transform) * scaled;
 
             var out: VertexOutput;
             out.position = uViewProj * vec4<f32>(world, 1.0);
@@ -314,14 +303,12 @@ export const shaderMeta = new ShaderMeta(
             let transform = uTransform[instance_index];
             let hz = footprint_half_z(instance_index);
             let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z);
-            let yaw = atan2(transform[0].y, transform[0].x);
+            let Rm = instance_rot(transform);
 
             // World ray -> instance-local space (same as fs_main).
-            let ic = cos(-yaw);
-            let is = sin(-yaw);
             let relW = world - center;
-            let lo = vec3<f32>(rotZ(relW.xy, ic, is), relW.z);
-            let ld = normalize(vec3<f32>(rotZ(uRayDir.xy, ic, is), uRayDir.z));
+            let lo = transpose(Rm) * relW;
+            let ld = normalize(transpose(Rm) * uRayDir.xyz);
 
             // Slab test against the local AABB.
             let halfXY = footprint_half_xy(instance_index);
@@ -367,10 +354,11 @@ export const shaderMeta = new ShaderMeta(
             var dir = vec2<f32>(0.0);
             if (intensity < 0.0) {
                 // World-space facing: +X axis (long axis +Y for trapezoid beams).
-                var facingWorld = vec2<f32>(transform[0].x, transform[0].y);
+                var facingWorld3 = Rm * vec3<f32>(1.0, 0.0, 0.0);
                 if (uKind[instance_index] == 4u) {
-                    facingWorld = vec2<f32>(transform[1].x, transform[1].y);
+                    facingWorld3 = Rm * vec3<f32>(0.0, 1.0, 0.0);
                 }
+                let facingWorld = facingWorld3.xy;
                 // Project to screen/texture space so the cone matches the cascade
                 // raymarch (which dots emitDir against -rayDir in texture UV space).
                 // Drop z, then negate clip.y: clip is y-up, texture V grows downward

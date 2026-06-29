@@ -110,7 +110,7 @@ export const shaderMeta = new ShaderMeta(
   wgsl /* wgsl */ `
 const SQRT3: f32 = 1.7320508;
 
-// Shared local-SDF helpers (rotZ, sd_*, sd_2d_for_kind, extrude, sd_shape3d, sd_normal3d).
+// Shared local-SDF helpers (instance_rot, sd_*, sd_2d_for_kind, extrude, sd_shape3d, sd_normal3d).
 // They read uKind/uValues/uRoundness by global name, declared in group 1 with identical types.
 ${sceneSDF}
 
@@ -203,13 +203,13 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let cellSize = uGridOrigin.w;
   let world = uGridOrigin.xyz + (vec3<f32>(coord) + vec3<f32>(0.5)) * cellSize;
 
-  // Evaluate ONLY instance ins: world -> local (subtract center, inverse yaw via rotZ),
-  // then its LOCAL sd_shape3d. (No loop over the other instances — the whole point.)
+  // Evaluate ONLY instance ins: world -> local (subtract center, inverse rotation via
+  // transpose), then its LOCAL sd_shape3d. (No loop over the other instances — the whole point.)
   let tr = uTransform[ins];
   let center = vec3<f32>(tr[3].x, tr[3].y, tr[3].z);
-  let yaw = atan2(tr[0].y, tr[0].x);
+  let Rm = instance_rot(tr);
   let rel = world - center;
-  let lp = vec3<f32>(rotZ(rel.xy, cos(-yaw), sin(-yaw)), rel.z);
+  let lp = transpose(Rm) * rel;
   let d = sd_shape3d(lp, ins);
 
   // Conservative "iso-surface crosses this voxel": within half the voxel diagonal. NOT solid
@@ -219,11 +219,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     return;
   }
 
-  // LOCAL normal of THIS instance only, rotated back to world by +yaw.
+  // LOCAL normal of THIS instance only, rotated back to world.
   let nLocal = sd_normal3d(lp, ins);
-  let cy = cos(yaw);
-  let sy = sin(yaw);
-  let N = vec3<f32>(rotZ(nLocal.xy, cy, sy), nLocal.z);
+  let N = Rm * nLocal;
 
   // voxelRADIANCE (the only volume the cone samples, via its mip pyramid) uses ANTI-ALIASED
   // coverage: a linear band across the iso-surface (1 deep inside -> 0.5 at the centre -> 0 at
