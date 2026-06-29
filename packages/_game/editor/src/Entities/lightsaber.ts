@@ -53,5 +53,5 @@ export function buildLightsaber(world: EngineWorld, { scale }: EntityOptions): E
   LightEmitter.addComponent(world, blade, 5, 0.5);
   add(blade);
 
-  return { root, animations: {} };
+  return { root, bones: { root }, animations: {} };
 }

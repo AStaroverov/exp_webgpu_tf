@@ -3,6 +3,9 @@ import {
   getEngineComponents,
   type EngineWorld,
 } from "../../../../engine/src/ECS/createEngineWorld.ts";
+import { makeBlendLayer } from "../anim/blend.ts";
+import { buildClipPlayer } from "../anim/registry.ts";
+import { SWORD_SWING } from "../anim/presets/index.ts";
 import type { EntityAnimations, EntityInstance, EntityOptions } from "./registry.ts";
 import type { UnitInstance } from "./unit.ts";
 
@@ -15,47 +18,6 @@ type Key = { at: number; v: number };
 
 const DEG = Math.PI / 180;
 const SWORD_REL = 1.5;
-const BODY_YAW = 35 * DEG;
-
-// Slice = an overhead chop. Wind-up (0 → ~0.6): the hand rises to head level and out to the right,
-// blade pointing up. Strike (~0.6 → 1): the hand sweeps down to the body centre, the blade pitches
-// forward/down, the wrist rolls through, and the body steps in. It ends at the struck pose (= the
-// cycle start), so there is no orphan recovery phase. Channels share one phase.
-const SWING_CYCLE = 1.4;
-const SLICE_X_KEYS: Key[] = [
-  { at: 0, v: 0 },
-  { at: 0.6, v: 0.95 },
-  { at: 1, v: 0 },
-];
-const SLICE_Y_KEYS: Key[] = [
-  { at: 0, v: 0.6 },
-  { at: 0.6, v: -0.3 },
-  { at: 1, v: 0.6 },
-];
-const SLICE_Z_KEYS: Key[] = [
-  { at: 0, v: 1.0 },
-  { at: 0.6, v: 2.4 },
-  { at: 1, v: 1.0 },
-];
-const SLICE_PITCH_KEYS: Key[] = [
-  { at: 0, v: -100 * DEG },
-  { at: 0.6, v: 60 * DEG },
-  { at: 0.8, v: -110 * DEG },
-  { at: 1, v: -100 * DEG },
-];
-const SLICE_WRIST_KEYS: Key[] = [
-  { at: 0, v: 0 },
-  { at: 0.6, v: -0.9 },
-  { at: 0.8, v: 0.9 },
-  { at: 1, v: 0 },
-];
-const SLICE_STEP_KEYS: Key[] = [
-  { at: 0, v: 0 },
-  { at: 0.6, v: 0 },
-  { at: 0.8, v: 1 },
-  { at: 1, v: 0 },
-];
-const SLICE_STEP = 0.5;
 
 // Lunge stance: arm extended forward, blade horizontal (a thrust); the body steps forward.
 const LUNGE_HAND: [number, number, number] = [0.9, 0.6, 1.0];
@@ -85,9 +47,9 @@ function sampleKeys(keys: Key[], p: number): number {
 }
 
 // A swordsman = a unit holding a weapon in its right hand (the unit's exposed `hand`). The weapon
-// is parented to the hand, so it follows the arm in every animation. Combat stances (slice, lunge)
-// each have an independent weight that eases in while their animation is active and out otherwise,
-// so transitions between rest and either stance — and between the stances — blend smoothly.
+// is parented to the hand, so it follows the arm in every animation. `sword_slice` plays an authored
+// clip (anim/presets) that keys the arm; `lunge` is a procedural stance whose weight eases in while
+// active and out otherwise, so the rest ↔ lunge transition blends smoothly.
 export function buildSwordsman(
   world: EngineWorld,
   { scale, parts }: EntityOptions & { parts: SwordsmanParts },
@@ -96,70 +58,61 @@ export function buildSwordsman(
 
   const unit = parts.unit(world, { scale });
   const sword = parts.sword(world, { scale: SWORD_REL });
-  Children.addChild(unit.hand, sword.root);
+  Children.addChild(unit.bones.armR, sword.root);
+
+  const bones = { ...prefix("unit/", unit.bones), ...prefix("sword/", sword.bones) };
 
   const rootMatrix = LocalTransform.matrix.getBatch(unit.root);
-  const armMatrix = LocalTransform.matrix.getBatch(unit.hand);
+  const armMatrix = LocalTransform.matrix.getBatch(unit.bones.armR);
   const restArmX = armMatrix[12];
   const restArmZ = armMatrix[14];
 
-  let t = 0;
-  let sliceW = 0;
-  let lungeW = 0;
-  function applyStance(delta: number, sliceTarget: number, lungeTarget: number): void {
-    const ease = 1 - Math.exp(-delta * 8);
-    sliceW += (sliceTarget - sliceW) * ease;
-    lungeW += (lungeTarget - lungeW) * ease;
-    t += delta;
-
-    const sp = (t % SWING_CYCLE) / SWING_CYCLE;
-    const lp = (t % LUNGE_CYCLE) / LUNGE_CYCLE;
-    const reach = sampleKeys(LUNGE_KEYS, lp);
-
-    // Blend arm pose params from rest → slice (sliceW) → lunge (lungeW).
+  const lunge = makeBlendLayer(LUNGE_CYCLE, (phase, weight) => {
+    const reach = sampleKeys(LUNGE_KEYS, phase);
     let px = restArmX;
     let py = 0;
     let pz = restArmZ;
     let rx = 0;
-    let ry = 0;
-    px += (sampleKeys(SLICE_X_KEYS, sp) - px) * sliceW;
-    py += (sampleKeys(SLICE_Y_KEYS, sp) - py) * sliceW;
-    pz += (sampleKeys(SLICE_Z_KEYS, sp) - pz) * sliceW;
-    rx += (sampleKeys(SLICE_PITCH_KEYS, sp) - rx) * sliceW;
-    ry += (sampleKeys(SLICE_WRIST_KEYS, sp) - ry) * sliceW;
-    px += (LUNGE_HAND[0] - px) * lungeW;
-    py += (LUNGE_HAND[1] + reach * LUNGE_REACH - py) * lungeW;
-    pz += (LUNGE_HAND[2] - pz) * lungeW;
-    rx += (LUNGE_ROT_X - rx) * lungeW;
-    ry += (0 - ry) * lungeW;
+    px += (LUNGE_HAND[0] - px) * weight;
+    py += (LUNGE_HAND[1] + reach * LUNGE_REACH - py) * weight;
+    pz += (LUNGE_HAND[2] - pz) * weight;
+    rx += (LUNGE_ROT_X - rx) * weight;
 
     mat4.identity(armMatrix);
     mat4.translate(armMatrix, armMatrix, [px, py, pz]);
     mat4.rotateX(armMatrix, armMatrix, rx);
-    mat4.rotateY(armMatrix, armMatrix, ry);
 
-    mat4.rotateZ(rootMatrix, rootMatrix, BODY_YAW * sliceW);
-    rootMatrix[13] +=
-      sampleKeys(SLICE_STEP_KEYS, sp) * SLICE_STEP * sliceW +
-      Math.max(0, reach) * LUNGE_BODY * lungeW;
-  }
+    rootMatrix[13] += Math.max(0, reach) * LUNGE_BODY * weight;
+  });
+
+  const slice = makeBlendLayer(
+    SWORD_SWING.duration,
+    buildClipPlayer(world, SWORD_SWING, { root: unit.root, bones }),
+  );
 
   const animations: EntityAnimations = {};
   for (const name in unit.animations) {
     const unitAnim = unit.animations[name];
     animations[name] = (delta: number) => {
       unitAnim(delta);
-      applyStance(delta, 0, 0);
+      lunge(delta, 0);
+      slice(delta, 0);
     };
   }
   animations.sword_slice = (delta: number) => {
-    unit.animations.idle?.(delta / 10);
-    applyStance(delta / 10, 1, 0);
+    unit.animations.idle?.(delta);
+    lunge(delta, 0);
+    slice(delta, 1);
   };
   animations.lunge = (delta: number) => {
     unit.animations.idle?.(delta);
-    applyStance(delta, 0, 1);
+    lunge(delta, 1);
+    slice(delta, 0);
   };
 
-  return { root: unit.root, animations };
+  return { root: unit.root, bones, animations };
+}
+
+function prefix(p: string, m: Record<string, number>): Record<string, number> {
+  return Object.fromEntries(Object.entries(m).map(([k, v]) => [p + k, v]));
 }

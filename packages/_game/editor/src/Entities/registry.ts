@@ -10,6 +10,7 @@ export type EntityOptions = { scale: number };
 
 export type EntityInstance = {
   root: number;
+  bones: Record<string, number>;
   animations: EntityAnimations;
 };
 

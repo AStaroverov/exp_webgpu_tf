@@ -55,5 +55,5 @@ export function buildTree(world: EngineWorld, { scale }: EntityOptions): EntityI
     Children.addChild(root, blob);
   }
 
-  return { root, animations: {} };
+  return { root, bones: { root }, animations: {} };
 }

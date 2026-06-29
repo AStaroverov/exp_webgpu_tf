@@ -11,6 +11,7 @@ import {
   getEngineComponents,
   type EngineWorld,
 } from "../../../../engine/src/ECS/createEngineWorld.ts";
+import { makeBlendLayer } from "../anim/blend.ts";
 import type { EntityAnimations, EntityInstance, EntityOptions } from "./registry.ts";
 
 const COLOR: TColor = [0.13, 0.34, 0.56, 1];
@@ -21,7 +22,14 @@ export type UnitInstance = EntityInstance & { hand: number };
 
 export function buildUnit(world: EngineWorld, { scale }: EntityOptions): UnitInstance {
   const parts = buildStructure(world, scale);
-  return { root: parts.root, animations: buildAnimations(world, parts), hand: parts.armR };
+  const bones = {
+    root: parts.root,
+    body: parts.body,
+    armL: parts.armL,
+    armR: parts.armR,
+    head: parts.head,
+  };
+  return { root: parts.root, bones, animations: buildAnimations(world, parts), hand: parts.armR };
 }
 
 type UnitParts = {
@@ -118,26 +126,32 @@ type Pose = {
   height: number;
   bobW: number;
   roll: number;
-  alpha: number;
 };
 
 function buildAnimations(world: EngineWorld, p: UnitParts): EntityAnimations {
-  const { LocalTransform, Color } = getEngineComponents(world);
+  const { LocalTransform } = getEngineComponents(world);
   const { root, body, armL, armR, head, bodyHeight, armX, armZ, headZ, scale } = p;
 
-  const REST: Pose = { headTilt: 0, height: HOVER, bobW: 1, roll: 0, alpha: 1 };
-  const MOVE: Pose = { headTilt: 0.25, height: HOVER, bobW: 1, roll: -0.25, alpha: 1 };
-  const DEAD: Pose = { headTilt: 0, height: 0, bobW: 0, roll: 1.5, alpha: 0 };
+  const REST: Pose = { headTilt: 0, height: HOVER, bobW: 1, roll: 0 };
+  const MOVE: Pose = { headTilt: 0.25, height: HOVER, bobW: 1, roll: -0.25 };
+  const DEAD: Pose = { headTilt: 0, height: 0, bobW: 0, roll: 1.5 };
+  const poseKeys = Object.keys(REST) as (keyof Pose)[];
   const pose: Pose = { ...REST };
-  const parts = [body, armL, armR, head];
   let clock = 0;
 
-  function blendTo(target: Pose, delta: number): void {
-    const a = 1 - Math.exp(-delta * 6);
-    for (const key of Object.keys(pose) as (keyof Pose)[]) {
-      pose[key] += (target[key] - pose[key]) * a;
-    }
+  // movement/death are weighted layers added onto the rest pose (REST + Σ weight·(target − REST)),
+  // so each eases in/out on its own and is skipped while its weight is ~0 — same as the swordsman stances.
+  function overlay(target: Pose): (delta: number, weight: number) => void {
+    return makeBlendLayer(
+      1,
+      (_phase, weight) => {
+        for (const k of poseKeys) pose[k] += (target[k] - REST[k]) * weight;
+      },
+      6,
+    );
   }
+  const move = overlay(MOVE);
+  const death = overlay(DEAD);
 
   function applyPose(): void {
     const rm = LocalTransform.matrix.getBatch(root);
@@ -164,19 +178,19 @@ function buildAnimations(world: EngineWorld, p: UnitParts): EntityAnimations {
       mat4.identity(am);
       mat4.translate(am, am, [x, 0, armZ]);
     }
-
-    for (let i = 0; i < parts.length; i++) {
-      Color.set$(parts[i], COLOR[0], COLOR[1], COLOR[2], pose.alpha);
-    }
   }
 
-  function play(target: Pose): (delta: number) => void {
-    return (delta: number) => {
-      clock += delta;
-      blendTo(target, delta);
-      applyPose();
-    };
+  function frame(delta: number, moveTarget: number, deathTarget: number): void {
+    clock += delta;
+    Object.assign(pose, REST);
+    move(delta, moveTarget);
+    death(delta, deathTarget);
+    applyPose();
   }
 
-  return { idle: play(REST), movement: play(MOVE), death: play(DEAD) };
+  return {
+    idle: (delta) => frame(delta, 0, 0),
+    movement: (delta) => frame(delta, 1, 0),
+    death: (delta) => frame(delta, 0, 1),
+  };
 }
