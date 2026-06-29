@@ -13,7 +13,8 @@
     "packages/ppo",
     "packages/ppo_unknown",
     "packages/burn_rl",
-    "packages/engine"
+    "packages/engine",
+    "packages/_game/editor"
   ],
   "type": "module",
   "scripts": {

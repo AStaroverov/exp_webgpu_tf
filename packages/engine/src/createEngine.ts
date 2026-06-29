@@ -1,11 +1,10 @@
 import { createTransformSystem } from "../../renderer/src/ECS/Systems/TransformSystem.ts";
-import { createEngineWorld, getEngineSab } from "./ECS/createEngineWorld.ts";
+import { createEngineWorld, getEngineComponents, getEngineSab } from "./ECS/createEngineWorld.ts";
 import { createApplyRigidBodyToTransformSystem } from "./ECS/Systems/createApplyRigidBodyToTransformSystem.ts";
 import { createPhysicsWorker } from "./Physics/createPhysicsWorker.ts";
 import { createRenderTarget } from "./createRenderTarget.ts";
 import { EngineDI, type EngineApi } from "./DI/EngineDI.ts";
 import { RenderDI } from "./DI/RenderDI.ts";
-import { stubChildren } from "./lib/constants.ts";
 
 export type CreateEngineOptions = {
   canvas?: HTMLCanvasElement | null;
@@ -30,7 +29,7 @@ export async function createEngine({
   const world = createEngineWorld();
   const physicsWorker = createPhysicsWorker(getEngineSab(world).bundle);
 
-  const execTransformSystem = createTransformSystem(world, stubChildren);
+  const execTransformSystem = createTransformSystem(world, getEngineComponents(world).Children);
   const applyRigidBodyToLocalTransform = createApplyRigidBodyToTransformSystem(world);
 
   function tick(delta: number): void {

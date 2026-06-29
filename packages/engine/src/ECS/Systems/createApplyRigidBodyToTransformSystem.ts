@@ -19,21 +19,9 @@ export function createApplyRigidBodyToTransformSystem(world: EngineWorld): () =>
 
   const _q = quat.create();
   const _t = vec3.create();
-  let frameLog = 0;
 
   return function applyRigidBodyToLocalTransform() {
     const entities = query(world, [LocalTransform, RigidBodyState]);
-    if (frameLog < 10) {
-      const e0 = entities[0];
-      console.log(
-        "[main] apply frame#", frameLog,
-        "entities", entities.length,
-        e0 !== undefined
-          ? `eid0=${e0} pose=(${RigidBodyState.position.get(e0, 0).toFixed(2)},${RigidBodyState.position.get(e0, 1).toFixed(2)},${RigidBodyState.position.get(e0, 2).toFixed(2)})`
-          : "(no entities)",
-      );
-      frameLog++;
-    }
     for (let i = 0; i < entities.length; i++) {
       const eid = entities[i];
 

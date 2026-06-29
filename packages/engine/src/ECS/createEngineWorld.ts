@@ -4,6 +4,7 @@ import { createEngineComponents } from "./components.ts";
 import { bindBundle, type Sab } from "../../../common/src/sab/sab.ts";
 import { getComponentSab, setComponentSabFactory } from "../../../common/src/component.ts";
 import { allocate, type SabBundle } from "../../../common/src/sab/registry.ts";
+import { adoptEntity } from "../../../common/src/sab/adoptEntity.ts";
 
 export type PhysicsComponents = ReturnType<typeof createEngineComponents>;
 export type PhysicsWorkerWorld = World<{ components: PhysicsComponents }>;
@@ -48,6 +49,11 @@ export function getEngineSab(world: World): Sab {
   return sab as Sab;
 }
 
+// Allocate the next shared-counter eid AND materialize it in this world. The SAB
+// counter is the single eid authority across the main + worker worlds; callers just
+// get a live eid back and never touch the SAB.
 export function createEntityId(world: World): number {
-  return getEngineSab(world).nextEid();
+  const eid = getEngineSab(world).nextEid();
+  adoptEntity(world, eid);
+  return eid;
 }

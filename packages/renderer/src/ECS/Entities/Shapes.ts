@@ -3,14 +3,12 @@ import { addTransformComponents, applyMatrixTranslate } from "../Components/Tran
 import { TColor } from "../Components/Common.ts";
 import { ShapeKind } from "../Components/Shape.ts";
 import { getRenderComponents, type RenderWorld } from "../world.ts";
-import { adoptEntity } from "../../../../common/src/sab/adoptEntity.ts";
-
-// Entity id source. When `eid` is supplied (the engine's shared-counter path,
-// plan §4.2/§6.3) the world ADOPTS that exact id; otherwise bitecs allocates one
-// from its own per-world counter (single-world renderer-only callers). Keeping
-// this one helper means every shape factory honors a caller-chosen eid for free.
+// Entity id source. When `eid` is supplied it is a LIVE eid the caller already
+// materialized (the engine's shared-counter path via createEntityId, plan §4.2/§6.3),
+// so it is used as-is; otherwise bitecs allocates one from its own per-world counter
+// (single-world renderer-only callers).
 function createOrAdoptEntity(world: RenderWorld, eid?: number): number {
-  return eid === undefined ? addEntity(world) : adoptEntity(world, eid);
+  return eid === undefined ? addEntity(world) : eid;
 }
 
 // A sphere is the only true-3D primitive: its radius alone defines its vertical
@@ -163,6 +161,7 @@ export function createTrapezoid(
     color,
     roundness,
     depth,
+    eid,
   }: {
     x: number;
     y: number;
@@ -173,10 +172,11 @@ export function createTrapezoid(
     color: TColor;
     roundness?: number;
     depth?: number;
+    eid?: number;
   },
 ) {
   const { Color, LocalTransform, Roundness, Shape } = getRenderComponents(world);
-  const id = addEntity(world);
+  const id = createOrAdoptEntity(world, eid);
 
   addTransformComponents(world, id);
   applyMatrixTranslate(LocalTransform.matrix.getBatch(id), x, y, z);
