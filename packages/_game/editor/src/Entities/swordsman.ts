@@ -3,18 +3,16 @@ import {
   getEngineComponents,
   type EngineWorld,
 } from "../../../../engine/src/ECS/createEngineWorld.ts";
-import { makeBlendLayer } from "../anim/blend.ts";
-import { buildClipPlayer } from "../anim/registry.ts";
+import { clipLayer, combineAnimations, proceduralLayer } from "../anim/layer.ts";
+import { sampleKeys, type Key } from "../anim/curve.ts";
 import { SWORD_SWING } from "../anim/presets/index.ts";
-import type { EntityAnimations, EntityInstance, EntityOptions } from "./registry.ts";
+import type { EntityInstance, EntityOptions } from "./registry.ts";
 import type { UnitInstance } from "./unit.ts";
 
 export type SwordsmanParts = {
   unit: (world: EngineWorld, options: EntityOptions) => UnitInstance;
   sword: (world: EngineWorld, options: EntityOptions) => EntityInstance;
 };
-
-type Key = { at: number; v: number };
 
 const DEG = Math.PI / 180;
 const SWORD_REL = 1.5;
@@ -32,19 +30,6 @@ const LUNGE_KEYS: Key[] = [
   { at: 0.62, v: 1 },
   { at: 1.0, v: 0 },
 ];
-
-function smoothstep(x: number): number {
-  return x * x * (3 - 2 * x);
-}
-
-function sampleKeys(keys: Key[], p: number): number {
-  for (let i = 0; i < keys.length - 1; i++) {
-    const a = keys[i];
-    const b = keys[i + 1];
-    if (p <= b.at) return a.v + (b.v - a.v) * smoothstep((p - a.at) / (b.at - a.at));
-  }
-  return keys[keys.length - 1].v;
-}
 
 // A swordsman = a unit holding a weapon in its right hand (the unit's exposed `hand`). The weapon
 // is parented to the hand, so it follows the arm in every animation. `sword_slice` plays an authored
@@ -67,7 +52,7 @@ export function buildSwordsman(
   const restArmX = armMatrix[12];
   const restArmZ = armMatrix[14];
 
-  const lunge = makeBlendLayer(LUNGE_CYCLE, (phase, weight) => {
+  const sword_lunge = proceduralLayer(LUNGE_CYCLE, (phase, weight) => {
     const reach = sampleKeys(LUNGE_KEYS, phase);
     let px = restArmX;
     let py = 0;
@@ -85,30 +70,9 @@ export function buildSwordsman(
     rootMatrix[13] += Math.max(0, reach) * LUNGE_BODY * weight;
   });
 
-  const slice = makeBlendLayer(
-    SWORD_SWING.duration,
-    buildClipPlayer(world, SWORD_SWING, { root: unit.root, bones }),
-  );
+  const sword_slice = clipLayer(world, SWORD_SWING, { root: unit.root, bones });
 
-  const animations: EntityAnimations = {};
-  for (const name in unit.animations) {
-    const unitAnim = unit.animations[name];
-    animations[name] = (delta: number) => {
-      unitAnim(delta);
-      lunge(delta, 0);
-      slice(delta, 0);
-    };
-  }
-  animations.sword_slice = (delta: number) => {
-    unit.animations.idle?.(delta);
-    lunge(delta, 0);
-    slice(delta, 1);
-  };
-  animations.lunge = (delta: number) => {
-    unit.animations.idle?.(delta);
-    lunge(delta, 1);
-    slice(delta, 0);
-  };
+  const animations = combineAnimations(unit.animations, { sword_slice, sword_lunge });
 
   return { root: unit.root, bones, animations };
 }

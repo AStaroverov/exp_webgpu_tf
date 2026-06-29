@@ -11,7 +11,7 @@ import {
   getEngineComponents,
   type EngineWorld,
 } from "../../../../engine/src/ECS/createEngineWorld.ts";
-import { makeBlendLayer } from "../anim/blend.ts";
+import { proceduralLayer, type Layer } from "../anim/layer.ts";
 import type { EntityAnimations, EntityInstance, EntityOptions } from "./registry.ts";
 
 const COLOR: TColor = [0.13, 0.34, 0.56, 1];
@@ -90,6 +90,7 @@ function buildStructure(world: EngineWorld, scale: number): UnitParts {
     eid: createEntityId(world),
   });
   add(armL);
+  Children.addComponent(world, armL);
   const armR = createRectangle(world, {
     x: armX,
     y: 0,
@@ -141,8 +142,8 @@ function buildAnimations(world: EngineWorld, p: UnitParts): EntityAnimations {
 
   // movement/death are weighted layers added onto the rest pose (REST + Σ weight·(target − REST)),
   // so each eases in/out on its own and is skipped while its weight is ~0 — same as the swordsman stances.
-  function overlay(target: Pose): (delta: number, weight: number) => void {
-    return makeBlendLayer(
+  function overlay(target: Pose): Layer {
+    return proceduralLayer(
       1,
       (_phase, weight) => {
         for (const k of poseKeys) pose[k] += (target[k] - REST[k]) * weight;
@@ -190,7 +191,7 @@ function buildAnimations(world: EngineWorld, p: UnitParts): EntityAnimations {
 
   return {
     idle: (delta) => frame(delta, 0, 0),
-    movement: (delta) => frame(delta, 1, 0),
     death: (delta) => frame(delta, 0, 1),
+    movement: (delta) => frame(delta, 1, 0),
   };
 }

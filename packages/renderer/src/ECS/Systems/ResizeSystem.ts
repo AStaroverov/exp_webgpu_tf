@@ -25,6 +25,10 @@ export const sceneLightDir = vec3.normalize(
 // Camera position in world coordinates (the look-at target on the ground plane).
 export const cameraPosition = { x: 0, y: 0 };
 
+// Height (world Z) of the look-at target. Zoom scales the frustum around the target, so set this to
+// the focus point's height (e.g. an entity's center) to keep it screen-centered while zooming.
+export const cameraHeight = { value: 0 };
+
 // Camera zoom: >1 zooms in, <1 zooms out (shows more of the world).
 export const cameraZoom = { value: 1 };
 
@@ -64,6 +68,7 @@ export function createResizeSystem(canvas: HTMLCanvasElement, getPixelRatio: () 
   let prevCameraZoom = cameraZoom.value;
   let prevCameraElevation = cameraElevation.value;
   let prevCameraAzimuth = cameraAzimuth.value;
+  let prevCameraHeight = cameraHeight.value;
 
   canvas.width = width * pixelRatio;
   canvas.height = height * pixelRatio;
@@ -94,7 +99,7 @@ export function createResizeSystem(canvas: HTMLCanvasElement, getPixelRatio: () 
     // visible volume is roughly centered (mirrors the prototype's target.z).
     target[0] = cameraPosition.x;
     target[1] = cameraPosition.y;
-    target[2] = 0;
+    target[2] = cameraHeight.value;
 
     // Camera sits along a tilted direction at a large fixed distance; the
     // orthographic near/far planes give the usable depth range.
@@ -129,7 +134,8 @@ export function createResizeSystem(canvas: HTMLCanvasElement, getPixelRatio: () 
       prevCameraY !== cameraPosition.y ||
       prevCameraZoom !== cameraZoom.value ||
       prevCameraElevation !== cameraElevation.value ||
-      prevCameraAzimuth !== cameraAzimuth.value;
+      prevCameraAzimuth !== cameraAzimuth.value ||
+      prevCameraHeight !== cameraHeight.value;
 
     if (!sizeChanged && !cameraChanged) return;
 
@@ -148,5 +154,6 @@ export function createResizeSystem(canvas: HTMLCanvasElement, getPixelRatio: () 
     prevCameraZoom = cameraZoom.value;
     prevCameraElevation = cameraElevation.value;
     prevCameraAzimuth = cameraAzimuth.value;
+    prevCameraHeight = cameraHeight.value;
   };
 }

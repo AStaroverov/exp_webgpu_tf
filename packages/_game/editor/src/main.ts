@@ -14,6 +14,7 @@ import { SunLight } from "../../../renderer/src/ECS/Systems/SunLight.ts";
 import {
   cameraAzimuth,
   cameraElevation,
+  cameraHeight,
   cameraZoom,
   setCameraAzimuth,
   setCameraElevation,
@@ -21,14 +22,8 @@ import {
   setCameraZoom,
 } from "../../../renderer/src/ECS/Systems/ResizeSystem.ts";
 import { ENTITIES, type EntityAnimations, type EntityInstance } from "./Entities/registry.ts";
-import { registerDemoClips } from "./anim/example.ts";
 import { clips$, makeClipAnimations, registerClip } from "./anim/registry.ts";
-import {
-  animatableBones,
-  editToClip,
-  snapshotPose,
-  type EditClip,
-} from "./anim/editclip.ts";
+import { animatableBones, editToClip, snapshotPose, type EditClip } from "./anim/editclip.ts";
 import { readPose, writePose, type Pose } from "./anim/pose.ts";
 import {
   EDIT,
@@ -71,8 +66,6 @@ async function main(): Promise<void> {
     "Each record has a key + % time; same key merges into one keyframe. Set Duration, " +
     "pick the clip by name in Animation to preview, Log clip → console.";
 
-  registerDemoClips();
-
   const engine = await createEngine({ canvas });
   const world = engine.world as EngineWorld;
   const sceneRoot = engine.sceneRoot;
@@ -107,7 +100,11 @@ async function main(): Promise<void> {
     if (hasComponent(world, eid, Children)) {
       const count = Children.entitiesCount.get(eid);
       for (let i = 0; i < count; i++) {
-        appendNode(Children.entitiesIds.get(eid, i), nodeLabel(Children.entitiesIds.get(eid, i)), depth + 1);
+        appendNode(
+          Children.entitiesIds.get(eid, i),
+          nodeLabel(Children.entitiesIds.get(eid, i)),
+          depth + 1,
+        );
       }
     }
   }
@@ -256,8 +253,19 @@ async function main(): Promise<void> {
   SunLight.intensity = 0.9;
   SunLight.color = [1.0, 0.93, 0.82];
 
-  setCameraPosition(0, 2.5);
+  setCameraPosition(0, 0);
+  cameraHeight.value = 1.5;
   cameraZoom.value = 48;
+
+  // Point the camera (and thus the zoom pivot) at a selected entity's world position. Read after a
+  // tick so the GlobalTransform is fresh — a just-built entity still has the identity matrix.
+  let pendingFocus = -1;
+  function focusCamera(eid: number): void {
+    if (eid < 0 || !hasComponent(world, eid, components.GlobalTransform)) return;
+    const m = components.GlobalTransform.matrix.getBatch(eid);
+    setCameraPosition(m[12], m[13]);
+    cameraHeight.value = m[14];
+  }
   cameraElevation.value = 55;
   cameraAzimuth.value = 45;
 
@@ -332,6 +340,7 @@ async function main(): Promise<void> {
       applyHighlight(eid);
       renderComponents(eid);
       readInspector(eid);
+      pendingFocus = eid;
     }),
   );
 
@@ -342,17 +351,21 @@ async function main(): Promise<void> {
       readInspector(selectedEid$.value);
     }),
   );
-  subs.add(fromEvent(animSelectEl, "change").subscribe(() => selectedAnimation$.next(animSelectEl.value)));
+  subs.add(
+    fromEvent(animSelectEl, "change").subscribe(() => selectedAnimation$.next(animSelectEl.value)),
+  );
 
   for (const key of poseKeys) {
     subs.add(fromEvent(poseFields[key], "input").subscribe(() => writeInspector()));
   }
 
   subs.add(clips$.subscribe(() => refreshAnimations()));
-  subs.add(editClip$.subscribe((edit) => {
-    renderRecords(edit);
-    if (edit !== null) registerEdit(edit);
-  }));
+  subs.add(
+    editClip$.subscribe((edit) => {
+      renderRecords(edit);
+      if (edit !== null) registerEdit(edit);
+    }),
+  );
 
   subs.add(fromEvent(snapshotEl, "click").subscribe(() => snapshot()));
   subs.add(fromEvent(logClipEl, "click").subscribe(() => logClip()));
@@ -463,6 +476,10 @@ async function main(): Promise<void> {
       }
     }
     engine.tick(delta);
+    if (pendingFocus >= 0) {
+      focusCamera(pendingFocus);
+      pendingFocus = -1;
+    }
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);
