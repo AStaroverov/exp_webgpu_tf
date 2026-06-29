@@ -14,10 +14,11 @@ import {
 const COLOR: TColor = [0.13, 0.34, 0.56, 1];
 const HOVER = 0.7;
 
-let animTimer: ReturnType<typeof setInterval> | undefined;
-
+// A unit (dark blue, one root + children): a downward-tapering pyramid torso (no legs),
+// two small cube arms beside it, and a head cube floating a short gap above the torso. The
+// torso is a trapezoid whose taper is horizontal in its own footprint; rotating it 90° about
+// X stands the taper up so it is wide at the top and narrow at the bottom.
 export function buildUnit(world: EngineWorld): number {
-  if (animTimer !== undefined) clearInterval(animTimer);
   const { Children, LocalTransform } = getEngineComponents(world);
 
   const root = createEntityId(world);
@@ -27,25 +28,27 @@ export function buildUnit(world: EngineWorld): number {
 
   const add = (eid: number) => Children.addChild(root, eid);
 
-  const bodyDepth = 2.4;
-  let body = createTrapezoid(world, {
+  const bodyHeight = 2.2;
+  const body = createTrapezoid(world, {
     x: 0,
     y: 0,
-    z: bodyDepth / 2,
-    topWidth: 1.7,
-    bottomWidth: 0.6,
-    height: 1.1,
-    depth: bodyDepth,
+    z: bodyHeight / 2,
+    topWidth: 1.4,
+    bottomWidth: 0.4,
+    height: bodyHeight,
+    depth: 1.0,
     color: COLOR,
     eid: createEntityId(world),
   });
+  const bodyMatrix = LocalTransform.matrix.getBatch(body);
+  mat4.rotateX(bodyMatrix, bodyMatrix, Math.PI / 2);
   add(body);
 
-  const armSize = 0.45;
-  const armZ = 1.5;
+  const armSize = 0.35;
+  const armZ = bodyHeight * 0.45;
   add(
     createRectangle(world, {
-      x: -1.0,
+      x: -0.9,
       y: 0,
       z: armZ,
       width: armSize,
@@ -57,7 +60,7 @@ export function buildUnit(world: EngineWorld): number {
   );
   add(
     createRectangle(world, {
-      x: 1.0,
+      x: 0.9,
       y: 0,
       z: armZ,
       width: armSize,
@@ -68,12 +71,13 @@ export function buildUnit(world: EngineWorld): number {
     }),
   );
 
-  const headSize = 0.7;
+  const headSize = 0.6;
+  const headGap = 0.3;
   add(
     createRectangle(world, {
       x: 0,
       y: 0,
-      z: bodyDepth + 0.5 + headSize / 2,
+      z: bodyHeight + headGap + headSize / 2,
       width: headSize,
       height: headSize,
       depth: headSize,
@@ -81,20 +85,6 @@ export function buildUnit(world: EngineWorld): number {
       eid: createEntityId(world),
     }),
   );
-
-  const bodyPos: [number, number, number] = [0, 0, bodyDepth / 2];
-  let elapsed = 0;
-  animTimer = setInterval(() => {
-    elapsed += 0.033;
-    const axis = Math.floor(elapsed / 3) % 3;
-    const angle = ((elapsed % 3) / 3) * Math.PI * 2;
-    const m = LocalTransform.matrix.getBatch(body);
-    mat4.identity(m);
-    mat4.translate(m, m, bodyPos);
-    if (axis === 0) mat4.rotateX(m, m, angle);
-    else if (axis === 1) mat4.rotateY(m, m, angle);
-    else mat4.rotateZ(m, m, angle);
-  }, 33);
 
   return root;
 }
