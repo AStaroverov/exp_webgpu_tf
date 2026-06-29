@@ -142,7 +142,7 @@ export const shaderMeta = new ShaderMeta(
             // Unit-cube corner scaled by footprint half-extents + half-height,
             // rotated by the full instance basis into world.
             let scaled = corner * vec3<f32>(halfXY.x, halfXY.y, hz);
-            let world = center + instance_rot(transform) * scaled;
+            let world = center + instance_rot(transform) * (scaled * instance_scale(transform));
 
             var out: VertexOutput;
             out.position = uViewProj * vec4<f32>(world, 1.0);
@@ -168,11 +168,14 @@ export const shaderMeta = new ShaderMeta(
             let hz = footprint_half_z(instance_index);
             let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z);
             let Rm = instance_rot(transform);
+            let s = instance_scale(transform);
 
             // World ray (origin = this fragment's box-surface point) → instance-local
             // space (transpose(R) = inverse rotation; rigid transform preserves distances).
+            // Divide the point by s so the SDF is evaluated at the unscaled footprint; the
+            // direction is scale-invariant.
             let relW = world - center;
-            let lo = transpose(Rm) * relW;
+            let lo = (transpose(Rm) * relW) / s;
             let ld = normalize(transpose(Rm) * uRayDir.xyz);
 
             // Slab test against the local AABB (footprint half-extents + half-height).
@@ -214,9 +217,10 @@ export const shaderMeta = new ShaderMeta(
             let pLocal = lo + ld * t;
             let nLocal = sd_normal3d(pLocal, instance_index);
 
-            // Back to world (forward rotation).
+            // Back to world (forward rotation + uniform scale; normal direction is
+            // scale-invariant after renormalize).
             let nWorld = normalize(Rm * nLocal);
-            let pWorld = center + Rm * pLocal;
+            let pWorld = center + Rm * (pLocal * s);
 
             let clip = uViewProj * vec4<f32>(pWorld, 1.0);
 
@@ -280,7 +284,7 @@ export const shaderMeta = new ShaderMeta(
             let corner = CUBE[vertex_index];
 
             let scaled = corner * vec3<f32>(halfXY.x, halfXY.y, hz);
-            let world = center + instance_rot(transform) * scaled;
+            let world = center + instance_rot(transform) * (scaled * instance_scale(transform));
 
             var out: VertexOutput;
             out.position = uViewProj * vec4<f32>(world, 1.0);
@@ -304,10 +308,11 @@ export const shaderMeta = new ShaderMeta(
             let hz = footprint_half_z(instance_index);
             let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z);
             let Rm = instance_rot(transform);
+            let s = instance_scale(transform);
 
             // World ray -> instance-local space (same as fs_main).
             let relW = world - center;
-            let lo = transpose(Rm) * relW;
+            let lo = (transpose(Rm) * relW) / s;
             let ld = normalize(transpose(Rm) * uRayDir.xyz);
 
             // Slab test against the local AABB.

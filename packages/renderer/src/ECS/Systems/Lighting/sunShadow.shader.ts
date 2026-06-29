@@ -111,7 +111,7 @@ export const shaderMeta = new ShaderMeta(
             let corner = CUBE[vertex_index];
 
             let scaled = corner * vec3<f32>(halfXY.x, halfXY.y, hz);
-            let world = center + instance_rot(transform) * scaled;
+            let world = center + instance_rot(transform) * (scaled * instance_scale(transform));
 
             var out: VertexOutput;
             // Rasterize through the SUN view-projection (uViewProj is the sun matrix here).
@@ -138,11 +138,12 @@ export const shaderMeta = new ShaderMeta(
             let hz = footprint_half_z(instance_index);
             let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z);
             let Rm = instance_rot(transform);
+            let s = instance_scale(transform);
 
             // World ray (origin = this fragment's box-surface point) → instance-local space
             // (transpose(R) = inverse rotation). The ray direction is the SUN travel direction (uRayDir).
             let relW = world - center;
-            let lo = transpose(Rm) * relW;
+            let lo = (transpose(Rm) * relW) / s;
             let ld = normalize(transpose(Rm) * uRayDir.xyz);
 
             // Slab test against the local AABB (footprint half-extents + half-height).
@@ -180,8 +181,8 @@ export const shaderMeta = new ShaderMeta(
 
             let pLocal = lo + ld * t;
 
-            // Back to world (forward rotation), then to sun clip space.
-            let pWorld = center + Rm * pLocal;
+            // Back to world (forward rotation + uniform scale), then to sun clip space.
+            let pWorld = center + Rm * (pLocal * s);
             let clip = uViewProj * vec4<f32>(pWorld, 1.0);
 
             // Standard depth (orthoZO, z in [0,1]); the pipeline compares "less-equal".

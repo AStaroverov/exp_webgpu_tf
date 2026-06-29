@@ -208,8 +208,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let tr = uTransform[ins];
   let center = vec3<f32>(tr[3].x, tr[3].y, tr[3].z);
   let Rm = instance_rot(tr);
+  let s = instance_scale(tr);
   let rel = world - center;
-  let lp = transpose(Rm) * rel;
+  let lp = (transpose(Rm) * rel) / s;
   let d = sd_shape3d(lp, ins);
 
   // Conservative "iso-surface crosses this voxel": within half the voxel diagonal. NOT solid

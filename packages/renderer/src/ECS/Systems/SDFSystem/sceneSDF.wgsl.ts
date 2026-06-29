@@ -21,6 +21,13 @@ export const sceneSDF = wgsl /* WGSL */ `
             return mat3x3<f32>(normalize(t[0].xyz), normalize(t[1].xyz), normalize(t[2].xyz));
         }
 
+        // Uniform scale baked into the rigid transform: every column has length s, so
+        // column 0 alone gives it. The SDF is evaluated at the UNSCALED footprint, so the
+        // draw path divides the local point by s and multiplies the hit point back by s.
+        fn instance_scale(t: mat4x4<f32>) -> f32 {
+            return length(t[0].xyz);
+        }
+
         fn op_round(d: f32, r: f32) -> f32 {
             return d - r;
         }

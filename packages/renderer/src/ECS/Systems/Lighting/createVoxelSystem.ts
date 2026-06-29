@@ -977,9 +977,13 @@ export function createVoxelSystem({
       const m8 = Math.abs(tr[k * 16 + 8]);
       const m9 = Math.abs(tr[k * 16 + 9]);
       const m10 = Math.abs(tr[k * 16 + 10]);
-      const halfWX = m0 * hLocalXY + m4 * hLocalXY + m8 * hLocalZ + round + cellSize;
-      const halfWY = m1 * hLocalXY + m5 * hLocalXY + m9 * hLocalZ + round + cellSize;
-      const halfWZ = m2 * hLocalXY + m6 * hLocalXY + m10 * hLocalZ + round + cellSize;
+      // Raw matrix columns already carry the uniform scale s (length of each column), so the
+      // m*hLocal products are already abs(R)*(hLocal*s). The `round` term is in unscaled-local
+      // units and must scale by s too; `cellSize` is a grid constant and stays unscaled.
+      const s = Math.hypot(tr[k * 16 + 0], tr[k * 16 + 1], tr[k * 16 + 2]);
+      const halfWX = m0 * hLocalXY + m4 * hLocalXY + m8 * hLocalZ + round * s + cellSize;
+      const halfWY = m1 * hLocalXY + m5 * hLocalXY + m9 * hLocalZ + round * s + cellSize;
+      const halfWZ = m2 * hLocalXY + m6 * hLocalXY + m10 * hLocalZ + round * s + cellSize;
 
       const minX = cx - halfWX;
       const maxX = cx + halfWX;
