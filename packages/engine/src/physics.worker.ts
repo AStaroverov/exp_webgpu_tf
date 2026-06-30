@@ -22,8 +22,10 @@ import {
   decodeOp,
   isInitMessage,
   isMoveBody,
+  isSetVelocity,
   isSpawnBody,
   type MoveBodyOp,
+  type SetVelocityOp,
   type SpawnBodyOp,
   type WorkerInbound,
   type WorkerOutbound,
@@ -118,8 +120,21 @@ function drainOps(): void {
     const op = decodeOp(opcode, payload, slot);
     if (isSpawnBody(op)) spawnBody(op);
     else if (isMoveBody(op)) moveBody(op);
+    else if (isSetVelocity(op)) setVelocity(op);
     else despawnBody(op.eid);
   });
+}
+
+function setVelocity(op: SetVelocityOp): void {
+  const w = world!;
+  const pw = physicalWorld!;
+  const { RigidBodyRef } = getEngineComponents(w);
+
+  const pid = RigidBodyRef.id[op.eid];
+  if (pid !== 0) {
+    const body = pw.getRigidBody(pid);
+    if (body) body.setLinvel({ x: op.x, y: op.y, z: op.z }, true);
+  }
 }
 
 function moveBody(op: MoveBodyOp): void {

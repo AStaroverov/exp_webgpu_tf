@@ -6,6 +6,7 @@ export const OpCode = {
   SPAWN_BODY: 1,
   DESPAWN_BODY: 2,
   MOVE_BODY: 3,
+  SET_VELOCITY: 4,
 } as const;
 export type OpCode = (typeof OpCode)[keyof typeof OpCode];
 
@@ -46,7 +47,18 @@ export type MoveBodyOp = {
   readonly qw: number;
 };
 
-export type StructuralOp = SpawnBodyOp | DespawnBodyOp | MoveBodyOp;
+// Set a body's LINEAR velocity (the kinematic-by-velocity steering channel). The
+// producer-side Velocity component → createApplyVelocitySystem emits this; the worker
+// applies it with setLinvel. Not structural — it mutates a live body, like MOVE_BODY.
+export type SetVelocityOp = {
+  readonly op: typeof OpCode.SET_VELOCITY;
+  readonly eid: number;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+};
+
+export type StructuralOp = SpawnBodyOp | DespawnBodyOp | MoveBodyOp | SetVelocityOp;
 
 export function toSpawnOp(eid: number, spec: BodySpec): SpawnBodyOp {
   return { op: OpCode.SPAWN_BODY, eid, ...spec };
@@ -83,6 +95,10 @@ export function despawnBody(eid: number): DespawnBodyOp {
   return { op: OpCode.DESPAWN_BODY, eid };
 }
 
+export function setVelocity(eid: number, x: number, y: number, z: number): SetVelocityOp {
+  return { op: OpCode.SET_VELOCITY, eid, x, y, z };
+}
+
 export function moveBody(eid: number, pos: Vec3, rot: { x: number; y: number; z: number; w: number }): MoveBodyOp {
   return {
     op: OpCode.MOVE_BODY,
@@ -111,6 +127,10 @@ export function isMoveBody(op: StructuralOp): op is MoveBodyOp {
   return op.op === OpCode.MOVE_BODY;
 }
 
+export function isSetVelocity(op: StructuralOp): op is SetVelocityOp {
+  return op.op === OpCode.SET_VELOCITY;
+}
+
 // ---- OPS-ring record codec (plan §4.3) --------------------------------------
 const KIND_CODE = { box: 0, groundBox: 1, sphere: 2 } as const;
 
@@ -128,6 +148,12 @@ export function encodeOp(op: StructuralOp, payload: Float64Array, slot: number):
     payload[b + 6] = op.qz;
     payload[b + 7] = op.qw;
     return OpCode.MOVE_BODY;
+  }
+  if (op.op === OpCode.SET_VELOCITY) {
+    payload[b + 1] = op.x;
+    payload[b + 2] = op.y;
+    payload[b + 3] = op.z;
+    return OpCode.SET_VELOCITY;
   }
   payload[b + 1] = op.bodyType === "fixed" ? 1 : 0;
   payload[b + 2] = KIND_CODE[op.kind];
@@ -161,6 +187,9 @@ export function decodeOp(opcode: number, payload: Float64Array, slot: number): S
       qz: payload[b + 6],
       qw: payload[b + 7],
     };
+  }
+  if (opcode === OpCode.SET_VELOCITY) {
+    return { op: OpCode.SET_VELOCITY, eid, x: payload[b + 1], y: payload[b + 2], z: payload[b + 3] };
   }
   const bodyType = payload[b + 1] === 1 ? "fixed" : "dynamic";
   const position: Vec3 = { x: payload[b + 3], y: payload[b + 4], z: payload[b + 5] };

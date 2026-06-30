@@ -7,6 +7,7 @@ import {
   getEngineSab,
 } from "./ECS/createEngineWorld.ts";
 import { createApplyRigidBodyToTransformSystem } from "./ECS/Systems/createApplyRigidBodyToTransformSystem.ts";
+import { createApplyVelocitySystem } from "./ECS/Systems/createApplyVelocitySystem.ts";
 import { createPhysicsWorker } from "./Physics/createPhysicsWorker.ts";
 import { createRenderTarget } from "./createRenderTarget.ts";
 import { EngineDI, type EngineApi } from "./DI/EngineDI.ts";
@@ -43,8 +44,10 @@ export async function createEngine({
 
   const execTransformSystem = createTransformSystem(world, getEngineComponents(world).Children, sceneRoot);
   const applyRigidBodyToLocalTransform = createApplyRigidBodyToTransformSystem(world);
+  const applyVelocity = createApplyVelocitySystem(world);
 
   function tick(delta: number): void {
+    applyVelocity();
     applyRigidBodyToLocalTransform();
     execTransformSystem();
     RenderDI.renderFrame?.(delta);
