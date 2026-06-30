@@ -1,16 +1,16 @@
 import { mat4 } from "gl-matrix";
-import { createCircle } from "../../../../renderer/src/ECS/Entities/Shapes.ts";
+import { createCircle } from "../../../renderer/src/ECS/Entities/Shapes.js";
 import {
   addTransformComponents,
   applyMatrixScale,
-} from "../../../../renderer/src/ECS/Components/Transform.ts";
-import type { TColor } from "../../../../renderer/src/ECS/Components/Common.ts";
+} from "../../../renderer/src/ECS/Components/Transform.js";
+import type { TColor } from "../../../renderer/src/ECS/Components/Common.js";
 import {
   createEntityId,
   getEngineComponents,
   type EngineWorld,
-} from "../../../../engine/src/ECS/createEngineWorld.ts";
-import type { EntityInstance, EntityOptions } from "./registry.ts";
+} from "../../../engine/src/ECS/createEngineWorld.js";
+import type { EntityInstance, EntityOptions } from "./registry.js";
 
 const WOOD: TColor = [0.42, 0.27, 0.12, 1];
 const STRING: TColor = [0.85, 0.82, 0.7, 1];

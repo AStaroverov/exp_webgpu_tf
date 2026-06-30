@@ -3,18 +3,18 @@ import {
   createCircle,
   createRectangle,
   createTriangle,
-} from "../../../../renderer/src/ECS/Entities/Shapes.ts";
+} from "../../../renderer/src/ECS/Entities/Shapes.js";
 import {
   addTransformComponents,
   applyMatrixScale,
-} from "../../../../renderer/src/ECS/Components/Transform.ts";
-import type { TColor } from "../../../../renderer/src/ECS/Components/Common.ts";
+} from "../../../renderer/src/ECS/Components/Transform.js";
+import type { TColor } from "../../../renderer/src/ECS/Components/Common.js";
 import {
   createEntityId,
   getEngineComponents,
   type EngineWorld,
-} from "../../../../engine/src/ECS/createEngineWorld.ts";
-import type { EntityInstance, EntityOptions } from "./registry.ts";
+} from "../../../engine/src/ECS/createEngineWorld.js";
+import type { EntityInstance, EntityOptions } from "./registry.js";
 
 const SHAFT: TColor = [0.5, 0.4, 0.28, 1];
 const HEAD: TColor = [1.0, 0.13, 0.1, 1];

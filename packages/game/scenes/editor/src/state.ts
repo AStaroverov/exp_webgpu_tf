@@ -1,6 +1,6 @@
 import { BehaviorSubject } from "rxjs";
-import { ENTITIES } from "./Entities/registry.ts";
-import type { EditClip } from "./anim/editclip.ts";
+import { ENTITIES } from "../../../src/Entities/registry.js";
+import type { EditClip } from "../../../src/anim/editclip.js";
 
 export function persistentState<T>(key: string, initial: T): BehaviorSubject<T> {
   let start = initial;

@@ -2,15 +2,15 @@ import { mat4 } from "gl-matrix";
 import {
   getEngineComponents,
   type EngineWorld,
-} from "../../../../engine/src/ECS/createEngineWorld.ts";
-import { combineAnimations, proceduralLayer } from "../anim/layer.ts";
-import { sampleKeys, type Key } from "../anim/curve.ts";
-import type { EntityInstance, EntityOptions } from "./registry.ts";
-import type { UnitInstance } from "./unit.ts";
+} from "../../../engine/src/ECS/createEngineWorld.js";
+import { combineAnimations, proceduralLayer } from "../anim/layer.js";
+import { sampleKeys, type Key } from "../anim/curve.js";
+import type { EntityInstance, EntityOptions } from "./registry.js";
+import type { UnitInstance } from "./unit.js";
 import {
   applyMatrixRotateZ,
   applyMatrixTranslate,
-} from "../../../../renderer/src/ECS/Components/Transform.ts";
+} from "../../../renderer/src/ECS/Components/Transform.js";
 
 export type ArcherParts = {
   unit: (world: EngineWorld, options: EntityOptions) => UnitInstance;

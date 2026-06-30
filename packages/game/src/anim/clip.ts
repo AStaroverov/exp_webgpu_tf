@@ -2,7 +2,7 @@ import { mat4, quat, vec3 } from "gl-matrix";
 import {
   getEngineComponents,
   type EngineWorld,
-} from "../../../../engine/src/ECS/createEngineWorld.ts";
+} from "../../../engine/src/ECS/createEngineWorld.js";
 
 export type Vec3 = [number, number, number];
 export type Quat = [number, number, number, number]; // gl-matrix order [x, y, z, w]

@@ -1,15 +1,15 @@
-import { createCircle } from "../../../../renderer/src/ECS/Entities/Shapes.ts";
+import { createCircle } from "../../../renderer/src/ECS/Entities/Shapes.js";
 import {
   addTransformComponents,
   applyMatrixScale,
-} from "../../../../renderer/src/ECS/Components/Transform.ts";
-import type { TColor } from "../../../../renderer/src/ECS/Components/Common.ts";
+} from "../../../renderer/src/ECS/Components/Transform.js";
+import type { TColor } from "../../../renderer/src/ECS/Components/Common.js";
 import {
   createEntityId,
   getEngineComponents,
   type EngineWorld,
-} from "../../../../engine/src/ECS/createEngineWorld.ts";
-import type { EntityInstance, EntityOptions } from "./registry.ts";
+} from "../../../engine/src/ECS/createEngineWorld.js";
+import type { EntityInstance, EntityOptions } from "./registry.js";
 
 const METAL: TColor = [0.55, 0.57, 0.62, 1];
 const BLADE: TColor = [0.55, 0.8, 1.0, 1];

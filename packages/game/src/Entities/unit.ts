@@ -1,18 +1,18 @@
 import { mat4 } from "gl-matrix";
-import { createRectangle, createTrapezoid } from "../../../../renderer/src/ECS/Entities/Shapes.ts";
+import { createRectangle, createTrapezoid } from "../../../renderer/src/ECS/Entities/Shapes.js";
 import {
   addTransformComponents,
   applyMatrixScale,
   applyMatrixTranslate,
-} from "../../../../renderer/src/ECS/Components/Transform.ts";
-import type { TColor } from "../../../../renderer/src/ECS/Components/Common.ts";
+} from "../../../renderer/src/ECS/Components/Transform.js";
+import type { TColor } from "../../../renderer/src/ECS/Components/Common.js";
 import {
   createEntityId,
   getEngineComponents,
   type EngineWorld,
-} from "../../../../engine/src/ECS/createEngineWorld.ts";
-import { proceduralLayer, type Layer } from "../anim/layer.ts";
-import type { EntityAnimations, EntityInstance, EntityOptions } from "./registry.ts";
+} from "../../../engine/src/ECS/createEngineWorld.js";
+import { proceduralLayer, type Layer } from "../anim/layer.js";
+import type { EntityAnimations, EntityInstance, EntityOptions } from "./registry.js";
 
 const COLOR: TColor = [0.13, 0.34, 0.56, 1];
 const HOVER = 0.7;

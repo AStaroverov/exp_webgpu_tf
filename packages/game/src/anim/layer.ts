@@ -1,8 +1,8 @@
-import type { EngineWorld } from "../../../../engine/src/ECS/createEngineWorld.ts";
-import type { EntityAnimations, EntityInstance } from "../Entities/registry.ts";
-import { makeBlendLayer } from "./blend.ts";
-import { buildClipPlayer } from "./registry.ts";
-import type { Clip } from "./clip.ts";
+import type { EngineWorld } from "../../../engine/src/ECS/createEngineWorld.js";
+import type { EntityAnimations, EntityInstance } from "../Entities/registry.js";
+import { makeBlendLayer } from "./blend.js";
+import { buildClipPlayer } from "./registry.js";
+import type { Clip } from "./clip.js";
 
 // A Layer is one weighted, self-clocked animation channel: `(delta, target)` eases its weight toward
 // `target` (1 = active, 0 = off, skipped while ~0) and, when live, poses bones for its phase. It is

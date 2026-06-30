@@ -2,16 +2,20 @@ import { mat4, quat, vec3 } from "gl-matrix";
 import {
   getEngineComponents,
   type EngineWorld,
-} from "../../../../engine/src/ECS/createEngineWorld.ts";
-import type { EntityInstance } from "../Entities/registry.ts";
-import type { Clip, Quat, Vec3 } from "./clip.ts";
+} from "../../../engine/src/ECS/createEngineWorld.js";
+import type { EntityInstance } from "../Entities/registry.js";
+import type { Clip, Quat, Vec3 } from "./clip.js";
 
 // Authoring model: each Snapshot appends a RECORD — a whole-entity pose (every animatable bone's
 // transform) tagged with a keyframe `key` and a `pct` of the total duration. Records that share a
 // `key` collapse into one keyframe, merging bone-wise in record order (later wins), so a keyframe
 // can be built up over several snapshots. This is what the right-panel pipeline edits; it converts
 // to the track-based Clip the player + log consume.
-export type SnapRecord = { key: number; pct: number; pose: Record<string, { pos: Vec3; rot: Quat }> };
+export type SnapRecord = {
+  key: number;
+  pct: number;
+  pose: Record<string, { pos: Vec3; rot: Quat }>;
+};
 
 export type EditClip = {
   entityId: string;

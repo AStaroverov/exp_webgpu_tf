@@ -1,11 +1,11 @@
-import type { EngineWorld } from "../../../../engine/src/ECS/createEngineWorld.ts";
-import { buildTree } from "./tree.ts";
-import { buildUnit } from "./unit.ts";
-import { buildLightsaber } from "./lightsaber.ts";
-import { buildBow } from "./bow.ts";
-import { buildArrow } from "./arrow.ts";
-import { buildSwordsman } from "./swordsman.ts";
-import { buildArcher } from "./archer.ts";
+import type { EngineWorld } from "../../../engine/src/ECS/createEngineWorld.js";
+import { buildTree } from "./tree.js";
+import { buildUnit } from "./unit.js";
+import { buildLightsaber } from "./lightsaber.js";
+import { buildBow } from "./bow.js";
+import { buildArrow } from "./arrow.js";
+import { buildSwordsman } from "./swordsman.js";
+import { buildArcher } from "./archer.js";
 
 export type EntityAnimations = Record<string, (delta: number) => void>;
 

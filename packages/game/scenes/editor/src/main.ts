@@ -1,16 +1,16 @@
 import { hasComponent } from "bitecs";
 import { fromEvent, map, Subject, Subscription, switchMap, takeUntil } from "rxjs";
-import { createEngine } from "../../../engine/src/createEngine.ts";
+import { createEngine } from "../../../../engine/src/createEngine.js";
 import {
   createEntityId,
   type EngineComponents,
   type EngineWorld,
   getEngineComponents,
-} from "../../../engine/src/ECS/createEngineWorld.ts";
-import { removeEntityTree } from "../../../engine/src/ECS/hierarchy.ts";
-import { ShapeKind } from "../../../renderer/src/ECS/Components/Shape.ts";
-import { createRectangle } from "../../../renderer/src/ECS/Entities/Shapes.ts";
-import { SunLight } from "../../../renderer/src/ECS/Systems/SunLight.ts";
+} from "../../../../engine/src/ECS/createEngineWorld.js";
+import { removeEntityTree } from "../../../../engine/src/ECS/hierarchy.js";
+import { ShapeKind } from "../../../../renderer/src/ECS/Components/Shape.js";
+import { createRectangle } from "../../../../renderer/src/ECS/Entities/Shapes.js";
+import { SunLight } from "../../../../renderer/src/ECS/Systems/SunLight.js";
 import {
   cameraAzimuth,
   cameraElevation,
@@ -20,11 +20,20 @@ import {
   setCameraElevation,
   setCameraPosition,
   setCameraZoom,
-} from "../../../renderer/src/ECS/Systems/ResizeSystem.ts";
-import { ENTITIES, type EntityAnimations, type EntityInstance } from "./Entities/registry.ts";
-import { clips$, makeClipAnimations, registerClip } from "./anim/registry.ts";
-import { animatableBones, editToClip, snapshotPose, type EditClip } from "./anim/editclip.ts";
-import { readPose, writePose, type Pose } from "./anim/pose.ts";
+} from "../../../../renderer/src/ECS/Systems/ResizeSystem.js";
+import {
+  ENTITIES,
+  type EntityAnimations,
+  type EntityInstance,
+} from "../../../src/Entities/registry.js";
+import { clips$, makeClipAnimations, registerClip } from "../../../src/anim/registry.js";
+import {
+  animatableBones,
+  editToClip,
+  snapshotPose,
+  type EditClip,
+} from "../../../src/anim/editclip.js";
+import { readPose, writePose, type Pose } from "../../../src/anim/pose.js";
 import {
   EDIT,
   editClip$,
@@ -32,7 +41,7 @@ import {
   selectedEid$,
   selectedEntityId$,
   selectedScale$,
-} from "./state.ts";
+} from "./state.js";
 
 const NONE = "none";
 

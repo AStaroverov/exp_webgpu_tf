@@ -2,12 +2,12 @@ import { mat4 } from "gl-matrix";
 import {
   getEngineComponents,
   type EngineWorld,
-} from "../../../../engine/src/ECS/createEngineWorld.ts";
-import { clipLayer, combineAnimations, proceduralLayer } from "../anim/layer.ts";
-import { sampleKeys, type Key } from "../anim/curve.ts";
-import { SWORD_SWING } from "../anim/presets/index.ts";
-import type { EntityInstance, EntityOptions } from "./registry.ts";
-import type { UnitInstance } from "./unit.ts";
+} from "../../../engine/src/ECS/createEngineWorld.js";
+import { clipLayer, combineAnimations, proceduralLayer } from "../anim/layer.js";
+import { sampleKeys, type Key } from "../anim/curve.js";
+import { SWORD_SWING } from "../anim/presets/index.js";
+import type { EntityInstance, EntityOptions } from "./registry.js";
+import type { UnitInstance } from "./unit.js";
 
 export type SwordsmanParts = {
   unit: (world: EngineWorld, options: EntityOptions) => UnitInstance;

@@ -1,15 +1,15 @@
-import { createRectangle, createSphere } from "../../../../renderer/src/ECS/Entities/Shapes.ts";
+import { createRectangle, createSphere } from "../../../renderer/src/ECS/Entities/Shapes.js";
 import {
   addTransformComponents,
   applyMatrixScale,
-} from "../../../../renderer/src/ECS/Components/Transform.ts";
-import type { TColor } from "../../../../renderer/src/ECS/Components/Common.ts";
+} from "../../../renderer/src/ECS/Components/Transform.js";
+import type { TColor } from "../../../renderer/src/ECS/Components/Common.js";
 import {
   createEntityId,
   getEngineComponents,
   type EngineWorld,
-} from "../../../../engine/src/ECS/createEngineWorld.ts";
-import type { EntityInstance, EntityOptions } from "./registry.ts";
+} from "../../../engine/src/ECS/createEngineWorld.js";
+import type { EntityInstance, EntityOptions } from "./registry.js";
 
 function rand(min: number, max: number): number {
   return min + Math.random() * (max - min);

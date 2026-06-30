@@ -1,4 +1,4 @@
-import { canonicalizeTrack, type Clip, type Quat, type Track, type Vec3 } from "../clip.ts";
+import { canonicalizeTrack, type Clip, type Quat, type Track, type Vec3 } from "../clip.js";
 import swordSwing from "./swordmans_sword_swing.json";
 
 type RawClip = {

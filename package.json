@@ -5,16 +5,8 @@
   "workspaces": [
     "packages/common",
     "packages/renderer",
-    "packages/tanks",
-    "packages/ppo_tanks",
-    "packages/tanksV2",
-    "packages/unknown",
-    "packages/debug",
-    "packages/ppo",
-    "packages/ppo_unknown",
-    "packages/burn_rl",
     "packages/engine",
-    "packages/_game/editor"
+    "packages/game"
   ],
   "type": "module",
   "scripts": {

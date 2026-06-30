@@ -3,9 +3,9 @@ import { BehaviorSubject } from "rxjs";
 import {
   getEngineComponents,
   type EngineWorld,
-} from "../../../../engine/src/ECS/createEngineWorld.ts";
-import type { EntityInstance } from "../Entities/registry.ts";
-import { canonicalizeTrack, makeClipPlayer, type Clip, type ClipPlayer } from "./clip.ts";
+} from "../../../engine/src/ECS/createEngineWorld.js";
+import type { EntityInstance } from "../Entities/registry.js";
+import { canonicalizeTrack, makeClipPlayer, type Clip, type ClipPlayer } from "./clip.js";
 
 export type RegisteredClip = {
   name: string;
