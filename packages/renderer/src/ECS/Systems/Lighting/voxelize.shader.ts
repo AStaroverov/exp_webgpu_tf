@@ -61,6 +61,11 @@ export const shaderMeta = new ShaderMeta(
     // voxel counts), .y = uDispatchWidth (threads per workgroup-grid row = dispatchX *
     // WORKGROUP_1D), .z/.w spare. The flat work index is g = gid.y*uDispatchWidth + gid.x.
     dispatch: uC("uDispatch", `vec4<i32>`),
+    // Scatter CLASS for this dispatch: 0 = OCCLUDERS (material.x == 0), 1 = EMITTERS. The scatter
+    // runs TWICE — occluders then emitters — in two encoder-barriered passes, so an emitter that
+    // shares a voxel with an occluder always writes LAST (emitter-wins) instead of a nondeterministic
+    // last-writer-wins that flips frame-to-frame → flickering aimed-cone shadows. See main().
+    pass: uC("uPass", `u32`),
 
     // ---- group 1 : per-instance scene storage (StorageRead => @group(1)) ----
     // SAME names/types as sdf.shader.ts / the former gather, so the shared sceneSDF
@@ -188,6 +193,18 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
   }
   let ins = u32(lo - 1);
+
+  // CLASS FILTER — deterministic overlap resolution. This dispatch handles only ONE class:
+  // uPass 0 = occluders (material.x == 0), uPass 1 = emitters. The two passes are separate,
+  // encoder-barriered dispatches (occluders first), so where an emitter overlaps an occluder the
+  // emitter's textureStore lands LAST → the overlap voxel is deterministically the emitter's every
+  // frame. Without this, the two instances raced for the last write and the survivor flipped
+  // frame-to-frame (bright emitter ↔ dark occluder) → the aimed shadow cone flickered. Early-out
+  // BEFORE the SDF eval so off-class threads cost only the binary search above.
+  let isEmitter = uMaterial[ins].x != 0.0;
+  if (isEmitter != (uPass == 1u)) {
+    return;
+  }
 
   // Local offset within this instance's voxel box, decoded to (lx,ly,lz).
   let dim = uAabbDim[ins];

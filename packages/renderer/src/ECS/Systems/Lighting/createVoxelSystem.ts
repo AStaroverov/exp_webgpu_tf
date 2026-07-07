@@ -260,24 +260,45 @@ export function createVoxelSystem({
     ],
   });
 
+  // Two tiny constant uPass buffers (0 = occluders, 1 = emitters), uploaded ONCE. The scatter is
+  // dispatched twice — once with each — in separate encoder-barriered passes so the emitter writes
+  // land after the occluder writes (deterministic emitter-wins on voxel overlap → no shadow flicker).
+  // Two SEPARATE buffers (not one re-uploaded between passes) because both dispatches are encoded
+  // before the encoder is submitted: a mid-encode writeBuffer would apply to BOTH passes, not one.
+  const passBufOcc = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const passBufEmit = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  {
+    const p = new Uint32Array(4);
+    p[0] = 0;
+    device.queue.writeBuffer(passBufOcc, 0, p);
+    p[0] = 1;
+    device.queue.writeBuffer(passBufEmit, 0, p);
+  }
+
   // Group 0 (voxelize) = grid uniforms; Group 1 = the 7 scene-instance buffers. Both
   // reference stable buffers (uniform + draw system's GPUVariables) → built ONCE. Scene
   // buffers are bound at the VOXELIZE meta's binding numbers (NOT
-  // sceneInstances.X.getBindGroupEntry(), which carries the DRAW shader's bindings).
-  const voxGroup0 = device.createBindGroup({
-    layout: voxPipeline.getBindGroupLayout(0),
-    entries: [
-      voxShader.uniforms.gridOrigin.getBindGroupEntry(device),
-      voxShader.uniforms.gridDims.getBindGroupEntry(device),
-      voxShader.uniforms.instanceCount.getBindGroupEntry(device),
-      voxShader.uniforms.sun.getBindGroupEntry(device),
-      voxShader.uniforms.sunColor.getBindGroupEntry(device),
-      voxShader.uniforms.sunViewProj.getBindGroupEntry(device),
-      voxShader.uniforms.dispatch.getBindGroupEntry(device),
-      // Sun shadow map: the sun-POV depth texture, sampled to shadow the injected directional sun.
-      { binding: voxelizeMeta.uniforms.shadowMap.binding, resource: sunDepthView },
-    ],
-  });
+  // sceneInstances.X.getBindGroupEntry(), which carries the DRAW shader's bindings). Two group-0
+  // variants differ ONLY in the uPass buffer bound (occluder vs emitter scatter pass).
+  const makeVoxGroup0 = (passBuf: GPUBuffer) =>
+    device.createBindGroup({
+      layout: voxPipeline.getBindGroupLayout(0),
+      entries: [
+        voxShader.uniforms.gridOrigin.getBindGroupEntry(device),
+        voxShader.uniforms.gridDims.getBindGroupEntry(device),
+        voxShader.uniforms.instanceCount.getBindGroupEntry(device),
+        voxShader.uniforms.sun.getBindGroupEntry(device),
+        voxShader.uniforms.sunColor.getBindGroupEntry(device),
+        voxShader.uniforms.sunViewProj.getBindGroupEntry(device),
+        voxShader.uniforms.dispatch.getBindGroupEntry(device),
+        // Sun shadow map: the sun-POV depth texture, sampled to shadow the injected directional sun.
+        { binding: voxelizeMeta.uniforms.shadowMap.binding, resource: sunDepthView },
+        { binding: voxelizeMeta.uniforms.pass.binding, resource: { buffer: passBuf } },
+      ],
+    });
+  // Occluder variant (uPass=0) also drives the CLEAR pass (which ignores uPass).
+  const voxGroup0 = makeVoxGroup0(passBufOcc);
+  const voxGroup0Emit = makeVoxGroup0(passBufEmit);
   const voxGroup1 = device.createBindGroup({
     layout: voxPipeline.getBindGroupLayout(1),
     entries: [
@@ -1230,13 +1251,26 @@ export function createVoxelSystem({
     clearPass.end();
 
     if (scatterTotal > 0) {
-      const scatterPass = encoder.beginComputePass();
-      scatterPass.setPipeline(voxPipeline);
-      scatterPass.setBindGroup(0, voxGroup0);
-      scatterPass.setBindGroup(1, voxGroup1);
-      scatterPass.setBindGroup(2, voxGroup2);
-      scatterPass.dispatchWorkgroups(scatterDispatchX, scatterDispatchY, 1);
-      scatterPass.end();
+      // TWO scatter passes over the SAME work list: occluders (uPass=0), then emitters (uPass=1).
+      // Each invocation binary-searches its owning instance and early-outs unless it belongs to
+      // this pass's class, so the SDF-eval work is split (not duplicated). The encoder barriers
+      // between the passes → an emitter sharing a voxel with an occluder writes LAST every frame
+      // (deterministic emitter-wins), killing the nondeterministic-overlap shadow flicker.
+      const scatterOcc = encoder.beginComputePass();
+      scatterOcc.setPipeline(voxPipeline);
+      scatterOcc.setBindGroup(0, voxGroup0);
+      scatterOcc.setBindGroup(1, voxGroup1);
+      scatterOcc.setBindGroup(2, voxGroup2);
+      scatterOcc.dispatchWorkgroups(scatterDispatchX, scatterDispatchY, 1);
+      scatterOcc.end();
+
+      const scatterEmit = encoder.beginComputePass();
+      scatterEmit.setPipeline(voxPipeline);
+      scatterEmit.setBindGroup(0, voxGroup0Emit);
+      scatterEmit.setBindGroup(1, voxGroup1);
+      scatterEmit.setBindGroup(2, voxGroup2);
+      scatterEmit.dispatchWorkgroups(scatterDispatchX, scatterDispatchY, 1);
+      scatterEmit.end();
     }
   }
 
