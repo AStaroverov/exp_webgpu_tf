@@ -71,6 +71,47 @@ export type VoxelTextures = {
   voxelRadiance: GPUTexture;
 };
 
+// ===== Anisotropic directional voxels (the anti-leak for the far-field cone samples). =====
+// Six directional radiance volumes (−X,+X,−Y,+Y,−Z,+Z). Each is HALF the iso mip-0 resolution
+// (its level 0 already integrates a 2×2×2 iso block → equals the iso mip-1 resolution) and carries
+// its OWN mip pyramid. voxelAnisoBase builds level 0 from the iso voxelRadiance mip 0 (accumulating
+// each block FRONT-TO-BACK along that direction's axis); voxelAnisoVolume builds the coarser levels
+// per-direction. The cone trace picks the 3 volumes facing the cone direction (sign of dir) and
+// blends them by dir² → DIRECTION-correct occlusion: a near occluder masks the far voxel it shadows,
+// which the isotropic pyramid (a single direction-agnostic average) cannot do — that is the leak
+// (light bleeding through thin walls) anisotropic VCT removes.
+export type AnisoTextures = {
+  negX: GPUTexture;
+  posX: GPUTexture;
+  negY: GPUTexture;
+  posY: GPUTexture;
+  negZ: GPUTexture;
+  posZ: GPUTexture;
+};
+
+// Aniso level-0 dims = iso mip-0 dims halved (floored at 1): level 0 integrates a 2×2×2 iso block,
+// so the directional pyramid starts one step below the iso grid.
+export function anisoBaseDims(dimX: number, dimY: number, dimZ: number) {
+  return { x: Math.max(1, dimX >> 1), y: Math.max(1, dimY >> 1), z: Math.max(1, dimZ >> 1) };
+}
+
+// Six directional volumes at anisoBaseDims resolution, each with a full mip pyramid. Both
+// STORAGE_BINDING (written by the aniso base/volume compute passes) + TEXTURE_BINDING (sampled by
+// the cone pass). ~half the iso mip-0 voxel count PER direction × 6 (+ mip pyramids) → e.g. at the
+// 256×256×64 default this is 6 × 128×128×32 × rgba16float × ~1.33 ≈ 33 MB.
+export function createAnisoTextures(
+  device: GPUDevice,
+  grid: VoxelGridConfig = DEFAULT_VOXEL_GRID,
+): AnisoTextures {
+  const b = anisoBaseDims(grid.dimX, grid.dimY, grid.dimZ);
+  const size: [number, number, number] = [b.x, b.y, b.z];
+  const usage = GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING;
+  const mipLevelCount = voxelMipLevelCount(b.x, b.y, b.z);
+  const make = () =>
+    device.createTexture({ size, dimension: "3d", format: "rgba16float", mipLevelCount, usage });
+  return { negX: make(), posX: make(), negY: make(), posY: make(), negZ: make(), posZ: make() };
+}
+
 export function createVoxelTextures(
   device: GPUDevice,
   grid: VoxelGridConfig = DEFAULT_VOXEL_GRID,

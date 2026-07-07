@@ -100,6 +100,8 @@ async function main() {
     draw: true, // SDF G-buffer draw pass (frameTick)
     voxelize: true, // scene → 3D voxel textures
     mips: true, // radiance mip pyramid
+    anisoBase: true, // 6 directional level-0 volumes (iso mip0 → aniso)
+    anisoMips: true, // directional-volume mip pyramids
     probe: true, // irradiance-probe SH volume (fill/bounce)
     probeBlur: true, // 3D Gaussian smoothing of the probe SH volume
     cone: true, // N-cone GI gather (half-res)
@@ -603,6 +605,13 @@ async function main() {
     .add(coneResCfg, "scale", { "half-res (2)": 2, "quarter-res (4)": 4, "eighth-res (8)": 8 })
     .name("cone resolution")
     .onChange((s: number) => voxel.setConeScale(s));
+  // Anisotropic voxels: directional far-field volumes (anti-leak) vs the plain isotropic pyramid.
+  // Runtime toggle (no rebuild) — flip it to see light stop bleeding through thin occluders.
+  const anisoCfg = { anisotropic: voxel.anisoMode };
+  coneFolder
+    .add(anisoCfg, "anisotropic")
+    .name("anisotropic voxels")
+    .onChange((on: boolean) => voxel.setAnisoMode(on));
   // Aimed-cone march budget: fewer steps = cheaper, but shorter/coarser emitter shadows (and
   // possible light leak through thin occluders). 64 = the original crisp default.
   coneFolder.add(voxel.config, "aimedSteps", 8, 64, 1).name("aimed steps").onFinishChange(rebuild);
@@ -669,6 +678,8 @@ async function main() {
     pf.add(perf, "draw").name("1· SDF draw pass");
     pf.add(perf, "voxelize").name("2· voxelize");
     pf.add(perf, "mips").name("3· mips");
+    pf.add(perf, "anisoBase").name("3a· aniso base");
+    pf.add(perf, "anisoMips").name("3b· aniso mips");
     pf.add(perf, "probe").name("4· probe GI (SH)");
     pf.add(perf, "probeBlur").name("4b· probe blur");
     pf.add(perf, "cone").name("5· cone GI");
@@ -877,6 +888,8 @@ async function main() {
       if (perf.sunDepth) voxel.sunDepth(encoder); // sun-POV depth feeding voxelize (A) + composite
       if (perf.voxelize) voxel.voxelize(encoder);
       if (perf.mips) voxel.mips(encoder);
+      if (perf.anisoBase) voxel.anisoBase(encoder);
+      if (perf.anisoMips) voxel.anisoMips(encoder);
       if (perf.probe) voxel.probe(encoder);
       if (perf.probeBlur) voxel.probeBlur(encoder);
       if (perf.cone) voxel.cone(encoder);
@@ -892,6 +905,8 @@ async function main() {
       }
       voxel.voxelize(encoder);
       voxel.mips(encoder);
+      voxel.anisoBase(encoder);
+      voxel.anisoMips(encoder);
       voxel.probe(encoder);
       voxel.probeBlur(encoder);
       voxel.cone(encoder);

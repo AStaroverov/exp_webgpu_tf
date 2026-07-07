@@ -44,8 +44,8 @@ import { VoxelBakedConfig } from "./voxelConfig.ts";
 export function createConeShaderMeta(cfg: VoxelBakedConfig) {
   return new ShaderMeta(
   {
-    // .x = screen width (px), .y = screen height (px), .z = SPARE (emitter distance-falloff is now
-    // baked as the EMITTER_FALLOFF const), .w = active light count (0..8).
+    // .x = screen width (px), .y = screen height (px), .z = anisoMode (0 = isotropic pyramid,
+    // 1 = anisotropic directional volumes — the far-field anti-leak), .w = active light count (0..8).
     params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
     // Emitters to importance-sample: .xyz = world CENTER, .w = radius (penumbra source). These
     // are AUTO-DISCOVERED from the LightEmitter component (every emitter, no manual list); only
@@ -72,6 +72,34 @@ export function createConeShaderMeta(cfg: VoxelBakedConfig) {
     // The voxelRadiance mip pyramid (ALL mips) — the cone reads it at the per-step LOD (for the
     // aimed emitter cones + the short AO cones).
     voxelRadiance: new VariableMeta("voxelRadiance", VariableKind.Texture, `texture_3d<f32>`, {
+      viewDimension: "3d",
+      textureSampleType: "float",
+    }),
+    // The 6 ANISOTROPIC directional radiance volumes (−X,+X,−Y,+Y,−Z,+Z), each an ALL-mips
+    // sampled view of the half-res directional pyramid built by voxelAnisoBase/voxelAnisoVolume.
+    // sample_aniso picks the 3 facing the cone dir and blends by dir² → direction-correct occlusion
+    // for the far-field (coarse-LOD) samples. The near field still reads voxelRadiance mip 0 (crisp).
+    anisoNegX: new VariableMeta("anisoNegX", VariableKind.Texture, `texture_3d<f32>`, {
+      viewDimension: "3d",
+      textureSampleType: "float",
+    }),
+    anisoPosX: new VariableMeta("anisoPosX", VariableKind.Texture, `texture_3d<f32>`, {
+      viewDimension: "3d",
+      textureSampleType: "float",
+    }),
+    anisoNegY: new VariableMeta("anisoNegY", VariableKind.Texture, `texture_3d<f32>`, {
+      viewDimension: "3d",
+      textureSampleType: "float",
+    }),
+    anisoPosY: new VariableMeta("anisoPosY", VariableKind.Texture, `texture_3d<f32>`, {
+      viewDimension: "3d",
+      textureSampleType: "float",
+    }),
+    anisoNegZ: new VariableMeta("anisoNegZ", VariableKind.Texture, `texture_3d<f32>`, {
+      viewDimension: "3d",
+      textureSampleType: "float",
+    }),
+    anisoPosZ: new VariableMeta("anisoPosZ", VariableKind.Texture, `texture_3d<f32>`, {
       viewDimension: "3d",
       textureSampleType: "float",
     }),
@@ -144,6 +172,42 @@ fn build_basis(n: vec3<f32>) -> mat3x3<f32> {
   return mat3x3<f32>(t, b, n);
 }
 
+// Sample the 6 ANISOTROPIC directional volumes for a cone traveling along unit dir, at aniso LOD.
+// Per axis pick the volume whose pre-integration faces the ray (sign of dir): the negX volume is
+// accumulated front-to-back for a ray heading toward −X (built from the +X side), so dir.x<0 reads
+// negX, dir.x>0 reads posX (same for Y/Z). Blend the 3 by dir² (Σ dir² = 1 for a unit dir) → the
+// direction-correct occluded radiance. Each branch is one fetch (3 total), legal in non-uniform
+// control flow because textureSampleLevel takes an explicit LOD.
+fn sample_aniso(uvw: vec3<f32>, lod: f32, dir: vec3<f32>) -> vec4<f32> {
+  let w = dir * dir;
+  var sx: vec4<f32>;
+  if (dir.x < 0.0) { sx = textureSampleLevel(anisoNegX, voxelSampler, uvw, lod); }
+  else { sx = textureSampleLevel(anisoPosX, voxelSampler, uvw, lod); }
+  var sy: vec4<f32>;
+  if (dir.y < 0.0) { sy = textureSampleLevel(anisoNegY, voxelSampler, uvw, lod); }
+  else { sy = textureSampleLevel(anisoPosY, voxelSampler, uvw, lod); }
+  var sz: vec4<f32>;
+  if (dir.z < 0.0) { sz = textureSampleLevel(anisoNegZ, voxelSampler, uvw, lod); }
+  else { sz = textureSampleLevel(anisoPosZ, voxelSampler, uvw, lod); }
+  return w.x * sx + w.y * sy + w.z * sz;
+}
+
+// The radiance fetch inside the cone march. uParams2.z toggles the model:
+//   iso  (0): the plain isotropic voxelRadiance pyramid (one direction-agnostic average).
+//   aniso(1): near field (lod≲1) reads the crisp iso mip 0; the far field reads the directional
+//             volumes at (lod-1) — aniso level 0 == iso mip 1 resolution — blended over lod∈[0,1]
+//             so there is no seam where the two representations meet.
+// Both volumes store PREMULTIPLIED rgb (radiance·coverage) + coverage in .a, so the caller's
+// front-to-back "over" operator is unchanged regardless of which model is active.
+fn sample_radiance(uvw: vec3<f32>, lod: f32, dir: vec3<f32>) -> vec4<f32> {
+  if (uParams2.z < 0.5) {
+    return textureSampleLevel(voxelRadiance, voxelSampler, uvw, lod);
+  }
+  let iso0 = textureSampleLevel(voxelRadiance, voxelSampler, uvw, min(lod, 1.0));
+  let aniso = sample_aniso(uvw, max(0.0, lod - 1.0), dir);
+  return mix(iso0, aniso, clamp(lod, 0.0, 1.0));
+}
+
 // One cone marched along dir from origin: diameter grows with distance, each step samples
 // voxelRadiance at LOD=log2(diameter/voxelSize) and composites front-to-back ("over").
 // reach = how far this cone marches (world units). The step is floored at reach/maxSteps so the
@@ -176,7 +240,7 @@ fn trace_cone(origin: vec3<f32>, dir: vec3<f32>, aperture: f32, reach: f32, fade
     let wp = origin + dir * dist;
     let uvw = (wp - gridMin) / extent;
     if (any(uvw < vec3<f32>(0.0)) || any(uvw > vec3<f32>(1.0))) { break; }
-    let s = textureSampleLevel(voxelRadiance, voxelSampler, uvw, lod);
+    let s = sample_radiance(uvw, lod, dir);
     var window = 1.0;
     if (fadeFrac > 0.0) {
       window = clamp((reach - dist) / (reach * fadeFrac), 0.0, 1.0);
