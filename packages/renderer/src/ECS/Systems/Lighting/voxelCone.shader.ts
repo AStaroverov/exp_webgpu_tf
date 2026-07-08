@@ -47,6 +47,10 @@ export function createConeShaderMeta(cfg: VoxelBakedConfig) {
     // .x = screen width (px), .y = screen height (px), .z = anisoMode (0 = isotropic pyramid,
     // 1 = anisotropic directional volumes — the far-field anti-leak), .w = active light count (0..8).
     params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
+    // Screen-probe resolve params (all LIVE per-frame uniforms — GUI-tunable with no rebuild):
+    // .x = SCREEN_PROBE_TILE (full-res px / probe), .y = normal-weight power (SP_NORMAL_POW),
+    // .z = plane-threshold scale (SP_PLANE_K, × local probe spacing), .w spare.
+    params3: new VariableMeta("uParams3", VariableKind.Uniform, `vec4<f32>`),
     // Emitters to importance-sample: .xyz = world CENTER, .w = radius (penumbra source). These
     // are AUTO-DISCOVERED from the LightEmitter component (every emitter, no manual list); only
     // the first i32(uParams2.w) entries are live.
@@ -103,22 +107,25 @@ export function createConeShaderMeta(cfg: VoxelBakedConfig) {
       viewDimension: "3d",
       textureSampleType: "float",
     }),
-    // Irradiance-probe SH-L1 volume (one texture per color channel, .xyzw = the 4 SH coeffs).
-    // Sampled trilinearly (voxelSampler) to reconstruct the low-frequency bounce that REPLACES the
-    // old per-pixel fill hemisphere cones.
-    shR: new VariableMeta("shR", VariableKind.Texture, `texture_3d<f32>`, {
-      viewDimension: "3d",
+    // SCREEN-SPACE probe SH-L1 textures (the low-frequency diffuse fill/bounce source; .xyzw = the
+    // 4 SH coeffs). 2D (one texel per screen probe), point-loaded (textureLoad) in
+    // resolve_screen_probes — no sampler.
+    screenShR: new VariableMeta("screenShR", VariableKind.Texture, `texture_2d<f32>`, {
       textureSampleType: "float",
     }),
-    shG: new VariableMeta("shG", VariableKind.Texture, `texture_3d<f32>`, {
-      viewDimension: "3d",
+    screenShG: new VariableMeta("screenShG", VariableKind.Texture, `texture_2d<f32>`, {
       textureSampleType: "float",
     }),
-    shB: new VariableMeta("shB", VariableKind.Texture, `texture_3d<f32>`, {
-      viewDimension: "3d",
+    screenShB: new VariableMeta("screenShB", VariableKind.Texture, `texture_2d<f32>`, {
       textureSampleType: "float",
     }),
-    // Filtering sampler for textureSampleLevel over the pyramid + the SH volume.
+    // Per-probe geometry: .xy = representative full-res pixel, .z = validity. rgba32float → declared
+    // "unfilterable-float" (point-loaded); the resolve reconstructs each probe's P + N from the
+    // G-buffer at .xy. ALWAYS bound (pruning-safe).
+    screenProbePix: new VariableMeta("screenProbePix", VariableKind.Texture, `texture_2d<f32>`, {
+      textureSampleType: "unfilterable-float",
+    }),
+    // Filtering sampler for textureSampleLevel over the voxelRadiance pyramid + the aniso volumes.
     voxelSampler: new VariableMeta("voxelSampler", VariableKind.Sampler, `sampler`),
   },
   {},
@@ -261,6 +268,99 @@ fn sh_avg_radiance(c: vec4<f32>, N: vec3<f32>) -> f32 {
   return max(0.0, E * 0.31830989); // * (1/PI)
 }
 
+// ---- SCREEN-PROBE FILL (the sole diffuse fill/bounce source; see the (b) fill block). ----
+// Resolve the screen-probe fill at pixel 'full' (P, N = its world position + normal). A 4-nearest
+// bilinear cage in probe-grid space, each cage probe gated by a plane-distance × normal bilateral
+// weight (rejects probes across a depth discontinuity / on a back-to-back wall). SP weights are LIVE
+// uniforms (uParams3.y/.z, GUI-tunable). If the strict gate rejects all four (disocclusion /
+// silhouette / thin geo) it degrades to a LOOSE bilinear blend over whatever valid neighbours exist;
+// only if NO cage probe is valid at all does it return 0 (no fill). Screen-probe-only — there is no
+// world-volume backstop and no history buffer.
+fn resolve_screen_probes(P: vec3<f32>, N: vec3<f32>, full: vec2<i32>) -> vec3<f32> {
+  let tile = uParams3.x;
+  let normalPow = uParams3.y;
+  let planeK = uParams3.z;
+  let gw = i32(ceil(uParams2.x / tile));
+  let gh = i32(ceil(uParams2.y / tile));
+  let cellSize = uGridOrigin.w;
+
+  // Probe-grid float coord of this pixel: probe c sits at pixel c*tile + tile/2 → gf = full/tile - 0.5.
+  let gf = vec2<f32>(full) / tile - vec2<f32>(0.5);
+  let g0 = vec2<i32>(floor(gf));
+  let fr = gf - vec2<f32>(g0);
+
+  // Load & reconstruct the 4 cage probes (P, N, validity) from the G-buffer at their stored pixel.
+  var Pp: array<vec3<f32>, 4>;
+  var Np: array<vec3<f32>, 4>;
+  var ok: array<f32, 4>;
+  for (var q = 0; q < 4; q = q + 1) {
+    let off = vec2<i32>(q & 1, (q >> 1) & 1);      // (0,0),(1,0),(0,1),(1,1)
+    let c = g0 + off;
+    ok[q] = 0.0;
+    if (c.x < 0 || c.y < 0 || c.x >= gw || c.y >= gh) { continue; }
+    let pixMeta = textureLoad(screenProbePix, c, 0);   // .xy pixel, .z valid
+    if (pixMeta.z < 0.5) { continue; }
+    let pc = vec2<i32>(i32(pixMeta.x), i32(pixMeta.y));
+    let nn = textureLoad(normalTex, pc, 0);
+    if (nn.a < 0.5) { continue; }
+    Np[q] = normalize(nn.rgb * 2.0 - 1.0);
+    let dep = textureLoad(depthTex, pc, 0);
+    let uv = (vec2<f32>(pc) + vec2<f32>(0.5)) / uParams2.xy;
+    Pp[q] = unproject(vec3<f32>(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0, dep));
+    ok[q] = 1.0;
+  }
+
+  // Local world spacing between adjacent probes = the depth-adaptive plane tolerance (free: from Pp),
+  // so distant flat surfaces are NOT over-rejected by a fixed world-unit threshold.
+  var spacing = cellSize * 4.0;                      // fallback
+  if (ok[0] > 0.5 && ok[1] > 0.5) { spacing = length(Pp[1] - Pp[0]); }
+  else if (ok[2] > 0.5 && ok[3] > 0.5) { spacing = length(Pp[3] - Pp[2]); }
+  let planeThresh = max(cellSize, spacing) * planeK;
+
+  // Strict (bilateral) + loose (bilinear × validity) sums in one pass. The loose sum is the
+  // disocclusion backstop: if every strict weight rejects, blend the nearest valid neighbours.
+  var sumR = vec4<f32>(0.0); var sumG = vec4<f32>(0.0); var sumB = vec4<f32>(0.0);
+  var wsum = 0.0;
+  var looseR = vec4<f32>(0.0); var looseG = vec4<f32>(0.0); var looseB = vec4<f32>(0.0);
+  var lsum = 0.0;
+  for (var q = 0; q < 4; q = q + 1) {
+    if (ok[q] < 0.5) { continue; }
+    let off = vec2<i32>(q & 1, (q >> 1) & 1);
+    let c = g0 + off;
+    let wb = mix(1.0 - fr.x, fr.x, f32(off.x)) * mix(1.0 - fr.y, fr.y, f32(off.y)); // bilinear
+    let sR = textureLoad(screenShR, c, 0);
+    let sG = textureLoad(screenShG, c, 0);
+    let sB = textureLoad(screenShB, c, 0);
+    looseR = looseR + wb * sR; looseG = looseG + wb * sG; looseB = looseB + wb * sB;
+    lsum = lsum + wb;
+    let planeDist = abs(dot(Pp[q] - P, N));                                          // plane reject
+    let wp = clamp(1.0 - planeDist / planeThresh, 0.0, 1.0);
+    let wn = pow(max(dot(Np[q], N), 0.0), normalPow);                                // normal reject
+    let w = wb * wp * wn;
+    if (w <= 0.0) { continue; }
+    sumR = sumR + w * sR; sumG = sumG + w * sG; sumB = sumB + w * sB;
+    wsum = wsum + w;
+  }
+
+  if (wsum > 1e-4) {
+    let inv = 1.0 / wsum;
+    return vec3<f32>(
+      sh_avg_radiance(sumR * inv, N),
+      sh_avg_radiance(sumG * inv, N),
+      sh_avg_radiance(sumB * inv, N));
+  }
+  if (lsum > 1e-4) {
+    // Strict gate rejected all → loose bilinear blend over the valid neighbours (softens edges; may
+    // bleed slightly at silhouettes, but never black — no world volume to fall back to).
+    let inv = 1.0 / lsum;
+    return vec3<f32>(
+      sh_avg_radiance(looseR * inv, N),
+      sh_avg_radiance(looseG * inv, N),
+      sh_avg_radiance(looseB * inv, N));
+  }
+  return vec3<f32>(0.0);  // no valid cage probe (all four tile centres missed geometry) → no fill
+}
+
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   // This pass renders at a downscaled res (half or quarter — set on the CPU by the cone output
@@ -349,15 +449,10 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     directEmitters = directEmitters + max(vec3<f32>(0.0), contrib);
   }
 
-  // (b) FILL / bounce — the irradiance-probe SH volume (built once per frame in voxelProbe). One
-  // trilinear SH fetch per channel + a cosine-weighted reconstruction = the low-frequency
-  // hemisphere bounce the old per-pixel fill cones produced, at O(1) cost. Added as its OWN term
-  // (scaled by giStrength below) — no longer averaged against the emitter direct.
-  let pUvw = (origin - uGridOrigin.xyz) / (vec3<f32>(uGridDims.xyz) * cellSize);
-  let cR = textureSampleLevel(shR, voxelSampler, pUvw, 0.0);
-  let cG = textureSampleLevel(shG, voxelSampler, pUvw, 0.0);
-  let cB = textureSampleLevel(shB, voxelSampler, pUvw, 0.0);
-  let fillAvg = vec3<f32>(sh_avg_radiance(cR, N), sh_avg_radiance(cG, N), sh_avg_radiance(cB, N));
+  // (b) FILL / bounce — the SCREEN-SPACE probes (built in voxelScreenProbe): a bilateral 4-probe
+  // resolve of the surface-anchored SH-L1 fill (see resolve_screen_probes). The low-frequency
+  // hemisphere bounce, as its OWN term (scaled by GI_STRENGTH below).
+  let fillAvg = resolve_screen_probes(P, N, full);
 
   // (c) AO — a few SHORT hemisphere occlusion cones (opacity ONLY, no radiance → no double-count
   // with the probe bounce). Becomes the .a/visibility output the composite reads as ambient

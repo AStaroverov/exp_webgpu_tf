@@ -13,6 +13,10 @@ export async function initWebGPU(
     requiredLimits: {
       maxStorageBuffersPerShaderStage: adapter.limits.maxStorageBuffersPerShaderStage,
       maxStorageTexturesPerShaderStage: adapter.limits.maxStorageTexturesPerShaderStage,
+      // The cone pass binds 16 sampled textures (depth + normal + voxelRadiance + 6 aniso + 3 world
+      // SH + 3 screen-probe SH + 1 screen-probe pix) = the default cap of 16. Request the adapter's
+      // max so there is headroom and the A/B screen-probe fill bindings are never rejected.
+      maxSampledTexturesPerShaderStage: adapter.limits.maxSampledTexturesPerShaderStage,
     },
   });
   const context = canvas.getContext("webgpu") as GPUCanvasContext;

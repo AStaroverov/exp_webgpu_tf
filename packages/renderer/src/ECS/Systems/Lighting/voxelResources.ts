@@ -45,31 +45,51 @@ export function voxelMipLevelCount(dimX: number, dimY: number, dimZ: number): nu
   return 1 + Math.floor(Math.log2(Math.max(dimX, dimY, dimZ)));
 }
 
-// Irradiance-probe volume resolution (spans the SAME world box as the voxel grid; only the
-// resolution differs). 64x64x32 over the 64×64×16 box ≈ 2-unit probe spacing — coarse, but
-// indirect bounce is low-frequency, so that is fine. 16384 probes × 3 SH textures × rgba16float
-// (8 B) ≈ 0.4 MB.
-export type ProbeGridDims = { x: number; y: number; z: number };
-export const DEFAULT_PROBE_DIMS: ProbeGridDims = { x: 32, y: 32, z: 16 };
-
-export type ProbeTextures = {
-  shR: GPUTexture;
-  shG: GPUTexture;
-  shB: GPUTexture;
-};
-
-// The three SH-L1 textures (one per color channel; .xyzw = the 4 SH-L1 coefficients). Written by
-// the voxelProbe compute pass (textureStore) and read by the cone pass (sampled, trilinear).
-export function createProbeTextures(device: GPUDevice, dims: ProbeGridDims): ProbeTextures {
-  const size: [number, number, number] = [dims.x, dims.y, dims.z];
-  const usage = GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING;
-  const make = () => device.createTexture({ size, dimension: "3d", format: "rgba16float", usage });
-  return { shR: make(), shG: make(), shB: make() };
-}
-
 export type VoxelTextures = {
   voxelRadiance: GPUTexture;
 };
+
+// ===== Screen-space probe volume (the A/B alternative to the world SH-L1 probe volume). =====
+// One probe per SCREEN_PROBE_TILE×SCREEN_PROBE_TILE full-canvas-pixel tile (Lumen default
+// DownsampleFactor = 16). Anchored to the VISIBLE surface (not a fixed world grid), so probe
+// density follows the camera. The gather (voxelScreenProbe) writes SH-L1 into 3 rgba16float 2D
+// textures + the probe's representative pixel/validity into 1 rgba32float 2D texture (4 storage
+// textures = the WebGPU default cap). Canvas-sized-derived → recreated on resize.
+export const SCREEN_PROBE_TILE = 16; // DEFAULT full-res px / screen probe (Lumen default); GUI-tunable
+
+export type ScreenProbeGrid = { w: number; h: number };
+export function screenProbeGridDims(
+  canvasW: number,
+  canvasH: number,
+  tile: number = SCREEN_PROBE_TILE,
+): ScreenProbeGrid {
+  return {
+    w: Math.max(1, Math.ceil(canvasW / tile)),
+    h: Math.max(1, Math.ceil(canvasH / tile)),
+  };
+}
+
+export type ScreenProbeTextures = {
+  shR: GPUTexture;
+  shG: GPUTexture;
+  shB: GPUTexture;
+  pix: GPUTexture;
+};
+
+// The 3 SH-L1 channel textures (.xyzw = the 4 SH-L1 coefficients) + the probe-geometry texture
+// (.xy = representative full-res pixel, .z = validity). Written by the voxelScreenProbe compute
+// pass (textureStore) and read by the cone pass (textureLoad — point, no filtering). 2D, single
+// mip. rgba32float supports STORAGE_BINDING write in core WebGPU and is point-loaded.
+export function createScreenProbeTextures(
+  device: GPUDevice,
+  grid: ScreenProbeGrid,
+): ScreenProbeTextures {
+  const size: [number, number] = [grid.w, grid.h];
+  const usage = GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING;
+  const sh = () => device.createTexture({ size, dimension: "2d", format: "rgba16float", usage });
+  const pix = device.createTexture({ size, dimension: "2d", format: "rgba32float", usage });
+  return { shR: sh(), shG: sh(), shB: sh(), pix };
+}
 
 // ===== Anisotropic directional voxels (the anti-leak for the far-field cone samples). =====
 // Six directional radiance volumes (−X,+X,−Y,+Y,−Z,+Z). Each is HALF the iso mip-0 resolution

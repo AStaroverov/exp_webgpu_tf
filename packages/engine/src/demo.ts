@@ -228,12 +228,6 @@ function addVoxelControls(gui: GUI, voxel: VoxelSystem): void {
     .name("AO cones (contact)")
     .onFinishChange(rebuild);
   probeFolder.add(voxel.config, "aoReach", 1, 16, 0.5).name("AO reach").onFinishChange(rebuild);
-  // Probe-volume blur radius: 3D Gaussian smoothing of the SH bounce so a moving source's fill
-  // stops stepping by probe cells. 0 = off. Cheap (O(probes·kernel), not ·cones).
-  probeFolder
-    .add(voxel.config, "probeBlurRadius", 0, 4, 1)
-    .name("probe blur radius")
-    .onFinishChange(rebuild);
 
   // Composite: ambient floor + HDR exposure + sun-dim penumbra.
   const compositeFolder = gui.addFolder("Composite");

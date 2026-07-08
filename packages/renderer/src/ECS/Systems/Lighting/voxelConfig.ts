@@ -1,7 +1,7 @@
 // BAKED voxel-GI configuration. These are quality / tuning knobs that are CONSTANT during
 // gameplay (no per-frame animation), so instead of feeding them through per-frame uniform uploads
 // they are "baked" as compile-time `const`s directly into the WGSL via the `wgsl` template tag
-// (createConeShaderMeta / createCompositeShaderMeta / createProbeShaderMeta each interpolate these
+// (createConeShaderMeta / createCompositeShaderMeta / createScreenProbeShaderMeta each interpolate these
 // values). Changing one is an explicit, infrequent action: mutate the config and call
 // voxelSystem.rebuild(), which recompiles the affected shaders + recreates their pipelines and
 // bind groups with the new baked constants. Genuinely dynamic data (sun, camera invViewProj,
@@ -11,8 +11,7 @@
 //   cone shader    : normalBias, aperture, giStrength, emitterDirect, emitterFalloff,
 //                    aimedSteps, aimedAlphaCut, aoConeCount, aoReach, aoSteps
 //   composite shader: ambient, exposure, penumbra, shadowBaseSpread
-//   probe shader   : conesPerProbe, maxDist (cone+probe reach), aperture
-//   probe-blur shader: probeBlurRadius
+//   screen-probe shader: conesPerProbe, maxDist (cone+probe reach), aperture
 // (maxDist is unused by the cone shader body itself; it only drives the probe reach + CPU side.)
 export type VoxelBakedConfig = {
   // ── cone pass ───────────────────────────────────────────────────────────────────────
@@ -33,12 +32,8 @@ export type VoxelBakedConfig = {
   penumbra: number; // sun shadow softening strength: PCF widens as sun intensity drops below 1
   shadowBaseSpread: number; // base sun-shadow PCF radius (texels) ALWAYS applied, even at full sun;
   //   smooths the shadow-map texel staircase into a soft edge. 1 = near-hard (old behavior).
-  // ── probe pass ──────────────────────────────────────────────────────────────────────
-  conesPerProbe: number; // full-sphere cones per probe; SH-L1 saturates ~16, so more only cuts noise
-  // ── probe-blur pass ───────────────────────────────────────────────────────────────────
-  probeBlurRadius: number; // 3D Gaussian blur radius (probes) over the SH volume; 0 = no blur.
-  //   Spatially smooths the low-frequency bounce so a moving source's fill stops stepping by
-  //   probe cells — far cheaper than raising probe resolution (O(probes·kernel), not ·cones).
+  // ── screen-probe pass ─────────────────────────────────────────────────────────────────
+  conesPerProbe: number; // full-sphere cones per screen probe; SH-L1 saturates ~16, so more only cuts noise
 };
 
 export const DEFAULT_VOXEL_BAKED_CONFIG: VoxelBakedConfig = {
@@ -58,5 +53,4 @@ export const DEFAULT_VOXEL_BAKED_CONFIG: VoxelBakedConfig = {
   penumbra: 4,
   shadowBaseSpread: 2,
   conesPerProbe: 16,
-  probeBlurRadius: 2,
 };

@@ -8,20 +8,20 @@ import { createCompositeShaderMeta } from "./voxelComposite.shader.ts";
 import { shaderMeta as mipMeta, WORKGROUP as MIP_WG } from "./voxelMip.shader.ts";
 import { shaderMeta as anisoBaseMeta, WORKGROUP as ANISO_WG } from "./voxelAnisoBase.shader.ts";
 import { shaderMeta as anisoVolMeta } from "./voxelAnisoVolume.shader.ts";
-import { createProbeShaderMeta, WORKGROUP as PROBE_WG } from "./voxelProbe.shader.ts";
-import { createProbeBlurShaderMeta } from "./voxelProbeBlur.shader.ts";
+import { createScreenProbeShaderMeta, WORKGROUP as SCREEN_WG } from "./voxelScreenProbe.shader.ts";
 import { shaderMeta as sunShadowMeta } from "./sunShadow.shader.ts";
 import { DEFAULT_VOXEL_BAKED_CONFIG, type VoxelBakedConfig } from "./voxelConfig.ts";
 import {
   anisoBaseDims,
   createAnisoTextures,
-  createProbeTextures,
+  createScreenProbeTextures,
   createVoxelTextures,
-  DEFAULT_PROBE_DIMS,
   DEFAULT_VOXEL_GRID,
+  SCREEN_PROBE_TILE,
+  screenProbeGridDims,
   voxelMipLevelCount,
   type AnisoTextures,
-  type ProbeTextures,
+  type ScreenProbeTextures,
   type VoxelGridConfig,
   type VoxelTextures,
 } from "./voxelResources.ts";
@@ -156,45 +156,31 @@ export function createVoxelSystem({
     entries: [],
   });
 
-  // Irradiance-probe pass: one thread per probe traces full-sphere cones into voxelRadiance and
-  // writes SH-L1 (3 textures). group0 = uniforms + voxelRadiance + sampler, group2 = the SH
-  // outputs, group1 empty (same situation as the mip pass → bind a matching empty group).
-  let probeShader = new GPUShader(createProbeShaderMeta(config));
-  let probePipeline = probeShader.getComputePipeline(device, "main");
-  let probeEmptyGroup1 = device.createBindGroup({
-    layout: probeShader.createBindGroupLayout(device, 1),
+  // Screen-space probe pass: the diffuse fill/bounce source. One thread per screen probe traces
+  // full-sphere cones into voxelRadiance (verbatim probe math) and writes SH-L1 (3 textures) + the
+  // probe's representative pixel/validity (1 texture). group0 = uniforms + G-buffer + voxelRadiance
+  // + sampler, group2 = the 4 storage outputs, group1 empty (same situation as the mip pass → bind
+  // a matching empty group). Runs every frame; the cone pass resolves it for the (b) fill term.
+  let screenProbeShader = new GPUShader(createScreenProbeShaderMeta(config));
+  let screenProbePipeline = screenProbeShader.getComputePipeline(device, "main");
+  let screenProbeEmptyGroup1 = device.createBindGroup({
+    layout: screenProbeShader.createBindGroupLayout(device, 1),
     entries: [],
   });
 
-  // Probe-volume blur: a SEPARABLE 3D Gaussian over the SH-L1 textures (config.probeBlurRadius),
-  // run AFTER probe() so the cone fill samples a SPATIALLY-SMOOTHED bounce → a moving source's fill
-  // stops stepping by probe cells without paying for more probe trace work. Three 1D passes (X/Y/Z,
-  // O(R) taps each, NOT O(R³)) ping-pong A→B→A→B between the two SH sets. Baked R → rebuildable.
-  let probeBlurShader = new GPUShader(createProbeBlurShaderMeta(config));
-  let probeBlurPipelineX = probeBlurShader.getComputePipeline(device, "blur_x");
-  let probeBlurPipelineY = probeBlurShader.getComputePipeline(device, "blur_y");
-  let probeBlurPipelineZ = probeBlurShader.getComputePipeline(device, "blur_z");
-  let probeBlurEmptyGroup1 = device.createBindGroup({
-    layout: probeBlurShader.createBindGroupLayout(device, 1),
-    entries: [],
-  });
-
-  // Filtering sampler for textureSampleLevel over the rgba16float voxelRadiance pyramid AND the
-  // trilinear probe-SH fetch.
+  // Filtering sampler for textureSampleLevel over the rgba16float voxelRadiance pyramid + the aniso
+  // directional volumes (the screen-probe SH textures are point-loaded, not sampled through this).
   const voxelSampler = device.createSampler({
     magFilter: "linear",
     minFilter: "linear",
     mipmapFilter: "linear",
   });
 
-  // Probe SH-L1 volume (3 channel textures). Resolution is independent of cellSize → created ONCE
-  // here; the bind groups that reference voxelRadiance (which IS rebuilt on cellSize change) are
-  // rebuilt in buildGrid via buildProbeGroups().
-  const probeTextures: ProbeTextures = createProbeTextures(device, DEFAULT_PROBE_DIMS);
-  // Second SH set: the probe-blur pass reads probeTextures (raw) and writes here; the cone pass
-  // samples THIS blurred set. Same resolution as probeTextures (the blur is in-place in grid space).
-  const probeTexturesBlur: ProbeTextures = createProbeTextures(device, DEFAULT_PROBE_DIMS);
-  const probeDimsVal = DEFAULT_PROBE_DIMS;
+  // Screen-space probe textures (SH-L1 ×3 + pixel/validity ×1). Resolution is CANVAS-derived
+  // (one probe per SCREEN_PROBE_TILE² tile) → created here + recreated on resize (recreate()),
+  // exactly like coneOutput. `let` so recreate() can reassign the whole set.
+  let screenGrid = screenProbeGridDims(canvas.width, canvas.height);
+  let screenProbeTex: ScreenProbeTextures = createScreenProbeTextures(device, screenGrid);
 
   // ===== Sun shadow map (depth-only pass from the sun's POV; grid/camera-independent). =====
   // Standard depth (orthoZO [0,1]) so the composite's shadow test is the simple "fragment
@@ -352,10 +338,11 @@ export function createVoxelSystem({
   // Cone scratch. (params/aoParams/tune are now BAKED consts — no scratch arrays.)
   const coneParams2Arr = getTypeTypedArray(coneShader.shaderMeta.uniforms.params2.type); // Float32Array(4)
   const coneInvArr = getTypeTypedArray(coneShader.shaderMeta.uniforms.invViewProj.type); // Float32Array(16)
-  // Probe scratch. (probeParams is now BAKED — no scratch array.)
-  const probeOriginArr = getTypeTypedArray(probeShader.shaderMeta.uniforms.gridOrigin.type); // Float32Array(4)
-  const probeGridDimsArr = getTypeTypedArray(probeShader.shaderMeta.uniforms.gridDims.type); // Int32Array(4)
-  const probeDimsArr = getTypeTypedArray(probeShader.shaderMeta.uniforms.probeDims.type); // Int32Array(4)
+  // Cone screen-probe-resolve lane (params3): .x = tile, .y = normalPow, .z = planeK. Uploaded in cone().
+  const coneParams3Arr = getTypeTypedArray(coneShader.shaderMeta.uniforms.params3.type); // Float32Array(4)
+  // Screen-probe scratch: screenParams (.xy canvas, .z tile) + the per-frame reverse-Z inverse-VP.
+  const screenParamsArr = getTypeTypedArray(screenProbeShader.shaderMeta.uniforms.screenParams.type); // Float32Array(4)
+  const screenInvArr = getTypeTypedArray(screenProbeShader.shaderMeta.uniforms.invViewProj.type); // Float32Array(16)
   // Auto-discovered emitter centers the cone importance-samples (x,y,z,radius per light) +
   // parallel colors (r,g,b,intensity) for the analytic-direct shadow term.
   const coneLightsArr = getTypeTypedArray(coneShader.shaderMeta.uniforms.lights.type); // Float32Array(32)
@@ -382,6 +369,15 @@ export function createVoxelSystem({
   // Runtime iso/aniso toggle for the cone pass (uParams2.z). Default on — the anti-leak is the point;
   // flip via setAnisoMode() (GUI) to A/B against the plain isotropic pyramid without a rebuild.
   let anisoMode = true;
+  // Screen-probe resolve params — GUI-tunable, LIVE (uploaded to uParams3 in cone() each frame, no
+  // rebuild). `screenProbeTile` also drives the probe texture dims + dispatch, so its setter must
+  // recreate the textures (like setConeScale); normalPow/planeK are pure resolve weights.
+  let screenProbeTile = SCREEN_PROBE_TILE; // full-res px per screen probe
+  let spNormalPow = 2.0; // normal-similarity sharpness in the bilateral resolve
+  let spPlaneK = 1.0; // plane-reject threshold = spPlaneK × local probe spacing
+  // Edge-aware probe placement (screenParams.w): snap each probe onto the nearest valid surface in
+  // its tile so thin foreground features get represented (vs the fixed tile center). Live GUI toggle.
+  let edgeAware = true;
 
   // Sun shadow scratch (allocate ONCE — never per frame). sunViewProj is computed each frame
   // from SunLight + the grid AABB and uploaded to BOTH the sunShadow shader (vs uViewProj)
@@ -408,21 +404,11 @@ export function createVoxelSystem({
   let voxGroup2: GPUBindGroup;
   let coneGroup0: GPUBindGroup;
   let compositeGroup0: GPUBindGroup;
-  // Probe bind groups: group0 (uniforms + voxelRadiance all-mips view + sampler) is rebuilt with
-  // the voxelRadiance texture in buildGrid; group2 (SH outputs) references the persistent probe
-  // textures and is built once but is convenient to rebuild alongside.
-  let probeGroup0: GPUBindGroup;
-  let probeGroup2: GPUBindGroup;
-  // Probe-blur bind groups for the separable ping-pong. Two src→dst directions, each a (group0 =
-  // probeDims + src SH textures, group2 = dst SH textures) pair:
-  //   AB: src = probeTextures (A)     → dst = probeTexturesBlur (B)   — used by the X and Z passes
-  //   BA: src = probeTexturesBlur (B) → dst = probeTextures (A)       — used by the Y pass
-  // They reference the persistent probe textures (resolution-fixed) → rebuilt only when the blur
-  // shader recompiles (rebuild()), not on grid changes.
-  let blurGroupAB0: GPUBindGroup;
-  let blurGroupAB2: GPUBindGroup;
-  let blurGroupBA0: GPUBindGroup;
-  let blurGroupBA2: GPUBindGroup;
+  // Screen-probe bind groups: group0 (uniforms + G-buffer + voxelRadiance all-mips view + sampler)
+  // is rebuilt when voxelRadiance changes (buildGrid) OR the G-buffer / screen textures change
+  // (resize); group2 (the 4 storage outputs) references the canvas-derived screenProbeTex.
+  let screenProbeGroup0: GPUBindGroup;
+  let screenProbeGroup2: GPUBindGroup;
   let dispatchX = 0;
   let dispatchY = 0;
   let dispatchZ = 0;
@@ -461,6 +447,7 @@ export function createVoxelSystem({
       layout: conePipeline.getBindGroupLayout(0),
       entries: [
         coneShader.uniforms.params2.getBindGroupEntry(device),
+        coneShader.uniforms.params3.getBindGroupEntry(device),
         coneShader.uniforms.invViewProj.getBindGroupEntry(device),
         coneShader.uniforms.gridOrigin.getBindGroupEntry(device),
         coneShader.uniforms.gridDims.getBindGroupEntry(device),
@@ -499,119 +486,77 @@ export function createVoxelSystem({
           binding: coneShader.shaderMeta.uniforms.anisoPosZ.binding,
           resource: anisoTex!.posZ.createView({ dimension: "3d" }),
         },
-        // Irradiance-probe SH-L1 volume (one sampled 3D view per channel) for the fill term.
-        // Reads the BLURRED set (probeTexturesBlur), written by probeBlur() after probe().
+        // SCREEN-SPACE probe fill source (the diffuse fill/bounce). resolve_screen_probes point-loads
+        // these (SH-L1 ×3 + the per-probe pixel/validity texture).
         {
-          binding: coneShader.shaderMeta.uniforms.shR.binding,
-          resource: probeTexturesBlur.shR.createView({ dimension: "3d" }),
+          binding: coneShader.shaderMeta.uniforms.screenShR.binding,
+          resource: screenProbeTex.shR.createView({ dimension: "2d" }),
         },
         {
-          binding: coneShader.shaderMeta.uniforms.shG.binding,
-          resource: probeTexturesBlur.shG.createView({ dimension: "3d" }),
+          binding: coneShader.shaderMeta.uniforms.screenShG.binding,
+          resource: screenProbeTex.shG.createView({ dimension: "2d" }),
         },
         {
-          binding: coneShader.shaderMeta.uniforms.shB.binding,
-          resource: probeTexturesBlur.shB.createView({ dimension: "3d" }),
+          binding: coneShader.shaderMeta.uniforms.screenShB.binding,
+          resource: screenProbeTex.shB.createView({ dimension: "2d" }),
+        },
+        {
+          binding: coneShader.shaderMeta.uniforms.screenProbePix.binding,
+          resource: screenProbeTex.pix.createView({ dimension: "2d" }),
         },
         { binding: coneShader.shaderMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
       ],
     });
   }
 
-  // (Re)build the probe bind groups: group0 = uniforms + the ALL-mips voxelRadiance view + the
-  // sampler; group2 = the three SH storage views (write-only, single mip). group0 references
-  // voxelRadiance, so it must be rebuilt whenever the voxelRadiance texture is recreated (grid).
-  function buildProbeGroups() {
-    probeGroup0 = device.createBindGroup({
-      layout: probePipeline.getBindGroupLayout(0),
+  // (Re)build the screen-probe bind groups: group0 = uniforms + the G-buffer (depth/normal) + the
+  // ALL-mips voxelRadiance view + the sampler; group2 = the 4 storage outputs (SH ×3 + pixel). group0
+  // references voxelRadiance (rebuilt on grid change) AND the G-buffer + screen textures (rebuilt on
+  // resize), so this is called from buildGrid AND recreate. Also uploads the (static-per-grid)
+  // gridOrigin/gridDims from the arrays buildGrid has just populated (invViewProj/screenParams are
+  // dynamic → uploaded per frame in screenProbe()).
+  function buildScreenProbeGroups() {
+    screenProbeGroup0 = device.createBindGroup({
+      layout: screenProbePipeline.getBindGroupLayout(0),
       entries: [
-        probeShader.uniforms.gridOrigin.getBindGroupEntry(device),
-        probeShader.uniforms.gridDims.getBindGroupEntry(device),
-        probeShader.uniforms.probeDims.getBindGroupEntry(device),
+        screenProbeShader.uniforms.gridOrigin.getBindGroupEntry(device),
+        screenProbeShader.uniforms.gridDims.getBindGroupEntry(device),
+        screenProbeShader.uniforms.invViewProj.getBindGroupEntry(device),
+        screenProbeShader.uniforms.screenParams.getBindGroupEntry(device),
+        { binding: screenProbeShader.shaderMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
+        { binding: screenProbeShader.shaderMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
         {
-          binding: probeShader.shaderMeta.uniforms.voxelRadiance.binding,
+          binding: screenProbeShader.shaderMeta.uniforms.voxelRadiance.binding,
           resource: textures.voxelRadiance.createView({ dimension: "3d" }),
         },
-        { binding: probeShader.shaderMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
+        { binding: screenProbeShader.shaderMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
       ],
     });
-    probeGroup2 = device.createBindGroup({
-      layout: probePipeline.getBindGroupLayout(2),
+    screenProbeGroup2 = device.createBindGroup({
+      layout: screenProbePipeline.getBindGroupLayout(2),
       entries: [
         {
-          binding: probeShader.shaderMeta.uniforms.shR.binding,
-          resource: probeTextures.shR.createView({ dimension: "3d" }),
+          binding: screenProbeShader.shaderMeta.uniforms.screenShR.binding,
+          resource: screenProbeTex.shR.createView({ dimension: "2d" }),
         },
         {
-          binding: probeShader.shaderMeta.uniforms.shG.binding,
-          resource: probeTextures.shG.createView({ dimension: "3d" }),
+          binding: screenProbeShader.shaderMeta.uniforms.screenShG.binding,
+          resource: screenProbeTex.shG.createView({ dimension: "2d" }),
         },
         {
-          binding: probeShader.shaderMeta.uniforms.shB.binding,
-          resource: probeTextures.shB.createView({ dimension: "3d" }),
+          binding: screenProbeShader.shaderMeta.uniforms.screenShB.binding,
+          resource: screenProbeTex.shB.createView({ dimension: "2d" }),
+        },
+        {
+          binding: screenProbeShader.shaderMeta.uniforms.screenProbePix.binding,
+          resource: screenProbeTex.pix.createView({ dimension: "2d" }),
         },
       ],
     });
-  }
-
-  // (Re)build the probe-blur bind groups for both ping-pong directions. group0 = probeDims uniform
-  // + the SOURCE SH textures; group2 = the DEST SH textures. All 3 entry points (blur_x/_y/_z)
-  // share one pipeline layout, so any pipeline's layout works. Rebuilt when the blur shader is
-  // recompiled (rebuild()).
-  function buildBlurGroups() {
-    // group0 = probeDims + the three source SH views.
-    const group0 = (src: ProbeTextures) =>
-      device.createBindGroup({
-        layout: probeBlurPipelineX.getBindGroupLayout(0),
-        entries: [
-          probeBlurShader.uniforms.probeDims.getBindGroupEntry(device),
-          {
-            binding: probeBlurShader.shaderMeta.uniforms.srcR.binding,
-            resource: src.shR.createView({ dimension: "3d" }),
-          },
-          {
-            binding: probeBlurShader.shaderMeta.uniforms.srcG.binding,
-            resource: src.shG.createView({ dimension: "3d" }),
-          },
-          {
-            binding: probeBlurShader.shaderMeta.uniforms.srcB.binding,
-            resource: src.shB.createView({ dimension: "3d" }),
-          },
-        ],
-      });
-    // group2 = the three destination SH storage views.
-    const group2 = (dst: ProbeTextures) =>
-      device.createBindGroup({
-        layout: probeBlurPipelineX.getBindGroupLayout(2),
-        entries: [
-          {
-            binding: probeBlurShader.shaderMeta.uniforms.dstR.binding,
-            resource: dst.shR.createView({ dimension: "3d" }),
-          },
-          {
-            binding: probeBlurShader.shaderMeta.uniforms.dstG.binding,
-            resource: dst.shG.createView({ dimension: "3d" }),
-          },
-          {
-            binding: probeBlurShader.shaderMeta.uniforms.dstB.binding,
-            resource: dst.shB.createView({ dimension: "3d" }),
-          },
-        ],
-      });
-    blurGroupAB0 = group0(probeTextures); // src A
-    blurGroupAB2 = group2(probeTexturesBlur); // dst B
-    blurGroupBA0 = group0(probeTexturesBlur); // src B
-    blurGroupBA2 = group2(probeTextures); // dst A
-  }
-
-  // Upload the blur pass's probeDims uniform (constant = the probe resolution). Called once after
-  // the scratch arrays exist and again on rebuild() (the recompiled shader has a fresh buffer).
-  function uploadBlurUniforms() {
-    probeDimsArr[0] = probeDimsVal.x;
-    probeDimsArr[1] = probeDimsVal.y;
-    probeDimsArr[2] = probeDimsVal.z;
-    probeDimsArr[3] = 0;
-    device.queue.writeBuffer(probeBlurShader.uniforms.probeDims.getGPUBuffer(device), 0, probeDimsArr);
+    // Shares the SAME world box as the grid (origin + cellSize + voxel dims). originArr/dimsArr are
+    // populated by buildGrid before this runs; on rebuild() they are re-set from the same values.
+    device.queue.writeBuffer(screenProbeShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
+    device.queue.writeBuffer(screenProbeShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
   }
 
   // (Re)build the Layer-4 composite bind group: uniforms + the G-buffer (albedo/normal/
@@ -841,8 +786,6 @@ export function createVoxelSystem({
     buildConeGroup();
     // Composite bind group references the G-buffer (albedo/normal/emission/depth) + coneOutput.
     buildCompositeGroup();
-    // Probe group0 references the rebuilt voxelRadiance view.
-    buildProbeGroups();
 
     // Grid uniforms (shared by all shaders).
     originArr[0] = originX;
@@ -858,24 +801,11 @@ export function createVoxelSystem({
     device.queue.writeBuffer(coneShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
     device.queue.writeBuffer(coneShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
     // (composite no longer has grid uniforms — its sun shadow uses the shadow map, not voxels.)
-    // Probe shares the SAME world box (origin + cellSize + voxel dims) to map probes into it.
-    probeOriginArr.set(originArr);
-    probeGridDimsArr.set(dimsArr);
-    probeDimsArr[0] = probeDimsVal.x;
-    probeDimsArr[1] = probeDimsVal.y;
-    probeDimsArr[2] = probeDimsVal.z;
-    probeDimsArr[3] = 0;
-    device.queue.writeBuffer(
-      probeShader.uniforms.gridOrigin.getGPUBuffer(device),
-      0,
-      probeOriginArr,
-    );
-    device.queue.writeBuffer(
-      probeShader.uniforms.gridDims.getGPUBuffer(device),
-      0,
-      probeGridDimsArr,
-    );
-    device.queue.writeBuffer(probeShader.uniforms.probeDims.getGPUBuffer(device), 0, probeDimsArr);
+
+    // Screen-probe group0 references the rebuilt voxelRadiance view; it also uploads the screen
+    // pass's gridOrigin/gridDims from the arrays populated just above. group2 references the
+    // persistent screenProbeTex.
+    buildScreenProbeGroups();
 
     dispatchX = Math.ceil(dimX / WORKGROUP);
     dispatchY = Math.ceil(dimY / WORKGROUP);
@@ -916,11 +846,6 @@ export function createVoxelSystem({
   // Built last: buildGrid() (and recreate()) call buildCompositeGroup(), which references
   // coneOutput + compositeOutput, so those textures must exist first.
   buildGrid(cellSize);
-
-  // Probe-blur groups + uniform (independent of the grid → built once here, after the scratch
-  // arrays exist; rebuilt only when the blur shader recompiles in rebuild()).
-  buildBlurGroups();
-  uploadBlurUniforms();
 
   // Compute the sun's orthographic view-projection (orthoZO, z in [0,1]). XY is fitted to the
   // CAMERA's visible region (clamped to the grid) so the 2048² shadow texels concentrate where the
@@ -1335,56 +1260,48 @@ export function createVoxelSystem({
     }
   }
 
-  // Irradiance-probe pass: each probe traces conesPerProbe full-sphere cones through the
-  // voxelRadiance pyramid → SH-L1 (shR/shG/shB). MUST run AFTER mips() (it samples the pyramid)
-  // and BEFORE cone() (which reads the SH volume for the fill term). One compute dispatch.
-  function probe(encoder: GPUCommandEncoder) {
-    // conesPerProbe / maxDist / aperture are now BAKED consts in the probe shader — nothing to
-    // upload per frame; just dispatch.
+
+  // Screen-space probe pass: each screen probe traces conesPerProbe full-sphere cones through the
+  // voxelRadiance pyramid → SH-L1 (screenShR/G/B) + its representative pixel/validity (screenProbePix).
+  // The diffuse fill/bounce source. MUST run AFTER mips() (it samples the pyramid) and BEFORE cone()
+  // (which resolves it). One 2D compute dispatch over the probe grid.
+  function screenProbe(encoder: GPUCommandEncoder) {
+    // Dynamic uniforms: canvas dims + tile (screenParams) and the reverse-Z inverse-VP. The static
+    // gridOrigin/gridDims were uploaded in buildScreenProbeGroups().
+    screenParamsArr[0] = canvas.width;
+    screenParamsArr[1] = canvas.height;
+    screenParamsArr[2] = screenProbeTile;
+    screenParamsArr[3] = edgeAware ? 1 : 0;
+    device.queue.writeBuffer(
+      screenProbeShader.uniforms.screenParams.getGPUBuffer(device),
+      0,
+      screenParamsArr,
+    );
+    // Reuse the shared invViewProj scratch (cone() recomputes it right after — harmless).
+    mat4.invert(invViewProj, viewProjMatrix);
+    screenInvArr.set(invViewProj as Float32Array);
+    device.queue.writeBuffer(
+      screenProbeShader.uniforms.invViewProj.getGPUBuffer(device),
+      0,
+      screenInvArr,
+    );
+
     const pass = encoder.beginComputePass();
-    pass.setPipeline(probePipeline);
-    pass.setBindGroup(0, probeGroup0);
-    pass.setBindGroup(1, probeEmptyGroup1);
-    pass.setBindGroup(2, probeGroup2);
+    pass.setPipeline(screenProbePipeline);
+    pass.setBindGroup(0, screenProbeGroup0);
+    pass.setBindGroup(1, screenProbeEmptyGroup1);
+    pass.setBindGroup(2, screenProbeGroup2);
     pass.dispatchWorkgroups(
-      Math.ceil(probeDimsVal.x / PROBE_WG),
-      Math.ceil(probeDimsVal.y / PROBE_WG),
-      Math.ceil(probeDimsVal.z / PROBE_WG),
+      Math.ceil(screenGrid.w / SCREEN_WG),
+      Math.ceil(screenGrid.h / SCREEN_WG),
+      1,
     );
     pass.end();
   }
 
-  // Probe-volume blur: SEPARABLE 3D Gaussian over the SH-L1 set. MUST run AFTER probe() (reads its
-  // output) and BEFORE cone() (which samples the blurred set). Three 1D compute passes ping-pong
-  // A→B (X), B→A (Y), A→B (Z) so the FINAL blurred volume lands in probeTexturesBlur (B) — exactly
-  // what buildConeGroup binds. Each pass is a separate compute pass so the encoder barriers between
-  // them (a pass reads the previous pass's writes). With probeBlurRadius=0 each pass is a copy.
-  const blurDX = Math.ceil(probeDimsVal.x / PROBE_WG);
-  const blurDY = Math.ceil(probeDimsVal.y / PROBE_WG);
-  const blurDZ = Math.ceil(probeDimsVal.z / PROBE_WG);
-  function blurPass(
-    encoder: GPUCommandEncoder,
-    pipeline: GPUComputePipeline,
-    group0: GPUBindGroup,
-    group2: GPUBindGroup,
-  ) {
-    const pass = encoder.beginComputePass();
-    pass.setPipeline(pipeline);
-    pass.setBindGroup(0, group0);
-    pass.setBindGroup(1, probeBlurEmptyGroup1);
-    pass.setBindGroup(2, group2);
-    pass.dispatchWorkgroups(blurDX, blurDY, blurDZ);
-    pass.end();
-  }
-  function probeBlur(encoder: GPUCommandEncoder) {
-    blurPass(encoder, probeBlurPipelineX, blurGroupAB0, blurGroupAB2); // X: A→B
-    blurPass(encoder, probeBlurPipelineY, blurGroupBA0, blurGroupBA2); // Y: B→A
-    blurPass(encoder, probeBlurPipelineZ, blurGroupAB0, blurGroupAB2); // Z: A→B (final in B)
-  }
-
-  // VCT cone GI: per-pixel AIMED emitter cones (sharp direct + shadow) + a trilinear probe-SH
-  // fetch for the fill/bounce + short AO cones → coneOutput (HALF-res HDR; composite bilinear-
-  // upsamples). MUST run AFTER voxelize() + mips() + probe(). Reads the G-buffer (depth + normal).
+  // VCT cone GI: per-pixel AIMED emitter cones (sharp direct + shadow) + a screen-probe resolve
+  // for the fill/bounce + short AO cones → coneOutput (HALF-res HDR; composite bilinear-upsamples).
+  // MUST run AFTER voxelize() + mips() + screenProbe(). Reads the G-buffer (depth + normal).
   function cone(encoder: GPUCommandEncoder) {
     // params/aoParams/tune are BAKED consts now — only params2 carries dynamic data.
     // .x = canvas width, .y = canvas height, .z = SPARE (emitterFalloff is baked), .w = light count.
@@ -1393,6 +1310,14 @@ export function createVoxelSystem({
     coneParams2Arr[2] = anisoMode ? 1 : 0; // iso/aniso toggle read by sample_radiance
     coneParams2Arr[3] = coneLightCount;
     device.queue.writeBuffer(coneShader.uniforms.params2.getGPUBuffer(device), 0, coneParams2Arr);
+
+    // params3: the screen-probe resolve params (all LIVE, GUI-tunable, no rebuild). .x = tile (the
+    // resolve derives the probe grid from it), .y = normal-weight power, .z = plane-threshold scale.
+    coneParams3Arr[0] = screenProbeTile;
+    coneParams3Arr[1] = spNormalPow;
+    coneParams3Arr[2] = spPlaneK;
+    coneParams3Arr[3] = 0;
+    device.queue.writeBuffer(coneShader.uniforms.params3.getGPUBuffer(device), 0, coneParams3Arr);
 
     // invViewProj computed ONCE per frame here (cone runs before composite, which reuses it).
     mat4.invert(invViewProj, viewProjMatrix);
@@ -1479,16 +1404,16 @@ export function createVoxelSystem({
     pass.end();
   }
 
-  // Explicit, infrequent action: recompile the three BAKED shaders (cone/composite/probe) with the
-  // CURRENT config, recreate their pipelines + bind groups, and re-upload the buildGrid-time
-  // uniforms that the fresh GPU buffers lost (the per-frame ones refill next frame).
+  // Explicit, infrequent action: recompile the three BAKED shaders (cone/composite/screen-probe)
+  // with the CURRENT config, recreate their pipelines + bind groups, and re-upload the buildGrid-
+  // time uniforms that the fresh GPU buffers lost (the per-frame ones refill next frame).
   function rebuild() {
     coneShader.destroy();
     compositeShader.destroy();
-    probeShader.destroy();
+    screenProbeShader.destroy();
     coneShader = new GPUShader(createConeShaderMeta(config));
     compositeShader = new GPUShader(createCompositeShaderMeta(config));
-    probeShader = new GPUShader(createProbeShaderMeta(config));
+    screenProbeShader = new GPUShader(createScreenProbeShaderMeta(config));
     conePipeline = coneShader.getRenderPipeline(device, "vs_main", "fs_main", {
       targetFormat: "rgba16float",
       withBlending: false,
@@ -1497,32 +1422,19 @@ export function createVoxelSystem({
       targetFormat: "rgba16float",
       withBlending: false,
     });
-    probePipeline = probeShader.getComputePipeline(device, "main");
-    probeEmptyGroup1 = device.createBindGroup({
-      layout: probeShader.createBindGroupLayout(device, 1),
-      entries: [],
-    });
-    // Probe-blur shader is ALSO baked (probeBlurRadius) → recompile + rebuild its groups/uniform.
-    probeBlurShader.destroy();
-    probeBlurShader = new GPUShader(createProbeBlurShaderMeta(config));
-    probeBlurPipelineX = probeBlurShader.getComputePipeline(device, "blur_x");
-    probeBlurPipelineY = probeBlurShader.getComputePipeline(device, "blur_y");
-    probeBlurPipelineZ = probeBlurShader.getComputePipeline(device, "blur_z");
-    probeBlurEmptyGroup1 = device.createBindGroup({
-      layout: probeBlurShader.createBindGroupLayout(device, 1),
+    screenProbePipeline = screenProbeShader.getComputePipeline(device, "main");
+    screenProbeEmptyGroup1 = device.createBindGroup({
+      layout: screenProbeShader.createBindGroupLayout(device, 1),
       entries: [],
     });
     buildConeGroup();
     buildCompositeGroup();
-    buildProbeGroups();
-    buildBlurGroups();
-    uploadBlurUniforms();
+    // Screen-probe groups reference the fresh screenProbeShader buffers; buildScreenProbeGroups also
+    // re-uploads its gridOrigin/gridDims (originArr/dimsArr still hold the current grid values).
+    buildScreenProbeGroups();
     // Re-upload buildGrid-time uniforms to the NEW shader buffers (per-frame ones refill next frame).
     device.queue.writeBuffer(coneShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
     device.queue.writeBuffer(coneShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
-    device.queue.writeBuffer(probeShader.uniforms.gridOrigin.getGPUBuffer(device), 0, probeOriginArr);
-    device.queue.writeBuffer(probeShader.uniforms.gridDims.getGPUBuffer(device), 0, probeGridDimsArr);
-    device.queue.writeBuffer(probeShader.uniforms.probeDims.getGPUBuffer(device), 0, probeDimsArr);
   }
 
   // Change the voxel size (graininess). Destroys the old textures, rebuilds the grid.
@@ -1543,6 +1455,34 @@ export function createVoxelSystem({
   // (true) for the cone pass — read next frame via uParams2.z. No rebuild: A/B the anti-leak live.
   function setAnisoMode(on: boolean) {
     anisoMode = on;
+  }
+
+  // Screen-probe tile size (full-res px / probe). Changes the probe-grid dims → recreates the
+  // screen textures + rebuilds the screen/cone bind groups (like setConeScale). The tile value also
+  // rides uParams3.x each frame so the cone resolve derives the same grid.
+  function setScreenProbeTile(tile: number) {
+    screenProbeTile = Math.max(1, Math.round(tile));
+    screenGrid = screenProbeGridDims(canvas.width, canvas.height, screenProbeTile);
+    screenProbeTex.shR.destroy();
+    screenProbeTex.shG.destroy();
+    screenProbeTex.shB.destroy();
+    screenProbeTex.pix.destroy();
+    screenProbeTex = createScreenProbeTextures(device, screenGrid);
+    buildScreenProbeGroups(); // group2 references the recreated textures
+    buildConeGroup(); // cone samples the recreated screen textures
+  }
+
+  // Live screen-probe resolve weights (uParams3.y/.z, uploaded each frame in cone() — no rebuild).
+  // normalPow = normal-similarity sharpness; planeK = plane-reject threshold × local probe spacing.
+  function setScreenProbeParams(normalPow: number, planeK: number) {
+    spNormalPow = normalPow;
+    spPlaneK = planeK;
+  }
+
+  // Toggle edge-aware probe placement (screenParams.w) — live, no rebuild. On = snap each probe onto
+  // the nearest valid surface in its tile (fixes thin foreground features); off = fixed tile center.
+  function setEdgeAware(on: boolean) {
+    edgeAware = on;
   }
 
   // Change the cone-pass downscale factor (2 = half-res, 4 = quarter-res). Recreates the cone
@@ -1574,10 +1514,20 @@ export function createVoxelSystem({
     compositeOutput.destroy();
     compositeOutput = createCompositeOutput();
     compositeView = compositeOutput.createView();
-    // Bind groups below reference coneView, so refresh the cached views first.
+    // Screen-probe textures are canvas-derived → recompute the grid, destroy the old set, recreate.
+    screenGrid = screenProbeGridDims(canvas.width, canvas.height, screenProbeTile);
+    screenProbeTex.shR.destroy();
+    screenProbeTex.shG.destroy();
+    screenProbeTex.shB.destroy();
+    screenProbeTex.pix.destroy();
+    screenProbeTex = createScreenProbeTextures(device, screenGrid);
+    // Bind groups below reference coneView + the (new) G-buffer/screen textures, so refresh first.
     buildConeGroup();
     // Rebuild the composite group: G-buffer + coneOutput changed.
     buildCompositeGroup();
+    // Screen-probe group0 (G-buffer + voxelRadiance) + group2 (the recreated screen textures);
+    // buildConeGroup above already rebound the cone pass's screen-probe sampled views.
+    buildScreenProbeGroups();
   }
 
   return {
@@ -1587,8 +1537,7 @@ export function createVoxelSystem({
     mips,
     anisoBase,
     anisoMips,
-    probe,
-    probeBlur,
+    screenProbe,
     cone,
     setLights,
     sunDepth,
@@ -1597,8 +1546,23 @@ export function createVoxelSystem({
     setCellSize,
     setConeScale,
     setAnisoMode,
+    setScreenProbeTile,
+    setScreenProbeParams,
+    setEdgeAware,
     get anisoMode() {
       return anisoMode;
+    },
+    get edgeAware() {
+      return edgeAware;
+    },
+    get screenProbeTile() {
+      return screenProbeTile;
+    },
+    get spNormalPow() {
+      return spNormalPow;
+    },
+    get spPlaneK() {
+      return spPlaneK;
     },
     get coneScale() {
       return coneScale;

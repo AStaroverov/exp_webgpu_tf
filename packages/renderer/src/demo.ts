@@ -102,8 +102,7 @@ async function main() {
     mips: true, // radiance mip pyramid
     anisoBase: true, // 6 directional level-0 volumes (iso mip0 → aniso)
     anisoMips: true, // directional-volume mip pyramids
-    probe: true, // irradiance-probe SH volume (fill/bounce)
-    probeBlur: true, // 3D Gaussian smoothing of the probe SH volume
+    screenProbe: true, // screen-space probe SH (the diffuse fill/bounce source)
     cone: true, // N-cone GI gather (half-res)
     sunDepth: true, // sun shadow-map depth pass (sun-POV SDF depth)
     composite: true, // final lit image
@@ -622,10 +621,10 @@ async function main() {
     .name("aimed alpha cut")
     .onFinishChange(rebuild);
 
-  // Probe GI: the low-res irradiance-probe volume that replaced the per-pixel fill hemisphere.
+  // Screen-probe GI: surface-anchored probes (one per tile) that supply the diffuse fill/bounce.
   // conesPerProbe is the bounce quality (probes run at low res, once per frame → afford many);
   // aoConeCount/aoReach are the SHORT per-pixel contact-AO cones (the .a/visibility term).
-  const probeFolder = gui.addFolder("Probe GI");
+  const probeFolder = gui.addFolder("Screen probe GI");
   // SH-L1 saturates ~16 cones, so higher values only cut noise (no detail) — keep this low.
   probeFolder
     .add(voxel.config, "conesPerProbe", [8, 16, 32, 64, 128])
@@ -636,12 +635,26 @@ async function main() {
     .name("AO cones (contact)")
     .onFinishChange(rebuild);
   probeFolder.add(voxel.config, "aoReach", 1, 16, 0.5).name("AO reach").onFinishChange(rebuild);
-  // Probe-volume blur radius (probes): 3D Gaussian smoothing of the SH bounce so a moving source's
-  // fill stops stepping by probe cells. 0 = off. Cheap (O(probes·kernel), no extra cones).
+  // Screen-probe tile (full-res px / probe): smaller = finer probe grid = sharper fill but more
+  // gather cost. Live (recreates the probe textures on change — no shader rebuild).
+  const spCfg = { tile: voxel.screenProbeTile, normalPow: voxel.spNormalPow, planeK: voxel.spPlaneK };
   probeFolder
-    .add(voxel.config, "probeBlurRadius", 0, 4, 1)
-    .name("probe blur radius")
-    .onFinishChange(rebuild);
+    .add(spCfg, "tile", [2, 4, 8, 16, 24, 32, 48, 64])
+    .name("probe tile (px)")
+    .onChange((t: number) => voxel.setScreenProbeTile(t));
+  // Bilateral resolve weights (live, no rebuild): normalPow = normal-similarity sharpness (higher =
+  // stricter across differing normals); planeK = plane-reject threshold × local probe spacing
+  // (lower = stricter across depth steps → less bleed but more disocclusion fallback).
+  const applySP = () => voxel.setScreenProbeParams(spCfg.normalPow, spCfg.planeK);
+  probeFolder.add(spCfg, "normalPow", 0.5, 8, 0.5).name("resolve: normal pow").onChange(applySP);
+  probeFolder.add(spCfg, "planeK", 0.25, 4, 0.25).name("resolve: plane K").onChange(applySP);
+  // Edge-aware placement: snap each probe onto the nearest valid surface in its tile (fixes thin
+  // foreground features that miss the tile center) vs fixed tile-center. Live A/B toggle, no rebuild.
+  const edgeCfg = { edgeAware: voxel.edgeAware };
+  probeFolder
+    .add(edgeCfg, "edgeAware")
+    .name("edge-aware probes")
+    .onChange((on: boolean) => voxel.setEdgeAware(on));
 
   // Composite (Layer 4): the final lit image. Sun controls above feed it via SunLight;
   // cone giStrength bakes into the indirect term. Only the ambient floor lives here.
@@ -680,8 +693,7 @@ async function main() {
     pf.add(perf, "mips").name("3· mips");
     pf.add(perf, "anisoBase").name("3a· aniso base");
     pf.add(perf, "anisoMips").name("3b· aniso mips");
-    pf.add(perf, "probe").name("4· probe GI (SH)");
-    pf.add(perf, "probeBlur").name("4b· probe blur");
+    pf.add(perf, "screenProbe").name("4· screen probes");
     pf.add(perf, "cone").name("5· cone GI");
     pf.add(perf, "sunDepth").name("6· sun shadow-map pass");
     pf.add(perf, "composite").name("7· composite");
@@ -890,8 +902,9 @@ async function main() {
       if (perf.mips) voxel.mips(encoder);
       if (perf.anisoBase) voxel.anisoBase(encoder);
       if (perf.anisoMips) voxel.anisoMips(encoder);
-      if (perf.probe) voxel.probe(encoder);
-      if (perf.probeBlur) voxel.probeBlur(encoder);
+      // Screen-probe gather (the diffuse fill source): reads the radiance pyramid (after mips), must
+      // precede cone (which resolves it). Toggle it off to isolate its GPU cost.
+      if (perf.screenProbe) voxel.screenProbe(encoder);
       if (perf.cone) voxel.cone(encoder);
       if (perf.composite) voxel.composite(encoder);
       present(encoder, voxel.compositeOutputTexture);
@@ -907,8 +920,8 @@ async function main() {
       voxel.mips(encoder);
       voxel.anisoBase(encoder);
       voxel.anisoMips(encoder);
-      voxel.probe(encoder);
-      voxel.probeBlur(encoder);
+      // Screen-probe gather (the diffuse fill source): after mips, before cone.
+      voxel.screenProbe(encoder);
       voxel.cone(encoder);
       voxel.composite(encoder);
       present(encoder, voxel.compositeOutputTexture);

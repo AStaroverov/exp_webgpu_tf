@@ -97,8 +97,7 @@ export async function createRenderTarget(
     }
     voxel.voxelize(encoder);
     voxel.mips(encoder);
-    voxel.probe(encoder);
-    voxel.probeBlur(encoder);
+    voxel.screenProbe(encoder);
     voxel.cone(encoder);
     voxel.composite(encoder);
     present(encoder, voxel.compositeOutputTexture);
