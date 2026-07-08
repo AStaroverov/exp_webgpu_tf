@@ -606,6 +606,14 @@ export function createVoxelSystem({
           binding: coneShader.shaderMeta.uniforms.screenProbePix.binding,
           resource: screenProbeTex.pix.createView({ dimension: "2d" }),
         },
+        {
+          binding: coneShader.shaderMeta.uniforms.screenProbePos.binding,
+          resource: screenProbeTex.pos.createView({ dimension: "2d" }),
+        },
+        {
+          binding: coneShader.shaderMeta.uniforms.screenProbeNrm.binding,
+          resource: screenProbeTex.nrm.createView({ dimension: "2d" }),
+        },
         { binding: coneShader.shaderMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
       ],
     });
@@ -703,6 +711,14 @@ export function createVoxelSystem({
           {
             binding: shader.shaderMeta.uniforms.screenProbePix.binding,
             resource: screenProbeTex.pix.createView({ dimension: "2d" }),
+          },
+          {
+            binding: shader.shaderMeta.uniforms.screenProbePos.binding,
+            resource: screenProbeTex.pos.createView({ dimension: "2d" }),
+          },
+          {
+            binding: shader.shaderMeta.uniforms.screenProbeNrm.binding,
+            resource: screenProbeTex.nrm.createView({ dimension: "2d" }),
           },
         ],
       }),
@@ -1671,6 +1687,8 @@ export function createVoxelSystem({
     screenProbeTex.shG.destroy();
     screenProbeTex.shB.destroy();
     screenProbeTex.pix.destroy();
+    screenProbeTex.pos.destroy();
+    screenProbeTex.nrm.destroy();
     screenProbeTex = createScreenProbeTextures(device, screenGrid, probeCounts.adaptiveRows);
     destroyScreenProbeBuffers(probeBufs);
     probeBufs = createScreenProbeBuffers(device, probeCounts);

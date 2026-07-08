@@ -639,7 +639,7 @@ async function main() {
     .add(voxel.config, "aoConeCount", 0, 8, 1)
     .name("AO cones (contact)")
     .onFinishChange(rebuild);
-  probeFolder.add(voxel.config, "aoReach", 1, 16, 0.5).name("AO reach").onFinishChange(rebuild);
+  probeFolder.add(voxel.config, "aoReach", 21, 16, 0.5).name("AO reach").onFinishChange(rebuild);
   // Screen-probe tile (full-res px / probe): smaller = finer probe grid = sharper fill but more
   // gather cost. Live (recreates the probe textures on change — no shader rebuild).
   const spCfg = { tile: voxel.screenProbeTile, normalPow: voxel.spNormalPow, planeK: voxel.spPlaneK };

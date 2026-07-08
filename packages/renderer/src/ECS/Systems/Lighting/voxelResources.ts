@@ -74,6 +74,13 @@ export type ScreenProbeTextures = {
   shG: GPUTexture;
   shB: GPUTexture;
   pix: GPUTexture;
+  // Per-probe world anchor P (rgba32float, .xyz) + world normal N (rgba16float, .xyz), written by the
+  // gather (which already reconstructs both for the cone origin). The resolve reads these directly —
+  // ONE textureLoad each per tap — instead of re-doing normal+depth+unproject from the full-res
+  // G-buffer for every probe every pixel (the P1 perf win). `pix` still carries the probe's screen
+  // pixel (for the spatial kernel) + validity + footprint.
+  pos: GPUTexture;
+  nrm: GPUTexture;
 };
 
 // The 3 SH-L1 channel textures (.xyzw = the 4 SH-L1 coefficients) + the probe-geometry texture
@@ -97,9 +104,13 @@ export function createScreenProbeTextures(
   const usage = GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING;
   const sh = () => device.createTexture({ size, dimension: "2d", format: "rgba16float", usage });
   const pix = device.createTexture({ size, dimension: "2d", format: "rgba32float", usage });
+  // pos = world P (needs 32-bit for world-space plane-reject precision); nrm = world N (16-bit half
+  // is ample for a normal-similarity weight). Both written by the gather, read point-wise by the
+  // resolve → the P1 win (no per-tap G-buffer unproject).
+  const pos = device.createTexture({ size, dimension: "2d", format: "rgba32float", usage });
   // shR/shG/shB = the raw gather output; the cone resolve reads them directly (unified multi-probe
   // average, no separate blur set).
-  return { shR: sh(), shG: sh(), shB: sh(), pix };
+  return { shR: sh(), shG: sh(), shB: sh(), pix, pos, nrm: sh() };
 }
 
 // ===== Adaptive screen-probe atlas sizing (single 16→8 level, light-adaptive). =====

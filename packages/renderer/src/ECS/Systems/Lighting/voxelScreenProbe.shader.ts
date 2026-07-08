@@ -109,6 +109,23 @@ export function createScreenProbeShaderMeta(cfg: VoxelBakedConfig, isAdaptive: b
       storageTextureFormat: "rgba32float",
       storageTextureAccess: "write-only",
     }),
+    // Per-probe world anchor P (.xyz) — the gather already reconstructs it for the cone origin, so
+    // storing it lets the resolve skip the per-tap G-buffer unproject (P1). rgba32float for world-space
+    // plane-reject precision.
+    screenProbePos: new VariableMeta("screenProbePos", VariableKind.StorageTexture, `texture_storage_2d<rgba32float, write>`, {
+      visibility: GPUShaderStage.COMPUTE,
+      viewDimension: "2d",
+      storageTextureFormat: "rgba32float",
+      storageTextureAccess: "write-only",
+    }),
+    // Per-probe world normal N (.xyz, normalized). rgba16float half is ample for the resolve's
+    // normal-similarity weight; paired with screenProbePos it replaces the per-tap normal+depth reads.
+    screenProbeNrm: new VariableMeta("screenProbeNrm", VariableKind.StorageTexture, `texture_storage_2d<rgba16float, write>`, {
+      visibility: GPUShaderStage.COMPUTE,
+      viewDimension: "2d",
+      storageTextureFormat: "rgba16float",
+      storageTextureAccess: "write-only",
+    }),
   },
   {},
   // language=WGSL
@@ -201,6 +218,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     textureStore(screenShG, texel, vec4<f32>(0.0));
     textureStore(screenShB, texel, vec4<f32>(0.0));
     textureStore(screenProbePix, texel, vec4<f32>(f32(full.x), f32(full.y), 0.0, footprint));
+    textureStore(screenProbePos, texel, vec4<f32>(0.0));
+    textureStore(screenProbeNrm, texel, vec4<f32>(0.0));
     return;
   }
 
@@ -251,6 +270,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // Valid probe: store the representative full-res pixel + validity 1 + footprint (.w) for the
   // bilateral resolve (the resolve area-weights each probe by footprint²).
   textureStore(screenProbePix, texel, vec4<f32>(f32(full.x), f32(full.y), 1.0, footprint));
+  // Store the reconstructed world anchor P + normal N so the resolve reads them directly (P1) instead
+  // of re-doing normal+depth+unproject per tap.
+  textureStore(screenProbePos, texel, vec4<f32>(P, 0.0));
+  textureStore(screenProbeNrm, texel, vec4<f32>(N, 0.0));
 }
 `,
   );

@@ -129,6 +129,15 @@ export function createConeShaderMeta(cfg: VoxelBakedConfig) {
     screenProbePix: new VariableMeta("screenProbePix", VariableKind.Texture, `texture_2d<f32>`, {
       textureSampleType: "unfilterable-float",
     }),
+    // Per-probe world anchor P (.xyz) + world normal N (.xyz), written by the gather. The resolve
+    // point-loads these instead of reconstructing each probe's P/N from the full-res G-buffer per tap
+    // (P1). Both unfilterable-float (point sampling). ALWAYS bound (pruning-safe).
+    screenProbePos: new VariableMeta("screenProbePos", VariableKind.Texture, `texture_2d<f32>`, {
+      textureSampleType: "unfilterable-float",
+    }),
+    screenProbeNrm: new VariableMeta("screenProbeNrm", VariableKind.Texture, `texture_2d<f32>`, {
+      textureSampleType: "unfilterable-float",
+    }),
     // ADAPTIVE screen-probe indirection — group 1 (StorageRead, read-only storage in the fragment
     // stage, allowed in core WebGPU). tileHeader[T] = count of adaptive probes parented to coarse
     // tile T; tileIndices[T*K + j] = the global atlas slot of the tile's j-th adaptive probe. When
@@ -296,16 +305,11 @@ fn sh_avg_radiance(c: vec4<f32>, N: vec3<f32>) -> f32 {
 // smooth compact screen-distance kernel, so uniform vs adaptive is invisible in the output and
 // adding adaptive density only sharpens gradients — it never adds blockiness.
 
-// Reconstruct a probe's world position from its atlas texel (repr pixel → G-buffer depth). .w = ok.
+// Load a probe's world position from its atlas texel (stored by the gather). .w = ok (validity).
 fn sp_load_probe_P(atexel: vec2<i32>) -> vec4<f32> {
-  let pixMeta = textureLoad(screenProbePix, atexel, 0);   // .xy pixel, .z valid
+  let pixMeta = textureLoad(screenProbePix, atexel, 0);   // .z valid
   if (pixMeta.z < 0.5) { return vec4<f32>(0.0); }
-  let pc = vec2<i32>(i32(pixMeta.x), i32(pixMeta.y));
-  let nn = textureLoad(normalTex, pc, 0);
-  if (nn.a < 0.5) { return vec4<f32>(0.0); }
-  let dep = textureLoad(depthTex, pc, 0);
-  let uv = (vec2<f32>(pc) + vec2<f32>(0.5)) / uParams2.xy;
-  return vec4<f32>(unproject(vec3<f32>(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0, dep)), 1.0);
+  return vec4<f32>(textureLoad(screenProbePos, atexel, 0).xyz, 1.0);
 }
 
 // The ONE per-probe tap (used identically for uniform and adaptive slots). Loads the probe's repr
@@ -325,9 +329,7 @@ fn accum_probe(
 ) {
   let pixMeta = textureLoad(screenProbePix, atexel, 0);   // .xy pixel, .z valid, .w footprint (px)
   if (pixMeta.z < 0.5) { return; }
-  let pc = vec2<i32>(i32(pixMeta.x), i32(pixMeta.y));
-  let nn = textureLoad(normalTex, pc, 0);
-  if (nn.a < 0.5) { return; }
+  let pc = pixMeta.xy;                                     // the probe's representative screen pixel
   // DENSITY COMPENSATION: area-weight the probe by the screen area it represents (its footprint² in
   // full-res px), so N fine adaptive probes collectively weigh the same as the 1 coarse uniform probe
   // they subdivide → the average is density-invariant (dense/adaptive regions match uniform ones, and
@@ -340,13 +342,14 @@ fn accum_probe(
   let areaW = pixMeta.w * pixMeta.w;
   if (areaW <= 0.0) { return; }
   // SMOOTH compact screen-distance kernel (normalised so support == resolveRadius tiles).
-  let d = length(vec2<f32>(pc) - full) / (tile * resolveRadius);
+  let d = length(pc - full) / (tile * resolveRadius);
   let wSpatial = max(0.0, 1.0 - d * d) * areaW;
   if (wSpatial <= 0.0) { return; }
-  let Np = normalize(nn.rgb * 2.0 - 1.0);
-  let dep = textureLoad(depthTex, pc, 0);
-  let uv = (vec2<f32>(pc) + vec2<f32>(0.5)) / uParams2.xy;
-  let Pp = unproject(vec3<f32>(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0, dep));
+  // P1: the probe's world anchor + normal are read straight from the atlas (stored by the gather),
+  // NOT reconstructed from the full-res G-buffer per tap. Np is stored normalized (half-float error is
+  // negligible for the similarity weight).
+  let Pp = textureLoad(screenProbePos, atexel, 0).xyz;
+  let Np = textureLoad(screenProbeNrm, atexel, 0).xyz;
   let sR = textureLoad(screenShR, atexel, 0);
   let sG = textureLoad(screenShG, atexel, 0);
   let sB = textureLoad(screenShB, atexel, 0);
