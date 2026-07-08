@@ -428,13 +428,51 @@ export function createVoxelSystem({
   const refineScreenArr = new Float32Array(4);
   const refineLightArr = new Float32Array(4); // .x = lightThresh (subdivision trigger), .y = maxAdaptive
   const argsParamsArr = new Uint32Array(4);
-  // Auto-discovered emitter centers the aimed cones importance-sample (x,y,z,radius per light) +
-  // parallel colors (r,g,b,intensity) for the analytic-direct shadow term. Owned by the probe
-  // gather (the aimed cones are traced once per probe). Literal types — both gather shaders share
-  // the same uniform layout.
-  const coneLightsArr = getTypeTypedArray(`array<vec4<f32>, 8>`); // Float32Array(32)
-  const coneLightColorsArr = getTypeTypedArray(`array<vec4<f32>, 8>`); // Float32Array(32)
+  // Auto-discovered emitter records the aimed cones importance-sample: interleaved
+  // (x,y,z,radius, r,g,b,intensity) — two vec4 per light — in ONE storage buffer (the gather's
+  // runtime-sized uLights, so the light count is UNCAPPED). Capacity is in LIGHTS, grow-doubled
+  // in setLights (a growth destroys the buffer + rebuilds the probe bind groups — rare, and safe:
+  // WebGPU completes in-flight work before reclaiming a destroyed buffer). Shared by BOTH gather
+  // variants (one buffer, bound into each group 1).
+  let lightsBufCapacity = 64;
+  let lightsBuf = device.createBuffer({
+    label: "vct emitter lights",
+    size: lightsBufCapacity * 32, // 8 f32 per light
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+  });
   let coneLightCount = 0;
+  // CLUSTERED LIGHT CULLING (Persson-style CPU assignment): the grid AABB divided into cells of
+  // clusterDiv voxels per axis; setLights bins each emitter into every cell its influence sphere
+  // overlaps (same 0.003 contribution cull as the shader). Layout mirrors the gather's
+  // uLightClusters: (clusterCap + 1) u32 per cell — [base] = count, [base + 1 + k] = light index.
+  // (Re)created by recreateLightClusters(): dims depend on the grid (buildGrid) AND the baked
+  // clusterDiv/clusterCap (rebuild).
+  let clusterDimX = 1;
+  let clusterDimY = 1;
+  let clusterDimZ = 1;
+  let clusterArr = new Uint32Array(0);
+  // Parallel to clusterArr's index slots: the light's estimated contribution at the CELL CENTER.
+  // CPU-only (never uploaded) — drives the overflow policy: a full cell keeps its clusterCap
+  // STRONGEST lights, not the first-come ones (first-come made a light vanish from the crowded
+  // cells around itself while surviving in emptier far cells — light "beyond its sector but not
+  // inside it").
+  let clusterEstArr = new Float32Array(0);
+  let clusterBuf: GPUBuffer | null = null;
+
+  function recreateLightClusters() {
+    clusterDimX = Math.max(1, Math.ceil(dimX / config.clusterDiv));
+    clusterDimY = Math.max(1, Math.ceil(dimY / config.clusterDiv));
+    clusterDimZ = Math.max(1, Math.ceil(dimZ / config.clusterDiv));
+    const len = clusterDimX * clusterDimY * clusterDimZ * (config.clusterCap + 1);
+    clusterArr = new Uint32Array(len);
+    clusterEstArr = new Float32Array(len);
+    clusterBuf?.destroy();
+    clusterBuf = device.createBuffer({
+      label: "vct light clusters",
+      size: len * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+  }
   // Probe-gather aimed-emitter lane (uLightParams): .x = live light count, .y = anisoMode,
   // .zw spare. Uploaded per frame in uploadProbeUniforms().
   const probeLightParamsArr = new Float32Array(4);
@@ -473,7 +511,7 @@ export function createVoxelSystem({
   // STAGE 3: temporal hysteresis — the history weight of the probe-atlas blend (0..0.95). LIVE
   // (uTemporalParams.x, uploaded each frame — no rebuild). 0 disables temporal accumulation
   // entirely (the fresh-only parity/rollback path); ~0.85–0.9 amortizes the gather 2–4×.
-  let temporalHysteresis = 0.5;
+  let temporalHysteresis = 0.75;
   // Frame counter → curSet = the ping-pong parity. Bumped ONCE per frame at the head of
   // uploadProbeUniforms() (pass A0), so every later pass in the same frame sees one consistent
   // parity. Also rides uTemporalParams.y (mod 1024) for the golden-angle cone-set rotation.
@@ -698,10 +736,9 @@ export function createVoxelSystem({
           // STAGE 3 temporal uniforms (prev forward viewProj + hysteresis/frame lanes).
           shader.uniforms.prevViewProj.getBindGroupEntry(device),
           shader.uniforms.temporalParams.getBindGroupEntry(device),
-          // Aimed-emitter uniforms + the 6 aniso volumes (ALL-mips views) — the gather owns the
-          // aimed cones + the far-field anti-leak.
-          shader.uniforms.lights.getBindGroupEntry(device),
-          shader.uniforms.lightColor.getBindGroupEntry(device),
+          // Aimed-emitter lane + the 6 aniso volumes (ALL-mips views) — the gather owns the
+          // aimed cones + the far-field anti-leak. (The emitter records themselves are the
+          // uLights storage buffer in group 1.)
           shader.uniforms.lightParams.getBindGroupEntry(device),
           {
             binding: shader.shaderMeta.uniforms.anisoNegX.binding,
@@ -763,6 +800,11 @@ export function createVoxelSystem({
         entries: [
           { binding: shader.shaderMeta.uniforms.probeData.binding, resource: { buffer: probeBufs.data } },
           { binding: shader.shaderMeta.uniforms.probeCounter.binding, resource: { buffer: probeBufs.counter } },
+          { binding: shader.shaderMeta.uniforms.lightsData.binding, resource: { buffer: lightsBuf } },
+          {
+            binding: shader.shaderMeta.uniforms.lightClusters.binding,
+            resource: { buffer: clusterBuf! },
+          },
         ],
       });
       const g2 = (pp: number) => device.createBindGroup({
@@ -1130,6 +1172,9 @@ export function createVoxelSystem({
     device.queue.writeBuffer(coneShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
     // (composite no longer has grid uniforms — its sun shadow uses the shadow map, not voxels.)
 
+    // Light-cluster buffer dims derive from the fresh grid dims — recreate BEFORE the probe
+    // groups (their group 1 binds it).
+    recreateLightClusters();
     // Screen-probe group0 references the rebuilt voxelRadiance view; it also uploads the screen
     // pass's gridOrigin/gridDims from the arrays populated just above. group2 references the
     // persistent screenProbeTex.
@@ -1841,23 +1886,90 @@ export function createVoxelSystem({
     pass.end();
   }
 
-  // Upload the emitter data the aimed cones importance-sample. `flat` = n*4 floats (x,y,z,radius
-  // per light); `colorsFlat` = parallel n*4 (r,g,b,intensity per light) for the analytic-direct
-  // shadow term. `count` is clamped to [0,8]; unused entries zeroed. The caller discovers these
-  // from the LightEmitter component each frame (no manual light list). count=0 → pure Fibonacci
-  // fill cones. Uploaded to BOTH gather shaders (per-probe; the uniform + adaptive variants each
-  // own their uniform buffers — write both).
-  function setLights(flat: Float32Array, count: number, colorsFlat: Float32Array) {
-    const n = Math.max(0, Math.min(8, count));
-    // `flat`/`colorsFlat` are exactly 32 floats with the tail (beyond n*4) already zeroed
-    // by the caller, so set() directly — no slice (allocation) needed.
-    coneLightsArr.set(flat);
-    coneLightColorsArr.set(colorsFlat);
-    for (const s of [gatherUniformShader, gatherAdaptiveShader]) {
-      device.queue.writeBuffer(s.uniforms.lights.getGPUBuffer(device), 0, coneLightsArr);
-      device.queue.writeBuffer(s.uniforms.lightColor.getGPUBuffer(device), 0, coneLightColorsArr);
+  // Upload the emitter data the aimed cones importance-sample. `data` = count×8 interleaved floats
+  // (x,y,z,radius, r,g,b,intensity per light) — the uLights storage layout. UNCAPPED: the buffer
+  // grow-doubles (destroy + recreate + rebuild the probe bind groups — rare; in-flight frames keep
+  // the old buffer alive). The caller discovers these from the LightEmitter component each frame
+  // (no manual light list). count=0 → pure Fibonacci fill cones. ONE shared buffer serves both
+  // gather variants, so this is a single writeBuffer of the live prefix.
+  function setLights(data: Float32Array, count: number) {
+    if (count > lightsBufCapacity) {
+      while (lightsBufCapacity < count) lightsBufCapacity *= 2;
+      lightsBuf.destroy();
+      lightsBuf = device.createBuffer({
+        label: "vct emitter lights",
+        size: lightsBufCapacity * 32,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+      buildScreenProbeGroups();
     }
-    coneLightCount = n;
+    if (count > 0) {
+      device.queue.writeBuffer(lightsBuf, 0, data, 0, count * 8);
+    }
+    coneLightCount = count;
+
+    // CLUSTERED CULL (CPU assignment, clear-and-refill each frame): bin every emitter into the
+    // cluster cells its influence sphere overlaps (AABB of the sphere — slight over-inclusion is
+    // fine, the shader's per-light cull still applies). Influence radius = where the shader's own
+    // 0.003 contribution gate would cull it: atten = 1/(1 + F·d²/lr²) ≥ 0.003 / (maxLum·direct)
+    // → R = lr·√((maxLum·direct/0.003 − 1)/F) — the SAME radius the shader's range window scales
+    // the light to exactly zero at, so a cell the sphere doesn't reach truly receives zero light
+    // (no boundary step). emitterFalloff = 0 ⇒ R = ∞, and the ±Infinity arithmetic below clamps
+    // to the whole grid without a special case. A cell at capacity keeps its clusterCap STRONGEST
+    // lights (estimated contribution at the cell center) — the weakest entry is replaced, never
+    // the newest dropped.
+    clusterArr.fill(0);
+    const cw = cellSize * config.clusterDiv; // cluster cell size, world units
+    const cap = config.clusterCap;
+    const stride = cap + 1;
+    for (let i = 0; i < count; i++) {
+      const o = i * 8;
+      const maxLum =
+        Math.max(data[o + 4], data[o + 5], data[o + 6]) *
+        Math.abs(data[o + 7]) *
+        config.emitterDirect;
+      if (maxLum < 0.003) continue; // the shader would cull it in every cell
+      const lr = Math.max(data[o + 3], 1e-3);
+      const F = config.emitterFalloff;
+      const R = F > 0 ? lr * Math.sqrt((maxLum / 0.003 - 1) / F) : Infinity;
+      const x0 = Math.max(0, Math.floor((data[o + 0] - R - originX) / cw));
+      const x1 = Math.min(clusterDimX - 1, Math.floor((data[o + 0] + R - originX) / cw));
+      const y0 = Math.max(0, Math.floor((data[o + 1] - R - originY) / cw));
+      const y1 = Math.min(clusterDimY - 1, Math.floor((data[o + 1] + R - originY) / cw));
+      const z0 = Math.max(0, Math.floor((data[o + 2] - R - originZ) / cw));
+      const z1 = Math.min(clusterDimZ - 1, Math.floor((data[o + 2] + R - originZ) / cw));
+      for (let z = z0; z <= z1; z++) {
+        for (let y = y0; y <= y1; y++) {
+          for (let x = x0; x <= x1; x++) {
+            // Contribution estimate at the cell center (the same falloff the shader applies) —
+            // the cell's keep/replace ranking key.
+            const dx = data[o + 0] - (originX + (x + 0.5) * cw);
+            const dy = data[o + 1] - (originY + (y + 0.5) * cw);
+            const dz = data[o + 2] - (originZ + (z + 0.5) * cw);
+            const d2 = dx * dx + dy * dy + dz * dz;
+            const est = maxLum / (1 + (F * d2) / (lr * lr));
+            const base = ((z * clusterDimY + y) * clusterDimX + x) * stride;
+            const c = clusterArr[base];
+            if (c < cap) {
+              clusterArr[base + 1 + c] = i;
+              clusterEstArr[base + 1 + c] = est;
+              clusterArr[base] = c + 1;
+            } else {
+              // Full cell: replace the current weakest entry iff this light is stronger HERE.
+              let wk = base + 1;
+              for (let k = base + 2; k < base + 1 + cap; k++) {
+                if (clusterEstArr[k] < clusterEstArr[wk]) wk = k;
+              }
+              if (est > clusterEstArr[wk]) {
+                clusterArr[wk] = i;
+                clusterEstArr[wk] = est;
+              }
+            }
+          }
+        }
+      }
+    }
+    device.queue.writeBuffer(clusterBuf!, 0, clusterArr);
   }
 
   // VCT composite (Layer 4): combine albedo + cone indirect/AO + direct sun + self-emission
@@ -1951,6 +2063,8 @@ export function createVoxelSystem({
     // The config-independent classify/refine/args shaders are NOT recompiled — no baked consts.)
     buildConeGroup();
     buildCompositeGroup();
+    // The baked clusterDiv/clusterCap may have changed → the cluster buffer layout/size with them.
+    recreateLightClusters();
     // Screen-probe groups reference the fresh gather-shader buffers; buildScreenProbeGroups also
     // re-uploads its gridOrigin/gridDims (originArr/dimsArr still hold the current grid values).
     buildScreenProbeGroups();

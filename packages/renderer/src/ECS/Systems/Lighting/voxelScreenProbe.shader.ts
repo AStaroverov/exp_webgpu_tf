@@ -83,19 +83,8 @@ export function createScreenProbeShaderMeta(cfg: VoxelBakedConfig, isAdaptive: b
     //        knob the resolve's plane test scales by, so one knob tunes both).
     //   .w = normal-similarity power (spNormalPow — the resolve's live normal weight, reused).
     temporalParams: uC("uTemporalParams", `vec4<f32>`),
-    // Aimed-emitter uniforms + the aniso volumes. All uniforms (group 0): the group-2
-    // storage-texture budget is untouched. The emitter list is genuinely dynamic → per-frame
-    // uniforms, never baked.
-    // Emitters to importance-sample: .xyz = world CENTER, .w = radius (penumbra source).
-    // AUTO-DISCOVERED from the LightEmitter component (no manual list); only the first
-    // i32(uLightParams.x) entries are live.
-    lights: uC("lights", `array<vec4<f32>, 8>`),
-    // Parallel to lights[]: .rgb = emitter color, .w = intensity → Lj = rgb·|w| is the
-    // emitter's true radiance. Used for the analytic direct + bleed-cancel term (so a blocked
-    // cone DARKENS instead of picking up the occluder's own emission = the "white shadow"
-    // bug; a BRIGHT occluder cancels its own false shadow).
-    lightColor: uC("lightColor", `array<vec4<f32>, 8>`),
-    // .x = active light count (0..8), .y = anisoMode (0 = isotropic pyramid, 1 = anisotropic
+    // .x = global live light count (DEBUG only — the aimed loop reads its cluster cell's list
+    // from uLightClusters, group 1), .y = anisoMode (0 = isotropic pyramid, 1 = anisotropic
     // directional volumes), .zw spare.
     lightParams: uC("uLightParams", `vec4<f32>`),
     // The 6 ANISOTROPIC directional radiance volumes (−X,+X,−Y,+Y,−Z,+Z) — ALL-mips sampled
@@ -188,6 +177,28 @@ export function createScreenProbeShaderMeta(cfg: VoxelBakedConfig, isAdaptive: b
     probeCounter: new VariableMeta("uCounter", VariableKind.StorageRead, `array<u32, 2>`, {
       visibility: GPUShaderStage.COMPUTE,
     }),
+    // Emitter records the aimed cones importance-sample, TWO vec4 per light (stride 2):
+    //   [2j]   = .xyz world CENTER, .w radius (penumbra source / falloff scale)
+    //   [2j+1] = .rgb emitter color, .w intensity → Lj = rgb·|w| is the true radiance (drives the
+    //            analytic direct + bleed-cancel term — a blocked cone DARKENS instead of picking up
+    //            the occluder's own emission = the "white shadow" bug; a BRIGHT occluder cancels
+    //            its own false shadow).
+    // A RUNTIME-SIZED storage array (no light-count cap — the old `array<vec4, 8>` uniform pair);
+    // AUTO-DISCOVERED from the LightEmitter component, live count rides uLightParams.x, and the
+    // aimed loop round-robins AIMED_PER_FRAME of them per probe per frame (temporal history
+    // integrates the rest).
+    lightsData: new VariableMeta("uLights", VariableKind.StorageRead, `array<vec4<f32>>`, {
+      visibility: GPUShaderStage.COMPUTE,
+    }),
+    // CLUSTERED LIGHT CULLING (Persson-style, CPU assignment): the grid AABB is divided into
+    // cluster cells of CLUSTER_DIV voxels per axis; setLights bins each emitter into every cell its
+    // influence sphere (derived from the same 0.003 contribution cull) overlaps. Layout: one
+    // (CLUSTER_CAP + 1)-u32 record per cell — [base] = live count, [base + 1 + k] = uLights index.
+    // The aimed loop reads ONLY its probe's cell list, so the per-probe cost tracks the LOCAL
+    // light density, not the global count.
+    lightClusters: new VariableMeta("uLightClusters", VariableKind.StorageRead, `array<u32>`, {
+      visibility: GPUShaderStage.COMPUTE,
+    }),
 
     // ---- group 2 : outputs (StorageTexture, write-only, 6 total — gpu.ts requests the adapter's
     // maxStorageTexturesPerShaderStage, above the WebGPU default cap of 4) ----
@@ -250,6 +261,15 @@ const EMITTER_FALLOFF: f32 = ${cfg.emitterFalloff};
 const EMITTER_DIRECT: f32 = ${cfg.emitterDirect};
 const AIMED_STEPS: i32 = ${cfg.aimedSteps};
 const AIMED_ALPHA_CUT: f32 = ${cfg.aimedAlphaCut};
+// Per-probe per-frame aimed-cone budget. With ≤ AIMED_PER_FRAME live lights every one is traced
+// every frame (the old exact path). With more, each probe traces a round-robin WINDOW of this many
+// lights, scaled by lc/take so the estimate stays unbiased, and the temporal blend integrates the
+// full set over ceil(lc/take) frames → the aimed cost is CONSTANT in the light count.
+const AIMED_PER_FRAME: i32 = ${cfg.aimedPerFrame};
+// Cluster grid: CLUSTER_DIV voxels per cluster cell per axis; CLUSTER_CAP lights per cell record
+// (must match the CPU binning in createVoxelSystem.setLights — both bake from the same config).
+const CLUSTER_DIV: i32 = ${cfg.clusterDiv};
+const CLUSTER_CAP: i32 = ${cfg.clusterCap};
 // SH-L1 projection weight of one aimed (delta-direction) cone = 4π/3. NOT the fill cones'
 // dw = 2π/C (emitter energy must not scale with CONES_PER_PROBE) and NOT the light's solid angle
 // Ω = π·(r/d)² (the analytic direct term is already an INTEGRATED, irradiance-scale quantity —
@@ -485,24 +505,86 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   //   - weight = W_AIMED (a delta-direction projection constant — see its comment), NOT dw.
   // EMITTER_DIRECT is folded in HERE: the emitter light now rides the fill SH, which the cone pass
   // scales by GI_STRENGTH (default 1 → overall scale matches the old EMITTER_DIRECT-only path).
-  let lc = min(8, max(0, i32(uLightParams.x)));
-  for (var j = 0; j < lc; j = j + 1) {
-    let toL = lights[j].xyz - origin;
-    let d = length(toL);
-    if (d < 1e-3) { continue; }
-    let dir = toL / d;
-    if (dot(N, dir) <= 0.0) { continue; }   // hemisphere reject ONLY — the cosine comes at resolve
+  // ROUND-ROBIN SUBSAMPLE (unlimited lights at constant cost): when lc > AIMED_PER_FRAME each
+  // probe traces one contiguous WINDOW of "take" lights per frame. The window start advances by
+  // "take" each frame (consecutive windows tile the ring → full coverage in ceil(lc/take) frames)
+  // and is decorrelated across probes by the slot index, so every frame the probe POPULATION still
+  // covers all lights. The lc/take scale keeps the summed energy unbiased in expectation; the
+  // Stage-3 temporal blend integrates the per-frame variance away (with hysteresis 0 and
+  // lc > take the emitter light strobes — subsampling REQUIRES the history, by design).
+  // With lc <= AIMED_PER_FRAME: take = lc, start = 0, scale = 1 — the exact all-lights path.
+  // CLUSTERED CULL: lc and the light indices come from THIS probe's cluster cell (uLightClusters —
+  // CPU-binned by influence sphere), not the global list, so both the loop length and the
+  // round-robin window track the LOCAL light density. A probe outside the grid AABB gets lc = 0
+  // (its lighting is fill-cones/sun only — same as before, the voxel field ends there anyway).
+  let clusterDims = (uGridDims.xyz + vec3<i32>(CLUSTER_DIV - 1)) / vec3<i32>(CLUSTER_DIV);
+  let clusterCell = vec3<i32>(floor((origin - uGridOrigin.xyz) / (uGridOrigin.w * f32(CLUSTER_DIV))));
+  var lc = 0;
+  var cbase = 0;
+  if (all(clusterCell >= vec3<i32>(0)) && all(clusterCell < clusterDims)) {
+    let ci = (clusterCell.z * clusterDims.y + clusterCell.y) * clusterDims.x + clusterCell.x;
+    cbase = ci * (CLUSTER_CAP + 1);
+    lc = min(i32(uLightClusters[cbase]), CLUSTER_CAP);
+  }
+  let take = min(lc, AIMED_PER_FRAME);
+  var start = 0;
+  if (lc > take) { start = (globalSlot + i32(uTemporalParams.y) * take) % lc; }
+  let lightScale = f32(lc) / f32(max(take, 1));
+  for (var jj = 0; jj < take; jj = jj + 1) {
+    let j = i32(uLightClusters[cbase + 1 + (start + jj) % lc]);
+    let posR = uLights[2 * j];        // .xyz center, .w radius
+    let colI = uLights[2 * j + 1];    // .rgb color, .w intensity
+    // Light geometry from the SURFACE point P, NOT the lifted origin: the lift (1.5·cellSize +
+    // NORMAL_BIAS) exists only to start the MARCH clear of the surface voxel. Using it for the
+    // direction/hemisphere test made a light hovering closer than the lift height point DOWNWARD
+    // for the probes right under it → hemisphere-rejected → the light vanished at a distance
+    // proportional to the voxel size.
+    let toL = posR.xyz - P;
+    let dc = length(toL);
+    if (dc < 1e-3) { continue; }
+    let dir = toL / dc;
+    let lr = max(posR.w, 1e-3);
+    // SPHERE-LIGHT HORIZON FADE replaces the binary hemisphere reject. A sphere half-sunk into the
+    // surface has its CENTER at the horizon: dot(N, dir) flips sign probe-to-probe → neighboring
+    // probes alternate between the FULL (atten ≈ 1, huge) contribution and ZERO, and the resolve
+    // renders that lattice as noise. The visible-cap fraction (center height above the tangent
+    // plane / diameter, remapped to [0,1]) fades the light smoothly through the horizon instead.
+    let horizon = clamp((dot(N, toL) / lr) * 0.5 + 0.5, 0.0, 1.0);
+    if (horizon <= 0.0) { continue; }   // fully below the surface plane
+    // Probe at/inside the light sphere: clamp the shading distance to the sphere surface so atten
+    // and the aperture stay finite and continuous (dc still drives the shadow reach below).
+    let d = max(dc, lr);
     // Distance falloff: atten = 1 at the light center, ~1/d² far. EMITTER_FALLOFF = coefficient
     // (0 = none → flat sun-like emitter, never culled below; 1 = standard); lr = emitter radius.
-    let lr = max(lights[j].w, 1e-3);
-    let atten = 1.0 / (1.0 + EMITTER_FALLOFF * (d * d) / (lr * lr));
-    let Lj = lightColor[j].rgb * abs(lightColor[j].w) * atten;
+    var atten = 1.0 / (1.0 + EMITTER_FALLOFF * (d * d) / (lr * lr));
+    // RANGE WINDOW (the UE4/Frostbite windowed falloff, (1 − (d/R)⁴)²): scales the light SMOOTHLY
+    // to exactly zero at R = the CPU binning radius (both derive R from the same 0.003 cull:
+    // R² = lr²·(maxLum·EMITTER_DIRECT/0.003 − 1)/EMITTER_FALLOFF). Without it the light ends with
+    // a 0.003-high STEP at the last binned cluster cell — visible as cell-boundary "sectors" on
+    // the floor. EMITTER_FALLOFF = 0 ⇒ infinite range ⇒ no window (and the CPU bins to all cells).
+    if (EMITTER_FALLOFF > 0.0) {
+      let maxLumED = max(colI.r, max(colI.g, colI.b)) * abs(colI.w) * EMITTER_DIRECT;
+      let r2 = lr * lr * max(maxLumED / 0.003 - 1.0, 0.0) / EMITTER_FALLOFF;
+      let q = (d * d) / max(r2, 1e-6);
+      let x = clamp(1.0 - q * q, 0.0, 1.0);
+      atten = atten * x * x;
+    }
+    let Lj = colI.rgb * abs(colI.w) * atten;
     // LIGHT CULL: the shadow march is the dominant cost — skip it when the final contribution is
     // negligible (same 0.003 gate as the old per-pixel loop, sans ndl: a probe serves pixels of
     // many normals, so the cull must be normal-agnostic → strictly more conservative).
     if (max(Lj.r, max(Lj.g, Lj.b)) * EMITTER_DIRECT < 0.003) { continue; }
-    let ap = clamp(lights[j].w / d, 0.02, 0.5);   // angular size of the light = penumbra width
-    let r = trace_probe_cone(origin, dir, ap, d, max(1, AIMED_STEPS), AIMED_ALPHA_CUT);
+    let ap = clamp(posR.w / d, 0.02, 0.5);   // angular size of the light = penumbra width
+    // SHADOW REACH stops at the light's SURFACE minus one voxel — marching to the CENTER (old
+    // reach = d) always ended inside the emitter's own voxelized cells, self-occluding every
+    // close light (occ→1 while trilinear/LOD dilutes the bleed below the shadow). NEAR-FIELD
+    // GATE: within ~3 voxels the field cannot resolve an occluder at all (the march starts at
+    // dist = voxelSize and the surface+light share cells) — skip the trace, take occ = 0.
+    let shadowReach = dc - lr - uGridOrigin.w;
+    var r = vec4<f32>(0.0);
+    if (shadowReach > uGridOrigin.w * 3.0) {
+      r = trace_probe_cone(origin, dir, ap, shadowReach, max(1, AIMED_STEPS), AIMED_ALPHA_CUT);
+    }
     // ANALYTIC DIRECT + bleed-cancel (the "white shadow" fix): shadow = what the cone's opacity
     // removes; bleed = the radiance the cone actually gathered (a BRIGHT occluder => big bleed =>
     // its false shadow is cancelled; a DARK occluder => ~0 bleed => the shadow survives). Clamped
@@ -510,7 +592,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let occ = clamp(r.a, 0.0, 1.0);
     let shadow = Lj * occ;
     let bleed = r.rgb;
-    let contrib = max(vec3<f32>(0.0), Lj - max(vec3<f32>(0.0), shadow - bleed)) * EMITTER_DIRECT;
+    let contrib = max(vec3<f32>(0.0), Lj - max(vec3<f32>(0.0), shadow - bleed))
+      * (EMITTER_DIRECT * lightScale * horizon);
     // Project into the SAME SH-L1 accumulators as the fill cones, at the emitter direction.
     let Y00 = 0.282095;
     let Y1m1 = 0.488603 * dir.y;

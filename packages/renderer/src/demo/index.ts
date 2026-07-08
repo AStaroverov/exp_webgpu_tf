@@ -1,0 +1,501 @@
+// renderer3d 2.5D true-3D-SDF demo — the harness/wiring only. The scenes themselves (world
+// content + per-scene animation + per-scene GUI) live in src/demo/scenes/* behind the
+// createScene registry; this file owns the engine wiring (createWorld → initWebGPU → frame
+// textures → draw system → resize/transform systems → voxel GI → present), the shared voxel-GI
+// GUI, and the frame loop.
+//
+// DEPTH CONVENTION — REVERSE-Z (NEAR=1 .. FAR=0): the draw pipeline compares
+// depth "greater-equal" against a 0 clear; ResizeSystem.viewProjMatrix and the
+// shader's frag_depth both follow it. See sdf.shader.ts / ResizeSystem.ts.
+
+import GUI from "lil-gui";
+import Stats from "stats-gl";
+import { initWebGPU } from "../gpu.ts";
+import { createWorld } from "../ECS/world.ts";
+import { createFrameTextures, createFrameTick } from "../WGSL/createFrame.ts";
+import { createPresent } from "../WGSL/createPresent.ts";
+import { createDrawShapeSystem } from "../ECS/Systems/SDFSystem/createDrawShapeSystem.ts";
+import { createVoxelSystem } from "../ECS/Systems/Lighting/createVoxelSystem.ts";
+import { createLightEmitterSystem } from "../ECS/Systems/Lighting/createLightEmitterSystem.ts";
+import { SunLight } from "../ECS/Systems/SunLight.ts";
+import { createTransformSystem } from "../ECS/Systems/TransformSystem.ts";
+import {
+  cameraAzimuth,
+  cameraElevation,
+  cameraZoom,
+  createResizeSystem,
+  setCameraElevation,
+  setCameraPosition,
+} from "../ECS/Systems/ResizeSystem.ts";
+import { computeSmokeTest } from "../WGSL/computeSmokeTest.ts";
+import { atomicIndirectSmokeTest } from "../WGSL/atomicIndirectSmokeTest.ts";
+import { createScene, SCENE_OPTIONS, type SceneName } from "./scenes/index.ts";
+import { perfToggles } from "./scenes/perfToggles.ts";
+
+// The transform system multiplies parents by their children; this demo has no
+// hierarchy, so a stub Children with zero counts is enough.
+const stubChildren = {
+  entitiesCount: { get: (_eid: number) => 0 },
+  entitiesIds: { get: (_eid: number, _i: number) => 0 },
+};
+
+async function main() {
+  const canvas = document.getElementById("c") as HTMLCanvasElement;
+  const { device, context } = await initWebGPU(canvas);
+
+  // Stage-0 compute-infrastructure check (logs [compute-smoke] PASS/FAIL once).
+  void computeSmokeTest(device);
+
+  // De-risk the adaptive screen-probe atlas primitives: storage-buffer atomics +
+  // compute-written indirect dispatch (logs [atomic-indirect-smoke] PASS/FAIL once).
+  void atomicIndirectSmokeTest(device);
+
+  const getPixelRatio = () => window.devicePixelRatio;
+
+  const world = createWorld();
+
+  // Scene selection (picked live from the GUI; persisted in localStorage, applied on reload).
+  const savedScene = localStorage.getItem("demo.scene");
+  const SCENE: SceneName = (SCENE_OPTIONS as readonly string[]).includes(savedScene ?? "")
+    ? (savedScene as SceneName)
+    : "showcase";
+  // Both perf scenes drive the same GPU-cost harness (per-pass toggles + serialized timing).
+  const PERF = SCENE === "perf" || SCENE === "perf2";
+
+  // Spawn the scene's world content; keep its hooks (animate / setupGUI / camera framing).
+  const scene = createScene(SCENE, world);
+
+  // --- Systems ---
+  const execTransformSystem = createTransformSystem(world, stubChildren, -1);
+  const shapeSystem = createDrawShapeSystem({ world, device });
+  const present = createPresent(device, context);
+
+  setCameraPosition(0, 0);
+  // pixels per world unit; smaller shows more world. Scenes that spread wide/tall override it.
+  cameraZoom.value = scene.cameraZoom ?? 14;
+
+  let frame = createFrameTextures(device, canvas);
+  let frameW = canvas.width;
+  let frameH = canvas.height;
+  let frameTick = createFrameTick(
+    { ...frame, canvas, device, background: [0.043, 0.051, 0.07, 1], getPixelRatio },
+    ({ passEncoder }) => shapeSystem.drawShapes(passEncoder),
+  );
+
+  // Voxel GI system: voxelize the scene, build the radiance pyramid, cone-gather + composite.
+  const voxel = createVoxelSystem({
+    device,
+    canvas,
+    sceneInstances: shapeSystem.sceneInstances,
+    depthTexture: frame.depthTexture,
+    normalTexture: frame.normalTexture,
+    albedoTexture: frame.renderTexture,
+    emissionTexture: frame.emissionTexture,
+  });
+
+  const gui = new GUI({ title: "Voxel" });
+
+  gui
+    .add({ scene: SCENE }, "scene", SCENE_OPTIONS as unknown as string[])
+    .name("scene")
+    .onChange((v: string) => {
+      localStorage.setItem("demo.scene", v);
+      location.reload();
+    });
+
+  // Graininess: voxel size in world units. Smaller = finer = more voxels. Rebuilds the
+  // 3D textures on release (.onFinishChange, so it rebuilds once when the slider settles).
+  // The displayed dims controller reflects the resulting per-axis voxel counts.
+  const voxCfg = { cellSize: voxel.cellSize };
+  const dimsLabel = { dims: `${voxel.dims.x}×${voxel.dims.y}×${voxel.dims.z}` };
+  const dimsCtl = gui.add(dimsLabel, "dims").name("voxel dims").disable();
+  gui
+    .add(voxCfg, "cellSize", 0.125, 2, 0.025)
+    .name("voxel size (graininess)")
+    .onFinishChange((cs: number) => {
+      voxel.setCellSize(cs);
+      dimsLabel.dims = `${voxel.dims.x}×${voxel.dims.y}×${voxel.dims.z}`;
+      dimsCtl.updateDisplay();
+    });
+
+  // Sun toggle is read live by the draw pass; keep it exposed for the raw view.
+  gui.add(SunLight, "enabled").name("sun enabled");
+  gui.add(SunLight, "angle", 0, Math.PI * 2, 0.01).name("sun angle");
+  gui.add(SunLight, "elevation", 0, Math.PI / 2, 0.01).name("sun elevation");
+  gui.add(SunLight, "intensity", 0, 5, 0.05).name("sun intensity");
+  gui.addColor(SunLight, "color", 1).name("sun color"); // rgbScale=1 → array is 0..1 floats
+
+  // Cone GI: the screen-probe RESOLVE (the probe SH carries fill/bounce AND emitter light) + the
+  // short per-pixel AO cones. No aimed cones here anymore — the emitter knobs live in the
+  // "Screen probe GI" folder (they bake into the probe gather).
+  const coneFolder = gui.addFolder("Cone GI");
+  // Baked-config controls recompile the GI shaders on release (onFinishChange), not per drag tick.
+  const rebuild = () => voxel.rebuild();
+  coneFolder
+    .add(voxel.config, "aperture", 0.1, 1.5, 0.01)
+    .name("aperture (lower=sharper)")
+    .onFinishChange(rebuild);
+  coneFolder.add(voxel.config, "maxDist", 1, 64, 0.5).name("cone reach").onFinishChange(rebuild);
+  coneFolder
+    .add(voxel.config, "normalBias", 0, 2, 0.01)
+    .name("normal bias")
+    .onFinishChange(rebuild);
+  coneFolder
+    .add(voxel.config, "giStrength", 0, 4, 0.05)
+    .name("GI strength (bounce)")
+    .onFinishChange(rebuild);
+  // Cone-pass resolution: 2 = half-res (¼ pixels), 4 = quarter-res (1/16), 8 = eighth-res (1/64).
+  // The biggest perf lever for heavy scenes — lower res blurs the GI but the bilateral upsample
+  // keeps edges crisp.
+  const coneResCfg = { scale: voxel.coneScale };
+  coneFolder
+    .add(coneResCfg, "scale", { "half-res (2)": 2, "quarter-res (4)": 4, "eighth-res (8)": 8 })
+    .name("cone resolution")
+    .onChange((s: number) => voxel.setConeScale(s));
+  // Anisotropic voxels: directional far-field volumes (anti-leak) vs the plain isotropic pyramid.
+  // Runtime toggle (no rebuild) — flip it to see light stop bleeding through thin occluders.
+  const anisoCfg = { anisotropic: voxel.anisoMode };
+  coneFolder
+    .add(anisoCfg, "anisotropic")
+    .name("anisotropic voxels")
+    .onChange((on: boolean) => voxel.setAnisoMode(on));
+
+  // Screen-probe GI: surface-anchored probes (one per tile) that supply the diffuse fill/bounce
+  // AND the aimed emitter cones (traced once per probe — the emitter knobs below bake into the
+  // probe gather). conesPerProbe is the bounce quality (probes run at low res, once per frame →
+  // afford many); aoConeCount/aoReach are the SHORT per-pixel contact-AO cones (the .a/visibility
+  // term, still in the cone pass).
+  const probeFolder = gui.addFolder("Screen probe GI");
+  // Emitter DIRECT strength: multiplier on the aimed-cone direct light. Raise it to let a
+  // bright emitter overpower the sun (e.g. fill the sun-shadow it casts under itself).
+  probeFolder
+    .add(voxel.config, "emitterDirect", 0, 8, 0.1)
+    .name("emitter direct strength")
+    .onFinishChange(rebuild);
+  // Distance falloff for emitter direct light: 0 = flat (sun-like, hard rim), 1 = standard 1/d².
+  probeFolder
+    .add(voxel.config, "emitterFalloff", 0, 4, 0.05)
+    .name("emitter falloff")
+    .onFinishChange(rebuild);
+  // Aimed-cone march budget: fewer steps = cheaper, but shorter/coarser emitter shadows (and
+  // possible light leak through thin occluders).
+  probeFolder.add(voxel.config, "aimedSteps", 8, 64, 1).name("aimed steps").onFinishChange(rebuild);
+  // Early-out opacity: <1 lets a near-opaque aimed cone stop before its full budget (saves the tail
+  // when the light is blocked). 1 = no early cut (sharpest shadow).
+  probeFolder
+    .add(voxel.config, "aimedAlphaCut", 0.5, 1, 0.01)
+    .name("aimed alpha cut")
+    .onFinishChange(rebuild);
+  // Aimed cones per probe per FRAME: with more live lights in the probe's cluster cell it
+  // round-robins a window of this many (energy-rescaled; the temporal history integrates the
+  // rest — needs hysteresis > 0). The knob = the emitter cost ceiling per probe.
+  probeFolder
+    .add(voxel.config, "aimedPerFrame", 1, 16, 1)
+    .name("aimed cones / frame")
+    .onFinishChange(rebuild);
+  // Clustered light culling: cluster cell size (in voxels per axis) + max lights recorded per
+  // cell (overflow is dropped for that cell).
+  probeFolder
+    .add(voxel.config, "clusterDiv", [2, 4, 8, 16, 32])
+    .name("light cluster size (voxels)")
+    .onFinishChange(rebuild);
+  probeFolder
+    .add(voxel.config, "clusterCap", 4, 64, 1)
+    .name("lights / cluster cap")
+    .onFinishChange(rebuild);
+  // SH-L1 saturates ~16 cones, so higher values only cut noise (no detail) — keep this low.
+  probeFolder
+    .add(voxel.config, "conesPerProbe", [8, 16, 32, 64, 128])
+    .name("cones / probe")
+    .onFinishChange(rebuild);
+  probeFolder
+    .add(voxel.config, "aoConeCount", 0, 8, 1)
+    .name("AO cones (contact)")
+    .onFinishChange(rebuild);
+  probeFolder.add(voxel.config, "aoReach", 21, 16, 0.5).name("AO reach").onFinishChange(rebuild);
+  // Screen-probe tile (full-res px / probe): smaller = finer probe grid = sharper fill but more
+  // gather cost. Live (recreates the probe textures on change — no shader rebuild).
+  const spCfg = { tile: voxel.screenProbeTile, normalPow: voxel.spNormalPow, planeK: voxel.spPlaneK };
+  probeFolder
+    .add(spCfg, "tile", [2, 4, 8, 16, 24, 32, 48, 64])
+    .name("probe tile (px)")
+    .onChange((t: number) => voxel.setScreenProbeTile(t));
+  // Bilateral resolve weights (live, no rebuild): normalPow = normal-similarity sharpness (higher =
+  // stricter across differing normals); planeK = plane-reject threshold × local probe spacing
+  // (lower = stricter across depth steps → less bleed but more disocclusion fallback).
+  const applySP = () => voxel.setScreenProbeParams(spCfg.normalPow, spCfg.planeK);
+  probeFolder.add(spCfg, "normalPow", 0.5, 8, 0.5).name("resolve: normal pow").onChange(applySP);
+  probeFolder.add(spCfg, "planeK", 0.25, 4, 0.25).name("resolve: plane K").onChange(applySP);
+  // Unified-resolve support radius (in TILES): the smooth screen kernel that weights EVERY probe
+  // (uniform AND adaptive) tapers to zero at this distance. Bigger = smoother/wider fill (also helps a
+  // distant object seen by few probes); smaller = more local detail. Live, no rebuild. This supersedes
+  // the old probe blur pass — the wide multi-probe average IS the smoothing, so uniform vs adaptive is
+  // invisible and adding adaptive density only sharpens gradients (never blocky steps).
+  const resolveCfg = { radius: voxel.screenProbeResolveRadius };
+  probeFolder
+    .add(resolveCfg, "radius", 0.5, 3, 0.25)
+    .name("resolve radius (tiles)")
+    .onChange((r: number) => voxel.setScreenProbeResolveRadius(r));
+  // STAGE 3: temporal accumulation on the probe atlas — the history weight of the per-probe SH
+  // blend. 0 = OFF (fresh-only, byte-identical to the pre-temporal path — the A/B + rollback);
+  // ~0.85–0.9 amortizes the gather across frames (per-frame golden-angle cone rotation integrates
+  // back to an effective 2–4× cone budget), so cones/probe can drop to 4–8. Disocclusions are
+  // rejected by the SAME plane/normal weight the resolve uses (tuned by plane K / normal pow
+  // above), so raising it should not ghost. Live (per-frame uniform, no rebuild).
+  const temporalCfg = { hysteresis: voxel.temporalHysteresis };
+  probeFolder
+    .add(temporalCfg, "hysteresis", 0, 0.95, 0.05)
+    .name("temporal hysteresis")
+    .onChange((h: number) => voxel.setTemporalHysteresis(h));
+
+  // --- Adaptive screen-probe atlas (single 16→8 level, LIGHT-ADAPTIVE only). ---
+  // The sole density driver is lightThresh: refine spawns an adaptive probe where the GATHERED
+  // incoming light varies across the uniform cage by more than this. High ⇒ off (the flat uniform
+  // atlas, the A/B baseline); lower ⇒ denser where the light gradient is steep. adaptiveFraction
+  // sizes the atlas + all indirection buffers (rebuild, like a tile change). The read-only rows show
+  // the live adaptive count + a BUDGET-EXCEEDED flag from the throttled counter readback.
+  const adaptiveCfg = {
+    adaptiveFraction: voxel.adaptiveFraction,
+    div1: voxel.refineDiv1,
+    lightThresh: voxel.lightThresh,
+  };
+  probeFolder
+    .add(adaptiveCfg, "adaptiveFraction", 0, 4, 0.25)
+    .name("adaptive budget ×uniform")
+    .onFinishChange((v: number) => voxel.setAdaptiveFraction(v));
+  // Refine cell divisor → cellPx = tile / div (the level is tile → tile/div). E.g. tile 16 + 2 =
+  // 16→8. Live (no rebuild). A coarse tile + fine divisor can exceed the per-tile probe cap
+  // (SCREEN_PROBE_K=8) → surplus probes dropped; watch the budget row.
+  probeFolder
+    .add(adaptiveCfg, "div1", [2, 4, 8, 16])
+    .name("cell ÷")
+    .onChange((v: number) => voxel.setRefineDiv(v));
+  // Light-adaptive density trigger: subdivide where the gathered-SH luminance varies across the cage.
+  // Lower = denser probes in lit gradients; raise high = off (the flat uniform atlas). Live, no
+  // rebuild. Watch the budget row — lowering it spawns more probes.
+  probeFolder
+    .add(adaptiveCfg, "lightThresh", 0, 1, 0.01)
+    .name("light subdiv thresh")
+    .onChange((v: number) => voxel.setLightThresh(v));
+  // Read-only budget readout (updated each frame from the async counter readback; .listen() auto-
+  // refreshes the display). `budget` flips to BUDGET-EXCEEDED when the atlas overflowed this frame.
+  const probeStats = { adaptive: 0, budget: "OK" };
+  probeFolder.add(probeStats, "adaptive").name("adaptive probes").disable().listen();
+  probeFolder.add(probeStats, "budget").name("budget").disable().listen();
+  // Debug view: replace the lit image with a false-color map of the probe distribution — green =
+  // uniform (16px) probes, yellow = adaptive (8px) probes, red-tinted = subdivided tiles. Live.
+  const debugCfg = { debugProbes: voxel.debugProbes };
+  probeFolder
+    .add(debugCfg, "debugProbes")
+    .name("debug: probe layers")
+    .onChange((on: boolean) => voxel.setDebugProbes(on));
+
+  // Composite (Layer 4): the final lit image. Sun controls above feed it via SunLight;
+  // cone giStrength bakes into the indirect term. Only the ambient floor lives here.
+  const compositeFolder = gui.addFolder("Composite");
+  compositeFolder
+    .add(voxel.config, "ambient", 0, 0.5, 0.01)
+    .name("composite ambient")
+    .onFinishChange(rebuild);
+  // HDR exposure before the ACES tonemap. Raise for a brighter image; highlights roll off instead
+  // of clipping to flat white.
+  compositeFolder
+    .add(voxel.config, "exposure", 0.1, 4, 0.05)
+    .name("exposure")
+    .onFinishChange(rebuild);
+  // Sun-shadow penumbra: the PCF filter widens as the sun intensity drops below 1, so a dimmer sun
+  // casts a softer, wider shadow edge. 0 = always crisp; higher = stronger softening when sun < 1.
+  compositeFolder
+    .add(voxel.config, "penumbra", 0, 12, 0.5)
+    .name("penumbra (sun-dim)")
+    .onFinishChange(rebuild);
+  // Base sun-shadow PCF radius applied even at full sun → smooths the shadow-map texel staircase.
+  // 1 = near-hard (old). The sun frustum also auto-fits the camera view, so steps shrink on zoom.
+  compositeFolder
+    .add(voxel.config, "shadowBaseSpread", 1, 6, 0.25)
+    .name("shadow softness")
+    .onFinishChange(rebuild);
+
+  // Scene-specific GUI (perf toggles / emitter controls / animation switches / …).
+  scene.setupGUI?.(gui);
+
+  // Auto-discover scene emitters → cone importance-sampling lights each frame.
+  const updateLights = createLightEmitterSystem(world, voxel);
+
+  // Standalone resize/camera update, run BEFORE prepare() so the camera uniforms
+  // uploaded each frame are current. (createFrameTick has its own internal resize
+  // system, but it runs inside the main pass — i.e. after prepare — which would
+  // leave the orbiting camera one frame stale. The internal one then no-ops.)
+  const resizeSystem = createResizeSystem(canvas, getPixelRatio);
+
+  // --- Mouse orbit: horizontal drag = azimuth, vertical drag = elevation, wheel = zoom.
+  // Pointer capture keeps the drag alive when the cursor leaves the canvas.
+  let dragging = false;
+  canvas.style.cursor = "grab";
+  canvas.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    canvas.style.cursor = "grabbing";
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener("pointerup", (e) => {
+    dragging = false;
+    canvas.style.cursor = "grab";
+    canvas.releasePointerCapture(e.pointerId);
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    cameraAzimuth.value += e.movementX * 0.4; // ~0.4 deg per pixel
+    setCameraElevation(cameraElevation.value - e.movementY * 0.3); // clamped to (1, 89.9)
+  });
+  canvas.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
+      cameraZoom.value = Math.max(
+        4,
+        Math.min(60, cameraZoom.value * (1 - Math.sign(e.deltaY) * 0.1)),
+      );
+    },
+    { passive: false },
+  );
+
+  // stats-gl overlay: FPS + CPU come from begin()/end() (no init needed). stats-gl's NATIVE
+  // GPU timer needs a WebGL2 context or a three.js renderer — we have neither (raw WebGPU),
+  // so we feed our own GPU ms (onSubmittedWorkDone, below) into a custom panel instead.
+  const stats = new Stats({ trackGPU: false, horizontal: true, precision: 2 });
+  document.body.appendChild(stats.dom);
+  const gpuPanel = stats.addPanel(new Stats.Panel("GPU ms", "#ff8", "#221"));
+  let gpuMsMax = 1;
+
+  let last = performance.now();
+  let gpuMsEMA = 0;
+  async function loop(now: number) {
+    stats.begin();
+    const delta = Math.min(now - last, 16.6667);
+    last = now;
+
+    // Update camera + canvas size first, so prepare() uploads current uniforms
+    // and the resize check below sees this frame's dimensions.
+    resizeSystem();
+
+    // Recreate frame textures + tick if the canvas was resized.
+    if (canvas.width !== frameW || canvas.height !== frameH) {
+      frame = createFrameTextures(device, canvas);
+      frameW = canvas.width;
+      frameH = canvas.height;
+      frameTick = createFrameTick(
+        { ...frame, canvas, device, background: [0.043, 0.051, 0.07, 1], getPixelRatio },
+        ({ passEncoder }) => shapeSystem.drawShapes(passEncoder),
+      );
+      // Voxel: rebind the new G-buffer + recreate its canvas-sized outputs (debug + cone +
+      // GI accumulation).
+      voxel.recreate(
+        frame.depthTexture,
+        frame.normalTexture,
+        frame.renderTexture,
+        frame.emissionTexture,
+      );
+    }
+
+    // Drive the scene's dynamic objects, then push transforms → instance buffers.
+    scene.animate?.(now);
+    // Auto-discover emitters (positions are now current) → cone importance-sampling lights.
+    updateLights();
+    execTransformSystem();
+    shapeSystem.prepare();
+
+    const encoder = device.createCommandEncoder();
+    if (PERF) {
+      // Perf harness: every pass runs purely by its toggle (skipped passes just leave their
+      // textures stale — valid GPU work, no crash). Always presents the composite output, so
+      // toggling a pass changes ONLY that pass's GPU work → the gpuMs delta attributes its
+      // cost. The full chain is voxelize → mips → cone → composite (+ the SDF draw G-buffer).
+      // sunDepth runs FIRST so model A's voxelize can sample the sun shadow map (and
+      // buildSunViewProj uploads the matrix to voxelize + composite). If sunDepth is toggled OFF
+      // while voxelize is ON in model A, voxelize samples a STALE sun depth map — acceptable for
+      // a cost harness (the binding is always valid; no crash).
+      if (perfToggles.draw) frameTick(encoder, delta);
+      if (perfToggles.sunDepth) voxel.sunDepth(encoder); // sun-POV depth feeding voxelize (A) + composite
+      if (perfToggles.voxelize) voxel.voxelize(encoder);
+      if (perfToggles.mips) voxel.mips(encoder);
+      if (perfToggles.anisoBase) voxel.anisoBase(encoder);
+      if (perfToggles.anisoMips) voxel.anisoMips(encoder);
+      // Screen-probe gather (the diffuse fill source): reads the radiance pyramid (after mips), must
+      // precede cone (which resolves it). LIGHT-ADAPTIVE ATLAS chain (clear → classify → gatherUniform
+      // → refine 16→8 → build-args → gatherAdaptive); the single toggle gates the whole chain's GPU
+      // cost. gatherUniform runs BEFORE refine so refine subdivides on the real gathered-SH radiance
+      // spread across the cage.
+      if (perfToggles.screenProbe) {
+        voxel.probeClear(encoder);
+        voxel.probeClassify(encoder);
+        voxel.gatherUniform(encoder);
+        voxel.probeRefine(encoder);
+        voxel.probeBuildArgs(encoder);
+        voxel.gatherAdaptive(encoder);
+      }
+      if (perfToggles.cone) voxel.cone(encoder);
+      // Debug view replaces the lit composite (both write compositeOutput → present is unchanged).
+      if (voxel.debugProbes) voxel.probeDebug(encoder);
+      else if (perfToggles.composite) voxel.composite(encoder);
+      present(encoder, voxel.compositeOutputTexture);
+    } else {
+      // Final lit image. Order: SDF G-buffer draw → (sun depth, only when the directional sun is
+      // on) → voxelize → mips → cone gather → composite. The sun-POV depth map feeds the
+      // composite's crisp cast shadow (and voxelize's shadowed sun injection).
+      frameTick(encoder, delta);
+      if (SunLight.enabled) {
+        voxel.sunDepth(encoder);
+      }
+      voxel.voxelize(encoder);
+      voxel.mips(encoder);
+      voxel.anisoBase(encoder);
+      voxel.anisoMips(encoder);
+      // Screen-probe gather (the diffuse fill source): after mips, before cone. LIGHT-ADAPTIVE ATLAS
+      // chain (clear → classify → gatherUniform → refine 16→8 → build-args → gatherAdaptive).
+      // gatherUniform runs BEFORE refine so refine subdivides on the real gathered-SH radiance spread
+      // across the cage.
+      voxel.probeClear(encoder);
+      voxel.probeClassify(encoder);
+      voxel.gatherUniform(encoder);
+      voxel.probeRefine(encoder);
+      voxel.probeBuildArgs(encoder);
+      voxel.gatherAdaptive(encoder);
+      voxel.cone(encoder);
+      // Debug view replaces the lit composite (both write compositeOutput → present is unchanged).
+      if (voxel.debugProbes) voxel.probeDebug(encoder);
+      else voxel.composite(encoder);
+      present(encoder, voxel.compositeOutputTexture);
+    }
+
+    // GPU time of this frame's submitted work — resolves when the GPU finishes, BEFORE the
+    // vsync present, so it is not capped at 16.6 ms the way the rAF fps is. EMA-smoothed;
+    // read the DELTA when a perf toggle flips to attribute cost to that pass.
+    const tSubmit = performance.now();
+    device.queue.submit([encoder.finish()]);
+    // Serialize: wait for THIS frame's GPU work to fully finish before timing + encoding the
+    // next. Removes the cross-frame queue backlog, so gpuMs is a clean single-frame number and
+    // a pass toggle changes it unambiguously (diagnostic mode — not how a shipping loop runs).
+    await device.queue.onSubmittedWorkDone();
+    const dt = performance.now() - tSubmit;
+    gpuMsEMA = gpuMsEMA ? gpuMsEMA * 0.8 + dt * 0.2 : dt;
+    gpuMsMax = Math.max(gpuMsMax, gpuMsEMA);
+    gpuPanel.update(gpuMsEMA, gpuMsMax);
+
+    // Throttled adaptive-budget readback (self-paced, ~every 30 frames) → live GUI count + warning.
+    void voxel.pollBudget();
+    probeStats.adaptive = voxel.adaptiveProbeCount;
+    probeStats.budget = voxel.budgetExceeded ? "BUDGET EXCEEDED" : "OK";
+
+    // CPU/FPS frame bracket for stats-gl (GPU panel is fed by the timer above).
+    stats.end();
+    stats.update();
+
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+}
+
+main().catch((err) => {
+  document.body.innerHTML = `<pre style="color:#f88;padding:20px">${(err as Error)?.stack ?? err}</pre>`;
+  console.error(err);
+});

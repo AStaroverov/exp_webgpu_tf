@@ -26,6 +26,14 @@ export type VoxelBakedConfig = {
   emitterFalloff: number; // emitter distance falloff coefficient (0 = none/flat, 1 = standard 1/d²)
   aimedSteps: number; // aimed-cone march step budget (lower = cheaper, shorter/coarser shadows)
   aimedAlphaCut: number; // aimed-cone early-out opacity (<1 stops a near-opaque cone → saves the tail)
+  aimedPerFrame: number; // aimed cones traced per probe per FRAME; with more live lights each probe
+  //   round-robins a window of this many (energy-rescaled, temporally integrated) → the aimed cost
+  //   is CONSTANT in the light count. Requires temporal hysteresis > 0 once lights exceed it.
+  clusterDiv: number; // light-cluster cell size in VOXELS per axis (clustered light culling à la
+  //   Persson: CPU bins each emitter into the world-space cells its influence sphere overlaps;
+  //   a probe round-robins ONLY its own cell's list). Smaller = tighter lists, more CPU binning.
+  clusterCap: number; // max lights recorded per cluster cell (overflow lights are dropped for that
+  //   cell — raise it if a scene legitimately packs more overlapping emitters than this).
   aoConeCount: number; // short per-pixel hemisphere occlusion cones for contact AO (0 = no AO)
   aoReach: number; // AO cone reach (world units) — short, near-field contact occlusion
   aoSteps: number; // AO cone march budget (short)
@@ -48,6 +56,9 @@ export const DEFAULT_VOXEL_BAKED_CONFIG: VoxelBakedConfig = {
   emitterFalloff: 1,
   aimedSteps: 32,
   aimedAlphaCut: 1,
+  aimedPerFrame: 8,
+  clusterDiv: 8,
+  clusterCap: 16,
   aoConeCount: 2,
   aoReach: 2,
   aoSteps: 12,

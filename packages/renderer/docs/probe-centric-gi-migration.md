@@ -204,7 +204,27 @@ after Stage 1 is accepted (amortizing the old per-pixel path is pointless).
   (frame-index uniform lane) so successive frames fill different directions; temporal blend
   integrates them back to effective 16–32.
 - Many emitters (when they arrive): round-robin — each frame traces lights `frame % K` per
-  probe; history smooths.
+  probe; history smooths. **✅ DONE (later addition):** the emitter list moved from the
+  `array<vec4, 8>` uniform pair to ONE runtime-sized storage buffer (`uLights`, interleaved
+  posRadius/colorIntensity — light count UNCAPPED, auto-discovered by
+  `createLightEmitterSystem`), and the aimed loop traces a per-probe round-robin WINDOW of
+  `aimedPerFrame` (config, default 8) lights per frame, energy-rescaled by `lc/take` and
+  integrated by the Stage-3 history. ≤ `aimedPerFrame` lights ⇒ the exact all-lights path
+  (byte-identical to the old capped behavior); more ⇒ constant aimed cost in the light count.
+  Subsampling requires `hysteresis > 0` (with it off and `lc > aimedPerFrame` the emitter
+  light strobes, by design). On top of it sits **clustered light culling** (Persson-style CPU
+  assignment — "Practical Clustered Shading"): the grid AABB is divided into cells of
+  `clusterDiv` voxels per axis, `setLights` bins each emitter into every cell its influence
+  sphere (derived from the same 0.003 contribution cull) overlaps (`uLightClusters`,
+  `clusterCap` lights per cell), and the probe's aimed loop + round-robin window run over ITS
+  cell's list only — the per-probe cost tracks the local light density, not the global count.
+  Two hard-won correctness rules (both bugs were visible as cell "sectors" on the floor in the
+  swarm scene): (1) a FULL cell keeps its `clusterCap` STRONGEST lights by estimated
+  contribution at the cell center — first-come dropping made a light vanish from the crowded
+  cells around itself while surviving in emptier far cells; (2) the shader applies a
+  **UE4/Frostbite range window** `(1 − (d/R)⁴)²` with R = the binning radius, so the light
+  reaches exactly zero where the binning stops — without it the last covered cell ends with a
+  0.003-high visible step.
 - `adaptiveFraction 1.0 → ~0.5`: the comment in `voxelResources.ts` (`screenProbeCounts`)
   explicitly ties 1.0 to "we amortize NOTHING" — that premise is gone now.
 
