@@ -113,44 +113,85 @@ export const sceneSDF = wgsl /* WGSL */ `
             return -sqrt(d.x) * sign(d.y);
         }
 
+        // ============= Per-instance params, hoisted into registers =============
+        // sd_shape3d(p, i) re-reads uKind/uValues/uRoundness from storage on EVERY
+        // call — inside a sphere-trace loop that is hundreds of dynamically-indexed
+        // storage loads per fragment the compiler cannot hoist. ShapeParams loads
+        // the instance ONCE; the trace loop then runs on registers. The index-based
+        // wrappers below keep the old API for shaders that evaluate few samples
+        // per instance (sun shadow, voxelize).
+
+        struct ShapeParams {
+            kind: u32,
+            roundness: f32,
+            halfZ: f32,
+            va: vec4<f32>, // uValues[0..3]
+            vb: vec4<f32>, // uValues[4..7]
+        };
+
+        // Half of the shape's Z extent, per-kind from the values' depth slot. Sphere
+        // (6) has no extrusion: its radius is already its full half-extent.
+        fn shape_half_z(kind: u32, va: vec4<f32>, vb: vec4<f32>) -> f32 {
+            if (kind == 0u) {
+                return va.y * 0.5;
+            } else if (kind == 1u) {
+                return va.z * 0.5;
+            } else if (kind == 3u) {
+                return va.w * 0.5;
+            } else if (kind == 4u) {
+                return va.w * 0.5;
+            } else if (kind == 5u) {
+                return vb.z * 0.5;
+            }
+            return va.x;
+        }
+
+        fn load_shape_params(instance_index: u32) -> ShapeParams {
+            var sp: ShapeParams;
+            sp.kind = uKind[instance_index];
+            sp.roundness = uRoundness[instance_index];
+            let base = instance_index * 8u;
+            sp.va = vec4<f32>(uValues[base], uValues[base + 1u], uValues[base + 2u], uValues[base + 3u]);
+            sp.vb = vec4<f32>(uValues[base + 4u], uValues[base + 5u], uValues[base + 6u], uValues[base + 7u]);
+            sp.halfZ = shape_half_z(sp.kind, sp.va, sp.vb);
+            return sp;
+        }
+
         // Dispatch the 2D footprint SDF by ShapeKind, reusing the EXACT 2D values
         // layout + roundness convention from the original 2D shader. (Sphere=6 is
-        // handled separately in sd_shape3d — never reaches here.)
-        fn sd_2d_for_kind(p: vec2<f32>, instance_index: u32) -> f32 {
-            let kind = uKind[instance_index];
-            let width = uValues[instance_index * 8u + 0u];
-            let height = uValues[instance_index * 8u + 1u];
-            let roundness = uRoundness[instance_index];
+        // handled separately in sd_shape3d_p — never reaches here.)
+        fn sd_2d_p(p: vec2<f32>, sp: ShapeParams) -> f32 {
+            let roundness = sp.roundness;
             var dist = 1.0;
 
-            if (kind == 0u) {
+            if (sp.kind == 0u) {
                 // Circle -> cylinder footprint.
-                dist = sd_circle(p, width / 2.0);
-            } else if (kind == 1u) {
-                dist = sd_rectangle(p, width / 2.0 - roundness, height / 2.0 - roundness);
-            } else if (kind == 3u) {
-                dist = sd_parallelogram(p, width / 2.0 - roundness, height / 2.0 - roundness, uValues[instance_index * 8u + 2u]);
-            } else if (kind == 4u) {
+                dist = sd_circle(p, sp.va.x / 2.0);
+            } else if (sp.kind == 1u) {
+                dist = sd_rectangle(p, sp.va.x / 2.0 - roundness, sp.va.y / 2.0 - roundness);
+            } else if (sp.kind == 3u) {
+                dist = sd_parallelogram(p, sp.va.x / 2.0 - roundness, sp.va.y / 2.0 - roundness, sp.va.z);
+            } else if (sp.kind == 4u) {
                 // Trapezoid: values = [topWidth, bottomWidth, height].
                 // sd_trapezoid(p, r1=bottom half-width, r2=top half-width, he=half-height).
                 dist = sd_trapezoid(
                     p,
-                    uValues[instance_index * 8u + 1u] / 2.0 - roundness,
-                    uValues[instance_index * 8u + 0u] / 2.0 - roundness,
-                    uValues[instance_index * 8u + 2u] / 2.0 - roundness,
+                    sp.va.y / 2.0 - roundness,
+                    sp.va.x / 2.0 - roundness,
+                    sp.va.z / 2.0 - roundness,
                 );
-            } else if (kind == 5u) {
-                let ax = uValues[instance_index * 8u + 0u] - sign(uValues[instance_index * 8u + 0u]) * roundness;
-                let ay = uValues[instance_index * 8u + 1u] - sign(uValues[instance_index * 8u + 1u]) * roundness;
-                let bx = uValues[instance_index * 8u + 2u] - sign(uValues[instance_index * 8u + 2u]) * roundness;
-                let by = uValues[instance_index * 8u + 3u] - sign(uValues[instance_index * 8u + 3u]) * roundness;
-                let cx = uValues[instance_index * 8u + 4u] - sign(uValues[instance_index * 8u + 4u]) * roundness;
-                let cy = uValues[instance_index * 8u + 5u] - sign(uValues[instance_index * 8u + 5u]) * roundness;
+            } else if (sp.kind == 5u) {
+                let ax = sp.va.x - sign(sp.va.x) * roundness;
+                let ay = sp.va.y - sign(sp.va.y) * roundness;
+                let bx = sp.va.z - sign(sp.va.z) * roundness;
+                let by = sp.va.w - sign(sp.va.w) * roundness;
+                let cx = sp.vb.x - sign(sp.vb.x) * roundness;
+                let cy = sp.vb.y - sign(sp.vb.y) * roundness;
                 dist = sd_triangle(p, vec2f(ax, ay), vec2f(bx, by), vec2f(cx, cy));
             }
 
             // Circle has no roundness offset (matches the original 2D path).
-            if (kind != 0u) {
+            if (sp.kind != 0u) {
                 dist = op_round(dist, roundness);
             }
 
@@ -164,71 +205,76 @@ export const sceneSDF = wgsl /* WGSL */ `
             return min(max(w.x, w.y), 0.0) + length(max(w, vec2<f32>(0.0)));
         }
 
-        // Half of the shape's Z extent, read per-kind from uValues' depth slot. Sphere
-        // (6) has no extrusion: its radius is already its full half-extent.
-        fn footprint_half_z(instance_index: u32) -> f32 {
-            let kind = uKind[instance_index];
-            if (kind == 0u) {
-                return uValues[instance_index * 8u + 1u] * 0.5;
-            } else if (kind == 1u) {
-                return uValues[instance_index * 8u + 2u] * 0.5;
-            } else if (kind == 3u) {
-                return uValues[instance_index * 8u + 3u] * 0.5;
-            } else if (kind == 4u) {
-                return uValues[instance_index * 8u + 3u] * 0.5;
-            } else if (kind == 5u) {
-                return uValues[instance_index * 8u + 6u] * 0.5;
-            }
-            return uValues[instance_index * 8u + 0u];
-        }
-
-        fn sd_shape3d(p: vec3<f32>, instance_index: u32) -> f32 {
-            if (uKind[instance_index] == 6u) {
+        fn sd_shape3d_p(p: vec3<f32>, sp: ShapeParams) -> f32 {
+            if (sp.kind == 6u) {
                 // True 3D sphere; values[0] = radius.
-                return length(p) - uValues[instance_index * 8u + 0u];
+                return length(p) - sp.va.x;
             }
-            let d2 = sd_2d_for_kind(p.xy, instance_index);
-            return extrude(d2, p.z, footprint_half_z(instance_index));
+            return extrude(sd_2d_p(p.xy, sp), p.z, sp.halfZ);
         }
 
-        fn sd_normal3d(p: vec3<f32>, instance_index: u32) -> vec3<f32> {
+        fn sd_normal3d_p(p: vec3<f32>, sp: ShapeParams) -> vec3<f32> {
             let e = vec2<f32>(0.0015, -0.0015);
             return normalize(
-                e.xyy * sd_shape3d(p + e.xyy, instance_index) +
-                e.yyx * sd_shape3d(p + e.yyx, instance_index) +
-                e.yxy * sd_shape3d(p + e.yxy, instance_index) +
-                e.xxx * sd_shape3d(p + e.xxx, instance_index)
+                e.xyy * sd_shape3d_p(p + e.xyy, sp) +
+                e.yyx * sd_shape3d_p(p + e.yyx, sp) +
+                e.yxy * sd_shape3d_p(p + e.yxy, sp) +
+                e.xxx * sd_shape3d_p(p + e.xxx, sp)
             );
         }
 
         // Per-kind XY footprint half-extents (ported from the 2D compute_rect_vertex
         // bounding-box logic), so the impostor box silhouette never clips the SDF.
-        fn footprint_half_xy(instance_index: u32) -> vec2<f32> {
-            let kind = uKind[instance_index];
-            var width = uValues[instance_index * 8u + 0u];
-            var height = uValues[instance_index * 8u + 1u];
+        fn footprint_half_xy_p(sp: ShapeParams) -> vec2<f32> {
+            var width = sp.va.x;
+            var height = sp.va.y;
 
-            if (kind == 0u) {
+            if (sp.kind == 0u) {
                 // Circle / cylinder: square footprint from the radius (values[0] = radius).
                 height = width;
-            } else if (kind == 6u) {
+            } else if (sp.kind == 6u) {
                 // Sphere: values[0] = radius → full extent 2r in both axes.
-                width = uValues[instance_index * 8u + 0u] * 2.0;
+                width = sp.va.x * 2.0;
                 height = width;
-            } else if (kind == 3u) {
+            } else if (sp.kind == 3u) {
                 // Parallelogram: footprint widens by the skew amount on each side.
-                width += abs(uValues[instance_index * 8u + 2u]) * 2.0;
-            } else if (kind == 4u) {
+                width += abs(sp.va.z) * 2.0;
+            } else if (sp.kind == 4u) {
                 // Trapezoid: values = [topWidth, bottomWidth, height]. Footprint bound =
                 // wider of the two ends in X, the height value in Y.
-                width = max(uValues[instance_index * 8u + 0u], uValues[instance_index * 8u + 1u]);
-                height = uValues[instance_index * 8u + 2u];
-            } else if (kind == 5u) {
+                width = max(sp.va.x, sp.va.y);
+                height = sp.va.z;
+            } else if (sp.kind == 5u) {
                 // Triangle: bounding box from the three vertices.
-                width = max(width, max(uValues[instance_index * 8u + 2u], uValues[instance_index * 8u + 4u])) * 2.0;
-                height = max(height, max(uValues[instance_index * 8u + 3u], uValues[instance_index * 8u + 5u])) * 2.0;
+                width = max(width, max(sp.va.z, sp.vb.x)) * 2.0;
+                height = max(height, max(sp.va.w, sp.vb.y)) * 2.0;
             }
 
             return vec2<f32>(width / 2.0, height / 2.0);
+        }
+
+        // ============= Index-based wrappers (legacy API) =============
+        // Same signatures/results as before the ShapeParams refactor. Fine for
+        // shaders taking a handful of samples per instance; hot trace loops should
+        // load_shape_params once and use the _p versions.
+
+        fn footprint_half_z(instance_index: u32) -> f32 {
+            return load_shape_params(instance_index).halfZ;
+        }
+
+        fn footprint_half_xy(instance_index: u32) -> vec2<f32> {
+            return footprint_half_xy_p(load_shape_params(instance_index));
+        }
+
+        fn sd_2d_for_kind(p: vec2<f32>, instance_index: u32) -> f32 {
+            return sd_2d_p(p, load_shape_params(instance_index));
+        }
+
+        fn sd_shape3d(p: vec3<f32>, instance_index: u32) -> f32 {
+            return sd_shape3d_p(p, load_shape_params(instance_index));
+        }
+
+        fn sd_normal3d(p: vec3<f32>, instance_index: u32) -> vec3<f32> {
+            return sd_normal3d_p(p, load_shape_params(instance_index));
         }
 `;

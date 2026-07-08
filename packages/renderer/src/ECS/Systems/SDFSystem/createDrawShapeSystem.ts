@@ -175,26 +175,42 @@ export function createDrawShapeSystem({
     );
     device.queue.writeBuffer(gpuShader.uniforms.rayDir.getGPUBuffer(device), 0, rayDirCollect);
     device.queue.writeBuffer(gpuShader.uniforms.lightDir.getGPUBuffer(device), 0, lightDirCollect);
+    // Upload only the live [0, count) prefix of each collect array — the GPU
+    // buffers stay MAX_INSTANCE_COUNT-sized, but the per-frame traffic scales
+    // with the scene (the transform buffer alone is 640 KB/frame at full cap).
+    // Instances >= count are never drawn, so their stale tail bytes are inert.
     device.queue.writeBuffer(
       gpuShader.uniforms.transform.getGPUBuffer(device),
       0,
-      transformCollect,
+      transformCollect.subarray(0, count * 16),
     );
 
     if (countChanged || shapeChanges.hasChanges()) {
-      device.queue.writeBuffer(gpuShader.uniforms.kind.getGPUBuffer(device), 0, kindCollect);
-      device.queue.writeBuffer(gpuShader.uniforms.values.getGPUBuffer(device), 0, valuesCollect);
+      device.queue.writeBuffer(
+        gpuShader.uniforms.kind.getGPUBuffer(device),
+        0,
+        kindCollect.subarray(0, count),
+      );
+      device.queue.writeBuffer(
+        gpuShader.uniforms.values.getGPUBuffer(device),
+        0,
+        valuesCollect.subarray(0, count * 8),
+      );
     }
 
     if (countChanged || colorChanges.hasChanges()) {
-      device.queue.writeBuffer(gpuShader.uniforms.color.getGPUBuffer(device), 0, colorCollect);
+      device.queue.writeBuffer(
+        gpuShader.uniforms.color.getGPUBuffer(device),
+        0,
+        colorCollect.subarray(0, count * 4),
+      );
     }
 
     if (countChanged || roundnessChanges.hasChanges()) {
       device.queue.writeBuffer(
         gpuShader.uniforms.roundness.getGPUBuffer(device),
         0,
-        roundnessCollect,
+        roundnessCollect.subarray(0, count),
       );
     }
 
@@ -202,7 +218,7 @@ export function createDrawShapeSystem({
       device.queue.writeBuffer(
         gpuShader.uniforms.material.getGPUBuffer(device),
         0,
-        materialCollect,
+        materialCollect.subarray(0, count * 4),
       );
     }
 

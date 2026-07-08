@@ -164,8 +164,11 @@ export const shaderMeta = new ShaderMeta(
                 discard;
             }
 
+            // All per-instance shape params loaded ONCE into registers — the trace
+            // loop below must not touch the storage buffers.
+            let sp = load_shape_params(instance_index);
             let transform = uTransform[instance_index];
-            let hz = footprint_half_z(instance_index);
+            let hz = sp.halfZ;
             let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z);
             let Rm = instance_rot(transform);
             let s = instance_scale(transform);
@@ -179,7 +182,7 @@ export const shaderMeta = new ShaderMeta(
             let ld = normalize(transpose(Rm) * uRayDir.xyz);
 
             // Slab test against the local AABB (footprint half-extents + half-height).
-            let halfXY = footprint_half_xy(instance_index);
+            let halfXY = footprint_half_xy_p(sp);
             let half = vec3<f32>(halfXY.x, halfXY.y, hz);
             // Guard the reciprocal: lo lies on an AABB face, so for a near-axis-aligned
             // ray (ld component ~0 as the camera orbits) (half - lo) * (1/ld) would be
@@ -200,7 +203,7 @@ export const shaderMeta = new ShaderMeta(
             var t = max(t0, 0.0);
             var hit = false;
             for (var i = 0; i < 96; i = i + 1) {
-                let d = sd_shape3d(lo + ld * t, instance_index);
+                let d = sd_shape3d_p(lo + ld * t, sp);
                 if (d < 0.001) {
                     hit = true;
                     break;
@@ -215,7 +218,7 @@ export const shaderMeta = new ShaderMeta(
             }
 
             let pLocal = lo + ld * t;
-            let nLocal = sd_normal3d(pLocal, instance_index);
+            let nLocal = sd_normal3d_p(pLocal, sp);
 
             // Back to world (forward rotation + uniform scale; normal direction is
             // scale-invariant after renormalize).
@@ -304,8 +307,10 @@ export const shaderMeta = new ShaderMeta(
                 discard;
             }
 
+            // Per-instance params in registers, same as fs_main.
+            let sp = load_shape_params(instance_index);
             let transform = uTransform[instance_index];
-            let hz = footprint_half_z(instance_index);
+            let hz = sp.halfZ;
             let center = vec3<f32>(transform[3].x, transform[3].y, transform[3].z);
             let Rm = instance_rot(transform);
             let s = instance_scale(transform);
@@ -316,7 +321,7 @@ export const shaderMeta = new ShaderMeta(
             let ld = normalize(transpose(Rm) * uRayDir.xyz);
 
             // Slab test against the local AABB.
-            let halfXY = footprint_half_xy(instance_index);
+            let halfXY = footprint_half_xy_p(sp);
             let half = vec3<f32>(halfXY.x, halfXY.y, hz);
             let safeLd = select(ld, vec3<f32>(1e-6), abs(ld) < vec3<f32>(1e-6));
             let inv = 1.0 / safeLd;
@@ -335,7 +340,7 @@ export const shaderMeta = new ShaderMeta(
             var hit = false;
             var hitDist = 1.0;
             for (var i = 0; i < 96; i = i + 1) {
-                let d = sd_shape3d(lo + ld * t, instance_index);
+                let d = sd_shape3d_p(lo + ld * t, sp);
                 if (d < 0.001) {
                     hit = true;
                     hitDist = d;
@@ -360,7 +365,7 @@ export const shaderMeta = new ShaderMeta(
             if (intensity < 0.0) {
                 // World-space facing: +X axis (long axis +Y for trapezoid beams).
                 var facingWorld3 = Rm * vec3<f32>(1.0, 0.0, 0.0);
-                if (uKind[instance_index] == 4u) {
+                if (sp.kind == 4u) {
                     facingWorld3 = Rm * vec3<f32>(0.0, 1.0, 0.0);
                 }
                 let facingWorld = facingWorld3.xy;
