@@ -53,8 +53,8 @@ export type VoxelTextures = {
 // One probe per SCREEN_PROBE_TILE×SCREEN_PROBE_TILE full-canvas-pixel tile (Lumen default
 // DownsampleFactor = 16). Anchored to the VISIBLE surface (not a fixed world grid), so probe
 // density follows the camera. The gather (voxelScreenProbe) writes SH-L1 into 3 rgba16float 2D
-// textures + the probe's representative pixel/validity into 1 rgba32float 2D texture (4 storage
-// textures = the WebGPU default cap). Canvas-sized-derived → recreated on resize.
+// textures + the probe's representative pixel/validity + world anchor P + world normal N (6 storage
+// textures — gpu.ts requests the adapter cap). Canvas-sized-derived → recreated on resize.
 export const SCREEN_PROBE_TILE = 16; // DEFAULT full-res px / screen probe (Lumen default); GUI-tunable
 
 export type ScreenProbeGrid = { w: number; h: number };
@@ -88,6 +88,14 @@ export type ScreenProbeTextures = {
 // pass (textureStore) and read by the cone pass (textureLoad — point, no filtering). 2D, single
 // mip. rgba32float supports STORAGE_BINDING write in core WebGPU and is point-loaded.
 //
+// STAGE 3 (temporal accumulation): the system owns TWO full sets and PING-PONGS them by frame
+// parity — the CURRENT set is the gather's storage-write target (and what refine/resolve/debug
+// read this frame); the OTHER set is last frame's output = the HISTORY the gather reprojects and
+// blends from. Both roles need the same usage (STORAGE_BINDING when current + TEXTURE_BINDING when
+// history/read), so one create function serves both sets — no copies, the swap is pure rebinding.
+// History VALIDATION needs only pos/nrm (+ the SH being blended): an invalid probe stores ZERO
+// pos/nrm, so |nrm|²≈0 doubles as the history-validity test and `pix` never needs a history binding.
+//
 // FLAT-ATLAS ADDRESSING (slot → texel). The 4 textures are a flat probe atlas, not a literal
 // screen grid. Atlas WIDTH in probes = gw = grid.w; a probe's global SLOT maps to atlas texel
 // (slot % gw, slot / gw). The UNIFORM block occupies rows [0, gh): a uniform probe for tile
@@ -111,6 +119,17 @@ export function createScreenProbeTextures(
   // shR/shG/shB = the raw gather output; the cone resolve reads them directly (unified multi-probe
   // average, no separate blur set).
   return { shR: sh(), shG: sh(), shB: sh(), pix, pos, nrm: sh() };
+}
+
+// Destroy one full atlas set (the recreate helpers own TWO sets under the Stage-3 ping-pong —
+// both are destroyed + recreated together so a stale-sized history can never be sampled).
+export function destroyScreenProbeTextures(t: ScreenProbeTextures) {
+  t.shR.destroy();
+  t.shG.destroy();
+  t.shB.destroy();
+  t.pix.destroy();
+  t.pos.destroy();
+  t.nrm.destroy();
 }
 
 // ===== Adaptive screen-probe atlas sizing (single 16→8 level, light-adaptive). =====

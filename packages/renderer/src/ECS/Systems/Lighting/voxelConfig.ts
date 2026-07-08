@@ -8,10 +8,12 @@
 // emitter list, instance count, grid matrices, canvas size) stays in uniforms — it is NOT here.
 //
 // Field → where it bakes:
-//   cone shader    : normalBias, aperture, giStrength, emitterDirect, emitterFalloff,
-//                    aimedSteps, aimedAlphaCut, aoConeCount, aoReach, aoSteps
+//   cone shader    : normalBias, aperture, giStrength, aoConeCount, aoReach, aoSteps
 //   composite shader: ambient, exposure, penumbra, shadowBaseSpread
-//   screen-probe shader: conesPerProbe, maxDist (cone+probe reach), aperture
+//   screen-probe shader: conesPerProbe, maxDist (cone+probe reach), aperture, normalBias
+//   AIMED-cone group — emitterDirect, emitterFalloff, aimedSteps, aimedAlphaCut — bakes into the
+//     screen-probe shader: the aimed emitter cones are traced once per PROBE (the probe-centric
+//     final gather — see docs/probe-centric-gi-migration.md).
 // (maxDist is unused by the cone shader body itself; it only drives the probe reach + CPU side.)
 export type VoxelBakedConfig = {
   // ── cone pass ───────────────────────────────────────────────────────────────────────
@@ -19,6 +21,7 @@ export type VoxelBakedConfig = {
   maxDist: number; // cone / probe reach (world units)
   aperture: number; // tan(halfAngle) — cone half-angle (~0.577 = 60° full angle)
   giStrength: number; // multiplier on the probe bounce (indirect) term
+  // The aimed-cone group below bakes into the screen-probe shader (see the field→shader map above).
   emitterDirect: number; // multiplier on the summed emitter aimed-cone DIRECT light (vs the sun)
   emitterFalloff: number; // emitter distance falloff coefficient (0 = none/flat, 1 = standard 1/d²)
   aimedSteps: number; // aimed-cone march step budget (lower = cheaper, shorter/coarser shadows)

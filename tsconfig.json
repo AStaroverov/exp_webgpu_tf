@@ -17,5 +17,5 @@
     "noFallthroughCasesInSwitch": true,
     "typeRoots": ["./node_modules/@webgpu/types", "./node_modules/@types"]
   },
-  "exclude": ["node_modules", "**/node_modules", "dist", "**/dist"]
+  "exclude": ["node_modules", "**/node_modules", "dist", "**/dist", "lib"]
 }

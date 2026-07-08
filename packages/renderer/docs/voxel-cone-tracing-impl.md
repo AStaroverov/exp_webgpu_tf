@@ -1,5 +1,11 @@
 # Voxel Cone Tracing (VCT) — Integration Design for renderer
 
+> **NOTE (2026-07): the emitter / final-gather architecture has since moved PROBE-CENTRIC** —
+> all cone tracing (fill hemisphere + aimed emitter cones + the aniso far-field) now lives on
+> the temporally-accumulated SCREEN PROBES, and the per-pixel cone pass is only the probe SH
+> resolve + short AO cones. See `probe-centric-gi-migration.md` for the current design; the
+> per-pixel aimed-cone description below is historical.
+
 > Technical design document. Goal: add **hybrid VCT** (voxel cone tracing) global illumination (GI)
 > to the existing WebGPU/WGSL renderer `renderer`. The document covers decisions, formulas, and
 > their mapping to specific engine passes. No copy-paste-ready code is included — only prose,

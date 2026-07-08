@@ -571,23 +571,12 @@ async function main() {
   gui.add(SunLight, "intensity", 0, 5, 0.05).name("sun intensity");
   gui.addColor(SunLight, "color", 1).name("sun color"); // rgbScale=1 → array is 0..1 floats
 
-  // Cone GI: per-pixel AIMED emitter cones (sharp direct + shadow). The fill/bounce now comes
-  // from the probe SH volume (see Probe GI folder); coneCount only sets the fill/bounce BLEND
-  // weight (= count/2). Read live each frame by cone().
+  // Cone GI: the screen-probe RESOLVE (the probe SH carries fill/bounce AND emitter light) + the
+  // short per-pixel AO cones. No aimed cones here anymore — the emitter knobs live in the
+  // "Screen probe GI" folder (they bake into the probe gather).
   const coneFolder = gui.addFolder("Cone GI");
   // Baked-config controls recompile the GI shaders on release (onFinishChange), not per drag tick.
   const rebuild = () => voxel.rebuild();
-  // Emitter DIRECT strength: multiplier on the summed aimed-cone direct light. Raise it to let a
-  // bright emitter overpower the sun (e.g. fill the sun-shadow it casts under itself).
-  coneFolder
-    .add(voxel.config, "emitterDirect", 0, 8, 0.1)
-    .name("emitter direct strength")
-    .onFinishChange(rebuild);
-  // Distance falloff for emitter direct light: 0 = flat (sun-like, hard rim), 1 = standard 1/d².
-  coneFolder
-    .add(voxel.config, "emitterFalloff", 0, 4, 0.05)
-    .name("emitter falloff")
-    .onFinishChange(rebuild);
   coneFolder
     .add(voxel.config, "aperture", 0.1, 1.5, 0.01)
     .name("aperture (lower=sharper)")
@@ -616,20 +605,33 @@ async function main() {
     .add(anisoCfg, "anisotropic")
     .name("anisotropic voxels")
     .onChange((on: boolean) => voxel.setAnisoMode(on));
+
+  // Screen-probe GI: surface-anchored probes (one per tile) that supply the diffuse fill/bounce
+  // AND the aimed emitter cones (traced once per probe — the emitter knobs below bake into the
+  // probe gather). conesPerProbe is the bounce quality (probes run at low res, once per frame →
+  // afford many); aoConeCount/aoReach are the SHORT per-pixel contact-AO cones (the .a/visibility
+  // term, still in the cone pass).
+  const probeFolder = gui.addFolder("Screen probe GI");
+  // Emitter DIRECT strength: multiplier on the aimed-cone direct light. Raise it to let a
+  // bright emitter overpower the sun (e.g. fill the sun-shadow it casts under itself).
+  probeFolder
+    .add(voxel.config, "emitterDirect", 0, 8, 0.1)
+    .name("emitter direct strength")
+    .onFinishChange(rebuild);
+  // Distance falloff for emitter direct light: 0 = flat (sun-like, hard rim), 1 = standard 1/d².
+  probeFolder
+    .add(voxel.config, "emitterFalloff", 0, 4, 0.05)
+    .name("emitter falloff")
+    .onFinishChange(rebuild);
   // Aimed-cone march budget: fewer steps = cheaper, but shorter/coarser emitter shadows (and
-  // possible light leak through thin occluders). 64 = the original crisp default.
-  coneFolder.add(voxel.config, "aimedSteps", 8, 64, 1).name("aimed steps").onFinishChange(rebuild);
+  // possible light leak through thin occluders).
+  probeFolder.add(voxel.config, "aimedSteps", 8, 64, 1).name("aimed steps").onFinishChange(rebuild);
   // Early-out opacity: <1 lets a near-opaque aimed cone stop before its full budget (saves the tail
   // when the light is blocked). 1 = no early cut (sharpest shadow).
-  coneFolder
+  probeFolder
     .add(voxel.config, "aimedAlphaCut", 0.5, 1, 0.01)
     .name("aimed alpha cut")
     .onFinishChange(rebuild);
-
-  // Screen-probe GI: surface-anchored probes (one per tile) that supply the diffuse fill/bounce.
-  // conesPerProbe is the bounce quality (probes run at low res, once per frame → afford many);
-  // aoConeCount/aoReach are the SHORT per-pixel contact-AO cones (the .a/visibility term).
-  const probeFolder = gui.addFolder("Screen probe GI");
   // SH-L1 saturates ~16 cones, so higher values only cut noise (no detail) — keep this low.
   probeFolder
     .add(voxel.config, "conesPerProbe", [8, 16, 32, 64, 128])
@@ -663,6 +665,17 @@ async function main() {
     .add(resolveCfg, "radius", 0.5, 3, 0.25)
     .name("resolve radius (tiles)")
     .onChange((r: number) => voxel.setScreenProbeResolveRadius(r));
+  // STAGE 3: temporal accumulation on the probe atlas — the history weight of the per-probe SH
+  // blend. 0 = OFF (fresh-only, byte-identical to the pre-temporal path — the A/B + rollback);
+  // ~0.85–0.9 amortizes the gather across frames (per-frame golden-angle cone rotation integrates
+  // back to an effective 2–4× cone budget), so cones/probe can drop to 4–8. Disocclusions are
+  // rejected by the SAME plane/normal weight the resolve uses (tuned by plane K / normal pow
+  // above), so raising it should not ghost. Live (per-frame uniform, no rebuild).
+  const temporalCfg = { hysteresis: voxel.temporalHysteresis };
+  probeFolder
+    .add(temporalCfg, "hysteresis", 0, 0.95, 0.05)
+    .name("temporal hysteresis")
+    .onChange((h: number) => voxel.setTemporalHysteresis(h));
 
   // --- Adaptive screen-probe atlas (single 16→8 level, LIGHT-ADAPTIVE only). ---
   // The sole density driver is lightThresh: refine spawns an adaptive probe where the GATHERED
