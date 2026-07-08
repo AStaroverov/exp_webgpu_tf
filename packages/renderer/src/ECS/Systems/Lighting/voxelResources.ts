@@ -80,15 +80,114 @@ export type ScreenProbeTextures = {
 // (.xy = representative full-res pixel, .z = validity). Written by the voxelScreenProbe compute
 // pass (textureStore) and read by the cone pass (textureLoad — point, no filtering). 2D, single
 // mip. rgba32float supports STORAGE_BINDING write in core WebGPU and is point-loaded.
+//
+// FLAT-ATLAS ADDRESSING (slot → texel). The 4 textures are a flat probe atlas, not a literal
+// screen grid. Atlas WIDTH in probes = gw = grid.w; a probe's global SLOT maps to atlas texel
+// (slot % gw, slot / gw). The UNIFORM block occupies rows [0, gh): a uniform probe for tile
+// (tx,ty) has slot = ty*gw + tx → texel (tx,ty) — an IDENTITY mapping (no indirection). An
+// ADAPTIVE block (Phase 1+) occupies rows [gh, gh+adaptiveRows) for extra sub-tile probes.
+// Phase 0 passes adaptiveRows = 0, so the atlas is exactly [gw, gh] as before and every texel
+// is unchanged.
 export function createScreenProbeTextures(
   device: GPUDevice,
   grid: ScreenProbeGrid,
+  adaptiveRows: number = 0,
 ): ScreenProbeTextures {
-  const size: [number, number] = [grid.w, grid.h];
+  const size: [number, number] = [grid.w, grid.h + adaptiveRows];
   const usage = GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING;
   const sh = () => device.createTexture({ size, dimension: "2d", format: "rgba16float", usage });
   const pix = device.createTexture({ size, dimension: "2d", format: "rgba32float", usage });
+  // shR/shG/shB = the raw gather output; the cone resolve reads them directly (unified multi-probe
+  // average, no separate blur set).
   return { shR: sh(), shG: sh(), shB: sh(), pix };
+}
+
+// ===== Adaptive screen-probe atlas sizing (single 16→8 level, light-adaptive). =====
+// K = max adaptive probes per coarse (16px) tile = the fixed stride of tileIndices. A 16→8 split
+// yields at most 3 useful children, but a finer live cell divisor (GUI-tunable, e.g. 16→4/16→1) can
+// request many more per tile, so K = 8 gives headroom (the surplus beyond K is allocated but dropped
+// from the per-tile list). Shared between the buffer sizing (tileIndices length) and the
+// refine/resolve/debug shaders (interpolated as a WGSL const), so the CPU stride and the GPU stride
+// can never disagree.
+export const SCREEN_PROBE_K = 8;
+
+// Atlas + buffer capacity from the coarse grid + the adaptive budget fraction. numUniform = the
+// uniform block (one probe per 16px tile, identity-mapped into atlas rows [0, gh)); maxAdaptive =
+// numUniform * adaptiveFraction extra probes (Phase-1 default 1.0 → the atlas is 2× uniform, higher
+// than Lumen's ~0.5 because we amortize NOTHING across frames — every probe is paid fresh). The
+// adaptive block lands in atlas rows [gh, gh + adaptiveRows).
+export type ScreenProbeCounts = {
+  numUniform: number;
+  maxAdaptive: number;
+  adaptiveRows: number;
+};
+export function screenProbeCounts(
+  grid: ScreenProbeGrid,
+  adaptiveFraction: number,
+): ScreenProbeCounts {
+  const numUniform = grid.w * grid.h;
+  const maxAdaptive = Math.max(0, Math.round(numUniform * Math.max(0, adaptiveFraction)));
+  const adaptiveRows = Math.ceil(maxAdaptive / grid.w);
+  return { numUniform, maxAdaptive, adaptiveRows };
+}
+
+// The indirection + allocator STORAGE BUFFERS (NOT textures — WebGPU forbids storage-texture
+// atomics, and buffers stay off the 4-storage-texture cap the gather pass lives under). These are
+// SHARED across the classify / refine / args / gather / resolve passes, so they are RAW
+// device.createBuffer()s bound MANUALLY at each shader's declared binding (the argsBuf / passBuf
+// pattern) — never routed through GPUVariable.getGPUBuffer (which cannot express INDIRECT usage and
+// would hand each shader its OWN buffer instead of the one shared instance).
+export type ScreenProbeBuffers = {
+  // atomic<u32> ×2: [0] = bump-allocator counter for adaptive probes, [1] = sticky "budget
+  // exceeded" flag (set when an atomicAdd returns >= maxAdaptive). Cleared each frame.
+  counter: GPUBuffer;
+  // array<vec4<u32>>, numUniform + maxAdaptive: per-probe record (packed repr pixel + level),
+  // indexed by GLOBAL slot (uniform slots 0..numUniform-1, adaptive numUniform..).
+  data: GPUBuffer;
+  // array<atomic<u32>>, numUniform: count of adaptive probes whose parent is that coarse tile.
+  header: GPUBuffer;
+  // array<u32>, numUniform*K: fixed-stride list — [tileIdx*K + j] = the global slot of the tile's
+  // j-th adaptive probe (only the first min(header, K) entries per tile are meaningful).
+  indices: GPUBuffer;
+  // array<u32,3> = dispatchWorkgroupsIndirect args [ceil(total/GATHER_WG), 1, 1] for the gather.
+  // RAW STORAGE|INDIRECT|COPY_DST buffer (COPY_SRC too for diagnostics) — the one usage GPUVariable
+  // cannot emit.
+  args: GPUBuffer;
+};
+export function createScreenProbeBuffers(
+  device: GPUDevice,
+  counts: ScreenProbeCounts,
+): ScreenProbeBuffers {
+  // COPY_SRC on every buffer so the throttled budget readback (counter) and any future diagnostics
+  // can copy them to a staging buffer; COPY_DST so the per-frame clearBuffer works.
+  const storageUsage =
+    GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
+  const total = counts.numUniform + counts.maxAdaptive;
+  return {
+    counter: device.createBuffer({ size: 2 * 4, usage: storageUsage }),
+    data: device.createBuffer({ size: Math.max(1, total) * 16, usage: storageUsage }),
+    header: device.createBuffer({ size: Math.max(1, counts.numUniform) * 4, usage: storageUsage }),
+    indices: device.createBuffer({
+      size: Math.max(1, counts.numUniform * SCREEN_PROBE_K) * 4,
+      usage: storageUsage,
+    }),
+    args: device.createBuffer({
+      size: 3 * 4,
+      usage:
+        GPUBufferUsage.STORAGE |
+        GPUBufferUsage.INDIRECT |
+        GPUBufferUsage.COPY_DST |
+        GPUBufferUsage.COPY_SRC,
+    }),
+  };
+}
+
+export function destroyScreenProbeBuffers(b: ScreenProbeBuffers) {
+  b.counter.destroy();
+  b.data.destroy();
+  b.header.destroy();
+  b.indices.destroy();
+  b.args.destroy();
 }
 
 // ===== Anisotropic directional voxels (the anti-leak for the far-field cone samples). =====

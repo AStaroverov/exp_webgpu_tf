@@ -5,22 +5,31 @@ import { viewProjMatrix } from "../ResizeSystem.ts";
 import { shaderMeta as voxelizeMeta, WORKGROUP, WORKGROUP_1D } from "./voxelize.shader.ts";
 import { createConeShaderMeta } from "./voxelCone.shader.ts";
 import { createCompositeShaderMeta } from "./voxelComposite.shader.ts";
+import { debugShaderMeta } from "./voxelProbeDebug.shader.ts";
 import { shaderMeta as mipMeta, WORKGROUP as MIP_WG } from "./voxelMip.shader.ts";
 import { shaderMeta as anisoBaseMeta, WORKGROUP as ANISO_WG } from "./voxelAnisoBase.shader.ts";
 import { shaderMeta as anisoVolMeta } from "./voxelAnisoVolume.shader.ts";
-import { createScreenProbeShaderMeta, WORKGROUP as SCREEN_WG } from "./voxelScreenProbe.shader.ts";
+import { createScreenProbeShaderMeta, GATHER_WORKGROUP } from "./voxelScreenProbe.shader.ts";
+import { classifyShaderMeta, WORKGROUP as CLASSIFY_WG } from "./voxelProbeClassify.shader.ts";
+import { refineShaderMeta, WORKGROUP as REFINE_WG } from "./voxelProbeRefine.shader.ts";
+import { argsShaderMeta } from "./voxelProbeArgs.shader.ts";
 import { shaderMeta as sunShadowMeta } from "./sunShadow.shader.ts";
 import { DEFAULT_VOXEL_BAKED_CONFIG, type VoxelBakedConfig } from "./voxelConfig.ts";
 import {
   anisoBaseDims,
   createAnisoTextures,
+  createScreenProbeBuffers,
   createScreenProbeTextures,
   createVoxelTextures,
+  destroyScreenProbeBuffers,
   DEFAULT_VOXEL_GRID,
   SCREEN_PROBE_TILE,
+  screenProbeCounts,
   screenProbeGridDims,
   voxelMipLevelCount,
   type AnisoTextures,
+  type ScreenProbeBuffers,
+  type ScreenProbeCounts,
   type ScreenProbeTextures,
   type VoxelGridConfig,
   type VoxelTextures,
@@ -127,6 +136,14 @@ export function createVoxelSystem({
     targetFormat: "rgba16float",
     withBlending: false,
   });
+  // Screen-probe DEBUG view: a fullscreen pass that REPLACES the composite when debugProbes is on,
+  // false-coloring the probe distribution (uniform grid + adaptive probes + subdivided tiles).
+  // Config-independent → built once (not recompiled by rebuild()).
+  const debugShader = new GPUShader(debugShaderMeta);
+  const debugPipeline = debugShader.getRenderPipeline(device, "vs_main", "fs_main", {
+    targetFormat: "rgba16float",
+    withBlending: false,
+  });
   // Voxel-radiance mip-pyramid downsample (one dispatch per level).
   const mipShader = new GPUShader(mipMeta);
   const mipPipeline = mipShader.getComputePipeline(device, "main");
@@ -156,17 +173,41 @@ export function createVoxelSystem({
     entries: [],
   });
 
-  // Screen-space probe pass: the diffuse fill/bounce source. One thread per screen probe traces
-  // full-sphere cones into voxelRadiance (verbatim probe math) and writes SH-L1 (3 textures) + the
-  // probe's representative pixel/validity (1 texture). group0 = uniforms + G-buffer + voxelRadiance
-  // + sampler, group2 = the 4 storage outputs, group1 empty (same situation as the mip pass → bind
-  // a matching empty group). Runs every frame; the cone pass resolves it for the (b) fill term.
-  let screenProbeShader = new GPUShader(createScreenProbeShaderMeta(config));
-  let screenProbePipeline = screenProbeShader.getComputePipeline(device, "main");
-  let screenProbeEmptyGroup1 = device.createBindGroup({
-    layout: screenProbeShader.createBindGroupLayout(device, 1),
+  // Screen-space probe gather: the diffuse fill/bounce source. One thread per screen probe traces a
+  // hemisphere of cones into voxelRadiance (verbatim probe math) and writes SH-L1 (3 textures) + the
+  // probe's representative pixel/validity (1 texture). group0 = uniforms + G-buffer + voxelRadiance +
+  // sampler, group1 = probeData + counter, group2 = the 4 storage outputs. TWO pipelines from the one
+  // factory (IS_ADAPTIVE baked, identical bindings): gatherUniformPipeline (direct dispatch over the
+  // uniform block, runs BEFORE refine so refine reads its raw SH) and gatherAdaptivePipeline (indirect
+  // dispatch over the refine-placed adaptive tail, runs AFTER buildArgs). Both write the SAME atlas.
+  let gatherUniformShader = new GPUShader(createScreenProbeShaderMeta(config, false));
+  let gatherUniformPipeline = gatherUniformShader.getComputePipeline(device, "main");
+  let gatherAdaptiveShader = new GPUShader(createScreenProbeShaderMeta(config, true));
+  let gatherAdaptivePipeline = gatherAdaptiveShader.getComputePipeline(device, "main");
+
+  // Adaptive-atlas placement passes. These BAKE only the SCREEN_PROBE_K stride, never config
+  // tunables, so they are built ONCE and never recompiled by rebuild(): classify (uniform
+  // placement), refine (the single light-adaptive 16→8 spawn; the cell DIVISOR is a live uniform —
+  // refineDiv1 → screenParams.w), args (indirect-args build). classify + refine both use groups 0
+  // (uniforms + G-buffer) + 2 (StorageWrite) with an EMPTY group 1 (empty-group-1 pattern); args
+  // uses groups 0/1/2 (all populated).
+  const classifyShader = new GPUShader(classifyShaderMeta);
+  const classifyPipeline = classifyShader.getComputePipeline(device, "main");
+  const classifyEmptyGroup1 = device.createBindGroup({
+    layout: classifyShader.createBindGroupLayout(device, 1),
     entries: [],
   });
+  // The single light-adaptive refine pass (16→8; the cell DIVISOR is a live uniform — refineDiv1 →
+  // screenParams.w — so the cell size is GUI-tunable without a rebuild). group 1 is empty (no
+  // StorageRead binding) → bind a matching empty group at dispatch.
+  const refineShader = new GPUShader(refineShaderMeta);
+  const refinePipeline = refineShader.getComputePipeline(device, "main");
+  const refineEmptyGroup1 = device.createBindGroup({
+    layout: refineShader.createBindGroupLayout(device, 1),
+    entries: [],
+  });
+  const argsShader = new GPUShader(argsShaderMeta);
+  const argsPipeline = argsShader.getComputePipeline(device, "main");
 
   // Filtering sampler for textureSampleLevel over the rgba16float voxelRadiance pyramid + the aniso
   // directional volumes (the screen-probe SH textures are point-loaded, not sampled through this).
@@ -180,7 +221,29 @@ export function createVoxelSystem({
   // (one probe per SCREEN_PROBE_TILE² tile) → created here + recreated on resize (recreate()),
   // exactly like coneOutput. `let` so recreate() can reassign the whole set.
   let screenGrid = screenProbeGridDims(canvas.width, canvas.height);
-  let screenProbeTex: ScreenProbeTextures = createScreenProbeTextures(device, screenGrid);
+  // ADAPTIVE screen-probe atlas. adaptiveFraction sizes the atlas + buffers for numUniform +
+  // maxAdaptive probes (default 1.0 → 2× uniform, no temporal amortization). The adaptive block
+  // occupies atlas rows [gh, gh + adaptiveRows). The single refine pass spawns light-adaptively:
+  // large lightThresh ⇒ no adaptive probes (the flat uniform atlas); lower ⇒ denser where the
+  // gathered light varies.
+  let adaptiveFraction = 1.0;
+  // Cell DIVISOR of the single refine level (live, uploaded to the refine shader's screenParams.w).
+  // The level is tile → tile/refineDiv1 (default 2 → 16→8 at tile 16). Drives the CPU dispatch
+  // (cells = ceil(canvas / (tile/div))) AND the shader's cellPx.
+  let refineDiv1 = 2;
+  // Radiometric (light-adaptive) subdivision: the DC-luminance spread of the GATHERED uniform-probe
+  // SH across the cage (real incoming irradiance) above which refine spawns an adaptive probe. Live
+  // (uploaded to refine's lightParams.x). Large ⇒ off (no adaptive probes); lower ⇒ denser.
+  let lightThresh = 0.01;
+  let probeCounts: ScreenProbeCounts = screenProbeCounts(screenGrid, adaptiveFraction);
+  let screenProbeTex: ScreenProbeTextures = createScreenProbeTextures(
+    device,
+    screenGrid,
+    probeCounts.adaptiveRows,
+  );
+  // The indirection + allocator buffers (RAW, shared across the classify/refine/args/gather/resolve
+  // passes → bound manually at each shader's declared binding). Recreated wherever screenProbeTex is.
+  let probeBufs: ScreenProbeBuffers = createScreenProbeBuffers(device, probeCounts);
 
   // ===== Sun shadow map (depth-only pass from the sun's POV; grid/camera-independent). =====
   // Standard depth (orthoZO [0,1]) so the composite's shadow test is the simple "fragment
@@ -340,9 +403,19 @@ export function createVoxelSystem({
   const coneInvArr = getTypeTypedArray(coneShader.shaderMeta.uniforms.invViewProj.type); // Float32Array(16)
   // Cone screen-probe-resolve lane (params3): .x = tile, .y = normalPow, .z = planeK. Uploaded in cone().
   const coneParams3Arr = getTypeTypedArray(coneShader.shaderMeta.uniforms.params3.type); // Float32Array(4)
-  // Screen-probe scratch: screenParams (.xy canvas, .z tile) + the per-frame reverse-Z inverse-VP.
-  const screenParamsArr = getTypeTypedArray(screenProbeShader.shaderMeta.uniforms.screenParams.type); // Float32Array(4)
-  const screenInvArr = getTypeTypedArray(screenProbeShader.shaderMeta.uniforms.invViewProj.type); // Float32Array(16)
+  // Screen-probe scratch: screenParams (.xy canvas, .z tile, .w maxAdaptive) + the per-frame reverse-Z
+  // inverse-VP. Types are identical across both gather variants → read from the uniform one.
+  const screenParamsArr = getTypeTypedArray(gatherUniformShader.shaderMeta.uniforms.screenParams.type); // Float32Array(4)
+  const screenInvArr = getTypeTypedArray(gatherUniformShader.shaderMeta.uniforms.invViewProj.type); // Float32Array(16)
+  // Debug-view scratch: .xy = canvas, .z = tile, .w spare.
+  const debugParamsArr = getTypeTypedArray(debugShader.shaderMeta.uniforms.params.type); // Float32Array(4)
+  // Placement-pass uniform scratch (allocated ONCE). classify.screenParams (canvas + tile), refine
+  // .screenParams (.w = cell divisor) + .lightParams (lightThresh, maxAdaptive), args .params
+  // (numUniform, maxAdaptive).
+  const classifyScreenArr = new Float32Array(4);
+  const refineScreenArr = new Float32Array(4);
+  const refineLightArr = new Float32Array(4); // .x = lightThresh (subdivision trigger), .y = maxAdaptive
+  const argsParamsArr = new Uint32Array(4);
   // Auto-discovered emitter centers the cone importance-samples (x,y,z,radius per light) +
   // parallel colors (r,g,b,intensity) for the analytic-direct shadow term.
   const coneLightsArr = getTypeTypedArray(coneShader.shaderMeta.uniforms.lights.type); // Float32Array(32)
@@ -375,9 +448,14 @@ export function createVoxelSystem({
   let screenProbeTile = SCREEN_PROBE_TILE; // full-res px per screen probe
   let spNormalPow = 2.0; // normal-similarity sharpness in the bilateral resolve
   let spPlaneK = 1.0; // plane-reject threshold = spPlaneK × local probe spacing
-  // Edge-aware probe placement (screenParams.w): snap each probe onto the nearest valid surface in
-  // its tile so thin foreground features get represented (vs the fixed tile center). Live GUI toggle.
-  let edgeAware = true;
+  // Unified-resolve support radius, in TILES (uParams3.w). The smooth screen kernel that weights EVERY
+  // probe (uniform and adaptive) tapers to zero at this distance, so it sets how wide/smooth the fill
+  // is: bigger = smoother/wider (also helps a distant object seen by few probes), smaller = more local
+  // detail. Live, uploaded to the cone's uParams3.w each frame (no rebuild).
+  let screenProbeResolveRadius = 1.5;
+  // Debug view: when on, probeDebug() replaces composite() with a false-color map of the probe
+  // distribution (uniform grid + adaptive probes + subdivided tiles). Live GUI toggle, no rebuild.
+  let debugProbes = false;
 
   // Sun shadow scratch (allocate ONCE — never per frame). sunViewProj is computed each frame
   // from SunLight + the grid AABB and uploaded to BOTH the sunShadow shader (vs uViewProj)
@@ -404,11 +482,33 @@ export function createVoxelSystem({
   let voxGroup2: GPUBindGroup;
   let coneGroup0: GPUBindGroup;
   let compositeGroup0: GPUBindGroup;
-  // Screen-probe bind groups: group0 (uniforms + G-buffer + voxelRadiance all-mips view + sampler)
-  // is rebuilt when voxelRadiance changes (buildGrid) OR the G-buffer / screen textures change
-  // (resize); group2 (the 4 storage outputs) references the canvas-derived screenProbeTex.
-  let screenProbeGroup0: GPUBindGroup;
-  let screenProbeGroup2: GPUBindGroup;
+  // Gather bind groups: group0 (uniforms + G-buffer + voxelRadiance all-mips view + sampler) is
+  // rebuilt when voxelRadiance changes (buildGrid) OR the G-buffer / screen textures change (resize);
+  // group1 (probeData + counter) references the RAW probeBufs; group2 (the 4 storage outputs)
+  // references the canvas-derived screenProbeTex. The uniform + adaptive gather pipelines have
+  // IDENTICAL bindings but SEPARATE uniform buffers (own GPUShader) → one group set per pipeline.
+  let gatherUniformGroup0: GPUBindGroup;
+  let gatherUniformGroup1: GPUBindGroup;
+  let gatherUniformGroup2: GPUBindGroup;
+  let gatherAdaptiveGroup0: GPUBindGroup;
+  let gatherAdaptiveGroup1: GPUBindGroup;
+  let gatherAdaptiveGroup2: GPUBindGroup;
+  // Adaptive-atlas placement/indirection bind groups (rebuilt alongside the screen-probe groups):
+  // the classify/refine/args groups + the cone shader's group 1 (tileHeader + tileIndices). All
+  // reference the RAW probeBufs, so they are rebuilt whenever probeBufs is recreated (resize / tile /
+  // adaptiveFraction change). The gather's group 1 lives in the per-pipeline sets declared above.
+  let classifyGroup0: GPUBindGroup;
+  let classifyGroup2: GPUBindGroup;
+  // The single refine pass: group0 = uniforms + G-buffer normal + raw uniform SH; group2 = the
+  // allocator buffers. (group1 is empty → refineEmptyGroup1.)
+  let refineGroup0: GPUBindGroup;
+  let refineGroup2: GPUBindGroup;
+  let argsGroup0: GPUBindGroup;
+  let argsGroup1: GPUBindGroup;
+  let argsGroup2: GPUBindGroup;
+  let coneGroup1: GPUBindGroup;
+  let debugGroup0: GPUBindGroup;
+  let debugGroup1: GPUBindGroup;
   let dispatchX = 0;
   let dispatchY = 0;
   let dispatchZ = 0;
@@ -487,7 +587,9 @@ export function createVoxelSystem({
           resource: anisoTex!.posZ.createView({ dimension: "3d" }),
         },
         // SCREEN-SPACE probe fill source (the diffuse fill/bounce). resolve_screen_probes point-loads
-        // these (SH-L1 ×3 + the per-probe pixel/validity texture).
+        // these (SH-L1 ×3 + the per-probe pixel/validity texture) and binds the RAW gather output
+        // (shR/shG/shB) directly — the unified multi-probe smooth-kernel average supersedes the old
+        // blur pass, so there is no separate blurred set. Geometry (pix) is likewise unfiltered.
         {
           binding: coneShader.shaderMeta.uniforms.screenShR.binding,
           resource: screenProbeTex.shR.createView({ dimension: "2d" }),
@@ -507,6 +609,42 @@ export function createVoxelSystem({
         { binding: coneShader.shaderMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
       ],
     });
+    // group 1 = the adaptive-atlas indirection (tileHeader + tileIndices, StorageRead). Bound to the
+    // RAW shared buffers (not GPUVariable buffers) so the resolve sees the SAME lists the refine pass
+    // wrote. Present even with no adaptive probes (tileHeader is all-zero → the adaptive loop no-ops).
+    coneGroup1 = device.createBindGroup({
+      layout: conePipeline.getBindGroupLayout(1),
+      entries: [
+        { binding: coneShader.shaderMeta.uniforms.tileHeader.binding, resource: { buffer: probeBufs.header } },
+        { binding: coneShader.shaderMeta.uniforms.tileIndices.binding, resource: { buffer: probeBufs.indices } },
+      ],
+    });
+    // The debug view reads the same G-buffer normal + atlas pix + indirection; rebuild it alongside
+    // the cone group (both depend on gNormal / screenProbeTex / probeBufs → same recreate triggers).
+    buildProbeDebugGroup();
+  }
+
+  // (Re)build the debug-view bind group: group0 = params uniform + normal + screenProbePix; group1 =
+  // tileHeader + tileIndices (StorageRead). Called from buildConeGroup so it tracks every recreate.
+  function buildProbeDebugGroup() {
+    debugGroup0 = device.createBindGroup({
+      layout: debugPipeline.getBindGroupLayout(0),
+      entries: [
+        debugShader.uniforms.params.getBindGroupEntry(device),
+        { binding: debugShader.shaderMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
+        {
+          binding: debugShader.shaderMeta.uniforms.screenProbePix.binding,
+          resource: screenProbeTex.pix.createView({ dimension: "2d" }),
+        },
+      ],
+    });
+    debugGroup1 = device.createBindGroup({
+      layout: debugPipeline.getBindGroupLayout(1),
+      entries: [
+        { binding: debugShader.shaderMeta.uniforms.tileHeader.binding, resource: { buffer: probeBufs.header } },
+        { binding: debugShader.shaderMeta.uniforms.tileIndices.binding, resource: { buffer: probeBufs.indices } },
+      ],
+    });
   }
 
   // (Re)build the screen-probe bind groups: group0 = uniforms + the G-buffer (depth/normal) + the
@@ -516,47 +654,144 @@ export function createVoxelSystem({
   // gridOrigin/gridDims from the arrays buildGrid has just populated (invViewProj/screenParams are
   // dynamic → uploaded per frame in screenProbe()).
   function buildScreenProbeGroups() {
-    screenProbeGroup0 = device.createBindGroup({
-      layout: screenProbePipeline.getBindGroupLayout(0),
+    // One (group0, group1, group2) set per gather pipeline. The uniform + adaptive variants have
+    // IDENTICAL bindings but own uniform buffers (separate GPUShader), so build both from one helper
+    // (mirrors buildRefineGroups). group0 = uniforms + G-buffer + voxelRadiance + sampler; group1 =
+    // probeData + counter (RAW probeBufs); group2 = the 4 storage outputs (SH ×3 + pixel).
+    const buildGatherGroups = (
+      shader: typeof gatherUniformShader,
+      pipeline: GPUComputePipeline,
+    ): [GPUBindGroup, GPUBindGroup, GPUBindGroup] => [
+      device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+          shader.uniforms.gridOrigin.getBindGroupEntry(device),
+          shader.uniforms.gridDims.getBindGroupEntry(device),
+          shader.uniforms.invViewProj.getBindGroupEntry(device),
+          shader.uniforms.screenParams.getBindGroupEntry(device),
+          { binding: shader.shaderMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
+          { binding: shader.shaderMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
+          {
+            binding: shader.shaderMeta.uniforms.voxelRadiance.binding,
+            resource: textures.voxelRadiance.createView({ dimension: "3d" }),
+          },
+          { binding: shader.shaderMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
+        ],
+      }),
+      device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(1),
+        entries: [
+          { binding: shader.shaderMeta.uniforms.probeData.binding, resource: { buffer: probeBufs.data } },
+          { binding: shader.shaderMeta.uniforms.probeCounter.binding, resource: { buffer: probeBufs.counter } },
+        ],
+      }),
+      device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(2),
+        entries: [
+          {
+            binding: shader.shaderMeta.uniforms.screenShR.binding,
+            resource: screenProbeTex.shR.createView({ dimension: "2d" }),
+          },
+          {
+            binding: shader.shaderMeta.uniforms.screenShG.binding,
+            resource: screenProbeTex.shG.createView({ dimension: "2d" }),
+          },
+          {
+            binding: shader.shaderMeta.uniforms.screenShB.binding,
+            resource: screenProbeTex.shB.createView({ dimension: "2d" }),
+          },
+          {
+            binding: shader.shaderMeta.uniforms.screenProbePix.binding,
+            resource: screenProbeTex.pix.createView({ dimension: "2d" }),
+          },
+        ],
+      }),
+    ];
+    [gatherUniformGroup0, gatherUniformGroup1, gatherUniformGroup2] = buildGatherGroups(
+      gatherUniformShader,
+      gatherUniformPipeline,
+    );
+    [gatherAdaptiveGroup0, gatherAdaptiveGroup1, gatherAdaptiveGroup2] = buildGatherGroups(
+      gatherAdaptiveShader,
+      gatherAdaptivePipeline,
+    );
+    // Shares the SAME world box as the grid (origin + cellSize + voxel dims). originArr/dimsArr are
+    // populated by buildGrid before this runs; on rebuild() they are re-set from the same values.
+    // Uploaded to BOTH gather shaders (each has its own uniform buffers).
+    for (const s of [gatherUniformShader, gatherAdaptiveShader]) {
+      device.queue.writeBuffer(s.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
+      device.queue.writeBuffer(s.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
+    }
+
+    // ===== Adaptive-atlas placement bind groups (all reference the RAW shared probeBufs). =====
+    // (The gather's group 1 = probeData + counter is built per-pipeline in buildGatherGroups above.)
+    // Classify (Pass A0): group 0 = screenParams uniform (no G-buffer — pure center+jitter placement);
+    // group 2 = probeData.
+    classifyGroup0 = device.createBindGroup({
+      layout: classifyPipeline.getBindGroupLayout(0),
+      entries: [classifyShader.uniforms.screenParams.getBindGroupEntry(device)],
+    });
+    classifyGroup2 = device.createBindGroup({
+      layout: classifyPipeline.getBindGroupLayout(2),
       entries: [
-        screenProbeShader.uniforms.gridOrigin.getBindGroupEntry(device),
-        screenProbeShader.uniforms.gridDims.getBindGroupEntry(device),
-        screenProbeShader.uniforms.invViewProj.getBindGroupEntry(device),
-        screenProbeShader.uniforms.screenParams.getBindGroupEntry(device),
-        { binding: screenProbeShader.shaderMeta.uniforms.depthTex.binding, resource: gDepth.createView() },
-        { binding: screenProbeShader.shaderMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
-        {
-          binding: screenProbeShader.shaderMeta.uniforms.voxelRadiance.binding,
-          resource: textures.voxelRadiance.createView({ dimension: "3d" }),
-        },
-        { binding: screenProbeShader.shaderMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
+        { binding: classifyShader.shaderMeta.uniforms.probeData.binding, resource: { buffer: probeBufs.data } },
       ],
     });
-    screenProbeGroup2 = device.createBindGroup({
-      layout: screenProbePipeline.getBindGroupLayout(2),
+    // Refine (the single light-adaptive 16→8 pass): group 0 = uniforms + G-buffer normal + the RAW
+    // uniform SH atlas (point-loaded for the radiometric trigger); group 2 = the four allocator
+    // buffers. group 1 is empty (no StorageRead binding → refineEmptyGroup1 at dispatch). group 2
+    // references the RAW shared probeBufs.
+    refineGroup0 = device.createBindGroup({
+      layout: refinePipeline.getBindGroupLayout(0),
       entries: [
+        refineShader.uniforms.screenParams.getBindGroupEntry(device),
+        refineShader.uniforms.lightParams.getBindGroupEntry(device),
+        { binding: refineShader.shaderMeta.uniforms.normalTex.binding, resource: gNormal.createView() },
+        // The RAW uniform SH atlas (what gatherUniform wrote just before refine) — point-loaded for
+        // the radiometric spread trigger. Bound to shR/shG/shB (the raw gather outputs).
         {
-          binding: screenProbeShader.shaderMeta.uniforms.screenShR.binding,
+          binding: refineShader.shaderMeta.uniforms.inShR.binding,
           resource: screenProbeTex.shR.createView({ dimension: "2d" }),
         },
         {
-          binding: screenProbeShader.shaderMeta.uniforms.screenShG.binding,
+          binding: refineShader.shaderMeta.uniforms.inShG.binding,
           resource: screenProbeTex.shG.createView({ dimension: "2d" }),
         },
         {
-          binding: screenProbeShader.shaderMeta.uniforms.screenShB.binding,
+          binding: refineShader.shaderMeta.uniforms.inShB.binding,
           resource: screenProbeTex.shB.createView({ dimension: "2d" }),
-        },
-        {
-          binding: screenProbeShader.shaderMeta.uniforms.screenProbePix.binding,
-          resource: screenProbeTex.pix.createView({ dimension: "2d" }),
         },
       ],
     });
-    // Shares the SAME world box as the grid (origin + cellSize + voxel dims). originArr/dimsArr are
-    // populated by buildGrid before this runs; on rebuild() they are re-set from the same values.
-    device.queue.writeBuffer(screenProbeShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
-    device.queue.writeBuffer(screenProbeShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
+    refineGroup2 = device.createBindGroup({
+      layout: refinePipeline.getBindGroupLayout(2),
+      entries: [
+        { binding: refineShader.shaderMeta.uniforms.probeCounter.binding, resource: { buffer: probeBufs.counter } },
+        { binding: refineShader.shaderMeta.uniforms.probeData.binding, resource: { buffer: probeBufs.data } },
+        { binding: refineShader.shaderMeta.uniforms.tileHeader.binding, resource: { buffer: probeBufs.header } },
+        { binding: refineShader.shaderMeta.uniforms.tileIndices.binding, resource: { buffer: probeBufs.indices } },
+      ],
+    });
+    // Args (Pass B): group 0 = params uniform; group 1 = counter (read); group 2 = the RAW indirect
+    // args buffer (the one bit GPUVariable can't express → substitute our own INDIRECT-capable buffer).
+    argsGroup0 = device.createBindGroup({
+      layout: argsPipeline.getBindGroupLayout(0),
+      entries: [argsShader.uniforms.params.getBindGroupEntry(device)],
+    });
+    argsGroup1 = device.createBindGroup({
+      layout: argsPipeline.getBindGroupLayout(1),
+      entries: [
+        { binding: argsShader.shaderMeta.uniforms.counter.binding, resource: { buffer: probeBufs.counter } },
+      ],
+    });
+    argsGroup2 = device.createBindGroup({
+      layout: argsPipeline.getBindGroupLayout(2),
+      entries: [
+        { binding: argsShader.shaderMeta.uniforms.args.binding, resource: { buffer: probeBufs.args } },
+      ],
+    });
+    // (The refine pass no longer has grid uniforms — the light-adaptive trigger needs no world-space
+    // reconstruction, only the screen-space cage SH and the G-buffer normal.)
   }
 
   // (Re)build the Layer-4 composite bind group: uniforms + the G-buffer (albedo/normal/
@@ -1261,42 +1496,184 @@ export function createVoxelSystem({
   }
 
 
-  // Screen-space probe pass: each screen probe traces conesPerProbe full-sphere cones through the
-  // voxelRadiance pyramid → SH-L1 (screenShR/G/B) + its representative pixel/validity (screenProbePix).
-  // The diffuse fill/bounce source. MUST run AFTER mips() (it samples the pyramid) and BEFORE cone()
-  // (which resolves it). One 2D compute dispatch over the probe grid.
-  function screenProbe(encoder: GPUCommandEncoder) {
-    // Dynamic uniforms: canvas dims + tile (screenParams) and the reverse-Z inverse-VP. The static
-    // gridOrigin/gridDims were uploaded in buildScreenProbeGroups().
+  // ===== Adaptive screen-probe atlas pass chain (light-adaptive density). =====
+  // Frame order: probeClear → probeClassify → gatherUniform → probeRefine (16→8) → probeBuildArgs →
+  // gatherAdaptive → cone. The single gather is split: gatherUniform runs BEFORE refine (a DIRECT
+  // dispatch over the uniform block) so refine can read its raw SH as the light-adaptive subdivision
+  // signal; gatherAdaptive runs AFTER buildArgs (INDIRECT over the refine-placed adaptive tail). Both
+  // write the SAME raw SH atlas. Each compute pass is its OWN beginComputePass/end so the encoder
+  // barriers between them (classify's probeData → gatherUniform → refine reads its SH; refine's
+  // counter → args → the indirect gatherAdaptive — the SAME implicit inter-pass barrier the mip/aniso
+  // chains rely on). MUST run AFTER mips() (the gather samples the pyramid) and BEFORE cone() (resolve).
+
+  // Pass 0 — Clear (host-side, no shader). Zero the allocator counter (+ budget flag), the per-tile
+  // adaptive counts, and the indirect args. probeData/tileIndices need no clear (only written slots
+  // are ever read, gated by the counts). This explicit first step IS the anti-staleness mechanism.
+  function probeClear(encoder: GPUCommandEncoder) {
+    encoder.clearBuffer(probeBufs.counter);
+    encoder.clearBuffer(probeBufs.header);
+    encoder.clearBuffer(probeBufs.args);
+  }
+
+  // Upload the per-frame uniforms for the WHOLE chain (queue writes all land before the encoder runs,
+  // so doing them here at the head is correct regardless of pass order). invViewProj is the reverse-Z
+  // inverse-VP; cone() recomputes it right after into the same scratch — harmless.
+  function uploadProbeUniforms() {
+    mat4.invert(invViewProj, viewProjMatrix);
+    screenInvArr.set(invViewProj as Float32Array);
+    // Classify screenParams: canvas + tile (.w spare — placement is pure center+jitter).
+    classifyScreenArr[0] = canvas.width;
+    classifyScreenArr[1] = canvas.height;
+    classifyScreenArr[2] = screenProbeTile;
+    classifyScreenArr[3] = 0;
+    device.queue.writeBuffer(classifyShader.uniforms.screenParams.getGPUBuffer(device), 0, classifyScreenArr);
+    // Refine screenParams (.w = the live cell divisor refineDiv1) + lightParams (.x = lightThresh, the
+    // sole subdivision trigger; .y = the maxAdaptive budget).
+    refineScreenArr[0] = canvas.width;
+    refineScreenArr[1] = canvas.height;
+    refineScreenArr[2] = screenProbeTile;
+    refineScreenArr[3] = refineDiv1;
+    refineLightArr[0] = lightThresh;
+    refineLightArr[1] = probeCounts.maxAdaptive;
+    device.queue.writeBuffer(refineShader.uniforms.screenParams.getGPUBuffer(device), 0, refineScreenArr);
+    device.queue.writeBuffer(refineShader.uniforms.lightParams.getGPUBuffer(device), 0, refineLightArr);
+    // Args params: numUniform + maxAdaptive.
+    argsParamsArr[0] = probeCounts.numUniform;
+    argsParamsArr[1] = probeCounts.maxAdaptive;
+    device.queue.writeBuffer(argsShader.uniforms.params.getGPUBuffer(device), 0, argsParamsArr);
+    // Gather screenParams: .w = maxAdaptive (caps the adaptive counter). invViewProj = the reverse-Z
+    // inverse-VP. Uploaded to BOTH gather shaders (uniform + adaptive) — they share the same values,
+    // only IS_ADAPTIVE (baked) differs, and each has its own uniform buffers.
     screenParamsArr[0] = canvas.width;
     screenParamsArr[1] = canvas.height;
     screenParamsArr[2] = screenProbeTile;
-    screenParamsArr[3] = edgeAware ? 1 : 0;
-    device.queue.writeBuffer(
-      screenProbeShader.uniforms.screenParams.getGPUBuffer(device),
-      0,
-      screenParamsArr,
-    );
-    // Reuse the shared invViewProj scratch (cone() recomputes it right after — harmless).
-    mat4.invert(invViewProj, viewProjMatrix);
-    screenInvArr.set(invViewProj as Float32Array);
-    device.queue.writeBuffer(
-      screenProbeShader.uniforms.invViewProj.getGPUBuffer(device),
-      0,
-      screenInvArr,
-    );
+    screenParamsArr[3] = probeCounts.maxAdaptive;
+    for (const s of [gatherUniformShader, gatherAdaptiveShader]) {
+      device.queue.writeBuffer(s.uniforms.screenParams.getGPUBuffer(device), 0, screenParamsArr);
+      device.queue.writeBuffer(s.uniforms.invViewProj.getGPUBuffer(device), 0, screenInvArr);
+    }
+  }
 
+  // Pass A0 — uniform placement. One thread per coarse 16px tile → probeData[tileIdx] (repr pixel,
+  // level 0). Uploads the whole chain's uniforms first.
+  function probeClassify(encoder: GPUCommandEncoder) {
+    uploadProbeUniforms();
     const pass = encoder.beginComputePass();
-    pass.setPipeline(screenProbePipeline);
-    pass.setBindGroup(0, screenProbeGroup0);
-    pass.setBindGroup(1, screenProbeEmptyGroup1);
-    pass.setBindGroup(2, screenProbeGroup2);
+    pass.setPipeline(classifyPipeline);
+    pass.setBindGroup(0, classifyGroup0);
+    pass.setBindGroup(1, classifyEmptyGroup1);
+    pass.setBindGroup(2, classifyGroup2);
     pass.dispatchWorkgroups(
-      Math.ceil(screenGrid.w / SCREEN_WG),
-      Math.ceil(screenGrid.h / SCREEN_WG),
+      Math.ceil(screenGrid.w / CLASSIFY_WG),
+      Math.ceil(screenGrid.h / CLASSIFY_WG),
       1,
     );
     pass.end();
+  }
+
+  // Adaptive refine (16→8, light-adaptive). One thread per fine cell → atomicAdd-spawn where the
+  // gathered incoming light varies across the uniform cage by more than lightThresh. lightThresh
+  // large ⇒ no spawns → the counter stays 0 → the gather processes only the uniform block and the
+  // resolve's adaptive loop no-ops, reproducing the flat-atlas render (the uniform-only A/B).
+  function probeRefine(encoder: GPUCommandEncoder) {
+    const cellPx = Math.max(1, Math.floor(screenProbeTile / refineDiv1)); // tile / live cell divisor
+    const cellsX = Math.ceil(canvas.width / cellPx);
+    const cellsY = Math.ceil(canvas.height / cellPx);
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(refinePipeline);
+    pass.setBindGroup(0, refineGroup0);
+    pass.setBindGroup(1, refineEmptyGroup1);
+    pass.setBindGroup(2, refineGroup2);
+    pass.dispatchWorkgroups(Math.ceil(cellsX / REFINE_WG), Math.ceil(cellsY / REFINE_WG), 1);
+    pass.end();
+  }
+
+  // Pass B — build the indirect gather args from the (capped) adaptive count. Single thread.
+  function probeBuildArgs(encoder: GPUCommandEncoder) {
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(argsPipeline);
+    pass.setBindGroup(0, argsGroup0);
+    pass.setBindGroup(1, argsGroup1);
+    pass.setBindGroup(2, argsGroup2);
+    pass.dispatchWorkgroups(1, 1, 1);
+    pass.end();
+  }
+
+  // Gather UNIFORM (DIRECT dispatch, runs BEFORE refine). ceil(numUniform / GATHER_WG) workgroups
+  // over the uniform block → raw SH into atlas rows [0, gh). Refine reads this SH for its radiometric
+  // (light-adaptive) subdivision trigger. numUniform is CPU-known, so no indirect args needed.
+  function gatherUniform(encoder: GPUCommandEncoder) {
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(gatherUniformPipeline);
+    pass.setBindGroup(0, gatherUniformGroup0);
+    pass.setBindGroup(1, gatherUniformGroup1);
+    pass.setBindGroup(2, gatherUniformGroup2);
+    pass.dispatchWorkgroups(Math.ceil(probeCounts.numUniform / GATHER_WORKGROUP), 1, 1);
+    pass.end();
+  }
+
+  // Gather ADAPTIVE (INDIRECT dispatch, runs AFTER buildArgs). dispatchWorkgroupsIndirect launches
+  // over exactly the adaptiveCount probes refine placed (PASS B wrote the args) → raw SH into atlas
+  // rows [gh, ...). With no adaptive probes the counter is 0 → args = [0,1,1] → 0 groups → no-op.
+  function gatherAdaptive(encoder: GPUCommandEncoder) {
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(gatherAdaptivePipeline);
+    pass.setBindGroup(0, gatherAdaptiveGroup0);
+    pass.setBindGroup(1, gatherAdaptiveGroup1);
+    pass.setBindGroup(2, gatherAdaptiveGroup2);
+    pass.dispatchWorkgroupsIndirect(probeBufs.args, 0);
+    pass.end();
+  }
+
+  // Throttled async budget readback (~every 30 calls). Copies the counter to a staging buffer in a
+  // standalone encoder, maps it, and surfaces the live adaptive count + a sticky BUDGET-EXCEEDED
+  // flag (raised by the refine pass on an overflowing atomicAdd) for the GUI + a console.warn.
+  let adaptiveProbeCount = 0;
+  let budgetExceeded = false;
+  let readbackInFlight = false;
+  let readbackFrame = 0;
+  const counterStaging = device.createBuffer({
+    size: 8,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+  });
+  async function pollBudget() {
+    readbackFrame++;
+    if (readbackInFlight || readbackFrame % 30 !== 0) {
+      return;
+    }
+    readbackInFlight = true;
+    const enc = device.createCommandEncoder();
+    enc.copyBufferToBuffer(probeBufs.counter, 0, counterStaging, 0, 8);
+    device.queue.submit([enc.finish()]);
+    try {
+      await counterStaging.mapAsync(GPUMapMode.READ);
+      const a = new Uint32Array(counterStaging.getMappedRange().slice(0));
+      counterStaging.unmap();
+      adaptiveProbeCount = Math.min(a[0], probeCounts.maxAdaptive);
+      budgetExceeded = a[1] !== 0;
+      if (budgetExceeded) {
+        console.warn(
+          `[screen-probe] adaptive budget ${probeCounts.maxAdaptive} exceeded (allocated ${a[0]}); raise adaptiveFraction or tile`,
+        );
+      }
+    } finally {
+      readbackInFlight = false;
+    }
+  }
+
+  // Recreate the canvas-derived screen-probe atlas + indirection buffers from the current grid +
+  // adaptiveFraction. Called on resize / tile / adaptiveFraction change; the callers rebuild the
+  // bind groups after (buildScreenProbeGroups + buildConeGroup) since those reference these objects.
+  function recreateScreenProbeResources() {
+    screenGrid = screenProbeGridDims(canvas.width, canvas.height, screenProbeTile);
+    probeCounts = screenProbeCounts(screenGrid, adaptiveFraction);
+    screenProbeTex.shR.destroy();
+    screenProbeTex.shG.destroy();
+    screenProbeTex.shB.destroy();
+    screenProbeTex.pix.destroy();
+    screenProbeTex = createScreenProbeTextures(device, screenGrid, probeCounts.adaptiveRows);
+    destroyScreenProbeBuffers(probeBufs);
+    probeBufs = createScreenProbeBuffers(device, probeCounts);
   }
 
   // VCT cone GI: per-pixel AIMED emitter cones (sharp direct + shadow) + a screen-probe resolve
@@ -1312,11 +1689,12 @@ export function createVoxelSystem({
     device.queue.writeBuffer(coneShader.uniforms.params2.getGPUBuffer(device), 0, coneParams2Arr);
 
     // params3: the screen-probe resolve params (all LIVE, GUI-tunable, no rebuild). .x = tile (the
-    // resolve derives the probe grid from it), .y = normal-weight power, .z = plane-threshold scale.
+    // resolve derives the probe grid from it), .y = normal-weight power, .z = plane-threshold scale,
+    // .w = resolveRadius (the unified smooth kernel's support in tiles).
     coneParams3Arr[0] = screenProbeTile;
     coneParams3Arr[1] = spNormalPow;
     coneParams3Arr[2] = spPlaneK;
-    coneParams3Arr[3] = 0;
+    coneParams3Arr[3] = screenProbeResolveRadius;
     device.queue.writeBuffer(coneShader.uniforms.params3.getGPUBuffer(device), 0, coneParams3Arr);
 
     // invViewProj computed ONCE per frame here (cone runs before composite, which reuses it).
@@ -1336,6 +1714,7 @@ export function createVoxelSystem({
     });
     pass.setPipeline(conePipeline);
     pass.setBindGroup(0, coneGroup0);
+    pass.setBindGroup(1, coneGroup1); // adaptive-atlas tileHeader + tileIndices (StorageRead)
     pass.draw(6, 1, 0, 0);
     pass.end();
   }
@@ -1404,16 +1783,39 @@ export function createVoxelSystem({
     pass.end();
   }
 
+  // Screen-probe DEBUG view: false-color the probe distribution into compositeOutput (same target as
+  // composite → present() picks it up unchanged). Run INSTEAD of composite() when debugProbes is on.
+  // Reads the atlas + indirection (via debugGroup0/1), NOT the lit scene — MUST run after gatherAdaptive.
+  function probeDebug(encoder: GPUCommandEncoder) {
+    debugParamsArr[0] = canvas.width;
+    debugParamsArr[1] = canvas.height;
+    debugParamsArr[2] = screenProbeTile;
+    debugParamsArr[3] = 0;
+    device.queue.writeBuffer(debugShader.uniforms.params.getGPUBuffer(device), 0, debugParamsArr);
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [
+        { view: compositeView, clearValue: [0, 0, 0, 1], loadOp: "clear", storeOp: "store" },
+      ],
+    });
+    pass.setPipeline(debugPipeline);
+    pass.setBindGroup(0, debugGroup0);
+    pass.setBindGroup(1, debugGroup1);
+    pass.draw(6, 1, 0, 0);
+    pass.end();
+  }
+
   // Explicit, infrequent action: recompile the three BAKED shaders (cone/composite/screen-probe)
   // with the CURRENT config, recreate their pipelines + bind groups, and re-upload the buildGrid-
   // time uniforms that the fresh GPU buffers lost (the per-frame ones refill next frame).
   function rebuild() {
     coneShader.destroy();
     compositeShader.destroy();
-    screenProbeShader.destroy();
+    gatherUniformShader.destroy();
+    gatherAdaptiveShader.destroy();
     coneShader = new GPUShader(createConeShaderMeta(config));
     compositeShader = new GPUShader(createCompositeShaderMeta(config));
-    screenProbeShader = new GPUShader(createScreenProbeShaderMeta(config));
+    gatherUniformShader = new GPUShader(createScreenProbeShaderMeta(config, false));
+    gatherAdaptiveShader = new GPUShader(createScreenProbeShaderMeta(config, true));
     conePipeline = coneShader.getRenderPipeline(device, "vs_main", "fs_main", {
       targetFormat: "rgba16float",
       withBlending: false,
@@ -1422,14 +1824,13 @@ export function createVoxelSystem({
       targetFormat: "rgba16float",
       withBlending: false,
     });
-    screenProbePipeline = screenProbeShader.getComputePipeline(device, "main");
-    screenProbeEmptyGroup1 = device.createBindGroup({
-      layout: screenProbeShader.createBindGroupLayout(device, 1),
-      entries: [],
-    });
+    gatherUniformPipeline = gatherUniformShader.getComputePipeline(device, "main");
+    gatherAdaptivePipeline = gatherAdaptiveShader.getComputePipeline(device, "main");
+    // (Both gather variants use group 1 for probeData+counter; buildScreenProbeGroups rebuilds them.
+    // The config-independent classify/refine/args shaders are NOT recompiled — no baked consts.)
     buildConeGroup();
     buildCompositeGroup();
-    // Screen-probe groups reference the fresh screenProbeShader buffers; buildScreenProbeGroups also
+    // Screen-probe groups reference the fresh gather-shader buffers; buildScreenProbeGroups also
     // re-uploads its gridOrigin/gridDims (originArr/dimsArr still hold the current grid values).
     buildScreenProbeGroups();
     // Re-upload buildGrid-time uniforms to the NEW shader buffers (per-frame ones refill next frame).
@@ -1462,14 +1863,34 @@ export function createVoxelSystem({
   // rides uParams3.x each frame so the cone resolve derives the same grid.
   function setScreenProbeTile(tile: number) {
     screenProbeTile = Math.max(1, Math.round(tile));
-    screenGrid = screenProbeGridDims(canvas.width, canvas.height, screenProbeTile);
-    screenProbeTex.shR.destroy();
-    screenProbeTex.shG.destroy();
-    screenProbeTex.shB.destroy();
-    screenProbeTex.pix.destroy();
-    screenProbeTex = createScreenProbeTextures(device, screenGrid);
-    buildScreenProbeGroups(); // group2 references the recreated textures
-    buildConeGroup(); // cone samples the recreated screen textures
+    recreateScreenProbeResources(); // new grid → new atlas + indirection buffers
+    buildScreenProbeGroups(); // gather/classify/refine/args groups reference the recreated resources
+    buildConeGroup(); // cone samples the recreated screen textures + rebinds tileHeader/tileIndices
+  }
+
+  // Adaptive budget fraction (maxAdaptive = numUniform × fraction). Resizes the atlas + all
+  // indirection buffers (like a tile change), so rebuild the bind groups after.
+  function setAdaptiveFraction(fraction: number) {
+    adaptiveFraction = Math.max(0, fraction);
+    recreateScreenProbeResources();
+    buildScreenProbeGroups();
+    buildConeGroup();
+  }
+
+  // Cell divisor of the single refine level (cellPx = tile / div). Live — uploaded to the refine
+  // shader's screenParams.w + used for its dispatch next frame; no rebuild. E.g. tile 16 + div 2 =
+  // 16→8. NOTE: a coarse tile with a fine divisor (many child cells per tile) can exceed
+  // SCREEN_PROBE_K (8) adaptive probes/tile → the surplus is allocated but dropped from the per-tile
+  // list (j>=K guard); raise SCREEN_PROBE_K (a restart-time const) for full coverage.
+  function setRefineDiv(div: number) {
+    refineDiv1 = Math.max(1, Math.round(div));
+  }
+
+  // Light-adaptive subdivision threshold: refine spawns an adaptive probe where the DC-luminance
+  // spread of the GATHERED uniform-probe SH across the cage exceeds this. Live (uploaded to
+  // refine.lightParams.x). Large ⇒ off (no adaptive probes). Lower ⇒ denser in lit gradients.
+  function setLightThresh(t: number) {
+    lightThresh = Math.max(0, t);
   }
 
   // Live screen-probe resolve weights (uParams3.y/.z, uploaded each frame in cone() — no rebuild).
@@ -1479,10 +1900,16 @@ export function createVoxelSystem({
     spPlaneK = planeK;
   }
 
-  // Toggle edge-aware probe placement (screenParams.w) — live, no rebuild. On = snap each probe onto
-  // the nearest valid surface in its tile (fixes thin foreground features); off = fixed tile center.
-  function setEdgeAware(on: boolean) {
-    edgeAware = on;
+  // Unified-resolve support radius, in TILES. Bigger = smoother/wider fill (also helps a distant object
+  // seen by few probes), smaller = more local detail. Live — uploaded to the cone's uParams3.w each
+  // frame (no rebuild, no rebind).
+  function setScreenProbeResolveRadius(radius: number) {
+    screenProbeResolveRadius = Math.max(0.25, radius);
+  }
+
+  // Toggle the probe-distribution debug view (probeDebug replaces composite) — live, no rebuild.
+  function setDebugProbes(on: boolean) {
+    debugProbes = on;
   }
 
   // Change the cone-pass downscale factor (2 = half-res, 4 = quarter-res). Recreates the cone
@@ -1514,13 +1941,9 @@ export function createVoxelSystem({
     compositeOutput.destroy();
     compositeOutput = createCompositeOutput();
     compositeView = compositeOutput.createView();
-    // Screen-probe textures are canvas-derived → recompute the grid, destroy the old set, recreate.
-    screenGrid = screenProbeGridDims(canvas.width, canvas.height, screenProbeTile);
-    screenProbeTex.shR.destroy();
-    screenProbeTex.shG.destroy();
-    screenProbeTex.shB.destroy();
-    screenProbeTex.pix.destroy();
-    screenProbeTex = createScreenProbeTextures(device, screenGrid);
+    // Screen-probe atlas + indirection buffers are canvas-derived → recompute the grid + counts,
+    // destroy the old set, recreate.
+    recreateScreenProbeResources();
     // Bind groups below reference coneView + the (new) G-buffer/screen textures, so refresh first.
     buildConeGroup();
     // Rebuild the composite group: G-buffer + coneOutput changed.
@@ -1537,32 +1960,61 @@ export function createVoxelSystem({
     mips,
     anisoBase,
     anisoMips,
-    screenProbe,
+    probeClear,
+    probeClassify,
+    probeRefine,
+    probeBuildArgs,
+    gatherUniform,
+    gatherAdaptive,
+    pollBudget,
     cone,
     setLights,
     sunDepth,
     composite,
+    probeDebug,
     recreate,
     setCellSize,
     setConeScale,
     setAnisoMode,
     setScreenProbeTile,
     setScreenProbeParams,
-    setEdgeAware,
+    setAdaptiveFraction,
+    setRefineDiv,
+    setLightThresh,
+    setScreenProbeResolveRadius,
+    setDebugProbes,
     get anisoMode() {
       return anisoMode;
     },
-    get edgeAware() {
-      return edgeAware;
+    get debugProbes() {
+      return debugProbes;
     },
     get screenProbeTile() {
       return screenProbeTile;
+    },
+    get adaptiveFraction() {
+      return adaptiveFraction;
+    },
+    get refineDiv1() {
+      return refineDiv1;
+    },
+    get lightThresh() {
+      return lightThresh;
+    },
+    get adaptiveProbeCount() {
+      return adaptiveProbeCount;
+    },
+    get budgetExceeded() {
+      return budgetExceeded;
     },
     get spNormalPow() {
       return spNormalPow;
     },
     get spPlaneK() {
       return spPlaneK;
+    },
+    get screenProbeResolveRadius() {
+      return screenProbeResolveRadius;
     },
     get coneScale() {
       return coneScale;

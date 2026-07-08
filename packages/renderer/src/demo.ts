@@ -32,6 +32,7 @@ import {
   setCameraPosition,
 } from "./ECS/Systems/ResizeSystem.ts";
 import { computeSmokeTest } from "./WGSL/computeSmokeTest.ts";
+import { atomicIndirectSmokeTest } from "./WGSL/atomicIndirectSmokeTest.ts";
 import {
   applyMatrixRotateZ,
   setMatrixRotateZ,
@@ -59,6 +60,10 @@ async function main() {
 
   // Stage-0 compute-infrastructure check (logs [compute-smoke] PASS/FAIL once).
   void computeSmokeTest(device);
+
+  // De-risk the adaptive screen-probe atlas primitives: storage-buffer atomics +
+  // compute-written indirect dispatch (logs [atomic-indirect-smoke] PASS/FAIL once).
+  void atomicIndirectSmokeTest(device);
 
   const getPixelRatio = () => window.devicePixelRatio;
 
@@ -648,13 +653,58 @@ async function main() {
   const applySP = () => voxel.setScreenProbeParams(spCfg.normalPow, spCfg.planeK);
   probeFolder.add(spCfg, "normalPow", 0.5, 8, 0.5).name("resolve: normal pow").onChange(applySP);
   probeFolder.add(spCfg, "planeK", 0.25, 4, 0.25).name("resolve: plane K").onChange(applySP);
-  // Edge-aware placement: snap each probe onto the nearest valid surface in its tile (fixes thin
-  // foreground features that miss the tile center) vs fixed tile-center. Live A/B toggle, no rebuild.
-  const edgeCfg = { edgeAware: voxel.edgeAware };
+  // Unified-resolve support radius (in TILES): the smooth screen kernel that weights EVERY probe
+  // (uniform AND adaptive) tapers to zero at this distance. Bigger = smoother/wider fill (also helps a
+  // distant object seen by few probes); smaller = more local detail. Live, no rebuild. This supersedes
+  // the old probe blur pass — the wide multi-probe average IS the smoothing, so uniform vs adaptive is
+  // invisible and adding adaptive density only sharpens gradients (never blocky steps).
+  const resolveCfg = { radius: voxel.screenProbeResolveRadius };
   probeFolder
-    .add(edgeCfg, "edgeAware")
-    .name("edge-aware probes")
-    .onChange((on: boolean) => voxel.setEdgeAware(on));
+    .add(resolveCfg, "radius", 0.5, 3, 0.25)
+    .name("resolve radius (tiles)")
+    .onChange((r: number) => voxel.setScreenProbeResolveRadius(r));
+
+  // --- Adaptive screen-probe atlas (single 16→8 level, LIGHT-ADAPTIVE only). ---
+  // The sole density driver is lightThresh: refine spawns an adaptive probe where the GATHERED
+  // incoming light varies across the uniform cage by more than this. High ⇒ off (the flat uniform
+  // atlas, the A/B baseline); lower ⇒ denser where the light gradient is steep. adaptiveFraction
+  // sizes the atlas + all indirection buffers (rebuild, like a tile change). The read-only rows show
+  // the live adaptive count + a BUDGET-EXCEEDED flag from the throttled counter readback.
+  const adaptiveCfg = {
+    adaptiveFraction: voxel.adaptiveFraction,
+    div1: voxel.refineDiv1,
+    lightThresh: voxel.lightThresh,
+  };
+  probeFolder
+    .add(adaptiveCfg, "adaptiveFraction", 0, 4, 0.25)
+    .name("adaptive budget ×uniform")
+    .onFinishChange((v: number) => voxel.setAdaptiveFraction(v));
+  // Refine cell divisor → cellPx = tile / div (the level is tile → tile/div). E.g. tile 16 + 2 =
+  // 16→8. Live (no rebuild). A coarse tile + fine divisor can exceed the per-tile probe cap
+  // (SCREEN_PROBE_K=8) → surplus probes dropped; watch the budget row.
+  probeFolder
+    .add(adaptiveCfg, "div1", [2, 4, 8, 16])
+    .name("cell ÷")
+    .onChange((v: number) => voxel.setRefineDiv(v));
+  // Light-adaptive density trigger: subdivide where the gathered-SH luminance varies across the cage.
+  // Lower = denser probes in lit gradients; raise high = off (the flat uniform atlas). Live, no
+  // rebuild. Watch the budget row — lowering it spawns more probes.
+  probeFolder
+    .add(adaptiveCfg, "lightThresh", 0, 1, 0.01)
+    .name("light subdiv thresh")
+    .onChange((v: number) => voxel.setLightThresh(v));
+  // Read-only budget readout (updated each frame from the async counter readback; .listen() auto-
+  // refreshes the display). `budget` flips to BUDGET-EXCEEDED when the atlas overflowed this frame.
+  const probeStats = { adaptive: 0, budget: "OK" };
+  probeFolder.add(probeStats, "adaptive").name("adaptive probes").disable().listen();
+  probeFolder.add(probeStats, "budget").name("budget").disable().listen();
+  // Debug view: replace the lit image with a false-color map of the probe distribution — green =
+  // uniform (16px) probes, yellow = adaptive (8px) probes, red-tinted = subdivided tiles. Live.
+  const debugCfg = { debugProbes: voxel.debugProbes };
+  probeFolder
+    .add(debugCfg, "debugProbes")
+    .name("debug: probe layers")
+    .onChange((on: boolean) => voxel.setDebugProbes(on));
 
   // Composite (Layer 4): the final lit image. Sun controls above feed it via SunLight;
   // cone giStrength bakes into the indirect term. Only the ambient floor lives here.
@@ -903,10 +953,22 @@ async function main() {
       if (perf.anisoBase) voxel.anisoBase(encoder);
       if (perf.anisoMips) voxel.anisoMips(encoder);
       // Screen-probe gather (the diffuse fill source): reads the radiance pyramid (after mips), must
-      // precede cone (which resolves it). Toggle it off to isolate its GPU cost.
-      if (perf.screenProbe) voxel.screenProbe(encoder);
+      // precede cone (which resolves it). LIGHT-ADAPTIVE ATLAS chain (clear → classify → gatherUniform
+      // → refine 16→8 → build-args → gatherAdaptive); the single toggle gates the whole chain's GPU
+      // cost. gatherUniform runs BEFORE refine so refine subdivides on the real gathered-SH radiance
+      // spread across the cage.
+      if (perf.screenProbe) {
+        voxel.probeClear(encoder);
+        voxel.probeClassify(encoder);
+        voxel.gatherUniform(encoder);
+        voxel.probeRefine(encoder);
+        voxel.probeBuildArgs(encoder);
+        voxel.gatherAdaptive(encoder);
+      }
       if (perf.cone) voxel.cone(encoder);
-      if (perf.composite) voxel.composite(encoder);
+      // Debug view replaces the lit composite (both write compositeOutput → present is unchanged).
+      if (voxel.debugProbes) voxel.probeDebug(encoder);
+      else if (perf.composite) voxel.composite(encoder);
       present(encoder, voxel.compositeOutputTexture);
     } else {
       // Final lit image. Order: SDF G-buffer draw → (sun depth, only when the directional sun is
@@ -920,10 +982,20 @@ async function main() {
       voxel.mips(encoder);
       voxel.anisoBase(encoder);
       voxel.anisoMips(encoder);
-      // Screen-probe gather (the diffuse fill source): after mips, before cone.
-      voxel.screenProbe(encoder);
+      // Screen-probe gather (the diffuse fill source): after mips, before cone. LIGHT-ADAPTIVE ATLAS
+      // chain (clear → classify → gatherUniform → refine 16→8 → build-args → gatherAdaptive).
+      // gatherUniform runs BEFORE refine so refine subdivides on the real gathered-SH radiance spread
+      // across the cage.
+      voxel.probeClear(encoder);
+      voxel.probeClassify(encoder);
+      voxel.gatherUniform(encoder);
+      voxel.probeRefine(encoder);
+      voxel.probeBuildArgs(encoder);
+      voxel.gatherAdaptive(encoder);
       voxel.cone(encoder);
-      voxel.composite(encoder);
+      // Debug view replaces the lit composite (both write compositeOutput → present is unchanged).
+      if (voxel.debugProbes) voxel.probeDebug(encoder);
+      else voxel.composite(encoder);
       present(encoder, voxel.compositeOutputTexture);
     }
 
@@ -940,6 +1012,11 @@ async function main() {
     gpuMsEMA = gpuMsEMA ? gpuMsEMA * 0.8 + dt * 0.2 : dt;
     gpuMsMax = Math.max(gpuMsMax, gpuMsEMA);
     gpuPanel.update(gpuMsEMA, gpuMsMax);
+
+    // Throttled adaptive-budget readback (self-paced, ~every 30 frames) → live GUI count + warning.
+    void voxel.pollBudget();
+    probeStats.adaptive = voxel.adaptiveProbeCount;
+    probeStats.budget = voxel.budgetExceeded ? "BUDGET EXCEEDED" : "OK";
 
     // CPU/FPS frame bracket for stats-gl (GPU panel is fed by the timer above).
     stats.end();

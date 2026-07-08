@@ -90,14 +90,22 @@ export async function createRenderTarget(
 
     const encoder = device.createCommandEncoder();
     // Order (must not be reordered): SDF G-buffer draw → (sun depth, only when the
-    // directional sun is on) → voxelize → mips → probe → probeBlur → cone → composite → present.
+    // directional sun is on) → voxelize → mips → probe → cone → composite → present.
     frameTick(encoder, delta);
     if (SunLight.enabled) {
       voxel.sunDepth(encoder);
     }
     voxel.voxelize(encoder);
     voxel.mips(encoder);
-    voxel.screenProbe(encoder);
+    // Light-adaptive screen-probe atlas chain (clear → classify → gatherUniform → refine 16→8 →
+    // build-args → gatherAdaptive). gatherUniform runs BEFORE refine so refine subdivides on the real
+    // gathered-SH radiance spread across the cage.
+    voxel.probeClear(encoder);
+    voxel.probeClassify(encoder);
+    voxel.gatherUniform(encoder);
+    voxel.probeRefine(encoder);
+    voxel.probeBuildArgs(encoder);
+    voxel.gatherAdaptive(encoder);
     voxel.cone(encoder);
     voxel.composite(encoder);
     present(encoder, voxel.compositeOutputTexture);

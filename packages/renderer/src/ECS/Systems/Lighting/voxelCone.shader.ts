@@ -2,6 +2,8 @@ import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
 import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
 import { wgsl } from "../../../WGSL/wgsl.ts";
 import { VoxelBakedConfig } from "./voxelConfig.ts";
+import { SCREEN_PROBE_K } from "./voxelResources.ts";
+import { probeWeightWGSL } from "./voxelProbeShared.wgsl.ts";
 
 // VCT Layer 3 — the full DIFFUSE HEMISPHERE cone gather. A fullscreen pass over the G-buffer:
 //   1. Reconstruct the per-pixel world position P (from the reverse-Z depth + invViewProj)
@@ -49,7 +51,8 @@ export function createConeShaderMeta(cfg: VoxelBakedConfig) {
     params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
     // Screen-probe resolve params (all LIVE per-frame uniforms — GUI-tunable with no rebuild):
     // .x = SCREEN_PROBE_TILE (full-res px / probe), .y = normal-weight power (SP_NORMAL_POW),
-    // .z = plane-threshold scale (SP_PLANE_K, × local probe spacing), .w spare.
+    // .z = plane-threshold scale (SP_PLANE_K, × local probe spacing), .w = resolveRadius (the smooth
+    // screen kernel's support in TILES — bigger = smoother/wider fill, smaller = more local detail).
     params3: new VariableMeta("uParams3", VariableKind.Uniform, `vec4<f32>`),
     // Emitters to importance-sample: .xyz = world CENTER, .w = radius (penumbra source). These
     // are AUTO-DISCOVERED from the LightEmitter component (every emitter, no manual list); only
@@ -119,11 +122,23 @@ export function createConeShaderMeta(cfg: VoxelBakedConfig) {
     screenShB: new VariableMeta("screenShB", VariableKind.Texture, `texture_2d<f32>`, {
       textureSampleType: "float",
     }),
-    // Per-probe geometry: .xy = representative full-res pixel, .z = validity. rgba32float → declared
-    // "unfilterable-float" (point-loaded); the resolve reconstructs each probe's P + N from the
-    // G-buffer at .xy. ALWAYS bound (pruning-safe).
+    // Per-probe geometry: .xy = representative full-res pixel, .z = validity, .w = the probe FOOTPRINT
+    // (cell size in full-res px) → the resolve area-weights each probe by footprint² (density-invariant
+    // average). rgba32float → declared "unfilterable-float" (point-loaded); the resolve reconstructs
+    // each probe's P + N from the G-buffer at .xy. ALWAYS bound (pruning-safe).
     screenProbePix: new VariableMeta("screenProbePix", VariableKind.Texture, `texture_2d<f32>`, {
       textureSampleType: "unfilterable-float",
+    }),
+    // ADAPTIVE screen-probe indirection — group 1 (StorageRead, read-only storage in the fragment
+    // stage, allowed in core WebGPU). tileHeader[T] = count of adaptive probes parented to coarse
+    // tile T; tileIndices[T*K + j] = the global atlas slot of the tile's j-th adaptive probe. When
+    // lightThresh is high (no adaptive probes) tileHeader is all-zero (cleared, never written), so
+    // the adaptive-tap loop below is skipped and the resolve is identical to the flat-atlas build.
+    tileHeader: new VariableMeta("uTileHeader", VariableKind.StorageRead, `array<u32>`, {
+      visibility: GPUShaderStage.FRAGMENT,
+    }),
+    tileIndices: new VariableMeta("uTileIndices", VariableKind.StorageRead, `array<u32>`, {
+      visibility: GPUShaderStage.FRAGMENT,
     }),
     // Filtering sampler for textureSampleLevel over the voxelRadiance pyramid + the aniso volumes.
     voxelSampler: new VariableMeta("voxelSampler", VariableKind.Sampler, `sampler`),
@@ -142,6 +157,10 @@ const AIMED_ALPHA_CUT: f32 = ${cfg.aimedAlphaCut};
 const AO_CONE_COUNT: i32 = ${cfg.aoConeCount};
 const AO_REACH: f32 = ${cfg.aoReach};
 const AO_STEPS: i32 = ${cfg.aoSteps};
+// Max adaptive probes per coarse tile = the tileIndices stride (see voxelResources.SCREEN_PROBE_K).
+const SP_K: u32 = ${SCREEN_PROBE_K}u;
+
+${probeWeightWGSL}
 
 const POSITION = array<vec2f, 6>(
   vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0),
@@ -269,77 +288,163 @@ fn sh_avg_radiance(c: vec4<f32>, N: vec3<f32>) -> f32 {
 }
 
 // ---- SCREEN-PROBE FILL (the sole diffuse fill/bounce source; see the (b) fill block). ----
-// Resolve the screen-probe fill at pixel 'full' (P, N = its world position + normal). A 4-nearest
-// bilinear cage in probe-grid space, each cage probe gated by a plane-distance × normal bilateral
-// weight (rejects probes across a depth discontinuity / on a back-to-back wall). SP weights are LIVE
-// uniforms (uParams3.y/.z, GUI-tunable). If the strict gate rejects all four (disocclusion /
-// silhouette / thin geo) it degrades to a LOOSE bilinear blend over whatever valid neighbours exist;
-// only if NO cage probe is valid at all does it return 0 (no fill). Screen-probe-only — there is no
-// world-volume backstop and no history buffer.
+// UNIFIED RESOLVE. Every probe — uniform AND adaptive — flows through ONE identical path
+// (accum_probe): there is NO uniform-vs-adaptive branch anywhere in the tap weighting or source.
+// The old split (uniform = blurred SH + bilinear cage weight, adaptive = raw SH + a peaky gaussian)
+// made dense/adaptive regions snap to their raw voxel-discrete SH and reveal the voxel grid while
+// uniform-only stayed smooth. Now BOTH read the RAW SH atlas (shR/shG/shB) and BOTH use the SAME
+// smooth compact screen-distance kernel, so uniform vs adaptive is invisible in the output and
+// adding adaptive density only sharpens gradients — it never adds blockiness.
+
+// Reconstruct a probe's world position from its atlas texel (repr pixel → G-buffer depth). .w = ok.
+fn sp_load_probe_P(atexel: vec2<i32>) -> vec4<f32> {
+  let pixMeta = textureLoad(screenProbePix, atexel, 0);   // .xy pixel, .z valid
+  if (pixMeta.z < 0.5) { return vec4<f32>(0.0); }
+  let pc = vec2<i32>(i32(pixMeta.x), i32(pixMeta.y));
+  let nn = textureLoad(normalTex, pc, 0);
+  if (nn.a < 0.5) { return vec4<f32>(0.0); }
+  let dep = textureLoad(depthTex, pc, 0);
+  let uv = (vec2<f32>(pc) + vec2<f32>(0.5)) / uParams2.xy;
+  return vec4<f32>(unproject(vec3<f32>(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0, dep)), 1.0);
+}
+
+// The ONE per-probe tap (used identically for uniform and adaptive slots). Loads the probe's repr
+// pixel, reconstructs its Pp/Np from the G-buffer, weights it by wSpatial (a SMOOTH compact kernel on
+// SCREEN-pixel distance normalised by the resolve radius) and adds:
+//   - rawSH * wSpatial into the LOOSE sum (the disocclusion backstop — no bilateral gate), and
+//   - rawSH * (wSpatial * plane-normal weight) into the STRICT sum (the bilateral-gated average).
+// wSpatial = max(0, 1 - d*d), d = |reprPixel - full| / (tile * resolveRadius): compact (0 past the
+// support), smooth, and IDENTICAL for uniform and adaptive — that identity is the whole point.
+fn accum_probe(
+  atexel: vec2<i32>, P: vec3<f32>, N: vec3<f32>, full: vec2<f32>,
+  tile: f32, resolveRadius: f32, planeThresh: f32, normalPow: f32,
+  sumR: ptr<function, vec4<f32>>, sumG: ptr<function, vec4<f32>>, sumB: ptr<function, vec4<f32>>,
+  wsum: ptr<function, f32>,
+  looseR: ptr<function, vec4<f32>>, looseG: ptr<function, vec4<f32>>, looseB: ptr<function, vec4<f32>>,
+  lsum: ptr<function, f32>,
+) {
+  let pixMeta = textureLoad(screenProbePix, atexel, 0);   // .xy pixel, .z valid, .w footprint (px)
+  if (pixMeta.z < 0.5) { return; }
+  let pc = vec2<i32>(i32(pixMeta.x), i32(pixMeta.y));
+  let nn = textureLoad(normalTex, pc, 0);
+  if (nn.a < 0.5) { return; }
+  // DENSITY COMPENSATION: area-weight the probe by the screen area it represents (its footprint² in
+  // full-res px), so N fine adaptive probes collectively weigh the same as the 1 coarse uniform probe
+  // they subdivide → the average is density-invariant (dense/adaptive regions match uniform ones, and
+  // an adaptive spawn/despawn no longer shifts brightness). Folded into wSpatial ONCE, so BOTH the
+  // loose (wSpatial) and strict (wSpatial × plane×normal) accumulators inherit it — the flow stays
+  // UNIFIED (one accum_probe, no uniform-vs-adaptive branch; the footprint just rides in pixMeta.w).
+  // NOTE: a subdivided tile slightly double-counts — the uniform probe still votes its tile² alongside
+  // its children — a mild bias toward the coarse value that actually AIDS stability; a proper Voronoi
+  // split is deferred.
+  let areaW = pixMeta.w * pixMeta.w;
+  if (areaW <= 0.0) { return; }
+  // SMOOTH compact screen-distance kernel (normalised so support == resolveRadius tiles).
+  let d = length(vec2<f32>(pc) - full) / (tile * resolveRadius);
+  let wSpatial = max(0.0, 1.0 - d * d) * areaW;
+  if (wSpatial <= 0.0) { return; }
+  let Np = normalize(nn.rgb * 2.0 - 1.0);
+  let dep = textureLoad(depthTex, pc, 0);
+  let uv = (vec2<f32>(pc) + vec2<f32>(0.5)) / uParams2.xy;
+  let Pp = unproject(vec3<f32>(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0, dep));
+  let sR = textureLoad(screenShR, atexel, 0);
+  let sG = textureLoad(screenShG, atexel, 0);
+  let sB = textureLoad(screenShB, atexel, 0);
+  // LOOSE (spatial-only) backstop — accumulated for every in-support probe, no bilateral gate.
+  *looseR = *looseR + wSpatial * sR; *looseG = *looseG + wSpatial * sG; *looseB = *looseB + wSpatial * sB;
+  *lsum = *lsum + wSpatial;
+  // STRICT: multiply by the SHARED plane×normal weight (byte-identical to the refine placement test).
+  let w = wSpatial * sp_plane_normal_weight(P, N, Pp, Np, planeThresh, normalPow);
+  if (w <= 0.0) { return; }
+  *sumR = *sumR + w * sR; *sumG = *sumG + w * sG; *sumB = *sumB + w * sB;
+  *wsum = *wsum + w;
+}
+
+// Resolve the screen-probe fill at pixel 'full' (P, N = its world position + normal). Gathers a SCREEN
+// NEIGHBOURHOOD of probes over a small window of uniform grid cells (radius rc around the pixel's grid
+// coord), and for each in-bounds cell taps (a) that cell's UNIFORM probe and (b) that tile's ADAPTIVE
+// probes (tileHeader up to SP_K, via tileIndices) — all through the SAME accum_probe. The smooth
+// kernel makes the fill a spatially-continuous field with no per-probe snapping; a flat tile has
+// tileHeader == 0 so its adaptive inner loop is empty (uniform-only parity). resolveRadius is a LIVE
+// uniform (uParams3.w, GUI-tunable): bigger = smoother/wider support (also helps a distant object seen
+// by few probes), smaller = more local detail.
+// WORST-CASE TAPS: (2*rc+1)^2 uniform cells, each 1 uniform + up to SP_K adaptive probes →
+// (2*rc+1)^2 * (1 + SP_K). Default rc=2, SP_K=8 → 25*9 = 225; typical far fewer (most tiles have
+// zero/few adaptive probes and cells past the kernel support weight to 0).
 fn resolve_screen_probes(P: vec3<f32>, N: vec3<f32>, full: vec2<i32>) -> vec3<f32> {
   let tile = uParams3.x;
   let normalPow = uParams3.y;
   let planeK = uParams3.z;
+  let resolveRadius = max(0.25, uParams3.w);   // kernel support in TILES (guarded off zero)
   let gw = i32(ceil(uParams2.x / tile));
   let gh = i32(ceil(uParams2.y / tile));
   let cellSize = uGridOrigin.w;
 
-  // Probe-grid float coord of this pixel: probe c sits at pixel c*tile + tile/2 → gf = full/tile - 0.5.
-  let gf = vec2<f32>(full) / tile - vec2<f32>(0.5);
-  let g0 = vec2<i32>(floor(gf));
-  let fr = gf - vec2<f32>(g0);
+  // The uniform grid cell containing this pixel (gf = full/tile) + the window half-extent in cells.
+  let gf = vec2<f32>(full) / tile;
+  let gc = vec2<i32>(floor(gf));
+  let rc = clamp(i32(ceil(resolveRadius)), 1, 4);
 
-  // Load & reconstruct the 4 cage probes (P, N, validity) from the G-buffer at their stored pixel.
-  var Pp: array<vec3<f32>, 4>;
-  var Np: array<vec3<f32>, 4>;
-  var ok: array<f32, 4>;
-  for (var q = 0; q < 4; q = q + 1) {
-    let off = vec2<i32>(q & 1, (q >> 1) & 1);      // (0,0),(1,0),(0,1),(1,1)
-    let c = g0 + off;
-    ok[q] = 0.0;
-    if (c.x < 0 || c.y < 0 || c.x >= gw || c.y >= gh) { continue; }
-    let pixMeta = textureLoad(screenProbePix, c, 0);   // .xy pixel, .z valid
-    if (pixMeta.z < 0.5) { continue; }
-    let pc = vec2<i32>(i32(pixMeta.x), i32(pixMeta.y));
-    let nn = textureLoad(normalTex, pc, 0);
-    if (nn.a < 0.5) { continue; }
-    Np[q] = normalize(nn.rgb * 2.0 - 1.0);
-    let dep = textureLoad(depthTex, pc, 0);
-    let uv = (vec2<f32>(pc) + vec2<f32>(0.5)) / uParams2.xy;
-    Pp[q] = unproject(vec3<f32>(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0, dep));
-    ok[q] = 1.0;
+  // Local world spacing between adjacent UNIFORM probes = the depth-adaptive plane tolerance (from
+  // reconstructed Pp, so distant flat surfaces are NOT over-rejected by a fixed world-unit threshold).
+  // Uniform slot = cy*gw+cx → atlas texel (cx,cy) (identity), so the cell coord IS the atlas texel.
+  // ROBUST DERIVATION (silhouette rejection): take the MIN spacing over the (up to 4) CARDINAL
+  // neighbours of the center probe. On a silhouette a single neighbour lands on the background across
+  // the depth discontinuity → its spacing balloons and, if used alone, inflates planeThresh so the
+  // background probe is NOT rejected (bleed). The discontinuity inflates only the crossing neighbour(s);
+  // the MIN picks a same-surface neighbour → a tight planeThresh that rejects the background probe. On a
+  // distant flat surface all four spacings are similarly large → min ≈ correct (no over-rejection).
+  var spacingMin = cellSize * 4.0;                   // fallback if no valid cardinal neighbour
+  let gcc = clamp(gc, vec2<i32>(0), vec2<i32>(gw - 1, gh - 1));
+  let cP = sp_load_probe_P(gcc);
+  if (cP.w > 0.5) {
+    var best = 1e30;
+    var found = false;
+    if (gcc.x + 1 < gw) {
+      let nP = sp_load_probe_P(vec2<i32>(gcc.x + 1, gcc.y));
+      if (nP.w > 0.5) { best = min(best, length(nP.xyz - cP.xyz)); found = true; }
+    }
+    if (gcc.x - 1 >= 0) {
+      let nP = sp_load_probe_P(vec2<i32>(gcc.x - 1, gcc.y));
+      if (nP.w > 0.5) { best = min(best, length(nP.xyz - cP.xyz)); found = true; }
+    }
+    if (gcc.y + 1 < gh) {
+      let nP = sp_load_probe_P(vec2<i32>(gcc.x, gcc.y + 1));
+      if (nP.w > 0.5) { best = min(best, length(nP.xyz - cP.xyz)); found = true; }
+    }
+    if (gcc.y - 1 >= 0) {
+      let nP = sp_load_probe_P(vec2<i32>(gcc.x, gcc.y - 1));
+      if (nP.w > 0.5) { best = min(best, length(nP.xyz - cP.xyz)); found = true; }
+    }
+    if (found) { spacingMin = best; }
   }
+  let planeThresh = max(cellSize, spacingMin) * planeK;
 
-  // Local world spacing between adjacent probes = the depth-adaptive plane tolerance (free: from Pp),
-  // so distant flat surfaces are NOT over-rejected by a fixed world-unit threshold.
-  var spacing = cellSize * 4.0;                      // fallback
-  if (ok[0] > 0.5 && ok[1] > 0.5) { spacing = length(Pp[1] - Pp[0]); }
-  else if (ok[2] > 0.5 && ok[3] > 0.5) { spacing = length(Pp[3] - Pp[2]); }
-  let planeThresh = max(cellSize, spacing) * planeK;
-
-  // Strict (bilateral) + loose (bilinear × validity) sums in one pass. The loose sum is the
-  // disocclusion backstop: if every strict weight rejects, blend the nearest valid neighbours.
+  // Strict (bilateral) + loose (spatial-only) sums, accumulated over the whole neighbourhood in one
+  // pass. The loose sum is the disocclusion backstop: if every strict weight rejects, fall back to it.
   var sumR = vec4<f32>(0.0); var sumG = vec4<f32>(0.0); var sumB = vec4<f32>(0.0);
   var wsum = 0.0;
   var looseR = vec4<f32>(0.0); var looseG = vec4<f32>(0.0); var looseB = vec4<f32>(0.0);
   var lsum = 0.0;
-  for (var q = 0; q < 4; q = q + 1) {
-    if (ok[q] < 0.5) { continue; }
-    let off = vec2<i32>(q & 1, (q >> 1) & 1);
-    let c = g0 + off;
-    let wb = mix(1.0 - fr.x, fr.x, f32(off.x)) * mix(1.0 - fr.y, fr.y, f32(off.y)); // bilinear
-    let sR = textureLoad(screenShR, c, 0);
-    let sG = textureLoad(screenShG, c, 0);
-    let sB = textureLoad(screenShB, c, 0);
-    looseR = looseR + wb * sR; looseG = looseG + wb * sG; looseB = looseB + wb * sB;
-    lsum = lsum + wb;
-    let planeDist = abs(dot(Pp[q] - P, N));                                          // plane reject
-    let wp = clamp(1.0 - planeDist / planeThresh, 0.0, 1.0);
-    let wn = pow(max(dot(Np[q], N), 0.0), normalPow);                                // normal reject
-    let w = wb * wp * wn;
-    if (w <= 0.0) { continue; }
-    sumR = sumR + w * sR; sumG = sumG + w * sG; sumB = sumB + w * sB;
-    wsum = wsum + w;
+  let fullF = vec2<f32>(full);
+  for (var dy = -rc; dy <= rc; dy = dy + 1) {
+    for (var dx = -rc; dx <= rc; dx = dx + 1) {
+      let cx = gc.x + dx;
+      let cy = gc.y + dy;
+      if (cx < 0 || cy < 0 || cx >= gw || cy >= gh) { continue; }
+      // (a) UNIFORM probe of this cell — atlas texel == cell coord (identity mapping).
+      accum_probe(vec2<i32>(cx, cy), P, N, fullF, tile, resolveRadius, planeThresh, normalPow,
+        &sumR, &sumG, &sumB, &wsum, &looseR, &looseG, &looseB, &lsum);
+      // (b) ADAPTIVE probes parented to this tile (empty when tileHeader == 0 → uniform-only parity).
+      let T = u32(cy * gw + cx);
+      let cnt = min(uTileHeader[T], SP_K);
+      for (var j = 0u; j < cnt; j = j + 1u) {
+        let aslot = uTileIndices[T * SP_K + j];
+        let atexel = vec2<i32>(i32(aslot) % gw, i32(aslot) / gw);
+        accum_probe(atexel, P, N, fullF, tile, resolveRadius, planeThresh, normalPow,
+          &sumR, &sumG, &sumB, &wsum, &looseR, &looseG, &looseB, &lsum);
+      }
+    }
   }
 
   if (wsum > 1e-4) {
@@ -350,7 +455,7 @@ fn resolve_screen_probes(P: vec3<f32>, N: vec3<f32>, full: vec2<i32>) -> vec3<f3
       sh_avg_radiance(sumB * inv, N));
   }
   if (lsum > 1e-4) {
-    // Strict gate rejected all → loose bilinear blend over the valid neighbours (softens edges; may
+    // Strict gate rejected all → loose spatial blend over the in-support probes (softens edges; may
     // bleed slightly at silhouettes, but never black — no world volume to fall back to).
     let inv = 1.0 / lsum;
     return vec3<f32>(
@@ -358,7 +463,7 @@ fn resolve_screen_probes(P: vec3<f32>, N: vec3<f32>, full: vec2<i32>) -> vec3<f3
       sh_avg_radiance(looseG * inv, N),
       sh_avg_radiance(looseB * inv, N));
   }
-  return vec3<f32>(0.0);  // no valid cage probe (all four tile centres missed geometry) → no fill
+  return vec3<f32>(0.0);  // no valid probe anywhere in the window → no fill
 }
 
 @fragment
