@@ -469,11 +469,11 @@ export function createVoxelSystem({
   // probe (uniform and adaptive) tapers to zero at this distance, so it sets how wide/smooth the fill
   // is: bigger = smoother/wider (also helps a distant object seen by few probes), smaller = more local
   // detail. Live, uploaded to the cone's uParams3.w each frame (no rebuild).
-  let screenProbeResolveRadius = 1.5;
+  let screenProbeResolveRadius = 2;
   // STAGE 3: temporal hysteresis — the history weight of the probe-atlas blend (0..0.95). LIVE
   // (uTemporalParams.x, uploaded each frame — no rebuild). 0 disables temporal accumulation
   // entirely (the fresh-only parity/rollback path); ~0.85–0.9 amortizes the gather 2–4×.
-  let temporalHysteresis = 0.85;
+  let temporalHysteresis = 0.5;
   // Frame counter → curSet = the ping-pong parity. Bumped ONCE per frame at the head of
   // uploadProbeUniforms() (pass A0), so every later pass in the same frame sees one consistent
   // parity. Also rides uTemporalParams.y (mod 1024) for the golden-angle cone-set rotation.
