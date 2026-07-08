@@ -49,20 +49,12 @@ export function createDrawShapeSystem({
     getRenderComponents(world);
   const gpuShader = new GPUShader(shaderMeta);
 
-  // Single pipeline: world-space impostor box → raymarched SDF, with depth.
-  // Stage-3b G-buffer: THREE color targets — (0) albedo into renderTexture
-  // (bgra8unorm), (1) world normal into normalTexture (rgba16float), (2) per-pixel
-  // self-emission into emissionTexture (rgba16float). Order MUST match
-  // FragmentOutput locations 0,1,2 AND createFrameTick's main-pass
-  // color-attachment list (see createFrame.ts) — a mismatch is a hard WebGPU error.
   const pipelineSdf = gpuShader.getRenderPipeline(device, "vs_main", "fs_main", {
     targets: [{ format: "bgra8unorm" }, { format: "rgba16float" }, { format: "rgba16float" }],
     withDepth: true,
+    cullMode: "front",
   });
 
-  // Emission pipeline: emitter/occluder map for Radiance Cascades. Two attachments:
-  // (0) emission rgba16float ADDITIVE, (1) emit facing dir rg16float REPLACE. No depth.
-  // autoLayout with explicit bind groups (it only reads a subset of the uniforms).
   const pipelineEmit = gpuShader.getRenderPipeline(device, "vs_emit", "fs_emit", {
     targets: [
       { format: "rgba16float", blend: "additive" },
@@ -70,10 +62,8 @@ export function createDrawShapeSystem({
     ],
     autoLayout: true,
     withDepth: false,
+    cullMode: "front",
     bindGroups: {
-      // vs_emit reads uViewProj + uRayDir; fs_emit reads uRayDir. uLightDir is
-      // not referenced by the emit entry points, so it must NOT appear here — an
-      // autoLayout bind group's entries must match the shader's reflected usage.
       0: ["viewProj", "rayDir"],
       1: ["transform", "kind", "values", "roundness", "color", "material"],
     },
@@ -224,7 +214,6 @@ export function createDrawShapeSystem({
     blurnessChanges.clear();
   }
 
-  // Main render pass: one instanced draw of the impostor cube (36 verts/instance).
   function drawShapes(renderPass: GPURenderPassEncoder) {
     if (preparedEntityCount === 0) return;
 
@@ -234,9 +223,6 @@ export function createDrawShapeSystem({
     renderPass.draw(36, preparedEntityCount, 0, 0);
   }
 
-  // Emission pass: one instanced draw of the impostor cube (36 verts/instance)
-  // into the RC emitter/occluder map. Same geometry as drawShapes; the fragment
-  // raymarches the SDF for coverage and writes the emit convention (no depth).
   function drawEmitters(passEncoder: GPURenderPassEncoder) {
     if (preparedEntityCount === 0) return;
 
@@ -250,12 +236,6 @@ export function createDrawShapeSystem({
     prepare,
     drawShapes,
     drawEmitters,
-    // ── Stage-1 world-RC export ──────────────────────────────────────────────
-    // Live per-instance storage exposed so the world-space gather pass can bind
-    // the SAME GPU buffers in its own bind group (no second copy of the data).
-    // These are the GPUVariable wrappers; the gather system reads
-    // .getBindGroupEntry(device) / .getGPUBuffer(device) off them. Buffers
-    // already carry STORAGE|COPY_DST usage — no usage changes needed.
     sceneInstances: {
       transform: gpuShader.uniforms.transform,
       kind: gpuShader.uniforms.kind,
@@ -269,8 +249,7 @@ export function createDrawShapeSystem({
       cpuKind: kindCollect as Uint32Array,
       cpuValues: valuesCollect as Float32Array,
       cpuRoundness: roundnessCollect as Float32Array,
-      // Live count actually written this frame (clamped to MAX_INSTANCE_COUNT).
-      // MUST be a getter — preparedEntityCount is reassigned every prepare().
+
       get instanceCount() {
         return preparedEntityCount;
       },

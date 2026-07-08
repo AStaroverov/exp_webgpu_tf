@@ -46,6 +46,8 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
       withBlending?: boolean;
       blend?: "alpha" | "additive";
       targets?: { format: GPUTextureFormat; blend?: "alpha" | "additive" | "none" }[];
+      /** Face culling for the primitive block. Default "none" (previous behavior). */
+      cullMode?: GPUCullMode;
       autoLayout?: boolean;
       /** For autoLayout pipelines: specify which uniforms to include in each bind group */
       bindGroups?: Record<number, (keyof M["uniforms"])[]>;
@@ -58,6 +60,7 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
     const blend = options?.blend ?? "alpha";
     const autoLayout = options?.autoLayout ?? false;
     const bindGroups = options?.bindGroups;
+    const cullMode = options?.cullMode ?? "none";
 
     const targets: { format: GPUTextureFormat; blend: "alpha" | "additive" | "none" }[] =
       options?.targets?.map((t) => ({ format: t.format, blend: t.blend ?? "alpha" })) ?? [
@@ -95,7 +98,7 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
 
     const pipelineKey = `${vertexName}-${fragmentName}`;
     const targetsKey = targets.map((t) => `${t.format}:${t.blend}`).join(",");
-    const key = `${pipelineKey}-${withDepth}-${depthCompare}-${targetsKey}-${autoLayout}`;
+    const key = `${pipelineKey}-${withDepth}-${depthCompare}-${targetsKey}-${autoLayout}-${cullMode}`;
     const shaderModule = options?.shaderModule ?? this.getShaderModule(device);
 
     if (!this.mapRenderPipeline.has(key)) {
@@ -103,6 +106,7 @@ export class GPUShader<M extends ShaderMeta<any, any>> {
         layout: autoLayout ? "auto" : this.getGPUPipelineLayout(device),
         primitive: {
           topology: "triangle-list",
+          cullMode,
         },
         vertex: {
           module: shaderModule,
