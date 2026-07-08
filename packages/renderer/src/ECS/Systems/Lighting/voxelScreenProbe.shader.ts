@@ -351,6 +351,47 @@ fn unproject(ndc: vec3<f32>) -> vec3<f32> {
 }
 
 // Orthonormal basis with column 2 = n (basis * (x,y,z) = x*t + y*b + z*n).
+// SHADOW cone for the aimed emitter lights — modeled on the reference traceShadowCone
+// (Friduric/voxel-cone-tracing): a NEAR-UNIFORM ~voxel-sized march with saturating front-to-back
+// accumulation, NOT the geometric ladder of trace_probe_cone. The ladder's step grows with
+// distance (step = aperture·dist, up to 0.5·dist for a close light), so whether a sample lands
+// inside an occluder is a function of the probe→light distance — the shadow renders as
+// concentric WAVES whose period grows with distance. Uniform steps sample every voxel along the
+// ray exactly ~once at every distance, so occlusion is continuous in distance by construction.
+// The cone LOD (diameter = 2·aperture·dist) is kept ONLY for the penumbra softness of the
+// lookup; the step does not follow it. Opacity is corrected for the actual step length
+// (1 − (1−a)^(step/voxel)) so a budget-floored longer step still accumulates the same total.
+// Returns the same premultiplied (bleed.rgb, occlusion.a) contract as trace_probe_cone.
+fn trace_shadow_cone(origin: vec3<f32>, dir: vec3<f32>, aperture: f32, reach: f32, maxSteps: i32, alphaCut: f32) -> vec4<f32> {
+  var col = vec3<f32>(0.0);
+  var alpha = 0.0;
+  let voxelSize = uGridOrigin.w;
+  let gridMin = uGridOrigin.xyz;
+  let extent = vec3<f32>(uGridDims.xyz) * voxelSize;
+  // ~1 voxel per step (the reference uses 0.9·VOXEL_SIZE), floored so maxSteps always covers
+  // the full reach — a long reach trades sampling density, never silently truncates the shadow.
+  let step = max(0.9 * voxelSize, reach / f32(maxSteps));
+  let corr = step / voxelSize;
+  var dist = voxelSize;
+  for (var i = 0; i < maxSteps; i = i + 1) {
+    if (alpha >= alphaCut || dist > reach) { break; }
+    let wp = origin + dir * dist;
+    let uvw = (wp - gridMin) / extent;
+    if (any(uvw < vec3<f32>(0.0)) || any(uvw > vec3<f32>(1.0))) { break; }
+    let diameter = max(voxelSize, 2.0 * aperture * dist);
+    let lod = log2(diameter / voxelSize);
+    let s = sample_radiance(uvw, lod, dir);
+    let a = clamp(s.a, 0.0, 1.0);
+    let ac = 1.0 - pow(1.0 - a, corr);
+    // rgb is premultiplied by coverage — rescale it by the same correction ratio.
+    let rc = select(s.rgb * (ac / max(a, 1e-4)), vec3<f32>(0.0), a <= 1e-4);
+    col = col + (1.0 - alpha) * rc;
+    alpha = alpha + (1.0 - alpha) * ac;
+    dist = dist + step;
+  }
+  return vec4<f32>(col, alpha);
+}
+
 fn build_basis(n: vec3<f32>) -> mat3x3<f32> {
   let a = select(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), abs(n.x) > 0.9);
   let t = normalize(cross(a, n));
@@ -583,7 +624,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let shadowReach = dc - lr - uGridOrigin.w;
     var r = vec4<f32>(0.0);
     if (shadowReach > uGridOrigin.w * 3.0) {
-      r = trace_probe_cone(origin, dir, ap, shadowReach, max(1, AIMED_STEPS), AIMED_ALPHA_CUT);
+      r = trace_shadow_cone(origin, dir, ap, shadowReach, max(1, AIMED_STEPS), AIMED_ALPHA_CUT);
     }
     // ANALYTIC DIRECT + bleed-cancel (the "white shadow" fix): shadow = what the cone's opacity
     // removes; bleed = the radiance the cone actually gathered (a BRIGHT occluder => big bleed =>
