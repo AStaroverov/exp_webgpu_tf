@@ -275,6 +275,16 @@ export function createVoxelizeSystem({
     // mirrors are filled by prepare() (runs before voxelize() each frame), so they are current.
     // See voxelizeCpu.buildVoxelAABBs.
     const { originX, originY, originZ, cellSize, dimX, dimY, dimZ } = getGridBox();
+
+    // The grid origin FOLLOWS THE CAMERA (createVoxelSystem.updateGridOrigin), so re-upload this
+    // shader's uGridOrigin copy every frame from the live box — the same values the CPU AABB build
+    // below uses, so the scatter and the work list can never disagree on the origin.
+    originArr[0] = originX;
+    originArr[1] = originY;
+    originArr[2] = originZ;
+    originArr[3] = cellSize;
+    device.queue.writeBuffer(voxShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
+
     const n = sceneInstances.instanceCount;
     scatterTotal = buildVoxelAABBs(
       sceneInstances,

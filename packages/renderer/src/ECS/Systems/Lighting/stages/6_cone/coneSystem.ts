@@ -296,12 +296,19 @@ export function createConeSystem(deps: ConeDeps) {
     uploadGridUniforms();
   }
 
+  // Camera-following grid: re-upload ONLY uGridOrigin (originArr refreshed by the caller). A
+  // uniform write — dims/textures unchanged, no bind-group rebuild.
+  function uploadGridOrigin() {
+    device.queue.writeBuffer(coneShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
+  }
+
   return {
     cone,
     rebindGrid,
     rebindGroups,
     resize,
     rebuild,
+    uploadGridOrigin,
     setConeScale,
     getOutputTexture: () => coneOutput,
     getOutputView: () => coneView,

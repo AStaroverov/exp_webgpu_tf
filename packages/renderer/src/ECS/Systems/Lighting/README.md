@@ -127,7 +127,10 @@ chain), because `refine` reads its raw SH as the subdivision signal.
   `createCompositeShaderMeta` / `createScreenProbeShaderMeta` factories. Changing one → `voxel.rebuild()`
   (recompile affected shaders + rebuild their pipelines/bind groups).
 - **Dynamic** (uniforms, per frame) — sun, camera `invViewProj`, emitter list, instance count,
-  grid matrices, canvas size, temporal lanes.
+  grid matrices, canvas size, temporal lanes, and the **grid origin**: the voxel box's XY origin
+  follows the camera (`updateGridOrigin`, head of `setLights`/`renderFrame`), snapped to 4-voxel
+  multiples so voxel centers in the overlap land on the same world points (no pan shimmer; iso
+  mips 1–2 + aniso base keep their block partition). Toggle: `setFollowCamera` (GUI A/B).
 - ⚠️ Minor boundary leak: some "baked" values also ride live uniforms (cone `params3` carries
   `tile`/normalPow/planeK/resolveRadius). Left as-is; documented here.
 

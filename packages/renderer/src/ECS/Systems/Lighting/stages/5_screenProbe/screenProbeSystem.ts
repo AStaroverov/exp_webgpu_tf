@@ -886,6 +886,14 @@ export function createScreenProbeSystem(deps: ScreenProbeDeps) {
     debugProbes = on;
   }
 
+  // Camera-following grid: re-upload ONLY uGridOrigin to both gather shaders (originArr refreshed
+  // by the caller). A uniform write — dims/textures unchanged, no bind-group rebuild.
+  function uploadGridOrigin() {
+    for (const s of [gatherUniformShader, gatherAdaptiveShader]) {
+      device.queue.writeBuffer(s.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
+    }
+  }
+
   return {
     // Pass methods.
     probeClear,
@@ -901,6 +909,7 @@ export function createScreenProbeSystem(deps: ScreenProbeDeps) {
     rebuildGroups,
     resize,
     rebuild,
+    uploadGridOrigin,
     // For the CONE cluster (still in createVoxelSystem, consumes these).
     getSpTex: () => spTex,
     getCurSet: () => curSet,

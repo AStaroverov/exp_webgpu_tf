@@ -22,6 +22,7 @@ import { createTransformSystem } from "../ECS/Systems/TransformSystem.ts";
 import {
   cameraAzimuth,
   cameraElevation,
+  cameraPosition,
   cameraZoom,
   createResizeSystem,
   setCameraElevation,
@@ -107,6 +108,14 @@ async function main() {
       dimsLabel.dims = `${voxel.dims.x}×${voxel.dims.y}×${voxel.dims.z}`;
       dimsCtl.updateDisplay();
     });
+
+  // A/B for the camera-following voxel box: off = the box freezes at its current origin (the old
+  // fixed-world-box behavior), so panning past its edge shows the no-GI falloff again.
+  const followCfg = { follow: voxel.followCamera };
+  gui
+    .add(followCfg, "follow")
+    .name("grid follows camera")
+    .onChange((on: boolean) => voxel.setFollowCamera(on));
 
   // Sun toggle is read live by the draw pass; keep it exposed for the raw view.
   gui.add(SunLight, "enabled").name("sun enabled");
@@ -353,6 +362,37 @@ async function main() {
     { passive: false },
   );
 
+  // --- WASD / arrow-key panning: moves the camera look-at target across the ground plane in
+  // SCREEN-relative directions (W = away from the viewer, derived from the current azimuth).
+  // Exists to validate the camera-following voxel box: pan past the old fixed-box edge and watch
+  // GI coverage travel with the camera (and stay crawl-free thanks to the origin snap).
+  const heldKeys = new Set<string>();
+  window.addEventListener("keydown", (e) => {
+    if (e.target instanceof HTMLInputElement) return; // don't pan while typing in the GUI
+    heldKeys.add(e.code);
+  });
+  window.addEventListener("keyup", (e) => heldKeys.delete(e.code));
+  function panCamera(deltaMs: number) {
+    const dx =
+      (heldKeys.has("KeyD") || heldKeys.has("ArrowRight") ? 1 : 0) -
+      (heldKeys.has("KeyA") || heldKeys.has("ArrowLeft") ? 1 : 0);
+    const dy =
+      (heldKeys.has("KeyW") || heldKeys.has("ArrowUp") ? 1 : 0) -
+      (heldKeys.has("KeyS") || heldKeys.has("ArrowDown") ? 1 : 0);
+    if (dx === 0 && dy === 0) return;
+    // Ground-plane camera basis from the azimuth: forward = away from the viewer, right = screen
+    // right (matches the lookAt basis in ResizeSystem). Speed scales inversely with zoom so the
+    // on-screen pan rate feels constant.
+    const a = (cameraAzimuth.value * Math.PI) / 180;
+    const fx = -Math.cos(a);
+    const fy = -Math.sin(a);
+    const speed = (150 / cameraZoom.value) * (deltaMs / 1000);
+    setCameraPosition(
+      cameraPosition.x + (fx * dy + fy * dx) * speed,
+      cameraPosition.y + (fy * dy - fx * dx) * speed,
+    );
+  }
+
   // stats-gl overlay: FPS + CPU come from begin()/end() (no init needed). stats-gl's NATIVE
   // GPU timer needs a WebGL2 context or a three.js renderer — we have neither (raw WebGPU),
   // so we feed our own GPU ms (onSubmittedWorkDone, below) into a custom panel instead.
@@ -370,6 +410,7 @@ async function main() {
 
     // Update camera + canvas size first, so prepare() uploads current uniforms
     // and the resize check below sees this frame's dimensions.
+    panCamera(delta);
     resizeSystem();
 
     // Recreate frame textures + tick if the canvas was resized.

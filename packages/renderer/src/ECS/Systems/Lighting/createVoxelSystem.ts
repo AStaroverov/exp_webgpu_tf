@@ -18,14 +18,16 @@ import { createCompositeSystem } from "./stages/7_composite/compositeSystem.ts";
 import { createScreenProbeSystem } from "./stages/5_screenProbe/screenProbeSystem.ts";
 import { createConeSystem } from "./stages/6_cone/coneSystem.ts";
 import { SunLight } from "../SunLight.ts";
+import { cameraPosition } from "../ResizeSystem.ts";
 
 // Voxel scene system: voxelize() fills the 3D albedo/emission/radiance textures from the SDF
 // scene each frame; mips() builds the radiance pyramid; cone() gathers indirect light (N-cone
 // VCT); sunDepth() renders the sun-POV shadow map; composite() produces the final lit image
 // (see ./README.md for the full system scheme).
 //
-// GRANULARITY: the world box (origin + extent) is FIXED; cellSize controls voxel size
-// (and thus per-axis dims = round(extent/cellSize)) — the "graininess" knob. Smaller
+// GRANULARITY: the world box EXTENT is fixed, but its XY origin FOLLOWS THE CAMERA
+// (updateGridOrigin — snapped so panning doesn't re-sample the field); cellSize controls voxel
+// size (and thus per-axis dims = round(extent/cellSize)) — the "graininess" knob. Smaller
 // cellSize = finer voxels = more of them. setCellSize() rebuilds the textures + the two
 // texture-referencing bind groups; the canvas-sized output texture is independent of it.
 export function createVoxelSystem({
@@ -68,10 +70,12 @@ export function createVoxelSystem({
   let gAlbedo = albedoTexture;
   let gEmission = emissionTexture;
 
-  // Fixed world box (min corner + extent), derived from the initial config. cellSize is
-  // the only thing that varies; dims follow from it.
-  const originX = grid.originX;
-  const originY = grid.originY;
+  // World box: the EXTENT is fixed (derived from the initial config), but the XY origin FOLLOWS
+  // THE CAMERA (updateGridOrigin below) so GI coverage is always centered on what the player sees
+  // instead of being nailed to one spot on the map. Z stays fixed — the camera orbits in XY.
+  // cellSize is the only other thing that varies; dims follow from it.
+  let originX = grid.originX;
+  let originY = grid.originY;
   const originZ = grid.originZ;
   const extentX = grid.dimX * grid.cellSize;
   const extentY = grid.dimY * grid.cellSize;
@@ -225,6 +229,43 @@ export function createVoxelSystem({
     // pass's gridOrigin/gridDims from the arrays populated just above. group2 references the
     // persistent screenProbeTex.
     screenProbe.rebindGrid();
+  }
+
+  // ===== Camera-following grid origin. =====
+  // The box's XY origin tracks the camera look-at target (cameraPosition), SNAPPED to a multiple
+  // of SNAP_CELLS voxels. The snap is what keeps the move invisible: voxel centers in the overlap
+  // region land on the SAME world points as last frame → bit-identical mip 0 → no re-sampling
+  // shimmer while panning. SNAP_CELLS = 4 also keeps the 2×2×2 block partition of iso mips 1–2
+  // and the half-res aniso base stable; deeper mips can re-partition on a snap step — a subtle
+  // far-field breathing the probe temporal hysteresis absorbs.
+  //
+  // Call sites: the head of setLights (so the CPU emitter clustering bins with the SAME origin
+  // the gather shaders read this frame) and the head of renderFrame (for callers that drive
+  // passes without setLights). Both run before any GPU pass reads uGridOrigin; the second call
+  // in a frame is a no-op (cameraPosition is stable within a frame).
+  const SNAP_CELLS = 4;
+  let followCamera = true;
+
+  function updateGridOrigin() {
+    if (!followCamera) return;
+    const q = SNAP_CELLS * cellSize;
+    const ox = Math.round((cameraPosition.x - extentX * 0.5) / q) * q;
+    const oy = Math.round((cameraPosition.y - extentY * 0.5) / q) * q;
+    if (ox === originX && oy === originY) return;
+    originX = ox;
+    originY = oy;
+    // Propagate to every shader holding a uGridOrigin copy. Uniform-buffer writes only — dims and
+    // textures are unchanged, so NO bind groups rebuild. The voxelize cluster re-uploads its own
+    // copy from getGridBox() at the head of every voxelize(); sunShadow + the emitter clustering
+    // read the live accessors each frame and need no push.
+    originArr[0] = originX;
+    originArr[1] = originY;
+    coneSys.uploadGridOrigin();
+    screenProbe.uploadGridOrigin();
+  }
+
+  function setFollowCamera(on: boolean) {
+    followCamera = on;
   }
 
   // VCT composite (Layer 4 — the final lit image) sub-system. Owns the composite shader/pipeline +
@@ -390,6 +431,7 @@ export function createVoxelSystem({
   // frame reads as one named call. sunDepth runs only when the directional sun is on; probeDebug
   // replaces composite when the debug view is toggled.
   function renderFrame(encoder: GPUCommandEncoder) {
+    updateGridOrigin(); // camera-following box: must precede every pass that reads uGridOrigin
     if (SunLight.enabled) sunDepth(encoder); // sun-POV depth → voxelize injection + composite shadow
     voxelize(encoder); // scene → voxelRadiance mip 0
     mips(encoder); // isotropic radiance pyramid
@@ -426,7 +468,12 @@ export function createVoxelSystem({
     gatherAdaptive: screenProbe.gatherAdaptive,
     pollBudget: screenProbe.pollBudget,
     cone,
-    setLights: emitterLights.setLights,
+    // Origin update runs FIRST so the CPU emitter clustering bins with the same camera-following
+    // origin the gather shaders will read this frame (no one-frame cluster/uniform mismatch).
+    setLights: (data: Float32Array, count: number) => {
+      updateGridOrigin();
+      emitterLights.setLights(data, count);
+    },
     sunDepth,
     composite: compositeSys.composite,
     probeDebug: screenProbe.probeDebug,
@@ -434,6 +481,7 @@ export function createVoxelSystem({
     setCellSize,
     setConeScale: coneSys.setConeScale,
     setAnisoMode,
+    setFollowCamera,
     setScreenProbeTile: screenProbe.setScreenProbeTile,
     setScreenProbeParams: screenProbe.setScreenProbeParams,
     setAdaptiveFraction: screenProbe.setAdaptiveFraction,
@@ -444,6 +492,9 @@ export function createVoxelSystem({
     setDebugProbes: screenProbe.setDebugProbes,
     get anisoMode() {
       return anisoMode;
+    },
+    get followCamera() {
+      return followCamera;
     },
     get debugProbes() {
       return screenProbe.debugProbes;

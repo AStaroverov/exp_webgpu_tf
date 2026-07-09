@@ -28,9 +28,10 @@ export type VoxelGridConfig = {
   cellSize: number;
 };
 
-// World box x,y in [-32, 32], z in [-2, 14] (extent 64×64×16). At cellSize 0.25 that is
-// 256×256×64 = 4 194 304 voxels → voxelRadiance (rgba16float + mip pyramid) ≈ 38 MB. Fine enough
-// to resolve small objects in GI; raise cellSize via the GUI for coarser/cheaper, lower for finer.
+// INITIAL box (the XY origin follows the camera at runtime — createVoxelSystem.updateGridOrigin;
+// only the extent = dims × cellSize and the Z range stay fixed). 256×256×64 = 4 194 304 voxels →
+// voxelRadiance (rgba16float + mip pyramid) ≈ 38 MB (+ the same again for voxelEmission mip 0).
+// Fine enough to resolve small objects in GI; raise cellSize via the GUI for coarser/cheaper.
 export const DEFAULT_VOXEL_GRID: VoxelGridConfig = {
   originX: -32,
   originY: -32,
