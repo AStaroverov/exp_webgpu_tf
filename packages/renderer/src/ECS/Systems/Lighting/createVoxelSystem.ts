@@ -233,22 +233,27 @@ export function createVoxelSystem({
 
   // ===== Camera-following grid origin. =====
   // The box's XY origin tracks the camera look-at target (cameraPosition), SNAPPED to a multiple
-  // of SNAP_CELLS voxels. The snap is what keeps the move invisible: voxel centers in the overlap
-  // region land on the SAME world points as last frame → bit-identical mip 0 → no re-sampling
-  // shimmer while panning. SNAP_CELLS = 4 also keeps the 2×2×2 block partition of iso mips 1–2
-  // and the half-res aniso base stable; deeper mips can re-partition on a snap step — a subtle
-  // far-field breathing the probe temporal hysteresis absorbs.
+  // of snapCells voxels. The snap is what keeps the move invisible: a snapped shift lands every
+  // voxel center in the overlap on the SAME world points as last frame → bit-identical mip 0 →
+  // no re-sampling shimmer while panning. But each mip L aggregates 2^L-cell blocks whose
+  // PARTITION is anchored to the origin, so mips with blocks LARGER than the snap re-partition
+  // on every snap step — the far-field cone contribution re-forms slightly (a "different
+  // picture" pop; the cones reach LOD ~6 at maxDist 24 / aperture 0.577). snapCells trades the
+  // two: bigger = more levels world-locked (16 locks iso mip ≤ 4 + aniso ≤ 3, leaving only the
+  // blurriest tail to re-partition) but a coarser box step (16 cells = 8 wu at 0.5) — invisible
+  // mid-scene, only the far coverage edge lurches. Live GUI knob; the REAL fix is clipmap
+  // cascades replacing the deep mips (each level world-locked at its own granularity).
   //
   // Call sites: the head of setLights (so the CPU emitter clustering bins with the SAME origin
   // the gather shaders read this frame) and the head of renderFrame (for callers that drive
   // passes without setLights). Both run before any GPU pass reads uGridOrigin; the second call
   // in a frame is a no-op (cameraPosition is stable within a frame).
-  const SNAP_CELLS = 4;
+  let snapCells = 16;
   let followCamera = true;
 
   function updateGridOrigin() {
     if (!followCamera) return;
-    const q = SNAP_CELLS * cellSize;
+    const q = snapCells * cellSize;
     const ox = Math.round((cameraPosition.x - extentX * 0.5) / q) * q;
     const oy = Math.round((cameraPosition.y - extentY * 0.5) / q) * q;
     if (ox === originX && oy === originY) return;
@@ -266,6 +271,12 @@ export function createVoxelSystem({
 
   function setFollowCamera(on: boolean) {
     followCamera = on;
+  }
+
+  // Snap quantum in voxels (see the snapCells trade-off note above). Power of two keeps the
+  // locked-mip reasoning exact.
+  function setGridSnapCells(cells: number) {
+    snapCells = Math.max(1, Math.round(cells));
   }
 
   // VCT composite (Layer 4 — the final lit image) sub-system. Owns the composite shader/pipeline +
@@ -482,6 +493,7 @@ export function createVoxelSystem({
     setConeScale: coneSys.setConeScale,
     setAnisoMode,
     setFollowCamera,
+    setGridSnapCells,
     setScreenProbeTile: screenProbe.setScreenProbeTile,
     setScreenProbeParams: screenProbe.setScreenProbeParams,
     setAdaptiveFraction: screenProbe.setAdaptiveFraction,
@@ -495,6 +507,9 @@ export function createVoxelSystem({
     },
     get followCamera() {
       return followCamera;
+    },
+    get gridSnapCells() {
+      return snapCells;
     },
     get debugProbes() {
       return screenProbe.debugProbes;

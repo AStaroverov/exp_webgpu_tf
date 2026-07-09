@@ -111,11 +111,17 @@ async function main() {
 
   // A/B for the camera-following voxel box: off = the box freezes at its current origin (the old
   // fixed-world-box behavior), so panning past its edge shows the no-GI falloff again.
-  const followCfg = { follow: voxel.followCamera };
+  const followCfg = { follow: voxel.followCamera, snapCells: voxel.gridSnapCells };
   gui
     .add(followCfg, "follow")
     .name("grid follows camera")
     .onChange((on: boolean) => voxel.setFollowCamera(on));
+  // Snap quantum trade-off: bigger = more mip levels world-locked while panning (less far-field
+  // pattern re-forming on a snap step), but the coverage box steps coarser. 16 locks iso mip ≤ 4.
+  gui
+    .add(followCfg, "snapCells", [4, 8, 16, 32])
+    .name("grid snap (voxels)")
+    .onChange((c: number) => voxel.setGridSnapCells(c));
 
   // Sun toggle is read live by the draw pass; keep it exposed for the raw view.
   gui.add(SunLight, "enabled").name("sun enabled");
