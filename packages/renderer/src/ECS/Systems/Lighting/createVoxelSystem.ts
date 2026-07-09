@@ -18,7 +18,7 @@ import { createCompositeSystem } from "./stages/7_composite/compositeSystem.ts";
 import { createScreenProbeSystem } from "./stages/5_screenProbe/screenProbeSystem.ts";
 import { createConeSystem } from "./stages/6_cone/coneSystem.ts";
 import { SunLight } from "../SunLight.ts";
-import { cameraPosition } from "../ResizeSystem.ts";
+import { cameraElevation, cameraPosition, cameraZoom } from "../ResizeSystem.ts";
 
 // Voxel scene system: voxelize() fills the 3D albedo/emission/radiance textures from the SDF
 // scene each frame; mips() builds the radiance pyramid; cone() gathers indirect light (N-cone
@@ -70,16 +70,21 @@ export function createVoxelSystem({
   let gAlbedo = albedoTexture;
   let gEmission = emissionTexture;
 
-  // World box: the EXTENT is fixed (derived from the initial config), but the XY origin FOLLOWS
-  // THE CAMERA (updateGridOrigin below) so GI coverage is always centered on what the player sees
-  // instead of being nailed to one spot on the map. Z stays fixed — the camera orbits in XY.
-  // cellSize is the only other thing that varies; dims follow from it.
+  // World box: the XY origin FOLLOWS THE CAMERA (updateGridOrigin below) so GI coverage is always
+  // centered on what the player sees, and with autoCell the CELL SIZE follows the ZOOM (discrete
+  // ×2 ladder) so the box always covers the screen with a constant voxel budget: texture dims are
+  // the invariant, extent = dims × cellSize breathes with the ladder. Z origin stays fixed — the
+  // camera orbits in XY. The BASE extents (from the initial config) are the reference the manual
+  // buildGrid/setCellSize path derives dims from; the live extents track the current cell.
   let originX = grid.originX;
   let originY = grid.originY;
   const originZ = grid.originZ;
-  const extentX = grid.dimX * grid.cellSize;
-  const extentY = grid.dimY * grid.cellSize;
-  const extentZ = grid.dimZ * grid.cellSize;
+  const baseExtentX = grid.dimX * grid.cellSize;
+  const baseExtentY = grid.dimY * grid.cellSize;
+  const baseExtentZ = grid.dimZ * grid.cellSize;
+  let extentX = baseExtentX;
+  let extentY = baseExtentY;
+  let extentZ = baseExtentZ;
 
   // LEVEL 1 — the coarse clipmap cascade: cell 2×, XY extent 2× (same XY dims), Z extent UNCHANGED
   // (the scene is flat — doubling Z would voxelize empty sky), so dimZ1 = dimZ/2. Its own camera-
@@ -181,9 +186,15 @@ export function createVoxelSystem({
   // current cellSize, and upload the grid uniforms to all shaders.
   function buildGrid(newCellSize: number) {
     cellSize = newCellSize;
-    dimX = Math.max(1, Math.round(extentX / cellSize));
-    dimY = Math.max(1, Math.round(extentY / cellSize));
-    dimZ = Math.max(1, Math.round(extentZ / cellSize));
+    // Dims derive from the BASE extents (the initial-config world box), not the live ones — the
+    // zoom ladder scales the live extents without touching dims, and a manual rebuild must not
+    // compound that scaling into the texture size.
+    dimX = Math.max(1, Math.round(baseExtentX / cellSize));
+    dimY = Math.max(1, Math.round(baseExtentY / cellSize));
+    dimZ = Math.max(1, Math.round(baseExtentZ / cellSize));
+    extentX = dimX * cellSize;
+    extentY = dimY * cellSize;
+    extentZ = dimZ * cellSize;
     // Level 1: cell 2×, same XY dims (→ XY extent 2×), Z extent unchanged (→ dimZ halved).
     const cell1 = cellSize * 2;
     dim1X = dimX;
@@ -313,9 +324,58 @@ export function createVoxelSystem({
   // in a frame is a no-op (cameraPosition is stable within a frame).
   let snapCells = 16;
   let followCamera = true;
+  // Zoom ladder (autoCell): pick cellSize from the CURRENT zoom so the L0 box always covers the
+  // visible ground footprint + an off-screen light margin, at constant texture dims. Discrete ×2
+  // steps only — continuous scaling would re-sample the whole field every wheel tick (the same
+  // no-snap-for-scaling argument as rotation); a step is a rare one-frame re-form the probe
+  // hysteresis absorbs. Growing is immediate (coverage must not lag the screen); shrinking takes
+  // a 15% hysteresis margin so the ladder can't oscillate at a threshold.
+  let autoCell = true;
+  // Floor = one step below the initial cell: extentZ = dimZ·cell must still cover the scene's
+  // height (at the 0.5 default this floor is 0.25 → extentZ 16 wu, exactly the z ∈ [-2, 14] box).
+  const CELL_LADDER_MIN = grid.cellSize / 2;
+  const CELL_LADDER_MAX = grid.cellSize * 4;
+  // Fraction of the visible ground DIAGONAL the L0 box must cover; the remaining corners + the
+  // off-screen light margin ride level 1 (2× the extent). Calibrated so the DEFAULT demo view
+  // (zoom 14, 256-dim grid) lands exactly on today's 0.5 cell — the ladder changes nothing until
+  // the zoom actually leaves the band the current tuning was judged "fine" at.
+  const L0_COVERAGE = 0.8;
+
+  function zoomLadderCell(): number {
+    // Visible half-extents in world units (mirrors updateProjectionMatrix): halfH = px/2/zoom;
+    // the ground footprint stretches by 1/sin(elevation) along the view axis. The AABB of that
+    // footprint rotates with the azimuth, so take the azimuth-INVARIANT bounding diagonal —
+    // conservative (~√2), but orbiting can never force a ladder step.
+    const halfH = canvas.offsetHeight / 2 / cameraZoom.value;
+    const halfW = halfH * (canvas.offsetWidth / Math.max(1, canvas.offsetHeight));
+    const elev = (cameraElevation.value * Math.PI) / 180;
+    const groundHalfH = halfH / Math.max(0.2, Math.sin(elev));
+    const halfDiag = Math.hypot(halfW, groundHalfH);
+    const required = (2 * halfDiag * L0_COVERAGE) / Math.min(dimX, dimY);
+    let c = cellSize;
+    while (c < required && c < CELL_LADDER_MAX) c *= 2;
+    while (c > CELL_LADDER_MIN && required <= c * 0.5 * 0.85) c *= 0.5;
+    return c;
+  }
 
   function updateGridOrigin() {
     if (!followCamera) return;
+    // The ladder first: the snap quantum + extents below depend on the chosen cell. A cell step
+    // needs NO texture rebuild — dims are unchanged, only uniforms/extents move (the volume is
+    // re-voxelized every frame anyway).
+    let cellChanged = false;
+    if (autoCell) {
+      const c = zoomLadderCell();
+      if (c !== cellSize) {
+        cellSize = c;
+        extentX = dimX * c;
+        extentY = dimY * c;
+        extentZ = dimZ * c;
+        originArr[3] = c;
+        originArr1[3] = c * 2;
+        cellChanged = true;
+      }
+    }
     const q = snapCells * cellSize;
     const ox = Math.round((cameraPosition.x - extentX * 0.5) / q) * q;
     const oy = Math.round((cameraPosition.y - extentY * 0.5) / q) * q;
@@ -323,7 +383,8 @@ export function createVoxelSystem({
     const q1 = snapCells * cellSize * 2;
     const o1x = Math.round((cameraPosition.x - extentX) / q1) * q1;
     const o1y = Math.round((cameraPosition.y - extentY) / q1) * q1;
-    if (ox === originX && oy === originY && o1x === origin1X && o1y === origin1Y) return;
+    if (!cellChanged && ox === originX && oy === originY && o1x === origin1X && o1y === origin1Y)
+      return;
     originX = ox;
     originY = oy;
     origin1X = o1x;
@@ -348,6 +409,12 @@ export function createVoxelSystem({
   // locked-mip reasoning exact.
   function setGridSnapCells(cells: number) {
     snapCells = Math.max(1, Math.round(cells));
+  }
+
+  // Zoom-ladder toggle. Off = the cell freezes at its current value (manual setCellSize regains
+  // control); on = the ladder re-evaluates next updateGridOrigin.
+  function setAutoCell(on: boolean) {
+    autoCell = on;
   }
 
   // VCT composite (Layer 4 — the final lit image) sub-system. Owns the composite shader/pipeline +
@@ -478,6 +545,8 @@ export function createVoxelSystem({
   // Change the voxel size (graininess). Destroys the old textures, rebuilds the grid.
   // (The aniso directional volumes are destroyed by anisoVolume.rebindGrid inside buildGrid.)
   function setCellSize(newCellSize: number) {
+    // A manual cell choice is an override — stop the zoom ladder from re-deciding next frame.
+    autoCell = false;
     textures.voxelRadiance.destroy();
     textures.voxelEmission.destroy();
     textures1.voxelRadiance.destroy();
@@ -579,6 +648,7 @@ export function createVoxelSystem({
     setClipmapMode,
     setFollowCamera,
     setGridSnapCells,
+    setAutoCell,
     setScreenProbeTile: screenProbe.setScreenProbeTile,
     setScreenProbeParams: screenProbe.setScreenProbeParams,
     setAdaptiveFraction: screenProbe.setAdaptiveFraction,
@@ -598,6 +668,9 @@ export function createVoxelSystem({
     },
     get clipmapMode() {
       return clipmapMode;
+    },
+    get autoCell() {
+      return autoCell;
     },
     get debugProbes() {
       return screenProbe.debugProbes;

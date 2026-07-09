@@ -97,6 +97,8 @@ async function main() {
   // Graininess: voxel size in world units. Smaller = finer = more voxels. Rebuilds the
   // 3D textures on release (.onFinishChange, so it rebuilds once when the slider settles).
   // The displayed dims controller reflects the resulting per-axis voxel counts.
+  // NOTE: with "auto cell (zoom)" ON the ladder owns cellSize (the live readout below tracks it);
+  // touching the manual slider switches auto OFF (setCellSize is an override).
   const voxCfg = { cellSize: voxel.cellSize };
   const dimsLabel = { dims: `${voxel.dims.x}×${voxel.dims.y}×${voxel.dims.z}` };
   const dimsCtl = gui.add(dimsLabel, "dims").name("voxel dims").disable();
@@ -107,7 +109,22 @@ async function main() {
       voxel.setCellSize(cs);
       dimsLabel.dims = `${voxel.dims.x}×${voxel.dims.y}×${voxel.dims.z}`;
       dimsCtl.updateDisplay();
+      autoCellCfg.auto = voxel.autoCell; // slider overrides → auto flips off; reflect it
+      autoCellCtl.updateDisplay();
     });
+  // Zoom ladder: cellSize follows the zoom in discrete ×2 steps so the box always covers the
+  // screen (+ off-screen light margin) at constant texture dims. The readout shows the live cell.
+  const autoCellCfg = { auto: voxel.autoCell };
+  const autoCellCtl = gui
+    .add(autoCellCfg, "auto")
+    .name("auto cell (zoom)")
+    .onChange((on: boolean) => voxel.setAutoCell(on));
+  const cellLive = {
+    get cell() {
+      return voxel.cellSize;
+    },
+  };
+  gui.add(cellLive, "cell").name("cell (live)").disable().listen();
 
   // A/B for the camera-following voxel box: off = the box freezes at its current origin (the old
   // fixed-world-box behavior), so panning past its edge shows the no-GI falloff again.
