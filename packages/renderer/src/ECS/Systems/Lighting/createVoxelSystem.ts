@@ -164,9 +164,9 @@ export function createVoxelSystem({
       cellSize,
     });
 
-    // Voxelize cluster: rebind the mip-0 storage target + refresh its clear dispatch dims + grid
-    // uniforms for the recreated voxelRadiance / new dims.
-    voxelizeSys.rebindGrid(textures.voxelRadiance, {
+    // Voxelize cluster: rebind the two storage targets (radiance mip 0 + the emitter volume) +
+    // refresh its clear dispatch dims + grid uniforms for the recreated volumes / new dims.
+    voxelizeSys.rebindGrid(textures.voxelRadiance, textures.voxelEmission, {
       originX,
       originY,
       originZ,
@@ -351,6 +351,7 @@ export function createVoxelSystem({
   // (The aniso directional volumes are destroyed by anisoVolume.rebindGrid inside buildGrid.)
   function setCellSize(newCellSize: number) {
     textures.voxelRadiance.destroy();
+    textures.voxelEmission.destroy();
     buildGrid(newCellSize);
   }
 

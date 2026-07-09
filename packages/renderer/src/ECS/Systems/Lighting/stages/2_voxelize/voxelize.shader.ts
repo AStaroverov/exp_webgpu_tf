@@ -22,10 +22,12 @@ import { sceneSDF } from "../../../SDFSystem/sceneSDF.wgsl.ts";
 // that's the conservative test for "the iso-surface passes through this cell".
 //
 // Two @compute entry points share this module + the sceneSDF helpers:
-//   clear : one thread per voxel over the FULL grid — zeroes all three storage textures.
+//   clear : one thread per voxel over the FULL grid — zeroes the bound target volume.
 //           The scatter pass only ever WRITES solid voxels (last-writer-wins on overlap),
 //           so the volume MUST be cleared first.
-//   main  : the scatter described above.
+//   main  : the scatter described above. Dispatched TWICE per frame with different targets:
+//           emitters (uPass=1) into voxelEmission, then occluders (uPass=0) into
+//           voxelRadiance mip 0, MERGING voxelEmission in (see the CLASS SPLIT note at main()).
 
 // COMPUTE-visibility group-0 uniform helper.
 const uC = (name: string, type: string) =>
@@ -62,9 +64,10 @@ export const shaderMeta = new ShaderMeta(
     // WORKGROUP_1D), .z/.w spare. The flat work index is g = gid.y*uDispatchWidth + gid.x.
     dispatch: uC("uDispatch", `vec4<i32>`),
     // Scatter CLASS for this dispatch: 0 = OCCLUDERS (material.x == 0), 1 = EMITTERS. The scatter
-    // runs TWICE — occluders then emitters — in two encoder-barriered passes, so an emitter that
-    // shares a voxel with an occluder always writes LAST (emitter-wins) instead of a nondeterministic
-    // last-writer-wins that flips frame-to-frame → flickering aimed-cone shadows. See main().
+    // runs TWICE — emitters into voxelEmission FIRST, then occluders into voxelRadiance mip 0 —
+    // in two encoder-barriered passes writing DIFFERENT volumes, so the two classes never race
+    // for a shared voxel: the occluder pass reads the emitter volume and MERGES (sum rgb, max a)
+    // instead of one class overwriting the other. See main().
     pass: uC("uPass", `u32`),
 
     // ---- group 1 : per-instance scene storage (StorageRead => @group(1)) ----
@@ -85,12 +88,12 @@ export const shaderMeta = new ShaderMeta(
     aabbDim: sceneBuf("uAabbDim", `array<vec4<i32>, ${MAX_INSTANCE_COUNT}>`),
 
     // ---- group 2 : voxel output (StorageTexture, write-only) ----
-    // Only voxelRadiance is live: the cone-GI pass + mip pyramid read it. The former
-    // voxelAlbedo / voxelEmission 3D volumes were dead (their sole reader, voxelTrace.wgsl.ts,
-    // is unimported; the composite reads the 2D G-buffer emission, not a volume) — removed to
-    // reclaim VRAM.
-    voxelRadiance: new VariableMeta(
-      "voxelRadiance",
+    // The scatter's write TARGET, bound per pass: the emitter pass (uPass=1) writes the
+    // voxelEmission volume, the occluder pass (uPass=0) writes voxelRadiance mip 0 (merging
+    // voxelEmission in — it reads it via emissionRead below). The clear pass zeroes whatever
+    // is bound (voxelEmission; mip 0 needs no clear — the emission→mip0 copy overwrites it fully).
+    voxelTarget: new VariableMeta(
+      "voxelTarget",
       VariableKind.StorageTexture,
       `texture_storage_3d<rgba16float, write>`,
       {
@@ -108,6 +111,16 @@ export const shaderMeta = new ShaderMeta(
     shadowMap: new VariableMeta("shadowMap", VariableKind.Texture, `texture_depth_2d`, {
       visibility: GPUShaderStage.COMPUTE,
       textureSampleType: "depth",
+    }),
+
+    // ---- group 0 : emitter volume read (Texture), COMPUTE-visible ----
+    // voxelEmission, textureLoad-ed by the OCCLUDER pass to merge the emitter contribution into
+    // voxelRadiance mip 0 where the two classes share a voxel. The clear/emitter passes WRITE
+    // voxelEmission (a texture cannot be sampled and storage-written in one pass), so they bind
+    // a 1×1×1 dummy here; the uPass==0 gate in main() keeps the dummy read out of those passes.
+    emissionRead: new VariableMeta("emissionRead", VariableKind.Texture, `texture_3d<f32>`, {
+      visibility: GPUShaderStage.COMPUTE,
+      viewDimension: "3d",
     }),
   },
   {},
@@ -150,7 +163,7 @@ fn sun_vis_vox(P: vec3<f32>, N: vec3<f32>) -> f32 {
   return select(0.0, 1.0, ndc.z <= s + bias);
 }
 
-// CLEAR — one thread per voxel over the FULL grid. Zeroes all three storage textures so the
+// CLEAR — one thread per voxel over the FULL grid. Zeroes the bound target volume so the
 // scatter pass (which writes ONLY solid voxels) starts from an empty volume.
 @compute @workgroup_size(${WORKGROUP}, ${WORKGROUP}, ${WORKGROUP})
 fn clear(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -159,7 +172,7 @@ fn clear(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (coord.x >= uGridDims.x || coord.y >= uGridDims.y || coord.z >= uGridDims.z) {
     return;
   }
-  textureStore(voxelRadiance, coord, vec4<f32>(0.0));
+  textureStore(voxelTarget, coord, vec4<f32>(0.0));
 }
 
 // SCATTER — one thread per (instance, voxel-in-its-AABB) pair. The thread:
@@ -194,13 +207,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
   let ins = u32(lo - 1);
 
-  // CLASS FILTER — deterministic overlap resolution. This dispatch handles only ONE class:
-  // uPass 0 = occluders (material.x == 0), uPass 1 = emitters. The two passes are separate,
-  // encoder-barriered dispatches (occluders first), so where an emitter overlaps an occluder the
-  // emitter's textureStore lands LAST → the overlap voxel is deterministically the emitter's every
-  // frame. Without this, the two instances raced for the last write and the survivor flipped
-  // frame-to-frame (bright emitter ↔ dark occluder) → the aimed shadow cone flickered. Early-out
-  // BEFORE the SDF eval so off-class threads cost only the binary search above.
+  // CLASS SPLIT — the two classes write DIFFERENT volumes, so neither can overwrite the other
+  // (the old "emitter-wins" write-order hack is gone). uPass 1 = emitters scatter into
+  // voxelEmission; then the CPU copies voxelEmission → voxelRadiance mip 0 (covers emitter-only
+  // voxels); then uPass 0 = occluders (material.x == 0) scatter into voxelRadiance mip 0, ADDING
+  // the emitter rgb read back from voxelEmission at their own voxels — a shared voxel ends up
+  // with BOTH the occluder's sun-lit surface and the emitter light (sum rgb, max coverage),
+  // deterministically, every frame. Early-out BEFORE the SDF eval so off-class threads cost only
+  // the binary search above. (Within one class, AABB overlap is still last-writer-wins.)
   let isEmitter = uMaterial[ins].x != 0.0;
   if (isEmitter != (uPass == 1u)) {
     return;
@@ -259,9 +273,17 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let emission = emission_of(ins);
   let radiance = direct + emission;
 
-  // Last-writer-wins on AABB overlap — acceptable for a mip-blurred GI volume. radiance is stored
-  // PREMULTIPLIED (rgb*coverage, a=coverage) so the mip pyramid + cone over-operator stay consistent.
-  textureStore(voxelRadiance, coord, vec4<f32>(radiance * coverage, coverage));
+  // radiance is stored PREMULTIPLIED (rgb*coverage, a=coverage) so the mip pyramid + cone
+  // over-operator stay consistent. The occluder pass MERGES the emitter volume (already copied
+  // into mip 0 for emitter-only voxels) instead of overwriting it: rgb adds, coverage maxes —
+  // both stay premultiplied-consistent. The uPass gate also keeps the emitter pass (whose
+  // emissionRead is a dummy — it storage-writes the real voxelEmission) from reading garbage.
+  if (uPass == 0u) {
+    let e = textureLoad(emissionRead, coord, 0);
+    textureStore(voxelTarget, coord, vec4<f32>(radiance * coverage + e.rgb, max(coverage, e.a)));
+  } else {
+    textureStore(voxelTarget, coord, vec4<f32>(radiance * coverage, coverage));
+  }
 }
 `,
 );

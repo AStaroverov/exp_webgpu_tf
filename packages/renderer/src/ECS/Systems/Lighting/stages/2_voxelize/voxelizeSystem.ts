@@ -18,11 +18,20 @@ export type VoxelizeGridBox = {
 };
 
 // VOXELIZE cluster: fills the 3D radiance volume (mip 0) from the SDF scene each frame. Owns the
-// voxelize compute shader (two pipelines: `clear` zeroes the whole volume, `main` scatters per-shape),
+// voxelize compute shader (two pipelines: `clear` zeroes the bound volume, `main` scatters per-shape),
 // the two uPass buffers (occluder vs emitter scatter), the group-0/1 bind groups (grid uniforms +
 // scene-instance buffers + the sun shadow map), and the per-frame CPU AABB / dispatch scratch. The
-// group-2 target (voxelRadiance mip 0) + the clear dispatch dims are (re)bound by rebindGrid() when
-// the grid is (re)built.
+// group-0/2 texture bindings + the clear dispatch dims are (re)bound by rebindGrid() when the grid
+// is (re)built.
+//
+// Frame sequence (each step a separate encoder-barriered pass — see voxelize()):
+//   1. clear voxelEmission
+//   2. EMITTER scatter (uPass=1) → voxelEmission
+//   3. copyTextureToTexture voxelEmission → voxelRadiance mip 0 (covers emitter-only voxels;
+//      doubles as the mip-0 clear — every voxel is overwritten)
+//   4. OCCLUDER scatter (uPass=0) → voxelRadiance mip 0, MERGING voxelEmission (sum rgb, max a)
+// The two classes never write the same volume, so the old "emitter-wins" write-order hack (and
+// the light it dropped on shared voxels) is gone.
 export function createVoxelizeSystem({
   device,
   sceneInstances,
@@ -49,8 +58,8 @@ export function createVoxelizeSystem({
   const sunDepthView = sun.getDepthView();
 
   // Two tiny constant uPass buffers (0 = occluders, 1 = emitters), uploaded ONCE. The scatter is
-  // dispatched twice — once with each — in separate encoder-barriered passes so the emitter writes
-  // land after the occluder writes (deterministic emitter-wins on voxel overlap → no shadow flicker).
+  // dispatched twice — once with each — into DIFFERENT target volumes (emitters → voxelEmission,
+  // occluders → voxelRadiance mip 0 with the emission merged in), so the classes never race.
   // Two SEPARATE buffers (not one re-uploaded between passes) because both dispatches are encoded
   // before the encoder is submitted: a mid-encode writeBuffer would apply to BOTH passes, not one.
   const passBufOcc = device.createBuffer({
@@ -69,12 +78,25 @@ export function createVoxelizeSystem({
     device.queue.writeBuffer(passBufEmit, 0, p);
   }
 
-  // Group 0 (voxelize) = grid uniforms; Group 1 = the 7 scene-instance buffers. Both
-  // reference stable buffers (uniform + draw system's GPUVariables) → built ONCE. Scene
-  // buffers are bound at the VOXELIZE meta's binding numbers (NOT
-  // sceneInstances.X.getBindGroupEntry(), which carries the DRAW shader's bindings). Two group-0
-  // variants differ ONLY in the uPass buffer bound (occluder vs emitter scatter pass).
-  const makeVoxGroup0 = (passBuf: GPUBuffer) =>
+  // 1×1×1 dummy for the emissionRead binding in the passes that WRITE voxelEmission (clear +
+  // emitter scatter) — a texture cannot be sampled and storage-written in the same pass, and the
+  // uPass==1 branch never reads it anyway. Never written; reads as zero.
+  const dummyEmissionView = device
+    .createTexture({
+      size: [1, 1, 1],
+      dimension: "3d",
+      format: "rgba16float",
+      usage: GPUTextureUsage.TEXTURE_BINDING,
+    })
+    .createView({ dimension: "3d" });
+
+  // Group 0 (voxelize) = grid uniforms + the sun shadow map + the emissionRead texture; Group 1 =
+  // the scene-instance buffers (stable → built ONCE). Scene buffers are bound at the VOXELIZE
+  // meta's binding numbers (NOT sceneInstances.X.getBindGroupEntry(), which carries the DRAW
+  // shader's bindings). Two group-0 variants: occluder (uPass=0, reads the REAL voxelEmission for
+  // the merge) vs emitter/clear (uPass=1, dummy read). Rebuilt by rebindGrid — the emission view
+  // is grid-sized.
+  const makeVoxGroup0 = (passBuf: GPUBuffer, emissionReadView: GPUTextureView) =>
     device.createBindGroup({
       layout: voxPipeline.getBindGroupLayout(0),
       entries: [
@@ -88,11 +110,9 @@ export function createVoxelizeSystem({
         // Sun shadow map: the sun-POV depth texture, sampled to shadow the injected directional sun.
         { binding: voxelizeMeta.uniforms.shadowMap.binding, resource: sunDepthView },
         { binding: voxelizeMeta.uniforms.pass.binding, resource: { buffer: passBuf } },
+        { binding: voxelizeMeta.uniforms.emissionRead.binding, resource: emissionReadView },
       ],
     });
-  // Occluder variant (uPass=0) also drives the CLEAR pass (which ignores uPass).
-  const voxGroup0 = makeVoxGroup0(passBufOcc);
-  const voxGroup0Emit = makeVoxGroup0(passBufEmit);
   const voxGroup1 = device.createBindGroup({
     layout: voxPipeline.getBindGroupLayout(1),
     entries: [
@@ -145,7 +165,19 @@ export function createVoxelizeSystem({
   const dimsArr = getTypeTypedArray(voxelizeMeta.uniforms.gridDims.type); // Int32Array(4)
 
   // --- Grid-dependent state (rebuilt by rebindGrid). ---
-  let voxGroup2: GPUBindGroup;
+  // Group-0 variants: occluder pass (uPass=0 + real emission read) vs emitter/clear passes
+  // (uPass=1 + dummy read). Group-2 variants: the write target — voxelRadiance mip 0 (occluder)
+  // vs voxelEmission (emitter + clear).
+  let voxGroup0Occ: GPUBindGroup;
+  let voxGroup0Emit: GPUBindGroup;
+  let voxGroup2Radiance: GPUBindGroup;
+  let voxGroup2Emission: GPUBindGroup;
+  // Texture refs + dims for the per-frame voxelEmission → voxelRadiance mip-0 copy.
+  let radianceTex: GPUTexture;
+  let emissionTex: GPUTexture;
+  let gridDimX = 0;
+  let gridDimY = 0;
+  let gridDimZ = 0;
   let dispatchX = 0;
   let dispatchY = 0;
   let dispatchZ = 0;
@@ -154,27 +186,34 @@ export function createVoxelizeSystem({
   let scatterDispatchX = 0;
   let scatterDispatchY = 0;
 
-  // Rebind the voxel-radiance mip-0 storage target + refresh the clear dispatch dims and grid
-  // uniforms for the (re)built grid. Called from buildGrid after voxelRadiance is recreated.
-  function rebindGrid(voxelRadiance: GPUTexture, gridBox: VoxelizeGridBox) {
+  // Rebind the two storage targets + the emission merge read, and refresh the clear dispatch dims
+  // and grid uniforms for the (re)built grid. Called from buildGrid after the volumes are recreated.
+  function rebindGrid(
+    voxelRadiance: GPUTexture,
+    voxelEmission: GPUTexture,
+    gridBox: VoxelizeGridBox,
+  ) {
     const { originX, originY, originZ, cellSize, dimX, dimY, dimZ } = gridBox;
 
-    // Group 2 (voxelize) = voxel output storage textures (write-only, dimension 3d).
-    // voxelRadiance now has a mip pyramid; a storage view MUST span exactly one mip → bind
-    // mip 0 only (the voxelize pass writes level 0; voxelMip builds the rest).
-    voxGroup2 = device.createBindGroup({
-      layout: voxPipeline.getBindGroupLayout(2),
-      entries: [
-        {
-          binding: voxelizeMeta.uniforms.voxelRadiance.binding,
-          resource: voxelRadiance.createView({
-            dimension: "3d",
-            baseMipLevel: 0,
-            mipLevelCount: 1,
-          }),
-        },
-      ],
-    });
+    radianceTex = voxelRadiance;
+    emissionTex = voxelEmission;
+
+    const emissionReadView = voxelEmission.createView({ dimension: "3d" });
+    voxGroup0Occ = makeVoxGroup0(passBufOcc, emissionReadView);
+    voxGroup0Emit = makeVoxGroup0(passBufEmit, dummyEmissionView);
+
+    // Group 2 (voxelize) = the write target (write-only storage, dimension 3d). voxelRadiance has
+    // a mip pyramid; a storage view MUST span exactly one mip → bind mip 0 only (the voxelize pass
+    // writes level 0; voxelMip builds the rest). voxelEmission is single-mip.
+    const makeVoxGroup2 = (view: GPUTextureView) =>
+      device.createBindGroup({
+        layout: voxPipeline.getBindGroupLayout(2),
+        entries: [{ binding: voxelizeMeta.uniforms.voxelTarget.binding, resource: view }],
+      });
+    voxGroup2Radiance = makeVoxGroup2(
+      voxelRadiance.createView({ dimension: "3d", baseMipLevel: 0, mipLevelCount: 1 }),
+    );
+    voxGroup2Emission = makeVoxGroup2(voxelEmission.createView({ dimension: "3d" }));
 
     // Grid uniforms.
     originArr[0] = originX;
@@ -188,6 +227,9 @@ export function createVoxelizeSystem({
     device.queue.writeBuffer(voxShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
     device.queue.writeBuffer(voxShader.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
 
+    gridDimX = dimX;
+    gridDimY = dimY;
+    gridDimZ = dimZ;
     dispatchX = Math.ceil(dimX / WORKGROUP);
     dispatchY = Math.ceil(dimY / WORKGROUP);
     dispatchZ = Math.ceil(dimZ / WORKGROUP);
@@ -269,39 +311,51 @@ export function createVoxelizeSystem({
     dispatchArr[3] = 0;
     device.queue.writeBuffer(voxShader.uniforms.dispatch.getGPUBuffer(device), 0, dispatchArr);
 
-    // CLEAR (full grid) then SCATTER (compacted work list), in SEPARATE compute passes so the
-    // encoder barriers between them — the scatter's textureStore must see a fully-zeroed volume
-    // (dispatches within ONE pass are NOT synchronized; a same-pass clear could race/clobber a
-    // solid voxel). Clear ALWAYS runs so the volume is zeroed; the scatter only writes solids.
+    // Four encoder-barriered steps (dispatches within ONE pass are NOT synchronized — every
+    // consumer must be a separate pass/copy so it sees the producer's writes):
+    //   1. CLEAR voxelEmission (full grid) — the emitter scatter only writes solid voxels.
+    //   2. EMITTER scatter (uPass=1) → voxelEmission.
+    //   3. COPY voxelEmission → voxelRadiance mip 0 — lands the emitter-only voxels AND doubles
+    //      as the mip-0 clear (every voxel is overwritten, empty ones with zero).
+    //   4. OCCLUDER scatter (uPass=0) → voxelRadiance mip 0, MERGING the emission it reads back
+    //      (sum rgb, max coverage) — a voxel shared by both classes keeps BOTH contributions,
+    //      deterministically every frame (the old emitter-wins overwrite dropped the occluder's).
     const clearPass = encoder.beginComputePass();
     clearPass.setPipeline(voxClearPipeline);
-    clearPass.setBindGroup(0, voxGroup0);
+    // Emitter group-0 variant: clear WRITES voxelEmission, so it must bind the dummy read.
+    clearPass.setBindGroup(0, voxGroup0Emit);
     clearPass.setBindGroup(1, voxGroup1);
-    clearPass.setBindGroup(2, voxGroup2);
+    clearPass.setBindGroup(2, voxGroup2Emission);
     clearPass.dispatchWorkgroups(dispatchX, dispatchY, dispatchZ);
     clearPass.end();
 
     if (scatterTotal > 0) {
-      // TWO scatter passes over the SAME work list: occluders (uPass=0), then emitters (uPass=1).
-      // Each invocation binary-searches its owning instance and early-outs unless it belongs to
-      // this pass's class, so the SDF-eval work is split (not duplicated). The encoder barriers
-      // between the passes → an emitter sharing a voxel with an occluder writes LAST every frame
-      // (deterministic emitter-wins), killing the nondeterministic-overlap shadow flicker.
-      const scatterOcc = encoder.beginComputePass();
-      scatterOcc.setPipeline(voxPipeline);
-      scatterOcc.setBindGroup(0, voxGroup0);
-      scatterOcc.setBindGroup(1, voxGroup1);
-      scatterOcc.setBindGroup(2, voxGroup2);
-      scatterOcc.dispatchWorkgroups(scatterDispatchX, scatterDispatchY, 1);
-      scatterOcc.end();
-
+      // The two scatter passes run over the SAME work list: each invocation binary-searches its
+      // owning instance and early-outs unless it belongs to this pass's class, so the SDF-eval
+      // work is split (not duplicated).
       const scatterEmit = encoder.beginComputePass();
       scatterEmit.setPipeline(voxPipeline);
       scatterEmit.setBindGroup(0, voxGroup0Emit);
       scatterEmit.setBindGroup(1, voxGroup1);
-      scatterEmit.setBindGroup(2, voxGroup2);
+      scatterEmit.setBindGroup(2, voxGroup2Emission);
       scatterEmit.dispatchWorkgroups(scatterDispatchX, scatterDispatchY, 1);
       scatterEmit.end();
+    }
+
+    encoder.copyTextureToTexture(
+      { texture: emissionTex },
+      { texture: radianceTex, mipLevel: 0 },
+      [gridDimX, gridDimY, gridDimZ],
+    );
+
+    if (scatterTotal > 0) {
+      const scatterOcc = encoder.beginComputePass();
+      scatterOcc.setPipeline(voxPipeline);
+      scatterOcc.setBindGroup(0, voxGroup0Occ);
+      scatterOcc.setBindGroup(1, voxGroup1);
+      scatterOcc.setBindGroup(2, voxGroup2Radiance);
+      scatterOcc.dispatchWorkgroups(scatterDispatchX, scatterDispatchY, 1);
+      scatterOcc.end();
     }
   }
 

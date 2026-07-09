@@ -29,6 +29,7 @@ TEXTURE_BINDING` (written by a compute pass via `textureStore`, read later as a 
 | Resource                          | Type / format                       | Writer                                        | Reader                                  | Notes                                                                                                |
 | --------------------------------- | ----------------------------------- | --------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------- | --- | --------------------- |
 | `voxelRadiance`                   | 3D rgba16float + **mip pyramid**    | `voxelize` (mip0), `mips` (mip1..N)           | `anisoBase`, screen-probe gather        | rgb = direct-lit radiance (sun N·L·vis) + emission; a = occupancy. ~38 MB on the default grid        |
+| `voxelEmission`                   | 3D rgba16float, single mip          | `voxelize` (emitter scatter)                   | `voxelize` (occluder merge + mip0 copy) | Emitter-class scatter target; merged into `voxelRadiance` mip0 (sum rgb, max a) — kills the emitter/occluder shared-voxel overwrite |
 | aniso ×6 (`negX/posX/…/posZ`)     | 3D rgba16float ×6 + mips, **½ res** | `anisoBase` (lvl0), `anisoVolume` (lvl c→c+1) | screen-probe gather                     | Directional volumes (anti-leak); the cone picks the 3 volumes facing the cone dir and blends by dir² |
 | screen-probe atlas: `shR/shG/shB` | 2D rgba16float                      | gather                                        | `refine`, cone resolve, debug           | SH-L1 coefficients (per channel)                                                                     |
 | `nrm`                             | 2D rgba16float                      | gather                                        | gather (history validity), cone resolve | probe world normal;                                                                                  | nrm | ²≈0 = invalid history |
@@ -66,10 +67,11 @@ reorder). It lives in one place — `voxel.renderFrame(encoder)` — which both 
             │                                 │ (sun shadow)
             ▼                                 │
    voxelize:                                  │
-     clear (whole volume)                     │
-     scatter occluders (uPass=0)  ◄───────────┘  injects shadowed sun
-     scatter emitters  (uPass=1)                 (emitter-wins: writes last)
-            │  voxelRadiance mip0
+     clear voxelEmission                      │
+     scatter emitters  (uPass=1) ─► voxelEmission
+     copy voxelEmission ─► voxelRadiance mip0    (doubles as the mip0 clear)
+     scatter occluders (uPass=0)  ◄───────────┘  injects shadowed sun; MERGES
+            │  voxelRadiance mip0                voxelEmission (sum rgb, max a)
             ▼
    mips (mip1..N, one pass per level)
             │  voxelRadiance pyramid
@@ -150,8 +152,10 @@ chain), because `refine` reads its raw SH as the subdivision signal.
 - **No per-frame `createBindGroup`.** Bind groups are built at setup / `buildGrid` / `rebuild` and
   reused; ping-pong sets are switched by rebinding, not by rebuilding.
 - **Barriers between compute passes** come from separate `beginComputePass/end`. `clear` and
-  `scatter` are separate passes (else a race on `textureStore`). Occluders and emitters are
-  separate passes, emitters LAST (deterministic emitter-wins on a shared voxel → no flicker).
+  `scatter` are separate passes (else a race on `textureStore`). Occluders and emitters scatter
+  into SEPARATE volumes (emitters → `voxelEmission`, then copy → mip0, then occluders merge on
+  top) — neither class can overwrite the other's contribution on a shared voxel, and the write
+  order stays deterministic (no flicker). Within one class, AABB overlap is last-writer-wins.
 - **`gatherUniform` strictly BEFORE `refine`.**
 - **Uncapped lights** + round-robin `aimedPerFrame` → cost constant in the light count.
 - Ping-pong parity, mip chain one pass per level, aniso per direction.

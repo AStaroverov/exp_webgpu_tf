@@ -2,16 +2,18 @@
 // WORLD space (Z-up): origin = its min corner, dims = voxel counts per axis, cellSize =
 // world units per voxel (cubic). Voxel (i,j,k) center = origin + (vec3(i,j,k)+0.5)*cellSize.
 //
-// One 3D storage texture, both STORAGE_BINDING (written by the voxelize compute pass via
+// Two 3D storage textures, both STORAGE_BINDING (written by the voxelize compute passes via
 // textureStore) + TEXTURE_BINDING (read by later passes as a sampled texture_3d<f32>):
 //   voxelRadiance rgba16float — rgb = direct-lit radiance (sun N·L·vis) + emission, a = occupancy.
+//   voxelEmission rgba16float — the EMITTER class's own scatter target (single mip). Emitters and
+//     occluders write different volumes so neither overwrites the other; voxelize then copies
+//     voxelEmission into voxelRadiance mip 0 and the occluder scatter MERGES on top (sum rgb,
+//     max a). Nothing downstream reads voxelEmission — it exists to kill the emitter/occluder
+//     shared-voxel conflict that "emitter-wins" write ordering used to paper over.
 //
 // voxelRadiance carries a FULL MIP PYRAMID (voxelMipLevelCount levels): mip 0 is written by
 // the voxelize pass, the coarser levels by the voxelMip compute pass (isotropic, opacity-
 // weighted downsample). The pyramid is what the VCT cone-tracing path samples by LOD.
-//
-// (The former voxelAlbedo / voxelEmission 3D volumes were removed: their only reader was the
-// unimported voxelTrace.wgsl.ts; the composite reads the 2D G-buffer emission, not a volume.)
 
 export type VoxelGridConfig = {
   // World-space min corner of the grid box.
@@ -47,6 +49,7 @@ export function voxelMipLevelCount(dimX: number, dimY: number, dimZ: number): nu
 
 export type VoxelTextures = {
   voxelRadiance: GPUTexture;
+  voxelEmission: GPUTexture;
 };
 
 // ===== Screen-space probe volume (the A/B alternative to the world SH-L1 probe volume). =====
@@ -267,13 +270,24 @@ export function createVoxelTextures(
   const size: [number, number, number] = [grid.dimX, grid.dimY, grid.dimZ];
   const usage = GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING;
 
+  // COPY_DST: voxelize copies voxelEmission into mip 0 (the emitter-only voxels) before the
+  // occluder scatter merges on top.
   const voxelRadiance = device.createTexture({
     size,
     dimension: "3d",
     format: "rgba16float",
     mipLevelCount: voxelMipLevelCount(grid.dimX, grid.dimY, grid.dimZ),
-    usage,
+    usage: usage | GPUTextureUsage.COPY_DST,
   });
 
-  return { voxelRadiance };
+  // Emitter scatter target (single mip — only mip 0 semantics exist for it). COPY_SRC for the
+  // emission → radiance mip-0 copy; TEXTURE_BINDING for the occluder pass's merge read.
+  const voxelEmission = device.createTexture({
+    size,
+    dimension: "3d",
+    format: "rgba16float",
+    usage: usage | GPUTextureUsage.COPY_SRC,
+  });
+
+  return { voxelRadiance, voxelEmission };
 }
