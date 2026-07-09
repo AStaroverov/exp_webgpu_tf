@@ -457,15 +457,24 @@ export function createVoxelSystem({
   // cells around itself while surviving in emptier far cells — light "beyond its sector but not
   // inside it").
   let clusterEstArr = new Float32Array(0);
+  // Per-cell cache of the weakest kept entry (value + its slot in clusterArr), so a full cell
+  // rejects a weaker light with ONE compare instead of scanning all cap entries. Re-initialized
+  // lazily each frame by the first insert into the cell (counts are zeroed by fill(0)) — no
+  // per-frame clear needed; a full-cell rescan happens only on an actual replacement.
+  let clusterMinEst = new Float32Array(0);
+  let clusterMinIdx = new Uint32Array(0);
   let clusterBuf: GPUBuffer | null = null;
 
   function recreateLightClusters() {
     clusterDimX = Math.max(1, Math.ceil(dimX / config.clusterDiv));
     clusterDimY = Math.max(1, Math.ceil(dimY / config.clusterDiv));
     clusterDimZ = Math.max(1, Math.ceil(dimZ / config.clusterDiv));
-    const len = clusterDimX * clusterDimY * clusterDimZ * (config.clusterCap + 1);
+    const numCells = clusterDimX * clusterDimY * clusterDimZ;
+    const len = numCells * (config.clusterCap + 1);
     clusterArr = new Uint32Array(len);
     clusterEstArr = new Float32Array(len);
+    clusterMinEst = new Float32Array(numCells);
+    clusterMinIdx = new Uint32Array(numCells);
     clusterBuf?.destroy();
     clusterBuf = device.createBuffer({
       label: "vct light clusters",
@@ -511,7 +520,7 @@ export function createVoxelSystem({
   // STAGE 3: temporal hysteresis — the history weight of the probe-atlas blend (0..0.95). LIVE
   // (uTemporalParams.x, uploaded each frame — no rebuild). 0 disables temporal accumulation
   // entirely (the fresh-only parity/rollback path); ~0.85–0.9 amortizes the gather 2–4×.
-  let temporalHysteresis = 0.75;
+  let temporalHysteresis = 0.95;
   // Frame counter → curSet = the ping-pong parity. Bumped ONCE per frame at the head of
   // uploadProbeUniforms() (pass A0), so every later pass in the same frame sees one consistent
   // parity. Also rides uTemporalParams.y (mod 1024) for the golden-angle cone-set rotation.
@@ -1929,41 +1938,58 @@ export function createVoxelSystem({
         Math.abs(data[o + 7]) *
         config.emitterDirect;
       if (maxLum < 0.003) continue; // the shader would cull it in every cell
+      const lx = data[o + 0];
+      const ly = data[o + 1];
+      const lz = data[o + 2];
       const lr = Math.max(data[o + 3], 1e-3);
       const F = config.emitterFalloff;
       const R = F > 0 ? lr * Math.sqrt((maxLum / 0.003 - 1) / F) : Infinity;
-      const x0 = Math.max(0, Math.floor((data[o + 0] - R - originX) / cw));
-      const x1 = Math.min(clusterDimX - 1, Math.floor((data[o + 0] + R - originX) / cw));
-      const y0 = Math.max(0, Math.floor((data[o + 1] - R - originY) / cw));
-      const y1 = Math.min(clusterDimY - 1, Math.floor((data[o + 1] + R - originY) / cw));
-      const z0 = Math.max(0, Math.floor((data[o + 2] - R - originZ) / cw));
-      const z1 = Math.min(clusterDimZ - 1, Math.floor((data[o + 2] + R - originZ) / cw));
+      const x0 = Math.max(0, Math.floor((lx - R - originX) / cw));
+      const x1 = Math.min(clusterDimX - 1, Math.floor((lx + R - originX) / cw));
+      const y0 = Math.max(0, Math.floor((ly - R - originY) / cw));
+      const y1 = Math.min(clusterDimY - 1, Math.floor((ly + R - originY) / cw));
+      const z0 = Math.max(0, Math.floor((lz - R - originZ) / cw));
+      const z1 = Math.min(clusterDimZ - 1, Math.floor((lz + R - originZ) / cw));
+      const kAtt = F / (lr * lr); // est = maxLum / (1 + kAtt·d²)
+      const dx0 = lx - (originX + (x0 + 0.5) * cw);
       for (let z = z0; z <= z1; z++) {
+        const dz = lz - (originZ + (z + 0.5) * cw);
+        const dz2 = dz * dz;
         for (let y = y0; y <= y1; y++) {
-          for (let x = x0; x <= x1; x++) {
+          const dy = ly - (originY + (y + 0.5) * cw);
+          const dyz2 = dz2 + dy * dy;
+          let cell = (z * clusterDimY + y) * clusterDimX + x0;
+          let base = cell * stride;
+          let dx = dx0;
+          for (let x = x0; x <= x1; x++, cell++, base += stride, dx -= cw) {
             // Contribution estimate at the cell center (the same falloff the shader applies) —
             // the cell's keep/replace ranking key.
-            const dx = data[o + 0] - (originX + (x + 0.5) * cw);
-            const dy = data[o + 1] - (originY + (y + 0.5) * cw);
-            const dz = data[o + 2] - (originZ + (z + 0.5) * cw);
-            const d2 = dx * dx + dy * dy + dz * dz;
-            const est = maxLum / (1 + (F * d2) / (lr * lr));
-            const base = ((z * clusterDimY + y) * clusterDimX + x) * stride;
+            const est = maxLum / (1 + kAtt * (dx * dx + dyz2));
+            // The sphere-AABB corners: est here is below the shader's cull gate, so the cell
+            // would receive exactly zero from this light — skip it.
+            if (est < 0.003) continue;
             const c = clusterArr[base];
             if (c < cap) {
-              clusterArr[base + 1 + c] = i;
-              clusterEstArr[base + 1 + c] = est;
+              const slot = base + 1 + c;
+              clusterArr[slot] = i;
+              clusterEstArr[slot] = est;
               clusterArr[base] = c + 1;
-            } else {
-              // Full cell: replace the current weakest entry iff this light is stronger HERE.
-              let wk = base + 1;
+              if (c === 0 || est < clusterMinEst[cell]) {
+                clusterMinEst[cell] = est;
+                clusterMinIdx[cell] = slot;
+              }
+            } else if (est > clusterMinEst[cell]) {
+              // Full cell: replace the current weakest entry (cached), then rescan the cap
+              // entries ONLY here — the common weaker-light case is the O(1) reject above.
+              const wk = clusterMinIdx[cell];
+              clusterArr[wk] = i;
+              clusterEstArr[wk] = est;
+              let mn = base + 1;
               for (let k = base + 2; k < base + 1 + cap; k++) {
-                if (clusterEstArr[k] < clusterEstArr[wk]) wk = k;
+                if (clusterEstArr[k] < clusterEstArr[mn]) mn = k;
               }
-              if (est > clusterEstArr[wk]) {
-                clusterArr[wk] = i;
-                clusterEstArr[wk] = est;
-              }
+              clusterMinEst[cell] = clusterEstArr[mn];
+              clusterMinIdx[cell] = mn;
             }
           }
         }

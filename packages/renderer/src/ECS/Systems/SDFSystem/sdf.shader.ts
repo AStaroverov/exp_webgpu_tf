@@ -103,6 +103,114 @@ export const shaderMeta = new ShaderMeta(
 
         ${sceneSDF}
 
+        // ============= Ray vs local shape: analytic fast paths + march fallback =============
+        // The mass-case primitives need NO sphere trace: sphere (kind 6) is a quadratic,
+        // a sharp rectangle extrusion (kind 1, roundness 0) IS its impostor AABB so the
+        // slab entry t0 already is the surface hit, and a cylinder (kind 0) is a 2D
+        // quadratic + cap planes. Everything else (parallelogram/trapezoid/triangle and
+        // any rounded rectangle) falls back to the 96-step sphere trace.
+        // d = the SDF value at the hit: 0 for analytic hits, the sub-epsilon residual for
+        // marched hits (both land in [0, 0.001) — fs_emit's edge feather sees no change).
+
+        struct TraceResult {
+            hit: bool,
+            t: f32,
+            d: f32,
+        };
+
+        fn trace_shape(lo: vec3<f32>, ld: vec3<f32>, t0: f32, t1: f32, sp: ShapeParams) -> TraceResult {
+            var res: TraceResult;
+            res.hit = false;
+            res.t = max(t0, 0.0);
+            res.d = 0.0;
+
+            if (sp.kind == 6u) {
+                // Sphere: |lo + ld*t| = r, take the near root.
+                let r = sp.va.x;
+                let b = dot(lo, ld);
+                let disc = b * b - (dot(lo, lo) - r * r);
+                if (disc >= 0.0) {
+                    let tt = -b - sqrt(disc);
+                    // The trace origin lies ON the impostor box, which touches the shape
+                    // surface (tangent points/lines; the cylinder cap even coincides with
+                    // the box top face). fp noise in the world->local reconstruction puts
+                    // the origin a hair PAST the surface there, making the root slightly
+                    // negative — a hard tt >= 0 test flickers those fragments away.
+                    // Accept a small negative root and clamp to the origin instead.
+                    if (tt >= -1e-3 && tt <= t1) {
+                        res.hit = true;
+                        res.t = max(tt, 0.0);
+                    }
+                }
+                return res;
+            }
+
+            if (sp.kind == 1u && sp.roundness <= 0.0) {
+                // Sharp box == the impostor AABB: the slab entry (already in res.t) is
+                // the surface point. The slab test upstream guaranteed t1 >= max(t0, 0).
+                res.hit = true;
+                return res;
+            }
+
+            if (sp.kind == 0u) {
+                // Cylinder: radius va.x/2 around the z axis, caps at |z| = halfZ.
+                let r = sp.va.x * 0.5;
+                let hz = sp.halfZ;
+                let a = dot(ld.xy, ld.xy);
+                if (a > 1e-8) {
+                    let b = dot(lo.xy, ld.xy);
+                    let c = dot(lo.xy, lo.xy) - r * r;
+                    let disc = b * b - a * c;
+                    if (disc >= 0.0) {
+                        // Side surface first; if its z is out of range (or behind the
+                        // origin), the cap entry of the z-slab is the only candidate.
+                        // Same -1e-3 tolerance as the sphere: the box top face COINCIDES
+                        // with the cap plane and the box sides are tangent to the barrel,
+                        // so fp noise flips exact-zero roots slightly negative.
+                        let tt = (-b - sqrt(disc)) / a;
+                        if (tt >= -1e-3 && tt <= t1 && abs(lo.z + ld.z * max(tt, 0.0)) <= hz + 1e-3) {
+                            res.hit = true;
+                            res.t = max(tt, 0.0);
+                            return res;
+                        }
+                        if (abs(ld.z) > 1e-8) {
+                            let tz = (select(-hz, hz, ld.z < 0.0) - lo.z) / ld.z;
+                            let q = lo.xy + ld.xy * max(tz, 0.0);
+                            if (tz >= -1e-3 && tz <= t1 && dot(q, q) <= r * r) {
+                                res.hit = true;
+                                res.t = max(tz, 0.0);
+                            }
+                        }
+                    }
+                } else if (dot(lo.xy, lo.xy) <= r * r && abs(ld.z) > 1e-8) {
+                    // Ray parallel to the axis: straight onto a cap.
+                    let tz = (select(-hz, hz, ld.z < 0.0) - lo.z) / ld.z;
+                    if (tz >= -1e-3 && tz <= t1) {
+                        res.hit = true;
+                        res.t = max(tz, 0.0);
+                    }
+                }
+                return res;
+            }
+
+            // Fallback: sphere-trace between entry and exit.
+            var t = max(t0, 0.0);
+            for (var i = 0; i < 96; i = i + 1) {
+                let d = sd_shape3d_p(lo + ld * t, sp);
+                if (d < 0.001) {
+                    res.hit = true;
+                    res.t = t;
+                    res.d = d;
+                    return res;
+                }
+                t = t + d;
+                if (t > t1) {
+                    break;
+                }
+            }
+            return res;
+        }
+
         // ============= Vertex: rasterize the per-instance impostor box =============
 
         // 36-vertex unit cube ([-1,1]^3), 12 triangles. Indexed by vertex_index.
@@ -199,25 +307,13 @@ export const shaderMeta = new ShaderMeta(
                 discard;
             }
 
-            // Sphere-trace between entry and exit.
-            var t = max(t0, 0.0);
-            var hit = false;
-            for (var i = 0; i < 96; i = i + 1) {
-                let d = sd_shape3d_p(lo + ld * t, sp);
-                if (d < 0.001) {
-                    hit = true;
-                    break;
-                }
-                t = t + d;
-                if (t > t1) {
-                    break;
-                }
-            }
-            if (!hit) {
+            // Analytic intersection where possible, sphere-trace fallback otherwise.
+            let tr = trace_shape(lo, ld, t0, t1, sp);
+            if (!tr.hit) {
                 discard;
             }
 
-            let pLocal = lo + ld * t;
+            let pLocal = lo + ld * tr.t;
             let nLocal = sd_normal3d_p(pLocal, sp);
 
             // Back to world (forward rotation + uniform scale; normal direction is
@@ -335,25 +431,13 @@ export const shaderMeta = new ShaderMeta(
                 discard;
             }
 
-            // Sphere-trace for coverage. dist at the hit feeds the edge feather.
-            var t = max(t0, 0.0);
-            var hit = false;
-            var hitDist = 1.0;
-            for (var i = 0; i < 96; i = i + 1) {
-                let d = sd_shape3d_p(lo + ld * t, sp);
-                if (d < 0.001) {
-                    hit = true;
-                    hitDist = d;
-                    break;
-                }
-                t = t + d;
-                if (t > t1) {
-                    break;
-                }
-            }
-            if (!hit) {
+            // Coverage: analytic where possible, marched otherwise. The SDF value at
+            // the hit (tr.d) feeds the edge feather.
+            let tr = trace_shape(lo, ld, t0, t1, sp);
+            if (!tr.hit) {
                 discard;
             }
+            let hitDist = tr.d;
 
             let intensity = uMaterial[instance_index].x;
 

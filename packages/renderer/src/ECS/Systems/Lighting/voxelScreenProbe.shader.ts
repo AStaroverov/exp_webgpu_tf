@@ -185,8 +185,8 @@ export function createScreenProbeShaderMeta(cfg: VoxelBakedConfig, isAdaptive: b
     //            its own false shadow).
     // A RUNTIME-SIZED storage array (no light-count cap — the old `array<vec4, 8>` uniform pair);
     // AUTO-DISCOVERED from the LightEmitter component, live count rides uLightParams.x, and the
-    // aimed loop round-robins AIMED_PER_FRAME of them per probe per frame (temporal history
-    // integrates the rest).
+    // aimed loop importance-samples AIMED_PER_FRAME of them per probe per frame (dominant lights
+    // every frame; the temporal history integrates the stochastic dim tail).
     lightsData: new VariableMeta("uLights", VariableKind.StorageRead, `array<vec4<f32>>`, {
       visibility: GPUShaderStage.COMPUTE,
     }),
@@ -262,9 +262,9 @@ const EMITTER_DIRECT: f32 = ${cfg.emitterDirect};
 const AIMED_STEPS: i32 = ${cfg.aimedSteps};
 const AIMED_ALPHA_CUT: f32 = ${cfg.aimedAlphaCut};
 // Per-probe per-frame aimed-cone budget. With ≤ AIMED_PER_FRAME live lights every one is traced
-// every frame (the old exact path). With more, each probe traces a round-robin WINDOW of this many
-// lights, scaled by lc/take so the estimate stays unbiased, and the temporal blend integrates the
-// full set over ceil(lc/take) frames → the aimed cost is CONSTANT in the light count.
+// every frame (the exact path). With more, each probe IMPORTANCE-SAMPLES this many lights per
+// frame (systematic resampling over the unshadowed-contribution weights — see the aimed loop), so
+// the aimed cost is CONSTANT in the light count while dominant lights are traced every frame.
 const AIMED_PER_FRAME: i32 = ${cfg.aimedPerFrame};
 // Cluster grid: CLUSTER_DIV voxels per cluster cell per axis; CLUSTER_CAP lights per cell record
 // (must match the CPU binning in createVoxelSystem.setLights — both bake from the same config).
@@ -392,11 +392,54 @@ fn trace_shadow_cone(origin: vec3<f32>, dir: vec3<f32>, aperture: f32, reach: f3
   return vec4<f32>(col, alpha);
 }
 
+// Wang hash — the per-probe, per-frame random phase of the aimed systematic resampling. Anything
+// LINEAR in globalSlot must not reach the light selection: slot is an atlas coord (y*gw + x), so a
+// (slot mod lc)-style phase tiles the probe grid with period-lc bands the resolve renders as
+// coherent moving stripes; the hash decorrelates probes AND frames into high-frequency noise the
+// bilateral resolve + temporal history integrate away.
+fn wang_hash(v: u32) -> u32 {
+  var s = (v ^ 61u) ^ (v >> 16u);
+  s = s * 9u;
+  s = s ^ (s >> 4u);
+  s = s * 0x27d4eb2du;
+  s = s ^ (s >> 15u);
+  return s;
+}
+
 fn build_basis(n: vec3<f32>) -> mat3x3<f32> {
   let a = select(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), abs(n.x) > 0.9);
   let t = normalize(cross(a, n));
   let b = cross(n, t);
   return mat3x3<f32>(t, b, n);
+}
+
+// UNSHADOWED importance of emitter j (uLights index) seen from surface point P with normal N —
+// the same atten/horizon/range-window math as the aimed trace loop, minus the shadow cone. It
+// only steers the per-frame light SELECTION (the systematic resampling in the aimed loop); the
+// traced contribution is divided by it, so any positive approximation keeps the estimator
+// unbiased. Contract: returns 0 exactly when the trace loop would contribute nothing (the same
+// culls, keeping the selection from wasting picks), > 0 otherwise.
+fn emitter_importance(j: i32, P: vec3<f32>, N: vec3<f32>) -> f32 {
+  let posR = uLights[2 * j];
+  let colI = uLights[2 * j + 1];
+  let toL = posR.xyz - P;
+  let dc = length(toL);
+  if (dc < 1e-3) { return 0.0; }
+  let lr = max(posR.w, 1e-3);
+  let horizon = clamp((dot(N, toL) / lr) * 0.5 + 0.5, 0.0, 1.0);
+  if (horizon <= 0.0) { return 0.0; }
+  let d = max(dc, lr);
+  var atten = 1.0 / (1.0 + EMITTER_FALLOFF * (d * d) / (lr * lr));
+  if (EMITTER_FALLOFF > 0.0) {
+    let maxLumED = max(colI.r, max(colI.g, colI.b)) * abs(colI.w) * EMITTER_DIRECT;
+    let r2 = lr * lr * max(maxLumED / 0.003 - 1.0, 0.0) / EMITTER_FALLOFF;
+    let q = (d * d) / max(r2, 1e-6);
+    let x = clamp(1.0 - q * q, 0.0, 1.0);
+    atten = atten * x * x;
+  }
+  let lum = max(colI.r, max(colI.g, colI.b)) * abs(colI.w) * atten;
+  if (lum * EMITTER_DIRECT < 0.003) { return 0.0; }
+  return lum * horizon;
 }
 
 @compute @workgroup_size(${GATHER_WORKGROUP}, 1, 1)
@@ -546,17 +589,20 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   //   - weight = W_AIMED (a delta-direction projection constant — see its comment), NOT dw.
   // EMITTER_DIRECT is folded in HERE: the emitter light now rides the fill SH, which the cone pass
   // scales by GI_STRENGTH (default 1 → overall scale matches the old EMITTER_DIRECT-only path).
-  // ROUND-ROBIN SUBSAMPLE (unlimited lights at constant cost): when lc > AIMED_PER_FRAME each
-  // probe traces one contiguous WINDOW of "take" lights per frame. The window start advances by
-  // "take" each frame (consecutive windows tile the ring → full coverage in ceil(lc/take) frames)
-  // and is decorrelated across probes by the slot index, so every frame the probe POPULATION still
-  // covers all lights. The lc/take scale keeps the summed energy unbiased in expectation; the
-  // Stage-3 temporal blend integrates the per-frame variance away (with hysteresis 0 and
-  // lc > take the emitter light strobes — subsampling REQUIRES the history, by design).
-  // With lc <= AIMED_PER_FRAME: take = lc, start = 0, scale = 1 — the exact all-lights path.
+  // IMPORTANCE-DRIVEN SUBSAMPLE (unlimited lights at constant cost, MegaLights-style): when
+  // lc > AIMED_PER_FRAME the probe picks "take" lights by SYSTEMATIC RESAMPLING over the
+  // unshadowed-contribution weights (emitter_importance): the weight CDF is cut into take equal
+  // strata, one pick each, shared random phase u. A light whose weight exceeds wSum/take is picked
+  // EVERY frame deterministically — dominant lights never strobe, which is what makes the temporal
+  // EMA converge (the old round-robin window alternated ceil(lc/take) fixed subsets, and an EMA of
+  // an alternating sequence never converges — it oscillates at amplitude (1-h)/(1+h)*|A-B|,
+  // the steady-state flicker). Only the dim tail is stochastic; each pick is scaled by
+  // wSum/(take*wj) (m picks fold into one trace scaled by m), so the summed energy stays unbiased
+  // in expectation and the Stage-3 blend integrates the residual (small) variance away.
+  // With lc <= AIMED_PER_FRAME: every positive-weight light is traced exactly, scale 1.
   // CLUSTERED CULL: lc and the light indices come from THIS probe's cluster cell (uLightClusters —
   // CPU-binned by influence sphere), not the global list, so both the loop length and the
-  // round-robin window track the LOCAL light density. A probe outside the grid AABB gets lc = 0
+  // selection weights track the LOCAL light density. A probe outside the grid AABB gets lc = 0
   // (its lighting is fill-cones/sun only — same as before, the voxel field ends there anyway).
   let clusterDims = (uGridDims.xyz + vec3<i32>(CLUSTER_DIV - 1)) / vec3<i32>(CLUSTER_DIV);
   let clusterCell = vec3<i32>(floor((origin - uGridOrigin.xyz) / (uGridOrigin.w * f32(CLUSTER_DIV))));
@@ -568,11 +614,35 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     lc = min(i32(uLightClusters[cbase]), CLUSTER_CAP);
   }
   let take = min(lc, AIMED_PER_FRAME);
-  var start = 0;
-  if (lc > take) { start = (globalSlot + i32(uTemporalParams.y) * take) % lc; }
-  let lightScale = f32(lc) / f32(max(take, 1));
-  for (var jj = 0; jj < take; jj = jj + 1) {
-    let j = i32(uLightClusters[cbase + 1 + (start + jj) % lc]);
+  // Selection weights over this probe's cluster list (0 = culled, never picked). lc is capped at
+  // CLUSTER_CAP so the scratch array is fixed-size.
+  var wArr: array<f32, CLUSTER_CAP>;
+  var wSum = 0.0;
+  for (var jj = 0; jj < lc; jj = jj + 1) {
+    let wj = emitter_importance(i32(uLightClusters[cbase + 1 + jj]), P, N);
+    wArr[jj] = wj;
+    wSum = wSum + wj;
+  }
+  // Random stratum phase, decorrelated across probes (slot) AND frames (frame index) — see
+  // wang_hash's comment for why nothing linear in the slot may reach the selection.
+  let u = f32(wang_hash((u32(globalSlot) * 2654435761u) ^ u32(i32(uTemporalParams.y))) & 0xffffffu)
+    / 16777216.0;
+  var cum = 0.0;
+  var k = 0;
+  for (var jj = 0; jj < lc; jj = jj + 1) {
+    let wj = wArr[jj];
+    if (wj <= 0.0) { continue; }
+    cum = cum + wj;
+    // Systematic resampling: pick light jj once per stratum boundary (k + u)/take * wSum crossed
+    // by the CDF at cum. m picks collapse into ONE trace scaled by m * wSum / (take * wj).
+    var pickScale = 1.0;
+    if (lc > take) {
+      var m = 0.0;
+      while (k < take && (f32(k) + u) * wSum <= cum * f32(take)) { m = m + 1.0; k = k + 1; }
+      if (m <= 0.0) { continue; }
+      pickScale = m * wSum / (f32(take) * wj);
+    }
+    let j = i32(uLightClusters[cbase + 1 + jj]);
     let posR = uLights[2 * j];        // .xyz center, .w radius
     let colI = uLights[2 * j + 1];    // .rgb color, .w intensity
     // Light geometry from the SURFACE point P, NOT the lifted origin: the lift (1.5·cellSize +
@@ -634,7 +704,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let shadow = Lj * occ;
     let bleed = r.rgb;
     let contrib = max(vec3<f32>(0.0), Lj - max(vec3<f32>(0.0), shadow - bleed))
-      * (EMITTER_DIRECT * lightScale * horizon);
+      * (EMITTER_DIRECT * pickScale * horizon);
     // Project into the SAME SH-L1 accumulators as the fill cones, at the emitter direction.
     let Y00 = 0.282095;
     let Y1m1 = 0.488603 * dir.y;
@@ -652,9 +722,23 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // Raw-SH lerp is valid (SH is linear in its coefficients; both sets are the same
   // solid-angle-weighted RADIANCE encoding).
   if (h > 0.0) {
-    cR = mix(cR, textureLoad(histShR, histTexel, 0), h);
-    cG = mix(cG, textureLoad(histShG, histTexel, 0), h);
-    cB = mix(cB, textureLoad(histShB, histTexel, 0), h);
+    let hR = textureLoad(histShR, histTexel, 0);
+    let hG = textureLoad(histShG, histTexel, 0);
+    let hB = textureLoad(histShB, histTexel, 0);
+    // CHANGE DETECTION (the RTXGI/DDGI adaptive-hysteresis scheme): a REAL lighting change (a
+    // light moved/appeared) must not be dragged out over the 1/(1-h) history lag — that lag is
+    // the ghosting a high global hysteresis buys. Relative DC-luminance difference fresh vs
+    // history: > 25% shaves the history weight, > 80% drops it entirely (instant response).
+    // Sampling noise stays below the 25% gate: the aimed lights are importance-sampled (dominant
+    // lights are traced every frame) and the fill-cone rotation only redistributes directions.
+    let freshLum = dot(vec3<f32>(cR.x, cG.x, cB.x), vec3<f32>(0.2126, 0.7152, 0.0722));
+    let histLum = dot(vec3<f32>(hR.x, hG.x, hB.x), vec3<f32>(0.2126, 0.7152, 0.0722));
+    let change = abs(freshLum - histLum) / max(max(abs(freshLum), abs(histLum)), 1e-3);
+    if (change > 0.25) { h = max(0.0, h - 0.15); }
+    if (change > 0.8) { h = 0.0; }
+    cR = mix(cR, hR, h);
+    cG = mix(cG, hG, h);
+    cB = mix(cB, hB, h);
   }
 
   textureStore(screenShR, texel, cR);
