@@ -55,8 +55,8 @@ The atlas is canvas-derived → recreated on resize.
 ## 3. Pass pipeline (frame order)
 
 The order is **load-bearing** (the encoder provides barriers between compute passes; do not
-reorder). It is currently duplicated across the two callers (`demo/index.ts`,
-`engine/createRenderTarget.ts`) — this will be consolidated into `voxel.renderFrame(encoder)`.
+reorder). It lives in one place — `voxel.renderFrame(encoder)` — which both callers
+(`demo/index.ts`, `engine/createRenderTarget.ts`) invoke (demo's PERF branch keeps per-pass toggles).
 
 ```
    [SDF G-buffer draw]  (outside this system: depth + normal + albedo + emission)
@@ -145,7 +145,7 @@ chain), because `refine` reads its raw SH as the subdivision signal.
 
 ---
 
-## 7. Key invariants (do not break during refactor)
+## 7. Key invariants (do not break)
 
 - **No per-frame `createBindGroup`.** Bind groups are built at setup / `buildGrid` / `rebuild` and
   reused; ping-pong sets are switched by rebinding, not by rebuilding.
@@ -170,7 +170,6 @@ pure CPU helper (if any) — the three layers of one responsibility side by side
 Lighting/
   createVoxelSystem.ts              ← THE entry point: assembler + grid conductor + renderFrame scenario
   README.md                         ← this document
-  REFACTOR_PLAN.md                  ← refactor progress log
 
   core/                             ← foundation shared by every stage
     voxelConfig.ts                  ← baked config (WGSL consts, needs rebuild())
