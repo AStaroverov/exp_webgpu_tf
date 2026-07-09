@@ -37,10 +37,15 @@ export type ScreenProbeDeps = {
   // by the god file), so the module always sees the current grid values.
   originArr: ReturnType<typeof getTypeTypedArray>;
   dimsArr: ReturnType<typeof getTypeTypedArray>;
+  // Level-1 (coarse clipmap) counterparts of originArr/dimsArr.
+  originArr1: ReturnType<typeof getTypeTypedArray>;
+  dimsArr1: ReturnType<typeof getTypeTypedArray>;
   // Current voxel cell size (uploadProbeUniforms scales the plane threshold by it). Read per frame.
   getCellSize: () => number;
   // The grid voxelRadiance texture (gather group0 binds its all-mips 3d view). Read after buildGrid.
   getVoxelRadiance: () => GPUTexture;
+  // The level-1 radiance pyramid (gather group0 binds its all-mips 3d view for the far field).
+  getVoxelRadiance1: () => GPUTexture;
   // The aniso sub-system — gather group0 binds its 6 directional volumes (getTextures()).
   aniso: ReturnType<typeof createAnisoVolumeSystem>;
   // The G-buffer (gather/refine bind normal + depth; debug binds normal). Read at group-build time.
@@ -50,6 +55,9 @@ export type ScreenProbeDeps = {
   emitterLights: ReturnType<typeof createEmitterLightsSystem>;
   // Runtime iso/aniso toggle (uploadProbeUniforms → probeLightParamsArr[1]).
   getAnisoMode: () => boolean;
+  // Runtime clipmap toggle (uploadProbeUniforms → probeLightParamsArr[2]): off = the exact old
+  // single-box path (level 0 only), for A/B.
+  getClipmapMode: () => boolean;
   // probeDebug renders into the composite output view (= compositeSys.getOutputView()).
   getDebugTargetView: () => GPUTextureView;
   // Called after resources are recreated by setScreenProbeTile / setAdaptiveFraction — the god file
@@ -67,12 +75,16 @@ export function createScreenProbeSystem(deps: ScreenProbeDeps) {
     config,
     originArr,
     dimsArr,
+    originArr1,
+    dimsArr1,
     getCellSize,
     getVoxelRadiance,
+    getVoxelRadiance1,
     aniso,
     getGBuffer,
     emitterLights,
     getAnisoMode,
+    getClipmapMode,
     getDebugTargetView,
     voxelSampler,
     onResourcesRecreated,
@@ -310,6 +322,8 @@ export function createScreenProbeSystem(deps: ScreenProbeDeps) {
           entries: [
             shader.uniforms.gridOrigin.getBindGroupEntry(device),
             shader.uniforms.gridDims.getBindGroupEntry(device),
+            shader.uniforms.gridOrigin1.getBindGroupEntry(device),
+            shader.uniforms.gridDims1.getBindGroupEntry(device),
             shader.uniforms.invViewProj.getBindGroupEntry(device),
             shader.uniforms.screenParams.getBindGroupEntry(device),
             // STAGE 3 temporal uniforms (prev forward viewProj + hysteresis/frame lanes).
@@ -351,6 +365,10 @@ export function createScreenProbeSystem(deps: ScreenProbeDeps) {
             {
               binding: shader.shaderMeta.uniforms.voxelRadiance.binding,
               resource: gVoxelRadiance.createView({ dimension: "3d" }),
+            },
+            {
+              binding: shader.shaderMeta.uniforms.voxelRadiance1.binding,
+              resource: getVoxelRadiance1().createView({ dimension: "3d" }),
             },
             { binding: shader.shaderMeta.uniforms.voxelSampler.binding, resource: voxelSampler },
             // STAGE 3 HISTORY: the OTHER atlas set (last frame's group-2 output) as sampled views —
@@ -440,12 +458,14 @@ export function createScreenProbeSystem(deps: ScreenProbeDeps) {
       gatherAdaptiveGroup1 = a.g1;
       gatherAdaptiveGroup2 = a.g2;
     }
-    // Shares the SAME world box as the grid (origin + cellSize + voxel dims). originArr/dimsArr are
-    // populated by buildGrid before this runs; on rebuild() they are re-set from the same values.
-    // Uploaded to BOTH gather shaders (each has its own uniform buffers).
+    // Shares the SAME world boxes as the grid (origin + cellSize + voxel dims, both levels).
+    // The arrays are populated by buildGrid before this runs; on rebuild() they are re-set from
+    // the same values. Uploaded to BOTH gather shaders (each has its own uniform buffers).
     for (const s of [gatherUniformShader, gatherAdaptiveShader]) {
       device.queue.writeBuffer(s.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
       device.queue.writeBuffer(s.uniforms.gridDims.getGPUBuffer(device), 0, dimsArr);
+      device.queue.writeBuffer(s.uniforms.gridOrigin1.getGPUBuffer(device), 0, originArr1);
+      device.queue.writeBuffer(s.uniforms.gridDims1.getGPUBuffer(device), 0, dimsArr1);
     }
 
     // ===== Adaptive-atlas placement bind groups (all reference the RAW shared probeBufs). =====
@@ -636,9 +656,10 @@ export function createScreenProbeSystem(deps: ScreenProbeDeps) {
     // Snapshot THIS frame's forward viewProj for next frame's reprojection (the only retained copy).
     prevViewProjArr.set(viewProjMatrix as Float32Array);
     // Aimed-emitter lane: .x = live light count, .y = the iso/aniso toggle (read by
-    // sample_radiance in the gather), .zw spare.
+    // sample_radiance in the gather), .z = the clipmap toggle (sample_field), .w spare.
     probeLightParamsArr[0] = emitterLights.getLightCount();
     probeLightParamsArr[1] = getAnisoMode() ? 1 : 0;
+    probeLightParamsArr[2] = getClipmapMode() ? 1 : 0;
     for (const s of [gatherUniformShader, gatherAdaptiveShader]) {
       device.queue.writeBuffer(s.uniforms.lightParams.getGPUBuffer(device), 0, probeLightParamsArr);
     }
@@ -886,11 +907,12 @@ export function createScreenProbeSystem(deps: ScreenProbeDeps) {
     debugProbes = on;
   }
 
-  // Camera-following grid: re-upload ONLY uGridOrigin to both gather shaders (originArr refreshed
-  // by the caller). A uniform write — dims/textures unchanged, no bind-group rebuild.
+  // Camera-following grid: re-upload ONLY the origins to both gather shaders (originArr/originArr1
+  // refreshed by the caller). Uniform writes — dims/textures unchanged, no bind-group rebuild.
   function uploadGridOrigin() {
     for (const s of [gatherUniformShader, gatherAdaptiveShader]) {
       device.queue.writeBuffer(s.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
+      device.queue.writeBuffer(s.uniforms.gridOrigin1.getGPUBuffer(device), 0, originArr1);
     }
   }
 

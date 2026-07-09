@@ -24,24 +24,29 @@ export type VoxelizeGridBox = {
 // group-0/2 texture bindings + the clear dispatch dims are (re)bound by rebindGrid() when the grid
 // is (re)built.
 //
-// Frame sequence (each step a separate encoder-barriered pass — see voxelize()):
-//   1. clear voxelEmission
-//   2. EMITTER scatter (uPass=1) → voxelEmission
-//   3. copyTextureToTexture voxelEmission → voxelRadiance mip 0 (covers emitter-only voxels;
+// Frame sequence (each step a separate encoder-barriered pass — see voxelize()); every scatter
+// dispatch covers BOTH clipmap levels via one flat work list (level-0 entries + level-1 entries,
+// see buildVoxelAABBs), writing each level's own volume pair:
+//   1. clear voxelEmission (both levels, one dispatch)
+//   2. EMITTER scatter (uPass=1) → voxelEmission / voxelEmission1
+//   3. copyTextureToTexture voxelEmission_i → voxelRadiance_i mip 0 (covers emitter-only voxels;
 //      doubles as the mip-0 clear — every voxel is overwritten)
-//   4. OCCLUDER scatter (uPass=0) → voxelRadiance mip 0, MERGING voxelEmission (sum rgb, max a)
+//   4. OCCLUDER scatter (uPass=0) → voxelRadiance_i mip 0, MERGING voxelEmission_i (sum rgb, max a)
 // The two classes never write the same volume, so the old "emitter-wins" write-order hack (and
 // the light it dropped on shared voxels) is gone.
 export function createVoxelizeSystem({
   device,
   sceneInstances,
   getGridBox,
+  getGridBox1,
   sun,
 }: {
   device: GPUDevice;
   sceneInstances: SceneInstances;
-  // Grid box (origin + cellSize + voxel dims), read live each frame for the CPU AABB build.
+  // Grid boxes (origin + cellSize + voxel dims) per clipmap level, read live each frame for the
+  // CPU AABB build + the per-frame origin uploads (both origins follow the camera).
   getGridBox: () => VoxelizeGridBox;
+  getGridBox1: () => VoxelizeGridBox;
   // The sun shadow sub-system: voxelize binds its depth view (shadowed sun injection) and, at the
   // head of run(), uploads the sun view-proj matrix it computed (must match the map it rendered).
   sun: ReturnType<typeof createSunShadowSystem>;
@@ -96,12 +101,18 @@ export function createVoxelizeSystem({
   // shader's bindings). Two group-0 variants: occluder (uPass=0, reads the REAL voxelEmission for
   // the merge) vs emitter/clear (uPass=1, dummy read). Rebuilt by rebindGrid — the emission view
   // is grid-sized.
-  const makeVoxGroup0 = (passBuf: GPUBuffer, emissionReadView: GPUTextureView) =>
+  const makeVoxGroup0 = (
+    passBuf: GPUBuffer,
+    emissionReadView: GPUTextureView,
+    emissionRead1View: GPUTextureView,
+  ) =>
     device.createBindGroup({
       layout: voxPipeline.getBindGroupLayout(0),
       entries: [
         voxShader.uniforms.gridOrigin.getBindGroupEntry(device),
         voxShader.uniforms.gridDims.getBindGroupEntry(device),
+        voxShader.uniforms.gridOrigin1.getBindGroupEntry(device),
+        voxShader.uniforms.gridDims1.getBindGroupEntry(device),
         voxShader.uniforms.instanceCount.getBindGroupEntry(device),
         voxShader.uniforms.sun.getBindGroupEntry(device),
         voxShader.uniforms.sunColor.getBindGroupEntry(device),
@@ -111,6 +122,7 @@ export function createVoxelizeSystem({
         { binding: voxelizeMeta.uniforms.shadowMap.binding, resource: sunDepthView },
         { binding: voxelizeMeta.uniforms.pass.binding, resource: { buffer: passBuf } },
         { binding: voxelizeMeta.uniforms.emissionRead.binding, resource: emissionReadView },
+        { binding: voxelizeMeta.uniforms.emissionRead1.binding, resource: emissionRead1View },
       ],
     });
   const voxGroup1 = device.createBindGroup({
@@ -163,21 +175,29 @@ export function createVoxelizeSystem({
   // Grid uniform scratch (written to voxShader in rebindGrid; content mirrors buildGrid's).
   const originArr = getTypeTypedArray(voxelizeMeta.uniforms.gridOrigin.type); // Float32Array(4)
   const dimsArr = getTypeTypedArray(voxelizeMeta.uniforms.gridDims.type); // Int32Array(4)
+  // Level-1 counterparts.
+  const origin1Arr = getTypeTypedArray(voxelizeMeta.uniforms.gridOrigin1.type); // Float32Array(4)
+  const dims1Arr = getTypeTypedArray(voxelizeMeta.uniforms.gridDims1.type); // Int32Array(4)
 
   // --- Grid-dependent state (rebuilt by rebindGrid). ---
-  // Group-0 variants: occluder pass (uPass=0 + real emission read) vs emitter/clear passes
-  // (uPass=1 + dummy read). Group-2 variants: the write target — voxelRadiance mip 0 (occluder)
-  // vs voxelEmission (emitter + clear).
+  // Group-0 variants: occluder pass (uPass=0 + real emission reads) vs emitter/clear passes
+  // (uPass=1 + dummy reads). Group-2 variants: the write target pair — the radiance mip 0s
+  // (occluder) vs the emission volumes (emitter + clear). Index _i = clipmap level.
   let voxGroup0Occ: GPUBindGroup;
   let voxGroup0Emit: GPUBindGroup;
   let voxGroup2Radiance: GPUBindGroup;
   let voxGroup2Emission: GPUBindGroup;
-  // Texture refs + dims for the per-frame voxelEmission → voxelRadiance mip-0 copy.
+  // Texture refs + dims for the per-frame voxelEmission_i → voxelRadiance_i mip-0 copies.
   let radianceTex: GPUTexture;
   let emissionTex: GPUTexture;
+  let radianceTex1: GPUTexture;
+  let emissionTex1: GPUTexture;
   let gridDimX = 0;
   let gridDimY = 0;
   let gridDimZ = 0;
+  let gridDim1X = 0;
+  let gridDim1Y = 0;
+  let gridDim1Z = 0;
   let dispatchX = 0;
   let dispatchY = 0;
   let dispatchZ = 0;
@@ -186,34 +206,62 @@ export function createVoxelizeSystem({
   let scatterDispatchX = 0;
   let scatterDispatchY = 0;
 
-  // Rebind the two storage targets + the emission merge read, and refresh the clear dispatch dims
-  // and grid uniforms for the (re)built grid. Called from buildGrid after the volumes are recreated.
+  // Rebind both levels' storage targets + emission merge reads, and refresh the clear dispatch
+  // dims and grid uniforms for the (re)built grids. Called from buildGrid after the volumes are
+  // recreated.
   function rebindGrid(
     voxelRadiance: GPUTexture,
     voxelEmission: GPUTexture,
+    voxelRadiance1: GPUTexture,
+    voxelEmission1: GPUTexture,
     gridBox: VoxelizeGridBox,
+    gridBox1: VoxelizeGridBox,
   ) {
     const { originX, originY, originZ, cellSize, dimX, dimY, dimZ } = gridBox;
 
     radianceTex = voxelRadiance;
     emissionTex = voxelEmission;
+    radianceTex1 = voxelRadiance1;
+    emissionTex1 = voxelEmission1;
 
-    const emissionReadView = voxelEmission.createView({ dimension: "3d" });
-    voxGroup0Occ = makeVoxGroup0(passBufOcc, emissionReadView);
-    voxGroup0Emit = makeVoxGroup0(passBufEmit, dummyEmissionView);
+    voxGroup0Occ = makeVoxGroup0(
+      passBufOcc,
+      voxelEmission.createView({ dimension: "3d" }),
+      voxelEmission1.createView({ dimension: "3d" }),
+    );
+    voxGroup0Emit = makeVoxGroup0(passBufEmit, dummyEmissionView, dummyEmissionView);
 
-    // Group 2 (voxelize) = the write target (write-only storage, dimension 3d). voxelRadiance has
-    // a mip pyramid; a storage view MUST span exactly one mip → bind mip 0 only (the voxelize pass
-    // writes level 0; voxelMip builds the rest). voxelEmission is single-mip.
-    const makeVoxGroup2 = (view: GPUTextureView) =>
+    // Group 2 (voxelize) = the write target pair (write-only storage, dimension 3d). The radiance
+    // volumes have mip pyramids; a storage view MUST span exactly one mip → bind mip 0 only (the
+    // voxelize pass writes level 0; voxelMip builds the rest). The emission volumes are single-mip.
+    const makeVoxGroup2 = (view: GPUTextureView, view1: GPUTextureView) =>
       device.createBindGroup({
         layout: voxPipeline.getBindGroupLayout(2),
-        entries: [{ binding: voxelizeMeta.uniforms.voxelTarget.binding, resource: view }],
+        entries: [
+          { binding: voxelizeMeta.uniforms.voxelTarget.binding, resource: view },
+          { binding: voxelizeMeta.uniforms.voxelTarget1.binding, resource: view1 },
+        ],
       });
     voxGroup2Radiance = makeVoxGroup2(
       voxelRadiance.createView({ dimension: "3d", baseMipLevel: 0, mipLevelCount: 1 }),
+      voxelRadiance1.createView({ dimension: "3d", baseMipLevel: 0, mipLevelCount: 1 }),
     );
-    voxGroup2Emission = makeVoxGroup2(voxelEmission.createView({ dimension: "3d" }));
+    voxGroup2Emission = makeVoxGroup2(
+      voxelEmission.createView({ dimension: "3d" }),
+      voxelEmission1.createView({ dimension: "3d" }),
+    );
+
+    // Level-1 grid uniforms (dims static per rebuild; the ORIGIN is refreshed per frame in
+    // voxelize() alongside level 0's — both follow the camera).
+    const box1 = gridBox1;
+    gridDim1X = box1.dimX;
+    gridDim1Y = box1.dimY;
+    gridDim1Z = box1.dimZ;
+    dims1Arr[0] = box1.dimX;
+    dims1Arr[1] = box1.dimY;
+    dims1Arr[2] = box1.dimZ;
+    dims1Arr[3] = 0;
+    device.queue.writeBuffer(voxShader.uniforms.gridDims1.getGPUBuffer(device), 0, dims1Arr);
 
     // Grid uniforms.
     originArr[0] = originX;
@@ -276,38 +324,45 @@ export function createVoxelizeSystem({
     // See voxelizeCpu.buildVoxelAABBs.
     const { originX, originY, originZ, cellSize, dimX, dimY, dimZ } = getGridBox();
 
-    // The grid origin FOLLOWS THE CAMERA (createVoxelSystem.updateGridOrigin), so re-upload this
-    // shader's uGridOrigin copy every frame from the live box — the same values the CPU AABB build
-    // below uses, so the scatter and the work list can never disagree on the origin.
+    // Both grid origins FOLLOW THE CAMERA (createVoxelSystem.updateGridOrigin), so re-upload this
+    // shader's uGridOrigin/uGridOrigin1 copies every frame from the live boxes — the same values
+    // the CPU AABB build below uses, so the scatter and the work list can never disagree.
+    const box1 = getGridBox1();
     originArr[0] = originX;
     originArr[1] = originY;
     originArr[2] = originZ;
     originArr[3] = cellSize;
     device.queue.writeBuffer(voxShader.uniforms.gridOrigin.getGPUBuffer(device), 0, originArr);
+    origin1Arr[0] = box1.originX;
+    origin1Arr[1] = box1.originY;
+    origin1Arr[2] = box1.originZ;
+    origin1Arr[3] = box1.cellSize;
+    device.queue.writeBuffer(voxShader.uniforms.gridOrigin1.getGPUBuffer(device), 0, origin1Arr);
 
     const n = sceneInstances.instanceCount;
+    // ONE flat work list covering both levels: entries [0,n) = level-0 boxes, [n,2n) = level-1.
     scatterTotal = buildVoxelAABBs(
       sceneInstances,
-      { originX, originY, originZ, cellSize, dimX, dimY, dimZ },
+      [{ originX, originY, originZ, cellSize, dimX, dimY, dimZ }, box1],
       aabbMinArr,
       aabbDimArr,
     );
 
-    // Upload the AABB lists. Only the live n entries matter (the binary search bound is
-    // uInstanceCount = n), so upload exactly n*4 i32 elements instead of the whole MAX-sized buffer.
+    // Upload the AABB lists. Only the live 2n entries matter (the binary search bound is
+    // 2·uInstanceCount), so upload exactly 2n*4 i32 elements instead of the whole MAX-sized buffer.
     device.queue.writeBuffer(
       voxShader.uniforms.aabbMin.getGPUBuffer(device),
       0,
       aabbMinArr,
       0,
-      n * 4,
+      n * 2 * 4,
     );
     device.queue.writeBuffer(
       voxShader.uniforms.aabbDim.getGPUBuffer(device),
       0,
       aabbDimArr,
       0,
-      n * 4,
+      n * 2 * 4,
     );
 
     // Scatter dispatch sizing — 2D over workgroups to dodge the 65535 per-dim workgroup cap.
@@ -321,13 +376,14 @@ export function createVoxelizeSystem({
     dispatchArr[3] = 0;
     device.queue.writeBuffer(voxShader.uniforms.dispatch.getGPUBuffer(device), 0, dispatchArr);
 
-    // Four encoder-barriered steps (dispatches within ONE pass are NOT synchronized — every
-    // consumer must be a separate pass/copy so it sees the producer's writes):
-    //   1. CLEAR voxelEmission (full grid) — the emitter scatter only writes solid voxels.
-    //   2. EMITTER scatter (uPass=1) → voxelEmission.
-    //   3. COPY voxelEmission → voxelRadiance mip 0 — lands the emitter-only voxels AND doubles
-    //      as the mip-0 clear (every voxel is overwritten, empty ones with zero).
-    //   4. OCCLUDER scatter (uPass=0) → voxelRadiance mip 0, MERGING the emission it reads back
+    // Four encoder-barriered steps, each covering BOTH clipmap levels (dispatches within ONE pass
+    // are NOT synchronized — every consumer must be a separate pass/copy so it sees the
+    // producer's writes):
+    //   1. CLEAR both voxelEmission volumes (one full-grid dispatch; L1 is never larger per axis).
+    //   2. EMITTER scatter (uPass=1) → voxelEmission_i (one dispatch, two-level work list).
+    //   3. COPY voxelEmission_i → voxelRadiance_i mip 0 — lands the emitter-only voxels AND
+    //      doubles as the mip-0 clears (every voxel is overwritten, empty ones with zero).
+    //   4. OCCLUDER scatter (uPass=0) → voxelRadiance_i mip 0, MERGING the emission it reads back
     //      (sum rgb, max coverage) — a voxel shared by both classes keeps BOTH contributions,
     //      deterministically every frame (the old emitter-wins overwrite dropped the occluder's).
     const clearPass = encoder.beginComputePass();
@@ -356,6 +412,11 @@ export function createVoxelizeSystem({
       { texture: emissionTex },
       { texture: radianceTex, mipLevel: 0 },
       [gridDimX, gridDimY, gridDimZ],
+    );
+    encoder.copyTextureToTexture(
+      { texture: emissionTex1 },
+      { texture: radianceTex1, mipLevel: 0 },
+      [gridDim1X, gridDim1Y, gridDim1Z],
     );
 
     if (scatterTotal > 0) {

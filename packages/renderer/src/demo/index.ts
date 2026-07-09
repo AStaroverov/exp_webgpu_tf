@@ -122,6 +122,13 @@ async function main() {
     .add(followCfg, "snapCells", [4, 8, 16, 32])
     .name("grid snap (voxels)")
     .onChange((c: number) => voxel.setGridSnapCells(c));
+  // Clipmap A/B: off = the cones read level 0 only (old single-box behavior — far field from the
+  // deep L0 mips, GI cut at the L0 edge); on = far field + beyond-L0 from the coarse level 1.
+  const clipCfg = { clipmap: voxel.clipmapMode };
+  gui
+    .add(clipCfg, "clipmap")
+    .name("clipmap far field")
+    .onChange((on: boolean) => voxel.setClipmapMode(on));
 
   // Sun toggle is read live by the draw pass; keep it exposed for the raw view.
   gui.add(SunLight, "enabled").name("sun enabled");

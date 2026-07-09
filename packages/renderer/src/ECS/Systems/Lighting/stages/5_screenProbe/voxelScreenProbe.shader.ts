@@ -61,10 +61,14 @@ export function createScreenProbeShaderMeta(cfg: VoxelBakedConfig, isAdaptive: b
   return new ShaderMeta(
     {
       // ---- group 0 : uniforms (COMPUTE-only) ----
-      // .xyz = world min corner of the grid box, .w = cellSize (world units per voxel).
+      // LEVEL 0 (fine): .xyz = world min corner of the grid box, .w = cellSize (world units/voxel).
       gridOrigin: uC("uGridOrigin", `vec4<f32>`),
       // .xyz = voxel counts per axis, .w unused.
       gridDims: uC("uGridDims", `vec4<i32>`),
+      // LEVEL 1 (coarse clipmap): cell 2×, XY extent 2×, its own camera-snapped origin. The cone
+      // march reads L1 beyond the CLIP_SWITCH diameter / outside the L0 box (see sample_field).
+      gridOrigin1: uC("uGridOrigin1", `vec4<f32>`),
+      gridDims1: uC("uGridDims1", `vec4<i32>`),
       // inverse(viewProjMatrix) (reverse-Z) — reconstructs the probe's world position from the
       // G-buffer depth at its representative pixel.
       invViewProj: uC("uInvViewProj", `mat4x4<f32>`),
@@ -86,7 +90,8 @@ export function createScreenProbeShaderMeta(cfg: VoxelBakedConfig, isAdaptive: b
       temporalParams: uC("uTemporalParams", `vec4<f32>`),
       // .x = global live light count (DEBUG only — the aimed loop reads its cluster cell's list
       // from uLightClusters, group 1), .y = anisoMode (0 = isotropic pyramid, 1 = anisotropic
-      // directional volumes), .zw spare.
+      // directional volumes), .z = clipmap mode (0 = level 0 only, old single-box behavior;
+      // 1 = far field + out-of-L0 reads level 1), .w spare.
       lightParams: uC("uLightParams", `vec4<f32>`),
       // The 6 ANISOTROPIC directional radiance volumes (−X,+X,−Y,+Y,−Z,+Z) — ALL-mips sampled
       // views of the half-res directional pyramid (voxelAnisoBase/voxelAnisoVolume). sample_aniso
@@ -133,6 +138,14 @@ export function createScreenProbeShaderMeta(cfg: VoxelBakedConfig, isAdaptive: b
         textureSampleType: "float",
       }),
       voxelRadiance: new VariableMeta("voxelRadiance", VariableKind.Texture, `texture_3d<f32>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        viewDimension: "3d",
+        textureSampleType: "float",
+      }),
+      // LEVEL-1 radiance pyramid (coarse clipmap; iso only — the aniso anti-leak lives on level 0
+      // where the cones are still narrow; by the time a cone switches to L1 its own accumulated
+      // near-field alpha has already screened most of what could leak).
+      voxelRadiance1: new VariableMeta("voxelRadiance1", VariableKind.Texture, `texture_3d<f32>`, {
         visibility: GPUShaderStage.COMPUTE,
         viewDimension: "3d",
         textureSampleType: "float",
@@ -349,6 +362,53 @@ fn sample_radiance(uvw: vec3<f32>, lod: f32, dir: vec3<f32>) -> vec4<f32> {
   return mix(iso0, aniso, clamp(lod, 0.0, 1.0));
 }
 
+// ===== Clipmap field fetch: pick the level by the cone's footprint. =====
+// Level 0 (fine, iso+aniso via sample_radiance) serves footprints up to CLIP_SWITCH in L0-lod
+// terms; level 1 (coarse, iso-only) serves beyond, blended over CLIP_BLEND lods so there is no
+// seam. The point of the split: the cone never climbs L0's DEEP mips (whose block partition
+// re-forms when the camera-following box snaps) — every lattice it does read is world-locked
+// (L0 lod ≤ CLIP_SWITCH+CLIP_BLEND and L1 lod ≤ CLIP_L1_MAX_LOD, both within the snap quantum).
+// Outside the L0 box the fine level has no data → full L1 regardless of footprint (this is what
+// extends GI reach to the coarse box). Off (uLightParams.z < 0.5) → exact old single-box path.
+const CLIP_SWITCH: f32 = 2.0;     // L0 lod where the handover starts (diameter = 4 L0 cells)
+const CLIP_BLEND: f32 = 1.0;      // handover width in lods
+const CLIP_L1_MAX_LOD: f32 = 4.0; // deepest L1 mip the cone may read (block = 16 L1 cells)
+
+fn sample_field(wp: vec3<f32>, diameter: f32, dir: vec3<f32>) -> vec4<f32> {
+  let cell0 = uGridOrigin.w;
+  let ext0 = vec3<f32>(uGridDims.xyz) * cell0;
+  let uvw0 = (wp - uGridOrigin.xyz) / ext0;
+  let lod0 = log2(max(diameter, cell0) / cell0);
+  var w1 = 0.0;
+  if (uLightParams.z >= 0.5) {
+    w1 = clamp((lod0 - CLIP_SWITCH) / CLIP_BLEND, 0.0, 1.0);
+    if (any(uvw0 < vec3<f32>(0.0)) || any(uvw0 > vec3<f32>(1.0))) { w1 = 1.0; }
+  }
+  var s0 = vec4<f32>(0.0);
+  if (w1 < 1.0) { s0 = sample_radiance(uvw0, lod0, dir); }
+  if (w1 <= 0.0) { return s0; }
+  let cell1 = uGridOrigin1.w;
+  let ext1 = vec3<f32>(uGridDims1.xyz) * cell1;
+  let uvw1 = (wp - uGridOrigin1.xyz) / ext1;
+  var s1 = vec4<f32>(0.0);
+  if (all(uvw1 >= vec3<f32>(0.0)) && all(uvw1 <= vec3<f32>(1.0))) {
+    let lod1 = clamp(log2(max(diameter, cell1) / cell1), 0.0, CLIP_L1_MAX_LOD);
+    s1 = textureSampleLevel(voxelRadiance1, voxelSampler, uvw1, lod1);
+  }
+  return mix(s0, s1, w1);
+}
+
+// March bounds = the OUTER box (L1 when the clipmap is on, else L0): where the cone finally
+// leaves the field and the loop breaks.
+fn field_bounds_min() -> vec3<f32> {
+  if (uLightParams.z >= 0.5) { return uGridOrigin1.xyz; }
+  return uGridOrigin.xyz;
+}
+fn field_bounds_ext() -> vec3<f32> {
+  if (uLightParams.z >= 0.5) { return vec3<f32>(uGridDims1.xyz) * uGridOrigin1.w; }
+  return vec3<f32>(uGridDims.xyz) * uGridOrigin.w;
+}
+
 // One cone marched from origin along dir through the voxelRadiance pyramid: premultiplied
 // front-to-back "over" integration (diameter grows with distance, LOD = log2(diameter/voxelSize),
 // step floored at reach/maxSteps, early-out on alpha >= alphaCut / past reach / outside the box).
@@ -358,18 +418,17 @@ fn trace_probe_cone(origin: vec3<f32>, dir: vec3<f32>, aperture: f32, reach: f32
   var col = vec3<f32>(0.0);
   var alpha = 0.0;
   let voxelSize = uGridOrigin.w;
-  let gridMin = uGridOrigin.xyz;
-  let extent = vec3<f32>(uGridDims.xyz) * voxelSize;
+  let gridMin = field_bounds_min();
+  let extent = field_bounds_ext();
   let stepFloor = reach / f32(maxSteps);
   var dist = voxelSize;
   for (var i = 0; i < maxSteps; i = i + 1) {
     if (alpha >= alphaCut || dist > reach) { break; }
     let diameter = max(voxelSize, 2.0 * aperture * dist);
-    let lod = log2(diameter / voxelSize);
     let wp = origin + dir * dist;
     let uvw = (wp - gridMin) / extent;
     if (any(uvw < vec3<f32>(0.0)) || any(uvw > vec3<f32>(1.0))) { break; }
-    let s = sample_radiance(uvw, lod, dir);
+    let s = sample_field(wp, diameter, dir);
     col = col + (1.0 - alpha) * s.rgb;
     alpha = alpha + (1.0 - alpha) * s.a;
     dist = dist + max(diameter * 0.5, stepFloor);
@@ -392,10 +451,12 @@ fn trace_shadow_cone(origin: vec3<f32>, dir: vec3<f32>, aperture: f32, reach: f3
   var col = vec3<f32>(0.0);
   var alpha = 0.0;
   let voxelSize = uGridOrigin.w;
-  let gridMin = uGridOrigin.xyz;
-  let extent = vec3<f32>(uGridDims.xyz) * voxelSize;
+  let gridMin = field_bounds_min();
+  let extent = field_bounds_ext();
   // ~1 voxel per step (the reference uses 0.9·VOXEL_SIZE), floored so maxSteps always covers
   // the full reach — a long reach trades sampling density, never silently truncates the shadow.
+  // corr stays in L0 voxels even where the sample lands on L1 (whose cell is 2×) — a slight
+  // over-darkening of far shadows, acceptable for the coarse tail.
   let step = max(0.9 * voxelSize, reach / f32(maxSteps));
   let corr = step / voxelSize;
   var dist = voxelSize;
@@ -405,8 +466,7 @@ fn trace_shadow_cone(origin: vec3<f32>, dir: vec3<f32>, aperture: f32, reach: f3
     let uvw = (wp - gridMin) / extent;
     if (any(uvw < vec3<f32>(0.0)) || any(uvw > vec3<f32>(1.0))) { break; }
     let diameter = max(voxelSize, 2.0 * aperture * dist);
-    let lod = log2(diameter / voxelSize);
-    let s = sample_radiance(uvw, lod, dir);
+    let s = sample_field(wp, diameter, dir);
     let a = clamp(s.a, 0.0, 1.0);
     let ac = 1.0 - pow(1.0 - a, corr);
     // rgb is premultiplied by coverage — rescale it by the same correction ratio.
