@@ -148,6 +148,28 @@ export function createSunViewProjComputer() {
       if (sunCorner[2] < lminZ) lminZ = sunCorner[2];
       if (sunCorner[2] > lmaxZ) lmaxZ = sunCorner[2];
     }
+    // STABILIZE the ortho box against camera motion (the classic shadow-map shimmer fix). The
+    // fit above tracks the camera CONTINUOUSLY, so while panning/zooming the map's texel grid
+    // slides relative to the world and every shadow test near an edge flips back and forth —
+    // visible as light ripple (the voxelize sun injection is a single un-filtered tap, so it
+    // shows it worst). Two quantizations, both in LIGHT space (whose axes only move when the
+    // SUN moves, not the camera):
+    //   1. Round the box SIZE up to a multiple of SIZE_Q — texel size changes in rare discrete
+    //      steps instead of every frame (translation snap alone is void while size drifts).
+    //   2. Snap the box CENTER to the texel grid — translation moves in whole texels, so every
+    //      world point keeps its texel while the region slides.
+    const SIZE_Q = 8 * cellSize;
+    const sizeX = Math.ceil((lmaxX - lminX) / SIZE_Q) * SIZE_Q;
+    const sizeY = Math.ceil((lmaxY - lminY) / SIZE_Q) * SIZE_Q;
+    const texelX = sizeX / shadowSize;
+    const texelY = sizeY / shadowSize;
+    const ccx = Math.round((lminX + lmaxX) * 0.5 / texelX) * texelX;
+    const ccy = Math.round((lminY + lmaxY) * 0.5 / texelY) * texelY;
+    lminX = ccx - sizeX * 0.5;
+    lmaxX = ccx + sizeX * 0.5;
+    lminY = ccy - sizeY * 0.5;
+    lmaxY = ccy + sizeY * 0.5;
+
     // near/far are POSITIVE distances; view-space z is negative going forward, so
     // near = -lmaxZ (closest), far = -lminZ (farthest). Pad to avoid front-face clipping.
     const near = -lmaxZ - 1.0;
