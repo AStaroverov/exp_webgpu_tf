@@ -37,24 +37,8 @@ import {
 } from "./voxelResources.ts";
 import type { SceneInstances } from "../SDFSystem/createDrawShapeSystem.ts";
 import { SunLight } from "../SunLight.ts";
-
-// Half the shape's Z extent from its per-kind depth slot in Shape.values (stride 8).
-// Mirrors footprint_half_z in sceneSDF.wgsl; sphere (6) is unhalved (radius == half-extent).
-function footprintHalfZ(kind: number, values: Float32Array, k: number): number {
-  switch (kind) {
-    case 0:
-      return values[k * 8 + 1] * 0.5;
-    case 1:
-      return values[k * 8 + 2] * 0.5;
-    case 3:
-    case 4:
-      return values[k * 8 + 3] * 0.5;
-    case 5:
-      return values[k * 8 + 6] * 0.5;
-    default:
-      return values[k * 8 + 0];
-  }
-}
+import { buildVoxelAABBs } from "./voxelizeCpu.ts";
+import { assignLightClusters } from "./lightClustering.ts";
 
 // Voxel scene system: voxelize() fills the 3D albedo/emission/radiance textures from the SDF
 // scene each frame; mips() builds the radiance pyramid; cone() gathers indirect light (N-cone
@@ -1423,111 +1407,16 @@ export function createVoxelSystem({
     // uSunViewProj is uploaded by buildSunViewProj() inside sunDepth(), which runs BEFORE
     // voxelize() in the loop (so the shadowed-sun injection samples the matching matrix).
 
-    // ===== Build per-instance voxel AABBs + the prefix-sum work list (CPU). =====
-    // The CPU arrays are filled by prepare() (which runs before voxelize() each frame), so
-    // they are current. For each instance compute a CONSERVATIVE rotated-box world AABB,
-    // convert it to a voxel box clamped to the grid, and accumulate the prefix sum of voxel
-    // counts. The scatter shader walks this flat list via a binary search on `start`.
+    // Build per-instance voxel AABBs + the scatter prefix-sum work list on the CPU. The scene CPU
+    // mirrors are filled by prepare() (runs before voxelize() each frame), so they are current.
+    // See voxelizeCpu.buildVoxelAABBs.
     const n = sceneInstances.instanceCount;
-    const tr = sceneInstances.cpuTransform;
-    const kindArr = sceneInstances.cpuKind;
-    const valArr = sceneInstances.cpuValues;
-    const roundArr = sceneInstances.cpuRoundness;
-    let prefix = 0;
-    for (let k = 0; k < n; k++) {
-      // Translation is column-major mat4 elements 12,13,14 (per-instance 16-float stride).
-      const cx = tr[k * 16 + 12];
-      const cy = tr[k * 16 + 13];
-      const tz = tr[k * 16 + 14];
-      const kind = kindArr[k];
-      const round = roundArr[k];
-
-      // Conservative bounding-circle radius in XY, computed from the SAME geometry the
-      // footprint uses so the AABB never clips the shape. The depth slot must be EXCLUDED
-      // from the XY bound, so each kind reads only its footprint (XY) slots — mirroring
-      // footprint_half_xy in sceneSDF.wgsl.
-      const v0 = valArr[k * 8 + 0];
-      const v1 = valArr[k * 8 + 1];
-      const v2 = valArr[k * 8 + 2];
-      let rxyShape: number;
-      if (kind === 3) {
-        // Parallelogram: skew widens the X half-extent (halfX = width/2 + |skew|); the worst
-        // corner is at hypot(halfX, height/2). values = (width, height, skew, depth).
-        rxyShape = Math.hypot(v0 / 2 + Math.abs(v2), v1 / 2);
-      } else if (kind === 5) {
-        // Triangle: the first 6 slots are signed vertex coords (ax,ay,bx,by,cx,cy). The
-        // conservative radius is the farthest vertex distance from the local origin.
-        rxyShape = Math.max(
-          Math.hypot(valArr[k * 8 + 0], valArr[k * 8 + 1]),
-          Math.hypot(valArr[k * 8 + 2], valArr[k * 8 + 3]),
-          Math.hypot(valArr[k * 8 + 4], valArr[k * 8 + 5]),
-        );
-      } else if (kind === 0 || kind === 6) {
-        // Circle/cylinder + sphere: values[0] = radius (the full XY half-extent).
-        rxyShape = v0;
-      } else if (kind === 4) {
-        // Trapezoid: values = [topWidth, bottomWidth, ySize, depth]. Bound = wider end / 2 in X,
-        // ySize / 2 in Y → the worst corner is at hypot of those.
-        rxyShape = Math.hypot(Math.max(v0, v1) / 2, v2 / 2);
-      } else {
-        // Rectangle/box: values = [width, height, depth]. Corner at hypot(width/2, height/2).
-        rxyShape = Math.hypot(v0 / 2, v1 / 2);
-      }
-      // Local conservative half-extents: a single bounding-circle radius for X and Y
-      // (yaw-invariant) plus the per-kind Z half. Under full rotation each axis grows by
-      // the rotated box bound half_world = abs(R) * half_local (R = the instance's 3x3
-      // rotation, column-major in tr: element (row r, col c) = tr[k*16 + c*4 + r]).
-      const hLocalXY = rxyShape;
-      const hLocalZ = footprintHalfZ(kind, valArr, k);
-      const m0 = Math.abs(tr[k * 16 + 0]);
-      const m1 = Math.abs(tr[k * 16 + 1]);
-      const m2 = Math.abs(tr[k * 16 + 2]);
-      const m4 = Math.abs(tr[k * 16 + 4]);
-      const m5 = Math.abs(tr[k * 16 + 5]);
-      const m6 = Math.abs(tr[k * 16 + 6]);
-      const m8 = Math.abs(tr[k * 16 + 8]);
-      const m9 = Math.abs(tr[k * 16 + 9]);
-      const m10 = Math.abs(tr[k * 16 + 10]);
-      // Raw matrix columns already carry the uniform scale s (length of each column), so the
-      // m*hLocal products are already abs(R)*(hLocal*s). The `round` term is in unscaled-local
-      // units and must scale by s too; `cellSize` is a grid constant and stays unscaled.
-      const s = Math.hypot(tr[k * 16 + 0], tr[k * 16 + 1], tr[k * 16 + 2]);
-      const halfWX = m0 * hLocalXY + m4 * hLocalXY + m8 * hLocalZ + round * s + cellSize;
-      const halfWY = m1 * hLocalXY + m5 * hLocalXY + m9 * hLocalZ + round * s + cellSize;
-      const halfWZ = m2 * hLocalXY + m6 * hLocalXY + m10 * hLocalZ + round * s + cellSize;
-
-      const minX = cx - halfWX;
-      const maxX = cx + halfWX;
-      const minY = cy - halfWY;
-      const maxY = cy + halfWY;
-      const minZ = tz - halfWZ;
-      const maxZ = tz + halfWZ;
-
-      // World AABB -> voxel index box, clamped to [0, dim] (floor min, ceil max), then size.
-      const vx0 = Math.min(Math.max(Math.floor((minX - originX) / cellSize), 0), dimX);
-      const vx1 = Math.min(Math.max(Math.ceil((maxX - originX) / cellSize), 0), dimX);
-      const vy0 = Math.min(Math.max(Math.floor((minY - originY) / cellSize), 0), dimY);
-      const vy1 = Math.min(Math.max(Math.ceil((maxY - originY) / cellSize), 0), dimY);
-      const vz0 = Math.min(Math.max(Math.floor((minZ - originZ) / cellSize), 0), dimZ);
-      const vz1 = Math.min(Math.max(Math.ceil((maxZ - originZ) / cellSize), 0), dimZ);
-      const nx = Math.max(0, vx1 - vx0);
-      const ny = Math.max(0, vy1 - vy0);
-      const nz = Math.max(0, vz1 - vz0);
-      const count = nx * ny * nz;
-
-      // Every index gets a `start` (empty ranges share their successor's start and are skipped
-      // by the binary search). aabbMin.w = prefix start; aabbDim.w = voxel count.
-      aabbMinArr[k * 4 + 0] = vx0;
-      aabbMinArr[k * 4 + 1] = vy0;
-      aabbMinArr[k * 4 + 2] = vz0;
-      aabbMinArr[k * 4 + 3] = prefix;
-      aabbDimArr[k * 4 + 0] = nx;
-      aabbDimArr[k * 4 + 1] = ny;
-      aabbDimArr[k * 4 + 2] = nz;
-      aabbDimArr[k * 4 + 3] = count;
-      prefix += count;
-    }
-    scatterTotal = prefix;
+    scatterTotal = buildVoxelAABBs(
+      sceneInstances,
+      { originX, originY, originZ, cellSize, dimX, dimY, dimZ },
+      aabbMinArr,
+      aabbDimArr,
+    );
 
     // Upload the AABB lists. Only the live n entries matter (the binary search bound is
     // uInstanceCount = n), so upload exactly n*4 i32 elements instead of the whole MAX-sized buffer.
@@ -1917,84 +1806,16 @@ export function createVoxelSystem({
     }
     coneLightCount = count;
 
-    // CLUSTERED CULL (CPU assignment, clear-and-refill each frame): bin every emitter into the
-    // cluster cells its influence sphere overlaps (AABB of the sphere — slight over-inclusion is
-    // fine, the shader's per-light cull still applies). Influence radius = where the shader's own
-    // 0.003 contribution gate would cull it: atten = 1/(1 + F·d²/lr²) ≥ 0.003 / (maxLum·direct)
-    // → R = lr·√((maxLum·direct/0.003 − 1)/F) — the SAME radius the shader's range window scales
-    // the light to exactly zero at, so a cell the sphere doesn't reach truly receives zero light
-    // (no boundary step). emitterFalloff = 0 ⇒ R = ∞, and the ±Infinity arithmetic below clamps
-    // to the whole grid without a special case. A cell at capacity keeps its clusterCap STRONGEST
-    // lights (estimated contribution at the cell center) — the weakest entry is replaced, never
-    // the newest dropped.
-    clusterArr.fill(0);
-    const cw = cellSize * config.clusterDiv; // cluster cell size, world units
-    const cap = config.clusterCap;
-    const stride = cap + 1;
-    for (let i = 0; i < count; i++) {
-      const o = i * 8;
-      const maxLum =
-        Math.max(data[o + 4], data[o + 5], data[o + 6]) *
-        Math.abs(data[o + 7]) *
-        config.emitterDirect;
-      if (maxLum < 0.003) continue; // the shader would cull it in every cell
-      const lx = data[o + 0];
-      const ly = data[o + 1];
-      const lz = data[o + 2];
-      const lr = Math.max(data[o + 3], 1e-3);
-      const F = config.emitterFalloff;
-      const R = F > 0 ? lr * Math.sqrt((maxLum / 0.003 - 1) / F) : Infinity;
-      const x0 = Math.max(0, Math.floor((lx - R - originX) / cw));
-      const x1 = Math.min(clusterDimX - 1, Math.floor((lx + R - originX) / cw));
-      const y0 = Math.max(0, Math.floor((ly - R - originY) / cw));
-      const y1 = Math.min(clusterDimY - 1, Math.floor((ly + R - originY) / cw));
-      const z0 = Math.max(0, Math.floor((lz - R - originZ) / cw));
-      const z1 = Math.min(clusterDimZ - 1, Math.floor((lz + R - originZ) / cw));
-      const kAtt = F / (lr * lr); // est = maxLum / (1 + kAtt·d²)
-      const dx0 = lx - (originX + (x0 + 0.5) * cw);
-      for (let z = z0; z <= z1; z++) {
-        const dz = lz - (originZ + (z + 0.5) * cw);
-        const dz2 = dz * dz;
-        for (let y = y0; y <= y1; y++) {
-          const dy = ly - (originY + (y + 0.5) * cw);
-          const dyz2 = dz2 + dy * dy;
-          let cell = (z * clusterDimY + y) * clusterDimX + x0;
-          let base = cell * stride;
-          let dx = dx0;
-          for (let x = x0; x <= x1; x++, cell++, base += stride, dx -= cw) {
-            // Contribution estimate at the cell center (the same falloff the shader applies) —
-            // the cell's keep/replace ranking key.
-            const est = maxLum / (1 + kAtt * (dx * dx + dyz2));
-            // The sphere-AABB corners: est here is below the shader's cull gate, so the cell
-            // would receive exactly zero from this light — skip it.
-            if (est < 0.003) continue;
-            const c = clusterArr[base];
-            if (c < cap) {
-              const slot = base + 1 + c;
-              clusterArr[slot] = i;
-              clusterEstArr[slot] = est;
-              clusterArr[base] = c + 1;
-              if (c === 0 || est < clusterMinEst[cell]) {
-                clusterMinEst[cell] = est;
-                clusterMinIdx[cell] = slot;
-              }
-            } else if (est > clusterMinEst[cell]) {
-              // Full cell: replace the current weakest entry (cached), then rescan the cap
-              // entries ONLY here — the common weaker-light case is the O(1) reject above.
-              const wk = clusterMinIdx[cell];
-              clusterArr[wk] = i;
-              clusterEstArr[wk] = est;
-              let mn = base + 1;
-              for (let k = base + 2; k < base + 1 + cap; k++) {
-                if (clusterEstArr[k] < clusterEstArr[mn]) mn = k;
-              }
-              clusterMinEst[cell] = clusterEstArr[mn];
-              clusterMinIdx[cell] = mn;
-            }
-          }
-        }
-      }
-    }
+    // CLUSTERED CULL (CPU assignment, clear-and-refill each frame) → lightClustering.ts. Bins every
+    // emitter into the cluster cells its influence sphere overlaps; a full cell keeps its clusterCap
+    // STRONGEST lights. Then upload the refilled cluster table.
+    assignLightClusters(
+      data,
+      count,
+      config,
+      { originX, originY, originZ, cellSize, clusterDimX, clusterDimY, clusterDimZ },
+      { clusterArr, clusterEstArr, clusterMinEst, clusterMinIdx },
+    );
     device.queue.writeBuffer(clusterBuf!, 0, clusterArr);
   }
 

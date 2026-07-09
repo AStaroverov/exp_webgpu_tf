@@ -2,6 +2,7 @@ import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
 import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
 import { wgsl } from "../../../WGSL/wgsl.ts";
 import { VoxelBakedConfig } from "./voxelConfig.ts";
+import { unprojectWGSL } from "./voxelTrace.wgsl.ts";
 
 // VCT Layer 4 — the COMPOSITE: turn the indirect cone gather into the FINAL lit image.
 //   final = albedo·(ambient·AO + directSun·shadow + indirect) + selfEmission.
@@ -106,11 +107,7 @@ fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
   return out;
 }
 
-// Unproject an NDC point (z reverse-Z) to world space.
-fn unproject(ndc: vec3<f32>) -> vec3<f32> {
-  let w = uF.invViewProj * vec4<f32>(ndc, 1.0);
-  return w.xyz / w.w;
-}
+${unprojectWGSL}
 
 // 16-sample Poisson disk (unit disk). A scattered, low-discrepancy tap set: scaling it gives a
 // wide soft kernel WITHOUT the regular-grid banding a square 5×5 kernel produces at large radii.
@@ -245,7 +242,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   if (uF.sun.w > 0.0 && ndl > 0.0) {
     let depthP = textureLoad(depthTex, pixel, 0);
     let uvP = (vec2<f32>(pixel) + vec2<f32>(0.5)) / uF.params2.xy;
-    let P = unproject(vec3<f32>(uvP.x * 2.0 - 1.0, (1.0 - uvP.y) * 2.0 - 1.0, depthP));
+    let P = unproject(vec3<f32>(uvP.x * 2.0 - 1.0, (1.0 - uvP.y) * 2.0 - 1.0, depthP), uF.invViewProj);
     // Base PCF softness ALWAYS applied (kills the shadow-map texel staircase even at full sun),
     // and grows further as the sun dims below 1 (a dimmer sun → softer, wider penumbra).
     let spread = SHADOW_BASE_SPREAD + PENUMBRA * clamp(1.0 - uF.sun.w, 0.0, 1.0);

@@ -32,6 +32,35 @@ const storageTex = (name: string) =>
 
 export const WORKGROUP = 4;
 
+// The 2×2×2 sub-voxel offsets, in load order v0..v7. Index i encodes the offset bits:
+// offset = (1 - ((i>>2)&1), 1 - ((i>>1)&1), 1 - (i&1)) → v0=(1,1,1) .. v7=(0,0,0).
+const OFFSETS: [number, number, number][] = [
+  [1, 1, 1], [1, 1, 0], [1, 0, 1], [1, 0, 0],
+  [0, 1, 1], [0, 1, 0], [0, 0, 1], [0, 0, 0],
+];
+
+// One block per direction. `pairs` are the front-to-back (near, far) sample pairs along that
+// direction's axis, in the ORIGINAL accumulation order (kept exact so the summation is FP-identical
+// to the old hand-written blocks). The near voxel occludes the far one: near + far·(1 − near.a).
+const DIRS: { name: string; pairs: [number, number][] }[] = [
+  { name: "NegX", pairs: [[0, 4], [1, 5], [2, 6], [3, 7]] },
+  { name: "PosX", pairs: [[4, 0], [5, 1], [6, 2], [7, 3]] },
+  { name: "NegY", pairs: [[0, 2], [1, 3], [5, 7], [4, 6]] },
+  { name: "PosY", pairs: [[2, 0], [3, 1], [7, 5], [6, 4]] },
+  { name: "NegZ", pairs: [[0, 1], [2, 3], [4, 5], [6, 7]] },
+  { name: "PosZ", pairs: [[1, 0], [3, 2], [5, 4], [7, 6]] },
+];
+
+// Emit one per-direction block: 8 loads from src{Dir} + the front-to-back store into dst{Dir}.
+// Each block is wrapped in `{ }` so `let v0..v7` gets its own scope (no duplicate-let across blocks).
+const anisoBlock = ({ name, pairs }: (typeof DIRS)[number]) => {
+  const loads = OFFSETS.map(
+    (o, i) => `    let v${i} = textureLoad(src${name}, base + vec3<i32>(${o[0]}, ${o[1]}, ${o[2]}), 0);`,
+  ).join("\n");
+  const acc = pairs.map(([n, f]) => `v${n} + v${f} * (1.0 - v${n}.a)`).join(" + ");
+  return `  {\n${loads}\n    textureStore(dst${name}, dst, (${acc}) * 0.25);\n  }`;
+};
+
 export const shaderMeta = new ShaderMeta(
   {
     // ---- group 0 : uniform + the 6 sampled source volumes (level c) ----
@@ -61,72 +90,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (dst.x >= uDst.x || dst.y >= uDst.y || dst.z >= uDst.z) { return; }
   let base = dst * 2;
 
-  {
-    let v0 = textureLoad(srcNegX, base + vec3<i32>(1, 1, 1), 0);
-    let v1 = textureLoad(srcNegX, base + vec3<i32>(1, 1, 0), 0);
-    let v2 = textureLoad(srcNegX, base + vec3<i32>(1, 0, 1), 0);
-    let v3 = textureLoad(srcNegX, base + vec3<i32>(1, 0, 0), 0);
-    let v4 = textureLoad(srcNegX, base + vec3<i32>(0, 1, 1), 0);
-    let v5 = textureLoad(srcNegX, base + vec3<i32>(0, 1, 0), 0);
-    let v6 = textureLoad(srcNegX, base + vec3<i32>(0, 0, 1), 0);
-    let v7 = textureLoad(srcNegX, base + vec3<i32>(0, 0, 0), 0);
-    textureStore(dstNegX, dst, (v0 + v4 * (1.0 - v0.a) + v1 + v5 * (1.0 - v1.a) + v2 + v6 * (1.0 - v2.a) + v3 + v7 * (1.0 - v3.a)) * 0.25);
-  }
-  {
-    let v0 = textureLoad(srcPosX, base + vec3<i32>(1, 1, 1), 0);
-    let v1 = textureLoad(srcPosX, base + vec3<i32>(1, 1, 0), 0);
-    let v2 = textureLoad(srcPosX, base + vec3<i32>(1, 0, 1), 0);
-    let v3 = textureLoad(srcPosX, base + vec3<i32>(1, 0, 0), 0);
-    let v4 = textureLoad(srcPosX, base + vec3<i32>(0, 1, 1), 0);
-    let v5 = textureLoad(srcPosX, base + vec3<i32>(0, 1, 0), 0);
-    let v6 = textureLoad(srcPosX, base + vec3<i32>(0, 0, 1), 0);
-    let v7 = textureLoad(srcPosX, base + vec3<i32>(0, 0, 0), 0);
-    textureStore(dstPosX, dst, (v4 + v0 * (1.0 - v4.a) + v5 + v1 * (1.0 - v5.a) + v6 + v2 * (1.0 - v6.a) + v7 + v3 * (1.0 - v7.a)) * 0.25);
-  }
-  {
-    let v0 = textureLoad(srcNegY, base + vec3<i32>(1, 1, 1), 0);
-    let v1 = textureLoad(srcNegY, base + vec3<i32>(1, 1, 0), 0);
-    let v2 = textureLoad(srcNegY, base + vec3<i32>(1, 0, 1), 0);
-    let v3 = textureLoad(srcNegY, base + vec3<i32>(1, 0, 0), 0);
-    let v4 = textureLoad(srcNegY, base + vec3<i32>(0, 1, 1), 0);
-    let v5 = textureLoad(srcNegY, base + vec3<i32>(0, 1, 0), 0);
-    let v6 = textureLoad(srcNegY, base + vec3<i32>(0, 0, 1), 0);
-    let v7 = textureLoad(srcNegY, base + vec3<i32>(0, 0, 0), 0);
-    textureStore(dstNegY, dst, (v0 + v2 * (1.0 - v0.a) + v1 + v3 * (1.0 - v1.a) + v5 + v7 * (1.0 - v5.a) + v4 + v6 * (1.0 - v4.a)) * 0.25);
-  }
-  {
-    let v0 = textureLoad(srcPosY, base + vec3<i32>(1, 1, 1), 0);
-    let v1 = textureLoad(srcPosY, base + vec3<i32>(1, 1, 0), 0);
-    let v2 = textureLoad(srcPosY, base + vec3<i32>(1, 0, 1), 0);
-    let v3 = textureLoad(srcPosY, base + vec3<i32>(1, 0, 0), 0);
-    let v4 = textureLoad(srcPosY, base + vec3<i32>(0, 1, 1), 0);
-    let v5 = textureLoad(srcPosY, base + vec3<i32>(0, 1, 0), 0);
-    let v6 = textureLoad(srcPosY, base + vec3<i32>(0, 0, 1), 0);
-    let v7 = textureLoad(srcPosY, base + vec3<i32>(0, 0, 0), 0);
-    textureStore(dstPosY, dst, (v2 + v0 * (1.0 - v2.a) + v3 + v1 * (1.0 - v3.a) + v7 + v5 * (1.0 - v7.a) + v6 + v4 * (1.0 - v6.a)) * 0.25);
-  }
-  {
-    let v0 = textureLoad(srcNegZ, base + vec3<i32>(1, 1, 1), 0);
-    let v1 = textureLoad(srcNegZ, base + vec3<i32>(1, 1, 0), 0);
-    let v2 = textureLoad(srcNegZ, base + vec3<i32>(1, 0, 1), 0);
-    let v3 = textureLoad(srcNegZ, base + vec3<i32>(1, 0, 0), 0);
-    let v4 = textureLoad(srcNegZ, base + vec3<i32>(0, 1, 1), 0);
-    let v5 = textureLoad(srcNegZ, base + vec3<i32>(0, 1, 0), 0);
-    let v6 = textureLoad(srcNegZ, base + vec3<i32>(0, 0, 1), 0);
-    let v7 = textureLoad(srcNegZ, base + vec3<i32>(0, 0, 0), 0);
-    textureStore(dstNegZ, dst, (v0 + v1 * (1.0 - v0.a) + v2 + v3 * (1.0 - v2.a) + v4 + v5 * (1.0 - v4.a) + v6 + v7 * (1.0 - v6.a)) * 0.25);
-  }
-  {
-    let v0 = textureLoad(srcPosZ, base + vec3<i32>(1, 1, 1), 0);
-    let v1 = textureLoad(srcPosZ, base + vec3<i32>(1, 1, 0), 0);
-    let v2 = textureLoad(srcPosZ, base + vec3<i32>(1, 0, 1), 0);
-    let v3 = textureLoad(srcPosZ, base + vec3<i32>(1, 0, 0), 0);
-    let v4 = textureLoad(srcPosZ, base + vec3<i32>(0, 1, 1), 0);
-    let v5 = textureLoad(srcPosZ, base + vec3<i32>(0, 1, 0), 0);
-    let v6 = textureLoad(srcPosZ, base + vec3<i32>(0, 0, 1), 0);
-    let v7 = textureLoad(srcPosZ, base + vec3<i32>(0, 0, 0), 0);
-    textureStore(dstPosZ, dst, (v1 + v0 * (1.0 - v1.a) + v3 + v2 * (1.0 - v3.a) + v5 + v4 * (1.0 - v5.a) + v7 + v6 * (1.0 - v7.a)) * 0.25);
-  }
+${DIRS.map(anisoBlock).join("\n")}
 }
 `,
 );

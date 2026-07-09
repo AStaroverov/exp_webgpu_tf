@@ -4,6 +4,7 @@ import { wgsl } from "../../../WGSL/wgsl.ts";
 import { VoxelBakedConfig } from "./voxelConfig.ts";
 import { SCREEN_PROBE_K } from "./voxelResources.ts";
 import { probeWeightWGSL } from "./voxelProbeShared.wgsl.ts";
+import { buildBasisWGSL, unprojectWGSL } from "./voxelTrace.wgsl.ts";
 
 // VCT Layer 3 — SCREEN-PROBE RESOLVE + CONTACT AO. A fullscreen pass over the G-buffer:
 //   1. Reconstruct the per-pixel world position P (from the reverse-Z depth + invViewProj)
@@ -116,6 +117,8 @@ const AO_STEPS: i32 = ${cfg.aoSteps};
 const SP_K: u32 = ${SCREEN_PROBE_K}u;
 
 ${probeWeightWGSL}
+${unprojectWGSL}
+${buildBasisWGSL}
 
 const POSITION = array<vec2f, 6>(
   vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0),
@@ -137,20 +140,6 @@ fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
   out.position = vec4f(POSITION[vertexIndex], 0.0, 1.0);
   out.texCoord = TEX_COORDS[vertexIndex];
   return out;
-}
-
-// Unproject an NDC point (z reverse-Z) to world space.
-fn unproject(ndc: vec3<f32>) -> vec3<f32> {
-  let w = uInvViewProj * vec4<f32>(ndc, 1.0);
-  return w.xyz / w.w;
-}
-
-// Orthonormal basis with column 2 = n (so basis * (x,y,z) = x*t + y*b + z*n).
-fn build_basis(n: vec3<f32>) -> mat3x3<f32> {
-  let a = select(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), abs(n.x) > 0.9);
-  let t = normalize(cross(a, n));
-  let b = cross(n, t);
-  return mat3x3<f32>(t, b, n);
 }
 
 // One SHORT AO cone marched along dir from origin: diameter grows with distance, each step samples
@@ -385,7 +374,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let depth = textureLoad(depthTex, full, 0);
   let uv = (vec2<f32>(full) + vec2<f32>(0.5)) / uParams2.xy;
   let ndc = vec3<f32>(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0, depth);
-  let P = unproject(ndc);
+  let P = unproject(ndc, uInvViewProj);
 
   // Lift the cone origin off the surface to avoid self-sampling the originating voxel.
   let cellSize = uGridOrigin.w;

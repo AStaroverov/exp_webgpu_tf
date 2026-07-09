@@ -3,6 +3,7 @@ import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
 import { wgsl } from "../../../WGSL/wgsl.ts";
 import { VoxelBakedConfig } from "./voxelConfig.ts";
 import { probePackWGSL, probeWeightWGSL } from "./voxelProbeShared.wgsl.ts";
+import { buildBasisWGSL, unprojectWGSL } from "./voxelTrace.wgsl.ts";
 
 // VCT — SCREEN-SPACE PROBE gather. One thread per probe (uniform OR adaptive) traces a hemisphere of
 // fill cones through the voxelRadiance pyramid, projects the gathered radiance onto SH-L1 (4 coeffs /
@@ -280,6 +281,8 @@ const W_AIMED: f32 = 4.18879020;
 
 ${probePackWGSL}
 ${probeWeightWGSL}
+${unprojectWGSL}
+${buildBasisWGSL}
 
 // Sample the 6 ANISOTROPIC directional volumes for a cone traveling along unit dir, at aniso LOD.
 // Per axis pick the volume whose pre-integration faces the ray (sign of dir): the negX volume is
@@ -344,13 +347,6 @@ fn trace_probe_cone(origin: vec3<f32>, dir: vec3<f32>, aperture: f32, reach: f32
   return vec4<f32>(col, alpha);
 }
 
-// Unproject an NDC point (z reverse-Z) to world space. Copied from voxelCone.shader.ts.
-fn unproject(ndc: vec3<f32>) -> vec3<f32> {
-  let w = uInvViewProj * vec4<f32>(ndc, 1.0);
-  return w.xyz / w.w;
-}
-
-// Orthonormal basis with column 2 = n (basis * (x,y,z) = x*t + y*b + z*n).
 // SHADOW cone for the aimed emitter lights — modeled on the reference traceShadowCone
 // (Friduric/voxel-cone-tracing): a NEAR-UNIFORM ~voxel-sized march with saturating front-to-back
 // accumulation, NOT the geometric ladder of trace_probe_cone. The ladder's step grows with
@@ -404,13 +400,6 @@ fn wang_hash(v: u32) -> u32 {
   s = s * 0x27d4eb2du;
   s = s ^ (s >> 15u);
   return s;
-}
-
-fn build_basis(n: vec3<f32>) -> mat3x3<f32> {
-  let a = select(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), abs(n.x) > 0.9);
-  let t = normalize(cross(a, n));
-  let b = cross(n, t);
-  return mat3x3<f32>(t, b, n);
 }
 
 // UNSHADOWED importance of emitter j (uLights index) seen from surface point P with normal N —
@@ -492,7 +481,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let depth = textureLoad(depthTex, full, 0);
   let uv = (vec2<f32>(full) + vec2<f32>(0.5)) / screenParams.xy;
   let ndc = vec3<f32>(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0, depth);
-  let P = unproject(ndc);
+  let P = unproject(ndc, uInvViewProj);
   let origin = P + N * (uGridOrigin.w * 1.5 + NORMAL_BIAS);
 
   let C = CONES_PER_PROBE;
