@@ -20,54 +20,54 @@ import { unprojectWGSL } from "./voxelTrace.wgsl.ts";
 
 export function createCompositeShaderMeta(cfg: VoxelBakedConfig) {
   return new ShaderMeta(
-  {
-    // All per-frame scalar/vector/matrix uniforms consolidated into ONE struct buffer (uF) so the
-    // pass binds + uploads a single UBO instead of six. The WGSL `CompositeFrame` struct is defined
-    // in the body below; the type name here is opaque to the meta system, so size/bufferSize are
-    // given explicitly (48 f32 = 192 bytes: 4×vec4 + 2×mat4x4, all 16-byte aligned → no padding).
-    // Fields:
-    //   params  .z = sun shadow-map world texel size (normal-offset bias). .x/.y/.w baked consts.
-    //   params2 .x/.y = screen width/height px (cone upsample uv), .z = cone downscale factor.
-    //   sun     .xyz = normalized world dir TOWARD the sun, .w = effective intensity (0 = disabled).
-    //   sunColor.rgb = sun color (linear).
-    //   invViewProj = inverse(viewProj) (reverse-Z) → reconstruct world P from camera depth.
-    //   sunViewProj = sun orthographic view-projection (orthoZO) → project P into the shadow map.
-    frame: new VariableMeta("uF", VariableKind.Uniform, `CompositeFrame`, {
-      size: 48,
-      bufferSize: 192,
-    }),
-    // G-buffer reverse-Z camera depth, to reconstruct the per-pixel world position P.
-    depthTex: new VariableMeta("depthTex", VariableKind.Texture, `texture_depth_2d`, {
-      textureSampleType: "depth",
-    }),
-    // Sun-POV depth map (depth32float from the sunDepth pass). textureLoad (no sampler).
-    shadowMap: new VariableMeta("shadowMap", VariableKind.Texture, `texture_depth_2d`, {
-      textureSampleType: "depth",
-    }),
-    // G-buffer albedo (the SDF draw-pass renderTexture).
-    albedoTex: new VariableMeta("albedoTex", VariableKind.Texture, `texture_2d<f32>`, {
-      textureSampleType: "float",
-    }),
-    // G-buffer world normal (rgba16float, packed *0.5+0.5; a<0.5 = no surface) — used only as the
-    // surface mask here.
-    normalTex: new VariableMeta("normalTex", VariableKind.Texture, `texture_2d<f32>`, {
-      textureSampleType: "float",
-    }),
-    // Cone output: rgb = indirect (×giStrength), a = AO visibility. HALF-res → sampled with
-    // a linear sampler to bilinear-upsample to full res.
-    coneTex: new VariableMeta("coneTex", VariableKind.Texture, `texture_2d<f32>`, {
-      textureSampleType: "float",
-    }),
-    // Linear/clamp sampler for the bilinear upsample of the half-res cone output.
-    coneSampler: new VariableMeta("coneSampler", VariableKind.Sampler, `sampler`),
-    // G-buffer per-pixel self-emission (rgba16float, rgb = uColor·abs(material.x)).
-    emissionTex: new VariableMeta("emissionTex", VariableKind.Texture, `texture_2d<f32>`, {
-      textureSampleType: "float",
-    }),
-  },
-  {},
-  // language=WGSL
-  wgsl /* wgsl */ `
+    {
+      // All per-frame scalar/vector/matrix uniforms consolidated into ONE struct buffer (uF) so the
+      // pass binds + uploads a single UBO instead of six. The WGSL `CompositeFrame` struct is defined
+      // in the body below; the type name here is opaque to the meta system, so size/bufferSize are
+      // given explicitly (48 f32 = 192 bytes: 4×vec4 + 2×mat4x4, all 16-byte aligned → no padding).
+      // Fields:
+      //   params  .z = sun shadow-map world texel size (normal-offset bias). .x/.y/.w baked consts.
+      //   params2 .x/.y = screen width/height px (cone upsample uv), .z = cone downscale factor.
+      //   sun     .xyz = normalized world dir TOWARD the sun, .w = effective intensity (0 = disabled).
+      //   sunColor.rgb = sun color (linear).
+      //   invViewProj = inverse(viewProj) (reverse-Z) → reconstruct world P from camera depth.
+      //   sunViewProj = sun orthographic view-projection (orthoZO) → project P into the shadow map.
+      frame: new VariableMeta("uF", VariableKind.Uniform, `CompositeFrame`, {
+        size: 48,
+        bufferSize: 192,
+      }),
+      // G-buffer reverse-Z camera depth, to reconstruct the per-pixel world position P.
+      depthTex: new VariableMeta("depthTex", VariableKind.Texture, `texture_depth_2d`, {
+        textureSampleType: "depth",
+      }),
+      // Sun-POV depth map (depth32float from the sunDepth pass). textureLoad (no sampler).
+      shadowMap: new VariableMeta("shadowMap", VariableKind.Texture, `texture_depth_2d`, {
+        textureSampleType: "depth",
+      }),
+      // G-buffer albedo (the SDF draw-pass renderTexture).
+      albedoTex: new VariableMeta("albedoTex", VariableKind.Texture, `texture_2d<f32>`, {
+        textureSampleType: "float",
+      }),
+      // G-buffer world normal (rgba16float, packed *0.5+0.5; a<0.5 = no surface) — used only as the
+      // surface mask here.
+      normalTex: new VariableMeta("normalTex", VariableKind.Texture, `texture_2d<f32>`, {
+        textureSampleType: "float",
+      }),
+      // Cone output: rgb = indirect (×giStrength), a = AO visibility. HALF-res → sampled with
+      // a linear sampler to bilinear-upsample to full res.
+      coneTex: new VariableMeta("coneTex", VariableKind.Texture, `texture_2d<f32>`, {
+        textureSampleType: "float",
+      }),
+      // Linear/clamp sampler for the bilinear upsample of the half-res cone output.
+      coneSampler: new VariableMeta("coneSampler", VariableKind.Sampler, `sampler`),
+      // G-buffer per-pixel self-emission (rgba16float, rgb = uColor·abs(material.x)).
+      emissionTex: new VariableMeta("emissionTex", VariableKind.Texture, `texture_2d<f32>`, {
+        textureSampleType: "float",
+      }),
+    },
+    {},
+    // language=WGSL
+    wgsl /* wgsl */ `
 const AMBIENT: f32 = ${cfg.ambient};
 const EXPOSURE: f32 = ${cfg.exposure};
 const PENUMBRA: f32 = ${cfg.penumbra};

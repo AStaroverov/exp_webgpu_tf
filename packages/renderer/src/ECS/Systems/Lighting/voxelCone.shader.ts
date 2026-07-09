@@ -33,79 +33,79 @@ import { buildBasisWGSL, unprojectWGSL } from "./voxelTrace.wgsl.ts";
 
 export function createConeShaderMeta(cfg: VoxelBakedConfig) {
   return new ShaderMeta(
-  {
-    // .x = screen width (px), .y = screen height (px), .zw spare (the aniso toggle + light count
-    // that used to ride here moved to the probe gather's uLightParams — this pass keeps only the
-    // probe resolve + iso AO cones).
-    params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
-    // Screen-probe resolve params (all LIVE per-frame uniforms — GUI-tunable with no rebuild):
-    // .x = SCREEN_PROBE_TILE (full-res px / probe), .y = normal-weight power (SP_NORMAL_POW),
-    // .z = plane-threshold scale (SP_PLANE_K, × local probe spacing), .w = resolveRadius (the smooth
-    // screen kernel's support in TILES — bigger = smoother/wider fill, smaller = more local detail).
-    params3: new VariableMeta("uParams3", VariableKind.Uniform, `vec4<f32>`),
-    // inverse(viewProjMatrix) (reverse-Z), column-major, for world-position reconstruction.
-    invViewProj: new VariableMeta("uInvViewProj", VariableKind.Uniform, `mat4x4<f32>`),
-    // .xyz = world min corner, .w = cellSize.
-    gridOrigin: new VariableMeta("uGridOrigin", VariableKind.Uniform, `vec4<f32>`),
-    // .xyz = voxel counts per axis.
-    gridDims: new VariableMeta("uGridDims", VariableKind.Uniform, `vec4<i32>`),
-    // G-buffer reverse-Z depth (texture_depth_2d) + world normal (rgba16float, packed *0.5+0.5).
-    depthTex: new VariableMeta("depthTex", VariableKind.Texture, `texture_depth_2d`, {
-      textureSampleType: "depth",
-    }),
-    normalTex: new VariableMeta("normalTex", VariableKind.Texture, `texture_2d<f32>`, {
-      textureSampleType: "float",
-    }),
-    // The voxelRadiance mip pyramid (ALL mips) — read at the per-step LOD by the short AO cones.
-    voxelRadiance: new VariableMeta("voxelRadiance", VariableKind.Texture, `texture_3d<f32>`, {
-      viewDimension: "3d",
-      textureSampleType: "float",
-    }),
-    // SCREEN-SPACE probe SH-L1 textures (the low-frequency diffuse fill/bounce source; .xyzw = the
-    // 4 SH coeffs). 2D (one texel per screen probe), point-loaded (textureLoad) in
-    // resolve_screen_probes — no sampler.
-    screenShR: new VariableMeta("screenShR", VariableKind.Texture, `texture_2d<f32>`, {
-      textureSampleType: "float",
-    }),
-    screenShG: new VariableMeta("screenShG", VariableKind.Texture, `texture_2d<f32>`, {
-      textureSampleType: "float",
-    }),
-    screenShB: new VariableMeta("screenShB", VariableKind.Texture, `texture_2d<f32>`, {
-      textureSampleType: "float",
-    }),
-    // Per-probe geometry: .xy = representative full-res pixel, .z = validity, .w = the probe FOOTPRINT
-    // (cell size in full-res px) → the resolve area-weights each probe by footprint² (density-invariant
-    // average). rgba32float → declared "unfilterable-float" (point-loaded); the resolve reconstructs
-    // each probe's P + N from the G-buffer at .xy. ALWAYS bound (pruning-safe).
-    screenProbePix: new VariableMeta("screenProbePix", VariableKind.Texture, `texture_2d<f32>`, {
-      textureSampleType: "unfilterable-float",
-    }),
-    // Per-probe world anchor P (.xyz) + world normal N (.xyz), written by the gather. The resolve
-    // point-loads these instead of reconstructing each probe's P/N from the full-res G-buffer per tap
-    // (P1). Both unfilterable-float (point sampling). ALWAYS bound (pruning-safe).
-    screenProbePos: new VariableMeta("screenProbePos", VariableKind.Texture, `texture_2d<f32>`, {
-      textureSampleType: "unfilterable-float",
-    }),
-    screenProbeNrm: new VariableMeta("screenProbeNrm", VariableKind.Texture, `texture_2d<f32>`, {
-      textureSampleType: "unfilterable-float",
-    }),
-    // ADAPTIVE screen-probe indirection — group 1 (StorageRead, read-only storage in the fragment
-    // stage, allowed in core WebGPU). tileHeader[T] = count of adaptive probes parented to coarse
-    // tile T; tileIndices[T*K + j] = the global atlas slot of the tile's j-th adaptive probe. When
-    // lightThresh is high (no adaptive probes) tileHeader is all-zero (cleared, never written), so
-    // the adaptive-tap loop below is skipped and the resolve is identical to the flat-atlas build.
-    tileHeader: new VariableMeta("uTileHeader", VariableKind.StorageRead, `array<u32>`, {
-      visibility: GPUShaderStage.FRAGMENT,
-    }),
-    tileIndices: new VariableMeta("uTileIndices", VariableKind.StorageRead, `array<u32>`, {
-      visibility: GPUShaderStage.FRAGMENT,
-    }),
-    // Filtering sampler for textureSampleLevel over the voxelRadiance pyramid.
-    voxelSampler: new VariableMeta("voxelSampler", VariableKind.Sampler, `sampler`),
-  },
-  {},
-  // language=WGSL
-  wgsl /* wgsl */ `
+    {
+      // .x = screen width (px), .y = screen height (px), .zw spare (the aniso toggle + light count
+      // that used to ride here moved to the probe gather's uLightParams — this pass keeps only the
+      // probe resolve + iso AO cones).
+      params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
+      // Screen-probe resolve params (all LIVE per-frame uniforms — GUI-tunable with no rebuild):
+      // .x = SCREEN_PROBE_TILE (full-res px / probe), .y = normal-weight power (SP_NORMAL_POW),
+      // .z = plane-threshold scale (SP_PLANE_K, × local probe spacing), .w = resolveRadius (the smooth
+      // screen kernel's support in TILES — bigger = smoother/wider fill, smaller = more local detail).
+      params3: new VariableMeta("uParams3", VariableKind.Uniform, `vec4<f32>`),
+      // inverse(viewProjMatrix) (reverse-Z), column-major, for world-position reconstruction.
+      invViewProj: new VariableMeta("uInvViewProj", VariableKind.Uniform, `mat4x4<f32>`),
+      // .xyz = world min corner, .w = cellSize.
+      gridOrigin: new VariableMeta("uGridOrigin", VariableKind.Uniform, `vec4<f32>`),
+      // .xyz = voxel counts per axis.
+      gridDims: new VariableMeta("uGridDims", VariableKind.Uniform, `vec4<i32>`),
+      // G-buffer reverse-Z depth (texture_depth_2d) + world normal (rgba16float, packed *0.5+0.5).
+      depthTex: new VariableMeta("depthTex", VariableKind.Texture, `texture_depth_2d`, {
+        textureSampleType: "depth",
+      }),
+      normalTex: new VariableMeta("normalTex", VariableKind.Texture, `texture_2d<f32>`, {
+        textureSampleType: "float",
+      }),
+      // The voxelRadiance mip pyramid (ALL mips) — read at the per-step LOD by the short AO cones.
+      voxelRadiance: new VariableMeta("voxelRadiance", VariableKind.Texture, `texture_3d<f32>`, {
+        viewDimension: "3d",
+        textureSampleType: "float",
+      }),
+      // SCREEN-SPACE probe SH-L1 textures (the low-frequency diffuse fill/bounce source; .xyzw = the
+      // 4 SH coeffs). 2D (one texel per screen probe), point-loaded (textureLoad) in
+      // resolve_screen_probes — no sampler.
+      screenShR: new VariableMeta("screenShR", VariableKind.Texture, `texture_2d<f32>`, {
+        textureSampleType: "float",
+      }),
+      screenShG: new VariableMeta("screenShG", VariableKind.Texture, `texture_2d<f32>`, {
+        textureSampleType: "float",
+      }),
+      screenShB: new VariableMeta("screenShB", VariableKind.Texture, `texture_2d<f32>`, {
+        textureSampleType: "float",
+      }),
+      // Per-probe geometry: .xy = representative full-res pixel, .z = validity, .w = the probe FOOTPRINT
+      // (cell size in full-res px) → the resolve area-weights each probe by footprint² (density-invariant
+      // average). rgba32float → declared "unfilterable-float" (point-loaded); the resolve reconstructs
+      // each probe's P + N from the G-buffer at .xy. ALWAYS bound (pruning-safe).
+      screenProbePix: new VariableMeta("screenProbePix", VariableKind.Texture, `texture_2d<f32>`, {
+        textureSampleType: "unfilterable-float",
+      }),
+      // Per-probe world anchor P (.xyz) + world normal N (.xyz), written by the gather. The resolve
+      // point-loads these instead of reconstructing each probe's P/N from the full-res G-buffer per tap
+      // (P1). Both unfilterable-float (point sampling). ALWAYS bound (pruning-safe).
+      screenProbePos: new VariableMeta("screenProbePos", VariableKind.Texture, `texture_2d<f32>`, {
+        textureSampleType: "unfilterable-float",
+      }),
+      screenProbeNrm: new VariableMeta("screenProbeNrm", VariableKind.Texture, `texture_2d<f32>`, {
+        textureSampleType: "unfilterable-float",
+      }),
+      // ADAPTIVE screen-probe indirection — group 1 (StorageRead, read-only storage in the fragment
+      // stage, allowed in core WebGPU). tileHeader[T] = count of adaptive probes parented to coarse
+      // tile T; tileIndices[T*K + j] = the global atlas slot of the tile's j-th adaptive probe. When
+      // lightThresh is high (no adaptive probes) tileHeader is all-zero (cleared, never written), so
+      // the adaptive-tap loop below is skipped and the resolve is identical to the flat-atlas build.
+      tileHeader: new VariableMeta("uTileHeader", VariableKind.StorageRead, `array<u32>`, {
+        visibility: GPUShaderStage.FRAGMENT,
+      }),
+      tileIndices: new VariableMeta("uTileIndices", VariableKind.StorageRead, `array<u32>`, {
+        visibility: GPUShaderStage.FRAGMENT,
+      }),
+      // Filtering sampler for textureSampleLevel over the voxelRadiance pyramid.
+      voxelSampler: new VariableMeta("voxelSampler", VariableKind.Sampler, `sampler`),
+    },
+    {},
+    // language=WGSL
+    wgsl /* wgsl */ `
 // BAKED tuning consts (interpolated from VoxelBakedConfig at shader-build time). See voxelConfig.ts.
 const NORMAL_BIAS: f32 = ${cfg.normalBias};
 const APERTURE: f32 = ${cfg.aperture};

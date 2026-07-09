@@ -6,7 +6,6 @@ import { createVoxelSystem } from "../../renderer/src/ECS/Systems/Lighting/creat
 import { createLightEmitterSystem } from "../../renderer/src/ECS/Systems/Lighting/createLightEmitterSystem.ts";
 import { createTransformSystem } from "../../renderer/src/ECS/Systems/TransformSystem.ts";
 import { createResizeSystem } from "../../renderer/src/ECS/Systems/ResizeSystem.ts";
-import { SunLight } from "../../renderer/src/ECS/Systems/SunLight.ts";
 import { getEngineComponents, type EngineWorld } from "./ECS/createEngineWorld.ts";
 import { RenderDI } from "./DI/RenderDI.ts";
 import { EngineDI } from "./DI/EngineDI.ts";
@@ -89,25 +88,11 @@ export async function createRenderTarget(
     shapeSystem.prepare();
 
     const encoder = device.createCommandEncoder();
-    // Order (must not be reordered): SDF G-buffer draw → (sun depth, only when the
-    // directional sun is on) → voxelize → mips → probe → cone → composite → present.
+    // SDF G-buffer draw → the full voxel-GI scenario (voxel.renderFrame, load-bearing order) →
+    // present. renderFrame internally gates sunDepth on SunLight.enabled and swaps composite for the
+    // probe-debug view when toggled.
     frameTick(encoder, delta);
-    if (SunLight.enabled) {
-      voxel.sunDepth(encoder);
-    }
-    voxel.voxelize(encoder);
-    voxel.mips(encoder);
-    // Light-adaptive screen-probe atlas chain (clear → classify → gatherUniform → refine 16→8 →
-    // build-args → gatherAdaptive). gatherUniform runs BEFORE refine so refine subdivides on the real
-    // gathered-SH radiance spread across the cage.
-    voxel.probeClear(encoder);
-    voxel.probeClassify(encoder);
-    voxel.gatherUniform(encoder);
-    voxel.probeRefine(encoder);
-    voxel.probeBuildArgs(encoder);
-    voxel.gatherAdaptive(encoder);
-    voxel.cone(encoder);
-    voxel.composite(encoder);
+    voxel.renderFrame(encoder);
     present(encoder, voxel.compositeOutputTexture);
     device.queue.submit([encoder.finish()]);
   }

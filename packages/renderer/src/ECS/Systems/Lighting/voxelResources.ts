@@ -190,8 +190,7 @@ export function createScreenProbeBuffers(
 ): ScreenProbeBuffers {
   // COPY_SRC on every buffer so the throttled budget readback (counter) and any future diagnostics
   // can copy them to a staging buffer; COPY_DST so the per-frame clearBuffer works.
-  const storageUsage =
-    GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
+  const storageUsage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
   const total = counts.numUniform + counts.maxAdaptive;
   return {
     counter: device.createBuffer({ size: 2 * 4, usage: storageUsage }),

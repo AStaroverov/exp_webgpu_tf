@@ -13,7 +13,7 @@
 //   screen-probe shader: conesPerProbe, maxDist (cone+probe reach), aperture, normalBias
 //   AIMED-cone group — emitterDirect, emitterFalloff, aimedSteps, aimedAlphaCut — bakes into the
 //     screen-probe shader: the aimed emitter cones are traced once per PROBE (the probe-centric
-//     final gather — see docs/probe-centric-gi-migration.md).
+//     final gather — see ./README.md).
 // (maxDist is unused by the cone shader body itself; it only drives the probe reach + CPU side.)
 export type VoxelBakedConfig = {
   // ── cone pass ───────────────────────────────────────────────────────────────────────

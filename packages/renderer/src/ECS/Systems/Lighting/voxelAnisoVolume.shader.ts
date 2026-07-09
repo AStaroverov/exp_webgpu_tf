@@ -35,27 +35,82 @@ export const WORKGROUP = 4;
 // The 2×2×2 sub-voxel offsets, in load order v0..v7. Index i encodes the offset bits:
 // offset = (1 - ((i>>2)&1), 1 - ((i>>1)&1), 1 - (i&1)) → v0=(1,1,1) .. v7=(0,0,0).
 const OFFSETS: [number, number, number][] = [
-  [1, 1, 1], [1, 1, 0], [1, 0, 1], [1, 0, 0],
-  [0, 1, 1], [0, 1, 0], [0, 0, 1], [0, 0, 0],
+  [1, 1, 1],
+  [1, 1, 0],
+  [1, 0, 1],
+  [1, 0, 0],
+  [0, 1, 1],
+  [0, 1, 0],
+  [0, 0, 1],
+  [0, 0, 0],
 ];
 
 // One block per direction. `pairs` are the front-to-back (near, far) sample pairs along that
 // direction's axis, in the ORIGINAL accumulation order (kept exact so the summation is FP-identical
 // to the old hand-written blocks). The near voxel occludes the far one: near + far·(1 − near.a).
 const DIRS: { name: string; pairs: [number, number][] }[] = [
-  { name: "NegX", pairs: [[0, 4], [1, 5], [2, 6], [3, 7]] },
-  { name: "PosX", pairs: [[4, 0], [5, 1], [6, 2], [7, 3]] },
-  { name: "NegY", pairs: [[0, 2], [1, 3], [5, 7], [4, 6]] },
-  { name: "PosY", pairs: [[2, 0], [3, 1], [7, 5], [6, 4]] },
-  { name: "NegZ", pairs: [[0, 1], [2, 3], [4, 5], [6, 7]] },
-  { name: "PosZ", pairs: [[1, 0], [3, 2], [5, 4], [7, 6]] },
+  {
+    name: "NegX",
+    pairs: [
+      [0, 4],
+      [1, 5],
+      [2, 6],
+      [3, 7],
+    ],
+  },
+  {
+    name: "PosX",
+    pairs: [
+      [4, 0],
+      [5, 1],
+      [6, 2],
+      [7, 3],
+    ],
+  },
+  {
+    name: "NegY",
+    pairs: [
+      [0, 2],
+      [1, 3],
+      [5, 7],
+      [4, 6],
+    ],
+  },
+  {
+    name: "PosY",
+    pairs: [
+      [2, 0],
+      [3, 1],
+      [7, 5],
+      [6, 4],
+    ],
+  },
+  {
+    name: "NegZ",
+    pairs: [
+      [0, 1],
+      [2, 3],
+      [4, 5],
+      [6, 7],
+    ],
+  },
+  {
+    name: "PosZ",
+    pairs: [
+      [1, 0],
+      [3, 2],
+      [5, 4],
+      [7, 6],
+    ],
+  },
 ];
 
 // Emit one per-direction block: 8 loads from src{Dir} + the front-to-back store into dst{Dir}.
 // Each block is wrapped in `{ }` so `let v0..v7` gets its own scope (no duplicate-let across blocks).
 const anisoBlock = ({ name, pairs }: (typeof DIRS)[number]) => {
   const loads = OFFSETS.map(
-    (o, i) => `    let v${i} = textureLoad(src${name}, base + vec3<i32>(${o[0]}, ${o[1]}, ${o[2]}), 0);`,
+    (o, i) =>
+      `    let v${i} = textureLoad(src${name}, base + vec3<i32>(${o[0]}, ${o[1]}, ${o[2]}), 0);`,
   ).join("\n");
   const acc = pairs.map(([n, f]) => `v${n} + v${f} * (1.0 - v${n}.a)`).join(" + ");
   return `  {\n${loads}\n    textureStore(dst${name}, dst, (${acc}) * 0.25);\n  }`;

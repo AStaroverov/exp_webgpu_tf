@@ -26,24 +26,24 @@ Two light sources add up in the final composite:
 Created in `voxelResources.ts`. All 3D textures are `rgba16float`, `STORAGE_BINDING |
 TEXTURE_BINDING` (written by a compute pass via `textureStore`, read later as a sampled texture).
 
-| Resource | Type / format | Writer | Reader | Notes |
-|---|---|---|---|---|
-| `voxelRadiance` | 3D rgba16float + **mip pyramid** | `voxelize` (mip0), `mips` (mip1..N) | `anisoBase`, screen-probe gather | rgb = direct-lit radiance (sun N·L·vis) + emission; a = occupancy. ~38 MB on the default grid |
-| aniso ×6 (`negX/posX/…/posZ`) | 3D rgba16float ×6 + mips, **½ res** | `anisoBase` (lvl0), `anisoVolume` (lvl c→c+1) | screen-probe gather | Directional volumes (anti-leak); the cone picks the 3 volumes facing the cone dir and blends by dir² |
-| screen-probe atlas: `shR/shG/shB` | 2D rgba16float | gather | `refine`, cone resolve, debug | SH-L1 coefficients (per channel) |
-| `nrm` | 2D rgba16float | gather | gather (history validity), cone resolve | probe world normal; |nrm|²≈0 = invalid history |
-| `pix` | 2D rgba32float | gather | cone resolve, debug | probe representative pixel + validity + footprint |
-| `pos` | 2D rgba32float | gather | cone resolve | probe world anchor P (32-bit for plane-reject precision) |
-| screen-probe buffers: `counter` | atomic<u32>×2 | refine (atomicAdd), clear | args | [0]=bump allocator, [1]=sticky budget-exceeded |
-| `data` | array<vec4<u32>> | classify, refine | gather, cone | per-probe record (repr pixel + level), index = global slot |
-| `header` | array<atomic<u32>> | refine, clear | cone | count of adaptive probes per coarse tile |
-| `indices` | array<u32>, stride=K(=8) | refine | cone | global slots of a tile's adaptive probes |
-| `args` | array<u32,3>, INDIRECT | args, clear | `gatherAdaptive` (indirect dispatch) | [ceil(total/WG),1,1] |
-| `sunDepth` | 2D depth32float | `sunDepth` | `voxelize`, `composite` | sun-POV shadow map |
-| `coneOutput` | 2D HDR, **½ res** | `cone` | `composite` | indirect + AO; composite bilinearly upsamples |
-| `compositeOutput` | 2D HDR full-res | `composite` / `probeDebug` | present | final image |
-| `lightsBuf` | storage, grow-doubled | `setLights` | gather | emitters (x,y,z,r, r,g,b,i) as 2×vec4 |
-| `clusterBuf` | storage | `setLights` (CPU clustering) | gather | per-cell emitter lists |
+| Resource                          | Type / format                       | Writer                                        | Reader                                  | Notes                                                                                                |
+| --------------------------------- | ----------------------------------- | --------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------- | --- | --------------------- |
+| `voxelRadiance`                   | 3D rgba16float + **mip pyramid**    | `voxelize` (mip0), `mips` (mip1..N)           | `anisoBase`, screen-probe gather        | rgb = direct-lit radiance (sun N·L·vis) + emission; a = occupancy. ~38 MB on the default grid        |
+| aniso ×6 (`negX/posX/…/posZ`)     | 3D rgba16float ×6 + mips, **½ res** | `anisoBase` (lvl0), `anisoVolume` (lvl c→c+1) | screen-probe gather                     | Directional volumes (anti-leak); the cone picks the 3 volumes facing the cone dir and blends by dir² |
+| screen-probe atlas: `shR/shG/shB` | 2D rgba16float                      | gather                                        | `refine`, cone resolve, debug           | SH-L1 coefficients (per channel)                                                                     |
+| `nrm`                             | 2D rgba16float                      | gather                                        | gather (history validity), cone resolve | probe world normal;                                                                                  | nrm | ²≈0 = invalid history |
+| `pix`                             | 2D rgba32float                      | gather                                        | cone resolve, debug                     | probe representative pixel + validity + footprint                                                    |
+| `pos`                             | 2D rgba32float                      | gather                                        | cone resolve                            | probe world anchor P (32-bit for plane-reject precision)                                             |
+| screen-probe buffers: `counter`   | atomic<u32>×2                       | refine (atomicAdd), clear                     | args                                    | [0]=bump allocator, [1]=sticky budget-exceeded                                                       |
+| `data`                            | array<vec4<u32>>                    | classify, refine                              | gather, cone                            | per-probe record (repr pixel + level), index = global slot                                           |
+| `header`                          | array<atomic<u32>>                  | refine, clear                                 | cone                                    | count of adaptive probes per coarse tile                                                             |
+| `indices`                         | array<u32>, stride=K(=8)            | refine                                        | cone                                    | global slots of a tile's adaptive probes                                                             |
+| `args`                            | array<u32,3>, INDIRECT              | args, clear                                   | `gatherAdaptive` (indirect dispatch)    | [ceil(total/WG),1,1]                                                                                 |
+| `sunDepth`                        | 2D depth32float                     | `sunDepth`                                    | `voxelize`, `composite`                 | sun-POV shadow map                                                                                   |
+| `coneOutput`                      | 2D HDR, **½ res**                   | `cone`                                        | `composite`                             | indirect + AO; composite bilinearly upsamples                                                        |
+| `compositeOutput`                 | 2D HDR full-res                     | `composite` / `probeDebug`                    | present                                 | final image                                                                                          |
+| `lightsBuf`                       | storage, grow-doubled               | `setLights`                                   | gather                                  | emitters (x,y,z,r, r,g,b,i) as 2×vec4                                                                |
+| `clusterBuf`                      | storage                             | `setLights` (CPU clustering)                  | gather                                  | per-cell emitter lists                                                                               |
 
 **Screen-probe atlas** is a flat probe atlas (not a literal screen grid): one probe per
 `tile×tile` pixels (default 16, "Lumen DownsampleFactor"). The uniform block occupies rows

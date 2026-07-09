@@ -38,7 +38,7 @@ import { buildBasisWGSL, unprojectWGSL } from "./voxelTrace.wgsl.ts";
 // plain lerp is a valid radiance blend. hysteresis = 0 (uTemporalParams.x) disables the whole path
 // — byte-identical output to the pre-temporal build (the parity/rollback gate).
 //
-// PROBE-CENTRIC FINAL GATHER (the accepted architecture — see docs/probe-centric-gi-migration.md):
+// PROBE-CENTRIC FINAL GATHER (the accepted architecture — see ./README.md):
 // this gather owns ALL cone tracing. Besides the fill hemisphere it traces the AIMED emitter cones
 // (one narrow cone per emitter, once per PROBE instead of once per pixel — the deleted per-pixel
 // loop in voxelCone was O(pixels × lights) and the dominant frame cost) and binds the 6 anisotropic
@@ -59,198 +59,228 @@ export const GATHER_WORKGROUP = 64;
 // true → the adaptive variant (indirect dispatch over the live counter's [numUniform, ...) tail).
 export function createScreenProbeShaderMeta(cfg: VoxelBakedConfig, isAdaptive: boolean) {
   return new ShaderMeta(
-  {
-    // ---- group 0 : uniforms (COMPUTE-only) ----
-    // .xyz = world min corner of the grid box, .w = cellSize (world units per voxel).
-    gridOrigin: uC("uGridOrigin", `vec4<f32>`),
-    // .xyz = voxel counts per axis, .w unused.
-    gridDims: uC("uGridDims", `vec4<i32>`),
-    // inverse(viewProjMatrix) (reverse-Z) — reconstructs the probe's world position from the
-    // G-buffer depth at its representative pixel.
-    invViewProj: uC("uInvViewProj", `mat4x4<f32>`),
-    // .x = canvas width (px), .y = canvas height (px), .z = SCREEN_PROBE_TILE (full-res px / probe),
-    // .w = maxAdaptive (the adaptive budget → caps the counter when deriving `total`). Placement is
-    // already resolved into probeData by the classify/refine passes; the gather only reads it.
-    screenParams: uC("screenParams", `vec4<f32>`),
-    // STAGE 3 (temporal): LAST frame's FORWARD viewProjMatrix (NOT an inverse — the CPU snapshots
-    // the raw matrix after each frame's uploads). Projects the fresh world anchor P into the
-    // previous frame's clip space → prev NDC → prev pixel → prev uniform tile = the history texel.
-    prevViewProj: uC("uPrevViewProj", `mat4x4<f32>`),
-    // STAGE 3 (temporal), all LIVE (per-frame uploads, no rebuild):
-    //   .x = hysteresis (0..1). 0 = temporal OFF — the fresh-only path, byte-identical output.
-    //   .y = frame index (mod 1024 on the CPU for f32 exactness) — drives the per-frame
-    //        golden-angle rotation of the Fibonacci fill-cone set.
-    //   .z = plane-reject threshold in WORLD units (spPlaneK × voxel cellSize — the same live GUI
-    //        knob the resolve's plane test scales by, so one knob tunes both).
-    //   .w = normal-similarity power (spNormalPow — the resolve's live normal weight, reused).
-    temporalParams: uC("uTemporalParams", `vec4<f32>`),
-    // .x = global live light count (DEBUG only — the aimed loop reads its cluster cell's list
-    // from uLightClusters, group 1), .y = anisoMode (0 = isotropic pyramid, 1 = anisotropic
-    // directional volumes), .zw spare.
-    lightParams: uC("uLightParams", `vec4<f32>`),
-    // The 6 ANISOTROPIC directional radiance volumes (−X,+X,−Y,+Y,−Z,+Z) — ALL-mips sampled
-    // views of the half-res directional pyramid (voxelAnisoBase/voxelAnisoVolume). sample_aniso
-    // picks the 3 facing the cone dir and blends by dir² → direction-correct occlusion for the
-    // far-field (coarse-LOD) samples; the near field still reads voxelRadiance mip 0 (crisp).
-    anisoNegX: new VariableMeta("anisoNegX", VariableKind.Texture, `texture_3d<f32>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      viewDimension: "3d",
-      textureSampleType: "float",
-    }),
-    anisoPosX: new VariableMeta("anisoPosX", VariableKind.Texture, `texture_3d<f32>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      viewDimension: "3d",
-      textureSampleType: "float",
-    }),
-    anisoNegY: new VariableMeta("anisoNegY", VariableKind.Texture, `texture_3d<f32>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      viewDimension: "3d",
-      textureSampleType: "float",
-    }),
-    anisoPosY: new VariableMeta("anisoPosY", VariableKind.Texture, `texture_3d<f32>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      viewDimension: "3d",
-      textureSampleType: "float",
-    }),
-    anisoNegZ: new VariableMeta("anisoNegZ", VariableKind.Texture, `texture_3d<f32>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      viewDimension: "3d",
-      textureSampleType: "float",
-    }),
-    anisoPosZ: new VariableMeta("anisoPosZ", VariableKind.Texture, `texture_3d<f32>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      viewDimension: "3d",
-      textureSampleType: "float",
-    }),
+    {
+      // ---- group 0 : uniforms (COMPUTE-only) ----
+      // .xyz = world min corner of the grid box, .w = cellSize (world units per voxel).
+      gridOrigin: uC("uGridOrigin", `vec4<f32>`),
+      // .xyz = voxel counts per axis, .w unused.
+      gridDims: uC("uGridDims", `vec4<i32>`),
+      // inverse(viewProjMatrix) (reverse-Z) — reconstructs the probe's world position from the
+      // G-buffer depth at its representative pixel.
+      invViewProj: uC("uInvViewProj", `mat4x4<f32>`),
+      // .x = canvas width (px), .y = canvas height (px), .z = SCREEN_PROBE_TILE (full-res px / probe),
+      // .w = maxAdaptive (the adaptive budget → caps the counter when deriving `total`). Placement is
+      // already resolved into probeData by the classify/refine passes; the gather only reads it.
+      screenParams: uC("screenParams", `vec4<f32>`),
+      // STAGE 3 (temporal): LAST frame's FORWARD viewProjMatrix (NOT an inverse — the CPU snapshots
+      // the raw matrix after each frame's uploads). Projects the fresh world anchor P into the
+      // previous frame's clip space → prev NDC → prev pixel → prev uniform tile = the history texel.
+      prevViewProj: uC("uPrevViewProj", `mat4x4<f32>`),
+      // STAGE 3 (temporal), all LIVE (per-frame uploads, no rebuild):
+      //   .x = hysteresis (0..1). 0 = temporal OFF — the fresh-only path, byte-identical output.
+      //   .y = frame index (mod 1024 on the CPU for f32 exactness) — drives the per-frame
+      //        golden-angle rotation of the Fibonacci fill-cone set.
+      //   .z = plane-reject threshold in WORLD units (spPlaneK × voxel cellSize — the same live GUI
+      //        knob the resolve's plane test scales by, so one knob tunes both).
+      //   .w = normal-similarity power (spNormalPow — the resolve's live normal weight, reused).
+      temporalParams: uC("uTemporalParams", `vec4<f32>`),
+      // .x = global live light count (DEBUG only — the aimed loop reads its cluster cell's list
+      // from uLightClusters, group 1), .y = anisoMode (0 = isotropic pyramid, 1 = anisotropic
+      // directional volumes), .zw spare.
+      lightParams: uC("uLightParams", `vec4<f32>`),
+      // The 6 ANISOTROPIC directional radiance volumes (−X,+X,−Y,+Y,−Z,+Z) — ALL-mips sampled
+      // views of the half-res directional pyramid (voxelAnisoBase/voxelAnisoVolume). sample_aniso
+      // picks the 3 facing the cone dir and blends by dir² → direction-correct occlusion for the
+      // far-field (coarse-LOD) samples; the near field still reads voxelRadiance mip 0 (crisp).
+      anisoNegX: new VariableMeta("anisoNegX", VariableKind.Texture, `texture_3d<f32>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        viewDimension: "3d",
+        textureSampleType: "float",
+      }),
+      anisoPosX: new VariableMeta("anisoPosX", VariableKind.Texture, `texture_3d<f32>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        viewDimension: "3d",
+        textureSampleType: "float",
+      }),
+      anisoNegY: new VariableMeta("anisoNegY", VariableKind.Texture, `texture_3d<f32>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        viewDimension: "3d",
+        textureSampleType: "float",
+      }),
+      anisoPosY: new VariableMeta("anisoPosY", VariableKind.Texture, `texture_3d<f32>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        viewDimension: "3d",
+        textureSampleType: "float",
+      }),
+      anisoNegZ: new VariableMeta("anisoNegZ", VariableKind.Texture, `texture_3d<f32>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        viewDimension: "3d",
+        textureSampleType: "float",
+      }),
+      anisoPosZ: new VariableMeta("anisoPosZ", VariableKind.Texture, `texture_3d<f32>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        viewDimension: "3d",
+        textureSampleType: "float",
+      }),
 
-    // ---- group 0 : G-buffer + voxelRadiance pyramid (Texture/Sampler => group 0) ----
-    depthTex: new VariableMeta("depthTex", VariableKind.Texture, `texture_depth_2d`, {
-      visibility: GPUShaderStage.COMPUTE,
-      textureSampleType: "depth",
-    }),
-    normalTex: new VariableMeta("normalTex", VariableKind.Texture, `texture_2d<f32>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      textureSampleType: "float",
-    }),
-    voxelRadiance: new VariableMeta("voxelRadiance", VariableKind.Texture, `texture_3d<f32>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      viewDimension: "3d",
-      textureSampleType: "float",
-    }),
-    voxelSampler: new VariableMeta("voxelSampler", VariableKind.Sampler, `sampler`, {
-      visibility: GPUShaderStage.COMPUTE,
-    }),
+      // ---- group 0 : G-buffer + voxelRadiance pyramid (Texture/Sampler => group 0) ----
+      depthTex: new VariableMeta("depthTex", VariableKind.Texture, `texture_depth_2d`, {
+        visibility: GPUShaderStage.COMPUTE,
+        textureSampleType: "depth",
+      }),
+      normalTex: new VariableMeta("normalTex", VariableKind.Texture, `texture_2d<f32>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        textureSampleType: "float",
+      }),
+      voxelRadiance: new VariableMeta("voxelRadiance", VariableKind.Texture, `texture_3d<f32>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        viewDimension: "3d",
+        textureSampleType: "float",
+      }),
+      voxelSampler: new VariableMeta("voxelSampler", VariableKind.Sampler, `sampler`, {
+        visibility: GPUShaderStage.COMPUTE,
+      }),
 
-    // ---- group 0 : STAGE-3 HISTORY (last frame's atlas set, SAMPLED — point textureLoad only) ----
-    // The ping-pong partner of the group-2 outputs: what THIS pass wrote last frame. Bound as plain
-    // sampled textures (TEXTURE_BINDING) so the group-2 storage-texture budget stays at 6. History
-    // VALIDATION needs only pos/nrm: an invalid probe stores ZERO pos/nrm, so |nrm|² ≈ 0 doubles as
-    // the history-validity test (freshly recreated textures are zero-filled → auto-invalid history
-    // after a resize/tile change, no CPU flag needed). Sample types mirror the cone pass's bindings
-    // of the same textures (rgba16float = float, rgba32float = unfilterable-float).
-    histShR: new VariableMeta("histShR", VariableKind.Texture, `texture_2d<f32>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      textureSampleType: "float",
-    }),
-    histShG: new VariableMeta("histShG", VariableKind.Texture, `texture_2d<f32>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      textureSampleType: "float",
-    }),
-    histShB: new VariableMeta("histShB", VariableKind.Texture, `texture_2d<f32>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      textureSampleType: "float",
-    }),
-    histPos: new VariableMeta("histPos", VariableKind.Texture, `texture_2d<f32>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      textureSampleType: "unfilterable-float",
-    }),
-    histNrm: new VariableMeta("histNrm", VariableKind.Texture, `texture_2d<f32>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      textureSampleType: "float",
-    }),
+      // ---- group 0 : STAGE-3 HISTORY (last frame's atlas set, SAMPLED — point textureLoad only) ----
+      // The ping-pong partner of the group-2 outputs: what THIS pass wrote last frame. Bound as plain
+      // sampled textures (TEXTURE_BINDING) so the group-2 storage-texture budget stays at 6. History
+      // VALIDATION needs only pos/nrm: an invalid probe stores ZERO pos/nrm, so |nrm|² ≈ 0 doubles as
+      // the history-validity test (freshly recreated textures are zero-filled → auto-invalid history
+      // after a resize/tile change, no CPU flag needed). Sample types mirror the cone pass's bindings
+      // of the same textures (rgba16float = float, rgba32float = unfilterable-float).
+      histShR: new VariableMeta("histShR", VariableKind.Texture, `texture_2d<f32>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        textureSampleType: "float",
+      }),
+      histShG: new VariableMeta("histShG", VariableKind.Texture, `texture_2d<f32>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        textureSampleType: "float",
+      }),
+      histShB: new VariableMeta("histShB", VariableKind.Texture, `texture_2d<f32>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        textureSampleType: "float",
+      }),
+      histPos: new VariableMeta("histPos", VariableKind.Texture, `texture_2d<f32>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        textureSampleType: "unfilterable-float",
+      }),
+      histNrm: new VariableMeta("histNrm", VariableKind.Texture, `texture_2d<f32>`, {
+        visibility: GPUShaderStage.COMPUTE,
+        textureSampleType: "float",
+      }),
 
-    // ---- group 1 : probe indirection (StorageRead = var<storage, read>) ----
-    // probeData drives the addressing (repr pixel per slot); probeCounter[0] = the adaptive count
-    // (read as plain u32 across the barrier) → total = numUniform + min(counter, maxAdaptive).
-    probeData: new VariableMeta("uProbeData", VariableKind.StorageRead, `array<vec4<u32>>`, {
-      visibility: GPUShaderStage.COMPUTE,
-    }),
-    probeCounter: new VariableMeta("uCounter", VariableKind.StorageRead, `array<u32, 2>`, {
-      visibility: GPUShaderStage.COMPUTE,
-    }),
-    // Emitter records the aimed cones importance-sample, TWO vec4 per light (stride 2):
-    //   [2j]   = .xyz world CENTER, .w radius (penumbra source / falloff scale)
-    //   [2j+1] = .rgb emitter color, .w intensity → Lj = rgb·|w| is the true radiance (drives the
-    //            analytic direct + bleed-cancel term — a blocked cone DARKENS instead of picking up
-    //            the occluder's own emission = the "white shadow" bug; a BRIGHT occluder cancels
-    //            its own false shadow).
-    // A RUNTIME-SIZED storage array (no light-count cap — the old `array<vec4, 8>` uniform pair);
-    // AUTO-DISCOVERED from the LightEmitter component, live count rides uLightParams.x, and the
-    // aimed loop importance-samples AIMED_PER_FRAME of them per probe per frame (dominant lights
-    // every frame; the temporal history integrates the stochastic dim tail).
-    lightsData: new VariableMeta("uLights", VariableKind.StorageRead, `array<vec4<f32>>`, {
-      visibility: GPUShaderStage.COMPUTE,
-    }),
-    // CLUSTERED LIGHT CULLING (Persson-style, CPU assignment): the grid AABB is divided into
-    // cluster cells of CLUSTER_DIV voxels per axis; setLights bins each emitter into every cell its
-    // influence sphere (derived from the same 0.003 contribution cull) overlaps. Layout: one
-    // (CLUSTER_CAP + 1)-u32 record per cell — [base] = live count, [base + 1 + k] = uLights index.
-    // The aimed loop reads ONLY its probe's cell list, so the per-probe cost tracks the LOCAL
-    // light density, not the global count.
-    lightClusters: new VariableMeta("uLightClusters", VariableKind.StorageRead, `array<u32>`, {
-      visibility: GPUShaderStage.COMPUTE,
-    }),
+      // ---- group 1 : probe indirection (StorageRead = var<storage, read>) ----
+      // probeData drives the addressing (repr pixel per slot); probeCounter[0] = the adaptive count
+      // (read as plain u32 across the barrier) → total = numUniform + min(counter, maxAdaptive).
+      probeData: new VariableMeta("uProbeData", VariableKind.StorageRead, `array<vec4<u32>>`, {
+        visibility: GPUShaderStage.COMPUTE,
+      }),
+      probeCounter: new VariableMeta("uCounter", VariableKind.StorageRead, `array<u32, 2>`, {
+        visibility: GPUShaderStage.COMPUTE,
+      }),
+      // Emitter records the aimed cones importance-sample, TWO vec4 per light (stride 2):
+      //   [2j]   = .xyz world CENTER, .w radius (penumbra source / falloff scale)
+      //   [2j+1] = .rgb emitter color, .w intensity → Lj = rgb·|w| is the true radiance (drives the
+      //            analytic direct + bleed-cancel term — a blocked cone DARKENS instead of picking up
+      //            the occluder's own emission = the "white shadow" bug; a BRIGHT occluder cancels
+      //            its own false shadow).
+      // A RUNTIME-SIZED storage array (no light-count cap — the old `array<vec4, 8>` uniform pair);
+      // AUTO-DISCOVERED from the LightEmitter component, live count rides uLightParams.x, and the
+      // aimed loop importance-samples AIMED_PER_FRAME of them per probe per frame (dominant lights
+      // every frame; the temporal history integrates the stochastic dim tail).
+      lightsData: new VariableMeta("uLights", VariableKind.StorageRead, `array<vec4<f32>>`, {
+        visibility: GPUShaderStage.COMPUTE,
+      }),
+      // CLUSTERED LIGHT CULLING (Persson-style, CPU assignment): the grid AABB is divided into
+      // cluster cells of CLUSTER_DIV voxels per axis; setLights bins each emitter into every cell its
+      // influence sphere (derived from the same 0.003 contribution cull) overlaps. Layout: one
+      // (CLUSTER_CAP + 1)-u32 record per cell — [base] = live count, [base + 1 + k] = uLights index.
+      // The aimed loop reads ONLY its probe's cell list, so the per-probe cost tracks the LOCAL
+      // light density, not the global count.
+      lightClusters: new VariableMeta("uLightClusters", VariableKind.StorageRead, `array<u32>`, {
+        visibility: GPUShaderStage.COMPUTE,
+      }),
 
-    // ---- group 2 : outputs (StorageTexture, write-only, 6 total — gpu.ts requests the adapter's
-    // maxStorageTexturesPerShaderStage, above the WebGPU default cap of 4) ----
-    screenShR: new VariableMeta("screenShR", VariableKind.StorageTexture, `texture_storage_2d<rgba16float, write>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      viewDimension: "2d",
-      storageTextureFormat: "rgba16float",
-      storageTextureAccess: "write-only",
-    }),
-    screenShG: new VariableMeta("screenShG", VariableKind.StorageTexture, `texture_storage_2d<rgba16float, write>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      viewDimension: "2d",
-      storageTextureFormat: "rgba16float",
-      storageTextureAccess: "write-only",
-    }),
-    screenShB: new VariableMeta("screenShB", VariableKind.StorageTexture, `texture_storage_2d<rgba16float, write>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      viewDimension: "2d",
-      storageTextureFormat: "rgba16float",
-      storageTextureAccess: "write-only",
-    }),
-    // .xy = representative full-res pixel coord, .z = validity (1 surface / 0 no surface), .w = the
-    // probe FOOTPRINT (cell size in full-res px) → the resolve area-weights each probe by footprint².
-    // rgba32float (point-loaded in the resolve) so the pixel coords survive without precision loss.
-    screenProbePix: new VariableMeta("screenProbePix", VariableKind.StorageTexture, `texture_storage_2d<rgba32float, write>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      viewDimension: "2d",
-      storageTextureFormat: "rgba32float",
-      storageTextureAccess: "write-only",
-    }),
-    // Per-probe world anchor P (.xyz) — the gather already reconstructs it for the cone origin, so
-    // storing it lets the resolve skip the per-tap G-buffer unproject (P1). rgba32float for world-space
-    // plane-reject precision.
-    screenProbePos: new VariableMeta("screenProbePos", VariableKind.StorageTexture, `texture_storage_2d<rgba32float, write>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      viewDimension: "2d",
-      storageTextureFormat: "rgba32float",
-      storageTextureAccess: "write-only",
-    }),
-    // Per-probe world normal N (.xyz, normalized). rgba16float half is ample for the resolve's
-    // normal-similarity weight; paired with screenProbePos it replaces the per-tap normal+depth reads.
-    screenProbeNrm: new VariableMeta("screenProbeNrm", VariableKind.StorageTexture, `texture_storage_2d<rgba16float, write>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      viewDimension: "2d",
-      storageTextureFormat: "rgba16float",
-      storageTextureAccess: "write-only",
-    }),
-  },
-  {},
-  // language=WGSL
-  wgsl /* wgsl */ `
+      // ---- group 2 : outputs (StorageTexture, write-only, 6 total — gpu.ts requests the adapter's
+      // maxStorageTexturesPerShaderStage, above the WebGPU default cap of 4) ----
+      screenShR: new VariableMeta(
+        "screenShR",
+        VariableKind.StorageTexture,
+        `texture_storage_2d<rgba16float, write>`,
+        {
+          visibility: GPUShaderStage.COMPUTE,
+          viewDimension: "2d",
+          storageTextureFormat: "rgba16float",
+          storageTextureAccess: "write-only",
+        },
+      ),
+      screenShG: new VariableMeta(
+        "screenShG",
+        VariableKind.StorageTexture,
+        `texture_storage_2d<rgba16float, write>`,
+        {
+          visibility: GPUShaderStage.COMPUTE,
+          viewDimension: "2d",
+          storageTextureFormat: "rgba16float",
+          storageTextureAccess: "write-only",
+        },
+      ),
+      screenShB: new VariableMeta(
+        "screenShB",
+        VariableKind.StorageTexture,
+        `texture_storage_2d<rgba16float, write>`,
+        {
+          visibility: GPUShaderStage.COMPUTE,
+          viewDimension: "2d",
+          storageTextureFormat: "rgba16float",
+          storageTextureAccess: "write-only",
+        },
+      ),
+      // .xy = representative full-res pixel coord, .z = validity (1 surface / 0 no surface), .w = the
+      // probe FOOTPRINT (cell size in full-res px) → the resolve area-weights each probe by footprint².
+      // rgba32float (point-loaded in the resolve) so the pixel coords survive without precision loss.
+      screenProbePix: new VariableMeta(
+        "screenProbePix",
+        VariableKind.StorageTexture,
+        `texture_storage_2d<rgba32float, write>`,
+        {
+          visibility: GPUShaderStage.COMPUTE,
+          viewDimension: "2d",
+          storageTextureFormat: "rgba32float",
+          storageTextureAccess: "write-only",
+        },
+      ),
+      // Per-probe world anchor P (.xyz) — the gather already reconstructs it for the cone origin, so
+      // storing it lets the resolve skip the per-tap G-buffer unproject (P1). rgba32float for world-space
+      // plane-reject precision.
+      screenProbePos: new VariableMeta(
+        "screenProbePos",
+        VariableKind.StorageTexture,
+        `texture_storage_2d<rgba32float, write>`,
+        {
+          visibility: GPUShaderStage.COMPUTE,
+          viewDimension: "2d",
+          storageTextureFormat: "rgba32float",
+          storageTextureAccess: "write-only",
+        },
+      ),
+      // Per-probe world normal N (.xyz, normalized). rgba16float half is ample for the resolve's
+      // normal-similarity weight; paired with screenProbePos it replaces the per-tap normal+depth reads.
+      screenProbeNrm: new VariableMeta(
+        "screenProbeNrm",
+        VariableKind.StorageTexture,
+        `texture_storage_2d<rgba16float, write>`,
+        {
+          visibility: GPUShaderStage.COMPUTE,
+          viewDimension: "2d",
+          storageTextureFormat: "rgba16float",
+          storageTextureAccess: "write-only",
+        },
+      ),
+    },
+    {},
+    // language=WGSL
+    wgsl /* wgsl */ `
 const PI: f32 = 3.14159265359;
 const IS_ADAPTIVE: i32 = ${isAdaptive ? 1 : 0};   // baked per pipeline (uniform=0 / adaptive=1)
 const CONES_PER_PROBE: i32 = ${cfg.conesPerProbe};

@@ -27,8 +27,6 @@ import {
   setCameraElevation,
   setCameraPosition,
 } from "../ECS/Systems/ResizeSystem.ts";
-import { computeSmokeTest } from "../WGSL/computeSmokeTest.ts";
-import { atomicIndirectSmokeTest } from "../WGSL/atomicIndirectSmokeTest.ts";
 import { createScene, SCENE_OPTIONS, type SceneName } from "./scenes/index.ts";
 import { perfToggles } from "./scenes/perfToggles.ts";
 
@@ -42,14 +40,6 @@ const stubChildren = {
 async function main() {
   const canvas = document.getElementById("c") as HTMLCanvasElement;
   const { device, context } = await initWebGPU(canvas);
-
-  // Stage-0 compute-infrastructure check (logs [compute-smoke] PASS/FAIL once).
-  void computeSmokeTest(device);
-
-  // De-risk the adaptive screen-probe atlas primitives: storage-buffer atomics +
-  // compute-written indirect dispatch (logs [atomic-indirect-smoke] PASS/FAIL once).
-  void atomicIndirectSmokeTest(device);
-
   const getPixelRatio = () => window.devicePixelRatio;
 
   const world = createWorld();
@@ -215,7 +205,11 @@ async function main() {
   probeFolder.add(voxel.config, "aoReach", 21, 16, 0.5).name("AO reach").onFinishChange(rebuild);
   // Screen-probe tile (full-res px / probe): smaller = finer probe grid = sharper fill but more
   // gather cost. Live (recreates the probe textures on change — no shader rebuild).
-  const spCfg = { tile: voxel.screenProbeTile, normalPow: voxel.spNormalPow, planeK: voxel.spPlaneK };
+  const spCfg = {
+    tile: voxel.screenProbeTile,
+    normalPow: voxel.spNormalPow,
+    planeK: voxel.spPlaneK,
+  };
   probeFolder
     .add(spCfg, "tile", [2, 4, 8, 16, 24, 32, 48, 64])
     .name("probe tile (px)")
@@ -439,31 +433,11 @@ async function main() {
       else if (perfToggles.composite) voxel.composite(encoder);
       present(encoder, voxel.compositeOutputTexture);
     } else {
-      // Final lit image. Order: SDF G-buffer draw → (sun depth, only when the directional sun is
-      // on) → voxelize → mips → cone gather → composite. The sun-POV depth map feeds the
-      // composite's crisp cast shadow (and voxelize's shadowed sun injection).
+      // Final lit image: SDF G-buffer draw → the full voxel-GI scenario (voxel.renderFrame,
+      // load-bearing order — sunDepth is gated on the sun internally, probeDebug swaps in when
+      // toggled) → present.
       frameTick(encoder, delta);
-      if (SunLight.enabled) {
-        voxel.sunDepth(encoder);
-      }
-      voxel.voxelize(encoder);
-      voxel.mips(encoder);
-      voxel.anisoBase(encoder);
-      voxel.anisoMips(encoder);
-      // Screen-probe gather (the diffuse fill source): after mips, before cone. LIGHT-ADAPTIVE ATLAS
-      // chain (clear → classify → gatherUniform → refine 16→8 → build-args → gatherAdaptive).
-      // gatherUniform runs BEFORE refine so refine subdivides on the real gathered-SH radiance spread
-      // across the cage.
-      voxel.probeClear(encoder);
-      voxel.probeClassify(encoder);
-      voxel.gatherUniform(encoder);
-      voxel.probeRefine(encoder);
-      voxel.probeBuildArgs(encoder);
-      voxel.gatherAdaptive(encoder);
-      voxel.cone(encoder);
-      // Debug view replaces the lit composite (both write compositeOutput → present is unchanged).
-      if (voxel.debugProbes) voxel.probeDebug(encoder);
-      else voxel.composite(encoder);
+      voxel.renderFrame(encoder);
       present(encoder, voxel.compositeOutputTexture);
     }
 
