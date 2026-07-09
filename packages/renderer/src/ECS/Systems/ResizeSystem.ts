@@ -17,10 +17,7 @@ export const viewProjMatrix = mat4.create();
 // across the frame for an orthographic camera (all rays parallel).
 export const cameraRayDir = vec3.create();
 // sceneLightDir : fixed world-space directional light (points along travel).
-export const sceneLightDir = vec3.normalize(
-  vec3.create(),
-  vec3.fromValues(-0.4, -0.55, -0.72),
-);
+export const sceneLightDir = vec3.normalize(vec3.create(), vec3.fromValues(-0.4, -0.55, -0.72));
 
 // Camera position in world coordinates (the look-at target on the ground plane).
 export const cameraPosition = { x: 0, y: 0 };

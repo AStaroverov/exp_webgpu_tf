@@ -86,7 +86,7 @@ via the probe SH field. Biggest perf win of the whole migration; gated behind a 
   aperture, `trace` to the light, analytic direct + bleed-cancel ("white shadow" fix).
 - Project the result into the same `cR/cG/cB` SH-L1 accumulators along the emitter direction.
   **Correctness trap:** the old per-pixel formula multiplies by `ndl`; SH storage holds
-  *radiance* and the cosine is applied at resolve time by `sh_avg_radiance` — drop the `ndl`
+  _radiance_ and the cosine is applied at resolve time by `sh_avg_radiance` — drop the `ndl`
   factor when porting or the cosine is applied twice (emitters come out too dim at grazing
   angles). Keep only the `ndl <= 0` hemisphere rejection.
 - Weight: an aimed cone is a delta-ish direction, not a `dw = 2π/C` fill cone. Project as
@@ -118,14 +118,14 @@ via the probe SH field. Biggest perf win of the whole migration; gated behind a 
 
 ### Live verification (perf scene, flip `emitterConesOnProbes` back and forth)
 
-| Check | Expect |
-| --- | --- |
-| Cone-pass GPU time | drops by the full former aimed cost (the biggest single delta of the migration); probe gather grows only slightly (~2k probes × lights ≪ former pixel count × lights) |
-| S1 (emitter near wall) | light + a *soft, low-frequency* shadow survives. Softness at probe resolution is **expected and accepted here** — crispness returns in Stage 2 |
+| Check                      | Expect                                                                                                                                                                                                                                 |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cone-pass GPU time         | drops by the full former aimed cost (the biggest single delta of the migration); probe gather grows only slightly (~2k probes × lights ≪ former pixel count × lights)                                                                  |
+| S1 (emitter near wall)     | light + a _soft, low-frequency_ shadow survives. Softness at probe resolution is **expected and accepted here** — crispness returns in Stage 2                                                                                         |
 | S2 (two opposing emitters) | both light the object; check for SH-L1 "mush" (two opposing lobes cancel in L1). Some loss is a known SH-L1 limit — record it; if unacceptable, the fallback is per-probe octahedral storage (out of scope, noted as the escape hatch) |
-| Brightness parity | overall emitter energy within ~±20% of the old path (fix the Ω weight if it scales with `conesPerProbe`) |
-| Lights = 0 | new path == old path pixel-identical (aimed loop is a no-op both ways) |
-| Adaptive probes | subdivision still reacts to emitter light (refine reads the raw SH, which now includes emitters — it should get *more* responsive, not less) |
+| Brightness parity          | overall emitter energy within ~±20% of the old path (fix the Ω weight if it scales with `conesPerProbe`)                                                                                                                               |
+| Lights = 0                 | new path == old path pixel-identical (aimed loop is a no-op both ways)                                                                                                                                                                 |
+| Adaptive probes            | subdivision still reacts to emitter light (refine reads the raw SH, which now includes emitters — it should get _more_ responsive, not less)                                                                                           |
 
 **Rollback:** `emitterConesOnProbes = false`.
 
@@ -158,12 +158,12 @@ work in the cone pass (it already has depth + reconstructed P).
 
 ### Live verification
 
-| Check | Expect |
-| --- | --- |
-| S3 (object on floor near emitter) | a readable dark contact edge reappears under/behind the object; compare against the Stage 0 screenshot — should approach the old aimed-cone crispness at contacts |
-| Cone-pass GPU time | grows < ~0.5 ms |
-| Off-screen occluder | its contact shadow disappears (screen-space limitation) — verify the remaining probe (voxel) shadow still provides the soft term so it degrades gracefully, not to zero |
-| `contactShadowStrength = 0` | identical to Stage 1 |
+| Check                             | Expect                                                                                                                                                                  |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S3 (object on floor near emitter) | a readable dark contact edge reappears under/behind the object; compare against the Stage 0 screenshot — should approach the old aimed-cone crispness at contacts       |
+| Cone-pass GPU time                | grows < ~0.5 ms                                                                                                                                                         |
+| Off-screen occluder               | its contact shadow disappears (screen-space limitation) — verify the remaining probe (voxel) shadow still provides the soft term so it degrades gracefully, not to zero |
+| `contactShadowStrength = 0`       | identical to Stage 1                                                                                                                                                    |
 
 **Rollback:** `contactShadowStrength = 0`.
 
@@ -230,13 +230,13 @@ after Stage 1 is accepted (amortizing the old per-pixel path is pointless).
 
 ### Live verification
 
-| Check | Expect |
-| --- | --- |
-| Static scene, `conesPerProbe = 4`, hysteresis 0.9 | converged image ≈ Stage 2 at 16 cones (allow a few frames to converge); probe-gather GPU time ~⅓–¼ |
-| S4 camera clip | GI lags ≤ 3–4 frames; NO smearing/ghosting on disocclusions (sharp camera turn, object driving past a wall) — failures point at the plane/normal validation, not the blend |
-| Moving emitter | light pool follows with the same ≤ 3–4 frame lag; no stale bright trail |
-| `hysteresis = 0` | identical to Stage 2 (fresh-only path intact) |
-| Resize / grid rebuild | no crash, no one-frame garbage (history invalidated or aged out) |
+| Check                                             | Expect                                                                                                                                                                     |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Static scene, `conesPerProbe = 4`, hysteresis 0.9 | converged image ≈ Stage 2 at 16 cones (allow a few frames to converge); probe-gather GPU time ~⅓–¼                                                                         |
+| S4 camera clip                                    | GI lags ≤ 3–4 frames; NO smearing/ghosting on disocclusions (sharp camera turn, object driving past a wall) — failures point at the plane/normal validation, not the blend |
+| Moving emitter                                    | light pool follows with the same ≤ 3–4 frame lag; no stale bright trail                                                                                                    |
+| `hysteresis = 0`                                  | identical to Stage 2 (fresh-only path intact)                                                                                                                              |
+| Resize / grid rebuild                             | no crash, no one-frame garbage (history invalidated or aged out)                                                                                                           |
 
 **Rollback:** `hysteresis = 0` + `conesPerProbe = 16`.
 
@@ -274,13 +274,13 @@ longer scales with resolution or light count; total GI cost down by the aimed-bl
 
 ## Stage dependencies & risk summary
 
-| Stage | Depends on | Main win | Main risk |
-| --- | --- | --- | --- |
-| 0 | — | comparability | — |
-| 1 | 0 | deletes the dominant per-pixel × per-light cost | soft emitter shadows until Stage 2; SH-L1 two-opposing-lights mush |
-| 2 | 1 | restores contact crispness | screen-space misses off-screen occluders |
-| 3 | 1 (2 recommended) | 2–4× on the probe budget | ghosting / disocclusion lag; +3 history textures |
-| 4 | 1–3 accepted | code deletion, possible pass merge | — |
+| Stage | Depends on        | Main win                                        | Main risk                                                          |
+| ----- | ----------------- | ----------------------------------------------- | ------------------------------------------------------------------ |
+| 0     | —                 | comparability                                   | —                                                                  |
+| 1     | 0                 | deletes the dominant per-pixel × per-light cost | soft emitter shadows until Stage 2; SH-L1 two-opposing-lights mush |
+| 2     | 1                 | restores contact crispness                      | screen-space misses off-screen occluders                           |
+| 3     | 1 (2 recommended) | 2–4× on the probe budget                        | ghosting / disocclusion lag; +3 history textures                   |
+| 4     | 1–3 accepted      | code deletion, possible pass merge              | —                                                                  |
 
 Escape hatch if SH-L1 proves too lossy for emitters (Stage 1, check S2): per-probe octahedral
 radiance tiles (Lumen's actual storage) instead of SH-L1 — a bigger change, deliberately out of

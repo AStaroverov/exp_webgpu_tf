@@ -8,8 +8,8 @@
 // pass downsamples each direction one level per dispatch. Both use groups 0 (uniform + sources) and
 // 2 (storage outputs) with an EMPTY group 1 (same shape as the mip pass → bind a matching empty
 // group so strict impls are satisfied).
-import { GPUShader } from "../../../WGSL/GPUShader.ts";
-import { getTypeTypedArray } from "../../../Shader/index.ts";
+import { GPUShader } from "../../../../../WGSL/GPUShader.ts";
+import { getTypeTypedArray } from "../../../../../Shader/index.ts";
 import { shaderMeta as anisoBaseMeta, WORKGROUP as ANISO_WG } from "./voxelAnisoBase.shader.ts";
 import { shaderMeta as anisoVolMeta } from "./voxelAnisoVolume.shader.ts";
 import {
@@ -17,8 +17,8 @@ import {
   createAnisoTextures,
   voxelMipLevelCount,
   type AnisoTextures,
-} from "./voxelResources.ts";
-import { runAnisoBase, runAnisoMips } from "./passes/mipPass.ts";
+} from "../../core/voxelResources.ts";
+import { runAnisoBase, runAnisoMips } from "../../core/mipPass.ts";
 
 export type AnisoVolumeDeps = {
   device: GPUDevice;

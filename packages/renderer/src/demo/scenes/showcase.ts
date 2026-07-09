@@ -107,15 +107,33 @@ export function createShowcaseScene(world: RenderWorld): DemoScene {
   // Three non-symmetric boxes, each tilted about ONE axis (X / Y / Z) to prove the
   // impostor honors full 3D rotation, not just yaw.
   const tiltX = createRectangle(world, {
-    x: 3, y: -7, z: 3, width: 2, height: 5, depth: 2, color: [0.85, 0.4, 0.4, 1],
+    x: 3,
+    y: -7,
+    z: 3,
+    width: 2,
+    height: 5,
+    depth: 2,
+    color: [0.85, 0.4, 0.4, 1],
   });
   mat4.rotateX(LocalTransform.matrix.getBatch(tiltX), LocalTransform.matrix.getBatch(tiltX), 0.7);
   const tiltY = createRectangle(world, {
-    x: 0, y: -11, z: 3, width: 2, height: 5, depth: 2, color: [0.4, 0.85, 0.4, 1],
+    x: 0,
+    y: -11,
+    z: 3,
+    width: 2,
+    height: 5,
+    depth: 2,
+    color: [0.4, 0.85, 0.4, 1],
   });
   mat4.rotateY(LocalTransform.matrix.getBatch(tiltY), LocalTransform.matrix.getBatch(tiltY), 0.7);
   const tiltZ = createRectangle(world, {
-    x: -3, y: -11, z: 3, width: 2, height: 5, depth: 2, color: [0.4, 0.4, 0.85, 1],
+    x: -3,
+    y: -11,
+    z: 3,
+    width: 2,
+    height: 5,
+    depth: 2,
+    color: [0.4, 0.4, 0.85, 1],
   });
   mat4.rotateZ(LocalTransform.matrix.getBatch(tiltZ), LocalTransform.matrix.getBatch(tiltZ), 0.7);
 

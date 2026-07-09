@@ -1,8 +1,8 @@
-import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
-import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
-import { wgsl } from "../../../WGSL/wgsl.ts";
-import { MAX_INSTANCE_COUNT } from "../SDFSystem/sdf.shader.ts";
-import { sceneSDF } from "../SDFSystem/sceneSDF.wgsl.ts";
+import { VariableKind, VariableMeta } from "../../../../../Struct/VariableMeta.ts";
+import { ShaderMeta } from "../../../../../WGSL/ShaderMeta.ts";
+import { wgsl } from "../../../../../WGSL/wgsl.ts";
+import { MAX_INSTANCE_COUNT } from "../../../SDFSystem/sdf.shader.ts";
+import { sceneSDF } from "../../../SDFSystem/sceneSDF.wgsl.ts";
 
 // Sun shadow-map depth pass. Renders the SDF scene from the sun's point of view into a
 // single depth texture; the composite later projects each lit pixel into this map and

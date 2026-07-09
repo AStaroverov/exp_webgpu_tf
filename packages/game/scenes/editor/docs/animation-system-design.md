@@ -32,7 +32,7 @@
   - **`swordsman.ts`** (`applyStance`, `:109-145`): `Key = {at, v}` arrays (`:25-72`) feeding a
     `sampleKeys(keys, p)` sampler with `smoothstep` easing (`:74-85`), but these keys drive
     **abstract scalar channels** (`SLICE_X/Y/Z/PITCH/WRIST/STEP`, `LUNGE_*`) that are then
-    *combined with the rest pose and scaled by a live, eased per-stance weight*
+    _combined with the rest pose and scaled by a live, eased per-stance weight_
     (`sliceW/lungeW`, `:110-112`, `:125-134`) and **written to two targets from one phase**: the
     arm matrix (`armMatrix`, `:136-139`) and the root (`rootMatrix` yaw + Y-step, `:141-144`).
     The sword child entity is parented onto the unit's exposed `hand` (`:99`).
@@ -71,27 +71,27 @@ appear in the same `selectedAnimation$` dropdown and play through the unchanged 
 **Out (deferred, but the format must not preclude them):**
 
 - **Cross-clip / multi-stance blending** (the swordsman `sliceW/lungeW` ease-in/out mix). v1 ships
-  single-clip playback; blending is a clean follow-up because the player separates *sample* from
-  *write* (§3.5). The ease-in/out of the swordsman stances is **lost until this lands** (§1.4 H-note).
+  single-clip playback; blending is a clean follow-up because the player separates _sample_ from
+  _write_ (§3.5). The ease-in/out of the swordsman stances is **lost until this lands** (§1.4 H-note).
 - **Animated scale / color tracks.** Scale is a build-time constant today; the alpha fade stays code.
 - **Full 3-ring rotate gizmo.** v1 rotates only about the screen-facing axis where the screen-angle
   math is well-conditioned (§4.5); the two edge-on rings are deferred.
 
 ### 1.4 What replaces the hand-coded logic — and what stays code
 
-| Hand-coded thing | Disposition |
-|---|---|
-| swordsman slice/lunge **scalar-channel arm + root motion** (`swordsman.ts:25-145`) | **Partially migrate.** The fully-*blended* pose (at `sliceW=1`) bakes into **two tracks** (`unit/armR` + `unit/root`). The **per-stance ease-in/out weight is NOT a transform track and is LOST in v1** — it returns only with the §3.5 blender. **Not lossless.** |
-| unit `idle/movement/death` **discrete target poses** (`unit.ts:128-130`) | **Expressible as clips** (each pose = one keyframe; a transition = a 2-key clip). Migrate opportunistically. |
-| unit **continuous body bob** `sin(clock*2)` (`unit.ts:145`) | **Keep as code.** Procedural sine, not keyframes; faking it needs many keys and is still wrong. |
-| **exponential blend-to-target** `1-exp(-delta*6)` (`unit.ts:135`) and stance ease `1-exp(-delta*8)` (`swordsman.ts:110`) | **Keep as code.** A *state-driven spring* toward a live target, not a *time-driven* timeline. Fundamental impedance mismatch with a fixed-duration clip. |
-| per-part **`Color.alpha` fade** (`unit.ts:168-170`, inside `applyPose`) | **Keep as code, but must be EXTRACTED first.** The fade lives *inside* `applyPose`, the same function a clip replaces. Split `applyPose` into a transform half and an `applyColor()` half before deleting the transform code, else the death-fade dies with it (§7 Phase 4). |
+| Hand-coded thing                                                                                                         | Disposition                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| swordsman slice/lunge **scalar-channel arm + root motion** (`swordsman.ts:25-145`)                                       | **Partially migrate.** The fully-_blended_ pose (at `sliceW=1`) bakes into **two tracks** (`unit/armR` + `unit/root`). The **per-stance ease-in/out weight is NOT a transform track and is LOST in v1** — it returns only with the §3.5 blender. **Not lossless.**           |
+| unit `idle/movement/death` **discrete target poses** (`unit.ts:128-130`)                                                 | **Expressible as clips** (each pose = one keyframe; a transition = a 2-key clip). Migrate opportunistically.                                                                                                                                                                 |
+| unit **continuous body bob** `sin(clock*2)` (`unit.ts:145`)                                                              | **Keep as code.** Procedural sine, not keyframes; faking it needs many keys and is still wrong.                                                                                                                                                                              |
+| **exponential blend-to-target** `1-exp(-delta*6)` (`unit.ts:135`) and stance ease `1-exp(-delta*8)` (`swordsman.ts:110`) | **Keep as code.** A _state-driven spring_ toward a live target, not a _time-driven_ timeline. Fundamental impedance mismatch with a fixed-duration clip.                                                                                                                     |
+| per-part **`Color.alpha` fade** (`unit.ts:168-170`, inside `applyPose`)                                                  | **Keep as code, but must be EXTRACTED first.** The fade lives _inside_ `applyPose`, the same function a clip replaces. Split `applyPose` into a transform half and an `applyColor()` half before deleting the transform code, else the death-fade dies with it (§7 Phase 4). |
 
 **Coexistence has a hard rule: one writer per bone per frame.** Both a `makeClipPlayer` closure and
 a hand-written procedural closure are `(delta)=>void`; `main.ts` cannot tell them apart. They may
 run side-by-side in the same `animations` Record **only if they write disjoint bones**. They do
 NOT today: `unit.ts` `applyPose` rebuilds the **root** every frame (`:142-147`), and `swordsman.ts`
-composes `unit.animations.idle` (`:156,160`) *plus* writes the **root** in `applyStance` (`:141-144`)
+composes `unit.animations.idle` (`:156,160`) _plus_ writes the **root** in `applyStance` (`:141-144`)
 — that is already a double-write, last-writer-wins. A clip with a `root` track stomping a still-running
 procedural `idle` is the same bug. **Decision (see §3.6):** a clip and a procedural closure must
 never target the same bone in the same frame. For the swordsman specifically, clips target
@@ -100,10 +100,10 @@ clips can't express). The unified player owns everything keyframeable; genuinely
 procedural-continuous motion stays as small code (per `CLAUDE.md`).
 
 > Side note: the swordsman `rootMatrix` write is itself a latent bug — `mat4.rotateZ(rootMatrix,
-> rootMatrix, …)` and `rootMatrix[13] += …` (`:141-142`) **mutate the root in place every frame**,
+rootMatrix, …)` and `rootMatrix[13] += …` (`:141-142`) **mutate the root in place every frame**,
 > accumulating yaw/translation because nothing resets the root first (unlike `unit.applyPose` which
 > `mat4.identity`s first). The clip model resets-from-keyframes each frame, so migrating root motion
-> to a clip would *fix* this; but per the one-writer rule we keep root procedural in v1, so this bug
+> to a clip would _fix_ this; but per the one-writer rule we keep root procedural in v1, so this bug
 > is out of scope (flag it).
 
 ---
@@ -119,11 +119,11 @@ author time AND at play time. This is the load-bearing data-model decision.
 
 ### 2.2 Decision: **named bones** (a `bones: Record<string, number>` published by the builder)
 
-| Option | Verdict |
-|---|---|
-| **Child PATH/index** `[2]`, `[2,0]` | Robust to eid churn, needs no builder change, but **brittle to structural edits** — insert a part and every later index silently re-targets the wrong track. Opaque in JSON (`"path":[2,0]` is meaningless). |
+| Option                                                       | Verdict                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Child PATH/index** `[2]`, `[2,0]`                          | Robust to eid churn, needs no builder change, but **brittle to structural edits** — insert a part and every later index silently re-targets the wrong track. Opaque in JSON (`"path":[2,0]` is meaningless).                                         |
 | **Named bones** map `name→eid` from the builder — **CHOSEN** | Stable across rebuilds (names are source constants), **survives structural edits** (names don't shift on reorder), readable clips (`"track":"armR"`), and **extends the handle the builder already exposes** (`UnitInstance.hand`, `unit.ts:20,24`). |
-| Bone as an ECS component `Bone{nameId}` | Over-engineered for a prototype (name-intern table, no queryable consumer). Rejected per `CLAUDE.md` "no speculative generality". |
+| Bone as an ECS component `Bone{nameId}`                      | Over-engineered for a prototype (name-intern table, no queryable consumer). Rejected per `CLAUDE.md` "no speculative generality".                                                                                                                    |
 
 **Why named bones win over paths here:** `buildUnit` already hands out a named part handle
 (`hand: parts.armR`, `unit.ts:24`); a `bones` map is the natural generalization of that, not a new
@@ -151,7 +151,13 @@ reads directly today):
    // unit.ts buildUnit
    return {
      root: parts.root,
-     bones: { root: parts.root, body: parts.body, armL: parts.armL, armR: parts.armR, head: parts.head },
+     bones: {
+       root: parts.root,
+       body: parts.body,
+       armL: parts.armL,
+       armR: parts.armR,
+       head: parts.head,
+     },
      animations: buildAnimations(world, parts),
      hand: parts.armR, // alias, removed in step 2
    };
@@ -165,7 +171,7 @@ the sword under the unit's right arm, and currently returns `{ root: unit.root, 
 prefixes so a track can target any depth without knowing the tree shape:
 
 ```ts
-const unit  = parts.unit(world, { scale });
+const unit = parts.unit(world, { scale });
 const sword = parts.sword(world, { scale: SWORD_REL });
 Children.addChild(unit.bones.armR, sword.root);
 
@@ -188,11 +194,11 @@ type Quat = [number, number, number, number]; // gl-matrix order [x,y,z,w]
 type Keyframe = {
   time: number; // seconds, absolute within the clip
   pos: Vec3;
-  rot: Quat;    // sign-canonicalized vs the previous key at capture/load (§3.3)
+  rot: Quat; // sign-canonicalized vs the previous key at capture/load (§3.3)
 };
 
 type Track = {
-  bone: string;     // a key into the instance bones map ("armR", "unit/armR", …)
+  bone: string; // a key into the instance bones map ("armR", "unit/armR", …)
   keys: Keyframe[]; // sorted ascending by time
 };
 
@@ -225,7 +231,7 @@ which would bloat keys and bake the current `selectedScale$` into the data):
   resolve `key.scale ?? restScale` **once per key at load**, never as a per-frame branch on absence
   (per `CLAUDE.md`: no nullable field you null-check in a hot loop).
 
-This lets the root *be* a track (its translate/rotation animate) while its build-time scale is
+This lets the root _be_ a track (its translate/rotation animate) while its build-time scale is
 restored from `restScale`, not from a keyframe — no root-scale double-apply.
 
 ### 2.5 Capture (author-time → keyframe) and resolution
@@ -243,7 +249,7 @@ restored from `restScale`, not from a keyframe — no root-scale double-apply.
   (`unit.ts:152,157`).
 - **Quaternion sign-canonicalization (required, not optional, §3.3):** on capture, before upsert,
   flip the new key's `rot` sign if `quat.dot(prevKey.rot, rot) < 0`, so neighboring keys live on the
-  same hemisphere. Same pass runs once at clip *load*. Without it, multi-key rotation tracks
+  same hemisphere. Same pass runs once at clip _load_. Without it, multi-key rotation tracks
   (the slice pitch has 4 keys) snap between segments.
 - **Author-time bone lookup:** selection is an eid (`selectedEid$`). Invert the live `bones` map
   once per build into `eidToBone: Map<number, string>`. Note the swordsman merge can map two names
@@ -274,8 +280,10 @@ const animations: EntityAnimations = { ...proceduralAnimations };
 for (const clip of clipsForEntity) {
   const trackEid = clip.tracks.map((t) => bones[t.bone] ?? -1);
   const restScale = trackEid.map((eid) =>
-    eid < 0 ? vec3.fromValues(1, 1, 1)
-            : mat4.getScaling(vec3.create(), LocalTransform.matrix.getBatch(eid)));
+    eid < 0
+      ? vec3.fromValues(1, 1, 1)
+      : mat4.getScaling(vec3.create(), LocalTransform.matrix.getBatch(eid)),
+  );
   animations[clip.name] = makeClipPlayer(world, clip, trackEid, restScale);
 }
 ```
@@ -287,12 +295,13 @@ raw `delta` (so they are scrub/pause-able — §5.3).
 ### 3.2 Player construction & per-frame write
 
 `restScale` and `trackEid` are computed by the caller in `build()` (§3.1) — pinned to the rest pose
-*before any clip runs* — and passed in, so the player has no order-dependency on live state:
+_before any clip runs_ — and passed in, so the player has no order-dependency on live state:
 
 ```ts
 export function makeClipPlayer(world, clip, trackEid: number[], restScale: vec3[]) {
   const { LocalTransform } = getEngineComponents(world);
-  const pos = vec3.create(), rot = quat.create();
+  const pos = vec3.create(),
+    rot = quat.create();
 
   return (_delta: number, t: number) => {
     for (let i = 0; i < clip.tracks.length; i++) {
@@ -300,7 +309,12 @@ export function makeClipPlayer(world, clip, trackEid: number[], restScale: vec3[
       if (eid < 0) continue;
       sampleTrack(clip.tracks[i], t, pos, rot);
       // write straight into the live column view — zero copy, matches unit.ts/swordsman.ts
-      mat4.fromRotationTranslationScale(LocalTransform.matrix.getBatch(eid), rot, pos, restScale[i]);
+      mat4.fromRotationTranslationScale(
+        LocalTransform.matrix.getBatch(eid),
+        rot,
+        pos,
+        restScale[i],
+      );
     }
   };
 }
@@ -315,7 +329,7 @@ export function makeClipPlayer(world, clip, trackEid: number[], restScale: vec3[
   monomorphic `for` reading typed-array columns by eid — no `forEach`, no per-element closures, no
   allocation (per `CLAUDE.md` hot-loop rules).
 - The write target is **`LocalTransform` only**; the `TransformSystem` DFS recomposes `GlobalTransform`
-  **unconditionally** every `engine.tick` (no dirty-flag gating), and the tick runs *after* the
+  **unconditionally** every `engine.tick` (no dirty-flag gating), and the tick runs _after_ the
   closure in `main.ts`'s loop — so no one-frame lag and no change-mark needed.
 - The player is driven by a **caller-supplied `t`** (the timeline cursor, §5), not its own `clock`,
   so scrubbing and pause come for free.
@@ -329,16 +343,24 @@ function canonicalizeTrack(track: Track) {
   for (let i = 1; i < keys.length; i++) {
     if (quat.dot(keys[i - 1].rot, keys[i].rot) < 0) {
       const r = keys[i].rot;
-      r[0] = -r[0]; r[1] = -r[1]; r[2] = -r[2]; r[3] = -r[3];
+      r[0] = -r[0];
+      r[1] = -r[1];
+      r[2] = -r[2];
+      r[3] = -r[3];
     }
   }
 }
 
 function sampleTrack(track, t, outPos, outRot) {
   const keys = track.keys;
-  let a = keys[0], b = keys[0];
+  let a = keys[0],
+    b = keys[0];
   for (let i = 0; i < keys.length - 1; i++) {
-    if (t <= keys[i + 1].time) { a = keys[i]; b = keys[i + 1]; break; }
+    if (t <= keys[i + 1].time) {
+      a = keys[i];
+      b = keys[i + 1];
+      break;
+    }
     a = b = keys[i + 1];
   }
   const span = b.time - a.time;
@@ -351,8 +373,8 @@ function sampleTrack(track, t, outPos, outRot) {
 - **Interpolation:** `vec3.lerp` for translate, `quat.slerp` for rotation (the reason rotation is
   captured as a quaternion, not Euler — slerp gives correct shortest-path orientation interpolation;
   Euler would gimbal/wrap badly).
-- **Why canonicalization is mandatory (H3):** `quat.slerp` only picks the short arc between *its two
-  arguments*. `mat4.getRotation` does not guarantee hemisphere continuity across separately-captured
+- **Why canonicalization is mandatory (H3):** `quat.slerp` only picks the short arc between _its two
+  arguments_. `mat4.getRotation` does not guarantee hemisphere continuity across separately-captured
   keys, so a ≥3-key track (the slice pitch has 4, `swordsman.ts:40-45`) can take the short way on
   A→B and visually snap on B→C. `canonicalizeTrack` flips each key relative to its predecessor once,
   making every adjacent pair short-path consistent. This is what makes the smooth-loop claim (§3.4)
@@ -454,7 +476,7 @@ Full 3D rotation now renders, so the 2.5D objection in §6/§8.4 is void. But th
 is **only well-conditioned for the ring whose axis points toward the camera**; the two edge-on rings
 have real degeneracies. **Decision: v1 rotates about ONE axis — the most screen-facing world axis**
 (`A = argmax |dot(A, fwd)|` over X/Y/Z, chosen at drag-start). The other two axes are reached by
-re-orbiting the camera so a different axis faces the screen. This is the leanest scheme that *works*;
+re-orbiting the camera so a different axis faces the screen. This is the leanest scheme that _works_;
 the full 3-ring gizmo is deferred.
 
 Per drag on the chosen axis `A`:
@@ -471,7 +493,9 @@ Per drag on the chosen axis `A`:
 5. Apply as a **world-axis pre-multiply** to the local rotation:
    ```ts
    const m = LocalTransform.matrix.getBatch(eid);
-   mat4.getRotation(qCur, m); mat4.getScaling(s, m); getMatrixTranslation(/*out*/ tVec, m);
+   mat4.getRotation(qCur, m);
+   mat4.getScaling(s, m);
+   getMatrixTranslation(/*out*/ tVec, m);
    quat.setAxisAngle(qDelta, A, angleDelta);
    quat.multiply(qCur, qDelta, qCur); // pre-multiply = rotate about WORLD axis
    mat4.fromRotationTranslationScale(m, qCur, tVec, s);
@@ -495,7 +519,7 @@ rotation readout, driven by the same `selectedEid$.subscribe`, plain DOM + `from
   `applyMatrixTranslate` deltas or rebuild T while preserving R/S.
 - **Rotation is a DISPLAY-ONLY Euler readout, NOT an editor (M1).** `quat → Euler` is not unique
   (gimbal, ±180 aliasing): a clean posed quaternion can display as ugly Euler and typing it back
-  `fromEuler`s a *different* quaternion than was captured. So rotation **authoring goes through the
+  `fromEuler`s a _different_ quaternion than was captured. So rotation **authoring goes through the
   gizmo** (§4.5), which composes incremental quats and never round-trips through Euler. The matrix
   (and the captured quaternion) stays the single source of truth; storing Euler per part would be a
   second drifting source (rejected per `CLAUDE.md`).
@@ -504,7 +528,8 @@ rotation readout, driven by the same `selectedEid$.subscribe`, plain DOM + `from
 - **Write** (translate `input` only): rebuild the local matrix in place from the fields, preserving
   rotation and scale:
   ```ts
-  mat4.getRotation(q, m); mat4.getScaling(s, m);
+  mat4.getRotation(q, m);
+  mat4.getScaling(s, m);
   mat4.fromRotationTranslationScale(m, q, [tx, ty, tz], s);
   ```
   (If a numeric rotation field is genuinely needed before the gizmo lands, accept and document the
@@ -521,10 +546,10 @@ rotation readout, driven by the same `selectedEid$.subscribe`, plain DOM + `from
 
 ```ts
 type Mode = "view" | "edit" | "play";
-export const editorMode$  = new BehaviorSubject<Mode>("view");
+export const editorMode$ = new BehaviorSubject<Mode>("view");
 export const currentTime$ = new BehaviorSubject<number>(0);
-export const isPlaying$   = new BehaviorSubject<boolean>(false);
-export const loop$        = persistentState<boolean>("viewer.loop", true);
+export const isPlaying$ = new BehaviorSubject<boolean>(false);
+export const loop$ = persistentState<boolean>("viewer.loop", true);
 export const editingClip$ = new BehaviorSubject<Clip | null>(null);
 ```
 
@@ -558,8 +583,8 @@ const clip = editingClip$.value;
 if (mode === "play" && isPlaying$.value && clip) {
   let t = currentTime$.value + delta;
   if (t >= clip.duration) t = loop$.value ? t % clip.duration : clip.duration;
-  currentTime$.next(t);          // updates the scrubber UI
-  player(0, t);                  // write the pose DIRECTLY — not via rxjs (L3)
+  currentTime$.next(t); // updates the scrubber UI
+  player(0, t); // write the pose DIRECTLY — not via rxjs (L3)
 } else if (mode === "none-or-builtin") {
   currentAnimations[selectedAnimation$.value]?.(delta); // legacy procedural path
 }
@@ -614,7 +639,7 @@ capture → `captureKeyframe()`; mode toggle → `editorMode$`.
   export const clipsStore$ = persistentState<Record<string, Clip>>("viewer.clips", {});
   ```
   Map key = `${entityId}/${name}`. Autosave: `editingClip$.subscribe(c => c && clipsStore$.next({
-  ...clipsStore$.value, [`${c.entityId}/${c.name}`]: c }))`. `persistentState` already writes
+...clipsStore$.value, [`${c.entityId}/${c.name}`]: c }))`. `persistentState` already writes
   through to localStorage on every `.next` — no Save button.
 - **Bound to entity TYPE via stable bone ids.** `Clip.entityId` = `EntityDef.id`; tracks key by bone
   name. A clip is independent of any rebuild's eids and of the viewer scale (§2.4).
@@ -643,26 +668,26 @@ capture → `captureKeyframe()`; mode toggle → `editorMode$`.
 **Phase 0 — stable bones (foundation; no behavior change).**
 `EntityInstance.bones` in `registry.ts`; `buildUnit`/`buildLightsaber`/`buildSwordsman` publish
 bones (two-step `hand` migration + namespaced merge for swordsman, §2.3). Keep existing
-`animations` working unchanged. *Runnable: viewer identical, bones now available.*
+`animations` working unchanged. _Runnable: viewer identical, bones now available._
 
 **Phase 1 — player + format (validate playback before authoring exists).**
 New `Animation/clip.ts` (`Clip/Track/Keyframe`, `makeClipPlayer`, `sampleTrack`, `canonicalizeTrack`).
 Snapshot `restScale` in `build()` right after the tree is built (§3.1). Wire a **hand-written test
 clip — a fresh 2-key arm raise on `unit/armR`** (NOT the swordsman slice, which isn't a clean track,
 §1.4) into `animations`, play it via the existing dropdown + a fixed cursor clock.
-*Runnable: a data-driven clip plays, slerp+canonicalization verified.*
+_Runnable: a data-driven clip plays, slerp+canonicalization verified._
 
 **Phase 2 — inspector + capture + timeline (the core authoring loop, no gizmo yet).**
 New rxjs state (§5.1); timeline + inspector DOM (§5.2, §4.6 — editable translate, read-only rotation
 readout); edit/play frame split (§5.3, pose-write inline in play mode); capture (with
 canonicalization) / add-track / delete (§5.4); localStorage store + selector integration with the
 collision rule (§6). Pose translation via the numeric inspector; rotation deferred to the gizmo.
-*Runnable: select → pose-translate (numeric) → capture → scrub → playback → saved & reloaded.*
+_Runnable: select → pose-translate (numeric) → capture → scrub → playback → saved & reloaded._
 
 **Phase 3 — gizmo (ergonomics; unblocks rotation authoring).**
 Input-mode split on `down$`; CPU canvas picking (§4.3) feeding `selectedEid$`; translate handles
 (§4.4) reusing §6 math; single screen-facing rotate ring → quaternion (§4.5).
-*Runnable: pose translate AND rotation by dragging in the viewport.*
+_Runnable: pose translate AND rotation by dragging in the viewport._
 
 **Phase 4 — migrate built-ins + cleanup.**
 Re-author the swordsman slice/lunge as `unit/armR`+`sword/*` clips at the blended pose (root stays
@@ -684,7 +709,7 @@ frame split.
 2. **Quat slerp at the loop seam.** Resolved by `canonicalizeTrack` (§3.3) plus the author placing
    keys at both `time = 0` and `time = duration`; the timeline's duration marker makes this obvious.
 3. **Bone-map churn across builder edits.** Named bones are stable across rebuilds and child reorder;
-   a clip breaks only if a builder *renames/removes* a bone — at which point the track resolves to
+   a clip breaks only if a builder _renames/removes_ a bone — at which point the track resolves to
    `-1` and is skipped (explicit absence, not a silent wrong-target). Acceptable for a prototype;
    re-author on rename. One-line note in `clip.ts`.
 4. **One-writer-per-bone is a contract, not arbitration.** Confirm the boundary is acceptable: clips

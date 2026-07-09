@@ -1,4 +1,4 @@
-import { wgsl } from "../../../WGSL/wgsl.ts";
+import { wgsl } from "../../../../../WGSL/wgsl.ts";
 
 // SHARED WGSL fragments used by more than one lighting shader, inlined via wgsl-template
 // interpolation (same pattern as voxelProbeShared.wgsl.ts): a fragment with no `name` is spliced in

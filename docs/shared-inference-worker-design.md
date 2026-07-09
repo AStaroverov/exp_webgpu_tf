@@ -29,7 +29,7 @@ Two goals drive this work:
    implementation file and nothing above it.
 
 **Why a shared worker (not a shared model in each actor):** batching requires a single
-process that *sees* requests from all actors. With per-worker models there is no point
+process that _sees_ requests from all actors. With per-worker models there is no point
 where cross-actor requests meet. One worker that owns the networks is the only place a
 cross-actor batch can form. It also collapses 4 WebGPU contexts (one per actor) into 1,
 and makes weight reloads a single load instead of four.
@@ -197,13 +197,14 @@ holding the `tf.LayersModel`, `tf.tidy` + `policyNetwork.apply`, `parsePolicyOut
 
 **How to swap backends later:** write a new class implementing `InferenceEngine`
 (e.g. `OnnxInferenceEngine`). It must:
+
 1. reshape `stacked` into `[n, 11, 11, 19]` + build the `[n, 121]` content mask the model
-   expects (the content mask is **structural**, derived from the board — it is *not* the
+   expects (the content mask is **structural**, derived from the board — it is _not_ the
    action mask; reconstruct it the same way `createInputTensors` does today, or pass it as
    a second stacked buffer if a future engine needs it precomputed),
 2. run the forward pass,
 3. return raw logits `Float32Array` of length `n * 43`.
-Nothing above the seam changes; the Batcher, client, worker, and agents are untouched.
+   Nothing above the seam changes; the Batcher, client, worker, and agents are untouched.
 
 > Note on the content mask: today `createInputTensors` produces a 2nd tensor `[B, 121]`.
 > Keep that derivation **inside** `TfInferenceEngine` (it is TF input plumbing), or, if a
@@ -223,20 +224,20 @@ All wire types contain **only** `Float32Array` + numbers — never `tf`.
 ```ts
 // packages/ppo/src/inference/types.ts
 export type InferRequest = {
-  reqId: number;          // monotonic per-port; correlates resp to the awaiting promise
-  model: ModelKind;       // selects the queue + weights; cannot mix within a batch row-set
-  board: Float32Array;    // length BOARD_SIZE (2299); the actor's copied-out snapshot
-  mask: Float32Array;     // length ACTION_DIM_TOTAL (43); 0 allowed / -1e9 forbidden
-  greedy: boolean;        // resolved per-row in the sampler; may freely mix within a batch
-  reqVersion: number;     // version the caller believes is current (staleness diagnostics)
+  reqId: number; // monotonic per-port; correlates resp to the awaiting promise
+  model: ModelKind; // selects the queue + weights; cannot mix within a batch row-set
+  board: Float32Array; // length BOARD_SIZE (2299); the actor's copied-out snapshot
+  mask: Float32Array; // length ACTION_DIM_TOTAL (43); 0 allowed / -1e9 forbidden
+  greedy: boolean; // resolved per-row in the sampler; may freely mix within a batch
+  reqVersion: number; // version the caller believes is current (staleness diagnostics)
 };
 
 export type InferResponse = {
-  reqId: number;          // echoes the request
-  actions: Float32Array;  // one action index per head (here length 1: the flat head)
-  logits: Float32Array;   // raw concatenated logits, length 43
-  logProb: number;        // summed log-prob of the chosen action(s)
-  modelVersion: number;   // version that ACTUALLY served this result (for memory tagging)
+  reqId: number; // echoes the request
+  actions: Float32Array; // one action index per head (here length 1: the flat head)
+  logits: Float32Array; // raw concatenated logits, length 43
+  logProb: number; // summed log-prob of the chosen action(s)
+  modelVersion: number; // version that ACTUALLY served this result (for memory tagging)
 };
 ```
 
@@ -260,7 +261,7 @@ already knows which port a request arrived on and replies on that same port.
 ### 5.3 Transfer strategy & allocation discipline
 
 - **v1 — `postMessage` transferables (ship this).** The actor must copy `state.board` out
-  of the reused `ensureUnknownInputBoard(world).board.getBatch(eid)` scratch *anyway*
+  of the reused `ensureUnknownInputBoard(world).board.getBatch(eid)` scratch _anyway_
   (the next tick overwrites it — `InputArrays.ts`). Make that forced copy the transfer
   buffer and hand its backing `ArrayBuffer` over zero-copy:
   ```ts
@@ -299,7 +300,10 @@ A queue flushes when **either** condition fires (whichever is first):
 function enqueue(model: ModelKind, req: InferRequest, port: MessagePort) {
   const q = queues[model];
   q.items.push({ req, port });
-  if (q.items.length >= MAX_BATCH) { flush(model); return; }
+  if (q.items.length >= MAX_BATCH) {
+    flush(model);
+    return;
+  }
   if (q.timer == null) {
     q.timer = setTimeout(() => flush(model), WINDOW_MS); // WINDOW_MS = 60
   }
@@ -311,8 +315,12 @@ function enqueue(model: ModelKind, req: InferRequest, port: MessagePort) {
 ```ts
 async function flush(model: ModelKind) {
   const q = queues[model];
-  if (q.timer != null) { clearTimeout(q.timer); q.timer = null; }
-  const items = q.items; q.items = []; // swap out; new arrivals start a fresh window
+  if (q.timer != null) {
+    clearTimeout(q.timer);
+    q.timer = null;
+  }
+  const items = q.items;
+  q.items = []; // swap out; new arrivals start a fresh window
   if (items.length === 0) return;
 
   const n = items.length;
@@ -325,8 +333,18 @@ async function flush(model: ModelKind) {
   // GENERIC tail — sampleBatch(): extracted verbatim from batchActAsync (train.ts:169-194)
   for (let i = 0; i < n; i++) {
     const raw = logitsFlat.subarray(i * ACTION_DIM_TOTAL, (i + 1) * ACTION_DIM_TOTAL);
-    const { actions, logits, logProb } = sampleBatchRow(raw, items[i].req.mask, items[i].req.greedy);
-    const resp: InferResponse = { reqId: items[i].req.reqId, actions, logits, logProb, modelVersion: ver };
+    const { actions, logits, logProb } = sampleBatchRow(
+      raw,
+      items[i].req.mask,
+      items[i].req.greedy,
+    );
+    const resp: InferResponse = {
+      reqId: items[i].req.reqId,
+      actions,
+      logits,
+      logProb,
+      modelVersion: ver,
+    };
     items[i].port.postMessage(resp, [resp.logits.buffer, resp.actions.buffer]);
   }
 }
@@ -345,7 +363,7 @@ The actor **blocks on `drain()` every tick** (`EpisodeManager.runGameLoop`,
 - A long window on a blocking drain **serializes actors and starves the queue** — tick
   N+1's request cannot be enqueued until tick N resolves, so a 100 ms window would mostly
   time out near-empty. **The window is a tail-latency ceiling, not the feed mechanism.**
-- The batch is fed by **intra-tick concurrency**: `updatePolicyDriver` fires *all* deciding
+- The batch is fed by **intra-tick concurrency**: `updatePolicyDriver` fires _all_ deciding
   tanks' promises before `Promise.all(pending)`. One tick from one actor already emits
   N-tank requests; × `workerCount` (4) overlapping actors = tens of concurrent requests per
   window. **`MAX_BATCH` is the primary flush path.**
@@ -378,7 +396,7 @@ in-flight batch**.
    synchronous assignment**, and only **between flushes** (never mid-`infer`).
 3. **Safe disposal invariant (the load-bearing correctness argument):** an in-flight `infer`
    already **captured its `net` local** when the flush began, so it completes against the
-   old weights with no torn read. The swap merely repoints the field for the *next* flush.
+   old weights with no torn read. The swap merely repoints the field for the _next_ flush.
    `disposeNetwork(prev)` runs only **after** the in-flight forward pass settles — gate it
    on the per-model in-flight counter (or `await onReadyRead()` as `Transfer.ts:16` already
    does before saves) before disposing.
@@ -387,7 +405,7 @@ in-flight batch**.
    version that **actually served** the sample — correct regardless of when a reload landed.
    `getVersion()` on the agents is served from the latest `modelVersion` the client has seen.
 
-**Frozen-pool LRU thrashing (must mitigate):** if every actor rerolls a *different* frozen
+**Frozen-pool LRU thrashing (must mitigate):** if every actor rerolls a _different_ frozen
 version per episode, `policy_frozen` batches fragment per version (each version = different
 weights = its own forward pass). Mitigation: **cap the number of distinct frozen versions
 loaded at once** (small LRU, e.g. 2–4 slots keyed by version) and accept that frozen batches
@@ -432,6 +450,7 @@ prefer an already-loaded frozen version when curriculum allows.
 ## 9. File & module plan
 
 **New — `packages/ppo/src/inference/`:**
+
 - `types.ts` — `ModelKind`, `InferRequest`, `InferResponse`, wire constants.
 - `InferenceEngine.ts` — the `InferenceEngine` interface (§4).
 - `TfInferenceEngine.ts` — the **only** file importing `@tensorflow/tfjs`; relocates
@@ -443,16 +462,19 @@ prefer an already-loaded frozen version when curriculum allows.
   map; exposes `infer(model, board, mask, greedy): Promise<InferResponse>`.
 
 **New — `packages/ppo_unknown/src/entry/`:**
+
 - `InferenceWorker.ts` — worker entry: side-effect import `../models/createUnknownNetworks.ts`
   (custom layers, as `ActorWorker.ts:6`), constructs `TfInferenceEngine` + `Batcher`, accepts
   ports, subscribes to `inferenceReloadChannel` + frozen-reroll control messages.
 
 **New — channel:**
+
 - `inferenceReloadChannel` in `packages/ppo/src/core/channels.ts` (or a new
   `packages/ppo_unknown/src/inferenceChannel.ts`) — low-rate `createChannel` for
   weight-reload + frozen-pick notifications.
 
 **Changed:**
+
 - `packages/ppo_unknown/src/entry/index.ts` — spawn `InferenceWorker` **first**; create one
   `MessageChannel` per actor; hand `port1`→inference, `port2`→actor (§5.1).
 - `packages/ppo_unknown/src/entry/ActorWorker.ts` — **remove** `initTensorFlow("webgpu")`
@@ -475,7 +497,7 @@ Each step is independently shippable and testable.
 
 1. **Pure refactor — extract `sampleBatchRow` from `batchActAsync`** (`train.ts:170-192`).
    No behavior change. Test: existing training + actor paths green; `batchActAsync` output
-   bit-identical on a fixed input. *Biggest single risk-reducer; lands before any worker code.*
+   bit-identical on a fixed input. _Biggest single risk-reducer; lands before any worker code._
 2. **`InferenceEngine` + `TfInferenceEngine`** (no worker yet). Wire `batchActAsync` to call
    `TfInferenceEngine.infer` internally. **Parity test:** raw logits from `infer(model, stacked, n)`
    match the current `policyNetwork.apply` path **bit-for-bit** at `B=1` and at `B=N`

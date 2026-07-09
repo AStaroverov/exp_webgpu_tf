@@ -1,6 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { addComponent, addEntity, createWorld, hasComponent, removeComponent, removeEntity } from "bitecs";
+import {
+  addComponent,
+  addEntity,
+  createWorld,
+  hasComponent,
+  removeComponent,
+  removeEntity,
+} from "bitecs";
 import { createTable } from "./Table.ts";
 import { defineComponent } from "./component.ts";
 

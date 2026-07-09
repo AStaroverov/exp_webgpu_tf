@@ -665,10 +665,10 @@ eid)` does not exist. Shipped at `renderer/src/sab/adoptEntity.ts` (§4.2).
 - **eid exhaustion.** A never-recycled counter against `defaultSize = 30000` caps _total
   lifetime_ spawns at 30k. The demo is safe; **training (worker+SAB everywhere, high
   spawn/despawn churn across thousands of episodes) will overrun it.** Resolve before
-  wiring ppo_engine: (a) a single **shared** SAB free-list as the one eid authority —
+  wiring ppo*engine: (a) a single **shared** SAB free-list as the one eid authority —
   recycling without divergence because it stays one shared source; (b) tear down + rebuild
-  the worlds per episode; or (c) raise/grow capacity. _Recommendation: (a) when training
-  lands; keep the monotonic counter for the demo now._
+  the worlds per episode; or (c) raise/grow capacity. \_Recommendation: (a) when training
+  lands; keep the monotonic counter for the demo now.*
 
 ```
 

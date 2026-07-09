@@ -3,7 +3,7 @@
 // setLights() (upload the emitters + refill/upload the cluster table each frame) plus
 // recreateLightClusters() (resize the cluster table to the current grid + baked clusterDiv/clusterCap).
 // Extracted verbatim from createVoxelSystem — behavior is byte-for-byte identical.
-import type { VoxelBakedConfig } from "./voxelConfig.ts";
+import type { VoxelBakedConfig } from "../core/voxelConfig.ts";
 import { assignLightClusters } from "./lightClustering.ts";
 
 export type EmitterLightsDeps = {

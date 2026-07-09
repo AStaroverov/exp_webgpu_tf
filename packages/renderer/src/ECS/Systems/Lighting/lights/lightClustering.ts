@@ -1,4 +1,4 @@
-import type { VoxelBakedConfig } from "./voxelConfig.ts";
+import type { VoxelBakedConfig } from "../core/voxelConfig.ts";
 
 // CPU clustered light culling (Persson-style, clear-and-refill each frame). Bins every emitter into
 // the cluster cells its influence sphere overlaps; a full cell keeps its clusterCap STRONGEST lights

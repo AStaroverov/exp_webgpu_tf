@@ -1,22 +1,22 @@
 import { getTypeTypedArray } from "../../../Shader/index.ts";
-import { shaderMeta as voxelizeMeta } from "./voxelize.shader.ts";
-import { DEFAULT_VOXEL_BAKED_CONFIG, type VoxelBakedConfig } from "./voxelConfig.ts";
+import { shaderMeta as voxelizeMeta } from "./stages/2_voxelize/voxelize.shader.ts";
+import { DEFAULT_VOXEL_BAKED_CONFIG, type VoxelBakedConfig } from "./core/voxelConfig.ts";
 import {
   createVoxelTextures,
   DEFAULT_VOXEL_GRID,
   voxelMipLevelCount,
   type VoxelGridConfig,
   type VoxelTextures,
-} from "./voxelResources.ts";
+} from "./core/voxelResources.ts";
 import type { SceneInstances } from "../SDFSystem/createDrawShapeSystem.ts";
-import { createVoxelizeSystem } from "./voxelizeSystem.ts";
-import { createEmitterLightsSystem } from "./emitterLightsSystem.ts";
-import { createSunShadowSystem } from "./sunShadowSystem.ts";
-import { createMipPyramidSystem } from "./mipPyramidSystem.ts";
-import { createAnisoVolumeSystem } from "./anisoVolumeSystem.ts";
-import { createCompositeSystem } from "./compositeSystem.ts";
-import { createScreenProbeSystem } from "./screenProbeSystem.ts";
-import { createConeSystem } from "./coneSystem.ts";
+import { createVoxelizeSystem } from "./stages/2_voxelize/voxelizeSystem.ts";
+import { createEmitterLightsSystem } from "./lights/emitterLightsSystem.ts";
+import { createSunShadowSystem } from "./stages/1_sunShadow/sunShadowSystem.ts";
+import { createMipPyramidSystem } from "./stages/3_mipPyramid/mipPyramidSystem.ts";
+import { createAnisoVolumeSystem } from "./stages/4_anisoVolume/anisoVolumeSystem.ts";
+import { createCompositeSystem } from "./stages/7_composite/compositeSystem.ts";
+import { createScreenProbeSystem } from "./stages/5_screenProbe/screenProbeSystem.ts";
+import { createConeSystem } from "./stages/6_cone/coneSystem.ts";
 import { SunLight } from "../SunLight.ts";
 
 // Voxel scene system: voxelize() fills the 3D albedo/emission/radiance textures from the SDF

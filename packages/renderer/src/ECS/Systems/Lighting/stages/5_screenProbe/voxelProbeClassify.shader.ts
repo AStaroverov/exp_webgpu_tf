@@ -1,7 +1,7 @@
-import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
-import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
-import { wgsl } from "../../../WGSL/wgsl.ts";
-import { probePackWGSL } from "./voxelProbeShared.wgsl.ts";
+import { VariableKind, VariableMeta } from "../../../../../Struct/VariableMeta.ts";
+import { ShaderMeta } from "../../../../../WGSL/ShaderMeta.ts";
+import { wgsl } from "../../../../../WGSL/wgsl.ts";
+import { probePackWGSL } from "../../core/shaders/voxelProbeShared.wgsl.ts";
 
 // Adaptive screen-probe atlas — PASS A0 (uniform placement). One thread per COARSE 16px tile picks
 // the tile's representative full-res pixel (tile center + a stable per-tile jitter, exactly as the

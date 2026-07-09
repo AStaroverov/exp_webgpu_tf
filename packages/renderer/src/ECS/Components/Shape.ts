@@ -69,15 +69,13 @@ export const createShapeComponent = defineComponent((Shape, { obs }) => {
       values.set(id, 1, height);
       values.set(id, 2, depth);
     }),
-    setParallelogram$: obs(
-      (id: number, width: number, height: number, skew: number, depth = 0) => {
-        kind[id] = ShapeKind.Parallelogram;
-        values.set(id, 0, width);
-        values.set(id, 1, height);
-        values.set(id, 2, skew);
-        values.set(id, 3, depth);
-      },
-    ),
+    setParallelogram$: obs((id: number, width: number, height: number, skew: number, depth = 0) => {
+      kind[id] = ShapeKind.Parallelogram;
+      values.set(id, 0, width);
+      values.set(id, 1, height);
+      values.set(id, 2, skew);
+      values.set(id, 3, depth);
+    }),
     setTrapezoid$: obs(
       (id: number, topWidth: number, bottomWidth: number, height: number, depth = 0) => {
         kind[id] = ShapeKind.Trapezoid;
@@ -88,16 +86,7 @@ export const createShapeComponent = defineComponent((Shape, { obs }) => {
       },
     ),
     setTriangle$: obs(
-      (
-        id: number,
-        a: number,
-        b: number,
-        c: number,
-        d: number,
-        e: number,
-        f: number,
-        depth = 0,
-      ) => {
+      (id: number, a: number, b: number, c: number, d: number, e: number, f: number, depth = 0) => {
         kind[id] = ShapeKind.Triangle;
         values.set(id, 0, a);
         values.set(id, 1, b);

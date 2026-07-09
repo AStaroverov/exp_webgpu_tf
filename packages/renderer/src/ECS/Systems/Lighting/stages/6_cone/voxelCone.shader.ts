@@ -1,10 +1,10 @@
-import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
-import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
-import { wgsl } from "../../../WGSL/wgsl.ts";
-import { VoxelBakedConfig } from "./voxelConfig.ts";
-import { SCREEN_PROBE_K } from "./voxelResources.ts";
-import { probeWeightWGSL } from "./voxelProbeShared.wgsl.ts";
-import { buildBasisWGSL, unprojectWGSL } from "./voxelTrace.wgsl.ts";
+import { VariableKind, VariableMeta } from "../../../../../Struct/VariableMeta.ts";
+import { ShaderMeta } from "../../../../../WGSL/ShaderMeta.ts";
+import { wgsl } from "../../../../../WGSL/wgsl.ts";
+import { VoxelBakedConfig } from "../../core/voxelConfig.ts";
+import { SCREEN_PROBE_K } from "../../core/voxelResources.ts";
+import { probeWeightWGSL } from "../../core/shaders/voxelProbeShared.wgsl.ts";
+import { buildBasisWGSL, unprojectWGSL } from "../../core/shaders/voxelTrace.wgsl.ts";
 
 // VCT Layer 3 — SCREEN-PROBE RESOLVE + CONTACT AO. A fullscreen pass over the G-buffer:
 //   1. Reconstruct the per-pixel world position P (from the reverse-Z depth + invViewProj)

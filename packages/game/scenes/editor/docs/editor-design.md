@@ -63,7 +63,7 @@ a glob).
   canvas with the panel layout below.
 - **Relative-import depth (verified, not guessed):** from a file under `packages/_game/editor/src/` the
   imports resolve to **`../../../renderer/src/...`** and **`../../../engine/src/...`** — both **three** `../`
-  (src → editor → _game → packages). I computed this with `os.path.relpath`, not by counting in my head; do
+  (src → editor → \_game → packages). I computed this with `os.path.relpath`, not by counting in my head; do
   the same `Phase 0` smoke-import before writing much code, because one miscount cascades.
 
 ### How it consumes `engine`
@@ -99,7 +99,7 @@ A CSS-grid shell around the WebGPU canvas: **left = scene tree**, **center = can
   Inspector = a `params` object rebound to the selected entity's fields on selection change. **Pose fields
   must be read from `RigidBodyState.position.get(eid, i)` every frame, not bound once** — the worker owns
   pose and a freshly-spawned dynamic body is still falling, so a one-time bind shows stale spawn pose. Pose
-  *edits* from the inspector go through `PendingMove` (§4), identical to the gizmo.
+  _edits_ from the inspector go through `PendingMove` (§4), identical to the gizmo.
 
 No new UI dependency.
 
@@ -120,9 +120,10 @@ Add an editor-package component **`SceneNode`** (marker; optionally one `u8 node
 grouping/icons — skip if not needed yet). The hierarchy panel renders `query(world, [SceneNode])` each frame.
 
 Rejected alternatives and why:
-- *Query an existing component* (e.g. `[RigidBodyState]`) — couples the tree to physics and won't see future
+
+- _Query an existing component_ (e.g. `[RigidBodyState]`) — couples the tree to physics and won't see future
   non-physical nodes (lights, empties). Leaky.
-- *Editor-side `Set<eid>`* — an imperative duplicate of world state; `CLAUDE.md` explicitly rejects
+- _Editor-side `Set<eid>`_ — an imperative duplicate of world state; `CLAUDE.md` explicitly rejects
   module-side buffers that should be world state. The query **is** the membership set ("the fastest search is
   the one you don't do").
 
@@ -160,11 +161,11 @@ Hover, if added later, is a **separate** `Hovered` marker — don't overload `Se
 Add-to-scene = call the existing factory at a default pose, then tag the returned eid with `SceneNode`
 (+ default label). The three factories cover all three `BodySpec` kinds:
 
-| Palette item | Factory | `BodySpec.kind` | Body type |
-|---|---|---|---|
-| Box | `createRigidBox` | `box` | **dynamic** |
-| Sphere | `createRigidSphere` | `sphere` | **dynamic** |
-| Ground | `createGround` | `groundBox` | fixed |
+| Palette item | Factory             | `BodySpec.kind` | Body type   |
+| ------------ | ------------------- | --------------- | ----------- |
+| Box          | `createRigidBox`    | `box`           | **dynamic** |
+| Sphere       | `createRigidSphere` | `sphere`        | **dynamic** |
+| Ground       | `createGround`      | `groundBox`     | fixed       |
 
 **No new factories** are required to ship the six goals. The dynamic body type of box/sphere is exactly why
 the gizmo needs §4's kinematic-during-drag — it is not an afterthought.
@@ -191,7 +192,7 @@ bodies, and by the next bank publish even for a settled one.
 ### Options considered
 
 - **(a) Edit mode = pause physics globally.** The worker self-clocks (`setTimeout` loop,
-  `physics.worker.ts:201`); pausing it needs a *new* control channel and doesn't, by itself, let you move a
+  `physics.worker.ts:201`); pausing it needs a _new_ control channel and doesn't, by itself, let you move a
   body. Heavy and incomplete. **Rejected.**
 - **(c) Edit render transform + despawn/respawn on drop.** Both ops already exist (zero op-channel change).
   But it requires suppressing the apply-system for the dragged eid (a per-entity `if` in the hot apply loop),
@@ -210,6 +211,7 @@ components, not flags + branches; "spawn is a component-add" precedent). Concret
 **1. `opChannel.ts` — extend the discriminated union, not just a number.** `OpCode` is an **object literal**
 `{ SPAWN_BODY: 1, DESPAWN_BODY: 2 }` and the codec gates on `op.op === OpCode.X` over a
 `StructuralOp = SpawnBodyOp | DespawnBodyOp` union (`:36,87,107`). Adding MOVE means **all** of:
+
 - `MOVE_BODY: 3` on `OpCode`.
 - a `MoveBodyOp = { op: typeof OpCode.MOVE_BODY; eid; x,y,z; qx,qy,qz,qw }` member **added to the
   `StructuralOp` union** (so `decodeOp`'s return type covers it and every consumer must narrow).
@@ -224,18 +226,22 @@ components, not flags + branches; "spawn is a component-add" precedent). Concret
 > (optionally fix it to `(typeof OpCode)[keyof typeof OpCode]` while you're there, but that's not required).
 
 **2. Worker `drainOps` — the `else = despawn` landmine MUST be fixed first.** Today (`physics.worker.ts:121-125`):
+
 ```
 const op = decodeOp(opcode, payload, slot);
 if (isSpawnBody(op)) spawnBody(op);
 else despawnBody(op.eid);          // <-- a MOVE op falls HERE and DELETES the body
 ```
+
 A `MOVE_BODY` op decoded into this branch would be treated as a despawn and **silently destroy the entity on
 the first drag**. The branch must become explicit:
+
 ```
 if (isSpawnBody(op)) spawnBody(op);
 else if (isMoveBody(op)) moveBody(op);
 else despawnBody(op.eid);          // isDespawnBody
 ```
+
 `moveBody(op)` resolves the pid via `RigidBodyRef.id[eid]` — the same lookup despawn uses — and **must apply
 the same `pid !== 0` guard** (`:163-164`): the entity may have been despawned before its move op drains, and
 `pw.getRigidBody(0)` is undefined behavior. Then `setTranslation({x,y,z}, true)` / `setRotation({x,y,z,w},
@@ -262,7 +268,7 @@ its primary targets. Two viable ways to make the drag actually hold:
 - **(b2) Spawn palette box/sphere as `fixed` in the editor.** Cheapest possible (zero extra op): the editor
   passes `bodyType: "fixed"` through a thin editor-side spawn wrapper (or a one-line factory variant) so
   every placed object stays put and is freely draggable; a future "Play" toggle would flip them to dynamic.
-  Trade-off: you don't see live falling/settling in edit mode, which is arguably *correct* for an editor.
+  Trade-off: you don't see live falling/settling in edit mode, which is arguably _correct_ for an editor.
 
 **DECISION (chosen): (b2) — the editor spawns palette box/sphere as `fixed`.** Absolute minimum (zero extra
 op), every placed object stays put and is freely draggable, and it gives a clean edit/play split: a future
@@ -275,12 +281,12 @@ ships only `MOVE_BODY` + `PendingMove`. Goal 6 is **honestly closed** because ev
 `fixed` and so the gizmo's `MOVE_BODY` holds with no gravity fighting it.
 
 Edits are async (worker drains at its next phase boundary, then publishes; main sees the result ~1–2 frames
-later) — the same model spawn already uses. For drag *feel*, see M-note below.
+later) — the same model spawn already uses. For drag _feel_, see M-note below.
 
 > **Drag responsiveness (do not route the visual through the worker round-trip).** Routing every drag frame
-> through `PendingMove → worker → publish → read` adds ~1–2 frames of lag to the *visible* object and (if
+> through `PendingMove → worker → publish → read` adds ~1–2 frames of lag to the _visible_ object and (if
 > gizmo arms are entities) to the handles. For a smooth drag: each drag-frame **also** write the new pose
-> *optimistically* on the main side for immediate feedback, and let the worker pose **reconcile** it. Concretely:
+> _optimistically_ on the main side for immediate feedback, and let the worker pose **reconcile** it. Concretely:
 > the gizmo arms are render-only entities (no `RigidBodyState`), so writing their `LocalTransform` directly is
 > never clobbered (see the exception above) — move them with the cursor every frame for instant feedback. The
 > grabbed **body** is kinematic during the drag (b1), so its worker-published pose tracks the `PendingMove`
@@ -293,7 +299,7 @@ later) — the same model spawn already uses. For drag *feel*, see M-note below.
 
 ### What "add a collider" means here
 
-There is **no standalone collider concept**. A collider is *implied by `BodySpec.kind`*; the worker turns the
+There is **no standalone collider concept**. A collider is _implied by `BodySpec.kind`_; the worker turns the
 kind into exactly one centered Rapier collider (cuboid / ball). So **"add a collider" = "spawn a body via a
 factory"** (§3 palette), and the three supported colliders are box / groundBox / sphere. No
 add-collider-to-existing-body path exists, and it is out of scope for the prototype.
@@ -370,7 +376,7 @@ rayDir    = fwd
 
 `D` only slides the origin **along** a parallel ray, so it cannot change an analytic hit `t` — any value in
 the depth range `[0.1, dist+200]` (= `[0.1, 300]`, `dist=100`) is fine; use `D = 200` and don't rely on a
-magic number. (It *does* matter for the world→screen path below — keep that path using `viewProjMatrix`, which
+magic number. (It _does_ matter for the world→screen path below — keep that path using `viewProjMatrix`, which
 clips correctly.)
 
 **Ray → world point on plane `z = z0`:** `t = (z0 - rayOrigin.z) / fwd.z` (`fwd.z = -sin el`, never 0 for
@@ -388,7 +394,7 @@ ray-vs-shape on main**, against the exact transform the renderer composes:
   pickable as scene objects, and (optionally) excluding gizmo arms by simply not querying them.
 - **Rotation is the FULL quaternion, not yaw.** `LocalTransform.matrix` is built by
   `mat4.fromRotationTranslation(fullQuaternion, …)` (`createApplyRigidBodyToTransformSystem.ts:55`) — it bakes
-  in all three rotation axes even though the SDF only *renders* yaw. So a box test that reconstructs a
+  in all three rotation axes even though the SDF only _renders_ yaw. So a box test that reconstructs a
   yaw-only frame would **disagree with the physics body** for any tumbled dynamic box (the common case in a
   play mode). Do **not** reconstruct rotZ. Instead:
   - **Box:** invert the eid's `GlobalTransform.matrix.getBatch(eid)` (full 4×4) into a scratch matrix, transform
@@ -419,13 +425,13 @@ No existing line/overlay path. Two options:
     clobbers their `LocalTransform`, so the editor positions them every frame with a direct main-side write
     (instant, no worker round-trip). This is the clean path the §4 exception enables.
   - **Exclude `GizmoHandle` from the scene-object picker** (a `Without(GizmoHandle)` on the pick query), and
-    run a **separate** handle-pick query *first* so grabbing a handle wins over selecting whatever's behind it.
+    run a **separate** handle-pick query _first_ so grabbing a handle wins over selecting whatever's behind it.
   - Picking a handle uses the **same** CPU box ray test; they're depth-tested for free.
   - Cons: they live in the lit scene (VCT GI lights them) and a pure-Z arm is foreshortened under the tilted
     cam. Fine for a prototype.
 - **(B) Dedicated overlay pass.** A `line-list` pipeline bound to `viewProjMatrix`, drawn into the present
   target with depth disabled or `greater-equal`. Crisp, unlit, never lit/foreshortened — but a whole pipeline
-  + vertex buffer to maintain.
+  - vertex buffer to maintain.
 
 Go with **(A)** now; promote to (B) only if "lit gizmo" or Z-handle foreshortening becomes a real problem.
 
@@ -469,20 +475,20 @@ Each phase is a runnable slice. Goals in parentheses.
 **Phase 0 — App skeleton.** Create the package (`package.json`, `config.vite.ts`, `tsconfig.json`,
 `index.html`, `src/main.ts`); register in root workspaces; **smoke-test the `../../../renderer` /
 `../../../engine` imports resolve**, then verify `createEngine` boots under COOP/COEP with a fresh rAF `tick`
-loop. *(goal 1)*
+loop. _(goal 1)_
 
 **Phase 1 — Palette + flat tree + collider (free).** lil-gui palette calls the three factories at a default
 pose; on spawn, tag the eid with `SceneNode` and add a `Map<eid,name>` label. Plain-DOM tree renders
 `query([SceneNode])`; cleanup label on `onRemove(SceneNode)`. The spawned shape **is** the rendered collider.
-*(goals 2, 3, 4, 5)*
+_(goals 2, 3, 4, 5)_
 
 **Phase 2 — Selection + inspector.** `Selected` marker; tree click and (Phase 3) canvas pick set it
 single-select; highlight system tints `[Selected, Shape]` (save/restore `OriginalColor`). lil-gui inspector
 rebinds to the selection — **pose read per-frame from `RigidBodyState.position.get`** (not a one-time bind),
-live color edit. *(goal 1 polish)*
+live color edit. _(goal 1 polish)_
 
 **Phase 3 — CPU picking + camera input.** Implement the screen→world ray and ray-vs-box (full-matrix inverse)
-/ ray-vs-sphere pick (§6); canvas click selects. Add Alt-drag orbit + wheel zoom. *(goal 6 prerequisite)*
+/ ray-vs-sphere pick (§6); canvas click selects. Add Alt-drag orbit + wheel zoom. _(goal 6 prerequisite)_
 
 **Phase 4 — Reposition op + `PendingMove`.** Land `MOVE_BODY` in `opChannel.ts` (union
 member + encode/decode + guard), **fix the worker `drainOps` `else`-branch landmine** (explicit
@@ -490,15 +496,15 @@ member + encode/decode + guard), **fix the worker `drainOps` `else`-branch landm
 `createApplyPendingMoveSystem`. Dynamic-drag is handled by the chosen **(b2)** path — the editor's spawn
 wrapper passes `bodyType: "fixed"`, so no `SET_BODY_TYPE` op / `PendingBodyType` component is needed here.
 Round-trip a position edit end-to-end from **inspector sliders** first to validate latency/feel before the
-gizmo. *(goal 6 core)*
+gizmo. _(goal 6 core)_
 
 **Phase 5 — Translate gizmo.** Spawn three `GizmoHandle{axis}` render-only entities at `[Selected,
 RigidBodyState]` (no `SceneNode`, no `RigidBodyState`); a handle-pick query runs before the scene-object
 picker; drag math (§6) writes the gizmo-arm `LocalTransform` directly (instant) + `PendingMove` (authoritative).
-On grab/drop, emit the body-type flip (b1). *(goal 6 complete)*
+On grab/drop, emit the body-type flip (b1). _(goal 6 complete)_
 
 **Later (not MVP):** collider wireframe overlay (§5); real `Parent`/`Children` hierarchy; rotate/scale gizmo
-(the wireframe overlay is the way to *see* true rotation the impostor hides); multi-select; undo; scene
+(the wireframe overlay is the way to _see_ true rotation the impostor hides); multi-select; undo; scene
 save/load (eids never recycle, so serialization is stable, but reload must respect the shared counter); a
 dedicated overlay/line pass for crisp unlit gizmos.
 
@@ -519,8 +525,8 @@ dedicated overlay/line pass for crisp unlit gizmos.
    always use the full inverse — never reconstruct rotZ.
 4. **2.5D rotation is a half-truth.** Only yaw + spheres render rotation faithfully; a tumbling box looks
    upright while its collider and transform are fully rotated. A rotate gizmo would visually lie —
-   deprioritized. The collider wireframe overlay (§5) is the way to *see* true rotation if needed.
-5. **Drag latency vs visual feedback.** Routing the *visible* object solely through the async worker
+   deprioritized. The collider wireframe overlay (§5) is the way to _see_ true rotation if needed.
+5. **Drag latency vs visual feedback.** Routing the _visible_ object solely through the async worker
    round-trip lags ~1–2 frames. Mitigated (§6) by writing the gizmo arms' `LocalTransform` directly each
    drag-frame (render-only entities, never clobbered) and keeping the grabbed body kinematic so its published
    pose tracks the targets. Validate feel with inspector sliders in Phase 4 before building the gizmo.

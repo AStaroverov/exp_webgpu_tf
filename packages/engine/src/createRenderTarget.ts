@@ -3,7 +3,7 @@ import { createFrameTextures, createFrameTick } from "../../renderer/src/WGSL/cr
 import { createPresent } from "../../renderer/src/WGSL/createPresent.ts";
 import { createDrawShapeSystem } from "../../renderer/src/ECS/Systems/SDFSystem/createDrawShapeSystem.ts";
 import { createVoxelSystem } from "../../renderer/src/ECS/Systems/Lighting/createVoxelSystem.ts";
-import { createLightEmitterSystem } from "../../renderer/src/ECS/Systems/Lighting/createLightEmitterSystem.ts";
+import { createLightEmitterSystem } from "../../renderer/src/ECS/Systems/Lighting/lights/createLightEmitterSystem.ts";
 import { createTransformSystem } from "../../renderer/src/ECS/Systems/TransformSystem.ts";
 import { createResizeSystem } from "../../renderer/src/ECS/Systems/ResizeSystem.ts";
 import { getEngineComponents, type EngineWorld } from "./ECS/createEngineWorld.ts";

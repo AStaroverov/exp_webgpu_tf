@@ -1,8 +1,8 @@
-import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
-import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
-import { wgsl } from "../../../WGSL/wgsl.ts";
-import { VoxelBakedConfig } from "./voxelConfig.ts";
-import { unprojectWGSL } from "./voxelTrace.wgsl.ts";
+import { VariableKind, VariableMeta } from "../../../../../Struct/VariableMeta.ts";
+import { ShaderMeta } from "../../../../../WGSL/ShaderMeta.ts";
+import { wgsl } from "../../../../../WGSL/wgsl.ts";
+import { VoxelBakedConfig } from "../../core/voxelConfig.ts";
+import { unprojectWGSL } from "../../core/shaders/voxelTrace.wgsl.ts";
 
 // VCT Layer 4 — the COMPOSITE: turn the indirect cone gather into the FINAL lit image.
 //   final = albedo·(ambient·AO + directSun·shadow + indirect) + selfEmission.

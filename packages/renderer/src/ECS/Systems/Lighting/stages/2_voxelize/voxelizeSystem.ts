@@ -1,10 +1,10 @@
-import { GPUShader } from "../../../WGSL/GPUShader.ts";
-import { getTypeTypedArray } from "../../../Shader/index.ts";
+import { GPUShader } from "../../../../../WGSL/GPUShader.ts";
+import { getTypeTypedArray } from "../../../../../Shader/index.ts";
 import { shaderMeta as voxelizeMeta, WORKGROUP, WORKGROUP_1D } from "./voxelize.shader.ts";
-import type { SceneInstances } from "../SDFSystem/createDrawShapeSystem.ts";
-import { SunLight } from "../SunLight.ts";
+import type { SceneInstances } from "../../../SDFSystem/createDrawShapeSystem.ts";
+import { SunLight } from "../../../SunLight.ts";
 import { buildVoxelAABBs } from "./voxelizeCpu.ts";
-import type { createSunShadowSystem } from "./sunShadowSystem.ts";
+import type { createSunShadowSystem } from "../1_sunShadow/sunShadowSystem.ts";
 
 // Grid box (min corner + cellSize + per-axis voxel dims). The AABB build + clear dispatch read it.
 export type VoxelizeGridBox = {

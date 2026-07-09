@@ -158,28 +158,47 @@ chain), because `refine` reads its raw SH as the subdivision signal.
 
 ---
 
-## 8. File map (after refactor)
+## 8. File map
+
+The directory is organized so the root shows only the entry point + docs, and the rest falls into
+three concepts: **`core/`** (foundation shared by every stage), **`lights/`** (emitter input, prepared
+outside `renderFrame`), and **`stages/`** (the GI pipeline — one numbered folder per stage, in frame
+order). Each stage folder co-locates its sub-system (orchestration) + its shader(s) (GPU logic) + its
+pure CPU helper (if any) — the three layers of one responsibility side by side.
 
 ```
 Lighting/
-  README.md                     ← this document
-  createVoxelSystem.ts          ← thin assembler: VoxelCtx + module wiring + public API
-  voxelContext.ts               ← VoxelCtx type + shared-state init
-  renderFrame.ts                ← single pass ordering (voxel.renderFrame(encoder))
-  voxelConfig.ts                ← baked config
-  voxelResources.ts             ← texture/buffer factories
-  pipelines/voxelPipelines.ts   ← GPUShaders + sampler + empty group-1 placeholders
-  bindgroups/voxelBindGroups.ts ← buildXGroup + buildGrid
-  uniforms/voxelUniforms.ts     ← scratch + uploadProbeUniforms + buildSunViewProj
-  uniforms/frameBlock.ts        ← named UBO-block helper
-  passes/{sunShadow,voxelize,mip,probe,cone,composite}Pass.ts
-  lights/voxelLights.ts         ← setLights + clustering + createLightEmitterSystem
-  budget/voxelBudget.ts         ← pollBudget + readback + recreateScreenProbeResources
-  api/voxelConfigApi.ts         ← rebuild / recreate / setXxx / getters
-  shaders/                      ← *.shader.ts + shared/*.wgsl.ts
+  createVoxelSystem.ts              ← THE entry point: assembler + grid conductor + renderFrame scenario
+  README.md                         ← this document
+  REFACTOR_PLAN.md                  ← refactor progress log
+
+  core/                             ← foundation shared by every stage
+    voxelConfig.ts                  ← baked config (WGSL consts, needs rebuild())
+    voxelResources.ts               ← texture/buffer factories
+    mipPass.ts                      ← shared dispatch primitive (runMips/runAnisoBase/runAnisoMips)
+    shaders/
+      voxelTrace.wgsl.ts            ← shared WGSL: unproject / build_basis
+      voxelProbeShared.wgsl.ts      ← shared WGSL: probe pack / weight
+
+  lights/                           ← INPUT: emitters (setLights, called outside renderFrame)
+    emitterLightsSystem.ts          ← GPU light buffer + upload
+    createLightEmitterSystem.ts     ← ECS discovery of LightEmitter entities
+    lightClustering.ts              ← pure CPU clustered light culling
+
+  stages/                           ← the GI pipeline, one folder per stage, in frame order
+    1_sunShadow/                    ← sunShadowSystem + sunShadow.shader + sunViewProj (pure)
+    2_voxelize/                     ← voxelizeSystem + voxelize.shader + voxelizeCpu (pure)
+    3_mipPyramid/                   ← mipPyramidSystem + voxelMip.shader
+    4_anisoVolume/                  ← anisoVolumeSystem + voxelAnisoBase/Volume.shader
+    5_screenProbe/                  ← screenProbeSystem + voxelScreenProbe + voxelProbe{Classify,Refine,Args,Debug}.shader
+    6_cone/                         ← coneSystem + voxelCone.shader
+    7_composite/                    ← compositeSystem + voxelComposite.shader
 ```
 
-Public API (`ReturnType<typeof createVoxelSystem>`, see `RenderDI.VoxelSystem`): the passes
-(`sunDepth/voxelize/mips/anisoBase/anisoMips/probe*/gather*/cone/composite/probeDebug`), `setLights`,
-`pollBudget`, `rebuild`, `recreate`, the set of `setXxx` setters and getters, `coneOutputTexture` /
+`createVoxelSystem` builds each stage's `createXxxSystem(deps)` sub-system, owns the voxel grid, and
+drives the frame via `renderFrame(encoder)` (the numbered stage order = the pass order in §3).
+
+Public API (`ReturnType<typeof createVoxelSystem>`, see `RenderDI.VoxelSystem`): `renderFrame`, the
+individual passes (`sunDepth/voxelize/mips/anisoBase/anisoMips/probe*/gather*/cone/composite/probeDebug`),
+`setLights`, `pollBudget`, `rebuild`, `recreate`, the `setXxx` setters and getters, `coneOutputTexture` /
 `compositeOutputTexture`.

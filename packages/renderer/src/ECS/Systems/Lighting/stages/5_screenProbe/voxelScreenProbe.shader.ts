@@ -1,9 +1,9 @@
-import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
-import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
-import { wgsl } from "../../../WGSL/wgsl.ts";
-import { VoxelBakedConfig } from "./voxelConfig.ts";
-import { probePackWGSL, probeWeightWGSL } from "./voxelProbeShared.wgsl.ts";
-import { buildBasisWGSL, unprojectWGSL } from "./voxelTrace.wgsl.ts";
+import { VariableKind, VariableMeta } from "../../../../../Struct/VariableMeta.ts";
+import { ShaderMeta } from "../../../../../WGSL/ShaderMeta.ts";
+import { wgsl } from "../../../../../WGSL/wgsl.ts";
+import { VoxelBakedConfig } from "../../core/voxelConfig.ts";
+import { probePackWGSL, probeWeightWGSL } from "../../core/shaders/voxelProbeShared.wgsl.ts";
+import { buildBasisWGSL, unprojectWGSL } from "../../core/shaders/voxelTrace.wgsl.ts";
 
 // VCT — SCREEN-SPACE PROBE gather. One thread per probe (uniform OR adaptive) traces a hemisphere of
 // fill cones through the voxelRadiance pyramid, projects the gathered radiance onto SH-L1 (4 coeffs /

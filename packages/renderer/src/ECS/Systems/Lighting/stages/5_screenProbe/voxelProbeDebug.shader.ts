@@ -1,7 +1,7 @@
-import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
-import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
-import { wgsl } from "../../../WGSL/wgsl.ts";
-import { SCREEN_PROBE_K } from "./voxelResources.ts";
+import { VariableKind, VariableMeta } from "../../../../../Struct/VariableMeta.ts";
+import { ShaderMeta } from "../../../../../WGSL/ShaderMeta.ts";
+import { wgsl } from "../../../../../WGSL/wgsl.ts";
+import { SCREEN_PROBE_K } from "../../core/voxelResources.ts";
 
 // Screen-probe DEBUG visualization — a fullscreen pass that replaces the composite (when the GUI
 // "debug: probe layers" toggle is on) so you can SEE how the adaptive probes are distributed:

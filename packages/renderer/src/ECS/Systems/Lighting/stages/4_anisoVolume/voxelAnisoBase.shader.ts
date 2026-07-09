@@ -1,6 +1,6 @@
-import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
-import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
-import { wgsl } from "../../../WGSL/wgsl.ts";
+import { VariableKind, VariableMeta } from "../../../../../Struct/VariableMeta.ts";
+import { ShaderMeta } from "../../../../../WGSL/ShaderMeta.ts";
+import { wgsl } from "../../../../../WGSL/wgsl.ts";
 
 // Anisotropic VCT (Layer 6) — BASE pass. Builds the level-0 of the 6 directional radiance
 // volumes from the ISOTROPIC voxelRadiance mip 0 (full res, PREMULTIPLIED rgb=radiance·coverage,

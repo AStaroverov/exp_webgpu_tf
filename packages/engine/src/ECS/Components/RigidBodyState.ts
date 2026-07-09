@@ -1,11 +1,6 @@
 import { addComponent, observe, onRemove, World } from "bitecs";
 import { defineComponent } from "../../../../common/src/component.ts";
-import {
-  despawnBody,
-  encodeOp,
-  toSpawnOp,
-  type BodySpec,
-} from "../../Physics/opChannel.ts";
+import { despawnBody, encodeOp, toSpawnOp, type BodySpec } from "../../Physics/opChannel.ts";
 
 // Per-frame physics snapshot in 3D. The single biggest 2D→3D delta from the
 // unknown package: position is [x,y,z], rotation is a QUATERNION [x,y,z,w]

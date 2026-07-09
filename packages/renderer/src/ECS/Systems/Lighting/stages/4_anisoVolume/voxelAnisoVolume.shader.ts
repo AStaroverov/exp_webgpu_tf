@@ -1,6 +1,6 @@
-import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
-import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
-import { wgsl } from "../../../WGSL/wgsl.ts";
+import { VariableKind, VariableMeta } from "../../../../../Struct/VariableMeta.ts";
+import { ShaderMeta } from "../../../../../WGSL/ShaderMeta.ts";
+import { wgsl } from "../../../../../WGSL/wgsl.ts";
 
 // Anisotropic VCT (Layer 6) — VOLUME pass. Downsamples each directional volume from level c to
 // level c+1, each direction reading its OWN volume's 2×2×2 block with its OWN front-to-back

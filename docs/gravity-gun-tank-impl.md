@@ -30,7 +30,7 @@ ECS-обрамление (по принципу из `CLAUDE.md`, раздел �
 - **Компонент-данные `GravityFirearm`** на турели/корпусе грави-танка — параметры волны
   (полуугол конуса, дальность, сила импульса, коэффициент урона при ударе, перезарядка).
 - **Система `createGravityWaveSystem`** — её query (турели с `GravityFirearm`, у которых
-  поднят флаг выстрела и не идёт перезарядка) *есть* триггер. Она находит тела в конусе и
+  поднят флаг выстрела и не идёт перезарядка) _есть_ триггер. Она находит тела в конусе и
   ставит им импульс через существующий компонент `Impulse`.
 - **Существующие системы не трогаются по существу**: импульс применяет уже имеющаяся
   `createApplyImpulseSystem` (`createApplyImpulseSystem.ts`). **Урона нет** — никакого
@@ -51,9 +51,9 @@ RocketTank в том же файле.
 
 2. **Конфиг-объект** — `Config/vehicles.ts:210-235` (`RocketTankConfig`). Создать
    `GravityTankConfig` с идентичной формой: `{ type, engine, size, padding, density,
-   colliderRadius, hullSize, turretSize, hullGrid, turretHeadGrid, caterpillarLines,
-   caterpillarSize, trackAnchorXMult, turretSpeed, gun: { gunGrid, reloadTime, caliber,
-   bulletOffsetYMult }, colors }`. ВАЖНО (gotcha): конфиг **декларативный**, фабрика его
+colliderRadius, hullSize, turretSize, hullGrid, turretHeadGrid, caterpillarLines,
+caterpillarSize, trackAnchorXMult, turretSpeed, gun: { gunGrid, reloadTime, caliber,
+bulletOffsetYMult }, colors }`. ВАЖНО (gotcha): конфиг **декларативный**, фабрика его
    не читает — значения дублируются в фабрике вручную, держать в синхроне.
 
 3. **switch в `getTankConfig()`** — `Config/vehicles.ts:364-377` (кейсы 372-373 для
@@ -77,7 +77,7 @@ RocketTank в том же файле.
 
 7. **Фабрика** — создать `ECS/Entities/Tank/Gravity/GravityTank.ts` по образцу
    `ECS/Entities/Tank/Rocket/RocketTank.ts:1-50`. Сигнатура `createGravityTank(opts: {
-   playerId, teamId, x, y, rotation, color })`. Внутри (как RocketTank): `resetOptions`,
+playerId, teamId, x, y, rotation, color })`. Внутри (как RocketTank): `resetOptions`,
    задать `partsCount/size/padding/approximateColliderRadius`,
    `options.vehicleType = VehicleType.GravityTank` (прецедент 47),
    `options.engineType` (48), `createTankBase`, `createTankTracks`, `createTankTurret`,
@@ -91,7 +91,7 @@ RocketTank в том же файле.
 
 8. **Геометрия частей** — создать `ECS/Entities/Tank/Gravity/GravityTankParts.ts` по
    образцу `RocketTankParts.ts:1-67`: экспортировать `SIZE, PADDING, DENSITY,
-   HULL_COLS/ROWS, hullSet, <gunSet>, cabinSet`, конфиги гусениц и `PARTS_COUNT`.
+HULL_COLS/ROWS, hullSet, <gunSet>, cabinSet`, конфиги гусениц и `PARTS_COUNT`.
    GOTCHA: `PARTS_COUNT` (RocketTankParts.ts:64-66) должен точно равняться сумме длин всех
    наборов частей + гусеницы; он кладётся в `options.partsCount` (RocketTank.ts:43) и
    используется `fillAllSlots()`. Рассинхрон — баг аллокации слотов.
@@ -178,9 +178,9 @@ RocketTank в том же файле.
 4. **Системы-эффекта выбираются ПРИСУТСТВИЕМ своей нагрузки (без `Not`):**
    - `createSpawnerBulletsSystem` → query `[VehicleTurret, TurretController, Firearms, BulletEmitter]`.
    - `createGravityWaveSystem` → query `[VehicleTurret, TurretController, Firearms, GravityFirearm]`.
-   Обе на условии `shouldShoot() && !Firearms.isReloading()` → `Firearms.startReloading()` +
-   свой эффект. Перезарядку тикает каждая для своего набора; двойного счёта нет (на турели
-   ровно одна нагрузка).
+     Обе на условии `shouldShoot() && !Firearms.isReloading()` → `Firearms.startReloading()` +
+     свой эффект. Перезарядку тикает каждая для своего набора; двойного счёта нет (на турели
+     ровно одна нагрузка).
 
 Так generic-спавнер перестаёт знать про грави: он лишь **сузил query до своей нагрузки**
 (`BulletEmitter`), ровно как `createExplodeSystem` живёт на `[Explodable, Destroy]`. Нажатие
@@ -196,6 +196,7 @@ RocketTank в том же файле.
 `createApplyImpulseSystem.ts:8-76` / `createExplodeSystem.ts:22-71`.
 
 Логика тика:
+
 1. `query(world, [VehicleTurret, TurretController, Firearms, GravityFirearm])` — триггер.
 2. На каждой турели: перезарядку/триггер берём у **`Firearms`** (не у `GravityFirearm`):
    если `!shouldShoot() || Firearms.isReloading()` — пропуск. Иначе `Firearms.startReloading()`
@@ -249,7 +250,7 @@ RocketTank в том же файле.
 во что-то врежется, штатная физика отработает обычное столкновение как для любого летящего
 тела — но это побочный эффект физики, не часть оружия, и специально не усиливается.
 
-Геймплейно урон приходит из *других* источников (пушки союзников, зоны, обломки) — грави
+Геймплейно урон приходит из _других_ источников (пушки союзников, зоны, обломки) — грави
 лишь ставит врага в невыгодную позицию. Это и есть «без скрытой магии»: одно оружие = один
 эффект (сила), без скрытого урона.
 
@@ -261,6 +262,7 @@ RocketTank в том же файле.
 обломок — свободное Dynamic-тело и взаимодействует со всеми не-vehicle телами.
 
 Следствия для волны:
+
 - Обломки **уже** Dynamic с `RigidBodyRef` → `intersectionWithShape` из 3.3 их находит,
   `Impulse.add` на них работает (прецедент `applyExplosionImpulse.ts:1-55` толкает именно
   такие отделённые части).
@@ -287,13 +289,13 @@ RocketTank в том же файле.
   `models/Networks/v3.ts`.
 - **Переобучение из-за action-space НЕ требуется** — форма входов/выходов сети та же.
 
-Агент просто выдаёт `Fire` по направлению; *что* произойдёт (пуля или грави-волна)
+Агент просто выдаёт `Fire` по направлению; _что_ произойдёт (пуля или грави-волна)
 определяется **оружием танка** на игровой стороне (`Firearms` vs `Firearms+GravityFirearm`),
 а не действием. Это и есть смысл «выстрел не отличается»: различие живёт в ECS-эффекте
 курка (3.2), а слой действий/RL о грави-пушке вообще не знает.
 
 > Это работает, потому что (3.2) `FireAction` завязан на общий механизм `Firearms.isReloading()`,
-> а *эффект* курка выбирается нагрузкой (`BulletEmitter` vs `GravityFirearm`). Грави-турель
+> а _эффект_ курка выбирается нагрузкой (`BulletEmitter` vs `GravityFirearm`). Грави-турель
 > несёт `Firearms` (механизм) + `GravityFirearm` (нагрузка) — `FireAction` отрабатывает как есть.
 
 ### 4.2. Читаемость эффекта в observation
@@ -311,6 +313,7 @@ RocketTank в том же файле.
 Reward — per-macro-action, дельта `ScoreTracker` (`reward/calculateReward.ts:47-51`),
 dense-shaping затухает к концу обучения. Грави-пушка **урона не даёт**, поэтому shaping
 строится вокруг **позиционной выгоды**:
+
 - **+ за смещение врага** в нежелательную для него сторону: к стене, в зону поражения,
   прочь от его цели (дельта дистанции врага до укрытия/до своей цели).
 - **+ большой за спихивание врага в зону** (out-of-zone destroy — `destroyOutOfZone`).
@@ -325,39 +328,39 @@ dense-shaping затухает к концу обучения. Грави-пуш
 ## 5. Порядок имплементации (мелкие коммиты)
 
 - [ ] **Коммит 1 — регистрация типа (без поведения).** `Config/vehicles.ts` (enum 15-22,
-  `GravityTankConfig` 210-235-аналог, switch 364-377), `Config/weapons.ts`
-  (`ReloadConfig.gravityGun` 149-164; turret speed — переиспользовать),
-  `Config/parts.ts` (`VehicleBaseDensity` 48-55), `VehicleBase.ts` (`volumeByType` 12-19).
+      `GravityTankConfig` 210-235-аналог, switch 364-377), `Config/weapons.ts`
+      (`ReloadConfig.gravityGun` 149-164; turret speed — переиспользовать),
+      `Config/parts.ts` (`VehicleBaseDensity` 48-55), `VehicleBase.ts` (`volumeByType` 12-19).
 - [ ] **Коммит 2 — геометрия и фабрика.** `ECS/Entities/Tank/Gravity/GravityTankParts.ts`
-  (образец `RocketTankParts.ts`), `ECS/Entities/Tank/Gravity/GravityTank.ts` (образец
-  `RocketTank.ts`), роутер `createTank.ts:1-35` (import + union + case). На этом этапе
-  танк ездит и наводится, но не «стреляет».
+      (образец `RocketTankParts.ts`), `ECS/Entities/Tank/Gravity/GravityTank.ts` (образец
+      `RocketTank.ts`), роутер `createTank.ts:1-35` (import + union + case). На этом этапе
+      танк ездит и наводится, но не «стреляет».
 - [ ] **Коммит 3 — рефактор: вынести нагрузку пули в `BulletEmitter` (без новой фичи).**
-  Чисто разделить роли `Firearms` (см. 3.2), не меняя поведение обычных танков:
-  `ECS/Components/Firearms.ts` ужать до `reloading` + методов (убрать `caliber`,
-  `bulletStartPosition`, `setData`); новый `ECS/Components/BulletEmitter.ts`
-  `{ caliber, bulletStartPosition }` + `setData`, регистрация в `createGameWorld.ts:61-108`;
-  `spawnBullet` (`Bullet.ts:102-120`) читает из `BulletEmitter`; `createTankTurret`
-  (`Tank.ts:80-82`) для обычных танков навешивает `Firearms` + `BulletEmitter`;
-  `createSpawnerBulletsSystem` (`createBulletSystem.ts:6-23`) → query
-  `[VehicleTurret, TurretController, Firearms, BulletEmitter]`. Проверить, что обычные танки
-  стреляют как раньше (регрессия). Это самостоятельный, осмысленный сам по себе коммит.
+      Чисто разделить роли `Firearms` (см. 3.2), не меняя поведение обычных танков:
+      `ECS/Components/Firearms.ts` ужать до `reloading` + методов (убрать `caliber`,
+      `bulletStartPosition`, `setData`); новый `ECS/Components/BulletEmitter.ts`
+      `{ caliber, bulletStartPosition }` + `setData`, регистрация в `createGameWorld.ts:61-108`;
+      `spawnBullet` (`Bullet.ts:102-120`) читает из `BulletEmitter`; `createTankTurret`
+      (`Tank.ts:80-82`) для обычных танков навешивает `Firearms` + `BulletEmitter`;
+      `createSpawnerBulletsSystem` (`createBulletSystem.ts:6-23`) → query
+      `[VehicleTurret, TurretController, Firearms, BulletEmitter]`. Проверить, что обычные танки
+      стреляют как раньше (регрессия). Это самостоятельный, осмысленный сам по себе коммит.
 - [ ] **Коммит 4 — компонент `GravityFirearm`.** `ECS/Components/GravityFirearm.ts`
-  (образец `Explodable.ts` — чистые данные волны: cone/range/impulse), регистрация в
-  `createGameWorld.ts:61-108`. В `createTankTurret` для GravityTank: `Firearms` (механизм) +
-  `GravityFirearm` (нагрузка), БЕЗ `BulletEmitter`.
+      (образец `Explodable.ts` — чистые данные волны: cone/range/impulse), регистрация в
+      `createGameWorld.ts:61-108`. В `createTankTurret` для GravityTank: `Firearms` (механизм) +
+      `GravityFirearm` (нагрузка), БЕЗ `BulletEmitter`.
 - [ ] **Коммит 5 — система волны.** `ECS/Systems/createGravityWaveSystem.ts` (образец
-  `createApplyImpulseSystem.ts`): query `[VehicleTurret, TurretController, Firearms,
-  GravityFirearm]`, на `shouldShoot() && !Firearms.isReloading()` →
-  `intersectionWithShape` (конус перед стволом) → `Impulse.add` затронутым телам,
-  `Firearms.startReloading()`. Инстанс в `createGame.ts:~100`, вызов в `physicalFrame`
-  после `execTransformSystem()` (109), перед `applyImpulses()` (110). **Урона нет.**
+      `createApplyImpulseSystem.ts`): query `[VehicleTurret, TurretController, Firearms,
+GravityFirearm]`, на `shouldShoot() && !Firearms.isReloading()` →
+      `intersectionWithShape` (конус перед стволом) → `Impulse.add` затронутым телам,
+      `Firearms.startReloading()`. Инстанс в `createGame.ts:~100`, вызов в `physicalFrame`
+      после `execTransformSystem()` (109), перед `applyImpulses()` (110). **Урона нет.**
 - [ ] **Коммит 6 — спавн в сценариях.** Добавить грави-танк в dev-мир (`setupDemoWorld`)
-  и/или в обучающий сценарий `ppo_unknown` (по памяти проекта — build-specific контент
-  живёт там, не в `createGame`).
+      и/или в обучающий сценарий `ppo_unknown` (по памяти проекта — build-specific контент
+      живёт там, не в `createGame`).
 - [ ] **(опц.) Коммит 7 — reward-shaping.** Позиционный shaping в
-  `reward/calculateReward.ts:47-51` (смещение врага к стене/в зону). НЕ обязателен для
-  запуска — действие `Fire` и так работает на грави-танке без правок RL-слоя.
+      `reward/calculateReward.ts:47-51` (смещение врага к стене/в зону). НЕ обязателен для
+      запуска — действие `Fire` и так работает на грави-танке без правок RL-слоя.
 
 > **Чего в плане НЕТ (по решению из раздела 4):** нового `ActionKind`, правок
 > `consts.ts`/`applyActionToGame.ts`/`computeActionMask.ts`/сети, нового канала observation,
@@ -389,7 +392,7 @@ dense-shaping затухает к концу обучения. Грави-пуш
    Решить на этапе визуала.
 
 5. **Баланс силы/перезарядки/конуса.** `impulse`, `coneHalfAngle`, `range`, `ReloadConfig
-   .gravityGun` — все требуют игровой настройки и профилирования. Поскольку урона нет,
+.gravityGun` — все требуют игровой настройки и профилирования. Поскольку урона нет,
    «слишком сильно» = телепортирует врага через пол-карты; «слишком слабо» = бесполезно.
    Профилировать по worst-frame (GC от спавна VFX, если будет визуал волны).
 

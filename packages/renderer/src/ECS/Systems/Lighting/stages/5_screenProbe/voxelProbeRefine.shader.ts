@@ -1,8 +1,8 @@
-import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
-import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
-import { wgsl } from "../../../WGSL/wgsl.ts";
-import { SCREEN_PROBE_K } from "./voxelResources.ts";
-import { probePackWGSL } from "./voxelProbeShared.wgsl.ts";
+import { VariableKind, VariableMeta } from "../../../../../Struct/VariableMeta.ts";
+import { ShaderMeta } from "../../../../../WGSL/ShaderMeta.ts";
+import { wgsl } from "../../../../../WGSL/wgsl.ts";
+import { SCREEN_PROBE_K } from "../../core/voxelResources.ts";
+import { probePackWGSL } from "../../core/shaders/voxelProbeShared.wgsl.ts";
 
 // Adaptive screen-probe atlas — ADAPTIVE REFINE (single level, 16→8). One thread per fine cell; the
 // cell center is a candidate adaptive-probe position and its parent base tile is cell / cellDiv (the

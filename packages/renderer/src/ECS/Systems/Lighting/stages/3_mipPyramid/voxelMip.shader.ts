@@ -1,6 +1,6 @@
-import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
-import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
-import { wgsl } from "../../../WGSL/wgsl.ts";
+import { VariableKind, VariableMeta } from "../../../../../Struct/VariableMeta.ts";
+import { ShaderMeta } from "../../../../../WGSL/ShaderMeta.ts";
+import { wgsl } from "../../../../../WGSL/wgsl.ts";
 
 // Voxel-radiance MIP downsample — one level per dispatch. Reads mip L of voxelRadiance
 // (as a single-mip SAMPLED texture_3d via textureLoad) and writes mip L+1 (as a single-

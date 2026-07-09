@@ -1,4 +1,4 @@
-import { wgsl } from "../../../WGSL/wgsl.ts";
+import { wgsl } from "../../../../../WGSL/wgsl.ts";
 
 // SHARED WGSL fragments for the adaptive screen-probe atlas (Phase 1). These are inlined into
 // MULTIPLE probe shaders via the wgsl-template interpolation (the old coneTrace.wgsl.ts pattern):

@@ -1,5 +1,5 @@
 import { hasComponent, query } from "bitecs";
-import { getRenderComponents, type RenderWorld } from "../../world.ts";
+import { getRenderComponents, type RenderWorld } from "../../../world.ts";
 
 type VoxelLightSink = {
   setLights(data: Float32Array, count: number): void;

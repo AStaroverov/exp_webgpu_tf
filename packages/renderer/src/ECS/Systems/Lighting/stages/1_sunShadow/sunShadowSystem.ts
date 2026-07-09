@@ -1,11 +1,11 @@
 import { mat4 } from "gl-matrix";
-import { GPUShader } from "../../../WGSL/GPUShader.ts";
-import { getTypeTypedArray } from "../../../Shader/index.ts";
-import { viewProjMatrix } from "../ResizeSystem.ts";
+import { GPUShader } from "../../../../../WGSL/GPUShader.ts";
+import { getTypeTypedArray } from "../../../../../Shader/index.ts";
+import { viewProjMatrix } from "../../../ResizeSystem.ts";
 import { shaderMeta as sunShadowMeta } from "./sunShadow.shader.ts";
-import { SunLight } from "../SunLight.ts";
+import { SunLight } from "../../../SunLight.ts";
 import { createSunViewProjComputer, type SunViewProjBox } from "./sunViewProj.ts";
-import type { SceneInstances } from "../SDFSystem/createDrawShapeSystem.ts";
+import type { SceneInstances } from "../../../SDFSystem/createDrawShapeSystem.ts";
 
 // Sun shadow map (depth-only pass from the sun's POV; grid/camera-independent).
 // Standard depth (orthoZO [0,1]) so the composite's shadow test is the simple "fragment

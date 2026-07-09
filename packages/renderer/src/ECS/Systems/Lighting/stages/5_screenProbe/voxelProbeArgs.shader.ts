@@ -1,6 +1,6 @@
-import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
-import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
-import { wgsl } from "../../../WGSL/wgsl.ts";
+import { VariableKind, VariableMeta } from "../../../../../Struct/VariableMeta.ts";
+import { ShaderMeta } from "../../../../../WGSL/ShaderMeta.ts";
+import { wgsl } from "../../../../../WGSL/wgsl.ts";
 import { GATHER_WORKGROUP } from "./voxelScreenProbe.shader.ts";
 
 // Adaptive screen-probe atlas — PASS B (build indirect args). A single thread reads the adaptive

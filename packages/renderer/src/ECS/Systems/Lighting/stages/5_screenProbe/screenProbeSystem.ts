@@ -4,15 +4,15 @@
 // + the classify/refine/args placement pipelines + the debug view, and all their bind groups + CPU
 // scratch. Extracted VERBATIM from createVoxelSystem — behavior is byte-for-byte identical.
 import { mat4 } from "gl-matrix";
-import { GPUShader } from "../../../WGSL/GPUShader.ts";
-import { getTypeTypedArray } from "../../../Shader/index.ts";
-import { viewProjMatrix } from "../ResizeSystem.ts";
+import { GPUShader } from "../../../../../WGSL/GPUShader.ts";
+import { getTypeTypedArray } from "../../../../../Shader/index.ts";
+import { viewProjMatrix } from "../../../ResizeSystem.ts";
 import { createScreenProbeShaderMeta, GATHER_WORKGROUP } from "./voxelScreenProbe.shader.ts";
 import { classifyShaderMeta, WORKGROUP as CLASSIFY_WG } from "./voxelProbeClassify.shader.ts";
 import { refineShaderMeta, WORKGROUP as REFINE_WG } from "./voxelProbeRefine.shader.ts";
 import { argsShaderMeta } from "./voxelProbeArgs.shader.ts";
 import { debugShaderMeta } from "./voxelProbeDebug.shader.ts";
-import type { VoxelBakedConfig } from "./voxelConfig.ts";
+import type { VoxelBakedConfig } from "../../core/voxelConfig.ts";
 import {
   createScreenProbeBuffers,
   createScreenProbeTextures,
@@ -24,9 +24,9 @@ import {
   type ScreenProbeBuffers,
   type ScreenProbeCounts,
   type ScreenProbeTextures,
-} from "./voxelResources.ts";
-import type { createAnisoVolumeSystem } from "./anisoVolumeSystem.ts";
-import type { createEmitterLightsSystem } from "./emitterLightsSystem.ts";
+} from "../../core/voxelResources.ts";
+import type { createAnisoVolumeSystem } from "../4_anisoVolume/anisoVolumeSystem.ts";
+import type { createEmitterLightsSystem } from "../../lights/emitterLightsSystem.ts";
 
 export type ScreenProbeDeps = {
   device: GPUDevice;

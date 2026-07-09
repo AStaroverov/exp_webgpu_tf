@@ -42,7 +42,11 @@ export async function createEngine({
   getEngineComponents(world).Children.addComponent(world, sceneRoot);
   EngineDI.sceneRoot = sceneRoot;
 
-  const execTransformSystem = createTransformSystem(world, getEngineComponents(world).Children, sceneRoot);
+  const execTransformSystem = createTransformSystem(
+    world,
+    getEngineComponents(world).Children,
+    sceneRoot,
+  );
   const applyRigidBodyToLocalTransform = createApplyRigidBodyToTransformSystem(world);
   const applyVelocity = createApplyVelocitySystem(world);
 

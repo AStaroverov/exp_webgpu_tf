@@ -99,7 +99,11 @@ export function setVelocity(eid: number, x: number, y: number, z: number): SetVe
   return { op: OpCode.SET_VELOCITY, eid, x, y, z };
 }
 
-export function moveBody(eid: number, pos: Vec3, rot: { x: number; y: number; z: number; w: number }): MoveBodyOp {
+export function moveBody(
+  eid: number,
+  pos: Vec3,
+  rot: { x: number; y: number; z: number; w: number },
+): MoveBodyOp {
   return {
     op: OpCode.MOVE_BODY,
     eid,
@@ -189,7 +193,13 @@ export function decodeOp(opcode: number, payload: Float64Array, slot: number): S
     };
   }
   if (opcode === OpCode.SET_VELOCITY) {
-    return { op: OpCode.SET_VELOCITY, eid, x: payload[b + 1], y: payload[b + 2], z: payload[b + 3] };
+    return {
+      op: OpCode.SET_VELOCITY,
+      eid,
+      x: payload[b + 1],
+      y: payload[b + 2],
+      z: payload[b + 3],
+    };
   }
   const bodyType = payload[b + 1] === 1 ? "fixed" : "dynamic";
   const position: Vec3 = { x: payload[b + 3], y: payload[b + 4], z: payload[b + 5] };

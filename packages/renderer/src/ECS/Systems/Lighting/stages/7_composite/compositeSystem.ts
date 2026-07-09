@@ -7,11 +7,11 @@
 // (albedo/normal/emission/depth), the half-res cone output (indirect+AO, bilinear-upsampled), and
 // the sun shadow map. MUST run AFTER cone() (reads coneOutput + the shared invViewProj) and AFTER
 // sunDepth() (reads the sun view-proj matrix + world texel).
-import { GPUShader } from "../../../WGSL/GPUShader.ts";
+import { GPUShader } from "../../../../../WGSL/GPUShader.ts";
 import { createCompositeShaderMeta } from "./voxelComposite.shader.ts";
-import { SunLight } from "../SunLight.ts";
-import type { VoxelBakedConfig } from "./voxelConfig.ts";
-import type { createSunShadowSystem } from "./sunShadowSystem.ts";
+import { SunLight } from "../../../SunLight.ts";
+import type { VoxelBakedConfig } from "../../core/voxelConfig.ts";
+import type { createSunShadowSystem } from "../1_sunShadow/sunShadowSystem.ts";
 
 type SunShadowSystem = ReturnType<typeof createSunShadowSystem>;
 

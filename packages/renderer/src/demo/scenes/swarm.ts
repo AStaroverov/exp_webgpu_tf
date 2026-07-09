@@ -40,13 +40,31 @@ export function createSwarmScene(world: RenderWorld): DemoScene {
   // Sparse LARGE occluders: tall enough to cut through the hover band (zMin..zMax) so nearby
   // emitters cast readable soft shadows / occlusion onto the floor and each other.
   createRectangle(world, {
-    x: -14, y: 10, z: 0, width: 5, height: 5, depth: 7, color: [0.75, 0.55, 0.4, 1],
+    x: -14,
+    y: 10,
+    z: 0,
+    width: 5,
+    height: 5,
+    depth: 7,
+    color: [0.75, 0.55, 0.4, 1],
   });
   createRectangle(world, {
-    x: 12, y: -12, z: 0, width: 8, height: 2.5, depth: 5, color: [0.7, 0.7, 0.72, 1],
+    x: 12,
+    y: -12,
+    z: 0,
+    width: 8,
+    height: 2.5,
+    depth: 5,
+    color: [0.7, 0.7, 0.72, 1],
   });
   const swarmSlab = createRectangle(world, {
-    x: 2, y: 14, z: 0, width: 10, height: 1.6, depth: 4.5, color: [0.6, 0.62, 0.7, 1],
+    x: 2,
+    y: 14,
+    z: 0,
+    width: 10,
+    height: 1.6,
+    depth: 4.5,
+    color: [0.6, 0.62, 0.7, 1],
   });
   applyMatrixRotateZ(LocalTransform.matrix.getBatch(swarmSlab), 0.5);
   createSphere(world, { x: -12, y: -10, z: 0, radius: 3.2, color: [0.9, 0.9, 0.92, 1] });
@@ -58,7 +76,7 @@ export function createSwarmScene(world: RenderWorld): DemoScene {
   // identical layout every reload. Positions rejected inside a small keep-out around each large
   // occluder are NOT needed — an emitter drifting into geometry is itself a useful stress case.
   let seed = 1234567;
-  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
   // Hue palette cycled with per-light jitter — distinct pools without full-random mud.
   const swarmPalette: [number, number, number][] = [
     [1.0, 0.55, 0.2],

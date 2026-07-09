@@ -40,7 +40,9 @@ export function createPhysicsWorker(bundle: SabBundle): PhysicsWorker {
   // with no per-frame messages, so a worker that dies after init is otherwise invisible
   // (the renderer just reads a never-published bank → every body sits at the origin).
   worker.onerror = (e) => {
-    rejectReady(new Error(`physics worker uncaught error: ${e.message} (${e.filename}:${e.lineno})`));
+    rejectReady(
+      new Error(`physics worker uncaught error: ${e.message} (${e.filename}:${e.lineno})`),
+    );
   };
   worker.onmessageerror = (e) => {
     rejectReady(new Error(`physics worker message deserialization error: ${String(e)}`));

@@ -16,7 +16,7 @@ import { createFrameTextures, createFrameTick } from "../WGSL/createFrame.ts";
 import { createPresent } from "../WGSL/createPresent.ts";
 import { createDrawShapeSystem } from "../ECS/Systems/SDFSystem/createDrawShapeSystem.ts";
 import { createVoxelSystem } from "../ECS/Systems/Lighting/createVoxelSystem.ts";
-import { createLightEmitterSystem } from "../ECS/Systems/Lighting/createLightEmitterSystem.ts";
+import { createLightEmitterSystem } from "../ECS/Systems/Lighting/lights/createLightEmitterSystem.ts";
 import { SunLight } from "../ECS/Systems/SunLight.ts";
 import { createTransformSystem } from "../ECS/Systems/TransformSystem.ts";
 import {

@@ -1,8 +1,8 @@
-import { VariableKind, VariableMeta } from "../../../Struct/VariableMeta.ts";
-import { ShaderMeta } from "../../../WGSL/ShaderMeta.ts";
-import { wgsl } from "../../../WGSL/wgsl.ts";
-import { MAX_INSTANCE_COUNT } from "../SDFSystem/sdf.shader.ts";
-import { sceneSDF } from "../SDFSystem/sceneSDF.wgsl.ts";
+import { VariableKind, VariableMeta } from "../../../../../Struct/VariableMeta.ts";
+import { ShaderMeta } from "../../../../../WGSL/ShaderMeta.ts";
+import { wgsl } from "../../../../../WGSL/wgsl.ts";
+import { MAX_INSTANCE_COUNT } from "../../../SDFSystem/sdf.shader.ts";
+import { sceneSDF } from "../../../SDFSystem/sceneSDF.wgsl.ts";
 
 // Voxelization compute pass — SCATTER. Instead of one thread per voxel evaluating the
 // WHOLE scene SDF (cost = NumVoxels x NumInstances, plus 6 more evals for the normal),

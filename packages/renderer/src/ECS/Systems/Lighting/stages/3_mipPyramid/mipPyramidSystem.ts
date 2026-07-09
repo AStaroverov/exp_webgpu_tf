@@ -2,10 +2,10 @@
 // bind groups/buffers, and issues the mip-build pass. Extracted verbatim from createVoxelSystem:
 // the module builds its per-level state in rebindGrid() (called after voxelRadiance is recreated)
 // and runs one compute dispatch per level in run(). Behavior is byte-for-byte identical.
-import { GPUShader } from "../../../WGSL/GPUShader.ts";
-import { getTypeTypedArray } from "../../../Shader/index.ts";
+import { GPUShader } from "../../../../../WGSL/GPUShader.ts";
+import { getTypeTypedArray } from "../../../../../Shader/index.ts";
 import { shaderMeta as mipMeta, WORKGROUP as MIP_WG } from "./voxelMip.shader.ts";
-import { runMips } from "./passes/mipPass.ts";
+import { runMips } from "../../core/mipPass.ts";
 
 export type MipPyramidDeps = {
   device: GPUDevice;

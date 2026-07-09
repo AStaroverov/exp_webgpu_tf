@@ -1,4 +1,4 @@
-import type { SceneInstances } from "../SDFSystem/createDrawShapeSystem.ts";
+import type { SceneInstances } from "../../../SDFSystem/createDrawShapeSystem.ts";
 
 // CPU-side work for the voxelize pass: per-instance conservative voxel-AABB computation + the
 // scatter work-list prefix sum. Pure (reads the scene-instance CPU mirrors + grid params, writes the

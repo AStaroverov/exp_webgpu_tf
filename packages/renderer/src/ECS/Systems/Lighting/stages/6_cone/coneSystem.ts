@@ -10,13 +10,13 @@
 // coneOutput (HALF-res HDR; composite bilinear-upsamples). MUST run AFTER voxelize() + mips() +
 // screenProbe(). Reads the G-buffer (depth + normal).
 import { mat4 } from "gl-matrix";
-import { GPUShader } from "../../../WGSL/GPUShader.ts";
-import { getTypeTypedArray } from "../../../Shader/index.ts";
-import { viewProjMatrix } from "../ResizeSystem.ts";
+import { GPUShader } from "../../../../../WGSL/GPUShader.ts";
+import { getTypeTypedArray } from "../../../../../Shader/index.ts";
+import { viewProjMatrix } from "../../../ResizeSystem.ts";
 import { createConeShaderMeta } from "./voxelCone.shader.ts";
-import type { VoxelBakedConfig } from "./voxelConfig.ts";
-import type { ScreenProbeTextures } from "./voxelResources.ts";
-import type { createScreenProbeSystem } from "./screenProbeSystem.ts";
+import type { VoxelBakedConfig } from "../../core/voxelConfig.ts";
+import type { ScreenProbeTextures } from "../../core/voxelResources.ts";
+import type { createScreenProbeSystem } from "../5_screenProbe/screenProbeSystem.ts";
 
 type ScreenProbeSystem = ReturnType<typeof createScreenProbeSystem>;
 
