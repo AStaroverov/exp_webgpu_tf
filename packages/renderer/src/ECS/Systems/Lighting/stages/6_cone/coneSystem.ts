@@ -97,10 +97,6 @@ export function createConeSystem(deps: ConeDeps) {
   // gather's group-2 storage writes) bind spTex[curSet]; the gather's group-0 HISTORY bindings are
   // the one place the OTHER set (spTex[1 - curSet]) appears.
   let coneGroup0: [GPUBindGroup, GPUBindGroup];
-  // The cone shader's group 1 (tileHeader + tileIndices) references the RAW probeBufs, so it is
-  // rebuilt whenever probeBufs is recreated (resize / tile / adaptiveFraction change) — see
-  // buildConeGroup, which reads them via screenProbe.getProbeBufs().
-  let coneGroup1: GPUBindGroup;
   // Temporal-pass bind group: depth (G-buffer) + coneOutput (raw, this frame) + coneHistory (last
   // frame's filtered) + uniforms + sampler. Rebuilt with buildConeGroup (G-buffer / grid changes)
   // AND after recreateConeTargets (it references the recreated views).
@@ -111,11 +107,9 @@ export function createConeSystem(deps: ConeDeps) {
   // voxelRadiance view changes (grid rebuild) or the G-buffer changes (canvas resize).
   function buildConeGroup() {
     const { depth: gDepth, normal: gNormal } = getGBuffer();
-    // The screen-probe atlas ping-pong sets + the adaptive-atlas indirection buffers are owned by the
-    // screen-probe sub-system; read the current refs through its getters (the cone resolve reads the
-    // SAME textures/buffers the gather wrote).
+    // The screen-probe atlas ping-pong sets are owned by the screen-probe sub-system; read the
+    // current refs through its getters (the cone resolve reads the SAME textures the gather wrote).
     const spTex = screenProbe.getSpTex();
-    const probeBufs = screenProbe.getProbeBufs();
     // Per-parity variants (the resolve reads THIS frame's atlas = spTex[curSet]) — see the
     // ping-pong comment at the group declarations.
     const buildConeGroup0 = (tex: ScreenProbeTextures) =>
@@ -172,28 +166,6 @@ export function createConeSystem(deps: ConeDeps) {
         ],
       });
     coneGroup0 = [buildConeGroup0(spTex[0]), buildConeGroup0(spTex[1])];
-    // group 1 = the adaptive-atlas indirection (tileHeader + tileIndices, StorageRead). Bound to the
-    // RAW shared buffers (not GPUVariable buffers) so the resolve sees the SAME lists the refine pass
-    // wrote. Present even with no adaptive probes (tileHeader is all-zero → the adaptive loop no-ops).
-    coneGroup1 = device.createBindGroup({
-      layout: conePipeline.getBindGroupLayout(1),
-      entries: [
-        {
-          binding: coneShader.shaderMeta.uniforms.tileHeader.binding,
-          resource: { buffer: probeBufs.header },
-        },
-        {
-          binding: coneShader.shaderMeta.uniforms.tileIndices.binding,
-          resource: { buffer: probeBufs.indices },
-        },
-        // The persistent refine/boost state — the resolve derives each pixel's effective foveated
-        // level from it (must match what classify placed by this frame).
-        {
-          binding: coneShader.shaderMeta.uniforms.refineState.binding,
-          resource: { buffer: probeBufs.refineState },
-        },
-      ],
-    });
     buildTemporalGroup();
   }
 
@@ -303,7 +275,6 @@ export function createConeSystem(deps: ConeDeps) {
     });
     pass.setPipeline(conePipeline);
     pass.setBindGroup(0, coneGroup0[screenProbe.getCurSet()]); // resolve reads THIS frame's atlas set
-    pass.setBindGroup(1, coneGroup1); // adaptive-atlas tileHeader + tileIndices (StorageRead)
     pass.draw(6, 1, 0, 0);
     pass.end();
 

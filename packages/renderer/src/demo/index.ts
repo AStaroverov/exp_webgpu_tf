@@ -272,53 +272,6 @@ async function main() {
     .name("resolve temporal (C)")
     .onFinishChange(rebuild);
 
-  // --- Adaptive screen-probe atlas (single 16→8 level, LIGHT-ADAPTIVE only). ---
-  // The sole density driver is lightThresh: refine spawns an adaptive probe where the GATHERED
-  // incoming light varies across the uniform cage by more than this. High ⇒ off (the flat uniform
-  // atlas, the A/B baseline); lower ⇒ denser where the light gradient is steep. adaptiveFraction
-  // sizes the atlas + all indirection buffers (rebuild, like a tile change). The read-only rows show
-  // the live adaptive count + a BUDGET-EXCEEDED flag from the throttled counter readback.
-  const adaptiveCfg = { adaptiveFraction: voxel.adaptiveFraction };
-  probeFolder
-    .add(adaptiveCfg, "adaptiveFraction", 0, 4, 0.25)
-    .name("adaptive budget ×uniform")
-    .onFinishChange((v: number) => voxel.setAdaptiveFraction(v));
-  // Refine cell divisor → cellPx = tile / div (the level is tile → tile/div). E.g. tile 16 + 2 =
-  // 16→8. BAKED (rebuild — also recreates the atlas it sizes). A coarse tile + fine divisor can
-  // exceed the per-tile probe cap (SCREEN_PROBE_K) → surplus probes dropped; watch the budget row.
-  probeFolder
-    .add(voxel.config, "refineDiv", [2, 4, 8, 16])
-    .name("cell ÷")
-    .onFinishChange(rebuild);
-  // Light-adaptive density trigger: subdivide where the gathered-SH luminance varies across the
-  // neighborhood. Lower = denser probes in lit gradients; raise high = off (the flat uniform
-  // lattice). BAKED (rebuild). Watch the budget row — lowering it spawns more probes.
-  probeFolder
-    .add(voxel.config, "lightThresh", 0, 1, 0.01)
-    .name("light subdiv thresh")
-    .onFinishChange(rebuild);
-  // FOVEATED RINGS (perf): base probe density falls off with screen-center distance — full inside
-  // r0, ÷4 probes between r0..r1, ÷16 past r1; the light-adaptive boost restores one step where the
-  // gathered light varies. r0/r1 are normalized so the screen corner = 1. BAKED (rebuild); the
-  // debug view draws the two boundaries as cyan circles.
-  probeFolder.add(voxel.config, "ringsOn").name("foveated rings").onFinishChange(rebuild);
-  probeFolder.add(voxel.config, "ringR0", 0.1, 1, 0.05).name("ring r0 (÷4)").onFinishChange(rebuild);
-  probeFolder
-    .add(voxel.config, "ringR1", 0.2, 1.5, 0.05)
-    .name("ring r1 (÷16)")
-    .onFinishChange(rebuild);
-  // Read-only budget readout (updated each frame from the async counter readback; .listen() auto-
-  // refreshes the display). `budget` flips to BUDGET-EXCEEDED when the atlas overflowed this frame.
-  const probeStats = { adaptive: 0, budget: "OK" };
-  probeFolder.add(probeStats, "adaptive").name("adaptive probes").disable().listen();
-  probeFolder.add(probeStats, "budget").name("budget").disable().listen();
-  // Debug view: replace the lit image with a false-color map of the probe distribution — green =
-  // uniform (16px) probes, yellow = adaptive (8px) probes, red-tinted = subdivided tiles. Live.
-  const debugCfg = { debugProbes: voxel.debugProbes };
-  probeFolder
-    .add(debugCfg, "debugProbes")
-    .name("debug: probe layers")
-    .onChange((on: boolean) => voxel.setDebugProbes(on));
 
   // Composite (Layer 4): the final lit image. Sun controls above feed it via SunLight;
   // cone giStrength bakes into the indirect term. Only the ambient floor lives here.
@@ -482,28 +435,15 @@ async function main() {
       if (perfToggles.mips) voxel.mips(encoder);
       if (perfToggles.anisoBase) voxel.anisoBase(encoder);
       if (perfToggles.anisoMips) voxel.anisoMips(encoder);
-      // Screen-probe gather (the diffuse fill source): reads the radiance pyramid (after mips), must
-      // precede cone (which resolves it). LIGHT-ADAPTIVE ATLAS chain (clear → classify → gatherUniform
-      // → refine 16→8 → build-args → gatherAdaptive); the single toggle gates the whole chain's GPU
-      // cost. gatherUniform runs BEFORE refine so refine subdivides on the real gathered-SH radiance
-      // spread across the cage.
-      if (perfToggles.screenProbe) {
-        voxel.probeClear(encoder);
-        voxel.probeClassify(encoder);
-        voxel.gatherUniform(encoder);
-        voxel.probeRefine(encoder);
-        voxel.probeBuildArgs(encoder);
-        voxel.gatherAdaptive(encoder);
-      }
+      // Screen-probe gather (the diffuse fill source): reads the radiance pyramid (after mips),
+      // must precede cone (which resolves it).
+      if (perfToggles.screenProbe) voxel.gatherProbes(encoder);
       if (perfToggles.cone) voxel.cone(encoder);
-      // Debug view replaces the lit composite (both write compositeOutput → present is unchanged).
-      if (voxel.debugProbes) voxel.probeDebug(encoder);
-      else if (perfToggles.composite) voxel.composite(encoder);
+      if (perfToggles.composite) voxel.composite(encoder);
       present(encoder, voxel.compositeOutputTexture);
     } else {
       // Final lit image: SDF G-buffer draw → the full voxel-GI scenario (voxel.renderFrame,
-      // load-bearing order — sunDepth is gated on the sun internally, probeDebug swaps in when
-      // toggled) → present.
+      // load-bearing order — sunDepth is gated on the sun internally) → present.
       frameTick(encoder, delta);
       voxel.renderFrame(encoder);
       present(encoder, voxel.compositeOutputTexture);
@@ -522,11 +462,6 @@ async function main() {
     gpuMsEMA = gpuMsEMA ? gpuMsEMA * 0.8 + dt * 0.2 : dt;
     gpuMsMax = Math.max(gpuMsMax, gpuMsEMA);
     gpuPanel.update(gpuMsEMA, gpuMsMax);
-
-    // Throttled adaptive-budget readback (self-paced, ~every 30 frames) → live GUI count + warning.
-    void voxel.pollBudget();
-    probeStats.adaptive = voxel.adaptiveProbeCount;
-    probeStats.budget = voxel.budgetExceeded ? "BUDGET EXCEEDED" : "OK";
 
     // CPU/FPS frame bracket for stats-gl (GPU panel is fed by the timer above).
     stats.end();

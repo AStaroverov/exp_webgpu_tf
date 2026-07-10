@@ -1,27 +1,26 @@
 import { VariableKind, VariableMeta } from "../../../../../Struct/VariableMeta.ts";
 import { ShaderMeta } from "../../../../../WGSL/ShaderMeta.ts";
 import { wgsl } from "../../../../../WGSL/wgsl.ts";
-import { probeRefineDiv, probeTile, VoxelBakedConfig } from "../../core/voxelConfig.ts";
-import { probePackWGSL, probeWeightWGSL } from "../../core/shaders/voxelProbeShared.wgsl.ts";
+import { probeTile, VoxelBakedConfig } from "../../core/voxelConfig.ts";
+import { probeWeightWGSL } from "../../core/shaders/voxelProbeShared.wgsl.ts";
 import { buildBasisWGSL, unprojectWGSL } from "../../core/shaders/voxelTrace.wgsl.ts";
 
-// VCT — SCREEN-SPACE PROBE gather. One thread per probe (uniform OR adaptive) traces a hemisphere of
-// fill cones through the voxelRadiance pyramid, projects the gathered radiance onto SH-L1 (4 coeffs /
-// channel), and stores it into three rgba16float 2D textures + the probe's representative pixel/
+// VCT — SCREEN-SPACE PROBE gather. ONE thread per probe of the PLAIN UNIFORM GRID (one probe per
+// SP_TILE² pixel tile — thread index = slot = atlas texel, identity-mapped) traces a hemisphere of
+// fill cones through the voxelRadiance pyramid, projects the gathered radiance onto SH-L1 (4 coeffs
+// / channel), and stores it into three rgba16float 2D textures + the probe's representative pixel/
 // validity, world anchor P, and world normal N (6 storage textures — above the WebGPU default cap
 // of 4, so gpu.ts requests the adapter's maxStorageTexturesPerShaderStage).
 //
-// TWO PIPELINES from this ONE factory, bake IS_ADAPTIVE (0/1):
-//   - the UNIFORM variant (IS_ADAPTIVE=0) covers slots [0, numUniform) via a DIRECT dispatch of
-//     ceil(numUniform / GATHER_WG) workgroups. It runs BEFORE the refine passes so the refine can
-//     read its raw SH (the light-adaptive subdivision signal).
-//   - the ADAPTIVE variant (IS_ADAPTIVE=1) covers slots [numUniform, numUniform+adaptiveCount) via
-//     dispatchWorkgroupsIndirect (PASS B built the args from the live counter), so the empty atlas
-//     tail costs nothing. It runs AFTER refine placed the adaptive probes.
-// Both write the SAME raw SH atlas (uniform → rows [0, gh), adaptive → rows [gh, ...)). The cone/SH
-// math is byte-for-byte the flat-atlas gather's; ONLY the addressing changed:
-//   - the thread indexes a GLOBAL slot (1D) → atlas texel (slot % gw, slot / gw);
-//   - the representative pixel comes from probeData[slot] (written by classify/refine), not recomputed.
+// The representative pixel is computed INLINE: tile center + a stable per-tile hash jitter (the
+// jitter breaks coherent lattice aliasing; hashed from the tile coord → identical every frame, so
+// placement never flickers).
+//
+// (The adaptive-density machinery that used to sit around this pass — light-adaptive sub-tile
+// refinement + foveated rings, with their classify/decide/refine/args passes and the tile
+// indirection — was REMOVED after profiling: the placement/indirection overhead ate the traced-cone
+// savings, and the cone-output temporal filter smooths cheaper than extra probes. The uniform grid
+// + the two temporal stages IS the design.)
 //
 // STORAGE = RAW SH RADIANCE coefficients (solid-angle weighted, no cosine lobe). The cosine
 // (irradiance) convolution is applied at RECONSTRUCTION time in the cone shader (sh_avg_radiance).
@@ -30,12 +29,10 @@ import { buildBasisWGSL, unprojectWGSL } from "../../core/shaders/voxelTrace.wgs
 // frame parity: this pass storage-writes the CURRENT set (group 2) and SAMPLES last frame's set as
 // HISTORY (hist* bindings, group 0 — read-only history needs no storage access, so the group-2
 // storage-texture budget is untouched). The fresh anchor P is reprojected through the PREVIOUS
-// frame's forward viewProj: uniform probes read the prev UNIFORM tile texel; ADAPTIVE probes (now
-// direct-mapped — slot = numUniform + fineIdx, stable across frames) first try the prev FINE
-// cell's own texel and fall back to the uniform tile when it holds no valid probe. Either texel is
-// validated with the SHARED sp_plane_normal_weight (disocclusion ⇒ weight ≈ 0 ⇒ fresh only), and
-// blended: sh = mix(fresh, history, hysteresis · weight). SH is LINEAR in its coefficients, so a
-// plain lerp is a valid radiance blend. hysteresis = 0 (the BAKED SP_HYSTERESIS) disables the whole path
+// frame's forward viewProj to the prev tile texel, validated with the SHARED
+// sp_plane_normal_weight (disocclusion ⇒ weight ≈ 0 ⇒ fresh only), and blended:
+// sh = mix(fresh, history, hysteresis · weight). SH is LINEAR in its coefficients, so a plain lerp
+// is a valid radiance blend. hysteresis = 0 (the BAKED SP_HYSTERESIS) disables the whole path
 // — byte-identical output to the pre-temporal build (the parity/rollback gate).
 //
 // PROBE-CENTRIC FINAL GATHER (the accepted architecture — see ./README.md):
@@ -50,14 +47,11 @@ import { buildBasisWGSL, unprojectWGSL } from "../../core/shaders/voxelTrace.wgs
 const uC = (name: string, type: string) =>
   new VariableMeta(name, VariableKind.Uniform, type, { visibility: GPUShaderStage.COMPUTE });
 
-// One thread per probe, 64 threads / workgroup (matches the old 1-thread/probe budget). Also drives
-// the uniform DIRECT dispatch (ceil(numUniform / GATHER_WG)) AND PASS B's ceil(adaptive / GATHER_WG)
-// args math → exported so the CPU dispatch, the args shader, and this shader cannot disagree.
+// One thread per probe, 64 threads / workgroup — drives the DIRECT dispatch
+// (ceil(numUniform / GATHER_WG)); exported so the CPU dispatch and this shader cannot disagree.
 export const GATHER_WORKGROUP = 64;
 
-// isAdaptive bakes IS_ADAPTIVE: false → the uniform variant (direct dispatch over [0, numUniform)),
-// true → the adaptive variant (indirect dispatch over the live counter's [numUniform, ...) tail).
-export function createScreenProbeShaderMeta(cfg: VoxelBakedConfig, isAdaptive: boolean) {
+export function createScreenProbeShaderMeta(cfg: VoxelBakedConfig) {
   return new ShaderMeta(
     {
       // ---- group 0 : uniforms (COMPUTE-only) ----
@@ -68,11 +62,9 @@ export function createScreenProbeShaderMeta(cfg: VoxelBakedConfig, isAdaptive: b
       // inverse(viewProjMatrix) (reverse-Z) — reconstructs the probe's world position from the
       // G-buffer depth at its representative pixel.
       invViewProj: uC("uInvViewProj", `mat4x4<f32>`),
-      // The gather's ONE live parameter lane (everything tunable is baked):
+      // The gather's ONE live parameter vector (everything tunable is baked):
       //   .x/.y = canvas dims (px), .z = frame index (mod 1024 on the CPU for f32 exactness —
-      //   drives the golden-angle cone-set rotation + the aimed round-robin seed), .w = maxAdaptive
-      //   (the adaptive budget — derived from the CANVAS size, so it legitimately stays live; caps
-      //   the counter when deriving `total`).
+      //   drives the golden-angle cone-set rotation + the aimed round-robin seed), .w spare.
       screenParams: uC("screenParams", `vec4<f32>`),
       // STAGE 3 (temporal): LAST frame's FORWARD viewProjMatrix (NOT an inverse — the CPU snapshots
       // the raw matrix after each frame's uploads). Projects the fresh world anchor P into the
@@ -159,21 +151,7 @@ export function createScreenProbeShaderMeta(cfg: VoxelBakedConfig, isAdaptive: b
         textureSampleType: "float",
       }),
 
-      // ---- group 1 : probe indirection (StorageRead = var<storage, read>) ----
-      // probeData drives the addressing (repr pixel per slot); probeCounter[0] = the adaptive count
-      // (read as plain u32 across the barrier) → total = numUniform + min(counter, maxAdaptive).
-      probeData: new VariableMeta("uProbeData", VariableKind.StorageRead, `array<vec4<u32>>`, {
-        visibility: GPUShaderStage.COMPUTE,
-      }),
-      probeCounter: new VariableMeta("uCounter", VariableKind.StorageRead, `array<u32, 2>`, {
-        visibility: GPUShaderStage.COMPUTE,
-      }),
-      // THIS frame's active adaptive slots (refine's bump-ordered work list). The ADAPTIVE gather
-      // variant maps thread → uActiveList[thread] → a DIRECT-MAPPED slot (numUniform + fineIdx,
-      // stable across frames — the stable identity that makes adaptive temporal history possible).
-      activeList: new VariableMeta("uActiveList", VariableKind.StorageRead, `array<u32>`, {
-        visibility: GPUShaderStage.COMPUTE,
-      }),
+      // ---- group 1 : emitter data (StorageRead = var<storage, read>) ----
       // Emitter records the aimed cones importance-sample, TWO vec4 per light (stride 2):
       //   [2j]   = .xyz world CENTER, .w radius (penumbra source / falloff scale)
       //   [2j+1] = .rgb emitter color, .w intensity → Lj = rgb·|w| is the true radiance (drives the
@@ -279,7 +257,6 @@ export function createScreenProbeShaderMeta(cfg: VoxelBakedConfig, isAdaptive: b
     // language=WGSL
     wgsl /* wgsl */ `
 const PI: f32 = 3.14159265359;
-const IS_ADAPTIVE: i32 = ${isAdaptive ? 1 : 0};   // baked per pipeline (uniform=0 / adaptive=1)
 const CONES_PER_PROBE: i32 = ${cfg.conesPerProbe};
 const MAX_DIST: f32 = ${cfg.maxDist};
 const APERTURE: f32 = ${cfg.aperture};
@@ -304,7 +281,6 @@ const CLUSTER_CAP: i32 = ${cfg.clusterCap};
 // ladder changes cellSize at runtime).
 const ANISO_MODE: bool = ${cfg.anisoMode ? "true" : "false"};
 const SP_TILE: f32 = ${probeTile(cfg)};
-const REFINE_DIV: i32 = ${probeRefineDiv(cfg)};
 const SP_HYSTERESIS: f32 = ${cfg.temporalHysteresis};
 const SP_NORMAL_POW: f32 = ${cfg.spNormalPow};
 const SP_PLANE_K: f32 = ${cfg.spPlaneK};
@@ -316,7 +292,6 @@ const SP_PLANE_K: f32 = ${cfg.spPlaneK};
 // reconstructs ≈ ndl·L at ndl = 1, i.e. the old per-pixel scale (within SH-L1's softening).
 const W_AIMED: f32 = 4.18879020;
 
-${probePackWGSL}
 ${probeWeightWGSL}
 ${unprojectWGSL}
 ${buildBasisWGSL}
@@ -427,7 +402,7 @@ fn trace_shadow_cone(origin: vec3<f32>, dir: vec3<f32>, aperture: f32, reach: f3
 }
 
 // Wang hash — the per-probe, per-frame random phase of the aimed systematic resampling. Anything
-// LINEAR in globalSlot must not reach the light selection: slot is an atlas coord (y*gw + x), so a
+// LINEAR in the slot must not reach the light selection: slot is an atlas coord (y*gw + x), so a
 // (slot mod lc)-style phase tiles the probe grid with period-lc bands the resolve renders as
 // coherent moving stripes; the hash decorrelates probes AND frames into high-frequency noise the
 // bilateral resolve + temporal history integrate away.
@@ -471,41 +446,30 @@ fn emitter_importance(j: i32, P: vec3<f32>, N: vec3<f32>) -> f32 {
 
 @compute @workgroup_size(${GATHER_WORKGROUP}, 1, 1)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  // Atlas width in probes = gw = coarse-grid width; uniform block = numUniform slots.
+  // Probe grid dims = ceil(canvas / tile); thread index = SLOT = atlas texel (identity mapping).
   let gw = i32(ceil(screenParams.x / SP_TILE));
   let gh = i32(ceil(screenParams.y / SP_TILE));
   let numUniform = gw * gh;
-  let maxAdaptive = i32(screenParams.w);
-  // IS_ADAPTIVE (baked) selects which block this pipeline gathers. UNIFORM: base 0, count = numUniform
-  // (a direct dispatch). ADAPTIVE: base numUniform, count = the (capped) live counter (indirect args).
-  // BOTH branches of the select reference uCounter textually, so neither variant's binding is dropped
-  // and the two explicit layouts stay identical. Threads past count were only launched by the
-  // ceil-rounded group count (direct or indirect) — drop them.
-  let count = select(numUniform, min(i32(uCounter[0]), maxAdaptive), IS_ADAPTIVE == 1);
-  let localIdx = i32(gid.x);
-  if (localIdx >= count) { return; }
-  // Uniform: thread = slot (identity). Adaptive: thread → the work list → the DIRECT-MAPPED slot
-  // (numUniform + fineIdx, stable across frames).
-  let globalSlot = select(localIdx, i32(uActiveList[localIdx]), IS_ADAPTIVE == 1);
+  let slot = i32(gid.x);
+  // Threads past the count were only launched by the ceil-rounded group count — drop them.
+  if (slot >= numUniform) { return; }
+  let texel = vec2<i32>(slot % gw, slot / gw);
 
-  // FLAT-ATLAS slot→texel: uniform slots (row-major identity) fill rows [0, gh); adaptive slots fill
-  // rows [gh, gh+adaptiveRows). One texel per probe either way.
-  let texel = vec2<i32>(globalSlot % gw, globalSlot / gw);
+  // Representative full-res pixel = tile center + a STABLE per-tile hash jitter (±tile/4 — breaks
+  // coherent lattice aliasing; hashed from the tile coord → identical every frame, so placement
+  // never flickers). footprint (= the tile, in full-res px) rides into screenProbePix.w for the
+  // resolve's area weighting.
+  let jh = fract(52.9829189 * fract(dot(vec2<f32>(texel), vec2<f32>(0.06711056, 0.00583715))));
+  let jit = vec2<i32>((vec2<f32>(jh, fract(jh * 1.61803399)) - vec2<f32>(0.5)) * SP_TILE * 0.5);
+  let dimsI = vec2<i32>(screenParams.xy) - vec2<i32>(1);
+  let full = clamp(texel * i32(SP_TILE) + vec2<i32>(i32(SP_TILE) / 2) + jit, vec2<i32>(0), dimsI);
+  let footprint = SP_TILE;
 
-  // Representative full-res pixel + FOOTPRINT (probeData.z: cell size in full-res px, set by
-  // classify/refine) from probeData (placed by the classify/refine passes). The footprint rides into
-  // screenProbePix.w so the resolve can area-weight each probe by its footprint² (density-invariant
-  // average — N fine probes weigh the same collectively as the 1 coarse probe they subdivide).
-  let rec = uProbeData[globalSlot];
-  let full = sp_unpack_pixel(rec);
-  let footprint = f32(rec.z);
-
-  // No probe here this frame (rec.z == 0 — a foveated-ring NON-ANCHOR tile classify left empty) or
-  // no surface at the pixel (n.a < 0.5) → mark the texel invalid and zero its SH. The store is NOT
-  // optional for empty slots: the current write set was last written 2 frames ago (ping-pong), so a
-  // skipped texel would leak a stale probe into the resolve.
+  // No surface at the pixel (n.a < 0.5) → mark the texel invalid and zero its SH. The store is NOT
+  // optional: the current write set was last written 2 frames ago (ping-pong), so a skipped texel
+  // would leak a stale probe into the resolve.
   let n = textureLoad(normalTex, full, 0);
-  if (rec.z == 0u || n.a < 0.5) {
+  if (n.a < 0.5) {
     textureStore(screenShR, texel, vec4<f32>(0.0));
     textureStore(screenShG, texel, vec4<f32>(0.0));
     textureStore(screenShB, texel, vec4<f32>(0.0));
@@ -556,41 +520,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       let prevUv = vec2<f32>(prevNdc.x * 0.5 + 0.5, 0.5 - prevNdc.y * 0.5);
       if (all(prevUv >= vec2<f32>(0.0)) && all(prevUv < vec2<f32>(1.0))
           && prevNdc.z >= 0.0 && prevNdc.z <= 1.0) {
-        // Prev pixel → prev UNIFORM tile texel (rows [0, gh) — the identity-mapped persistent
-        // backbone; the coarse fallback for everyone).
+        // Prev pixel → prev tile texel (the identity-mapped persistent backbone).
         histTexel = clamp(
           vec2<i32>(prevUv * screenParams.xy / SP_TILE),
           vec2<i32>(0),
           vec2<i32>(gw - 1, gh - 1),
         );
-        // FOVEATED rings: a coarse BLOCK probe's history lives at its block's ANCHOR texel, not at
-        // the raw prev tile. Snap by this probe's OWN footprint (rings are screen-static, so the
-        // prev anchor sits at the same granularity; the rare level flip lands on an empty texel and
-        // rejects via the zero-normal validity test → fresh trace). footprint <= tile → sTiles = 1
-        // (level 0 / adaptive: unchanged).
-        let sTiles = max(1, i32(footprint / SP_TILE));
-        histTexel = (histTexel / sTiles) * sTiles;
-        if (IS_ADAPTIVE == 1) {
-          // Adaptive probes now have STABLE IDENTITY (direct-mapped slot = numUniform + fineIdx),
-          // so their own layer is reprojectable too: prev pixel → prev FINE cell → its fixed
-          // slot/texel. Prefer it (fine-grained history instead of the coarse tile's); fall back
-          // to the uniform texel when it holds no valid probe (the cell was inactive last frame /
-          // the divisor changed — the zero-normal validity test rejects it).
-          let div = REFINE_DIV;
-          let cellPx = max(1, i32(SP_TILE) / div);
-          let fineStride = gw * div;
-          let pc = clamp(
-            vec2<i32>(prevUv * screenParams.xy) / cellPx,
-            vec2<i32>(0),
-            vec2<i32>(fineStride - 1, gh * div - 1),
-          );
-          let hSlot = numUniform + pc.y * fineStride + pc.x;
-          let hTex = vec2<i32>(hSlot % gw, hSlot / gw);
-          let hN = textureLoad(histNrm, hTex, 0).xyz;
-          if (dot(hN, hN) > 0.25) {
-            histTexel = hTex;
-          }
-        }
         let hPos = textureLoad(histPos, histTexel, 0).xyz;
         let hNrmRaw = textureLoad(histNrm, histTexel, 0).xyz;
         // Validity: an invalid probe (and a freshly recreated zero-filled history texture) stored a
@@ -698,7 +633,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
   // Random stratum phase, decorrelated across probes (slot) AND frames (frame index) — see
   // wang_hash's comment for why nothing linear in the slot may reach the selection.
-  let u = f32(wang_hash((u32(globalSlot) * 2654435761u) ^ u32(i32(screenParams.z))) & 0xffffffu)
+  let u = f32(wang_hash((u32(slot) * 2654435761u) ^ u32(i32(screenParams.z))) & 0xffffffu)
     / 16777216.0;
   var cum = 0.0;
   var k = 0;

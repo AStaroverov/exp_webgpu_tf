@@ -379,7 +379,6 @@ export function createVoxelSystem({
     aniso: anisoVolume,
     getGBuffer: () => ({ depth: gDepth, normal: gNormal }),
     emitterLights,
-    getDebugTargetView: () => compositeSys.getOutputView(),
     onResourcesRecreated: () => coneSys.rebindGroups(),
     voxelSampler,
   });
@@ -499,8 +498,7 @@ export function createVoxelSystem({
 
   // The full per-frame GI scenario, in the load-bearing order. The caller draws the SDF G-buffer
   // BEFORE this and calls present(compositeOutputTexture) AFTER; everything between is here so the
-  // frame reads as one named call. sunDepth runs only when the directional sun is on; probeDebug
-  // replaces composite when the debug view is toggled.
+  // frame reads as one named call. sunDepth runs only when the directional sun is on.
   function renderFrame(encoder: GPUCommandEncoder) {
     updateGridOrigin(); // camera-following box: must precede every pass that reads uGridOrigin
     if (SunLight.enabled) sunDepth(encoder); // sun-POV depth → voxelize injection + composite shadow
@@ -508,19 +506,9 @@ export function createVoxelSystem({
     mips(encoder); // isotropic radiance pyramid
     anisoBase(encoder); // 6 directional level-0 volumes
     anisoMips(encoder); // directional pyramids (far-field anti-leak)
-    // Light-adaptive screen-probe atlas: clear → classify → gatherUniform → refine (16→8) →
-    // build-args → gatherAdaptive. gatherUniform runs BEFORE refine so refine subdivides on the real
-    // gathered-SH radiance spread across the cage.
-    screenProbe.probeClear(encoder);
-    screenProbe.probeClassify(encoder);
-    screenProbe.gatherUniform(encoder);
-    screenProbe.probeRefine(encoder);
-    screenProbe.probeBuildArgs(encoder);
-    screenProbe.gatherAdaptive(encoder);
-    cone(encoder); // screen-probe resolve + AO → half-res HDR
-    if (screenProbe.debugProbes)
-      screenProbe.probeDebug(encoder); // debug view (same target as composite)
-    else compositeSys.composite(encoder); // final lit image
+    screenProbe.gatherProbes(encoder); // the uniform probe grid: SH gather + temporal
+    cone(encoder); // screen-probe resolve + AO → half-res HDR (+ the output temporal filter)
+    compositeSys.composite(encoder); // final lit image
   }
 
   return {
@@ -531,13 +519,7 @@ export function createVoxelSystem({
     mips,
     anisoBase,
     anisoMips,
-    probeClear: screenProbe.probeClear,
-    probeClassify: screenProbe.probeClassify,
-    probeRefine: screenProbe.probeRefine,
-    probeBuildArgs: screenProbe.probeBuildArgs,
-    gatherUniform: screenProbe.gatherUniform,
-    gatherAdaptive: screenProbe.gatherAdaptive,
-    pollBudget: screenProbe.pollBudget,
+    gatherProbes: screenProbe.gatherProbes,
     cone,
     // Origin update runs FIRST so the CPU emitter clustering bins with the same camera-following
     // origin the gather shaders will read this frame (no one-frame cluster/uniform mismatch).
@@ -547,17 +529,14 @@ export function createVoxelSystem({
     },
     sunDepth,
     composite: compositeSys.composite,
-    probeDebug: screenProbe.probeDebug,
     recreate,
     setCellSize,
     setConeScale: coneSys.setConeScale,
     setFollowCamera,
     setGridSnapCells,
     setAutoCell,
-    // The one non-config sizing knob + the debug toggle. Every tuning knob — including the probe
-    // tile + refine divisor — is BAKED config now: mutate voxel.config and call rebuild().
-    setAdaptiveFraction: screenProbe.setAdaptiveFraction,
-    setDebugProbes: screenProbe.setDebugProbes,
+    // Every tuning knob — including the probe tile — is BAKED config: mutate voxel.config and
+    // call rebuild().
     get followCamera() {
       return followCamera;
     },
@@ -566,18 +545,6 @@ export function createVoxelSystem({
     },
     get autoCell() {
       return autoCell;
-    },
-    get debugProbes() {
-      return screenProbe.debugProbes;
-    },
-    get adaptiveFraction() {
-      return screenProbe.adaptiveFraction;
-    },
-    get adaptiveProbeCount() {
-      return screenProbe.adaptiveProbeCount;
-    },
-    get budgetExceeded() {
-      return screenProbe.budgetExceeded;
     },
     get coneScale() {
       return coneSys.getConeScale();

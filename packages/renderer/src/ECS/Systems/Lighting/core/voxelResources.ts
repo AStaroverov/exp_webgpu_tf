@@ -93,26 +93,20 @@ export type ScreenProbeTextures = {
 // mip. rgba32float supports STORAGE_BINDING write in core WebGPU and is point-loaded.
 //
 // STAGE 3 (temporal accumulation): the system owns TWO full sets and PING-PONGS them by frame
-// parity — the CURRENT set is the gather's storage-write target (and what refine/resolve/debug
-// read this frame); the OTHER set is last frame's output = the HISTORY the gather reprojects and
+// parity — the CURRENT set is the gather's storage-write target (and what the resolve/debug read
+// this frame); the OTHER set is last frame's output = the HISTORY the gather reprojects and
 // blends from. Both roles need the same usage (STORAGE_BINDING when current + TEXTURE_BINDING when
 // history/read), so one create function serves both sets — no copies, the swap is pure rebinding.
 // History VALIDATION needs only pos/nrm (+ the SH being blended): an invalid probe stores ZERO
 // pos/nrm, so |nrm|²≈0 doubles as the history-validity test and `pix` never needs a history binding.
 //
-// FLAT-ATLAS ADDRESSING (slot → texel). The 4 textures are a flat probe atlas, not a literal
-// screen grid. Atlas WIDTH in probes = gw = grid.w; a probe's global SLOT maps to atlas texel
-// (slot % gw, slot / gw). The UNIFORM block occupies rows [0, gh): a uniform probe for tile
-// (tx,ty) has slot = ty*gw + tx → texel (tx,ty) — an IDENTITY mapping (no indirection). An
-// ADAPTIVE block (Phase 1+) occupies rows [gh, gh+adaptiveRows) for extra sub-tile probes.
-// Phase 0 passes adaptiveRows = 0, so the atlas is exactly [gw, gh] as before and every texel
-// is unchanged.
+// ADDRESSING: one texel per probe, IDENTITY-mapped — the probe of tile (tx,ty) lives at texel
+// (tx,ty) (slot = ty*gw + tx).
 export function createScreenProbeTextures(
   device: GPUDevice,
   grid: ScreenProbeGrid,
-  adaptiveRows: number = 0,
 ): ScreenProbeTextures {
-  const size: [number, number] = [grid.w, grid.h + adaptiveRows];
+  const size: [number, number] = [grid.w, grid.h];
   const usage = GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING;
   const sh = () => device.createTexture({ size, dimension: "2d", format: "rgba16float", usage });
   const pix = device.createTexture({ size, dimension: "2d", format: "rgba32float", usage });
@@ -134,123 +128,6 @@ export function destroyScreenProbeTextures(t: ScreenProbeTextures) {
   t.pix.destroy();
   t.pos.destroy();
   t.nrm.destroy();
-}
-
-// ===== Adaptive screen-probe atlas sizing (single 16→8 level, light-adaptive). =====
-// K = max adaptive probes per coarse tile = the fixed stride of tileIndices. A refined tile spawns
-// its FULL fine lattice (div² probes: div 2 → 4, div 4 → 16), so K must cover the largest divisor
-// in use — at K = 8 a div-4 tile fit only its first 8 spawned cells, and thread order made that
-// consistently the TOP HALF of the tile (half-empty refinement patches). K = 16 covers div ≤ 4;
-// the surplus beyond K is allocated but dropped from the per-tile list. Shared between the buffer
-// sizing (tileIndices length) and the refine/resolve/debug shaders (interpolated as a WGSL const),
-// so the CPU stride and the GPU stride can never disagree. The resolve's per-tile loop is bounded
-// by min(tileHeader, K) — only refined tiles pay for the larger K.
-export const SCREEN_PROBE_K = 16;
-
-// Atlas + buffer capacity from the coarse grid + the adaptive budget fraction + the refine cell
-// divisor. numUniform = the uniform block (one probe per tile, identity-mapped into atlas rows
-// [0, gh)). The adaptive block is DIRECT-MAPPED: every fine cell (refineDiv² per tile) owns a
-// FIXED slot = numUniform + fineIdx and a fixed atlas texel in rows [gh, gh + adaptiveRows) —
-// stable identity across frames is what gives adaptive probes their own reprojectable temporal
-// history (the former bump-allocated slots shuffled every frame and could never accumulate).
-// maxAdaptive = numUniform × adaptiveFraction is the per-frame GATHER budget (the active work
-// list's cap), NOT the slot capacity.
-export type ScreenProbeCounts = {
-  numUniform: number;
-  maxAdaptive: number;
-  numFine: number;
-  adaptiveRows: number;
-};
-export function screenProbeCounts(
-  grid: ScreenProbeGrid,
-  adaptiveFraction: number,
-  refineDiv: number,
-): ScreenProbeCounts {
-  const numUniform = grid.w * grid.h;
-  const numFine = numUniform * refineDiv * refineDiv;
-  const maxAdaptive = Math.min(
-    numFine,
-    Math.max(0, Math.round(numUniform * Math.max(0, adaptiveFraction))),
-  );
-  const adaptiveRows = Math.ceil(numFine / grid.w);
-  return { numUniform, maxAdaptive, numFine, adaptiveRows };
-}
-
-// The indirection + allocator STORAGE BUFFERS (NOT textures — WebGPU forbids storage-texture
-// atomics, and buffers stay off the 4-storage-texture cap the gather pass lives under). These are
-// SHARED across the classify / refine / args / gather / resolve passes, so they are RAW
-// device.createBuffer()s bound MANUALLY at each shader's declared binding (the argsBuf / passBuf
-// pattern) — never routed through GPUVariable.getGPUBuffer (which cannot express INDIRECT usage and
-// would hand each shader its OWN buffer instead of the one shared instance).
-export type ScreenProbeBuffers = {
-  // atomic<u32> ×2: [0] = the ACTIVE-list length (bump counter for the gather work list), [1] =
-  // sticky "budget exceeded" flag (set when an atomicAdd returns >= maxAdaptive). Cleared each frame.
-  counter: GPUBuffer;
-  // array<vec4<u32>>, numUniform + numFine: per-probe record (packed repr pixel + level), indexed
-  // by GLOBAL slot. Adaptive slots are DIRECT-MAPPED (numUniform + fineIdx — stable across frames);
-  // stale inactive entries are unreachable (resolve only reaches slots via tileIndices, gather only
-  // via activeList).
-  data: GPUBuffer;
-  // array<atomic<u32>>, numUniform: count of adaptive probes whose parent is that coarse tile.
-  header: GPUBuffer;
-  // array<u32>, numUniform*K: fixed-stride list — [tileIdx*K + j] = the global slot of the tile's
-  // j-th adaptive probe (only the first min(header, K) entries per tile are meaningful).
-  indices: GPUBuffer;
-  // array<u32>, maxAdaptive: THIS frame's active adaptive slots (the gather work list) — the only
-  // per-frame-ordered structure left; its order feeds nothing but thread→slot mapping.
-  activeList: GPUBuffer;
-  // array<u32>, numUniform: PERSISTENT per-TILE hysteresis state (saturating counter, written by
-  // probeDecide). NOT cleared per frame — this is what keeps a tile's refinement membership stable
-  // while its raw trigger flickers. Zero-initialized at creation (WebGPU guarantees zeroed buffers).
-  refineState: GPUBuffer;
-  // array<u32,3> = dispatchWorkgroupsIndirect args [ceil(total/GATHER_WG), 1, 1] for the gather.
-  // RAW STORAGE|INDIRECT|COPY_DST buffer (COPY_SRC too for diagnostics) — the one usage GPUVariable
-  // cannot emit.
-  args: GPUBuffer;
-};
-export function createScreenProbeBuffers(
-  device: GPUDevice,
-  counts: ScreenProbeCounts,
-): ScreenProbeBuffers {
-  // COPY_SRC on every buffer so the throttled budget readback (counter) and any future diagnostics
-  // can copy them to a staging buffer; COPY_DST so the per-frame clearBuffer works.
-  const storageUsage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
-  const total = counts.numUniform + counts.numFine;
-  return {
-    counter: device.createBuffer({ size: 2 * 4, usage: storageUsage }),
-    data: device.createBuffer({ size: Math.max(1, total) * 16, usage: storageUsage }),
-    header: device.createBuffer({ size: Math.max(1, counts.numUniform) * 4, usage: storageUsage }),
-    indices: device.createBuffer({
-      size: Math.max(1, counts.numUniform * SCREEN_PROBE_K) * 4,
-      usage: storageUsage,
-    }),
-    activeList: device.createBuffer({
-      size: Math.max(1, counts.maxAdaptive) * 4,
-      usage: storageUsage,
-    }),
-    refineState: device.createBuffer({
-      size: Math.max(1, counts.numUniform) * 4,
-      usage: storageUsage,
-    }),
-    args: device.createBuffer({
-      size: 3 * 4,
-      usage:
-        GPUBufferUsage.STORAGE |
-        GPUBufferUsage.INDIRECT |
-        GPUBufferUsage.COPY_DST |
-        GPUBufferUsage.COPY_SRC,
-    }),
-  };
-}
-
-export function destroyScreenProbeBuffers(b: ScreenProbeBuffers) {
-  b.counter.destroy();
-  b.data.destroy();
-  b.header.destroy();
-  b.indices.destroy();
-  b.activeList.destroy();
-  b.refineState.destroy();
-  b.args.destroy();
 }
 
 // ===== Anisotropic directional voxels (the anti-leak for the far-field cone samples). =====
