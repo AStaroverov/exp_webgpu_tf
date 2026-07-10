@@ -69,6 +69,82 @@ export function probeTile(cfg: VoxelBakedConfig): number {
   return Math.max(1, Math.round(cfg.screenProbeTile));
 }
 
+// ===== GI QUALITY PRESETS (low / medium / high). =====
+// One switch over the PERF-relevant baked knobs: probe density (tile), cone budgets (fill / aimed /
+// AO), reach, the aniso anti-leak, the two temporal hystereses (a cheaper preset leans HARDER on
+// temporal accumulation to hide its noise), and the resolve kernel width (sparser probes want a
+// wider kernel). Artistic tuning (giStrength, exposure, ambient, sun/emitter strengths, aperture…)
+// is deliberately NOT in the presets — switching quality must never change the LOOK the user dialed
+// in, only its fidelity/cost.
+//
+// Every preset overrides the SAME key set, so switching is deterministic in any order (no key
+// leaks from a previous preset). `medium` == DEFAULT_VOXEL_BAKED_CONFIG for these keys.
+// coneScale is the one non-baked lever (the cone target's downscale — a texture size, not a shader
+// const); it rides the preset so the biggest perf lever isn't left behind.
+// Apply: Object.assign(config, preset.config) + setConeScale(preset.coneScale) + rebuild().
+export type GIQuality = "low" | "medium" | "high";
+export type GIQualityPreset = {
+  config: Partial<VoxelBakedConfig>;
+  coneScale: number;
+};
+export const GI_QUALITY_PRESETS: Record<GIQuality, GIQualityPreset> = {
+  // ~2–3× cheaper than medium, SAME probe density and resolve resolution (dropping those is what
+  // wrecks the image — validated in-browser). Savings come from the trace budgets only: half the
+  // fill cones, shorter reach, half the aimed/AO work, iso-only far field; hysteresis raised so
+  // temporal accumulation integrates the thinner per-frame sampling.
+  low: {
+    config: {
+      screenProbeTile: 16,
+      conesPerProbe: 8,
+      maxDist: 16,
+      aimedSteps: 12,
+      aimedPerFrame: 4,
+      aoConeCount: 1,
+      aoSteps: 8,
+      anisoMode: false,
+      temporalHysteresis: 0.85,
+      coneTemporalHysteresis: 0.9,
+      resolveRadius: 2,
+    },
+    coneScale: 2,
+  },
+  // The defaults (the shipped baseline).
+  medium: {
+    config: {
+      screenProbeTile: 16,
+      conesPerProbe: 16,
+      maxDist: 24,
+      aimedSteps: 16,
+      aimedPerFrame: 8,
+      aoConeCount: 2,
+      aoSteps: 12,
+      anisoMode: true,
+      temporalHysteresis: 0.75,
+      coneTemporalHysteresis: 0.85,
+      resolveRadius: 2,
+    },
+    coneScale: 2,
+  },
+  // ×4 probes (tile 8), double budgets everywhere, longer reach, tighter kernel; hysteresis
+  // lowered — dense fresh sampling needs less temporal smoothing, so light reacts faster.
+  high: {
+    config: {
+      screenProbeTile: 8,
+      conesPerProbe: 32,
+      maxDist: 32,
+      aimedSteps: 24,
+      aimedPerFrame: 12,
+      aoConeCount: 4,
+      aoSteps: 16,
+      anisoMode: true,
+      temporalHysteresis: 0.7,
+      coneTemporalHysteresis: 0.8,
+      resolveRadius: 1.5,
+    },
+    coneScale: 2,
+  },
+};
+
 export const DEFAULT_VOXEL_BAKED_CONFIG: VoxelBakedConfig = {
   normalBias: 0,
   maxDist: 24,

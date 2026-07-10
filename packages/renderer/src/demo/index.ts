@@ -11,11 +11,22 @@
 import GUI from "lil-gui";
 import Stats from "stats-gl";
 import { initWebGPU } from "../gpu.ts";
+import {
+  getGpuTimings,
+  gpuTimerBeginFrame,
+  gpuTimerPoll,
+  gpuTimerResolve,
+  initGpuTimer,
+} from "../gpuTimer.ts";
 import { createWorld } from "../ECS/world.ts";
 import { createFrameTextures, createFrameTick } from "../WGSL/createFrame.ts";
 import { createPresent } from "../WGSL/createPresent.ts";
 import { createDrawShapeSystem } from "../ECS/Systems/SDFSystem/createDrawShapeSystem.ts";
 import { createVoxelSystem } from "../ECS/Systems/Lighting/createVoxelSystem.ts";
+import {
+  GI_QUALITY_PRESETS,
+  type GIQuality,
+} from "../ECS/Systems/Lighting/core/voxelConfig.ts";
 import { createLightEmitterSystem } from "../ECS/Systems/Lighting/lights/createLightEmitterSystem.ts";
 import { SunLight } from "../ECS/Systems/SunLight.ts";
 import { createTransformSystem } from "../ECS/Systems/TransformSystem.ts";
@@ -42,6 +53,9 @@ async function main() {
   const canvas = document.getElementById("c") as HTMLCanvasElement;
   const { device, context } = await initWebGPU(canvas);
   const getPixelRatio = () => window.devicePixelRatio;
+  // Per-pass GPU profiler (timestamp queries). False when the adapter lacks the feature — the
+  // instrumented passes then run untagged with zero overhead.
+  const gpuTimerOn = initGpuTimer(device);
 
   const world = createWorld();
 
@@ -85,6 +99,48 @@ async function main() {
   });
 
   const gui = new GUI({ title: "Voxel" });
+
+  // Per-pass GPU timings (ms, EMA) from timestamp queries — the ground truth for every perf
+  // decision. Rows follow the gpuSpan labels; same-label passes (mips, aniso levels, the voxelize
+  // trio) are pre-summed. NOTE: Chrome quantizes timestamps to 100 µs by default — launch with
+  // --enable-webgpu-developer-features for µs precision on sub-0.1ms passes.
+  const timingsFolder = gui.addFolder("GPU timings (ms)");
+  const gpuStats: Record<string, number> = {
+    draw: 0,
+    sunDepth: 0,
+    voxelize: 0,
+    mips: 0,
+    anisoBase: 0,
+    anisoMips: 0,
+    probeGather: 0,
+    coneResolve: 0,
+    coneTemporal: 0,
+    composite: 0,
+    total: 0, // sum of the rows — INFLATED when pass windows overlap (see frameSpan)
+    frameSpan: 0, // first begin → last end: the frame's true GPU window (compare vs stats-gl)
+  };
+  if (gpuTimerOn) {
+    for (const key of Object.keys(gpuStats)) {
+      timingsFolder.add(gpuStats, key).decimals(3).disable().listen();
+    }
+  } else {
+    timingsFolder.add({ status: "timestamp-query N/A" }, "status").disable();
+  }
+  // Serialize CPU↔GPU per frame (await onSubmittedWorkDone) — DIAGNOSTIC only: gives a clean
+  // wall-clock GPU number for the old toggle-delta workflow, but caps fps at CPU+GPU instead of
+  // max(CPU, GPU). OFF by default — the timestamp table above supersedes it.
+  const serializeCfg = { serializeGpu: false };
+  timingsFolder.add(serializeCfg, "serializeGpu").name("serialize GPU (diag)");
+  timingsFolder.close();
+  const updateGpuStats = () => {
+    if (!gpuTimerOn) return;
+    let total = 0;
+    for (const [label, ms] of getGpuTimings()) {
+      if (label in gpuStats) gpuStats[label] = ms;
+      if (label !== "frameSpan") total += ms;
+    }
+    gpuStats.total = total;
+  };
 
   gui
     .add({ scene: SCENE }, "scene", SCENE_OPTIONS as unknown as string[])
@@ -150,6 +206,25 @@ async function main() {
   // Cone GI: the screen-probe RESOLVE (the probe SH carries fill/bounce AND emitter light) + the
   // short per-pixel AO cones. No aimed cones here anymore — the emitter knobs live in the
   // "Screen probe GI" folder (they bake into the probe gather).
+  // GI QUALITY PRESET: one switch over the perf-relevant baked knobs (probe tile, cone/AO/aimed
+  // budgets, reach, aniso, temporal hystereses, resolve radius) + the cone-pass resolution.
+  // Artistic tuning (strengths, exposure, sun…) is untouched. Applies + rebuilds immediately; the
+  // individual knobs below stay usable to deviate from a preset. (coneResCfg is declared below —
+  // the closure only runs on user input, long after setup.)
+  const qualityCfg = { quality: "medium" as GIQuality };
+  gui
+    .add(qualityCfg, "quality", ["low", "medium", "high"])
+    .name("GI quality")
+    .onChange((q: GIQuality) => {
+      const preset = GI_QUALITY_PRESETS[q];
+      Object.assign(voxel.config, preset.config);
+      coneResCfg.scale = preset.coneScale;
+      voxel.setConeScale(preset.coneScale);
+      voxel.rebuild();
+      // The preset mutated voxel.config fields other controllers are bound to — refresh them all.
+      gui.controllersRecursive().forEach((c) => c.updateDisplay());
+    });
+
   const coneFolder = gui.addFolder("Cone GI");
   // Baked-config controls recompile the GI shaders on release (onFinishChange), not per drag tick.
   const rebuild = () => voxel.rebuild();
@@ -419,6 +494,7 @@ async function main() {
     execTransformSystem();
     shapeSystem.prepare();
 
+    gpuTimerBeginFrame(); // reset the span allocator before any pass is encoded
     const encoder = device.createCommandEncoder();
     if (PERF) {
       // Perf harness: every pass runs purely by its toggle (skipped passes just leave their
@@ -449,19 +525,31 @@ async function main() {
       present(encoder, voxel.compositeOutputTexture);
     }
 
-    // GPU time of this frame's submitted work — resolves when the GPU finishes, BEFORE the
-    // vsync present, so it is not capped at 16.6 ms the way the rAF fps is. EMA-smoothed;
-    // read the DELTA when a perf toggle flips to attribute cost to that pass.
+    // Per-pass timestamps: resolve this frame's spans + stage the readback copy.
+    gpuTimerResolve(encoder);
+
     const tSubmit = performance.now();
     device.queue.submit([encoder.finish()]);
-    // Serialize: wait for THIS frame's GPU work to fully finish before timing + encoding the
-    // next. Removes the cross-frame queue backlog, so gpuMs is a clean single-frame number and
-    // a pass toggle changes it unambiguously (diagnostic mode — not how a shipping loop runs).
-    await device.queue.onSubmittedWorkDone();
-    const dt = performance.now() - tSubmit;
-    gpuMsEMA = gpuMsEMA ? gpuMsEMA * 0.8 + dt * 0.2 : dt;
-    gpuMsMax = Math.max(gpuMsMax, gpuMsEMA);
-    gpuPanel.update(gpuMsEMA, gpuMsMax);
+    gpuTimerPoll(); // kick the async map of the staged timestamp copy
+    updateGpuStats(); // refresh the GUI rows from the latest completed readback
+    if (serializeCfg.serializeGpu) {
+      // DIAGNOSTIC mode: wait for THIS frame's GPU work before encoding the next. Removes the
+      // cross-frame queue backlog so a wall-clock submit→done delta is a clean single-frame number
+      // — but it SERIALIZES CPU and GPU (frame = CPU encode + GPU execute, back to back), capping
+      // fps at the SUM instead of the max. Never how a shipping loop runs.
+      await device.queue.onSubmittedWorkDone();
+      const dt = performance.now() - tSubmit;
+      gpuMsEMA = gpuMsEMA ? gpuMsEMA * 0.8 + dt * 0.2 : dt;
+      gpuMsMax = Math.max(gpuMsMax, gpuMsEMA);
+      gpuPanel.update(gpuMsEMA, gpuMsMax);
+    } else {
+      // PIPELINED (default): CPU encodes frame N+1 while the GPU draws frame N — fps = max(CPU,
+      // GPU), not the sum. The GPU panel shows the timestamp-derived frameSpan (the honest GPU
+      // frame time; no wall-clock GPU number exists without serializing).
+      gpuMsEMA = gpuStats.frameSpan;
+      gpuMsMax = Math.max(gpuMsMax, gpuMsEMA);
+      gpuPanel.update(gpuMsEMA, gpuMsMax);
+    }
 
     // CPU/FPS frame bracket for stats-gl (GPU panel is fed by the timer above).
     stats.end();

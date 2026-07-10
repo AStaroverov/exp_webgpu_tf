@@ -1,3 +1,4 @@
+import { gpuSpan } from "../../../../../gpuTimer.ts";
 import { mat4 } from "gl-matrix";
 import { GPUShader } from "../../../../../WGSL/GPUShader.ts";
 import { getTypeTypedArray } from "../../../../../Shader/index.ts";
@@ -129,6 +130,7 @@ export function createSunShadowSystem({
   function render(encoder: GPUCommandEncoder) {
     buildSunViewProj();
     const pass = encoder.beginRenderPass({
+      timestampWrites: gpuSpan("sunDepth"),
       colorAttachments: [],
       depthStencilAttachment: {
         view: sunDepthView,

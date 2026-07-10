@@ -1,3 +1,4 @@
+import { gpuSpan } from "../../../../../gpuTimer.ts";
 // VCT COMPOSITE sub-system (Layer 4 — the final lit image). Owns the composite shader/pipeline +
 // its bind group, the consolidated frame UBO scratch, and the full-res HDR output texture, and
 // issues the composite render pass. Extracted VERBATIM from createVoxelSystem: same WGSL, same
@@ -157,6 +158,7 @@ export function createCompositeSystem(deps: CompositeDeps) {
     device.queue.writeBuffer(compositeShader.uniforms.frame.getGPUBuffer(device), 0, compFrameArr);
 
     const pass = encoder.beginRenderPass({
+      timestampWrites: gpuSpan("composite"),
       colorAttachments: [
         {
           view: compositeView,

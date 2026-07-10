@@ -1,3 +1,4 @@
+import { gpuSpan } from "../../../../../gpuTimer.ts";
 // VCT CONE-RESOLVE sub-system (Layer 2 — the screen-probe RESOLVE + short AO cones). Owns the cone
 // shader/pipeline, its two texture-referencing bind groups (coneGroup0 = uniforms + G-buffer + the
 // all-mips voxelRadiance view + the screen-probe atlas; coneGroup1 = the adaptive-atlas indirection
@@ -264,6 +265,7 @@ export function createConeSystem(deps: ConeDeps) {
     device.queue.writeBuffer(coneShader.uniforms.invViewProj.getGPUBuffer(device), 0, coneInvArr);
 
     const pass = encoder.beginRenderPass({
+      timestampWrites: gpuSpan("coneResolve"),
       colorAttachments: [
         {
           view: coneView,
@@ -302,6 +304,7 @@ export function createConeSystem(deps: ConeDeps) {
       temporalPrevVPArr,
     );
     const tPass = encoder.beginRenderPass({
+      timestampWrites: gpuSpan("coneTemporal"),
       colorAttachments: [
         { view: coneFilteredView, clearValue: [0, 0, 0, 1], loadOp: "clear", storeOp: "store" },
       ],

@@ -10,6 +10,11 @@ export async function initWebGPU(
   // The anisotropic-voxel base/volume passes each bind 6 storage textures in one compute
   // stage, above the default 4 → also request the adapter's max (commonly 8).
   const device = await adapter.requestDevice({
+    // Per-pass GPU profiling (see gpuTimer.ts) — optional feature, requested only when present so
+    // devices without it still initialize (the timer then stays inert).
+    requiredFeatures: adapter.features.has("timestamp-query")
+      ? ["timestamp-query" as GPUFeatureName]
+      : [],
     requiredLimits: {
       maxStorageBuffersPerShaderStage: adapter.limits.maxStorageBuffersPerShaderStage,
       maxStorageTexturesPerShaderStage: adapter.limits.maxStorageTexturesPerShaderStage,

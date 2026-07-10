@@ -1,3 +1,4 @@
+import { gpuSpan } from "../../../../../gpuTimer.ts";
 // SCREEN-PROBE sub-system (the diffuse fill/bounce source: gather + temporal). Owns the
 // screen-space probe atlas (SH-L1 ×3 + pixel/pos/nrm), the ping-pong temporal sets, the gather
 // pipeline, and their bind groups + CPU scratch.
@@ -276,7 +277,7 @@ export function createScreenProbeSystem(deps: ScreenProbeDeps) {
     prevViewProjArr.set(viewProjMatrix as Float32Array);
 
     const numProbes = screenGrid.w * screenGrid.h;
-    const pass = encoder.beginComputePass();
+    const pass = encoder.beginComputePass({ timestampWrites: gpuSpan("probeGather") });
     pass.setPipeline(gatherPipeline);
     pass.setBindGroup(0, gatherGroup0[curSet]); // history = spTex[1 - curSet] sampled views
     pass.setBindGroup(1, gatherGroup1);

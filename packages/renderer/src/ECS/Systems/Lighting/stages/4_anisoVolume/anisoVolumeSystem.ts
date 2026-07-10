@@ -218,6 +218,7 @@ export function createAnisoVolumeSystem(deps: AnisoVolumeDeps) {
       baseY: anisoBaseY,
       baseZ: anisoBaseZ,
       workgroup: ANISO_WG,
+      label: "anisoBase",
     });
   }
 
@@ -232,6 +233,7 @@ export function createAnisoVolumeSystem(deps: AnisoVolumeDeps) {
       baseZ: anisoBaseZ,
       count: anisoMipCount,
       workgroup: ANISO_WG,
+      label: "anisoMips",
     });
   }
 

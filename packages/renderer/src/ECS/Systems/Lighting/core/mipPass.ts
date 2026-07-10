@@ -1,3 +1,5 @@
+import { gpuSpan } from "../../../../gpuTimer.ts";
+
 // Mip-pyramid + anisotropic-pyramid downsample passes. Each is thin GPU-dispatch glue that issues
 // one compute pass per pyramid level. Extracted from createVoxelSystem as standalone functions that
 // take a scoped deps bundle (exactly the handles + dims they need) — the caller owns the state and
@@ -14,6 +16,9 @@ export type MipPassDeps = {
   dimY: number;
   dimZ: number;
   workgroup: number;
+  // GPU-timing label — every per-level pass tags itself with it; the profiler sums same-label
+  // spans into one row (see gpuTimer.ts).
+  label: string;
 };
 
 // Build the voxelRadiance mip pyramid: one compute pass PER level (encoder-barriered, so level L+1
@@ -23,7 +28,7 @@ export function runMips(encoder: GPUCommandEncoder, d: MipPassDeps): void {
     const dx = Math.max(1, d.dimX >> (L + 1));
     const dy = Math.max(1, d.dimY >> (L + 1));
     const dz = Math.max(1, d.dimZ >> (L + 1));
-    const pass = encoder.beginComputePass();
+    const pass = encoder.beginComputePass({ timestampWrites: gpuSpan(d.label) });
     pass.setPipeline(d.pipeline);
     pass.setBindGroup(0, d.group0[L]);
     pass.setBindGroup(1, d.emptyGroup1);
@@ -46,12 +51,13 @@ export type AnisoBasePassDeps = {
   baseY: number;
   baseZ: number;
   workgroup: number;
+  label: string; // GPU-timing label (see MipPassDeps.label)
 };
 
 // Build the 6 directional level-0 volumes from iso voxelRadiance mip 0 (one compute pass). MUST run
 // AFTER voxelize (reads iso mip 0). Followed by runAnisoMips for the coarser levels.
 export function runAnisoBase(encoder: GPUCommandEncoder, d: AnisoBasePassDeps): void {
-  const pass = encoder.beginComputePass();
+  const pass = encoder.beginComputePass({ timestampWrites: gpuSpan(d.label) });
   pass.setPipeline(d.pipeline);
   pass.setBindGroup(0, d.group0);
   pass.setBindGroup(1, d.emptyGroup1);
@@ -74,6 +80,7 @@ export type AnisoMipsPassDeps = {
   baseZ: number;
   count: number; // aniso mip level count (count-1 downsample steps)
   workgroup: number;
+  label: string; // GPU-timing label (see MipPassDeps.label)
 };
 
 // Downsample every directional volume level c → c+1 (one compute pass per level, encoder-barriered
@@ -83,7 +90,7 @@ export function runAnisoMips(encoder: GPUCommandEncoder, d: AnisoMipsPassDeps): 
     const dx = Math.max(1, d.baseX >> (c + 1));
     const dy = Math.max(1, d.baseY >> (c + 1));
     const dz = Math.max(1, d.baseZ >> (c + 1));
-    const pass = encoder.beginComputePass();
+    const pass = encoder.beginComputePass({ timestampWrites: gpuSpan(d.label) });
     pass.setPipeline(d.pipeline);
     pass.setBindGroup(0, d.group0[c]);
     pass.setBindGroup(1, d.emptyGroup1);

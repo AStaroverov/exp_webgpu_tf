@@ -1,4 +1,5 @@
 import { GPUShader } from "../../../../../WGSL/GPUShader.ts";
+import { gpuSpan } from "../../../../../gpuTimer.ts";
 import { getTypeTypedArray } from "../../../../../Shader/index.ts";
 import { shaderMeta as voxelizeMeta, WORKGROUP, WORKGROUP_1D } from "./voxelize.shader.ts";
 import type { SceneInstances } from "../../../SDFSystem/createDrawShapeSystem.ts";
@@ -331,7 +332,7 @@ export function createVoxelizeSystem({
     //   4. OCCLUDER scatter (uPass=0) → voxelRadiance mip 0, MERGING the emission it reads back
     //      (sum rgb, max coverage) — a voxel shared by both classes keeps BOTH contributions,
     //      deterministically every frame (the old emitter-wins overwrite dropped the occluder's).
-    const clearPass = encoder.beginComputePass();
+    const clearPass = encoder.beginComputePass({ timestampWrites: gpuSpan("voxelize") });
     clearPass.setPipeline(voxClearPipeline);
     // Emitter group-0 variant: clear WRITES voxelEmission, so it must bind the dummy read.
     clearPass.setBindGroup(0, voxGroup0Emit);
@@ -344,7 +345,7 @@ export function createVoxelizeSystem({
       // The two scatter passes run over the SAME work list: each invocation binary-searches its
       // owning instance and early-outs unless it belongs to this pass's class, so the SDF-eval
       // work is split (not duplicated).
-      const scatterEmit = encoder.beginComputePass();
+      const scatterEmit = encoder.beginComputePass({ timestampWrites: gpuSpan("voxelize") });
       scatterEmit.setPipeline(voxPipeline);
       scatterEmit.setBindGroup(0, voxGroup0Emit);
       scatterEmit.setBindGroup(1, voxGroup1);
@@ -360,7 +361,7 @@ export function createVoxelizeSystem({
     );
 
     if (scatterTotal > 0) {
-      const scatterOcc = encoder.beginComputePass();
+      const scatterOcc = encoder.beginComputePass({ timestampWrites: gpuSpan("voxelize") });
       scatterOcc.setPipeline(voxPipeline);
       scatterOcc.setBindGroup(0, voxGroup0Occ);
       scatterOcc.setBindGroup(1, voxGroup1);

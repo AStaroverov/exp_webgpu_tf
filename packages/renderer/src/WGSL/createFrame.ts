@@ -1,4 +1,5 @@
 import { createResizeSystem } from "../ECS/Systems/ResizeSystem.ts";
+import { gpuSpan } from "../gpuTimer.ts";
 
 export function createFrameTextures(device: GPUDevice, canvas: HTMLCanvasElement) {
   const renderTexture = device.createTexture({
@@ -82,6 +83,7 @@ export function createFrameTick(
 
     // === Main Render Pass ===
     const passEncoder = commandEncoder.beginRenderPass({
+      timestampWrites: gpuSpan("draw"),
       colorAttachments: [
         {
           view: textureView,

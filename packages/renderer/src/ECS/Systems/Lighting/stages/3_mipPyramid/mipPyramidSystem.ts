@@ -118,6 +118,7 @@ export function createMipPyramidSystem(deps: MipPyramidDeps) {
       dimY,
       dimZ,
       workgroup: MIP_WG,
+      label: "mips",
     });
   }
 
