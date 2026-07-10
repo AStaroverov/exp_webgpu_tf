@@ -1,9 +1,9 @@
 import { VariableKind, VariableMeta } from "../../../../../Struct/VariableMeta.ts";
 import { ShaderMeta } from "../../../../../WGSL/ShaderMeta.ts";
 import { wgsl } from "../../../../../WGSL/wgsl.ts";
-import { VoxelBakedConfig } from "../../core/voxelConfig.ts";
+import { probeTile, ringThresholds, VoxelBakedConfig } from "../../core/voxelConfig.ts";
 import { SCREEN_PROBE_K } from "../../core/voxelResources.ts";
-import { probeWeightWGSL } from "../../core/shaders/voxelProbeShared.wgsl.ts";
+import { probeRingWGSL, probeWeightWGSL } from "../../core/shaders/voxelProbeShared.wgsl.ts";
 import { buildBasisWGSL, unprojectWGSL } from "../../core/shaders/voxelTrace.wgsl.ts";
 
 // VCT Layer 3 — SCREEN-PROBE RESOLVE + CONTACT AO. A fullscreen pass over the G-buffer:
@@ -34,15 +34,10 @@ import { buildBasisWGSL, unprojectWGSL } from "../../core/shaders/voxelTrace.wgs
 export function createConeShaderMeta(cfg: VoxelBakedConfig) {
   return new ShaderMeta(
     {
-      // .x = screen width (px), .y = screen height (px), .zw spare (the aniso toggle + light count
-      // that used to ride here moved to the probe gather's uLightParams — this pass keeps only the
-      // probe resolve + iso AO cones).
-      params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec4<f32>`),
-      // Screen-probe resolve params (all LIVE per-frame uniforms — GUI-tunable with no rebuild):
-      // .x = SCREEN_PROBE_TILE (full-res px / probe), .y = normal-weight power (SP_NORMAL_POW),
-      // .z = plane-threshold scale (SP_PLANE_K, × local probe spacing), .w = resolveRadius (the smooth
-      // screen kernel's support in TILES — bigger = smoother/wider fill, smaller = more local detail).
-      params3: new VariableMeta("uParams3", VariableKind.Uniform, `vec4<f32>`),
+      // Canvas dims (px) — the only live scalar lane left. (Every resolve tuning value that used
+      // to ride here or in the old uParams3 — tile, normal pow, plane K, resolve radius, ring
+      // thresholds — is a BAKED const now.)
+      params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec2<f32>`),
       // inverse(viewProjMatrix) (reverse-Z), column-major, for world-position reconstruction.
       invViewProj: new VariableMeta("uInvViewProj", VariableKind.Uniform, `mat4x4<f32>`),
       // .xyz = world min corner, .w = cellSize.
@@ -100,6 +95,12 @@ export function createConeShaderMeta(cfg: VoxelBakedConfig) {
       tileIndices: new VariableMeta("uTileIndices", VariableKind.StorageRead, `array<u32>`, {
         visibility: GPUShaderStage.FRAGMENT,
       }),
+      // The persistent per-block refine/boost hysteresis state (written by probeDecide) — the
+      // resolve reads it to derive each pixel's EFFECTIVE foveated level (base − boost), exactly
+      // as classify did when it placed the probes this frame.
+      refineState: new VariableMeta("uRefineState", VariableKind.StorageRead, `array<u32>`, {
+        visibility: GPUShaderStage.FRAGMENT,
+      }),
       // Filtering sampler for textureSampleLevel over the voxelRadiance pyramid.
       voxelSampler: new VariableMeta("voxelSampler", VariableKind.Sampler, `sampler`),
     },
@@ -115,8 +116,18 @@ const AO_REACH: f32 = ${cfg.aoReach};
 const AO_STEPS: i32 = ${cfg.aoSteps};
 // Max adaptive probes per coarse tile = the tileIndices stride (see voxelResources.SCREEN_PROBE_K).
 const SP_K: u32 = ${SCREEN_PROBE_K}u;
+// BAKED resolve tuning (constant during gameplay — rebuild to change): the bilateral weights, the
+// smooth kernel's support (in local probe pitches), and the foveated ring thresholds (rings off
+// bakes as 9 — past any on-screen radius → level 0 everywhere, one code path).
+const SP_TILE: f32 = ${probeTile(cfg)};
+const SP_NORMAL_POW: f32 = ${cfg.spNormalPow};
+const SP_PLANE_K: f32 = ${cfg.spPlaneK};
+const SP_RESOLVE_RADIUS: f32 = ${cfg.resolveRadius};
+const RING_R0: f32 = ${ringThresholds(cfg).r0};
+const RING_R1: f32 = ${ringThresholds(cfg).r1};
 
 ${probeWeightWGSL}
+${probeRingWGSL}
 ${unprojectWGSL}
 ${buildBasisWGSL}
 
@@ -260,10 +271,10 @@ fn accum_probe(
 // (2*rc+1)^2 * (1 + SP_K). Default rc=2, SP_K=8 → 25*9 = 225; typical far fewer (most tiles have
 // zero/few adaptive probes and cells past the kernel support weight to 0).
 fn resolve_screen_probes(P: vec3<f32>, N: vec3<f32>, full: vec2<i32>) -> vec3<f32> {
-  let tile = uParams3.x;
-  let normalPow = uParams3.y;
-  let planeK = uParams3.z;
-  let resolveRadius = max(0.25, uParams3.w);   // kernel support in TILES (guarded off zero)
+  let tile = SP_TILE;
+  let normalPow = SP_NORMAL_POW;
+  let planeK = SP_PLANE_K;
+  let resolveRadius = max(0.25, SP_RESOLVE_RADIUS); // kernel support in local pitches (off-zero guard)
   let gw = i32(ceil(uParams2.x / tile));
   let gh = i32(ceil(uParams2.y / tile));
   let cellSize = uGridOrigin.w;
@@ -273,9 +284,26 @@ fn resolve_screen_probes(P: vec3<f32>, N: vec3<f32>, full: vec2<i32>) -> vec3<f3
   let gc = vec2<i32>(floor(gf));
   let rc = clamp(i32(ceil(resolveRadius)), 1, 4);
 
-  // Local world spacing between adjacent UNIFORM probes = the depth-adaptive plane tolerance (from
+  // FOVEATED rings: this pixel's EFFECTIVE probe level (base from its radial screen-center
+  // distance, boosted one step while the base block's refine state is active) — the same
+  // computation classify placed probes by. The window below strides by the block size s, so the
+  // tap count stays constant in every ring; anchors NEST, so a stride-s window over a finer
+  // neighboring region still lands on valid probe positions (a subset of its probes).
+  let sb = sp_ring_base_level(gc, uParams2.xy, tile, RING_R0, RING_R1);
+  var lvl = sb;
+  if (sb > 0) {
+    let ba = sp_ring_anchor(clamp(gc, vec2<i32>(0), vec2<i32>(gw - 1, gh - 1)), sb);
+    if (uRefineState[u32(ba.y * gw + ba.x)] >= SP_RING_HYST_ACTIVE) { lvl = sb - 1; }
+  }
+  let s = 1 << u32(lvl);
+  // The local probe pitch in px — normalizes the smooth kernel so its support scales with the
+  // local density (a ÷16 ring keeps the same support in PROBE spacings, not in tiles).
+  let tileK = tile * f32(s);
+
+  // Local world spacing between adjacent probes = the depth-adaptive plane tolerance (from
   // reconstructed Pp, so distant flat surfaces are NOT over-rejected by a fixed world-unit threshold).
-  // Uniform slot = cy*gw+cx → atlas texel (cx,cy) (identity), so the cell coord IS the atlas texel.
+  // Uniform slot = cy*gw+cx → atlas texel (cx,cy) (identity), so the cell coord IS the atlas texel;
+  // in a sparse ring the neighbors are the ±s BLOCK anchors.
   // ROBUST DERIVATION (silhouette rejection): take the MIN spacing over the (up to 4) CARDINAL
   // neighbours of the center probe. On a silhouette a single neighbour lands on the background across
   // the depth discontinuity → its spacing balloons and, if used alone, inflates planeThresh so the
@@ -283,25 +311,25 @@ fn resolve_screen_probes(P: vec3<f32>, N: vec3<f32>, full: vec2<i32>) -> vec3<f3
   // the MIN picks a same-surface neighbour → a tight planeThresh that rejects the background probe. On a
   // distant flat surface all four spacings are similarly large → min ≈ correct (no over-rejection).
   var spacingMin = cellSize * 4.0;                   // fallback if no valid cardinal neighbour
-  let gcc = clamp(gc, vec2<i32>(0), vec2<i32>(gw - 1, gh - 1));
+  let gcc = clamp(sp_ring_anchor(gc, lvl), vec2<i32>(0), vec2<i32>(gw - 1, gh - 1));
   let cP = sp_load_probe_P(gcc);
   if (cP.w > 0.5) {
     var best = 1e30;
     var found = false;
-    if (gcc.x + 1 < gw) {
-      let nP = sp_load_probe_P(vec2<i32>(gcc.x + 1, gcc.y));
+    if (gcc.x + s < gw) {
+      let nP = sp_load_probe_P(vec2<i32>(gcc.x + s, gcc.y));
       if (nP.w > 0.5) { best = min(best, length(nP.xyz - cP.xyz)); found = true; }
     }
-    if (gcc.x - 1 >= 0) {
-      let nP = sp_load_probe_P(vec2<i32>(gcc.x - 1, gcc.y));
+    if (gcc.x - s >= 0) {
+      let nP = sp_load_probe_P(vec2<i32>(gcc.x - s, gcc.y));
       if (nP.w > 0.5) { best = min(best, length(nP.xyz - cP.xyz)); found = true; }
     }
-    if (gcc.y + 1 < gh) {
-      let nP = sp_load_probe_P(vec2<i32>(gcc.x, gcc.y + 1));
+    if (gcc.y + s < gh) {
+      let nP = sp_load_probe_P(vec2<i32>(gcc.x, gcc.y + s));
       if (nP.w > 0.5) { best = min(best, length(nP.xyz - cP.xyz)); found = true; }
     }
-    if (gcc.y - 1 >= 0) {
-      let nP = sp_load_probe_P(vec2<i32>(gcc.x, gcc.y - 1));
+    if (gcc.y - s >= 0) {
+      let nP = sp_load_probe_P(vec2<i32>(gcc.x, gcc.y - s));
       if (nP.w > 0.5) { best = min(best, length(nP.xyz - cP.xyz)); found = true; }
     }
     if (found) { spacingMin = best; }
@@ -315,22 +343,34 @@ fn resolve_screen_probes(P: vec3<f32>, N: vec3<f32>, full: vec2<i32>) -> vec3<f3
   var looseR = vec4<f32>(0.0); var looseG = vec4<f32>(0.0); var looseB = vec4<f32>(0.0);
   var lsum = 0.0;
   let fullF = vec2<f32>(full);
+  // Window origin = this pixel's BLOCK anchor; step = the local block size s (level 0 → the
+  // original per-tile walk). Taps land on anchor positions, where classify actually placed probes;
+  // an empty texel (a coarser neighbor ring's non-anchor, or sky) drops out on the validity /
+  // footprint tests inside accum_probe.
+  let anchor0 = sp_ring_anchor(gc, lvl);
   for (var dy = -rc; dy <= rc; dy = dy + 1) {
     for (var dx = -rc; dx <= rc; dx = dx + 1) {
-      let cx = gc.x + dx;
-      let cy = gc.y + dy;
+      let cx = anchor0.x + dx * s;
+      let cy = anchor0.y + dy * s;
       if (cx < 0 || cy < 0 || cx >= gw || cy >= gh) { continue; }
-      // (a) UNIFORM probe of this cell — atlas texel == cell coord (identity mapping).
-      accum_probe(vec2<i32>(cx, cy), P, N, fullF, tile, resolveRadius, planeThresh, normalPow,
-        &sumR, &sumG, &sumB, &wsum, &looseR, &looseG, &looseB, &lsum);
-      // (b) ADAPTIVE probes parented to this tile (empty when tileHeader == 0 → uniform-only parity).
+      // A REFINED tile (tileHeader > 0) contributes ONLY its fine lattice — the dense grid
+      // REPLACES the sparse one (the uniform probe still gathers for history/trigger continuity,
+      // but mixing a coarse-jittered probe into a fine patch made refined areas resolve visibly
+      // differently from a plain fine-tile grid). Unrefined tile → its uniform probe alone.
       let T = u32(cy * gw + cx);
       let cnt = min(uTileHeader[T], SP_K);
-      for (var j = 0u; j < cnt; j = j + 1u) {
-        let aslot = uTileIndices[T * SP_K + j];
-        let atexel = vec2<i32>(i32(aslot) % gw, i32(aslot) / gw);
-        accum_probe(atexel, P, N, fullF, tile, resolveRadius, planeThresh, normalPow,
+      if (cnt == 0u) {
+        // UNIFORM probe of this cell — atlas texel == cell coord (identity mapping).
+        accum_probe(vec2<i32>(cx, cy), P, N, fullF, tileK, resolveRadius, planeThresh, normalPow,
           &sumR, &sumG, &sumB, &wsum, &looseR, &looseG, &looseB, &lsum);
+      } else {
+        // ADAPTIVE (fine-lattice) probes parented to this tile.
+        for (var j = 0u; j < cnt; j = j + 1u) {
+          let aslot = uTileIndices[T * SP_K + j];
+          let atexel = vec2<i32>(i32(aslot) % gw, i32(aslot) / gw);
+          accum_probe(atexel, P, N, fullF, tileK, resolveRadius, planeThresh, normalPow,
+            &sumR, &sumG, &sumB, &wsum, &looseR, &looseG, &looseB, &lsum);
+        }
       }
     }
   }

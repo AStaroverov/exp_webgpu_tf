@@ -144,9 +144,8 @@ export function createVoxelSystem({
     getGridDims: () => ({ dimX, dimY, dimZ, originX, originY, originZ, cellSize }),
     onBuffersRecreated: () => screenProbe.rebuildGroups(),
   });
-  // Runtime iso/aniso toggle for the cone pass (uParams2.z). Default on — the anti-leak is the point;
-  // flip via setAnisoMode() (GUI) to A/B against the plain isotropic pyramid without a rebuild.
-  let anisoMode = true;
+  // (The iso/aniso toggle is BAKED now — config.anisoMode → the gather's ANISO_MODE const;
+  // flip it in the config + rebuild() to A/B against the plain isotropic pyramid.)
 
   // --- Grid state (rebuilt by buildGrid). ---
   let cellSize = grid.cellSize;
@@ -262,7 +261,7 @@ export function createVoxelSystem({
   // the gather shaders read this frame) and the head of renderFrame (for callers that drive
   // passes without setLights). Both run before any GPU pass reads uGridOrigin; the second call
   // in a frame is a no-op (cameraPosition is stable within a frame).
-  let snapCells = 16;
+  let snapCells = 8;
   let followCamera = true;
   // Zoom ladder (autoCell): pick cellSize from the CURRENT zoom so the L0 box always covers the
   // visible ground footprint + an off-screen light margin, at constant texture dims. Discrete ×2
@@ -376,12 +375,10 @@ export function createVoxelSystem({
     config,
     originArr,
     dimsArr,
-    getCellSize: () => cellSize,
     getVoxelRadiance: () => textures.voxelRadiance,
     aniso: anisoVolume,
     getGBuffer: () => ({ depth: gDepth, normal: gNormal }),
     emitterLights,
-    getAnisoMode: () => anisoMode,
     getDebugTargetView: () => compositeSys.getOutputView(),
     onResourcesRecreated: () => coneSys.rebindGroups(),
     voxelSampler,
@@ -477,13 +474,6 @@ export function createVoxelSystem({
     buildGrid(newCellSize);
   }
 
-  // Runtime toggle between the isotropic pyramid (false) and the anisotropic directional volumes
-  // (true) — read next frame via the gather's uLightParams.y (the shader that owns the long cones).
-  // No rebuild: A/B the anti-leak live.
-  function setAnisoMode(on: boolean) {
-    anisoMode = on;
-  }
-
   // Canvas resized: rebind the (new) G-buffer textures, recreate the canvas-sized cone +
   // composite outputs, and rebuild the cone/composite bind groups.
   function recreate(
@@ -561,21 +551,13 @@ export function createVoxelSystem({
     recreate,
     setCellSize,
     setConeScale: coneSys.setConeScale,
-    setAnisoMode,
     setFollowCamera,
     setGridSnapCells,
     setAutoCell,
-    setScreenProbeTile: screenProbe.setScreenProbeTile,
-    setScreenProbeParams: screenProbe.setScreenProbeParams,
+    // The one non-config sizing knob + the debug toggle. Every tuning knob — including the probe
+    // tile + refine divisor — is BAKED config now: mutate voxel.config and call rebuild().
     setAdaptiveFraction: screenProbe.setAdaptiveFraction,
-    setRefineDiv: screenProbe.setRefineDiv,
-    setLightThresh: screenProbe.setLightThresh,
-    setScreenProbeResolveRadius: screenProbe.setScreenProbeResolveRadius,
-    setTemporalHysteresis: screenProbe.setTemporalHysteresis,
     setDebugProbes: screenProbe.setDebugProbes,
-    get anisoMode() {
-      return anisoMode;
-    },
     get followCamera() {
       return followCamera;
     },
@@ -588,35 +570,14 @@ export function createVoxelSystem({
     get debugProbes() {
       return screenProbe.debugProbes;
     },
-    get screenProbeTile() {
-      return screenProbe.screenProbeTile;
-    },
     get adaptiveFraction() {
       return screenProbe.adaptiveFraction;
-    },
-    get refineDiv1() {
-      return screenProbe.refineDiv1;
-    },
-    get lightThresh() {
-      return screenProbe.lightThresh;
     },
     get adaptiveProbeCount() {
       return screenProbe.adaptiveProbeCount;
     },
     get budgetExceeded() {
       return screenProbe.budgetExceeded;
-    },
-    get spNormalPow() {
-      return screenProbe.spNormalPow;
-    },
-    get spPlaneK() {
-      return screenProbe.spPlaneK;
-    },
-    get screenProbeResolveRadius() {
-      return screenProbe.screenProbeResolveRadius;
-    },
-    get temporalHysteresis() {
-      return screenProbe.temporalHysteresis;
     },
     get coneScale() {
       return coneSys.getConeScale();

@@ -175,12 +175,8 @@ async function main() {
     .name("cone resolution")
     .onChange((s: number) => voxel.setConeScale(s));
   // Anisotropic voxels: directional far-field volumes (anti-leak) vs the plain isotropic pyramid.
-  // Runtime toggle (no rebuild) — flip it to see light stop bleeding through thin occluders.
-  const anisoCfg = { anisotropic: voxel.anisoMode };
-  coneFolder
-    .add(anisoCfg, "anisotropic")
-    .name("anisotropic voxels")
-    .onChange((on: boolean) => voxel.setAnisoMode(on));
+  // BAKED (rebuild) — flip it to see light stop bleeding through thin occluders.
+  coneFolder.add(voxel.config, "anisoMode").name("anisotropic voxels").onFinishChange(rebuild);
 
   // Screen-probe GI: surface-anchored probes (one per tile) that supply the diffuse fill/bounce
   // AND the aimed emitter cones (traced once per probe — the emitter knobs below bake into the
@@ -236,43 +232,45 @@ async function main() {
     .onFinishChange(rebuild);
   probeFolder.add(voxel.config, "aoReach", 21, 16, 0.5).name("AO reach").onFinishChange(rebuild);
   // Screen-probe tile (full-res px / probe): smaller = finer probe grid = sharper fill but more
-  // gather cost. Live (recreates the probe textures on change — no shader rebuild).
-  const spCfg = {
-    tile: voxel.screenProbeTile,
-    normalPow: voxel.spNormalPow,
-    planeK: voxel.spPlaneK,
-  };
+  // gather cost. BAKED (rebuild — also recreates the atlas it sizes).
   probeFolder
-    .add(spCfg, "tile", [2, 4, 8, 16, 24, 32, 48, 64])
+    .add(voxel.config, "screenProbeTile", [2, 4, 8, 16, 24, 32, 48, 64])
     .name("probe tile (px)")
-    .onChange((t: number) => voxel.setScreenProbeTile(t));
-  // Bilateral resolve weights (live, no rebuild): normalPow = normal-similarity sharpness (higher =
+    .onFinishChange(rebuild);
+  // Bilateral resolve weights (BAKED — rebuild): normalPow = normal-similarity sharpness (higher =
   // stricter across differing normals); planeK = plane-reject threshold × local probe spacing
   // (lower = stricter across depth steps → less bleed but more disocclusion fallback).
-  const applySP = () => voxel.setScreenProbeParams(spCfg.normalPow, spCfg.planeK);
-  probeFolder.add(spCfg, "normalPow", 0.5, 8, 0.5).name("resolve: normal pow").onChange(applySP);
-  probeFolder.add(spCfg, "planeK", 0.25, 4, 0.25).name("resolve: plane K").onChange(applySP);
-  // Unified-resolve support radius (in TILES): the smooth screen kernel that weights EVERY probe
-  // (uniform AND adaptive) tapers to zero at this distance. Bigger = smoother/wider fill (also helps a
-  // distant object seen by few probes); smaller = more local detail. Live, no rebuild. This supersedes
-  // the old probe blur pass — the wide multi-probe average IS the smoothing, so uniform vs adaptive is
-  // invisible and adding adaptive density only sharpens gradients (never blocky steps).
-  const resolveCfg = { radius: voxel.screenProbeResolveRadius };
   probeFolder
-    .add(resolveCfg, "radius", 0.5, 3, 0.25)
+    .add(voxel.config, "spNormalPow", 0.5, 8, 0.5)
+    .name("resolve: normal pow")
+    .onFinishChange(rebuild);
+  probeFolder
+    .add(voxel.config, "spPlaneK", 0.25, 4, 0.25)
+    .name("resolve: plane K")
+    .onFinishChange(rebuild);
+  // Unified-resolve support radius (in local probe pitches): the smooth screen kernel that weights
+  // EVERY probe tapers to zero at this distance. Bigger = smoother/wider fill (also helps a distant
+  // object seen by few probes); smaller = more local detail. BAKED (rebuild).
+  probeFolder
+    .add(voxel.config, "resolveRadius", 0.5, 3, 0.25)
     .name("resolve radius (tiles)")
-    .onChange((r: number) => voxel.setScreenProbeResolveRadius(r));
+    .onFinishChange(rebuild);
   // STAGE 3: temporal accumulation on the probe atlas — the history weight of the per-probe SH
-  // blend. 0 = OFF (fresh-only, byte-identical to the pre-temporal path — the A/B + rollback);
-  // ~0.85–0.9 amortizes the gather across frames (per-frame golden-angle cone rotation integrates
-  // back to an effective 2–4× cone budget), so cones/probe can drop to 4–8. Disocclusions are
-  // rejected by the SAME plane/normal weight the resolve uses (tuned by plane K / normal pow
-  // above), so raising it should not ghost. Live (per-frame uniform, no rebuild).
-  const temporalCfg = { hysteresis: voxel.temporalHysteresis };
+  // blend. 0 = OFF (fresh-only — the A/B + rollback); ~0.85–0.9 amortizes the gather across frames
+  // (per-frame golden-angle cone rotation integrates back to an effective 2–4× cone budget), so
+  // cones/probe can drop to 4–8. BAKED (rebuild) — 0 makes the whole history block dead code.
   probeFolder
-    .add(temporalCfg, "hysteresis", 0, 0.95, 0.05)
+    .add(voxel.config, "temporalHysteresis", 0, 0.95, 0.05)
     .name("temporal hysteresis")
-    .onChange((h: number) => voxel.setTemporalHysteresis(h));
+    .onFinishChange(rebuild);
+  // POINT C: the temporal filter on the RESOLVED cone output (reproject + 3×3 neighborhood clamp +
+  // blend). Catches the resolve-level noise the probe history can't (probe-set churn at ring/refine
+  // boundaries, per-pixel AO jitter, motion-time freshness) — 0 = off (exact passthrough A/B).
+  // BAKED (rebuild).
+  probeFolder
+    .add(voxel.config, "coneTemporalHysteresis", 0, 0.95, 0.05)
+    .name("resolve temporal (C)")
+    .onFinishChange(rebuild);
 
   // --- Adaptive screen-probe atlas (single 16→8 level, LIGHT-ADAPTIVE only). ---
   // The sole density driver is lightThresh: refine spawns an adaptive probe where the GATHERED
@@ -280,29 +278,35 @@ async function main() {
   // atlas, the A/B baseline); lower ⇒ denser where the light gradient is steep. adaptiveFraction
   // sizes the atlas + all indirection buffers (rebuild, like a tile change). The read-only rows show
   // the live adaptive count + a BUDGET-EXCEEDED flag from the throttled counter readback.
-  const adaptiveCfg = {
-    adaptiveFraction: voxel.adaptiveFraction,
-    div1: voxel.refineDiv1,
-    lightThresh: voxel.lightThresh,
-  };
+  const adaptiveCfg = { adaptiveFraction: voxel.adaptiveFraction };
   probeFolder
     .add(adaptiveCfg, "adaptiveFraction", 0, 4, 0.25)
     .name("adaptive budget ×uniform")
     .onFinishChange((v: number) => voxel.setAdaptiveFraction(v));
   // Refine cell divisor → cellPx = tile / div (the level is tile → tile/div). E.g. tile 16 + 2 =
-  // 16→8. Live (no rebuild). A coarse tile + fine divisor can exceed the per-tile probe cap
-  // (SCREEN_PROBE_K=8) → surplus probes dropped; watch the budget row.
+  // 16→8. BAKED (rebuild — also recreates the atlas it sizes). A coarse tile + fine divisor can
+  // exceed the per-tile probe cap (SCREEN_PROBE_K) → surplus probes dropped; watch the budget row.
   probeFolder
-    .add(adaptiveCfg, "div1", [2, 4, 8, 16])
+    .add(voxel.config, "refineDiv", [2, 4, 8, 16])
     .name("cell ÷")
-    .onChange((v: number) => voxel.setRefineDiv(v));
-  // Light-adaptive density trigger: subdivide where the gathered-SH luminance varies across the cage.
-  // Lower = denser probes in lit gradients; raise high = off (the flat uniform atlas). Live, no
-  // rebuild. Watch the budget row — lowering it spawns more probes.
+    .onFinishChange(rebuild);
+  // Light-adaptive density trigger: subdivide where the gathered-SH luminance varies across the
+  // neighborhood. Lower = denser probes in lit gradients; raise high = off (the flat uniform
+  // lattice). BAKED (rebuild). Watch the budget row — lowering it spawns more probes.
   probeFolder
-    .add(adaptiveCfg, "lightThresh", 0, 1, 0.01)
+    .add(voxel.config, "lightThresh", 0, 1, 0.01)
     .name("light subdiv thresh")
-    .onChange((v: number) => voxel.setLightThresh(v));
+    .onFinishChange(rebuild);
+  // FOVEATED RINGS (perf): base probe density falls off with screen-center distance — full inside
+  // r0, ÷4 probes between r0..r1, ÷16 past r1; the light-adaptive boost restores one step where the
+  // gathered light varies. r0/r1 are normalized so the screen corner = 1. BAKED (rebuild); the
+  // debug view draws the two boundaries as cyan circles.
+  probeFolder.add(voxel.config, "ringsOn").name("foveated rings").onFinishChange(rebuild);
+  probeFolder.add(voxel.config, "ringR0", 0.1, 1, 0.05).name("ring r0 (÷4)").onFinishChange(rebuild);
+  probeFolder
+    .add(voxel.config, "ringR1", 0.2, 1.5, 0.05)
+    .name("ring r1 (÷16)")
+    .onFinishChange(rebuild);
   // Read-only budget readout (updated each frame from the async counter readback; .listen() auto-
   // refreshes the display). `budget` flips to BUDGET-EXCEEDED when the atlas overflowed this frame.
   const probeStats = { adaptive: 0, budget: "OK" };

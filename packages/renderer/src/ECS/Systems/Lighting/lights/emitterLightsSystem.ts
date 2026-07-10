@@ -124,7 +124,8 @@ export function createEmitterLightsSystem(deps: EmitterLightsDeps) {
   return {
     setLights,
     recreateLightClusters,
-    // uploadProbeUniforms reads this into probeLightParamsArr[0].
+    // Diagnostics/GUI only — the gather reads per-cell counts from the cluster records, so no
+    // shader consumes the global count anymore.
     getLightCount: () => coneLightCount,
     // The screen-probe gather's group 1 binds these; it reads them fresh (they change on grow /
     // cluster recreate).

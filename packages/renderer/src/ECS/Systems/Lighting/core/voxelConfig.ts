@@ -8,9 +8,13 @@
 // emitter list, instance count, grid matrices, canvas size) stays in uniforms — it is NOT here.
 //
 // Field → where it bakes:
-//   cone shader    : normalBias, aperture, giStrength, aoConeCount, aoReach, aoSteps
+//   cone shader    : normalBias, aperture, giStrength, aoConeCount, aoReach, aoSteps,
+//                    spNormalPow, spPlaneK, resolveRadius, ringR0/ringR1 (+ ringsOn)
 //   composite shader: ambient, exposure, penumbra, shadowBaseSpread
-//   screen-probe shader: conesPerProbe, maxDist (cone+probe reach), aperture, normalBias
+//   screen-probe shader: conesPerProbe, maxDist (cone+probe reach), aperture, normalBias,
+//                    temporalHysteresis, spNormalPow, spPlaneK, anisoMode
+//   classify/decide/refine/debug shaders: ringR0/ringR1 (+ ringsOn); decide also lightThresh
+//   cone-temporal shader: coneTemporalHysteresis
 //   AIMED-cone group — emitterDirect, emitterFalloff, aimedSteps, aimedAlphaCut — bakes into the
 //     screen-probe shader: the aimed emitter cones are traced once per PROBE (the probe-centric
 //     final gather — see ./README.md).
@@ -45,7 +49,43 @@ export type VoxelBakedConfig = {
   //   smooths the shadow-map texel staircase into a soft edge. 1 = near-hard (old behavior).
   // ── screen-probe pass ─────────────────────────────────────────────────────────────────
   conesPerProbe: number; // full-sphere cones per screen probe; SH-L1 saturates ~16, so more only cuts noise
+  anisoMode: boolean; // far-field cone samples read the 6 anisotropic volumes (true) or the iso pyramid
+  temporalHysteresis: number; // probe-atlas history weight (0..0.95; 0 = temporal OFF, fresh-only)
+  // ── probe resolve (cone pass) + shared bilateral weights ─────────────────────────────
+  spNormalPow: number; // normal-similarity sharpness (resolve taps + the gather's history validation)
+  spPlaneK: number; // plane-reject threshold scale (× local probe spacing; × cellSize in the gather)
+  resolveRadius: number; // resolve kernel support, in LOCAL probe pitches (bigger = smoother/wider)
+  // ── adaptive density (decide/refine + foveated rings) ────────────────────────────────
+  // Tile + divisor ALSO size the CPU-side atlas/buffers (screenProbeCounts) — the shaders bake
+  // them as consts while rebuild() recreates the resources from the same config values, so the
+  // two sides cannot drift. (maxAdaptive stays a live uniform: it derives from the CANVAS size.)
+  screenProbeTile: number; // full-res px per uniform screen probe (the base lattice pitch)
+  refineDiv: number; // refine cell divisor: an active tile subdivides into div² cells (cellPx = tile/div)
+  lightThresh: number; // decide trigger: DC-luminance spread across the probe neighborhood
+  ringsOn: boolean; // foveated rings master switch (off ⇒ level 0 everywhere — the flat lattice)
+  ringR0: number; // rings: radial threshold where density drops to ÷4 (screen corner = 1)
+  ringR1: number; // rings: radial threshold where density drops to ÷16
+  // ── cone-output temporal filter ("point C") ──────────────────────────────────────────
+  coneTemporalHysteresis: number; // history weight of the resolved-output blend (0 = passthrough)
 };
+
+// Effective ring thresholds: the OFF switch bakes as "thresholds past any on-screen radius"
+// (corner = 1), so every shader keeps ONE code path and rings-off compiles to level 0 everywhere.
+export function ringThresholds(cfg: VoxelBakedConfig): { r0: number; r1: number } {
+  return cfg.ringsOn
+    ? { r0: cfg.ringR0, r1: Math.max(cfg.ringR1, cfg.ringR0) }
+    : { r0: 9, r1: 9 };
+}
+
+// Sanitized bake values for the probe lattice pitch + refine divisor — ONE clamp shared by every
+// shader factory AND the CPU sizing (screenProbeCounts / dispatch math), so a fractional or zero
+// config value cannot make the WGSL consts and the buffer strides disagree.
+export function probeTile(cfg: VoxelBakedConfig): number {
+  return Math.max(1, Math.round(cfg.screenProbeTile));
+}
+export function probeRefineDiv(cfg: VoxelBakedConfig): number {
+  return Math.max(1, Math.round(cfg.refineDiv));
+}
 
 export const DEFAULT_VOXEL_BAKED_CONFIG: VoxelBakedConfig = {
   normalBias: 0,
@@ -67,4 +107,16 @@ export const DEFAULT_VOXEL_BAKED_CONFIG: VoxelBakedConfig = {
   penumbra: 4,
   shadowBaseSpread: 2,
   conesPerProbe: 16,
+  anisoMode: true,
+  temporalHysteresis: 0.75,
+  spNormalPow: 2,
+  spPlaneK: 1,
+  resolveRadius: 2,
+  screenProbeTile: 16, // Lumen default DownsampleFactor
+  refineDiv: 2,
+  lightThresh: 0.05,
+  ringsOn: true,
+  ringR0: 0.35,
+  ringR1: 0.7,
+  coneTemporalHysteresis: 0.85,
 };

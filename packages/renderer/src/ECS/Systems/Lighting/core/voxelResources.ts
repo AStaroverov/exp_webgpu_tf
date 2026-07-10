@@ -137,32 +137,43 @@ export function destroyScreenProbeTextures(t: ScreenProbeTextures) {
 }
 
 // ===== Adaptive screen-probe atlas sizing (single 16→8 level, light-adaptive). =====
-// K = max adaptive probes per coarse (16px) tile = the fixed stride of tileIndices. A 16→8 split
-// yields at most 3 useful children, but a finer live cell divisor (GUI-tunable, e.g. 16→4/16→1) can
-// request many more per tile, so K = 8 gives headroom (the surplus beyond K is allocated but dropped
-// from the per-tile list). Shared between the buffer sizing (tileIndices length) and the
-// refine/resolve/debug shaders (interpolated as a WGSL const), so the CPU stride and the GPU stride
-// can never disagree.
-export const SCREEN_PROBE_K = 8;
+// K = max adaptive probes per coarse tile = the fixed stride of tileIndices. A refined tile spawns
+// its FULL fine lattice (div² probes: div 2 → 4, div 4 → 16), so K must cover the largest divisor
+// in use — at K = 8 a div-4 tile fit only its first 8 spawned cells, and thread order made that
+// consistently the TOP HALF of the tile (half-empty refinement patches). K = 16 covers div ≤ 4;
+// the surplus beyond K is allocated but dropped from the per-tile list. Shared between the buffer
+// sizing (tileIndices length) and the refine/resolve/debug shaders (interpolated as a WGSL const),
+// so the CPU stride and the GPU stride can never disagree. The resolve's per-tile loop is bounded
+// by min(tileHeader, K) — only refined tiles pay for the larger K.
+export const SCREEN_PROBE_K = 16;
 
-// Atlas + buffer capacity from the coarse grid + the adaptive budget fraction. numUniform = the
-// uniform block (one probe per 16px tile, identity-mapped into atlas rows [0, gh)); maxAdaptive =
-// numUniform * adaptiveFraction extra probes (Phase-1 default 1.0 → the atlas is 2× uniform, higher
-// than Lumen's ~0.5 because we amortize NOTHING across frames — every probe is paid fresh). The
-// adaptive block lands in atlas rows [gh, gh + adaptiveRows).
+// Atlas + buffer capacity from the coarse grid + the adaptive budget fraction + the refine cell
+// divisor. numUniform = the uniform block (one probe per tile, identity-mapped into atlas rows
+// [0, gh)). The adaptive block is DIRECT-MAPPED: every fine cell (refineDiv² per tile) owns a
+// FIXED slot = numUniform + fineIdx and a fixed atlas texel in rows [gh, gh + adaptiveRows) —
+// stable identity across frames is what gives adaptive probes their own reprojectable temporal
+// history (the former bump-allocated slots shuffled every frame and could never accumulate).
+// maxAdaptive = numUniform × adaptiveFraction is the per-frame GATHER budget (the active work
+// list's cap), NOT the slot capacity.
 export type ScreenProbeCounts = {
   numUniform: number;
   maxAdaptive: number;
+  numFine: number;
   adaptiveRows: number;
 };
 export function screenProbeCounts(
   grid: ScreenProbeGrid,
   adaptiveFraction: number,
+  refineDiv: number,
 ): ScreenProbeCounts {
   const numUniform = grid.w * grid.h;
-  const maxAdaptive = Math.max(0, Math.round(numUniform * Math.max(0, adaptiveFraction)));
-  const adaptiveRows = Math.ceil(maxAdaptive / grid.w);
-  return { numUniform, maxAdaptive, adaptiveRows };
+  const numFine = numUniform * refineDiv * refineDiv;
+  const maxAdaptive = Math.min(
+    numFine,
+    Math.max(0, Math.round(numUniform * Math.max(0, adaptiveFraction))),
+  );
+  const adaptiveRows = Math.ceil(numFine / grid.w);
+  return { numUniform, maxAdaptive, numFine, adaptiveRows };
 }
 
 // The indirection + allocator STORAGE BUFFERS (NOT textures — WebGPU forbids storage-texture
@@ -172,17 +183,26 @@ export function screenProbeCounts(
 // pattern) — never routed through GPUVariable.getGPUBuffer (which cannot express INDIRECT usage and
 // would hand each shader its OWN buffer instead of the one shared instance).
 export type ScreenProbeBuffers = {
-  // atomic<u32> ×2: [0] = bump-allocator counter for adaptive probes, [1] = sticky "budget
-  // exceeded" flag (set when an atomicAdd returns >= maxAdaptive). Cleared each frame.
+  // atomic<u32> ×2: [0] = the ACTIVE-list length (bump counter for the gather work list), [1] =
+  // sticky "budget exceeded" flag (set when an atomicAdd returns >= maxAdaptive). Cleared each frame.
   counter: GPUBuffer;
-  // array<vec4<u32>>, numUniform + maxAdaptive: per-probe record (packed repr pixel + level),
-  // indexed by GLOBAL slot (uniform slots 0..numUniform-1, adaptive numUniform..).
+  // array<vec4<u32>>, numUniform + numFine: per-probe record (packed repr pixel + level), indexed
+  // by GLOBAL slot. Adaptive slots are DIRECT-MAPPED (numUniform + fineIdx — stable across frames);
+  // stale inactive entries are unreachable (resolve only reaches slots via tileIndices, gather only
+  // via activeList).
   data: GPUBuffer;
   // array<atomic<u32>>, numUniform: count of adaptive probes whose parent is that coarse tile.
   header: GPUBuffer;
   // array<u32>, numUniform*K: fixed-stride list — [tileIdx*K + j] = the global slot of the tile's
   // j-th adaptive probe (only the first min(header, K) entries per tile are meaningful).
   indices: GPUBuffer;
+  // array<u32>, maxAdaptive: THIS frame's active adaptive slots (the gather work list) — the only
+  // per-frame-ordered structure left; its order feeds nothing but thread→slot mapping.
+  activeList: GPUBuffer;
+  // array<u32>, numUniform: PERSISTENT per-TILE hysteresis state (saturating counter, written by
+  // probeDecide). NOT cleared per frame — this is what keeps a tile's refinement membership stable
+  // while its raw trigger flickers. Zero-initialized at creation (WebGPU guarantees zeroed buffers).
+  refineState: GPUBuffer;
   // array<u32,3> = dispatchWorkgroupsIndirect args [ceil(total/GATHER_WG), 1, 1] for the gather.
   // RAW STORAGE|INDIRECT|COPY_DST buffer (COPY_SRC too for diagnostics) — the one usage GPUVariable
   // cannot emit.
@@ -195,13 +215,21 @@ export function createScreenProbeBuffers(
   // COPY_SRC on every buffer so the throttled budget readback (counter) and any future diagnostics
   // can copy them to a staging buffer; COPY_DST so the per-frame clearBuffer works.
   const storageUsage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
-  const total = counts.numUniform + counts.maxAdaptive;
+  const total = counts.numUniform + counts.numFine;
   return {
     counter: device.createBuffer({ size: 2 * 4, usage: storageUsage }),
     data: device.createBuffer({ size: Math.max(1, total) * 16, usage: storageUsage }),
     header: device.createBuffer({ size: Math.max(1, counts.numUniform) * 4, usage: storageUsage }),
     indices: device.createBuffer({
       size: Math.max(1, counts.numUniform * SCREEN_PROBE_K) * 4,
+      usage: storageUsage,
+    }),
+    activeList: device.createBuffer({
+      size: Math.max(1, counts.maxAdaptive) * 4,
+      usage: storageUsage,
+    }),
+    refineState: device.createBuffer({
+      size: Math.max(1, counts.numUniform) * 4,
       usage: storageUsage,
     }),
     args: device.createBuffer({
@@ -220,6 +248,8 @@ export function destroyScreenProbeBuffers(b: ScreenProbeBuffers) {
   b.data.destroy();
   b.header.destroy();
   b.indices.destroy();
+  b.activeList.destroy();
+  b.refineState.destroy();
   b.args.destroy();
 }
 
