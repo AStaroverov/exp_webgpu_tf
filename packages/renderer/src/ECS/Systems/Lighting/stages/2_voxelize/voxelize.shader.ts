@@ -28,6 +28,10 @@ import { sceneSDF } from "../../../SDFSystem/sceneSDF.wgsl.ts";
 //   main  : the scatter described above. Dispatched TWICE per frame with different targets:
 //           emitters (uPass=1) into voxelEmission, then occluders (uPass=0) into
 //           voxelRadiance mip 0, MERGING voxelEmission in (see the CLASS SPLIT note at main()).
+//
+// (A second clipmap level lived here briefly and was REMOVED: with the zoom-ladder cellSize the
+// perceived far-field artifacts are scale-invariant and the coarse cascade had no visible effect
+// in validation — not worth its volume pair + the two-level work list.)
 
 // COMPUTE-visibility group-0 uniform helper.
 const uC = (name: string, type: string) =>
@@ -44,13 +48,10 @@ export const WORKGROUP_1D = 64; // scatter pass: 64 threads/workgroup over the 1
 export const shaderMeta = new ShaderMeta(
   {
     // ---- group 0 : grid uniforms (COMPUTE-only) ----
-    // LEVEL 0 (fine): .xyz = world min corner of the grid box, .w = cellSize (world units/voxel).
+    // .xyz = world min corner of the grid box, .w = cellSize (world units per voxel).
     gridOrigin: uC("uGridOrigin", `vec4<f32>`),
     // .xyz = voxel counts per axis (i32 for direct bounds compare), .w unused.
     gridDims: uC("uGridDims", `vec4<i32>`),
-    // LEVEL 1 (coarse clipmap): cell 2×, XY extent 2×, its own camera-snapped origin. Same layout.
-    gridOrigin1: uC("uGridOrigin1", `vec4<f32>`),
-    gridDims1: uC("uGridDims1", `vec4<i32>`),
     // Live scene instance count (<= MAX_INSTANCE_COUNT).
     instanceCount: uC("uInstanceCount", `u32`),
     // Directional sun: .xyz = normalized world dir TOWARD sun, .w = effective intensity
@@ -83,14 +84,12 @@ export const shaderMeta = new ShaderMeta(
     roundness: sceneBuf("uRoundness", `array<f32, ${MAX_INSTANCE_COUNT}>`),
     color: sceneBuf("uColor", `array<vec4<f32>, ${MAX_INSTANCE_COUNT}>`),
     material: sceneBuf("uMaterial", `array<vec4<f32>, ${MAX_INSTANCE_COUNT}>`),
-    // Per-VIRTUAL-instance AABB voxel box (built on the CPU each frame; bindings 6..7 — declared
-    // AFTER the 6 scene buffers so their binding numbers are preserved). The flat list holds BOTH
-    // clipmap levels: entries [0, n) = level-0 boxes, [n, 2n) = level-1 boxes (n = uInstanceCount),
-    // hence the 2× array size. .xyz = voxel box MIN in the OWNING LEVEL's grid, .w = prefix start
-    // (monotonic non-decreasing across the whole list).
-    aabbMin: sceneBuf("uAabbMin", `array<vec4<i32>, ${MAX_INSTANCE_COUNT * 2}>`),
+    // Per-instance AABB voxel box (built on the CPU each frame; bindings 6..7 — declared
+    // AFTER the 6 scene buffers so their binding numbers are preserved).
+    // .xyz = voxel box MIN (vx0,vy0,vz0), .w = prefix start (monotonic non-decreasing).
+    aabbMin: sceneBuf("uAabbMin", `array<vec4<i32>, ${MAX_INSTANCE_COUNT}>`),
     // .xyz = voxel box DIMS (nx,ny,nz), .w = n = nx*ny*nz.
-    aabbDim: sceneBuf("uAabbDim", `array<vec4<i32>, ${MAX_INSTANCE_COUNT * 2}>`),
+    aabbDim: sceneBuf("uAabbDim", `array<vec4<i32>, ${MAX_INSTANCE_COUNT}>`),
 
     // ---- group 2 : voxel output (StorageTexture, write-only) ----
     // The scatter's write TARGET, bound per pass: the emitter pass (uPass=1) writes the
@@ -99,19 +98,6 @@ export const shaderMeta = new ShaderMeta(
     // is bound (voxelEmission; mip 0 needs no clear — the emission→mip0 copy overwrites it fully).
     voxelTarget: new VariableMeta(
       "voxelTarget",
-      VariableKind.StorageTexture,
-      `texture_storage_3d<rgba16float, write>`,
-      {
-        visibility: GPUShaderStage.COMPUTE,
-        viewDimension: "3d",
-        storageTextureFormat: "rgba16float",
-        storageTextureAccess: "write-only",
-      },
-    ),
-    // The LEVEL-1 write target of the same pass (emitter: voxelEmission1, occluder/clear:
-    // voxelRadiance1 mip 0 / voxelEmission1) — one dispatch scatters both levels.
-    voxelTarget1: new VariableMeta(
-      "voxelTarget1",
       VariableKind.StorageTexture,
       `texture_storage_3d<rgba16float, write>`,
       {
@@ -137,11 +123,6 @@ export const shaderMeta = new ShaderMeta(
     // voxelEmission (a texture cannot be sampled and storage-written in one pass), so they bind
     // a 1×1×1 dummy here; the uPass==0 gate in main() keeps the dummy read out of those passes.
     emissionRead: new VariableMeta("emissionRead", VariableKind.Texture, `texture_3d<f32>`, {
-      visibility: GPUShaderStage.COMPUTE,
-      viewDimension: "3d",
-    }),
-    // Level-1 counterpart of emissionRead (dummy-bound in the clear/emitter passes likewise).
-    emissionRead1: new VariableMeta("emissionRead1", VariableKind.Texture, `texture_3d<f32>`, {
       visibility: GPUShaderStage.COMPUTE,
       viewDimension: "3d",
     }),
@@ -188,10 +169,8 @@ fn sun_vis_vox(P: vec3<f32>, N: vec3<f32>, cell: f32) -> f32 {
   return select(0.0, 1.0, ndc.z <= s + bias);
 }
 
-// CLEAR — one thread per voxel over the FULL level-0 grid, zeroing BOTH bound target volumes
-// (level 1 is never larger per axis — same XY dims, dimZ halved — so the level-0 dispatch covers
-// it; its own bounds guard drops the excess threads). The scatter only writes solid voxels, so
-// the volumes must start empty.
+// CLEAR — one thread per voxel over the FULL grid. Zeroes the bound target volume so the
+// scatter pass (which writes ONLY solid voxels) starts from an empty volume.
 @compute @workgroup_size(${WORKGROUP}, ${WORKGROUP}, ${WORKGROUP})
 fn clear(@builtin(global_invocation_id) gid: vec3<u32>) {
   let coord = vec3<i32>(gid);
@@ -200,9 +179,6 @@ fn clear(@builtin(global_invocation_id) gid: vec3<u32>) {
     return;
   }
   textureStore(voxelTarget, coord, vec4<f32>(0.0));
-  if (coord.x < uGridDims1.x && coord.y < uGridDims1.y && coord.z < uGridDims1.z) {
-    textureStore(voxelTarget1, coord, vec4<f32>(0.0));
-  }
 }
 
 // SCATTER — one thread per (instance, voxel-in-its-AABB) pair. The thread:
@@ -222,12 +198,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // Binary search the prefix start (= uAabbMin[k].w, monotonic non-decreasing): find the
-  // largest entry with start <= g (standard upper_bound - 1). Empty ranges (n == 0) share their
-  // successor's start and are skipped naturally — g never lands inside one. The list holds 2n
-  // VIRTUAL instances: [0, n) = level-0 boxes, [n, 2n) = level-1 boxes of the SAME n scene
-  // instances (level = vins / n, real instance = vins % n).
+  // largest ins with start[ins] <= g (standard upper_bound - 1). Empty ranges (n == 0)
+  // share their successor's start and are skipped naturally — g never lands inside one.
   var lo: i32 = 0;
-  var hi: i32 = i32(uInstanceCount) * 2;
+  var hi: i32 = i32(uInstanceCount);
   loop {
     if (lo >= hi) { break; }
     let mid = (lo + hi) / 2;
@@ -237,15 +211,13 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       hi = mid;
     }
   }
-  let vins = u32(lo - 1);
-  let level = select(0u, 1u, vins >= uInstanceCount);
-  let ins = vins - level * uInstanceCount;
+  let ins = u32(lo - 1);
 
   // CLASS SPLIT — the two classes write DIFFERENT volumes, so neither can overwrite the other
   // (the old "emitter-wins" write-order hack is gone). uPass 1 = emitters scatter into
   // voxelEmission; then the CPU copies voxelEmission → voxelRadiance mip 0 (covers emitter-only
   // voxels); then uPass 0 = occluders (material.x == 0) scatter into voxelRadiance mip 0, ADDING
-  // the emitter rgb read back from voxelEmission at their own voxels — a shared voxel ends up
+  // the emitter rgb read back from voxelEmission at their own voxel — a shared voxel ends up
   // with BOTH the occluder's sun-lit surface and the emitter light (sum rgb, max coverage),
   // deterministically, every frame. Early-out BEFORE the SDF eval so off-class threads cost only
   // the binary search above. (Within one class, AABB overlap is still last-writer-wins.)
@@ -254,22 +226,19 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     return;
   }
 
-  // Local offset within this virtual instance's voxel box, decoded to (lx,ly,lz).
-  let dim = uAabbDim[vins];
+  // Local offset within this instance's voxel box, decoded to (lx,ly,lz).
+  let dim = uAabbDim[ins];
   let nx = dim.x;
   let ny = dim.y;
-  let local = g - uAabbMin[vins].w;
+  let local = g - uAabbMin[ins].w;
   let lx = local % nx;
   let ly = (local / nx) % ny;
   let lz = local / (nx * ny);
 
-  // Voxel coord (already clamped to [0,dim) on the CPU side, in the OWNING LEVEL's grid) + its
-  // world-space center from that level's origin/cell.
-  let coord = uAabbMin[vins].xyz + vec3<i32>(lx, ly, lz);
-  var gOrigin = uGridOrigin;
-  if (level == 1u) { gOrigin = uGridOrigin1; }
-  let cellSize = gOrigin.w;
-  let world = gOrigin.xyz + (vec3<f32>(coord) + vec3<f32>(0.5)) * cellSize;
+  // Voxel coord (already clamped to [0,dim) on the CPU side) + its world-space center.
+  let coord = uAabbMin[ins].xyz + vec3<i32>(lx, ly, lz);
+  let cellSize = uGridOrigin.w;
+  let world = uGridOrigin.xyz + (vec3<f32>(coord) + vec3<f32>(0.5)) * cellSize;
 
   // Evaluate ONLY instance ins: world -> local (subtract center, inverse rotation via
   // transpose), then its LOCAL sd_shape3d. (No loop over the other instances — the whole point.)
@@ -315,21 +284,11 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // into mip 0 for emitter-only voxels) instead of overwriting it: rgb adds, coverage maxes —
   // both stay premultiplied-consistent. The uPass gate also keeps the emitter pass (whose
   // emissionRead is a dummy — it storage-writes the real voxelEmission) from reading garbage.
-  // Each level writes ITS OWN pair of volumes; the branches are uniform per work-list segment.
   if (uPass == 0u) {
-    if (level == 0u) {
-      let e = textureLoad(emissionRead, coord, 0);
-      textureStore(voxelTarget, coord, vec4<f32>(radiance * coverage + e.rgb, max(coverage, e.a)));
-    } else {
-      let e = textureLoad(emissionRead1, coord, 0);
-      textureStore(voxelTarget1, coord, vec4<f32>(radiance * coverage + e.rgb, max(coverage, e.a)));
-    }
+    let e = textureLoad(emissionRead, coord, 0);
+    textureStore(voxelTarget, coord, vec4<f32>(radiance * coverage + e.rgb, max(coverage, e.a)));
   } else {
-    if (level == 0u) {
-      textureStore(voxelTarget, coord, vec4<f32>(radiance * coverage, coverage));
-    } else {
-      textureStore(voxelTarget1, coord, vec4<f32>(radiance * coverage, coverage));
-    }
+    textureStore(voxelTarget, coord, vec4<f32>(radiance * coverage, coverage));
   }
 }
 `,

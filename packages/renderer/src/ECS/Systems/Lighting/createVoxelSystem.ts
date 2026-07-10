@@ -86,19 +86,11 @@ export function createVoxelSystem({
   let extentY = baseExtentY;
   let extentZ = baseExtentZ;
 
-  // LEVEL 1 — the coarse clipmap cascade: cell 2×, XY extent 2× (same XY dims), Z extent UNCHANGED
-  // (the scene is flat — doubling Z would voxelize empty sky), so dimZ1 = dimZ/2. Its own camera-
-  // snapped XY origin; Z shares the fine level's floor. Iso-only (no aniso set) with a full mip
-  // chain of which the cone reads lods ≤ CLIP_L1_MAX_LOD.
-  let origin1X = grid.originX - extentX * 0.5;
-  let origin1Y = grid.originY - extentY * 0.5;
-
   // ===== Sub-systems (created once; only textures/bind groups rebuild). =====
-  // Voxel-radiance mip pyramids — owned by their own sub-systems (downsample shader/pipeline +
-  // per-level bind groups/buffers), one instance per clipmap level. buildGrid calls their
-  // rebindGrid() after the radiance volumes are recreated; mips() runs both.
+  // Voxel-radiance mip pyramid — owned by its own sub-system (downsample shader/pipeline +
+  // per-level bind groups/buffers). buildGrid calls its rebindGrid() after voxelRadiance is
+  // recreated; mips() delegates to its run().
   const mipPyramid = createMipPyramidSystem({ device });
-  const mipPyramid1 = createMipPyramidSystem({ device });
 
   // Anisotropic directional pyramid (the far-field anti-leak) — owned by its own sub-system (BASE +
   // VOLUME shaders/pipelines + the 6 directional volumes + per-level bind groups/buffers). buildGrid
@@ -133,15 +125,6 @@ export function createVoxelSystem({
     device,
     sceneInstances,
     getGridBox: () => ({ originX, originY, originZ, cellSize, dimX, dimY, dimZ }),
-    getGridBox1: () => ({
-      originX: origin1X,
-      originY: origin1Y,
-      originZ,
-      cellSize: cellSize * 2,
-      dimX: dim1X,
-      dimY: dim1Y,
-      dimZ: dim1Z,
-    }),
     sun,
   });
 
@@ -149,9 +132,6 @@ export function createVoxelSystem({
   // Grid uniforms shared across the cone + gather shaders (the voxelize cluster owns its own copy).
   const originArr = getTypeTypedArray(voxelizeMeta.uniforms.gridOrigin.type); // Float32Array(4)
   const dimsArr = getTypeTypedArray(voxelizeMeta.uniforms.gridDims.type); // Int32Array(4)
-  // Level-1 counterparts (gather-only readers; the cone's AO cones stay on level 0).
-  const originArr1 = getTypeTypedArray(voxelizeMeta.uniforms.gridOrigin.type); // Float32Array(4)
-  const dimsArr1 = getTypeTypedArray(voxelizeMeta.uniforms.gridDims.type); // Int32Array(4)
   // EMITTER LIGHTS (CPU clustered cull) sub-system. Owns the aimed-emitter storage buffer (uLights)
   // + the clustered-cull table (uLightClusters) and their CPU scratch. setLights() uploads the
   // emitters + refills/uploads the cluster table each frame; recreateLightClusters() resizes the
@@ -167,20 +147,13 @@ export function createVoxelSystem({
   // Runtime iso/aniso toggle for the cone pass (uParams2.z). Default on — the anti-leak is the point;
   // flip via setAnisoMode() (GUI) to A/B against the plain isotropic pyramid without a rebuild.
   let anisoMode = true;
-  // Runtime clipmap toggle (gather uLightParams.z). Off = the exact old single-box path, for A/B.
-  let clipmapMode = true;
 
   // --- Grid state (rebuilt by buildGrid). ---
   let cellSize = grid.cellSize;
   let dimX = grid.dimX;
   let dimY = grid.dimY;
   let dimZ = grid.dimZ;
-  let dim1X = grid.dimX;
-  let dim1Y = grid.dimY;
-  let dim1Z = Math.max(1, grid.dimZ >> 1);
   let textures: VoxelTextures;
-  // Level-1 volume pair (radiance pyramid + emission scatter target).
-  let textures1: VoxelTextures;
 
   // (Re)build the voxel textures + the two texture-referencing bind groups for the
   // current cellSize, and upload the grid uniforms to all shaders.
@@ -195,11 +168,6 @@ export function createVoxelSystem({
     extentX = dimX * cellSize;
     extentY = dimY * cellSize;
     extentZ = dimZ * cellSize;
-    // Level 1: cell 2×, same XY dims (→ XY extent 2×), Z extent unchanged (→ dimZ halved).
-    const cell1 = cellSize * 2;
-    dim1X = dimX;
-    dim1Y = dimY;
-    dim1Z = Math.max(1, dimZ >> 1);
 
     textures = createVoxelTextures(device, {
       originX,
@@ -210,50 +178,27 @@ export function createVoxelSystem({
       dimZ,
       cellSize,
     });
-    textures1 = createVoxelTextures(device, {
-      originX: origin1X,
-      originY: origin1Y,
+
+    // Voxelize cluster: rebind the two storage targets (radiance mip 0 + the emitter volume) +
+    // refresh its clear dispatch dims + grid uniforms for the recreated volumes / new dims.
+    voxelizeSys.rebindGrid(textures.voxelRadiance, textures.voxelEmission, {
+      originX,
+      originY,
       originZ,
-      dimX: dim1X,
-      dimY: dim1Y,
-      dimZ: dim1Z,
-      cellSize: cell1,
+      cellSize,
+      dimX,
+      dimY,
+      dimZ,
     });
 
-    // Voxelize cluster: rebind both levels' storage targets (radiance mip 0s + the emitter
-    // volumes) + refresh its clear dispatch dims + grid uniforms for the recreated volumes.
-    voxelizeSys.rebindGrid(
-      textures.voxelRadiance,
-      textures.voxelEmission,
-      textures1.voxelRadiance,
-      textures1.voxelEmission,
-      { originX, originY, originZ, cellSize, dimX, dimY, dimZ },
-      {
-        originX: origin1X,
-        originY: origin1Y,
-        originZ,
-        cellSize: cell1,
-        dimX: dim1X,
-        dimY: dim1Y,
-        dimZ: dim1Z,
-      },
-    );
-
-    // Mip-pyramid downsample groups (mip L → L+1), one instance per clipmap level: each rebuilds
-    // its per-level views/buffers for its recreated radiance volume + new dims.
+    // Mip-pyramid downsample groups (mip L → L+1): the mip-pyramid sub-system rebuilds its
+    // per-level views/buffers for the recreated voxelRadiance + new dims.
     mipPyramid.rebindGrid(
       textures.voxelRadiance,
       dimX,
       dimY,
       dimZ,
       voxelMipLevelCount(dimX, dimY, dimZ),
-    );
-    mipPyramid1.rebindGrid(
-      textures1.voxelRadiance,
-      dim1X,
-      dim1Y,
-      dim1Z,
-      voxelMipLevelCount(dim1X, dim1Y, dim1Z),
     );
 
     // ===== Anisotropic directional pyramid (rebuilt alongside the iso pyramid). =====
@@ -280,14 +225,6 @@ export function createVoxelSystem({
     dimsArr[1] = dimY;
     dimsArr[2] = dimZ;
     dimsArr[3] = 0;
-    originArr1[0] = origin1X;
-    originArr1[1] = origin1Y;
-    originArr1[2] = originZ;
-    originArr1[3] = cell1;
-    dimsArr1[0] = dim1X;
-    dimsArr1[1] = dim1Y;
-    dimsArr1[2] = dim1Z;
-    dimsArr1[3] = 0;
 
     // Cone bind group references the rebuilt voxelRadiance view + the (stable) G-buffer; rebindGrid
     // also re-uploads the grid uniforms populated just above to the cone shader.
@@ -315,8 +252,11 @@ export function createVoxelSystem({
   // picture" pop; the cones reach LOD ~6 at maxDist 24 / aperture 0.577). snapCells trades the
   // two: bigger = more levels world-locked (16 locks iso mip ≤ 4 + aniso ≤ 3, leaving only the
   // blurriest tail to re-partition) but a coarser box step (16 cells = 8 wu at 0.5) — invisible
-  // mid-scene, only the far coverage edge lurches. Live GUI knob; the REAL fix is clipmap
-  // cascades replacing the deep mips (each level world-locked at its own granularity).
+  // mid-scene, only the far coverage edge lurches. Live GUI knob. What makes the residual tail
+  // acceptable is the zoom LADDER below: with cell ∝ zoom the whole configuration is scale-
+  // invariant, so every zoom level perceives the artifact like the (clean) reference close zoom.
+  // (A coarse clipmap cascade was tried as the "proper" fix and REMOVED — browser validation
+  // showed no visible difference once the ladder was in.)
   //
   // Call sites: the head of setLights (so the CPU emitter clustering bins with the SAME origin
   // the gather shaders read this frame) and the head of renderFrame (for callers that drive
@@ -372,31 +312,21 @@ export function createVoxelSystem({
         extentY = dimY * c;
         extentZ = dimZ * c;
         originArr[3] = c;
-        originArr1[3] = c * 2;
         cellChanged = true;
       }
     }
     const q = snapCells * cellSize;
     const ox = Math.round((cameraPosition.x - extentX * 0.5) / q) * q;
     const oy = Math.round((cameraPosition.y - extentY * 0.5) / q) * q;
-    // Level 1 snaps to ITS OWN cell quantum (2× the fine one) around its own (2×) extent.
-    const q1 = snapCells * cellSize * 2;
-    const o1x = Math.round((cameraPosition.x - extentX) / q1) * q1;
-    const o1y = Math.round((cameraPosition.y - extentY) / q1) * q1;
-    if (!cellChanged && ox === originX && oy === originY && o1x === origin1X && o1y === origin1Y)
-      return;
+    if (!cellChanged && ox === originX && oy === originY) return;
     originX = ox;
     originY = oy;
-    origin1X = o1x;
-    origin1Y = o1y;
-    // Propagate to every shader holding a uGridOrigin/uGridOrigin1 copy. Uniform-buffer writes
-    // only — dims and textures are unchanged, so NO bind groups rebuild. The voxelize cluster
-    // re-uploads its own copies from getGridBox()/getGridBox1() at the head of every voxelize();
-    // sunShadow + the emitter clustering read the live accessors each frame and need no push.
+    // Propagate to every shader holding a uGridOrigin copy. Uniform-buffer writes only — dims and
+    // textures are unchanged, so NO bind groups rebuild. The voxelize cluster re-uploads its own
+    // copy from getGridBox() at the head of every voxelize(); sunShadow + the emitter clustering
+    // read the live accessors each frame and need no push.
     originArr[0] = originX;
     originArr[1] = originY;
-    originArr1[0] = origin1X;
-    originArr1[1] = origin1Y;
     coneSys.uploadGridOrigin();
     screenProbe.uploadGridOrigin();
   }
@@ -446,16 +376,12 @@ export function createVoxelSystem({
     config,
     originArr,
     dimsArr,
-    originArr1,
-    dimsArr1,
     getCellSize: () => cellSize,
     getVoxelRadiance: () => textures.voxelRadiance,
-    getVoxelRadiance1: () => textures1.voxelRadiance,
     aniso: anisoVolume,
     getGBuffer: () => ({ depth: gDepth, normal: gNormal }),
     emitterLights,
     getAnisoMode: () => anisoMode,
-    getClipmapMode: () => clipmapMode,
     getDebugTargetView: () => compositeSys.getOutputView(),
     onResourcesRecreated: () => coneSys.rebindGroups(),
     voxelSampler,
@@ -502,11 +428,10 @@ export function createVoxelSystem({
     voxelizeSys.voxelize(encoder);
   }
 
-  // Build BOTH radiance mip pyramids — delegates to the per-level mip-pyramid sub-systems. Must
-  // run AFTER voxelize() (each level 0 reads the mip 0 voxelize wrote) and in the SAME encoder.
+  // Build the voxelRadiance mip pyramid — delegates to the mip-pyramid sub-system. Must run AFTER
+  // voxelize() (level 0 reads mip 0 that voxelize wrote) and in the SAME encoder.
   function mips(encoder: GPUCommandEncoder) {
     mipPyramid.run(encoder);
-    mipPyramid1.run(encoder);
   }
 
   // Aniso BASE / VOLUME passes — delegate to the aniso sub-system.
@@ -549,8 +474,6 @@ export function createVoxelSystem({
     autoCell = false;
     textures.voxelRadiance.destroy();
     textures.voxelEmission.destroy();
-    textures1.voxelRadiance.destroy();
-    textures1.voxelEmission.destroy();
     buildGrid(newCellSize);
   }
 
@@ -559,12 +482,6 @@ export function createVoxelSystem({
   // No rebuild: A/B the anti-leak live.
   function setAnisoMode(on: boolean) {
     anisoMode = on;
-  }
-
-  // Runtime clipmap A/B: off = the gather ignores level 1 entirely (exact old single-box path).
-  // The level-1 volumes keep being voxelized either way (their cost is the honest baseline).
-  function setClipmapMode(on: boolean) {
-    clipmapMode = on;
   }
 
   // Canvas resized: rebind the (new) G-buffer textures, recreate the canvas-sized cone +
@@ -645,7 +562,6 @@ export function createVoxelSystem({
     setCellSize,
     setConeScale: coneSys.setConeScale,
     setAnisoMode,
-    setClipmapMode,
     setFollowCamera,
     setGridSnapCells,
     setAutoCell,
@@ -665,9 +581,6 @@ export function createVoxelSystem({
     },
     get gridSnapCells() {
       return snapCells;
-    },
-    get clipmapMode() {
-      return clipmapMode;
     },
     get autoCell() {
       return autoCell;

@@ -30,7 +30,6 @@ TEXTURE_BINDING` (written by a compute pass via `textureStore`, read later as a 
 | --------------------------------- | ----------------------------------- | --------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------- | --- | --------------------- |
 | `voxelRadiance`                   | 3D rgba16float + **mip pyramid**    | `voxelize` (mip0), `mips` (mip1..N)           | `anisoBase`, screen-probe gather        | rgb = direct-lit radiance (sun N·L·vis) + emission; a = occupancy. ~38 MB on the default grid        |
 | `voxelEmission`                   | 3D rgba16float, single mip          | `voxelize` (emitter scatter)                   | `voxelize` (occluder merge + mip0 copy) | Emitter-class scatter target; merged into `voxelRadiance` mip0 (sum rgb, max a) — kills the emitter/occluder shared-voxel overwrite |
-| `voxelRadiance1` / `voxelEmission1` | same pair, **clipmap level 1**    | `voxelize` (same dispatches, one work list)    | screen-probe gather (far field)         | Coarse cascade: cell 2×, XY extent 2×, Z extent same (dimZ/2), own camera-snapped origin. Iso-only (no aniso); cone reads it beyond `CLIP_SWITCH` / outside the L0 box — replaces the L0 deep mips (whose block re-partition caused the pan "re-forming" artifact) and extends GI reach |
 | aniso ×6 (`negX/posX/…/posZ`)     | 3D rgba16float ×6 + mips, **½ res** | `anisoBase` (lvl0), `anisoVolume` (lvl c→c+1) | screen-probe gather                     | Directional volumes (anti-leak); the cone picks the 3 volumes facing the cone dir and blends by dir² |
 | screen-probe atlas: `shR/shG/shB` | 2D rgba16float                      | gather                                        | `refine`, cone resolve, debug           | SH-L1 coefficients (per channel)                                                                     |
 | `nrm`                             | 2D rgba16float                      | gather                                        | gather (history validity), cone resolve | probe world normal;                                                                                  | nrm | ²≈0 = invalid history |
@@ -67,16 +66,15 @@ reorder). It lives in one place — `voxel.renderFrame(encoder)` — which both 
    sunDepth ─────────────► sunDepthTexture ──┐
             │                                 │ (sun shadow)
             ▼                                 │
-   voxelize (ONE work list covers BOTH clipmap levels — see buildVoxelAABBs):
-     clear voxelEmission[0,1]                 │
-     scatter emitters  (uPass=1) ─► voxelEmission[0,1]
-     copy voxelEmission_i ─► voxelRadiance_i mip0  (doubles as the mip0 clear)
+   voxelize:                                  │
+     clear voxelEmission                      │
+     scatter emitters  (uPass=1) ─► voxelEmission
+     copy voxelEmission ─► voxelRadiance mip0    (doubles as the mip0 clear)
      scatter occluders (uPass=0)  ◄───────────┘  injects shadowed sun; MERGES
-            │  voxelRadiance[0,1] mip0           voxelEmission_i (sum rgb, max a)
+            │  voxelRadiance mip0                voxelEmission (sum rgb, max a)
             ▼
-   mips (mip1..N, one pass per level, BOTH radiance pyramids)
-            │  voxelRadiance[0,1] pyramids  (the cone reads L0 lods ≤ ~3; deeper footprints
-            │                                switch to the L1 pyramid — see sample_field)
+   mips (mip1..N, one pass per level)
+            │  voxelRadiance pyramid
             ▼
    anisoBase (lvl0 from iso mip0)  ──►  6 aniso volumes lvl0
             │
@@ -133,9 +131,10 @@ chain), because `refine` reads its raw SH as the subdivision signal.
   the camera (`updateGridOrigin`, head of `setLights`/`renderFrame`), snapped to `snapCells`-voxel
   multiples so voxel centers in the overlap land on the same world points (no pan shimmer), and
   with `autoCell` the CELL SIZE follows the zoom in discrete ×2 ladder steps (constant texture
-  dims, extent = dims × cell — uniform writes only, no texture rebuild; L0 targets ~80% of the
-  visible diagonal, corners + off-screen margin ride L1). Toggles: `setFollowCamera`,
-  `setAutoCell`, `setGridSnapCells`, `setClipmapMode` (GUI A/B).
+  dims, extent = dims × cell — uniform writes only, no texture rebuild; the box targets ~80% of
+  the visible ground diagonal). The ladder makes perceived lattice artifacts scale-invariant —
+  every zoom sees the reference close-zoom picture. Toggles: `setFollowCamera`, `setAutoCell`,
+  `setGridSnapCells` (GUI A/B).
 - ⚠️ Minor boundary leak: some "baked" values also ride live uniforms (cone `params3` carries
   `tile`/normalPow/planeK/resolveRadius). Left as-is; documented here.
 
