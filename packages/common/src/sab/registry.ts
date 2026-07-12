@@ -51,7 +51,8 @@ export const BRIDGE_COLUMNS: readonly ColumnSpec[] = [
 // Bumped whenever the table above changes; the worker asserts it matches its own
 // computed value so a layout drift fails loud instead of corrupting memory.
 // v2: added the OPS SAB (structural-op ring) to the bundle.
-export const LAYOUT_VERSION = 2;
+// v3: added the HITS SAB (query-result ring, worker → main).
+export const LAYOUT_VERSION = 3;
 
 export const CAPACITY = delegate.defaultSize; // 30_000; NEVER change without bumping LAYOUT_VERSION
 
@@ -81,6 +82,20 @@ const OPS_STATE_BYTES = OPS_SLOTS * Int32Array.BYTES_PER_ELEMENT;
 const OPS_PAYLOAD_BYTE_OFFSET = OPS_STATE_BYTES;
 const OPS_PAYLOAD_BYTES = OPS_SLOTS * OPS_PAYLOAD_STRIDE * Float64Array.BYTES_PER_ELEMENT;
 export const OPS_SAB_BYTES = OPS_PAYLOAD_BYTE_OFFSET + OPS_PAYLOAD_BYTES;
+
+// ---- HITS layout (query-result ring, worker → main) ---------------------------
+//
+// The mirror of the OPS ring with the roles swapped: single-producer (worker) /
+// single-consumer (main). Carries results of world queries (CAST_SHAPE ops) back to
+// main: one record per intersected collider. Same gate protocol as OPS — the Int32
+// STATE slot is 0 = empty / 1 = unconsumed record; the payload is written before the
+// gate flips (release), read after (acquire), then the consumer zeroes the slot.
+export const HITS_SLOTS = 1024;
+export const HITS_PAYLOAD_STRIDE = 3; // f64 per record: queryId, sourceEid, hitEid
+const HITS_STATE_BYTES = HITS_SLOTS * Int32Array.BYTES_PER_ELEMENT;
+const HITS_PAYLOAD_BYTE_OFFSET = HITS_STATE_BYTES; // slots*4 is 8-byte aligned
+const HITS_PAYLOAD_BYTES = HITS_SLOTS * HITS_PAYLOAD_STRIDE * Float64Array.BYTES_PER_ELEMENT;
+export const HITS_SAB_BYTES = HITS_PAYLOAD_BYTE_OFFSET + HITS_PAYLOAD_BYTES;
 
 // ---- Pure offset math (identical on both threads) ---------------------------
 
@@ -118,6 +133,7 @@ export function computeLayout(
 
 export type SabBundle = {
   readonly opsSab: SharedArrayBuffer;
+  readonly hitsSab: SharedArrayBuffer;
   readonly dataSab: SharedArrayBuffer;
   readonly controlSab: SharedArrayBuffer;
   readonly layoutVersion: number;
@@ -136,9 +152,10 @@ export function allocate(): SabBundle {
   }
   const layout = computeLayout();
   const opsSab = new SharedArrayBuffer(OPS_SAB_BYTES);
+  const hitsSab = new SharedArrayBuffer(HITS_SAB_BYTES);
   const dataSab = new SharedArrayBuffer(layout.dataByteLength);
   const controlSab = new SharedArrayBuffer(CONTROL_SLOTS * Int32Array.BYTES_PER_ELEMENT);
-  return { dataSab, controlSab, opsSab, layoutVersion: LAYOUT_VERSION };
+  return { dataSab, controlSab, opsSab, hitsSab, layoutVersion: LAYOUT_VERSION };
 }
 
 // Bind the OPS ring views over the received OPS SAB (both threads call identically).
@@ -153,6 +170,18 @@ export function bindOps(opsSab: ArrayBufferLike): OpsRingViews {
       opsSab as ArrayBufferLike,
       OPS_PAYLOAD_BYTE_OFFSET,
       OPS_SLOTS * OPS_PAYLOAD_STRIDE,
+    ),
+  };
+}
+
+// Bind the HITS ring views over the received HITS SAB (both threads call identically).
+export function bindHits(hitsSab: ArrayBufferLike): OpsRingViews {
+  return {
+    state: new Int32Array(hitsSab as ArrayBufferLike, 0, HITS_SLOTS),
+    payload: new Float64Array(
+      hitsSab as ArrayBufferLike,
+      HITS_PAYLOAD_BYTE_OFFSET,
+      HITS_SLOTS * HITS_PAYLOAD_STRIDE,
     ),
   };
 }

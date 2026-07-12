@@ -229,7 +229,7 @@ function addVoxelControls(gui: GUI, voxel: VoxelSystem): void {
     .onFinishChange(rebuild);
   probeFolder.add(voxel.config, "aoReach", 1, 16, 0.5).name("AO reach").onFinishChange(rebuild);
 
-  // Composite: ambient floor + HDR exposure + sun-dim penumbra.
+  // Composite: ambient floor + HDR exposure.
   const compositeFolder = gui.addFolder("Composite");
   compositeFolder
     .add(voxel.config, "ambient", 0, 0.5, 0.01)
@@ -239,15 +239,11 @@ function addVoxelControls(gui: GUI, voxel: VoxelSystem): void {
     .add(voxel.config, "exposure", 0.1, 4, 0.05)
     .name("exposure")
     .onFinishChange(rebuild);
+  // Sun cast-shadow softness (DF-style — one cone toward the sun per half-res pixel in the cone
+  // pass; penumbra grows with occluder distance).
   compositeFolder
-    .add(voxel.config, "penumbra", 0, 12, 0.5)
-    .name("penumbra (sun-dim)")
-    .onFinishChange(rebuild);
-  // Base sun-shadow PCF radius applied even at full sun → smooths the shadow-map texel staircase.
-  // 1 = near-hard. The sun frustum also auto-fits the camera view, so steps shrink on zoom.
-  compositeFolder
-    .add(voxel.config, "shadowBaseSpread", 1, 6, 0.25)
-    .name("shadow softness")
+    .add(voxel.config, "sunSoftness", 0.01, 0.3, 0.005)
+    .name("sun shadow softness")
     .onFinishChange(rebuild);
 }
 

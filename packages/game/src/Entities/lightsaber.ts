@@ -53,5 +53,15 @@ export function buildLightsaber(world: EngineWorld, { scale }: EntityOptions): E
   LightEmitter.addComponent(world, blade, 5, 0.5);
   add(blade);
 
+  // The blade IS the weapon's hit volume: the factory owns its geometry, so it also
+  // attaches the ShapeCaster (hilt top → tip in root-local space, a bit fatter than
+  // the visual blade). Wielders that need self-hit exclusion set excludeEid on it.
+  const { ShapeCaster } = getEngineComponents(world);
+  ShapeCaster.addComponent(world, root, {
+    localFrom: [0, 0, 0.5],
+    localTo: [0, 0, 0.5 + bladeLen],
+    radius: 0.25,
+  });
+
   return { root, bones: { root }, animations: {} };
 }

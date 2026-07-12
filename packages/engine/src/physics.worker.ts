@@ -20,10 +20,12 @@ import { createRigidBodyStateSystem } from "./ECS/Systems/createRigidBodyStateSy
 import { adoptEntity } from "../../common/src/sab/adoptEntity.ts";
 import {
   decodeOp,
+  isCastShape,
   isInitMessage,
   isMoveBody,
   isSetVelocity,
   isSpawnBody,
+  type CastShapeOp,
   type MoveBodyOp,
   type SetVelocityOp,
   type SpawnBodyOp,
@@ -40,6 +42,7 @@ import {
 let initPhysicalWorld: typeof import("./Physics/initPhysicalWorld.ts").initPhysicalWorld | null =
   null;
 let spawnBodyFromOp: typeof import("./Physics/spawnBodyFromOp.ts").spawnBodyFromOp | null = null;
+let castShapeFromOp: typeof import("./Physics/castShapeFromOp.ts").castShapeFromOp | null = null;
 
 // ---- DIAGNOSTIC LOGGING (temporary; remove once the worker is confirmed) -----
 let bodyCount = 0;
@@ -83,17 +86,20 @@ self.onmessage = (ev: MessageEvent<WorkerInbound>) => {
 
 async function onInit(bundle: {
   opsSab: SharedArrayBuffer;
+  hitsSab: SharedArrayBuffer;
   dataSab: SharedArrayBuffer;
   controlSab: SharedArrayBuffer;
   layoutVersion: number;
 }): Promise<void> {
   try {
-    const [physMod, spawnMod] = await Promise.all([
+    const [physMod, spawnMod, castMod] = await Promise.all([
       import("./Physics/initPhysicalWorld.ts"),
       import("./Physics/spawnBodyFromOp.ts"),
+      import("./Physics/castShapeFromOp.ts"),
     ]);
     initPhysicalWorld = physMod.initPhysicalWorld;
     spawnBodyFromOp = spawnMod.spawnBodyFromOp;
+    castShapeFromOp = castMod.castShapeFromOp;
 
     world = createPhysicsWorkerWorld(bundle);
     physicalWorld = initPhysicalWorld();
@@ -121,7 +127,21 @@ function drainOps(): void {
     if (isSpawnBody(op)) spawnBody(op);
     else if (isMoveBody(op)) moveBody(op);
     else if (isSetVelocity(op)) setVelocity(op);
+    else if (isCastShape(op)) castShape(op);
     else despawnBody(op.eid);
+  });
+}
+
+function castShape(op: CastShapeOp): void {
+  const w = world!;
+  const pw = physicalWorld!;
+  const { RigidBodyRef } = getEngineComponents(w);
+  const sab = getEngineSab(w);
+
+  const excludePid = op.excludeEid !== 0 ? RigidBodyRef.id[op.excludeEid] : 0;
+  castShapeFromOp!(pw, op, excludePid, (hitPid) => {
+    const hitEid = pidToEid.get(hitPid);
+    if (hitEid !== undefined) sab.pushHit(op.queryId, op.casterEid, hitEid);
   });
 }
 

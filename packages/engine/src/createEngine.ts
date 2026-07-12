@@ -8,6 +8,9 @@ import {
 } from "./ECS/createEngineWorld.ts";
 import { createApplyRigidBodyToTransformSystem } from "./ECS/Systems/createApplyRigidBodyToTransformSystem.ts";
 import { createApplyVelocitySystem } from "./ECS/Systems/createApplyVelocitySystem.ts";
+import { createShapeCastSystem } from "./ECS/Systems/createShapeCastSystem.ts";
+import { createApplyShapeCastResultsSystem } from "./ECS/Systems/createApplyShapeCastResultsSystem.ts";
+import { createColliderDebugSystem } from "./ECS/Systems/createColliderDebugSystem.ts";
 import { createPhysicsWorker } from "./Physics/createPhysicsWorker.ts";
 import { createRenderTarget } from "./createRenderTarget.ts";
 import { EngineDI, type EngineApi } from "./DI/EngineDI.ts";
@@ -49,11 +52,19 @@ export async function createEngine({
   );
   const applyRigidBodyToLocalTransform = createApplyRigidBodyToTransformSystem(world);
   const applyVelocity = createApplyVelocitySystem(world);
+  const requestShapeCasts = createShapeCastSystem(world);
+  const applyShapeCastResults = createApplyShapeCastResultsSystem(world);
+  const drawColliderDebug = createColliderDebugSystem(world, sceneRoot);
 
   function tick(delta: number): void {
+    // Results first: gameplay (which ran before tick) sees last frame's hits;
+    // requests last: they need the GlobalTransform the transform system just wrote.
+    applyShapeCastResults();
     applyVelocity();
     applyRigidBodyToLocalTransform();
+    drawColliderDebug();
     execTransformSystem();
+    requestShapeCasts();
     RenderDI.renderFrame?.(delta);
   }
 

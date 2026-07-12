@@ -15,6 +15,8 @@ import {
   setCameraPosition,
 } from "../../../../renderer/src/ECS/Systems/ResizeSystem.ts";
 import { buildUnit, type UnitInstance } from "../../../src/Entities/unit.ts";
+import { buildSwordsman } from "../../../src/Entities/swordsman.ts";
+import { buildLightsaber } from "../../../src/Entities/lightsaber.ts";
 import { createWanderComponent, createWanderSystem } from "./wander.ts";
 
 // Proto scene: 3 units, each backed by a dynamic sphere collider, wandering to random
@@ -36,14 +38,18 @@ const UNIT_COUNT = 3;
 const GROUND_Z = 0; // carrier sits on the ground plane; the unit's own HOVER lifts it
 const FORWARD_OFFSET = Math.PI / 2; // unit model faces +Y; turn it toward travel
 
-type Unit = { bodyEid: number; carrier: number; instance: UnitInstance; yaw: number };
+type Unit = { bodyEid: number; carrier: number; instance: UnitInstance; yaw: number; hurt: number };
+
+const UNIT_COLOR: [number, number, number] = [0.13, 0.34, 0.56];
+const HURT_COLOR: [number, number, number] = [0.9, 0.15, 0.1];
 
 async function main(): Promise<void> {
   const canvas = document.getElementById("c") as HTMLCanvasElement;
 
   const engine = await createEngine({ canvas });
   const world = engine.world as EngineWorld;
-  const { Children, RigidBodyState, Velocity, LocalTransform } = getEngineComponents(world);
+  const { Children, RigidBodyState, Velocity, LocalTransform, ShapeCaster, Color } =
+    getEngineComponents(world);
 
   const Wander = createWanderComponent(world);
   const wander = createWanderSystem(world, Wander);
@@ -92,7 +98,38 @@ async function main(): Promise<void> {
     const instance = buildUnit(world, { scale: SCALE });
     Children.addChild(carrier, instance.root);
 
-    units.push({ bodyEid, carrier, instance, yaw: 0 });
+    units.push({ bodyEid, carrier, instance, yaw: 0, hurt: 0 });
+  }
+  const unitByBodyEid = new Map(units.map((u) => [u.bodyEid, u]));
+
+  // A swordsman at the origin, endlessly swinging. The lightsaber factory already
+  // attached a ShapeCaster along the blade; wanderers straying into the swing flash red.
+  const swordsman = buildSwordsman(world, {
+    scale: SCALE,
+    parts: { unit: buildUnit, sword: buildLightsaber },
+  });
+  Children.addChild(engine.sceneRoot, swordsman.root);
+  const swordRoot = swordsman.bones["sword/root"];
+
+  function applyBladeHits(delta: number): void {
+    const hitCount = ShapeCaster.getHitCount(swordRoot);
+    for (let i = 0; i < hitCount; i++) {
+      const victim = unitByBodyEid.get(ShapeCaster.getHit(swordRoot, i));
+      if (victim) victim.hurt = 1;
+    }
+    for (let i = 0; i < units.length; i++) {
+      const u = units[i];
+      if (u.hurt === 0) continue;
+      u.hurt = Math.max(0, u.hurt - delta * 2);
+      const t = u.hurt;
+      Color.set$(
+        u.instance.bones.body,
+        UNIT_COLOR[0] + (HURT_COLOR[0] - UNIT_COLOR[0]) * t,
+        UNIT_COLOR[1] + (HURT_COLOR[1] - UNIT_COLOR[1]) * t,
+        UNIT_COLOR[2] + (HURT_COLOR[2] - UNIT_COLOR[2]) * t,
+        1,
+      );
+    }
   }
 
   function placeUnit(u: Unit, delta: number): void {
@@ -118,6 +155,8 @@ async function main(): Promise<void> {
 
     wander();
     for (let i = 0; i < units.length; i++) placeUnit(units[i], delta);
+    swordsman.animations.sword_slice(delta);
+    applyBladeHits(delta);
     engine.tick(delta);
 
     requestAnimationFrame(loop);

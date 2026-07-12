@@ -7,6 +7,7 @@ export const OpCode = {
   DESPAWN_BODY: 2,
   MOVE_BODY: 3,
   SET_VELOCITY: 4,
+  CAST_SHAPE: 5,
 } as const;
 export type OpCode = (typeof OpCode)[keyof typeof OpCode];
 
@@ -58,7 +59,28 @@ export type SetVelocityOp = {
   readonly z: number;
 };
 
-export type StructuralOp = SpawnBodyOp | DespawnBodyOp | MoveBodyOp | SetVelocityOp;
+// A world query, not a mutation: intersect a capsule spanning the from→to segment
+// (thickness `radius`) against every collider, excluding excludeEid's body (the
+// caster itself usually has no body — the wielder's collider does, and must not
+// self-hit). The worker answers each intersection with one HITS-ring record
+// (queryId, casterEid, hitEid): casterEid routes results back to the querying
+// entity; queryId is a main-private monotonic stamp so the consumer can group a
+// query's records and drop stale ones. The worker just echoes both.
+export type CastShapeOp = {
+  readonly op: typeof OpCode.CAST_SHAPE;
+  readonly queryId: number;
+  readonly casterEid: number;
+  readonly excludeEid: number;
+  readonly fromX: number;
+  readonly fromY: number;
+  readonly fromZ: number;
+  readonly toX: number;
+  readonly toY: number;
+  readonly toZ: number;
+  readonly radius: number;
+};
+
+export type StructuralOp = SpawnBodyOp | DespawnBodyOp | MoveBodyOp | SetVelocityOp | CastShapeOp;
 
 export function toSpawnOp(eid: number, spec: BodySpec): SpawnBodyOp {
   return { op: OpCode.SPAWN_BODY, eid, ...spec };
@@ -69,6 +91,7 @@ export type InitMessage = {
   readonly type: "init";
   readonly bundle: {
     readonly opsSab: SharedArrayBuffer;
+    readonly hitsSab: SharedArrayBuffer;
     readonly dataSab: SharedArrayBuffer;
     readonly controlSab: SharedArrayBuffer;
     readonly layoutVersion: number;
@@ -97,6 +120,29 @@ export function despawnBody(eid: number): DespawnBodyOp {
 
 export function setVelocity(eid: number, x: number, y: number, z: number): SetVelocityOp {
   return { op: OpCode.SET_VELOCITY, eid, x, y, z };
+}
+
+export function castShape(
+  queryId: number,
+  casterEid: number,
+  excludeEid: number,
+  from: Vec3,
+  to: Vec3,
+  radius: number,
+): CastShapeOp {
+  return {
+    op: OpCode.CAST_SHAPE,
+    queryId,
+    casterEid,
+    excludeEid,
+    fromX: from.x,
+    fromY: from.y,
+    fromZ: from.z,
+    toX: to.x,
+    toY: to.y,
+    toZ: to.z,
+    radius,
+  };
 }
 
 export function moveBody(
@@ -135,12 +181,29 @@ export function isSetVelocity(op: StructuralOp): op is SetVelocityOp {
   return op.op === OpCode.SET_VELOCITY;
 }
 
+export function isCastShape(op: StructuralOp): op is CastShapeOp {
+  return op.op === OpCode.CAST_SHAPE;
+}
+
 // ---- OPS-ring record codec (plan §4.3) --------------------------------------
 const KIND_CODE = { box: 0, groundBox: 1, sphere: 2 } as const;
 
 // Encode an op into the payload at slot `slot`; returns the opcode for the STATE gate.
 export function encodeOp(op: StructuralOp, payload: Float64Array, slot: number): number {
   const b = slot * OPS_PAYLOAD_STRIDE;
+  if (op.op === OpCode.CAST_SHAPE) {
+    payload[b] = op.queryId;
+    payload[b + 1] = op.casterEid;
+    payload[b + 2] = op.excludeEid;
+    payload[b + 3] = op.fromX;
+    payload[b + 4] = op.fromY;
+    payload[b + 5] = op.fromZ;
+    payload[b + 6] = op.toX;
+    payload[b + 7] = op.toY;
+    payload[b + 8] = op.toZ;
+    payload[b + 9] = op.radius;
+    return OpCode.CAST_SHAPE;
+  }
   payload[b] = op.eid;
   if (op.op === OpCode.DESPAWN_BODY) return OpCode.DESPAWN_BODY;
   if (op.op === OpCode.MOVE_BODY) {
@@ -177,6 +240,21 @@ export function encodeOp(op: StructuralOp, payload: Float64Array, slot: number):
 
 export function decodeOp(opcode: number, payload: Float64Array, slot: number): StructuralOp {
   const b = slot * OPS_PAYLOAD_STRIDE;
+  if (opcode === OpCode.CAST_SHAPE) {
+    return {
+      op: OpCode.CAST_SHAPE,
+      queryId: payload[b],
+      casterEid: payload[b + 1],
+      excludeEid: payload[b + 2],
+      fromX: payload[b + 3],
+      fromY: payload[b + 4],
+      fromZ: payload[b + 5],
+      toX: payload[b + 6],
+      toY: payload[b + 7],
+      toZ: payload[b + 8],
+      radius: payload[b + 9],
+    };
+  }
   const eid = payload[b];
   if (opcode === OpCode.DESPAWN_BODY) return { op: OpCode.DESPAWN_BODY, eid };
   if (opcode === OpCode.MOVE_BODY) {

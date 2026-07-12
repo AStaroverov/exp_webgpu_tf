@@ -17,12 +17,28 @@ import { despawnBody, encodeOp, toSpawnOp, type BodySpec } from "../../Physics/o
 // byte offsets, so both threads point at byte-identical memory and this component does
 // no offset math and takes no SAB constructor argument. There is no single-thread
 // fallback (plan §2) — a world without a shared SAB throws on ctx.sab.
+// Collider geometry kind, kept per entity alongside the pose (see the `collider*`
+// columns below). Mirrors BodySpec.kind as a number so debug/readback code can
+// reconstruct the collider without the op (which main fires and forgets).
+export const ColliderKind = {
+  box: 0,
+  groundBox: 1,
+  sphere: 2,
+} as const;
+export type ColliderKind = (typeof ColliderKind)[keyof typeof ColliderKind];
+
 export const createRigidBodyStateComponent = defineComponent((RigidBodyState, ctx) => {
   const sab = ctx.sab;
   const positionBanks = sab.banks("RigidBodyState.position"); // banks:2
   const rotationBanks = sab.banks("RigidBodyState.rotation"); // banks:2
   const linvel = sab.banks("RigidBodyState.linvel")[0]; // banks:1
   const angvel = sab.banks("RigidBodyState.angvel")[0]; // banks:1
+
+  // Collider GEOMETRY (thread-private, not a bridge column): the spec's kind and
+  // dimensions — halfExtents for boxes, radius in [0] for spheres. Static per body;
+  // only debug visualization and readback consume it, the worker builds from the op.
+  const colliderKind = ctx.table.flat(Float64Array);
+  const colliderDims = ctx.table.nested(Float64Array, 3);
 
   const writePosition = () => positionBanks[sab.writeBank()];
   const writeRotation = () => rotationBanks[sab.writeBank()];
@@ -52,6 +68,12 @@ export const createRigidBodyStateComponent = defineComponent((RigidBodyState, ct
     rotation: readAccessor(rotationBanks),
     linvel,
     angvel,
+    getColliderKind(eid: number): ColliderKind {
+      return colliderKind.get(eid) as ColliderKind;
+    },
+    getColliderDim(eid: number, index: number): number {
+      return colliderDims.get(eid, index);
+    },
     // Giving an entity RigidBodyState IS the spawn command (the public ECS surface — no
     // postOps method call). The BodySpec is REQUIRED: it seeds BOTH pose banks to the
     // spawn pose (so the shape renders there immediately, before the worker's first
@@ -60,6 +82,16 @@ export const createRigidBodyStateComponent = defineComponent((RigidBodyState, ct
     // it re-seeds the shared banks (same values) and, being a CONSUMER, does NOT re-emit.
     addComponent(world: World, eid: number, spec: BodySpec) {
       addComponent(world, eid, RigidBodyState);
+      colliderKind.set(eid, ColliderKind[spec.kind]);
+      if (spec.kind === "sphere") {
+        colliderDims.set(eid, 0, spec.radius);
+        colliderDims.set(eid, 1, 0);
+        colliderDims.set(eid, 2, 0);
+      } else {
+        colliderDims.set(eid, 0, spec.halfExtents.x);
+        colliderDims.set(eid, 1, spec.halfExtents.y);
+        colliderDims.set(eid, 2, spec.halfExtents.z);
+      }
       // Identity quaternion (w = 1) + the body CENTER, written to both banks.
       for (const p of positionBanks) {
         p.set(eid, 0, spec.position.x).set(eid, 1, spec.position.y).set(eid, 2, spec.position.z);

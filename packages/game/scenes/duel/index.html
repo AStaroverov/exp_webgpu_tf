@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>duel — two units fighting</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0b0d12;
+        overflow: hidden;
+      }
+      #c {
+        width: 100vw;
+        height: 100vh;
+        display: block;
+      }
+      #hud {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        color: #cdd5e0;
+        font: 13px ui-monospace, monospace;
+        white-space: pre;
+        pointer-events: none;
+        text-shadow: 0 1px 2px #000;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="c"></canvas>
+    <div id="hud"></div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

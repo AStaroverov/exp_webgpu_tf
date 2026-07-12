@@ -1,7 +1,10 @@
 import {
   bindFromSAB,
+  bindHits,
   bindOps,
   CONTROL,
+  HITS_PAYLOAD_STRIDE,
+  HITS_SLOTS,
   nextEid as nextEidFromControl,
   OPS_SLOTS,
   type BoundColumns,
@@ -18,6 +21,10 @@ export type Sab = ComponentSab & {
   publish(physTimeMs: number): void;
   nextEid(): number;
   drainOps(handler: (opcode: number, payload: Float64Array, slot: number) => void): void;
+  // HITS ring (query results, worker → main) — the OPS ring with roles swapped:
+  // the WORKER produces records, MAIN consumes them.
+  pushHit(queryId: number, casterEid: number, hitEid: number): void;
+  drainHits(handler: (queryId: number, casterEid: number, hitEid: number) => void): void;
 };
 export type SabRole =
   | { readonly kind: "producer" } // MAIN: allocate fresh SABs
@@ -26,9 +33,12 @@ export type SabRole =
 export function bindBundle(bundle: SabBundle, isProducer: boolean): Sab {
   const { columns, control } = bindFromSAB(bundle.dataSab, bundle.controlSab, bundle.layoutVersion);
   const { state: opsState, payload: opsPayload } = bindOps(bundle.opsSab);
+  const { state: hitsState, payload: hitsPayload } = bindHits(bundle.hitsSab);
 
   let writeCursor = 0;
   let readCursor = 0;
+  let hitsWriteCursor = 0;
+  let hitsReadCursor = 0;
 
   const bankCache = new Map<string, NestedArray<Float64ArrayConstructor>[]>();
 
@@ -77,6 +87,32 @@ export function bindBundle(bundle: SabBundle, isProducer: boolean): Sab {
         handler(opcode, opsPayload, slot);
         Atomics.store(opsState, slot, 0); // free the slot for the producer
         readCursor++;
+      }
+    },
+    pushHit(queryId: number, casterEid: number, hitEid: number) {
+      const slot = hitsWriteCursor % HITS_SLOTS;
+      if (Atomics.load(hitsState, slot) !== 0) {
+        // Unlike pushOp, dropping a hit must not kill the physics worker — a stalled
+        // main (background tab) would otherwise crash the simulation. The result is
+        // simply lost; the next frame's query re-reports a still-overlapping target.
+        console.error(`sab.pushHit: HITS ring full at slot ${slot} (main not draining)`);
+        return;
+      }
+      const b = slot * HITS_PAYLOAD_STRIDE;
+      hitsPayload[b] = queryId;
+      hitsPayload[b + 1] = casterEid;
+      hitsPayload[b + 2] = hitEid;
+      Atomics.store(hitsState, slot, 1); // PUBLISH (release)
+      hitsWriteCursor++;
+    },
+    drainHits(handler: (queryId: number, casterEid: number, hitEid: number) => void) {
+      for (;;) {
+        const slot = hitsReadCursor % HITS_SLOTS;
+        if (Atomics.load(hitsState, slot) === 0) return; // ring empty up to here
+        const b = slot * HITS_PAYLOAD_STRIDE;
+        handler(hitsPayload[b], hitsPayload[b + 1], hitsPayload[b + 2]);
+        Atomics.store(hitsState, slot, 0); // free the slot for the producer
+        hitsReadCursor++;
       }
     },
   };

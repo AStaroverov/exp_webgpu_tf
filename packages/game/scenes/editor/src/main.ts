@@ -8,6 +8,7 @@ import {
   getEngineComponents,
 } from "../../../../engine/src/ECS/createEngineWorld.js";
 import { removeEntityTree } from "../../../../engine/src/ECS/hierarchy.js";
+import { ColliderDebug } from "../../../../engine/src/ECS/Systems/createColliderDebugSystem.js";
 import { ShapeKind } from "../../../../renderer/src/ECS/Components/Shape.js";
 import { createRectangle } from "../../../../renderer/src/ECS/Entities/Shapes.js";
 import { SunLight } from "../../../../renderer/src/ECS/Systems/SunLight.js";
@@ -51,6 +52,7 @@ async function main(): Promise<void> {
   const animSelectEl = document.getElementById("animation-select") as HTMLSelectElement;
   const scaleEl = document.getElementById("scale-input") as HTMLInputElement;
   const regenBtn = document.getElementById("regen") as HTMLButtonElement;
+  const collidersEl = document.getElementById("colliders-toggle") as HTMLInputElement;
   const treeEl = document.getElementById("tree") as HTMLElement;
   const componentsEl = document.getElementById("components") as HTMLElement;
   const inspectorEl = document.getElementById("inspector") as HTMLElement;
@@ -428,6 +430,13 @@ async function main(): Promise<void> {
     }),
   );
   subs.add(fromEvent(regenBtn, "click").subscribe(() => rebuild$.next()));
+
+  ColliderDebug.enabled = collidersEl.checked;
+  subs.add(
+    fromEvent(collidersEl, "change").subscribe(() => {
+      ColliderDebug.enabled = collidersEl.checked;
+    }),
+  );
 
   subs.add(
     fromEvent<PointerEvent>(treeEl, "click").subscribe((e) => {
