@@ -1,5 +1,4 @@
 import { getTypeTypedArray } from "../../../Shader/index.ts";
-import { shaderMeta as voxelizeMeta } from "./stages/2_voxelize/voxelize.shader.ts";
 import { DEFAULT_VOXEL_BAKED_CONFIG, type VoxelBakedConfig } from "./core/voxelConfig.ts";
 import {
   createVoxelTextures,
@@ -11,18 +10,16 @@ import {
 import type { SceneInstances } from "../SDFSystem/createDrawShapeSystem.ts";
 import { createVoxelizeSystem } from "./stages/2_voxelize/voxelizeSystem.ts";
 import { createEmitterLightsSystem } from "./lights/emitterLightsSystem.ts";
-import { createSunShadowSystem } from "./stages/1_sunShadow/sunShadowSystem.ts";
 import { createMipPyramidSystem } from "./stages/3_mipPyramid/mipPyramidSystem.ts";
 import { createAnisoVolumeSystem } from "./stages/4_anisoVolume/anisoVolumeSystem.ts";
 import { createCompositeSystem } from "./stages/7_composite/compositeSystem.ts";
 import { createScreenProbeSystem } from "./stages/5_screenProbe/screenProbeSystem.ts";
 import { createConeSystem } from "./stages/6_cone/coneSystem.ts";
-import { SunLight } from "../SunLight.ts";
 import { cameraElevation, cameraPosition, cameraZoom } from "../ResizeSystem.ts";
 
 // Voxel scene system: voxelize() fills the 3D albedo/emission/radiance textures from the SDF
 // scene each frame; mips() builds the radiance pyramid; cone() gathers indirect light (N-cone
-// VCT); sunDepth() renders the sun-POV shadow map; composite() produces the final lit image
+// VCT); composite() produces the final lit image
 // (see ./README.md for the full system scheme).
 //
 // GRANULARITY: the world box EXTENT is fixed, but its XY origin FOLLOWS THE CAMERA
@@ -60,9 +57,10 @@ export function createVoxelSystem({
   // LIGHTING MODEL:
   //  - emitters (point lights) → injected into the voxel volume → gathered by the cone GI
   //    (aimed + fill cones). This is the composite's 'indirect' term.
-  //  - directional sun (SunLight) → a DIRECT term in the composite (N·L) with a crisp cast shadow
-  //    from the sun-POV depth map (sunDepth pass). It is also injected (shadowed) into the volume
-  //    by voxelize, so it contributes a GI bounce too. Dormant when SunLight is disabled (sun.w==0).
+  //  - directional sun (SunLight) → a DIRECT term in the composite (N·L) with a DF-style cast
+  //    shadow (one cone toward the sun per half-res pixel, traced in the cone pass). It is also
+  //    injected (shadowed against last frame's pyramid) into the volume by voxelize, so it
+  //    contributes a GI bounce too. Dormant when SunLight is disabled (sun.w==0).
 
   // G-buffer textures (reassigned by recreate() on canvas resize).
   let gDepth = depthTexture;
@@ -84,7 +82,6 @@ export function createVoxelSystem({
   const baseExtentZ = grid.dimZ * grid.cellSize;
   let extentX = baseExtentX;
   let extentY = baseExtentY;
-  let extentZ = baseExtentZ;
 
   // ===== Sub-systems (created once; only textures/bind groups rebuild). =====
   // Voxel-radiance mip pyramid — owned by its own sub-system (downsample shader/pipeline +
@@ -106,32 +103,26 @@ export function createVoxelSystem({
     mipmapFilter: "linear",
   });
 
-  // ===== Sun shadow map (depth-only pass from the sun's POV; grid/camera-independent). =====
-  // Owned by its own sub-system: it renders the sun-POV depth map and computes the sun view-proj
-  // matrix + world-texel size. The grid box is passed as an accessor so cellSize stays current
-  // across setCellSize(). voxelize + composite read the matrix/texel/depth-view back through the
-  // returned getters after sun.render() runs (see sunDepth() below).
-  const sun = createSunShadowSystem({
-    device,
-    sceneInstances,
-    getGridBox: () => ({ originX, originY, originZ, extentX, extentY, extentZ, cellSize }),
-  });
+  // (The sun-POV shadow-map sub-system that lived here was REMOVED with the DF-style sun shadows:
+  // the cone pass traces the screen shadow, voxelize shadows its own injection against last
+  // frame's pyramid — no map, no ortho fit, no quantize/snap machinery.)
   // VOXELIZE cluster — owns the voxelize shader/pipelines, the uPass buffers, the group-0/1 bind
-  // groups (grid uniforms + scene buffers + the sun shadow map), the CPU AABB / dispatch scratch,
-  // and issues the clear + two scatter passes. buildGrid() calls its rebindGrid() after the grid is
-  // (re)built (rebinds the mip-0 storage target + refreshes the clear dispatch dims + grid uniforms);
-  // voxelize() delegates to its run(). It reads the sun matrix/depth-view back through the sun getters.
+  // groups (grid uniforms + scene buffers), the CPU AABB / dispatch scratch, and issues the clear +
+  // two scatter passes. buildGrid() calls its rebindGrid() after the grid is (re)built (rebinds the
+  // mip-0 storage target + refreshes the clear dispatch dims + grid uniforms); voxelize() delegates
+  // to its run().
   const voxelizeSys = createVoxelizeSystem({
     device,
     sceneInstances,
     getGridBox: () => ({ originX, originY, originZ, cellSize, dimX, dimY, dimZ }),
-    sun,
+    config,
+    voxelSampler,
   });
 
   // --- Scratch typed arrays for uniform uploads. ---
   // Grid uniforms shared across the cone + gather shaders (the voxelize cluster owns its own copy).
-  const originArr = getTypeTypedArray(voxelizeMeta.uniforms.gridOrigin.type); // Float32Array(4)
-  const dimsArr = getTypeTypedArray(voxelizeMeta.uniforms.gridDims.type); // Int32Array(4)
+  const originArr = getTypeTypedArray(`vec4<f32>`); // Float32Array(4)
+  const dimsArr = getTypeTypedArray(`vec4<i32>`); // Int32Array(4)
   // EMITTER LIGHTS (CPU clustered cull) sub-system. Owns the aimed-emitter storage buffer (uLights)
   // + the clustered-cull table (uLightClusters) and their CPU scratch. setLights() uploads the
   // emitters + refills/uploads the cluster table each frame; recreateLightClusters() resizes the
@@ -166,7 +157,7 @@ export function createVoxelSystem({
     dimZ = Math.max(1, Math.round(baseExtentZ / cellSize));
     extentX = dimX * cellSize;
     extentY = dimY * cellSize;
-    extentZ = dimZ * cellSize;
+
 
     textures = createVoxelTextures(device, {
       originX,
@@ -309,7 +300,7 @@ export function createVoxelSystem({
         cellSize = c;
         extentX = dimX * c;
         extentY = dimY * c;
-        extentZ = dimZ * c;
+
         originArr[3] = c;
         cellChanged = true;
       }
@@ -322,8 +313,8 @@ export function createVoxelSystem({
     originY = oy;
     // Propagate to every shader holding a uGridOrigin copy. Uniform-buffer writes only — dims and
     // textures are unchanged, so NO bind groups rebuild. The voxelize cluster re-uploads its own
-    // copy from getGridBox() at the head of every voxelize(); sunShadow + the emitter clustering
-    // read the live accessors each frame and need no push.
+    // copy from getGridBox() at the head of every voxelize(); the emitter clustering reads the
+    // live accessors each frame and needs no push.
     originArr[0] = originX;
     originArr[1] = originY;
     coneSys.uploadGridOrigin();
@@ -347,20 +338,19 @@ export function createVoxelSystem({
   }
 
   // VCT composite (Layer 4 — the final lit image) sub-system. Owns the composite shader/pipeline +
-  // bind group, the consolidated frame UBO, and the full-res HDR output texture; issues the composite
-  // pass. It reads the G-buffer + coneOutput + the shared invViewProj + the sun matrix/texel through
-  // the accessors below (cone() computes invViewProj before composite() runs). buildGrid()/recreate()
-  // rebuild its group via rebindGroup()/resize(); rebuild() recompiles its shader.
+  // bind group, the consolidated frame UBO, and the full-res HDR output texture; issues the
+  // composite pass. It reads the G-buffer + coneOutput + the cone pass's sunVis through the
+  // accessors below. buildGrid()/recreate() rebuild its group via rebindGroup()/resize();
+  // rebuild() recompiles its shader.
   const compositeSys = createCompositeSystem({
     device,
     canvas,
     config,
-    sun,
     voxelSampler,
     getGBuffer: () => ({ depth: gDepth, normal: gNormal, albedo: gAlbedo, emission: gEmission }),
     getConeView: () => coneSys.getOutputView(),
+    getSunVisView: () => coneSys.getSunVisView(),
     getConeScale: () => coneSys.getConeScale(),
-    getInvViewProj: () => coneSys.getInvViewProj(),
   });
 
   // SCREEN-PROBE cluster (the diffuse fill/bounce source: gather + adaptive placement + temporal +
@@ -407,17 +397,6 @@ export function createVoxelSystem({
   // coneOutput, so that texture must exist first.
   buildGrid(cellSize);
 
-  // Render the SDF scene from the sun's POV into the sun depth map (depth-only). MUST run after
-  // prepare() (scene buffers current) and before composite() (which samples the map). The sun
-  // sub-system refreshes the sun matrices each call, so it can run any time before composite.
-  // The clusters that consume the sun view-proj it computed read it back through sun.getSunViewProj()
-  // where they need it: voxelize() (samples the shadow map) uploads it at the head of its own pass;
-  // composite() stages it into the frame UBO. Both run after this every frame, so reading it there
-  // is byte-identical.
-  function sunDepth(encoder: GPUCommandEncoder) {
-    sun.render(encoder);
-  }
-
   // Re-voxelize the scene into the 3D textures (run before debug()/the GI gather) — delegated to the
   // voxelize sub-system.
   function voxelize(encoder: GPUCommandEncoder) {
@@ -451,6 +430,9 @@ export function createVoxelSystem({
   // with the CURRENT config, recreate their pipelines + bind groups, and re-upload the buildGrid-
   // time uniforms that the fresh GPU buffers lost (the per-frame ones refill next frame).
   function rebuild() {
+    // Voxelize recompiles (the sun-injection mode + budgets are baked) + re-derives its grid
+    // groups/uniforms from its retained rebindGrid args.
+    voxelizeSys.rebuild(config);
     // Cone-resolve sub-system recompiles its shader + rebuilds its groups + re-uploads its grid
     // uniforms (originArr/dimsArr still hold the current grid values).
     coneSys.rebuild(config);
@@ -498,10 +480,10 @@ export function createVoxelSystem({
 
   // The full per-frame GI scenario, in the load-bearing order. The caller draws the SDF G-buffer
   // BEFORE this and calls present(compositeOutputTexture) AFTER; everything between is here so the
-  // frame reads as one named call. sunDepth runs only when the directional sun is on.
+  // frame reads as one named call. (Sun shadows are DF-style — traced in the cone pass; there is
+  // no sun-POV depth pass.)
   function renderFrame(encoder: GPUCommandEncoder) {
     updateGridOrigin(); // camera-following box: must precede every pass that reads uGridOrigin
-    if (SunLight.enabled) sunDepth(encoder); // sun-POV depth → voxelize injection + composite shadow
     voxelize(encoder); // scene → voxelRadiance mip 0
     mips(encoder); // isotropic radiance pyramid
     anisoBase(encoder); // 6 directional level-0 volumes
@@ -527,7 +509,6 @@ export function createVoxelSystem({
       updateGridOrigin();
       emitterLights.setLights(data, count);
     },
-    sunDepth,
     composite: compositeSys.composite,
     recreate,
     setCellSize,

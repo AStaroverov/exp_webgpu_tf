@@ -107,7 +107,6 @@ async function main() {
   const timingsFolder = gui.addFolder("GPU timings (ms)");
   const gpuStats: Record<string, number> = {
     draw: 0,
-    sunDepth: 0,
     voxelize: 0,
     mips: 0,
     anisoBase: 0,
@@ -202,6 +201,26 @@ async function main() {
   gui.add(SunLight, "elevation", 0, Math.PI / 2, 0.01).name("sun elevation");
   gui.add(SunLight, "intensity", 0, 5, 0.05).name("sun intensity");
   gui.addColor(SunLight, "color", 1).name("sun color"); // rgbScale=1 → array is 0..1 floats
+  // Baked-config controls recompile the GI shaders on release (onFinishChange), not per drag tick.
+  const rebuild = () => voxel.rebuild();
+  // SUN CAST SHADOWS (DF-style): ONE cone per half-res pixel toward the sun through the voxel
+  // field — penumbra widens with occluder distance physically. All BAKED (rebuild). softness ≈
+  // tan of the sun's angular half-size (bigger = softer, wider penumbra growth); steps/reach
+  // bound the march (fewer/shorter = cheaper, more leak).
+  const sunShadowFolder = gui.addFolder("Sun shadows");
+  sunShadowFolder
+    .add(voxel.config, "sunSoftness", 0.01, 0.3, 0.005)
+    .name("softness (penumbra)")
+    .onFinishChange(rebuild);
+  sunShadowFolder
+    .add(voxel.config, "sunShadowSteps", 8, 64, 1)
+    .name("march steps")
+    .onFinishChange(rebuild);
+  sunShadowFolder
+    .add(voxel.config, "sunShadowReach", 4, 64, 1)
+    .name("reach (world units)")
+    .onFinishChange(rebuild);
+  sunShadowFolder.close();
 
   // Cone GI: the screen-probe RESOLVE (the probe SH carries fill/bounce AND emitter light) + the
   // short per-pixel AO cones. No aimed cones here anymore — the emitter knobs live in the
@@ -226,8 +245,6 @@ async function main() {
     });
 
   const coneFolder = gui.addFolder("Cone GI");
-  // Baked-config controls recompile the GI shaders on release (onFinishChange), not per drag tick.
-  const rebuild = () => voxel.rebuild();
   coneFolder
     .add(voxel.config, "aperture", 0.1, 1.5, 0.01)
     .name("aperture (lower=sharper)")
@@ -361,18 +378,6 @@ async function main() {
     .add(voxel.config, "exposure", 0.1, 4, 0.05)
     .name("exposure")
     .onFinishChange(rebuild);
-  // Sun-shadow penumbra: the PCF filter widens as the sun intensity drops below 1, so a dimmer sun
-  // casts a softer, wider shadow edge. 0 = always crisp; higher = stronger softening when sun < 1.
-  compositeFolder
-    .add(voxel.config, "penumbra", 0, 12, 0.5)
-    .name("penumbra (sun-dim)")
-    .onFinishChange(rebuild);
-  // Base sun-shadow PCF radius applied even at full sun → smooths the shadow-map texel staircase.
-  // 1 = near-hard (old). The sun frustum also auto-fits the camera view, so steps shrink on zoom.
-  compositeFolder
-    .add(voxel.config, "shadowBaseSpread", 1, 6, 0.25)
-    .name("shadow softness")
-    .onFinishChange(rebuild);
 
   // Scene-specific GUI (perf toggles / emitter controls / animation switches / …).
   scene.setupGUI?.(gui);
@@ -501,12 +506,7 @@ async function main() {
       // textures stale — valid GPU work, no crash). Always presents the composite output, so
       // toggling a pass changes ONLY that pass's GPU work → the gpuMs delta attributes its
       // cost. The full chain is voxelize → mips → cone → composite (+ the SDF draw G-buffer).
-      // sunDepth runs FIRST so model A's voxelize can sample the sun shadow map (and
-      // buildSunViewProj uploads the matrix to voxelize + composite). If sunDepth is toggled OFF
-      // while voxelize is ON in model A, voxelize samples a STALE sun depth map — acceptable for
-      // a cost harness (the binding is always valid; no crash).
       if (perfToggles.draw) frameTick(encoder, delta);
-      if (perfToggles.sunDepth) voxel.sunDepth(encoder); // sun-POV depth feeding voxelize (A) + composite
       if (perfToggles.voxelize) voxel.voxelize(encoder);
       if (perfToggles.mips) voxel.mips(encoder);
       if (perfToggles.anisoBase) voxel.anisoBase(encoder);
@@ -519,7 +519,7 @@ async function main() {
       present(encoder, voxel.compositeOutputTexture);
     } else {
       // Final lit image: SDF G-buffer draw → the full voxel-GI scenario (voxel.renderFrame,
-      // load-bearing order — sunDepth is gated on the sun internally) → present.
+      // load-bearing order) → present.
       frameTick(encoder, delta);
       voxel.renderFrame(encoder);
       present(encoder, voxel.compositeOutputTexture);

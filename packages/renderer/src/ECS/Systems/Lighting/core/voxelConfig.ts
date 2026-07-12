@@ -10,7 +10,7 @@
 // Field → where it bakes:
 //   cone shader    : normalBias, aperture, giStrength, aoConeCount, aoReach, aoSteps,
 //                    screenProbeTile, spNormalPow, spPlaneK, resolveRadius
-//   composite shader: ambient, exposure, penumbra, shadowBaseSpread
+//   composite shader: ambient, exposure
 //   screen-probe shader: conesPerProbe, maxDist (cone+probe reach), aperture, normalBias,
 //                    screenProbeTile, temporalHysteresis, spNormalPow, spPlaneK, anisoMode
 //   probe-debug shader: screenProbeTile
@@ -41,12 +41,17 @@ export type VoxelBakedConfig = {
   aoConeCount: number; // short per-pixel hemisphere occlusion cones for contact AO (0 = no AO)
   aoReach: number; // AO cone reach (world units) — short, near-field contact occlusion
   aoSteps: number; // AO cone march budget (short)
+  // ── sun cast shadows (distance-field style — the ONLY sun-shadow path) ─────────────
+  // ONE cone per half-res pixel traced toward the sun through the voxel field (cone pass,
+  // @location(1) target): penumbra grows with occluder distance physically. The voxel injection
+  // shadows itself the same way (voxelize marches LAST frame's pyramid). The former sun-POV
+  // shadow map + PCF path was REMOVED after validation — no map, no ortho fit, no bias/snap.
+  sunSoftness: number; // sun cone aperture (≈ tan of the sun's angular half-size) — penumbra growth rate
+  sunShadowSteps: number; // sun cone march budget (higher = less leak through thin walls)
+  sunShadowReach: number; // sun cone reach (world units) — how far an occluder can cast
   // ── composite pass ──────────────────────────────────────────────────────────────────
   ambient: number; // ambient floor (scaled by the cone's AO term)
   exposure: number; // HDR exposure multiplier applied before the ACES tonemap
-  penumbra: number; // sun shadow softening strength: PCF widens as sun intensity drops below 1
-  shadowBaseSpread: number; // base sun-shadow PCF radius (texels) ALWAYS applied, even at full sun;
-  //   smooths the shadow-map texel staircase into a soft edge. 1 = near-hard (old behavior).
   // ── screen-probe pass ─────────────────────────────────────────────────────────────────
   conesPerProbe: number; // full-sphere cones per screen probe; SH-L1 saturates ~16, so more only cuts noise
   anisoMode: boolean; // far-field cone samples read the 6 anisotropic volumes (true) or the iso pyramid
@@ -160,10 +165,11 @@ export const DEFAULT_VOXEL_BAKED_CONFIG: VoxelBakedConfig = {
   aoConeCount: 2,
   aoReach: 2,
   aoSteps: 12,
+  sunSoftness: 0.06,
+  sunShadowSteps: 32,
+  sunShadowReach: 24,
   ambient: 0.05,
   exposure: 1,
-  penumbra: 4,
-  shadowBaseSpread: 2,
   conesPerProbe: 16,
   anisoMode: true,
   temporalHysteresis: 0.75,

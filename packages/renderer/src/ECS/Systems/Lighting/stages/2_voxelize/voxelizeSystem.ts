@@ -1,11 +1,11 @@
 import { GPUShader } from "../../../../../WGSL/GPUShader.ts";
 import { gpuSpan } from "../../../../../gpuTimer.ts";
 import { getTypeTypedArray } from "../../../../../Shader/index.ts";
-import { shaderMeta as voxelizeMeta, WORKGROUP, WORKGROUP_1D } from "./voxelize.shader.ts";
+import { createVoxelizeShaderMeta, WORKGROUP, WORKGROUP_1D } from "./voxelize.shader.ts";
 import type { SceneInstances } from "../../../SDFSystem/createDrawShapeSystem.ts";
 import { SunLight } from "../../../SunLight.ts";
 import { buildVoxelAABBs } from "./voxelizeCpu.ts";
-import type { createSunShadowSystem } from "../1_sunShadow/sunShadowSystem.ts";
+import type { VoxelBakedConfig } from "../../core/voxelConfig.ts";
 
 // Grid box (min corner + cellSize + per-axis voxel dims). The AABB build + clear dispatch read it.
 export type VoxelizeGridBox = {
@@ -21,7 +21,7 @@ export type VoxelizeGridBox = {
 // VOXELIZE cluster: fills the 3D radiance volume (mip 0) from the SDF scene each frame. Owns the
 // voxelize compute shader (two pipelines: `clear` zeroes the bound volume, `main` scatters per-shape),
 // the two uPass buffers (occluder vs emitter scatter), the group-0/1 bind groups (grid uniforms +
-// scene-instance buffers + the sun shadow map), and the per-frame CPU AABB / dispatch scratch. The
+// scene-instance buffers), and the per-frame CPU AABB / dispatch scratch. The
 // group-0/2 texture bindings + the clear dispatch dims are (re)bound by rebindGrid() when the grid
 // is (re)built.
 //
@@ -37,27 +37,28 @@ export function createVoxelizeSystem({
   device,
   sceneInstances,
   getGridBox,
-  sun,
+  config: initialConfig,
+  voxelSampler,
 }: {
   device: GPUDevice;
   sceneInstances: SceneInstances;
   // Grid box (origin + cellSize + voxel dims), read live each frame for the CPU AABB build + the
   // per-frame origin upload (the origin follows the camera; the cell follows the zoom ladder).
   getGridBox: () => VoxelizeGridBox;
-  // The sun shadow sub-system: voxelize binds its depth view (shadowed sun injection) and, at the
-  // head of run(), uploads the sun view-proj matrix it computed (must match the map it rendered).
-  sun: ReturnType<typeof createSunShadowSystem>;
+  // Baked config (sun-injection budgets bake into the shader) — swapped via rebuild().
+  config: VoxelBakedConfig;
+  // Filtering sampler for the sun-visibility march over last frame's radiance pyramid.
+  voxelSampler: GPUSampler;
 }) {
+  let config = initialConfig;
   // Two compute pipelines from the one shader: `clear` zeroes the full volume (one thread per
   // voxel), `main` is the per-shape scatter (one thread per (instance, voxel-in-AABB) pair).
   // They share one pipeline layout (groups 0/1/2 — clear binds the same groups, harmless since
-  // it does not read the aabb* / scene buffers).
-  const voxShader = new GPUShader(voxelizeMeta);
-  const voxClearPipeline = voxShader.getComputePipeline(device, "clear");
-  const voxPipeline = voxShader.getComputePipeline(device, "main");
-
-  // Sun shadow map: the sun-POV depth texture, sampled to shadow the injected directional sun.
-  const sunDepthView = sun.getDepthView();
+  // it does not read the aabb* / scene buffers). `let` — rebuild() recompiles with fresh config.
+  let voxelizeMeta = createVoxelizeShaderMeta(config);
+  let voxShader = new GPUShader(voxelizeMeta);
+  let voxClearPipeline = voxShader.getComputePipeline(device, "clear");
+  let voxPipeline = voxShader.getComputePipeline(device, "main");
 
   // Two tiny constant uPass buffers (0 = occluders, 1 = emitters), uploaded ONCE. The scatter is
   // dispatched twice — once with each — into DIFFERENT target volumes (emitters → voxelEmission,
@@ -92,7 +93,7 @@ export function createVoxelizeSystem({
     })
     .createView({ dimension: "3d" });
 
-  // Group 0 (voxelize) = grid uniforms + the sun shadow map + the emissionRead texture; Group 1 =
+  // Group 0 (voxelize) = grid uniforms + the emissionRead texture; Group 1 =
   // the scene-instance buffers (stable → built ONCE). Scene buffers are bound at the VOXELIZE
   // meta's binding numbers (NOT sceneInstances.X.getBindGroupEntry(), which carries the DRAW
   // shader's bindings). Two group-0 variants: occluder (uPass=0, reads the REAL voxelEmission for
@@ -107,15 +108,15 @@ export function createVoxelizeSystem({
         voxShader.uniforms.instanceCount.getBindGroupEntry(device),
         voxShader.uniforms.sun.getBindGroupEntry(device),
         voxShader.uniforms.sunColor.getBindGroupEntry(device),
-        voxShader.uniforms.sunViewProj.getBindGroupEntry(device),
         voxShader.uniforms.dispatch.getBindGroupEntry(device),
-        // Sun shadow map: the sun-POV depth texture, sampled to shadow the injected directional sun.
-        { binding: voxelizeMeta.uniforms.shadowMap.binding, resource: sunDepthView },
         { binding: voxelizeMeta.uniforms.pass.binding, resource: { buffer: passBuf } },
         { binding: voxelizeMeta.uniforms.emissionRead.binding, resource: emissionReadView },
+        // LAST frame's radiance pyramid (mips 1+) + sampler — the SUN_VOX_CONE march source.
+        { binding: voxelizeMeta.uniforms.radiancePyramid.binding, resource: radiancePyramidView },
+        { binding: voxelizeMeta.uniforms.pyrSampler.binding, resource: voxelSampler },
       ],
     });
-  const voxGroup1 = device.createBindGroup({
+  const makeVoxGroup1 = () => device.createBindGroup({
     layout: voxPipeline.getBindGroupLayout(1),
     entries: [
       {
@@ -149,13 +150,12 @@ export function createVoxelizeSystem({
       voxShader.uniforms.aabbDim.getBindGroupEntry(device),
     ],
   });
+  let voxGroup1 = makeVoxGroup1();
 
   // --- Scratch typed arrays for uniform uploads. ---
   const instanceCountArr = getTypeTypedArray(voxelizeMeta.uniforms.instanceCount.type); // Uint32Array(1)
   const sunArr = getTypeTypedArray(voxelizeMeta.uniforms.sun.type); // Float32Array(4)
   const sunColorArr = getTypeTypedArray(voxelizeMeta.uniforms.sunColor.type); // Float32Array(4)
-  // The sun view-proj voxelize samples the shadow map with (for the shadowed sun injection).
-  const voxSunViewProjArr = getTypeTypedArray(voxelizeMeta.uniforms.sunViewProj.type); // Float32Array(16)
   // Scatter dispatch: .x = total work items, .y = threads per workgroup-grid row, .z/.w spare.
   const dispatchArr = getTypeTypedArray(voxelizeMeta.uniforms.dispatch.type); // Int32Array(4)
   // Per-instance AABB scratch (allocated ONCE — never per frame). Packed vec4<i32> per instance:
@@ -174,6 +174,12 @@ export function createVoxelizeSystem({
   let voxGroup0Emit: GPUBindGroup;
   let voxGroup2Radiance: GPUBindGroup;
   let voxGroup2Emission: GPUBindGroup;
+  // Sampled view of voxelRadiance mips [1..N) — LAST frame's data during voxelize (this pass
+  // rewrites only mip 0; disjoint subresources, so the sampled+storage combination is legal).
+  let radiancePyramidView: GPUTextureView;
+  // rebindGrid args retained so rebuild() (shader recompile) can re-derive every grid-scoped
+  // group/uniform from the same current state.
+  let lastGridArgs: [GPUTexture, GPUTexture, VoxelizeGridBox] | null = null;
   // Texture refs + dims for the per-frame voxelEmission → voxelRadiance mip-0 copy.
   let radianceTex: GPUTexture;
   let emissionTex: GPUTexture;
@@ -199,7 +205,13 @@ export function createVoxelizeSystem({
 
     radianceTex = voxelRadiance;
     emissionTex = voxelEmission;
+    lastGridArgs = [voxelRadiance, voxelEmission, gridBox];
 
+    radiancePyramidView = voxelRadiance.createView({
+      dimension: "3d",
+      baseMipLevel: 1,
+      mipLevelCount: voxelRadiance.mipLevelCount - 1,
+    });
     voxGroup0Occ = makeVoxGroup0(passBufOcc, voxelEmission.createView({ dimension: "3d" }));
     voxGroup0Emit = makeVoxGroup0(passBufEmit, dummyEmissionView);
 
@@ -236,20 +248,9 @@ export function createVoxelizeSystem({
     dispatchZ = Math.ceil(dimZ / WORKGROUP);
   }
 
-  // Re-voxelize the scene into the 3D textures (run before debug()/the GI gather). Runs after
-  // sunDepth (sun.render) every frame; its shadow map + view-proj matrix are current.
+  // Re-voxelize the scene into the 3D textures (run before the GI gather). The shadowed sun
+  // injection marches LAST frame's radiance pyramid (see sun_vis_vox) — no shadow-map inputs.
   function voxelize(encoder: GPUCommandEncoder) {
-    // uSunViewProj: the matrix that rendered THIS frame's shadow map (sunDepth ran just before), so
-    // the shadowed-sun injection samples the matching matrix. Uploaded at the head of the pass; all
-    // queue writes land before the dispatch, so it is byte-identical to an earlier upload.
-    const sunViewProj = sun.getSunViewProj();
-    voxSunViewProjArr.set(sunViewProj as Float32Array);
-    device.queue.writeBuffer(
-      voxShader.uniforms.sunViewProj.getGPUBuffer(device),
-      0,
-      voxSunViewProjArr,
-    );
-
     instanceCountArr[0] = sceneInstances.instanceCount;
     device.queue.writeBuffer(
       voxShader.uniforms.instanceCount.getGPUBuffer(device),
@@ -371,8 +372,24 @@ export function createVoxelizeSystem({
     }
   }
 
+  // Explicit rebuild (config change): recompile the voxelize shader with the CURRENT config (the
+  // sun-injection mode + budgets are baked), recreate both pipelines, and re-derive every group +
+  // grid uniform via rebindGrid with the retained args (fresh GPUShader = fresh uniform buffers —
+  // rebindGrid re-uploads the grid lanes; the per-frame lanes refill in voxelize()).
+  function rebuild(cfg: VoxelBakedConfig) {
+    config = cfg;
+    voxShader.destroy();
+    voxelizeMeta = createVoxelizeShaderMeta(config);
+    voxShader = new GPUShader(voxelizeMeta);
+    voxClearPipeline = voxShader.getComputePipeline(device, "clear");
+    voxPipeline = voxShader.getComputePipeline(device, "main");
+    voxGroup1 = makeVoxGroup1();
+    if (lastGridArgs !== null) rebindGrid(...lastGridArgs);
+  }
+
   return {
     voxelize,
     rebindGrid,
+    rebuild,
   };
 }

@@ -6,15 +6,11 @@ import { gpuSpan } from "../../../../../gpuTimer.ts";
 //
 // final = albedo·(ambient·AO + directSun + indirect) + emission. Reads the G-buffer
 // (albedo/normal/emission/depth), the half-res cone output (indirect+AO, bilinear-upsampled), and
-// the sun shadow map. MUST run AFTER cone() (reads coneOutput + the shared invViewProj) and AFTER
-// sunDepth() (reads the sun view-proj matrix + world texel).
+// the cone pass's sun cast-shadow visibility (the DF-style sun shadow). MUST run AFTER cone().
 import { GPUShader } from "../../../../../WGSL/GPUShader.ts";
 import { createCompositeShaderMeta } from "./voxelComposite.shader.ts";
 import { SunLight } from "../../../SunLight.ts";
 import type { VoxelBakedConfig } from "../../core/voxelConfig.ts";
-import type { createSunShadowSystem } from "../1_sunShadow/sunShadowSystem.ts";
-
-type SunShadowSystem = ReturnType<typeof createSunShadowSystem>;
 
 // The G-buffer (the SDF draw pass output): reverse-Z depth + world normal + albedo + per-pixel
 // self-emission. The composite reads albedo + emission + normal + depth.
@@ -30,30 +26,27 @@ export type CompositeDeps = {
   canvas: HTMLCanvasElement;
   // Initial baked config (mutated + re-passed via rebuild()).
   config: VoxelBakedConfig;
-  // Sun shadow sub-system — provides the depth-map view + the sun view-proj matrix + world texel.
-  sun: SunShadowSystem;
   // Shared linear/clamp sampler (reused for the half-res cone upsample).
   voxelSampler: GPUSampler;
   // The current G-buffer set (re-fetched at group-build time so resize() picks up the new textures).
   getGBuffer: () => GBuffer;
   // The cone pass's HALF-res HDR output view (indirect+AO) — sampled by the composite.
   getConeView: () => GPUTextureView;
+  // The cone pass's sun cast-shadow visibility view (the DF-style sun shadow source).
+  getSunVisView: () => GPUTextureView;
   // Cone downscale factor → upsample_cone maps cone↔full res (rides params2.z each frame).
   getConeScale: () => number;
-  // The shared reverse-Z inverse-VP mat4, computed in cone() (which runs before composite).
-  getInvViewProj: () => Float32Array | Iterable<number>;
 };
 
 export function createCompositeSystem(deps: CompositeDeps) {
   const {
     device,
     canvas,
-    sun,
     voxelSampler,
     getGBuffer,
     getConeView,
+    getSunVisView,
     getConeScale,
-    getInvViewProj,
   } = deps;
   let config = deps.config;
 
@@ -66,15 +59,12 @@ export function createCompositeSystem(deps: CompositeDeps) {
   let compositeGroup0: GPUBindGroup;
 
   // Composite scratch — ONE consolidated frame UBO (matches the WGSL `CompositeFrame` struct).
-  // 48 f32 = 192 bytes. Field offsets (in f32 elements): params@0, params2@4, sun@8, sunColor@12,
-  // invViewProj@16, sunViewProj@32. Filled entirely inside composite(), one writeBuffer.
-  const compFrameArr = new Float32Array(48);
-  const CF_PARAMS = 0;
-  const CF_PARAMS2 = 4;
-  const CF_SUN = 8;
-  const CF_SUNCOLOR = 12;
-  const CF_INVVP = 16;
-  const CF_SUNVP = 32;
+  // 12 f32 = 48 bytes. Field offsets (in f32 elements): params2@0, sun@4, sunColor@8. Filled
+  // entirely inside composite(), one writeBuffer.
+  const compFrameArr = new Float32Array(12);
+  const CF_PARAMS2 = 0;
+  const CF_SUN = 4;
+  const CF_SUNCOLOR = 8;
 
   // Full-res HDR target for the Layer-4 composite (the final lit image — "final" source).
   const createCompositeOutput = () =>
@@ -95,6 +85,11 @@ export function createCompositeSystem(deps: CompositeDeps) {
     compositeGroup0 = device.createBindGroup({
       layout: compositePipeline.getBindGroupLayout(0),
       entries: [
+        // The cone pass's sun cast-shadow visibility (the DF-style sun shadow source).
+        {
+          binding: compositeShader.shaderMeta.uniforms.sunVisTex.binding,
+          resource: getSunVisView(),
+        },
         compositeShader.uniforms.frame.getBindGroupEntry(device),
         {
           binding: compositeShader.shaderMeta.uniforms.albedoTex.binding,
@@ -114,14 +109,10 @@ export function createCompositeSystem(deps: CompositeDeps) {
           binding: compositeShader.shaderMeta.uniforms.emissionTex.binding,
           resource: g.emission.createView(),
         },
-        // Sun shadow: reverse-Z camera depth (reconstruct P) + the sun-POV depth map.
+        // Reverse-Z camera depth (full-res dims for the cone upsample mapping).
         {
           binding: compositeShader.shaderMeta.uniforms.depthTex.binding,
           resource: g.depth.createView(),
-        },
-        {
-          binding: compositeShader.shaderMeta.uniforms.shadowMap.binding,
-          resource: sun.getDepthView(),
         },
       ],
     });
@@ -129,16 +120,10 @@ export function createCompositeSystem(deps: CompositeDeps) {
 
   // VCT composite (Layer 4): combine albedo + cone indirect/AO + direct sun + self-emission
   // into the final lit image → compositeOutput (full-res HDR). MUST run AFTER cone() (it reads
-  // coneOutput) and sunDepth() (sun matrix/texel). Reads the G-buffer (albedo/normal/depth/emission).
+  // coneOutput + sunVis). Reads the G-buffer (albedo/normal/depth/emission).
   function composite(encoder: GPUCommandEncoder) {
-    // Fill the consolidated frame UBO and upload it in ONE writeBuffer. The sun staging (params.z
-    // texel + the sunViewProj block) is done here too: sunDepth() runs before this every frame and
-    // the UBO is only ever uploaded here, so staging it here is byte-identical to staging it there.
-    // ambient/exposure/penumbra are BAKED consts; params.z = sun shadow-map world texel size.
-    compFrameArr.set(sun.getSunViewProj() as Float32Array, CF_SUNVP);
-    compFrameArr[CF_PARAMS + 2] = sun.getSunWorldTexel();
-    // invViewProj already computed in cone() this frame (cone runs before composite); just reuse it.
-    compFrameArr.set(getInvViewProj() as Float32Array, CF_INVVP);
+    // Fill the consolidated frame UBO and upload it in ONE writeBuffer (ambient/exposure are
+    // BAKED consts).
     compFrameArr[CF_PARAMS2 + 0] = canvas.width;
     compFrameArr[CF_PARAMS2 + 1] = canvas.height;
     compFrameArr[CF_PARAMS2 + 2] = getConeScale(); // cone downscale factor → upsample_cone maps cone↔full res

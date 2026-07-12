@@ -93,9 +93,9 @@ export function gpuTimerPoll(): void {
     .mapAsync(GPUMapMode.READ, 0, frameLabels.length * 16)
     .then(() => {
       const words = new BigUint64Array(
-        stagingBuf!.getMappedRange(0, frameLabels.length * 16).slice(0),
+      stagingBuf!   .getMappedRange(0, frameLabels.length * 16).slice(0),
       );
-      stagingBuf!.unmap();
+    stagingBuf!   .unmap();
       // ADDITIVE attribution via END-timestamp deltas — NOT the raw [begin, end] windows. Raw
       // windows OVERLAP on real GPUs (the begin stamp is top-of-pipe: it fires while the previous
       // pass's fragment work still drains), so window sums exceeded the real frame ~3× (measured).
@@ -103,8 +103,8 @@ export function gpuTimerPoll(): void {
       //   dur_i = end_i − max(end_{i−1}, begin_i)
       // is each pass's EXCLUSIVE tail: exact for hazard-serialized passes (our GI chain — every
       // pass reads its predecessor's output), and overlapped time is attributed to the LATER pass
-      // for independent ones (draw ∥ sunDepth). Idle gaps between passes are left unattributed,
-      // so Σ rows ≤ frameSpan. Spans are indexed in ENCODE order == queue execution order.
+      // for independent ones. Idle gaps between passes are left unattributed, so Σ rows ≤
+      // frameSpan. Spans are indexed in ENCODE order == queue execution order.
       const sums = new Map<string, number>();
       let prevEnd = words[0]; // first pass: dur = end − begin (nothing precedes it)
       for (let i = 0; i < frameLabels.length; i++) {
@@ -127,6 +127,11 @@ export function gpuTimerPoll(): void {
       for (const [label, ms] of sums) {
         const prev = emaMs.get(label);
         emaMs.set(label, prev === undefined ? ms : prev * (1 - EMA) + ms * EMA);
+      }
+      // Labels seen before but ABSENT this frame (a pass stopped running — e.g. sunDepth in the
+      // cone-shadow mode) decay to 0 instead of freezing at their last value.
+      for (const [label, prev] of emaMs) {
+        if (!sums.has(label)) emaMs.set(label, prev * (1 - EMA));
       }
     })
     .finally(() => {

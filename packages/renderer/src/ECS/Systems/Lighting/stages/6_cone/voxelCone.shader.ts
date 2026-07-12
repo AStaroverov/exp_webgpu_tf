@@ -37,6 +37,9 @@ export function createConeShaderMeta(cfg: VoxelBakedConfig) {
       // to ride here or in the old uParams3 — tile, normal pow, plane K, resolve radius, ring
       // thresholds — is a BAKED const now.)
       params2: new VariableMeta("uParams2", VariableKind.Uniform, `vec2<f32>`),
+      // .xyz = world dir TOWARD the sun, .w = effective intensity (0 = disabled) — the sun
+      // cast-shadow cone's direction.
+      sunDir: new VariableMeta("uSunDir", VariableKind.Uniform, `vec4<f32>`),
       // inverse(viewProjMatrix) (reverse-Z), column-major, for world-position reconstruction.
       invViewProj: new VariableMeta("uInvViewProj", VariableKind.Uniform, `mat4x4<f32>`),
       // .xyz = world min corner, .w = cellSize.
@@ -102,6 +105,12 @@ const SP_TILE: f32 = ${probeTile(cfg)};
 const SP_NORMAL_POW: f32 = ${cfg.spNormalPow};
 const SP_PLANE_K: f32 = ${cfg.spPlaneK};
 const SP_RESOLVE_RADIUS: f32 = ${cfg.resolveRadius};
+// SUN cast shadow via ONE cone toward the sun (the @location(1) target — the ONLY sun-shadow
+// path): penumbra widens with occluder distance (diameter = 2·SUN_SOFTNESS·dist) physically,
+// unlike the fixed-kernel PCF it replaced. Marches the same iso opacity pyramid the AO cones read.
+const SUN_SOFTNESS: f32 = ${cfg.sunSoftness};
+const SUN_STEPS: i32 = ${Math.max(1, Math.round(cfg.sunShadowSteps))};
+const SUN_REACH: f32 = ${cfg.sunShadowReach};
 
 ${probeWeightWGSL}
 ${unprojectWGSL}
@@ -317,8 +326,16 @@ fn resolve_screen_probes(P: vec3<f32>, N: vec3<f32>, full: vec2<i32>) -> vec3<f3
   return vec3<f32>(0.0);  // no valid probe anywhere in the window → no fill
 }
 
+// Fragment outputs: @location(0) = the cone result (rgb indirect, a = AO); @location(1) = the sun
+// cast-shadow visibility (r16float half-res target — the composite bilinearly upsamples it).
+struct FsOut {
+  @location(0) cone: vec4f,
+  @location(1) sunVis: vec4f,
+}
+
 @fragment
-fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+fn fs_main(input: VertexOutput) -> FsOut {
+  var out: FsOut;
   // This pass renders at a downscaled res (half or quarter — set on the CPU by the cone output
   // size). Map this cone pixel to a representative full-res G-buffer texel via the normalized
   // texCoord, which spans [0,1] across the target at ANY resolution → no scale uniform needed.
@@ -326,10 +343,13 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let half = vec2<i32>(floor(input.position.xy));
   let full = min(vec2<i32>(input.texCoord * uParams2.xy), vec2<i32>(uParams2.xy) - vec2<i32>(1));
 
-  // World normal from the G-buffer; a<0.5 = no surface at this pixel.
+  // World normal from the G-buffer; a<0.5 = no surface at this pixel (sky: no indirect, full AO
+  // and sun visibility — the composite ignores both for sky anyway).
   let n = textureLoad(normalTex, full, 0);
   if (n.a < 0.5) {
-    return vec4f(0.0, 0.0, 0.0, 1.0);
+    out.cone = vec4f(0.0, 0.0, 0.0, 1.0);
+    out.sunVis = vec4f(1.0, 0.0, 0.0, 1.0);
+    return out;
   }
   let N = normalize(n.rgb * 2.0 - 1.0);
 
@@ -383,12 +403,25 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     aoW = aoW + cosT;
   }
 
+  // (c) SUN cast shadow — ONE cone from the surface toward the sun, opacity only.
+  // The cone diameter grows as 2·SUN_SOFTNESS·dist, so a far occluder throws a soft wide penumbra
+  // and a near one a crisp edge — physically, with no PCF kernel. Deterministic direction → stable
+  // frame-to-frame, no temporal needed; jrad radial dither breaks marching shells (the half-res
+  // bilinear upsample blurs it away).
+  var sunV = 1.0;
+  if (uSunDir.w > 0.0 && dot(N, uSunDir.xyz) > 0.0) {
+    let rs = trace_cone(origin, uSunDir.xyz, SUN_SOFTNESS, SUN_REACH, jrad, SUN_STEPS, 0.99);
+    sunV = clamp(1.0 - rs.a, 0.0, 1.0);
+  }
+
   // Combine: probe bounce × GI_STRENGTH. The probe SH already carries the emitter direct term
   // (scaled by EMITTER_DIRECT at the probe gather), so fillAvg is the whole indirect+emitter light.
   let indirect = fillAvg * GI_STRENGTH;
   let visibility = clamp(1.0 - occAcc / max(aoW, 1e-4), 0.0, 1.0);
   // rgb = emitter direct + indirect bounce; a = AO visibility, read by the composite.
-  return vec4f(indirect, visibility);
+  out.cone = vec4f(indirect, visibility);
+  out.sunVis = vec4f(sunV, 0.0, 0.0, 1.0);
+  return out;
 }
 `,
   );

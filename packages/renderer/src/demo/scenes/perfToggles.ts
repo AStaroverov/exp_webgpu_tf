@@ -12,8 +12,7 @@ export const perfToggles = {
   anisoBase: true, // 6 directional level-0 volumes (iso mip0 → aniso)
   anisoMips: true, // directional-volume mip pyramids
   screenProbe: true, // screen-space probe SH (the diffuse fill/bounce source)
-  cone: true, // N-cone GI gather (half-res)
-  sunDepth: true, // sun shadow-map depth pass (sun-POV SDF depth)
+  cone: true, // N-cone GI gather (half-res; also traces the DF sun cast shadow)
   composite: true, // final lit image
 };
 
@@ -30,7 +29,6 @@ export function addPerfFolder(gui: GUI) {
   pf.add(perfToggles, "anisoMips").name("3b· aniso mips");
   pf.add(perfToggles, "screenProbe").name("4· screen probes");
   pf.add(perfToggles, "cone").name("5· cone GI");
-  pf.add(perfToggles, "sunDepth").name("6· sun shadow-map pass");
-  pf.add(perfToggles, "composite").name("7· composite");
+  pf.add(perfToggles, "composite").name("6· composite");
   pf.open();
 }

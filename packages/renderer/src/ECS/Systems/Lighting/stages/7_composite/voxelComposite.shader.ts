@@ -2,15 +2,14 @@ import { VariableKind, VariableMeta } from "../../../../../Struct/VariableMeta.t
 import { ShaderMeta } from "../../../../../WGSL/ShaderMeta.ts";
 import { wgsl } from "../../../../../WGSL/wgsl.ts";
 import { VoxelBakedConfig } from "../../core/voxelConfig.ts";
-import { unprojectWGSL } from "../../core/shaders/voxelTrace.wgsl.ts";
 
 // VCT Layer 4 — the COMPOSITE: turn the indirect cone gather into the FINAL lit image.
 //   final = albedo·(ambient·AO + directSun·shadow + indirect) + selfEmission.
 // A fullscreen FULL-res pass over the G-buffer. Per pixel:
 //   - albedo  = G-buffer albedo (the SDF renderTexture).
-//   - directSun = the directional sun (N·L · color · intensity), with a CRISP cast shadow from
-//     the sun-POV depth map (sun_shadow(): reconstruct world P, project into the sun's orthoZO
-//     clip space, compare depth with normal-offset + slope bias + 5×5 tent PCF).
+//   - directSun = the directional sun (N·L · color · intensity), with a DF-style cast shadow:
+//     the cone pass traced one cone per half-res pixel toward the sun through the voxel field
+//     (penumbra grows with occluder distance) — this pass just upsamples its sunVis target.
 //   - indirect already carries giStrength (baked into the cone's rgb); AO = the cone's hemisphere
 //     visibility (cone.a). The cone output is HALF-res → normal-aware (bilateral) upsample here
 //     (upsample_cone) so a near emitter's light does not smear across shape silhouettes.
@@ -21,27 +20,19 @@ import { unprojectWGSL } from "../../core/shaders/voxelTrace.wgsl.ts";
 export function createCompositeShaderMeta(cfg: VoxelBakedConfig) {
   return new ShaderMeta(
     {
-      // All per-frame scalar/vector/matrix uniforms consolidated into ONE struct buffer (uF) so the
-      // pass binds + uploads a single UBO instead of six. The WGSL `CompositeFrame` struct is defined
-      // in the body below; the type name here is opaque to the meta system, so size/bufferSize are
-      // given explicitly (48 f32 = 192 bytes: 4×vec4 + 2×mat4x4, all 16-byte aligned → no padding).
-      // Fields:
-      //   params  .z = sun shadow-map world texel size (normal-offset bias). .x/.y/.w baked consts.
+      // All per-frame scalar/vector uniforms consolidated into ONE struct buffer (uF) so the pass
+      // binds + uploads a single UBO. The WGSL `CompositeFrame` struct is defined in the body
+      // below; the type name is opaque to the meta system, so size/bufferSize are explicit
+      // (12 f32 = 48 bytes: 3×vec4, 16-byte aligned → no padding). Fields:
       //   params2 .x/.y = screen width/height px (cone upsample uv), .z = cone downscale factor.
       //   sun     .xyz = normalized world dir TOWARD the sun, .w = effective intensity (0 = disabled).
       //   sunColor.rgb = sun color (linear).
-      //   invViewProj = inverse(viewProj) (reverse-Z) → reconstruct world P from camera depth.
-      //   sunViewProj = sun orthographic view-projection (orthoZO) → project P into the shadow map.
       frame: new VariableMeta("uF", VariableKind.Uniform, `CompositeFrame`, {
-        size: 48,
-        bufferSize: 192,
+        size: 12,
+        bufferSize: 48,
       }),
-      // G-buffer reverse-Z camera depth, to reconstruct the per-pixel world position P.
+      // G-buffer reverse-Z camera depth (full-res dims for the cone upsample mapping).
       depthTex: new VariableMeta("depthTex", VariableKind.Texture, `texture_depth_2d`, {
-        textureSampleType: "depth",
-      }),
-      // Sun-POV depth map (depth32float from the sunDepth pass). textureLoad (no sampler).
-      shadowMap: new VariableMeta("shadowMap", VariableKind.Texture, `texture_depth_2d`, {
         textureSampleType: "depth",
       }),
       // G-buffer albedo (the SDF draw-pass renderTexture).
@@ -64,25 +55,24 @@ export function createCompositeShaderMeta(cfg: VoxelBakedConfig) {
       emissionTex: new VariableMeta("emissionTex", VariableKind.Texture, `texture_2d<f32>`, {
         textureSampleType: "float",
       }),
+      // SUN cast-shadow visibility from the cone pass (r16float, half-res, @location(1)) — the
+      // only sun-shadow source. Bilinear-upsampled via coneSampler.
+      sunVisTex: new VariableMeta("sunVisTex", VariableKind.Texture, `texture_2d<f32>`, {
+        textureSampleType: "float",
+      }),
     },
     {},
     // language=WGSL
     wgsl /* wgsl */ `
 const AMBIENT: f32 = ${cfg.ambient};
 const EXPOSURE: f32 = ${cfg.exposure};
-const PENUMBRA: f32 = ${cfg.penumbra};
-const SHADOW_BASE_SPREAD: f32 = ${cfg.shadowBaseSpread};
 
-// Per-frame uniforms, one consolidated UBO (uF). All members are 16-byte aligned (vec4 / mat4x4)
-// so the std140 layout is dense: params@0, params2@16, sun@32, sunColor@48, invViewProj@64,
-// sunViewProj@128 (bytes). Mirrored by the CPU scratch layout in createVoxelSystem.composite().
+// Per-frame uniforms, one consolidated UBO (uF): params2@0, sun@16, sunColor@32 (bytes).
+// Mirrored by the CPU scratch layout in compositeSystem.composite().
 struct CompositeFrame {
-  params: vec4<f32>,
   params2: vec4<f32>,
   sun: vec4<f32>,
   sunColor: vec4<f32>,
-  invViewProj: mat4x4<f32>,
-  sunViewProj: mat4x4<f32>,
 };
 
 const POSITION = array<vec2f, 6>(
@@ -105,62 +95,6 @@ fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
   out.position = vec4f(POSITION[vertexIndex], 0.0, 1.0);
   out.texCoord = TEX_COORDS[vertexIndex];
   return out;
-}
-
-${unprojectWGSL}
-
-// 16-sample Poisson disk (unit disk). A scattered, low-discrepancy tap set: scaling it gives a
-// wide soft kernel WITHOUT the regular-grid banding a square 5×5 kernel produces at large radii.
-const POISSON16 = array<vec2<f32>, 16>(
-  vec2<f32>(-0.94201624, -0.39906216), vec2<f32>( 0.94558609, -0.76890725),
-  vec2<f32>(-0.09418410, -0.92938870), vec2<f32>( 0.34495938,  0.29387760),
-  vec2<f32>(-0.91588581,  0.45771432), vec2<f32>(-0.81544232, -0.87912464),
-  vec2<f32>(-0.38277543,  0.27676845), vec2<f32>( 0.97484398,  0.75648379),
-  vec2<f32>( 0.44323325, -0.97511554), vec2<f32>( 0.53742981, -0.47373420),
-  vec2<f32>(-0.26496911, -0.41893023), vec2<f32>( 0.79197514,  0.19090188),
-  vec2<f32>(-0.24188840,  0.99706507), vec2<f32>(-0.81409955,  0.91437590),
-  vec2<f32>( 0.19984126,  0.78641367), vec2<f32>( 0.14383161, -0.14100790)
-);
-
-// Interleaved gradient noise (Jimenez) — a cheap per-pixel pseudo-random scalar in [0,1). Used to
-// rotate the Poisson disk per fragment so the residual under-sampling shows up as fine noise the
-// eye reads as softness, instead of correlated stair-steps.
-fn ign(p: vec2<f32>) -> f32 {
-  return fract(52.9829189 * fract(dot(p, vec2<f32>(0.06711056, 0.00583715))));
-}
-
-// Sun shadow-map lookup: project the surface point P into the sun's orthographic clip space and
-// compare depth. 1 = lit, 0 = shadowed. Normal-offset bias (uF.params.z = world texel size) is the
-// main acne killer; tiny slope-scaled constant bias on top. The map is orthoZO + clear 1.0 +
-// "less-equal", so it stores the nearest-to-sun depth → shadowed when the fragment's sun-space
-// depth is GREATER than stored (+ bias).
-// Soft shadows: a per-pixel-rotated Poisson disk of radius = spread (texels). spread=1 is the
-// near-crisp baseline; larger values widen the penumbra (driven by sun dimness in fs_main).
-fn sun_shadow(P: vec3<f32>, N: vec3<f32>, ndl: f32, spread: f32, seed: vec2<f32>) -> f32 {
-  let Po = P + N * (uF.params.z * 2.5);
-  let ls = uF.sunViewProj * vec4<f32>(Po, 1.0);
-  let ndc = ls.xyz / ls.w;
-  var uv = ndc.xy * 0.5 + vec2<f32>(0.5, 0.5);
-  uv.y = 1.0 - uv.y;
-  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || ndc.z < 0.0 || ndc.z > 1.0) {
-    return 1.0;
-  }
-  let bias = 0.0004 + 0.0015 * (1.0 - ndl);
-  let dim = vec2<i32>(textureDimensions(shadowMap, 0));
-  let texelPos = uv * vec2<f32>(dim) - vec2<f32>(0.5);
-  // Per-pixel rotation of the whole disk → decorrelates the taps so banding becomes noise.
-  let ang = ign(seed) * 6.2831853;
-  let ca = cos(ang);
-  let sa = sin(ang);
-  var sum = 0.0;
-  for (var i = 0; i < 16; i = i + 1) {
-    let o = POISSON16[i];
-    let r = vec2<f32>(o.x * ca - o.y * sa, o.x * sa + o.y * ca) * spread;
-    let c = clamp(vec2<i32>(round(texelPos + r)), vec2<i32>(0, 0), dim - vec2<i32>(1, 1));
-    let s = textureLoad(shadowMap, c, 0);
-    sum = sum + select(0.0, 1.0, ndc.z <= s + bias);
-  }
-  return sum / 16.0;
 }
 
 // ACES filmic tonemap (Narkowicz approximation): compresses unbounded HDR into [0,1] with a
@@ -240,13 +174,10 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let ndl = max(dot(N, uF.sun.xyz), 0.0);
   var sunVis = 1.0;
   if (uF.sun.w > 0.0 && ndl > 0.0) {
-    let depthP = textureLoad(depthTex, pixel, 0);
+    // The cone pass traced one cone toward the sun per half-res pixel — bilinear-upsample its
+    // visibility target. Penumbra width came from the trace (grows with occluder distance).
     let uvP = (vec2<f32>(pixel) + vec2<f32>(0.5)) / uF.params2.xy;
-    let P = unproject(vec3<f32>(uvP.x * 2.0 - 1.0, (1.0 - uvP.y) * 2.0 - 1.0, depthP), uF.invViewProj);
-    // Base PCF softness ALWAYS applied (kills the shadow-map texel staircase even at full sun),
-    // and grows further as the sun dims below 1 (a dimmer sun → softer, wider penumbra).
-    let spread = SHADOW_BASE_SPREAD + PENUMBRA * clamp(1.0 - uF.sun.w, 0.0, 1.0);
-    sunVis = sun_shadow(P, N, ndl, spread, input.position.xy);
+    sunVis = textureSampleLevel(sunVisTex, coneSampler, uvP, 0.0).r;
   }
   let sunDirect = ndl * uF.sunColor.rgb * uF.sun.w * sunVis;
 

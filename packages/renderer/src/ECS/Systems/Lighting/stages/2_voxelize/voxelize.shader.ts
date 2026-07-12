@@ -3,6 +3,7 @@ import { ShaderMeta } from "../../../../../WGSL/ShaderMeta.ts";
 import { wgsl } from "../../../../../WGSL/wgsl.ts";
 import { MAX_INSTANCE_COUNT } from "../../../SDFSystem/sdf.shader.ts";
 import { sceneSDF } from "../../../SDFSystem/sceneSDF.wgsl.ts";
+import type { VoxelBakedConfig } from "../../core/voxelConfig.ts";
 
 // Voxelization compute pass — SCATTER. Instead of one thread per voxel evaluating the
 // WHOLE scene SDF (cost = NumVoxels x NumInstances, plus 6 more evals for the normal),
@@ -45,7 +46,9 @@ const sceneBuf = (name: string, type: string) =>
 export const WORKGROUP = 4; // clear pass: 4*4*4 = 64 threads/workgroup over the 3D grid
 export const WORKGROUP_1D = 64; // scatter pass: 64 threads/workgroup over the 1D work list
 
-export const shaderMeta = new ShaderMeta(
+// Factory: bakes the sun-injection mode (shadow-map tap vs cone through LAST frame's pyramid) +
+// its budgets from the config — recompiled by rebuild() like the other baked shaders.
+export const createVoxelizeShaderMeta = (cfg: VoxelBakedConfig) => new ShaderMeta(
   {
     // ---- group 0 : grid uniforms (COMPUTE-only) ----
     // .xyz = world min corner of the grid box, .w = cellSize (world units per voxel).
@@ -59,10 +62,6 @@ export const shaderMeta = new ShaderMeta(
     sun: uC("uSun", `vec4<f32>`),
     // .rgb = sun color (linear).
     sunColor: uC("uSunColor", `vec4<f32>`),
-    // Sun orthographic view-projection (orthoZO, z in [0,1]) — SAME matrix the sunShadow depth
-    // pass uses. Projects a voxel-center world position into the sun shadow map for the SHADOWED
-    // sun injection (only matters when the directional sun is enabled; sun.w == 0 otherwise).
-    sunViewProj: uC("uSunViewProj", `mat4x4<f32>`),
     // Scatter dispatch description: .x = uTotal (total work items = prefix sum of all AABB
     // voxel counts), .y = uDispatchWidth (threads per workgroup-grid row = dispatchX *
     // WORKGROUP_1D), .z/.w spare. The flat work index is g = gid.y*uDispatchWidth + gid.x.
@@ -108,15 +107,6 @@ export const shaderMeta = new ShaderMeta(
       },
     ),
 
-    // ---- group 0 : sun shadow map (Texture => @group(0)), COMPUTE-visible ----
-    // Sun-POV depth (depth32float from the sunShadow pass). Sampled (single tap, nearest,
-    // no PCF) to inject SHADOWED sun into the volume. Read via textureLoad (integer coords
-    // + i32 LOD 0 — a depth texture cannot use a filtering sampler).
-    shadowMap: new VariableMeta("shadowMap", VariableKind.Texture, `texture_depth_2d`, {
-      visibility: GPUShaderStage.COMPUTE,
-      textureSampleType: "depth",
-    }),
-
     // ---- group 0 : emitter volume read (Texture), COMPUTE-visible ----
     // voxelEmission, textureLoad-ed by the OCCLUDER pass to merge the emitter contribution into
     // voxelRadiance mip 0 where the two classes share a voxel. The clear/emitter passes WRITE
@@ -126,11 +116,31 @@ export const shaderMeta = new ShaderMeta(
       visibility: GPUShaderStage.COMPUTE,
       viewDimension: "3d",
     }),
+
+    // ---- group 0 : LAST frame's radiance pyramid (mips 1+), COMPUTE-visible ----
+    // The SUN_VOX_CONE sun-visibility march. During voxelize only mip 0 is being rewritten — the
+    // coarser mips still hold LAST frame's downsample, so a view of mips [1..N) is a legal sampled
+    // binding alongside the mip-0 storage write (disjoint subresources) AND a usable (one frame
+    // stale) opacity field. Bound unconditionally (the view always exists) so the group layout
+    // never changes with the baked toggle.
+    radiancePyramid: new VariableMeta("radiancePyramid", VariableKind.Texture, `texture_3d<f32>`, {
+      visibility: GPUShaderStage.COMPUTE,
+      viewDimension: "3d",
+      textureSampleType: "float",
+    }),
+    pyrSampler: new VariableMeta("pyrSampler", VariableKind.Sampler, `sampler`, {
+      visibility: GPUShaderStage.COMPUTE,
+    }),
   },
   {},
   // language=WGSL
   wgsl /* wgsl */ `
 const SQRT3: f32 = 1.7320508;
+// Sun-injection budgets (BAKED) — half the screen-shadow step budget: the voxel injection only
+// feeds the low-frequency GI bounce, so coarse is fine.
+const SUN_SOFTNESS: f32 = ${cfg.sunSoftness};
+const SUN_VOX_STEPS: i32 = ${Math.max(8, Math.round(cfg.sunShadowSteps / 2))};
+const SUN_VOX_REACH: f32 = ${cfg.sunShadowReach};
 
 // Shared local-SDF helpers (instance_rot, sd_*, sd_2d_for_kind, extrude, sd_shape3d, sd_normal3d).
 // They read uKind/uValues/uRoundness by global name, declared in group 1 with identical types.
@@ -155,18 +165,28 @@ fn emission_of(instance: u32) -> vec3<f32> {
 // offset scales with the voxel actually being injected.
 fn sun_vis_vox(P: vec3<f32>, N: vec3<f32>, cell: f32) -> f32 {
   let Po = P + N * (1.5 * cell);
-  let ls = uSunViewProj * vec4<f32>(Po, 1.0);
-  let ndc = ls.xyz / ls.w;
-  var uv = ndc.xy * 0.5 + vec2<f32>(0.5, 0.5);
-  uv.y = 1.0 - uv.y;
-  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || ndc.z < 0.0 || ndc.z > 1.0) {
-    return 1.0;
+  // Cone toward the sun through LAST frame's radiance pyramid (mips 1+ view — mip 0 is being
+  // rewritten by this very pass, the coarser mips are rebuilt after; one frame stale, which the
+  // low-frequency bounce never shows). The view's mip 0 == the texture's mip 1 == 2·cell voxels,
+  // hence the lod/diameter floor of 2·cell. Start 2.5 cells out so the coarse lod-0 block
+  // holding this voxel itself doesn't self-shadow.
+  let gridMin = uGridOrigin.xyz;
+  let extent = vec3<f32>(uGridDims.xyz) * cell;
+  let stepFloor = SUN_VOX_REACH / f32(SUN_VOX_STEPS);
+  var alpha = 0.0;
+  var dist = 2.5 * cell;
+  for (var i = 0; i < SUN_VOX_STEPS; i = i + 1) {
+    if (alpha >= 0.9 || dist > SUN_VOX_REACH) { break; }
+    let diameter = max(2.0 * cell, 2.0 * SUN_SOFTNESS * dist);
+    let lod = log2(diameter / (2.0 * cell));
+    let wp = Po + uSun.xyz * dist;
+    let uvw = (wp - gridMin) / extent;
+    if (any(uvw < vec3<f32>(0.0)) || any(uvw > vec3<f32>(1.0))) { break; }
+    let s = textureSampleLevel(radiancePyramid, pyrSampler, uvw, lod);
+    alpha = alpha + (1.0 - alpha) * s.a;
+    dist = dist + max(diameter * 0.5, stepFloor);
   }
-  let dim = vec2<i32>(textureDimensions(shadowMap, 0));
-  let c = clamp(vec2<i32>(uv * vec2<f32>(dim)), vec2<i32>(0, 0), dim - vec2<i32>(1, 1));
-  let s = textureLoad(shadowMap, c, 0);
-  let bias = 0.002;
-  return select(0.0, 1.0, ndc.z <= s + bias);
+  return clamp(1.0 - alpha, 0.0, 1.0);
 }
 
 // CLEAR — one thread per voxel over the FULL grid. Zeroes the bound target volume so the

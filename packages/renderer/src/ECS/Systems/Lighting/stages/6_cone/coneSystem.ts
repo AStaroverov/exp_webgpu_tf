@@ -14,6 +14,7 @@ import { mat4 } from "gl-matrix";
 import { GPUShader } from "../../../../../WGSL/GPUShader.ts";
 import { getTypeTypedArray } from "../../../../../Shader/index.ts";
 import { viewProjMatrix } from "../../../ResizeSystem.ts";
+import { SunLight } from "../../../SunLight.ts";
 import { createConeShaderMeta } from "./voxelCone.shader.ts";
 import { createConeTemporalShaderMeta } from "./voxelConeTemporal.shader.ts";
 import type { VoxelBakedConfig } from "../../core/voxelConfig.ts";
@@ -68,10 +69,16 @@ export function createConeSystem(deps: ConeDeps) {
   // (composite bilinear-upsamples to full res; the heavy cone work runs at ¼ the pixels).
   // Built from a factory that bakes the current config consts into the WGSL → reassignable on
   // rebuild().
+  // Two targets: @location(0) = the cone result (rgba16float); @location(1) = the sun cast-shadow
+  // visibility (r16float, same half-res dims — the composite upsamples it; the DF-style sun cone
+  // is the only sun-shadow path).
+  const coneTargets = [
+    { format: "rgba16float" as GPUTextureFormat, blend: "none" as const },
+    { format: "r16float" as GPUTextureFormat, blend: "none" as const },
+  ];
   let coneShader = new GPUShader(createConeShaderMeta(config));
   let conePipeline = coneShader.getRenderPipeline(device, "vs_main", "fs_main", {
-    targetFormat: "rgba16float",
-    withBlending: false,
+    targets: coneTargets,
   });
   // CONE-OUTPUT TEMPORAL ("point C"): reproject + neighborhood-clamp + blend the raw resolve
   // against last frame's filtered output (see voxelConeTemporal.shader.ts). Bakes the hysteresis
@@ -87,6 +94,9 @@ export function createConeSystem(deps: ConeDeps) {
   // Cone scratch. (params/aoParams/tune are now BAKED consts — no scratch arrays.)
   const coneParams2Arr = getTypeTypedArray(coneShader.shaderMeta.uniforms.params2.type); // Float32Array(4)
   const coneInvArr = getTypeTypedArray(coneShader.shaderMeta.uniforms.invViewProj.type); // Float32Array(16)
+  // Sun direction/intensity for the sun cast-shadow trace (same packing as the composite's
+  // uF.sun lane).
+  const coneSunDirArr = getTypeTypedArray(coneShader.shaderMeta.uniforms.sunDir.type); // Float32Array(4)
   // Temporal-pass scratch: params (.xy canvas, .z hysteresis) + LAST frame's forward viewProj
   // (snapshotted at the end of cone(); starts zero → prevClip.w <= 0 rejects → frame 1 fresh-only).
   const temporalParamsArr = getTypeTypedArray(temporalShader.shaderMeta.uniforms.params.type); // Float32Array(4)
@@ -118,6 +128,7 @@ export function createConeSystem(deps: ConeDeps) {
         layout: conePipeline.getBindGroupLayout(0),
         entries: [
           coneShader.uniforms.params2.getBindGroupEntry(device),
+          coneShader.uniforms.sunDir.getBindGroupEntry(device),
           coneShader.uniforms.invViewProj.getBindGroupEntry(device),
           coneShader.uniforms.gridOrigin.getBindGroupEntry(device),
           coneShader.uniforms.gridDims.getBindGroupEntry(device),
@@ -220,10 +231,19 @@ export function createConeSystem(deps: ConeDeps) {
   let coneHistory = createConeOutput(
     GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
   );
+  // SUN cast-shadow visibility (@location(1)): r16float, same half-res dims.
+  const createSunVis = () =>
+    device.createTexture({
+      size: coneDims(),
+      format: "r16float",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+  let sunVisTex = createSunVis();
   // Cached views: coneView = the cone() attachment (raw); coneFilteredView = the composite's
   // sampled binding. Refreshed wherever the textures are rebuilt (resize / setConeScale).
   let coneView = coneOutput.createView();
   let coneFilteredView = coneFiltered.createView();
+  let sunVisView = sunVisTex.createView();
   // Freshly (re)created history is zero-filled — force one passthrough frame (h = 0) instead of
   // letting the neighborhood clamp drag the first frame toward black.
   let historyFresh = true;
@@ -239,8 +259,11 @@ export function createConeSystem(deps: ConeDeps) {
       GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
     );
     coneHistory = createConeOutput(GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST);
+    sunVisTex.destroy();
+    sunVisTex = createSunVis();
     coneView = coneOutput.createView();
     coneFilteredView = coneFiltered.createView();
+    sunVisView = sunVisTex.createView();
     historyFresh = true;
   }
 
@@ -259,6 +282,17 @@ export function createConeSystem(deps: ConeDeps) {
     coneParams2Arr[1] = canvas.height;
     device.queue.writeBuffer(coneShader.uniforms.params2.getGPUBuffer(device), 0, coneParams2Arr);
 
+    // Sun direction (toward the sun) + effective intensity — the SUN_CONE trace lane (same packing
+    // as the composite's uF.sun).
+    const sa = SunLight.angle;
+    const se = SunLight.elevation;
+    const sce = Math.cos(se);
+    coneSunDirArr[0] = Math.cos(sa) * sce;
+    coneSunDirArr[1] = Math.sin(sa) * sce;
+    coneSunDirArr[2] = Math.sin(se);
+    coneSunDirArr[3] = SunLight.enabled ? SunLight.intensity : 0;
+    device.queue.writeBuffer(coneShader.uniforms.sunDir.getGPUBuffer(device), 0, coneSunDirArr);
+
     // invViewProj computed ONCE per frame here (cone runs before composite, which reuses it).
     mat4.invert(invViewProj, viewProjMatrix);
     coneInvArr.set(invViewProj as Float32Array);
@@ -267,12 +301,9 @@ export function createConeSystem(deps: ConeDeps) {
     const pass = encoder.beginRenderPass({
       timestampWrites: gpuSpan("coneResolve"),
       colorAttachments: [
-        {
-          view: coneView,
-          clearValue: [0, 0, 0, 1],
-          loadOp: "clear",
-          storeOp: "store",
-        },
+        { view: coneView, clearValue: [0, 0, 0, 1], loadOp: "clear", storeOp: "store" },
+        // Sun cast-shadow visibility (cleared to 1 = fully lit).
+        { view: sunVisView, clearValue: [1, 1, 1, 1], loadOp: "clear", storeOp: "store" },
       ],
     });
     pass.setPipeline(conePipeline);
@@ -358,8 +389,7 @@ export function createConeSystem(deps: ConeDeps) {
     coneShader.destroy();
     coneShader = new GPUShader(createConeShaderMeta(config));
     conePipeline = coneShader.getRenderPipeline(device, "vs_main", "fs_main", {
-      targetFormat: "rgba16float",
-      withBlending: false,
+      targets: coneTargets,
     });
     temporalShader.destroy();
     temporalShader = new GPUShader(createConeTemporalShaderMeta(config));
@@ -388,6 +418,8 @@ export function createConeSystem(deps: ConeDeps) {
     // The composite samples the FILTERED output (raw coneOutput is internal to the temporal chain).
     getOutputTexture: () => coneFiltered,
     getOutputView: () => coneFilteredView,
+    // The sun cast-shadow visibility target — the composite upsamples it for the direct sun term.
+    getSunVisView: () => sunVisView,
     getConeScale: () => coneScale,
     getInvViewProj: () => invViewProj,
   };
